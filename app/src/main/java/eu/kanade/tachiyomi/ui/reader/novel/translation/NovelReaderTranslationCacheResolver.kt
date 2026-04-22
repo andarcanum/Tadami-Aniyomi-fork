@@ -54,6 +54,7 @@ internal fun NovelReaderSettings.translationCacheModelId(): String {
         NovelTranslationProvider.AIRFORCE -> airforceModel.trim()
         NovelTranslationProvider.OPENROUTER -> openRouterModel.trim()
         NovelTranslationProvider.DEEPSEEK -> deepSeekModel.trim()
+        NovelTranslationProvider.MISTRAL -> mistralModel.trim()
     }
 }
 

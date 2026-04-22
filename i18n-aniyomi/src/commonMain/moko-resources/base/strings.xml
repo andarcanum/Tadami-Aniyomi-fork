@@ -710,6 +710,7 @@
     <string name="novel_reader_translation_provider_openrouter">OpenRouter</string>
     <string name="novel_reader_translation_provider_gemini_private">Gemini Private</string>
     <string name="novel_reader_translation_provider_deepseek">DeepSeek</string>
+    <string name="novel_reader_translation_provider_mistral">Mistral</string>
     <string name="novel_reader_translation_auto_english_title">Auto-start translation for English</string>
     <string name="novel_reader_translation_auto_english_summary">Automatically start translation when source language is English</string>
     <string name="novel_reader_translation_prefetch_next_title">Pre-translate next chapter (30%)</string>
@@ -720,6 +721,9 @@
     <string name="novel_reader_deepseek_base_url">DeepSeek Base URL</string>
     <string name="novel_reader_deepseek_api_key">DeepSeek API key</string>
     <string name="novel_reader_deepseek_model">DeepSeek model</string>
+    <string name="novel_reader_mistral_base_url">Mistral Base URL</string>
+    <string name="novel_reader_mistral_api_key">Mistral API key</string>
+    <string name="novel_reader_mistral_model">Mistral model</string>
     <string name="novel_reader_gemini_section_title">Gemini Translation</string>
     <string name="novel_reader_gemini_section_summary">Chunk translation settings used by the AI button in reader.</string>
     <string name="novel_reader_gemini_api_key">Gemini API key</string>
@@ -787,6 +791,7 @@
     <string name="novel_reader_ai_translator_model_id_free_only">Model ID (free only)</string>
     <string name="novel_reader_ai_translator_model_id">Model ID</string>
     <string name="novel_reader_ai_translator_deepseek_models_title">DeepSeek models</string>
+    <string name="novel_reader_ai_translator_mistral_models_title">Mistral models</string>
     <string name="novel_reader_ai_translator_models_count">Models (%d)</string>
     <string name="novel_reader_ai_translator_choose_model">Choose a model</string>
     <string name="novel_reader_ai_translator_style_title">Translation style</string>
@@ -829,6 +834,7 @@
     <string name="novel_reader_ai_translator_log_invalid_bridge_password">Invalid bridge password.</string>
     <string name="novel_reader_ai_translator_log_openrouter_settings_saved">OpenRouter settings saved.</string>
     <string name="novel_reader_ai_translator_log_deepseek_settings_saved">DeepSeek settings saved.</string>
+    <string name="novel_reader_ai_translator_log_mistral_settings_saved">Mistral settings saved.</string>
     <string name="novel_reader_ai_translator_log_gemini_api_key_saved">Gemini API key saved.</string>
     <string name="novel_reader_ai_translator_log_cache_cleared">All cache cleared.</string>
     <string name="novel_reader_ai_translator_log_custom_prompt_updated">Custom prompt updated.</string>

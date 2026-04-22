@@ -47,6 +47,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationSessionCache
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleUnofficialSelectedTextTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralModelsService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralPromptResolver
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
@@ -235,6 +239,29 @@ class NovelReaderScreenModel(
             json = json,
         )
     },
+    private val mistralTranslationService: MistralTranslationService = run {
+        val app = Injekt.get<Application>()
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        val mistralClient = networkHelper.client.newBuilder()
+            .readTimeout(180, TimeUnit.SECONDS)
+            .build()
+        MistralTranslationService(
+            client = mistralClient,
+            json = json,
+            resolveSystemPrompt = { mode, family ->
+                MistralPromptResolver(app).resolveSystemPrompt(mode, family)
+            },
+        )
+    },
+    private val mistralModelsService: MistralModelsService = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        MistralModelsService(
+            client = networkHelper.client,
+            json = json,
+        )
+    },
     private val selectedTextTranslationProvider: NovelSelectedTextTranslationProvider = run {
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
@@ -357,6 +384,9 @@ class NovelReaderScreenModel(
     private var deepSeekModelIds: List<String> = emptyList()
     private var isDeepSeekModelsLoading: Boolean = false
     private var isTestingDeepSeekConnection: Boolean = false
+    private var mistralModelIds: List<String> = emptyList()
+    private var isMistralModelsLoading: Boolean = false
+    private var isTestingMistralConnection: Boolean = false
     private var selectedTextTranslationSelection: NovelSelectedTextSelection? = null
     private var selectedTextTranslationUiState: NovelSelectedTextTranslationUiState =
         NovelSelectedTextTranslationUiState.Idle
@@ -493,6 +523,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.AIRFORCE -> refreshAirforceModels()
             NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
+            NovelTranslationProvider.MISTRAL -> refreshMistralModels()
         }
     }
     private fun setError(message: String?) {
@@ -869,6 +900,9 @@ class NovelReaderScreenModel(
             deepSeekModelIds = deepSeekModelIds,
             isDeepSeekModelsLoading = isDeepSeekModelsLoading,
             isTestingDeepSeekConnection = isTestingDeepSeekConnection,
+            mistralModelIds = mistralModelIds,
+            isMistralModelsLoading = isMistralModelsLoading,
+            isTestingMistralConnection = isTestingMistralConnection,
         )
     }
     private suspend fun refreshTtsEngines() {
@@ -1836,6 +1870,8 @@ class NovelReaderScreenModel(
         isTestingOpenRouterConnection = false
         isDeepSeekModelsLoading = false
         isTestingDeepSeekConnection = false
+        isMistralModelsLoading = false
+        isTestingMistralConnection = false
         ttsWordProgressJob?.cancel()
         ttsWordProgressJob = null
         pendingTtsStartRequest = null
@@ -1955,6 +1991,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.AIRFORCE -> refreshAirforceModels()
             NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
+            NovelTranslationProvider.MISTRAL -> refreshMistralModels()
         }
     }
     fun setGoogleTranslationEnabled(value: Boolean) {
@@ -2004,6 +2041,18 @@ class NovelReaderScreenModel(
     fun setDeepSeekModel(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.deepSeekModel().set(value) },
         setOverride = { it.copy(deepSeekModel = value) },
+    )
+    fun setMistralBaseUrl(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.mistralBaseUrl().set(value) },
+        setOverride = { it.copy(mistralBaseUrl = value) },
+    )
+    fun setMistralApiKey(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.mistralApiKey().set(value) },
+        setOverride = { it.copy(mistralApiKey = value) },
+    )
+    fun setMistralModel(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.mistralModel().set(value) },
+        setOverride = { it.copy(mistralModel = value) },
     )
     fun refreshAirforceModels() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
@@ -2163,6 +2212,60 @@ class NovelReaderScreenModel(
                 addGeminiLog("? DeepSeek connection failed: ${formatGeminiThrowableForLog(error)}")
             }
             isTestingDeepSeekConnection = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
+    fun refreshMistralModels() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (settings.translationProvider != NovelTranslationProvider.MISTRAL) return
+        if (settings.mistralApiKey.isBlank()) return
+        if (settings.mistralBaseUrl.isBlank()) return
+        isMistralModelsLoading = true
+        updateContent(settings)
+        screenModelScope.launch(Dispatchers.IO) {
+            val fetched = runCatching {
+                mistralModelsService.fetchModels(
+                    baseUrl = settings.mistralBaseUrl,
+                    apiKey = settings.mistralApiKey,
+                )
+            }.getOrElse { error ->
+                addGeminiLog("? Mistral models load failed: ${formatGeminiThrowableForLog(error)}")
+                emptyList()
+            }
+            mistralModelIds = fetched
+            isMistralModelsLoading = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
+    fun testMistralConnection() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (isTestingMistralConnection) return
+        if (settings.translationProvider != NovelTranslationProvider.MISTRAL) return
+        if (!settings.hasConfiguredTranslationProvider()) {
+            addGeminiLog("? Mistral config invalid: fill Base URL, API key and Model")
+            return
+        }
+        isTestingMistralConnection = true
+        updateContent(settings)
+        screenModelScope.launch {
+            runCatching {
+                val result = requestTranslationBatch(
+                    segments = listOf("Connection test"),
+                    settings = settings,
+                ) { message ->
+                    addGeminiLog("?? Test: $message")
+                }
+                if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
+                    error("Empty response")
+                }
+            }.onSuccess {
+                addGeminiLog("? Mistral connection OK")
+            }.onFailure { error ->
+                addGeminiLog("? Mistral connection failed: ${formatGeminiThrowableForLog(error)}")
+            }
+            isTestingMistralConnection = false
             val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
             updateContent(currentSettings)
         }
@@ -2787,6 +2890,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.GEMINI,
             NovelTranslationProvider.OPENROUTER,
             NovelTranslationProvider.DEEPSEEK,
+            NovelTranslationProvider.MISTRAL,
             -> resolveNovelTranslationPromptFamily(geminiTargetLang)
         }
     }
@@ -2869,6 +2973,19 @@ class NovelReaderScreenModel(
             frequencyPenalty = DEEPSEEK_DEFAULT_FREQUENCY_PENALTY,
         )
     }
+    private fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslationParams {
+        return MistralTranslationParams(
+            baseUrl = mistralBaseUrl,
+            apiKey = mistralApiKey,
+            model = mistralModel,
+            sourceLang = geminiSourceLang,
+            targetLang = geminiTargetLang,
+            promptMode = geminiPromptMode,
+            promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
+            temperature = geminiTemperature,
+            topP = geminiTopP,
+        )
+    }
     private fun NovelReaderSettings.translationRequestConfigLog(): String {
         val common = buildString {
             append("provider=").append(translationProvider.name)
@@ -2915,6 +3032,10 @@ class NovelReaderScreenModel(
                     "presencePenalty=$presencePenalty, frequencyPenalty=$frequencyPenalty, " +
                     "stream=false"
             }
+            NovelTranslationProvider.MISTRAL -> {
+                "baseUrl=${mistralBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
+                    "topP=${geminiTopP.toLogFloat()}, stream=false"
+            }
         }
         return "$common, $sampling"
     }
@@ -2960,6 +3081,13 @@ class NovelReaderScreenModel(
                     onLog = onLog,
                 )
             }
+            NovelTranslationProvider.MISTRAL -> {
+                mistralTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toMistralTranslationParams(),
+                    onLog = onLog,
+                )
+            }
         }
     }
     private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
@@ -2982,6 +3110,11 @@ class NovelReaderScreenModel(
                     deepSeekApiKey.isNotBlank() &&
                     deepSeekModel.isNotBlank()
             }
+            NovelTranslationProvider.MISTRAL -> {
+                mistralBaseUrl.isNotBlank() &&
+                    mistralApiKey.isNotBlank() &&
+                    mistralModel.isNotBlank()
+            }
         }
     }
     private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
@@ -2993,6 +3126,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.AIRFORCE -> 1
             NovelTranslationProvider.OPENROUTER -> 1
             NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
+            NovelTranslationProvider.MISTRAL -> 1
         }
     }
     private fun NovelReaderSettings.shouldUseSinglePrivateChapterRequestMode(): Boolean {
@@ -3811,6 +3945,9 @@ class NovelReaderScreenModel(
             val deepSeekModelIds: List<String> = emptyList(),
             val isDeepSeekModelsLoading: Boolean = false,
             val isTestingDeepSeekConnection: Boolean = false,
+            val mistralModelIds: List<String> = emptyList(),
+            val isMistralModelsLoading: Boolean = false,
+            val isTestingMistralConnection: Boolean = false,
         ) : State {
             val textBlocks: List<String>
                 get() = contentBlocks

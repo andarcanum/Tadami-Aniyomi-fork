@@ -311,6 +311,11 @@ fun NovelReaderScreen(
     onSetDeepSeekModel: (String) -> Unit = {},
     onRefreshDeepSeekModels: () -> Unit = {},
     onTestDeepSeekConnection: () -> Unit = {},
+    onSetMistralBaseUrl: (String) -> Unit = {},
+    onSetMistralApiKey: (String) -> Unit = {},
+    onSetMistralModel: (String) -> Unit = {},
+    onRefreshMistralModels: () -> Unit = {},
+    onTestMistralConnection: () -> Unit = {},
     onStartGoogleTranslation: () -> Unit = {},
     onStopGoogleTranslation: () -> Unit = {},
     onResumeGoogleTranslation: () -> Unit = {},
@@ -3612,6 +3617,11 @@ fun NovelReaderScreen(
                 onSetDeepSeekModel = onSetDeepSeekModel,
                 onRefreshDeepSeekModels = onRefreshDeepSeekModels,
                 onTestDeepSeekConnection = onTestDeepSeekConnection,
+                onSetMistralBaseUrl = onSetMistralBaseUrl,
+                onSetMistralApiKey = onSetMistralApiKey,
+                onSetMistralModel = onSetMistralModel,
+                onRefreshMistralModels = onRefreshMistralModels,
+                onTestMistralConnection = onTestMistralConnection,
                 airforceModels = state.airforceModelIds,
                 isAirforceModelsLoading = state.isAirforceModelsLoading,
                 isTestingAirforceConnection = state.isTestingAirforceConnection,
@@ -3621,6 +3631,9 @@ fun NovelReaderScreen(
                 deepSeekModels = state.deepSeekModelIds,
                 isDeepSeekModelsLoading = state.isDeepSeekModelsLoading,
                 isTestingDeepSeekConnection = state.isTestingDeepSeekConnection,
+                mistralModels = state.mistralModelIds,
+                isMistralModelsLoading = state.isMistralModelsLoading,
+                isTestingMistralConnection = state.isTestingMistralConnection,
                 onDismiss = { showGeminiDialog = false },
             )
         }
@@ -3743,6 +3756,11 @@ private fun GeminiTranslationDialog(
     onSetDeepSeekModel: (String) -> Unit,
     onRefreshDeepSeekModels: () -> Unit,
     onTestDeepSeekConnection: () -> Unit,
+    onSetMistralBaseUrl: (String) -> Unit,
+    onSetMistralApiKey: (String) -> Unit,
+    onSetMistralModel: (String) -> Unit,
+    onRefreshMistralModels: () -> Unit,
+    onTestMistralConnection: () -> Unit,
     airforceModels: List<String>,
     isAirforceModelsLoading: Boolean,
     isTestingAirforceConnection: Boolean,
@@ -3752,6 +3770,9 @@ private fun GeminiTranslationDialog(
     deepSeekModels: List<String>,
     isDeepSeekModelsLoading: Boolean,
     isTestingDeepSeekConnection: Boolean,
+    mistralModels: List<String>,
+    isMistralModelsLoading: Boolean,
+    isTestingMistralConnection: Boolean,
     onDismiss: () -> Unit,
 ) {
     val modelEntries = remember {
@@ -3781,6 +3802,15 @@ private fun GeminiTranslationDialog(
     }
     val deepSeekAllModelEntries = remember(deepSeekModels) {
         deepSeekModels
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+            .associateWith { it }
+    }
+    val mistralAllModelEntries = remember(mistralModels) {
+        mistralModels
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -3860,6 +3890,7 @@ private fun GeminiTranslationDialog(
     val geminiModelLabel = stringResource(AYMR.strings.novel_reader_gemini_model)
     val openRouterModelLabel = stringResource(AYMR.strings.novel_reader_openrouter_model)
     val deepSeekModelLabel = stringResource(AYMR.strings.novel_reader_deepseek_model)
+    val mistralModelLabel = stringResource(AYMR.strings.novel_reader_mistral_model)
     val promptModeLabel = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode)
     val styleLabel = stringResource(AYMR.strings.novel_reader_ai_translator_style_title)
     val speedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism)
@@ -3884,6 +3915,7 @@ private fun GeminiTranslationDialog(
     val openRouterSettingsSavedLabel =
         stringResource(AYMR.strings.novel_reader_ai_translator_log_openrouter_settings_saved)
     val deepSeekSettingsSavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_deepseek_settings_saved)
+    val mistralSettingsSavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_mistral_settings_saved)
     val geminiApiKeySavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_gemini_api_key_saved)
     val cacheClearedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_cache_cleared)
     val customPromptUpdatedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_custom_prompt_updated)
@@ -3938,6 +3970,15 @@ private fun GeminiTranslationDialog(
     }
     var tempDeepSeekModel by remember(readerSettings.deepSeekModel) {
         mutableStateOf(readerSettings.deepSeekModel)
+    }
+    var tempMistralBaseUrl by remember(readerSettings.mistralBaseUrl) {
+        mutableStateOf(readerSettings.mistralBaseUrl)
+    }
+    var tempMistralApiKey by remember(readerSettings.mistralApiKey) {
+        mutableStateOf(readerSettings.mistralApiKey)
+    }
+    var tempMistralModel by remember(readerSettings.mistralModel) {
+        mutableStateOf(readerSettings.mistralModel)
     }
     var showAdvanced by remember { mutableStateOf(false) }
     var showGenerationConfig by remember { mutableStateOf(false) }
@@ -4111,6 +4152,7 @@ private fun GeminiTranslationDialog(
     val privateBridgeUnlocked = !privateBridgeRequiresUnlock || isPrivateProviderUnlocked
     val isOpenRouterSelected = tempProvider == NovelTranslationProvider.OPENROUTER
     val isDeepSeekSelected = tempProvider == NovelTranslationProvider.DEEPSEEK
+    val isMistralSelected = tempProvider == NovelTranslationProvider.MISTRAL
     val activeGenerationPresets = if (isDeepSeekSelected) {
         deepSeekGenerationPresets
     } else {
@@ -4147,6 +4189,12 @@ private fun GeminiTranslationDialog(
     LaunchedEffect(isDeepSeekSelected, deepSeekModels.size) {
         if (isDeepSeekSelected && deepSeekModels.isEmpty()) {
             onRefreshDeepSeekModels()
+        }
+    }
+
+    LaunchedEffect(isMistralSelected, mistralModels.size) {
+        if (isMistralSelected && mistralModels.isEmpty()) {
+            onRefreshMistralModels()
         }
     }
 
@@ -4322,6 +4370,9 @@ private fun GeminiTranslationDialog(
                             NovelTranslationProvider.DEEPSEEK to stringResource(
                                 AYMR.strings.novel_reader_translation_provider_deepseek,
                             ),
+                            NovelTranslationProvider.MISTRAL to stringResource(
+                                AYMR.strings.novel_reader_translation_provider_mistral,
+                            ),
                         )
                         providerCards.chunked(2).forEach { row ->
                             Row(
@@ -4342,6 +4393,7 @@ private fun GeminiTranslationDialog(
                                                     NovelTranslationProvider.GEMINI_PRIVATE -> Unit
                                                     NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
                                                     NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
+                                                    NovelTranslationProvider.MISTRAL -> onRefreshMistralModels()
                                                     NovelTranslationProvider.AIRFORCE -> Unit
                                                 }
                                             },
@@ -4584,6 +4636,64 @@ private fun GeminiTranslationDialog(
                                     onValueChange = {
                                         tempDeepSeekModel = it
                                         onSetDeepSeekModel(it)
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_model_id,
+                                            ),
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            NovelTranslationProvider.MISTRAL -> {
+                                Text(
+                                    stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_mistral_models_title,
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                if (mistralAllModelEntries.isNotEmpty()) {
+                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                                        value = tempMistralModel,
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_models_count,
+                                        ).format(mistralAllModelEntries.size),
+                                        subtitle = tempMistralModel.ifBlank {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_choose_model,
+                                            )
+                                        },
+                                        icon = null,
+                                        entries = mistralAllModelEntries,
+                                        onValueChange = { selected ->
+                                            tempMistralModel = selected
+                                            onSetMistralModel(selected)
+                                            logPair(mistralModelLabel, selected)
+                                        },
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = onRefreshMistralModels) {
+                                        Text(
+                                            if (isMistralModelsLoading) {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                )
+                                            } else {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = tempMistralModel,
+                                    onValueChange = {
+                                        tempMistralModel = it
+                                        onSetMistralModel(it)
                                     },
                                     label = {
                                         Text(
@@ -4922,22 +5032,32 @@ private fun GeminiTranslationDialog(
                         )
                     }
                     if (showAdvanced) {
-                        if (isOpenRouterSelected || isDeepSeekSelected) {
+                        if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected) {
                             OutlinedTextField(
-                                value = if (isOpenRouterSelected) tempOpenRouterBaseUrl else tempDeepSeekBaseUrl,
+                                value = when {
+                                    isOpenRouterSelected -> tempOpenRouterBaseUrl
+                                    isDeepSeekSelected -> tempDeepSeekBaseUrl
+                                    else -> tempMistralBaseUrl
+                                },
                                 onValueChange = {
                                     if (isOpenRouterSelected) {
                                         tempOpenRouterBaseUrl = it
-                                    } else {
+                                    } else if (isDeepSeekSelected) {
                                         tempDeepSeekBaseUrl = it
+                                    } else {
+                                        tempMistralBaseUrl = it
                                     }
                                 },
                                 label = {
                                     Text(
-                                        if (isOpenRouterSelected) {
-                                            stringResource(AYMR.strings.novel_reader_openrouter_base_url)
-                                        } else {
-                                            stringResource(AYMR.strings.novel_reader_deepseek_base_url)
+                                        when {
+                                            isOpenRouterSelected -> stringResource(
+                                                AYMR.strings.novel_reader_openrouter_base_url,
+                                            )
+                                            isDeepSeekSelected -> stringResource(
+                                                AYMR.strings.novel_reader_deepseek_base_url,
+                                            )
+                                            else -> stringResource(AYMR.strings.novel_reader_mistral_base_url)
                                         },
                                     )
                                 },
@@ -4948,6 +5068,7 @@ private fun GeminiTranslationDialog(
                             value = when {
                                 isOpenRouterSelected -> tempOpenRouterApiKey
                                 isDeepSeekSelected -> tempDeepSeekApiKey
+                                isMistralSelected -> tempMistralApiKey
                                 else -> tempKey
                             },
                             onValueChange = {
@@ -4955,6 +5076,8 @@ private fun GeminiTranslationDialog(
                                     tempOpenRouterApiKey = it
                                 } else if (isDeepSeekSelected) {
                                     tempDeepSeekApiKey = it
+                                } else if (isMistralSelected) {
+                                    tempMistralApiKey = it
                                 } else {
                                     tempKey = it
                                 }
@@ -4966,6 +5089,7 @@ private fun GeminiTranslationDialog(
                                             AYMR.strings.novel_reader_openrouter_api_key,
                                         )
                                         isDeepSeekSelected -> stringResource(AYMR.strings.novel_reader_deepseek_api_key)
+                                        isMistralSelected -> stringResource(AYMR.strings.novel_reader_mistral_api_key)
                                         else -> stringResource(AYMR.strings.novel_reader_gemini_api_key)
                                     },
                                 )
@@ -4988,6 +5112,11 @@ private fun GeminiTranslationDialog(
                                         onSetDeepSeekApiKey(tempDeepSeekApiKey)
                                         onSetDeepSeekModel(tempDeepSeekModel)
                                         onAddLog(deepSeekSettingsSavedLabel)
+                                    } else if (isMistralSelected) {
+                                        onSetMistralBaseUrl(tempMistralBaseUrl)
+                                        onSetMistralApiKey(tempMistralApiKey)
+                                        onSetMistralModel(tempMistralModel)
+                                        onAddLog(mistralSettingsSavedLabel)
                                     } else {
                                         onSetGeminiApiKey(tempKey)
                                         onAddLog(geminiApiKeySavedLabel)
@@ -5020,28 +5149,28 @@ private fun GeminiTranslationDialog(
                                 )
                             }
                         }
-                        if (isOpenRouterSelected || isDeepSeekSelected) {
+                        if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 TextButton(
-                                    onClick = if (isOpenRouterSelected) {
-                                        onTestOpenRouterConnection
-                                    } else {
-                                        onTestDeepSeekConnection
+                                    onClick = when {
+                                        isOpenRouterSelected -> onTestOpenRouterConnection
+                                        isDeepSeekSelected -> onTestDeepSeekConnection
+                                        else -> onTestMistralConnection
                                     },
-                                    enabled = if (isOpenRouterSelected) {
-                                        !isTestingOpenRouterConnection
-                                    } else {
-                                        !isTestingDeepSeekConnection
+                                    enabled = when {
+                                        isOpenRouterSelected -> !isTestingOpenRouterConnection
+                                        isDeepSeekSelected -> !isTestingDeepSeekConnection
+                                        else -> !isTestingMistralConnection
                                     },
                                     modifier = Modifier.weight(1f),
                                 ) {
-                                    val isTesting = if (isOpenRouterSelected) {
-                                        isTestingOpenRouterConnection
-                                    } else {
-                                        isTestingDeepSeekConnection
+                                    val isTesting = when {
+                                        isOpenRouterSelected -> isTestingOpenRouterConnection
+                                        isDeepSeekSelected -> isTestingDeepSeekConnection
+                                        else -> isTestingMistralConnection
                                     }
                                     Text(
                                         if (isTesting) {
@@ -5056,22 +5185,22 @@ private fun GeminiTranslationDialog(
                                     )
                                 }
                                 TextButton(
-                                    onClick = if (isOpenRouterSelected) {
-                                        onRefreshOpenRouterModels
-                                    } else {
-                                        onRefreshDeepSeekModels
+                                    onClick = when {
+                                        isOpenRouterSelected -> onRefreshOpenRouterModels
+                                        isDeepSeekSelected -> onRefreshDeepSeekModels
+                                        else -> onRefreshMistralModels
                                     },
-                                    enabled = if (isOpenRouterSelected) {
-                                        !isOpenRouterModelsLoading
-                                    } else {
-                                        !isDeepSeekModelsLoading
+                                    enabled = when {
+                                        isOpenRouterSelected -> !isOpenRouterModelsLoading
+                                        isDeepSeekSelected -> !isDeepSeekModelsLoading
+                                        else -> !isMistralModelsLoading
                                     },
                                     modifier = Modifier.weight(1f),
                                 ) {
-                                    val isLoading = if (isOpenRouterSelected) {
-                                        isOpenRouterModelsLoading
-                                    } else {
-                                        isDeepSeekModelsLoading
+                                    val isLoading = when {
+                                        isOpenRouterSelected -> isOpenRouterModelsLoading
+                                        isDeepSeekSelected -> isDeepSeekModelsLoading
+                                        else -> isMistralModelsLoading
                                     }
                                     Text(
                                         if (isLoading) {

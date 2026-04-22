@@ -14,6 +14,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralPromptResolver
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
@@ -75,6 +78,19 @@ class NovelChapterTranslationProcessor(
             json = json,
             resolveSystemPrompt = { mode, family ->
                 DeepSeekPromptResolver(application).resolveSystemPrompt(mode, family)
+            },
+        )
+    },
+    private val mistralTranslationService: MistralTranslationService = run {
+        val networkHelper = Injekt.get<NetworkHelper>()
+        val json = Injekt.get<Json>()
+        MistralTranslationService(
+            client = networkHelper.client.newBuilder()
+                .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                .build(),
+            json = json,
+            resolveSystemPrompt = { mode, family ->
+                MistralPromptResolver(application).resolveSystemPrompt(mode, family)
             },
         )
     },
@@ -242,6 +258,13 @@ class NovelChapterTranslationProcessor(
                     onLog = onLog,
                 )
             }
+            NovelTranslationProvider.MISTRAL -> {
+                mistralTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toMistralTranslationParams(),
+                    onLog = onLog,
+                )
+            }
         }
     }
 }
@@ -254,6 +277,7 @@ private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromp
         NovelTranslationProvider.GEMINI,
         NovelTranslationProvider.OPENROUTER,
         NovelTranslationProvider.DEEPSEEK,
+        NovelTranslationProvider.MISTRAL,
         -> resolveNovelTranslationPromptFamily(geminiTargetLang)
     }
 }
@@ -341,6 +365,20 @@ private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslati
     )
 }
 
+private fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslationParams {
+    return MistralTranslationParams(
+        baseUrl = mistralBaseUrl,
+        apiKey = mistralApiKey,
+        model = mistralModel,
+        sourceLang = geminiSourceLang,
+        targetLang = geminiTargetLang,
+        promptMode = geminiPromptMode,
+        promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
+        temperature = geminiTemperature,
+        topP = geminiTopP,
+    )
+}
+
 private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
     if (!geminiEnabled) return false
     return when (translationProvider) {
@@ -359,6 +397,9 @@ private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
         NovelTranslationProvider.DEEPSEEK -> {
             deepSeekBaseUrl.isNotBlank() && deepSeekApiKey.isNotBlank() && deepSeekModel.isNotBlank()
         }
+        NovelTranslationProvider.MISTRAL -> {
+            mistralBaseUrl.isNotBlank() && mistralApiKey.isNotBlank() && mistralModel.isNotBlank()
+        }
     }
 }
 
@@ -371,6 +412,7 @@ private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
         NovelTranslationProvider.AIRFORCE -> 1
         NovelTranslationProvider.OPENROUTER -> 1
         NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
+        NovelTranslationProvider.MISTRAL -> 1
     }
 }
 
@@ -434,6 +476,10 @@ private fun NovelReaderSettings.translationRequestConfigLog(): String {
                 "topP=${geminiTopP.toLogFloat()}, " +
                 "presencePenalty=$presencePenalty, frequencyPenalty=$frequencyPenalty, " +
                 "stream=false"
+        }
+        NovelTranslationProvider.MISTRAL -> {
+            "baseUrl=${mistralBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
+                "topP=${geminiTopP.toLogFloat()}, stream=false"
         }
     }
     return "$common, $sampling"

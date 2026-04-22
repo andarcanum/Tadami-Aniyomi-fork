@@ -128,6 +128,9 @@ data class NovelReaderSettings(
     val deepSeekBaseUrl: String = "https://api.deepseek.com",
     val deepSeekApiKey: String = "",
     val deepSeekModel: String = "deepseek-chat",
+    val mistralBaseUrl: String = "https://api.mistral.ai/v1",
+    val mistralApiKey: String = "",
+    val mistralModel: String = "mistral-large-latest",
 
     // Google Translation
     val googleTranslationEnabled: Boolean = false,
@@ -255,6 +258,7 @@ enum class NovelTranslationProvider {
     AIRFORCE,
     OPENROUTER,
     DEEPSEEK,
+    MISTRAL,
 }
 
 enum class NovelTtsHighlightMode {
@@ -375,6 +379,9 @@ data class NovelReaderOverride(
     val deepSeekBaseUrl: String? = null,
     val deepSeekApiKey: String? = null,
     val deepSeekModel: String? = null,
+    val mistralBaseUrl: String? = null,
+    val mistralApiKey: String? = null,
+    val mistralModel: String? = null,
 
     // Google Translation
     val googleTranslationEnabled: Boolean? = null,
@@ -731,6 +738,12 @@ class NovelReaderPreferences(
 
     fun deepSeekModel() = preferenceStore.getString("novel_reader_deepseek_model", "deepseek-chat")
 
+    fun mistralBaseUrl() = preferenceStore.getString("novel_reader_mistral_base_url", "https://api.mistral.ai/v1")
+
+    fun mistralApiKey() = preferenceStore.getString("novel_reader_mistral_api_key", "")
+
+    fun mistralModel() = preferenceStore.getString("novel_reader_mistral_model", "mistral-large-latest")
+
     private fun translatedDownloadFormatKey(novelId: Long): String {
         return "novel_reader_translated_download_format_$novelId"
     }
@@ -905,6 +918,9 @@ class NovelReaderPreferences(
                 deepSeekBaseUrl = deepSeekBaseUrl().get(),
                 deepSeekApiKey = deepSeekApiKey().get(),
                 deepSeekModel = deepSeekModel().get(),
+                mistralBaseUrl = mistralBaseUrl().get(),
+                mistralApiKey = mistralApiKey().get(),
+                mistralModel = mistralModel().get(),
                 googleTranslationEnabled = googleTranslationEnabled().get(),
                 googleTranslationSourceLang = googleTranslationSourceLang().get(),
                 googleTranslationTargetLang = googleTranslationTargetLang().get(),
@@ -1043,6 +1059,9 @@ class NovelReaderPreferences(
             deepSeekBaseUrl = override?.deepSeekBaseUrl ?: deepSeekBaseUrl().get(),
             deepSeekApiKey = override?.deepSeekApiKey ?: deepSeekApiKey().get(),
             deepSeekModel = override?.deepSeekModel ?: deepSeekModel().get(),
+            mistralBaseUrl = override?.mistralBaseUrl ?: mistralBaseUrl().get(),
+            mistralApiKey = override?.mistralApiKey ?: mistralApiKey().get(),
+            mistralModel = override?.mistralModel ?: mistralModel().get(),
             googleTranslationEnabled = override?.googleTranslationEnabled ?: googleTranslationEnabled().get(),
             googleTranslationSourceLang = override?.googleTranslationSourceLang ?: googleTranslationSourceLang().get(),
             googleTranslationTargetLang = override?.googleTranslationTargetLang ?: googleTranslationTargetLang().get(),
@@ -1255,6 +1274,9 @@ class NovelReaderPreferences(
             deepSeekBaseUrl().changes(),
             deepSeekApiKey().changes(),
             deepSeekModel().changes(),
+            mistralBaseUrl().changes(),
+            mistralApiKey().changes(),
+            mistralModel().changes(),
             googleTranslationEnabled().changes(),
             googleTranslationSourceLang().changes(),
             googleTranslationTargetLang().changes(),
@@ -1294,10 +1316,13 @@ class NovelReaderPreferences(
                 deepSeekBaseUrl = values[30] as String,
                 deepSeekApiKey = values[31] as String,
                 deepSeekModel = values[32] as String,
-                googleTranslationEnabled = values[33] as Boolean,
-                googleTranslationSourceLang = values[34] as String,
-                googleTranslationTargetLang = values[35] as String,
-                googleTranslationAutoStart = values[36] as Boolean,
+                mistralBaseUrl = values[33] as String,
+                mistralApiKey = values[34] as String,
+                mistralModel = values[35] as String,
+                googleTranslationEnabled = values[36] as Boolean,
+                googleTranslationSourceLang = values[37] as String,
+                googleTranslationTargetLang = values[38] as String,
+                googleTranslationAutoStart = values[39] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1458,6 +1483,9 @@ class NovelReaderPreferences(
                 deepSeekBaseUrl = override?.deepSeekBaseUrl ?: gemini.deepSeekBaseUrl,
                 deepSeekApiKey = override?.deepSeekApiKey ?: gemini.deepSeekApiKey,
                 deepSeekModel = override?.deepSeekModel ?: gemini.deepSeekModel,
+                mistralBaseUrl = override?.mistralBaseUrl ?: gemini.mistralBaseUrl,
+                mistralApiKey = override?.mistralApiKey ?: gemini.mistralApiKey,
+                mistralModel = override?.mistralModel ?: gemini.mistralModel,
                 googleTranslationEnabled = override?.googleTranslationEnabled ?: gemini.googleTranslationEnabled,
                 googleTranslationSourceLang =
                 override?.googleTranslationSourceLang ?: gemini.googleTranslationSourceLang,
@@ -1596,6 +1624,9 @@ class NovelReaderPreferences(
         val deepSeekBaseUrl: String,
         val deepSeekApiKey: String,
         val deepSeekModel: String,
+        val mistralBaseUrl: String,
+        val mistralApiKey: String,
+        val mistralModel: String,
         val googleTranslationEnabled: Boolean,
         val googleTranslationSourceLang: String,
         val googleTranslationTargetLang: String,

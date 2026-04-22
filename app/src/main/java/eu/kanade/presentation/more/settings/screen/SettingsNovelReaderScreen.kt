@@ -1323,6 +1323,8 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
                     NovelTranslationProvider.DEEPSEEK to
                         stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
+                    NovelTranslationProvider.MISTRAL to
+                        stringResource(AYMR.strings.novel_reader_translation_provider_mistral),
                 ),
                 title = stringResource(AYMR.strings.novel_reader_translation_provider),
             ),
@@ -1376,6 +1378,27 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 preference = prefs.deepSeekModel(),
                 dialogSubtitle = null,
                 title = stringResource(AYMR.strings.novel_reader_deepseek_model),
+                subtitle = "%s",
+            )
+        }
+
+        if (translationProvider == NovelTranslationProvider.MISTRAL) {
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.mistralBaseUrl(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_mistral_base_url),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.mistralApiKey(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_mistral_api_key),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.mistralModel(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_mistral_model),
                 subtitle = "%s",
             )
         }

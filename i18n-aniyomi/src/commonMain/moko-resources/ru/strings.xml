@@ -476,6 +476,7 @@
     <string name="novel_reader_translation_provider_openrouter">OpenRouter</string>
     <string name="novel_reader_translation_provider_gemini_private">Gemini Private</string>
     <string name="novel_reader_translation_provider_deepseek">DeepSeek</string>
+    <string name="novel_reader_translation_provider_mistral">Mistral</string>
     <string name="novel_reader_translation_auto_english_title">Автозапуск перевода для английского</string>
     <string name="novel_reader_translation_auto_english_summary">Автоматически запускать перевод, когда язык источника английский</string>
     <string name="novel_reader_translation_prefetch_next_title">Предперевод следующей главы (30%)</string>
@@ -486,6 +487,9 @@
     <string name="novel_reader_deepseek_base_url">Базовый URL DeepSeek</string>
     <string name="novel_reader_deepseek_api_key">API-ключ DeepSeek</string>
     <string name="novel_reader_deepseek_model">Модель DeepSeek</string>
+    <string name="novel_reader_mistral_base_url">Базовый URL Mistral</string>
+    <string name="novel_reader_mistral_api_key">API-ключ Mistral</string>
+    <string name="novel_reader_mistral_model">Модель Mistral</string>
     <string name="novel_reader_gemini_section_title">Gemini перевод</string>
     <string name="novel_reader_gemini_section_summary">Настройки пакетного перевода для кнопки AI в ридере.</string>
     <string name="novel_reader_gemini_api_key">Gemini API ключ</string>
@@ -553,6 +557,7 @@
     <string name="novel_reader_ai_translator_model_id_free_only">ID модели (только :free)</string>
     <string name="novel_reader_ai_translator_model_id">ID модели</string>
     <string name="novel_reader_ai_translator_deepseek_models_title">Модели DeepSeek</string>
+    <string name="novel_reader_ai_translator_mistral_models_title">Модели Mistral</string>
     <string name="novel_reader_ai_translator_models_count">Модели (%d)</string>
     <string name="novel_reader_ai_translator_choose_model">Выберите модель</string>
     <string name="novel_reader_ai_translator_style_title">Стиль перевода</string>
@@ -595,6 +600,7 @@
     <string name="novel_reader_ai_translator_log_invalid_bridge_password">Неверный пароль bridge.</string>
     <string name="novel_reader_ai_translator_log_openrouter_settings_saved">Настройки OpenRouter сохранены.</string>
     <string name="novel_reader_ai_translator_log_deepseek_settings_saved">Настройки DeepSeek сохранены.</string>
+    <string name="novel_reader_ai_translator_log_mistral_settings_saved">Настройки Mistral сохранены.</string>
     <string name="novel_reader_ai_translator_log_gemini_api_key_saved">API-ключ Gemini сохранён.</string>
     <string name="novel_reader_ai_translator_log_cache_cleared">Весь кэш очищен.</string>
     <string name="novel_reader_ai_translator_log_custom_prompt_updated">Свой промпт обновлён.</string>
