@@ -29,6 +29,7 @@ internal fun NovelChapterActionButton(
     progressColor: Color = iconTint,
     size: Dp = 40.dp,
     iconSize: Dp = 20.dp,
+    contentDescription: String? = null,
 ) {
     Box(
         modifier = modifier
@@ -50,7 +51,7 @@ internal fun NovelChapterActionButton(
         } else {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
+                contentDescription = contentDescription,
                 tint = iconTint,
                 modifier = Modifier.size(iconSize),
             )

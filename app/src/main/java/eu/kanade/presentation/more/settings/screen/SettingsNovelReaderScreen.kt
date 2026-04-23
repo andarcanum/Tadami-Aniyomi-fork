@@ -176,6 +176,8 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val prefs = remember { Injekt.get<NovelReaderPreferences>() }
         val eInkPrefs = remember { Injekt.get<ReaderPreferences>() }
         return listOf(
+            getAiTranslationGroup(prefs),
+            getGoogleTranslationGroup(prefs),
             getDisplayGroup(prefs),
             getEInkRefreshGroup(eInkPrefs),
             getThemeGroup(prefs),
@@ -211,8 +213,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
         val textShadowX by textShadowXPref.collectAsState()
         val textShadowYPref = prefs.textShadowY()
         val textShadowY by textShadowYPref.collectAsState()
-        val geminiEnabled by prefs.geminiEnabled().collectAsState()
-        val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
         val fontImportFailedMessage = stringResource(AYMR.strings.novel_reader_font_import_failed)
         val surfaceStrategy = remember { resolveNovelReaderSettingsSurfaceStrategy() }
         var fontCatalogVersion by remember { mutableIntStateOf(0) }
@@ -236,44 +236,10 @@ object SettingsNovelReaderScreen : SearchableSettings {
         } else {
             stringResource(AYMR.strings.novel_reader_global_settings_quick_dialog_summary)
         }
-        val displayTopSettings = novelReaderDisplayTopSettingSpecs(
-            geminiEnabled = geminiEnabled,
-            googleTranslateEnabled = googleTranslationEnabled,
-            geminiEnabledTitle = stringResource(AYMR.strings.novel_reader_gemini_enabled),
-            geminiPromptModeTitle = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
-            googleTranslateEnabledTitle = stringResource(AYMR.strings.novel_reader_google_translate_enable),
-            googleTranslateEnabledSubtitle = stringResource(
-                AYMR.strings.novel_reader_google_translate_enable_summary,
-            ),
-        )
 
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_display),
             preferenceItems = persistentListOf(
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = prefs.geminiEnabled(),
-                    title = displayTopSettings[0].title,
-                    subtitle = stringResource(AYMR.strings.novel_reader_gemini_enabled_summary),
-                    enabled = displayTopSettings[0].enabled,
-                ),
-                Preference.PreferenceItem.ListPreference(
-                    preference = prefs.geminiPromptMode(),
-                    entries = persistentMapOf(
-                        GeminiPromptMode.CLASSIC to stringResource(
-                            AYMR.strings.novel_reader_gemini_prompt_mode_classic,
-                        ),
-                        GeminiPromptMode.ADULT_18 to stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_adult),
-                    ),
-                    title = displayTopSettings[1].title,
-                    enabled = displayTopSettings[1].enabled,
-                    visible = displayTopSettings[1].visible,
-                ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = prefs.googleTranslationEnabled(),
-                    title = displayTopSettings[2].title,
-                    subtitle = displayTopSettings[2].subtitle,
-                    enabled = displayTopSettings[2].enabled,
-                ),
                 Preference.PreferenceItem.SliderPreference(
                     value = fontSize,
                     title = stringResource(AYMR.strings.novel_reader_font_size),
@@ -416,6 +382,176 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     )
                 },
             ),
+        )
+    }
+
+    @Composable
+    private fun getAiTranslationGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val aiEnabled by prefs.geminiEnabled().collectAsState()
+        val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
+        val translationProviderPref = prefs.translationProvider()
+        val translationProvider by translationProviderPref.collectAsState()
+        val privateProviderFallbackLabel = stringResource(
+            AYMR.strings.novel_reader_translation_provider_gemini_private,
+        )
+        val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
+            GeminiPrivateBridge.providerLabel()
+        } else {
+            privateProviderFallbackLabel
+        }
+        val items = mutableListOf<Preference.PreferenceItem<out Any>>(
+            Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.geminiEnabled(),
+                title = stringResource(AYMR.strings.novel_reader_gemini_enabled),
+                subtitle = stringResource(AYMR.strings.novel_reader_gemini_enabled_summary),
+                enabled = !googleTranslationEnabled,
+            ),
+        )
+
+        if (aiEnabled) {
+            items += Preference.PreferenceItem.ListPreference(
+                preference = translationProviderPref,
+                entries = persistentMapOf(
+                    NovelTranslationProvider.GEMINI to
+                        stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
+                    NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
+                    NovelTranslationProvider.OPENROUTER to
+                        stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
+                    NovelTranslationProvider.DEEPSEEK to
+                        stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
+                    NovelTranslationProvider.MISTRAL to
+                        stringResource(AYMR.strings.novel_reader_translation_provider_mistral),
+                ),
+                title = stringResource(AYMR.strings.novel_reader_translation_provider),
+            )
+
+            when (translationProvider) {
+                NovelTranslationProvider.OPENROUTER -> {
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.openRouterBaseUrl(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_openrouter_base_url),
+                        subtitle = "%s",
+                    )
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.openRouterApiKey(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_openrouter_api_key),
+                        subtitle = "%s",
+                    )
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.openRouterModel(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_openrouter_model),
+                        subtitle = "%s",
+                    )
+                }
+                NovelTranslationProvider.DEEPSEEK -> {
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.deepSeekBaseUrl(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_deepseek_base_url),
+                        subtitle = "%s",
+                    )
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.deepSeekApiKey(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_deepseek_api_key),
+                        subtitle = "%s",
+                    )
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.deepSeekModel(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_deepseek_model),
+                        subtitle = "%s",
+                    )
+                }
+                NovelTranslationProvider.MISTRAL -> {
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.mistralBaseUrl(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_mistral_base_url),
+                        subtitle = "%s",
+                    )
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.mistralApiKey(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_mistral_api_key),
+                        subtitle = "%s",
+                    )
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.mistralModel(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_mistral_model),
+                        subtitle = "%s",
+                    )
+                }
+                else -> Unit
+            }
+
+            items += Preference.PreferenceItem.ListPreference(
+                preference = prefs.geminiPromptMode(),
+                title = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
+                entries = persistentMapOf(
+                    GeminiPromptMode.CLASSIC to stringResource(
+                        AYMR.strings.novel_reader_gemini_prompt_mode_classic,
+                    ),
+                    GeminiPromptMode.ADULT_18 to stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_adult),
+                ),
+            )
+            items += Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.geminiAutoTranslateEnglishSource(),
+                title = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
+                subtitle = stringResource(AYMR.strings.novel_reader_translation_auto_english_summary),
+            )
+            items += Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.geminiPrefetchNextChapterTranslation(),
+                title = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
+                subtitle = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_summary),
+            )
+        }
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.novel_reader_gemini_section_title),
+            preferenceItems = items.toImmutableList(),
+        )
+    }
+
+    @Composable
+    private fun getGoogleTranslationGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val aiEnabled by prefs.geminiEnabled().collectAsState()
+        val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
+        val items = mutableListOf<Preference.PreferenceItem<out Any>>(
+            Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.googleTranslationEnabled(),
+                title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
+                subtitle = stringResource(AYMR.strings.novel_reader_google_translate_enable_summary),
+                enabled = !aiEnabled,
+            ),
+        )
+
+        if (googleTranslationEnabled) {
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.googleTranslationSourceLang(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_google_translate_source),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.EditTextInfoPreference(
+                preference = prefs.googleTranslationTargetLang(),
+                dialogSubtitle = null,
+                title = stringResource(AYMR.strings.novel_reader_google_translate_target),
+                subtitle = "%s",
+            )
+            items += Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.googleTranslationAutoStart(),
+                title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
+            )
+        }
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.novel_reader_google_translate),
+            preferenceItems = items.toImmutableList(),
         )
     }
 
@@ -1285,17 +1421,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
     @Composable
     private fun getAdvancedGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
-        val translationProviderPref = prefs.translationProvider()
-        val translationProvider by translationProviderPref.collectAsState()
-        val googleTranslationEnabled by prefs.googleTranslationEnabled().collectAsState()
-        val privateProviderFallbackLabel = stringResource(
-            AYMR.strings.novel_reader_translation_provider_gemini_private,
-        )
-        val privateProviderLabel = if (GeminiPrivateBridge.isInstalled()) {
-            GeminiPrivateBridge.providerLabel()
-        } else {
-            privateProviderFallbackLabel
-        }
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
             Preference.PreferenceItem.TextPreference(
                 title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
@@ -1313,114 +1438,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
                 subtitle = "%s",
             ),
-            Preference.PreferenceItem.ListPreference(
-                preference = translationProviderPref,
-                entries = persistentMapOf(
-                    NovelTranslationProvider.GEMINI to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
-                    NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
-                    NovelTranslationProvider.OPENROUTER to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
-                    NovelTranslationProvider.DEEPSEEK to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
-                    NovelTranslationProvider.MISTRAL to
-                        stringResource(AYMR.strings.novel_reader_translation_provider_mistral),
-                ),
-                title = stringResource(AYMR.strings.novel_reader_translation_provider),
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                preference = prefs.geminiAutoTranslateEnglishSource(),
-                title = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
-                subtitle = stringResource(AYMR.strings.novel_reader_translation_auto_english_summary),
-            ),
-            Preference.PreferenceItem.SwitchPreference(
-                preference = prefs.geminiPrefetchNextChapterTranslation(),
-                title = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
-                subtitle = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_summary),
-            ),
         )
-
-        if (translationProvider == NovelTranslationProvider.OPENROUTER) {
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.openRouterBaseUrl(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_openrouter_base_url),
-                subtitle = "%s",
-            )
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.openRouterApiKey(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_openrouter_api_key),
-                subtitle = "%s",
-            )
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.openRouterModel(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_openrouter_model),
-                subtitle = "%s",
-            )
-        }
-
-        if (translationProvider == NovelTranslationProvider.DEEPSEEK) {
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.deepSeekBaseUrl(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_deepseek_base_url),
-                subtitle = "%s",
-            )
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.deepSeekApiKey(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_deepseek_api_key),
-                subtitle = "%s",
-            )
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.deepSeekModel(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_deepseek_model),
-                subtitle = "%s",
-            )
-        }
-
-        if (translationProvider == NovelTranslationProvider.MISTRAL) {
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.mistralBaseUrl(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_mistral_base_url),
-                subtitle = "%s",
-            )
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.mistralApiKey(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_mistral_api_key),
-                subtitle = "%s",
-            )
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.mistralModel(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_mistral_model),
-                subtitle = "%s",
-            )
-        }
-
-        if (googleTranslationEnabled) {
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.googleTranslationSourceLang(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_google_translate_source),
-                subtitle = "%s",
-            )
-            items += Preference.PreferenceItem.EditTextInfoPreference(
-                preference = prefs.googleTranslationTargetLang(),
-                dialogSubtitle = null,
-                title = stringResource(AYMR.strings.novel_reader_google_translate_target),
-                subtitle = "%s",
-            )
-            items += Preference.PreferenceItem.SwitchPreference(
-                preference = prefs.googleTranslationAutoStart(),
-                title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
-            )
-        }
         items += Preference.PreferenceItem.MultiLineEditTextPreference(
             preference = prefs.customCSS(),
             title = stringResource(AYMR.strings.novel_reader_custom_css),

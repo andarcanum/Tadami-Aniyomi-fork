@@ -84,6 +84,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
@@ -327,6 +328,26 @@ private fun SettingsSectionHeader(
 }
 
 @Composable
+private fun getNovelReaderTranslationProviderLabel(provider: NovelTranslationProvider): String {
+    return when (provider) {
+        NovelTranslationProvider.GEMINI ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_gemini)
+        NovelTranslationProvider.GEMINI_PRIVATE ->
+            if (GeminiPrivateBridge.isInstalled()) {
+                GeminiPrivateBridge.providerLabel()
+            } else {
+                stringResource(AYMR.strings.novel_reader_translation_provider_gemini_private)
+            }
+        NovelTranslationProvider.OPENROUTER ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_openrouter)
+        NovelTranslationProvider.DEEPSEEK ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_deepseek)
+        NovelTranslationProvider.MISTRAL ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_mistral)
+    }
+}
+
+@Composable
 private fun NovelReaderAccordionSection(
     title: String,
     expanded: Boolean,
@@ -453,16 +474,6 @@ private fun GeneralTab(
             null -> null
         }
         return if (reasonText != null) "$baseSubtitle\n$reasonText" else baseSubtitle
-    }
-
-    LaunchedEffect(settings.translationProvider) {
-        if (settings.translationProvider == NovelTranslationProvider.AIRFORCE) {
-            update(
-                NovelTranslationProvider.GEMINI,
-                { o, v -> o.copy(translationProvider = v) },
-                { preferences.translationProvider().set(it) },
-            )
-        }
     }
 
     Column(
@@ -826,59 +837,19 @@ private fun GeneralTab(
                 canBeBlank = false,
                 formatSubtitle = true,
             )
-
-            SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_google_translate))
-
-            SwitchPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_google_translate_enable),
-                checked = settings.googleTranslationEnabled,
-                onCheckedChanged = {
-                    update(it, { o, v ->
-                        o.copy(googleTranslationEnabled = v)
-                    }, { preferences.googleTranslationEnabled().set(it) })
+            Text(
+                text = buildString {
+                    append(stringResource(AYMR.strings.novel_reader_translation_provider))
+                    append(": ")
+                    append(getNovelReaderTranslationProviderLabel(settings.translationProvider))
                 },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
-            EditTextPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_google_translate_source),
-                subtitle = "%s",
-                icon = null,
-                value = settings.googleTranslationSourceLang,
-                onConfirm = {
-                    update(it, { o, v ->
-                        o.copy(googleTranslationSourceLang = v)
-                    }, { preferences.googleTranslationSourceLang().set(it) })
-                    true
-                },
-                singleLine = true,
-                canBeBlank = false,
-                formatSubtitle = true,
-            )
-
-            EditTextPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_google_translate_target),
-                subtitle = "%s",
-                icon = null,
-                value = settings.googleTranslationTargetLang,
-                onConfirm = {
-                    update(it, { o, v ->
-                        o.copy(googleTranslationTargetLang = v)
-                    }, { preferences.googleTranslationTargetLang().set(it) })
-                    true
-                },
-                singleLine = true,
-                canBeBlank = false,
-                formatSubtitle = true,
-            )
-
-            SwitchPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_google_translate_auto_start),
-                checked = settings.googleTranslationAutoStart,
-                onCheckedChanged = {
-                    update(it, { o, v ->
-                        o.copy(googleTranslationAutoStart = v)
-                    }, { preferences.googleTranslationAutoStart().set(it) })
-                },
+            Text(
+                text = stringResource(AYMR.strings.novel_reader_global_settings_quick_dialog_summary),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         NovelReaderAccordionSection(

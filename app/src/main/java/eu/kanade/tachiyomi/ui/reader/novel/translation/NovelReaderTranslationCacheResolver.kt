@@ -51,7 +51,6 @@ internal fun NovelReaderSettings.translationCacheModelId(): String {
     return when (translationProvider) {
         NovelTranslationProvider.GEMINI -> geminiModel.normalizeGeminiModelId()
         NovelTranslationProvider.GEMINI_PRIVATE -> geminiModel.normalizeGeminiModelId()
-        NovelTranslationProvider.AIRFORCE -> airforceModel.trim()
         NovelTranslationProvider.OPENROUTER -> openRouterModel.trim()
         NovelTranslationProvider.DEEPSEEK -> deepSeekModel.trim()
         NovelTranslationProvider.MISTRAL -> mistralModel.trim()

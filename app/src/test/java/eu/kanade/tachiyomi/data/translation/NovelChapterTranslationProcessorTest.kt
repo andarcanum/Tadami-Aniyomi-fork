@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.data.translation
 import android.app.Application
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
@@ -25,7 +24,6 @@ class NovelChapterTranslationProcessorTest {
 
     private val application = mockk<Application>(relaxed = true)
     private val geminiTranslationService = mockk<GeminiTranslationService>()
-    private val airforceTranslationService = mockk<AirforceTranslationService>(relaxed = true)
     private val openRouterTranslationService = mockk<OpenRouterTranslationService>(relaxed = true)
     private val deepSeekTranslationService = mockk<DeepSeekTranslationService>(relaxed = true)
 
@@ -35,7 +33,6 @@ class NovelChapterTranslationProcessorTest {
             val processor = NovelChapterTranslationProcessor(
                 application = application,
                 geminiTranslationService = geminiTranslationService,
-                airforceTranslationService = airforceTranslationService,
                 openRouterTranslationService = openRouterTranslationService,
                 deepSeekTranslationService = deepSeekTranslationService,
             )

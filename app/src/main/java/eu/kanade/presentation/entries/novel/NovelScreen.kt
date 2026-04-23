@@ -1480,16 +1480,13 @@ private fun NovelClassicChapterRow(
                                     backgroundColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.24f),
                                     showProgress = translateState == NovelChapterActionIconState.InProgress,
                                     progressColor = MaterialTheme.colorScheme.primary,
-                                    size = 32.dp,
-                                    iconSize = 18.dp,
+                                    size = 36.dp,
+                                    iconSize = 20.dp,
+                                    contentDescription = stringResource(AYMR.strings.novel_reader_selected_text_translation_action_translate),
                                 )
                                 val translatedDownloadState = chapterActionState.downloadTranslatedState
                                 NovelChapterActionButton(
-                                    icon = if (translatedDownloadState == NovelChapterActionIconState.Active) {
-                                        Icons.Outlined.Download
-                                    } else {
-                                        Icons.Outlined.Download
-                                    },
+                                    icon = Icons.Outlined.Download,
                                     iconTint = when (translatedDownloadState) {
                                         NovelChapterActionIconState.Active -> MaterialTheme.colorScheme.primary
                                         NovelChapterActionIconState.InProgress -> MaterialTheme.colorScheme.tertiary
@@ -1504,8 +1501,9 @@ private fun NovelClassicChapterRow(
                                     backgroundColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.24f),
                                     showProgress = translatedDownloadState == NovelChapterActionIconState.InProgress,
                                     progressColor = MaterialTheme.colorScheme.primary,
-                                    size = 32.dp,
-                                    iconSize = 18.dp,
+                                    size = 36.dp,
+                                    iconSize = 20.dp,
+                                    contentDescription = stringResource(MR.strings.manga_download),
                                 )
                             }
                         }

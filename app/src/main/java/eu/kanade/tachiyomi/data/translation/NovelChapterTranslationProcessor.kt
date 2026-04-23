@@ -4,8 +4,6 @@ import android.app.Application
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationParams
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
@@ -46,16 +44,6 @@ class NovelChapterTranslationProcessor(
             client = networkHelper.client,
             json = json,
             promptResolver = GeminiPromptResolver(application),
-        )
-    },
-    private val airforceTranslationService: AirforceTranslationService = run {
-        val networkHelper = Injekt.get<NetworkHelper>()
-        val json = Injekt.get<Json>()
-        AirforceTranslationService(
-            client = networkHelper.client.newBuilder()
-                .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
-                .build(),
-            json = json,
         )
     },
     private val openRouterTranslationService: OpenRouterTranslationService = run {
@@ -237,13 +225,6 @@ class NovelChapterTranslationProcessor(
                     onLog = onLog,
                 )
             }
-            NovelTranslationProvider.AIRFORCE -> {
-                airforceTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toAirforceTranslationParams(),
-                    onLog = onLog,
-                )
-            }
             NovelTranslationProvider.OPENROUTER -> {
                 openRouterTranslationService.translateBatch(
                     segments = segments,
@@ -270,13 +251,12 @@ class NovelChapterTranslationProcessor(
 }
 
 private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {
-    return when (translationProvider) {
-        NovelTranslationProvider.GEMINI_PRIVATE,
-        NovelTranslationProvider.AIRFORCE,
-        -> NovelTranslationPromptFamily.RUSSIAN
-        NovelTranslationProvider.GEMINI,
-        NovelTranslationProvider.OPENROUTER,
-        NovelTranslationProvider.DEEPSEEK,
+        return when (translationProvider) {
+            NovelTranslationProvider.GEMINI_PRIVATE,
+            -> NovelTranslationPromptFamily.RUSSIAN
+            NovelTranslationProvider.GEMINI,
+            NovelTranslationProvider.OPENROUTER,
+            NovelTranslationProvider.DEEPSEEK,
         NovelTranslationProvider.MISTRAL,
         -> resolveNovelTranslationPromptFamily(geminiTargetLang)
     }
@@ -318,20 +298,6 @@ private fun NovelReaderSettings.toGeminiTranslationParams(): GeminiTranslationPa
         provider = translationProvider,
         privateUnlocked = geminiPrivateUnlocked,
         privatePythonLikeMode = geminiPrivatePythonLikeMode,
-    )
-}
-
-private fun NovelReaderSettings.toAirforceTranslationParams(): AirforceTranslationParams {
-    return AirforceTranslationParams(
-        baseUrl = airforceBaseUrl,
-        apiKey = airforceApiKey,
-        model = airforceModel,
-        sourceLang = geminiSourceLang,
-        targetLang = geminiTargetLang,
-        promptMode = geminiPromptMode,
-        promptModifiers = resolveTranslationPromptModifiers(),
-        temperature = geminiTemperature,
-        topP = geminiTopP,
     )
 }
 
@@ -386,9 +352,6 @@ private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
         NovelTranslationProvider.GEMINI_PRIVATE -> {
             geminiApiKey.isNotBlank() && isPrivateBridgeUnlocked()
         }
-        NovelTranslationProvider.AIRFORCE -> {
-            airforceBaseUrl.isNotBlank() && airforceApiKey.isNotBlank() && airforceModel.isNotBlank()
-        }
         NovelTranslationProvider.OPENROUTER -> {
             openRouterBaseUrl.isNotBlank() &&
                 openRouterApiKey.isNotBlank() &&
@@ -404,15 +367,14 @@ private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
 }
 
 private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
-    return when (translationProvider) {
-        NovelTranslationProvider.GEMINI -> geminiConcurrency.coerceIn(1, 8)
-        NovelTranslationProvider.GEMINI_PRIVATE -> {
-            if (shouldUseSinglePrivateChapterRequestMode()) 1 else geminiConcurrency.coerceIn(1, 8)
-        }
-        NovelTranslationProvider.AIRFORCE -> 1
-        NovelTranslationProvider.OPENROUTER -> 1
-        NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
-        NovelTranslationProvider.MISTRAL -> 1
+        return when (translationProvider) {
+            NovelTranslationProvider.GEMINI -> geminiConcurrency.coerceIn(1, 8)
+            NovelTranslationProvider.GEMINI_PRIVATE -> {
+                if (shouldUseSinglePrivateChapterRequestMode()) 1 else geminiConcurrency.coerceIn(1, 8)
+            }
+            NovelTranslationProvider.OPENROUTER -> 1
+            NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
+            NovelTranslationProvider.MISTRAL -> 1
     }
 }
 
@@ -460,9 +422,6 @@ private fun NovelReaderSettings.translationRequestConfigLog(): String {
                 "singleRequest=${shouldUseSinglePrivateChapterRequestMode()}, " +
                 "pythonLike=$geminiPrivatePythonLikeMode, " +
                 "bridgeInstalled=${GeminiPrivateBridge.isInstalled()}, bridgeUnlocked=${isPrivateBridgeUnlocked()}"
-        }
-        NovelTranslationProvider.AIRFORCE -> {
-            "baseUrl=${airforceBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, topP=${geminiTopP.toLogFloat()}"
         }
         NovelTranslationProvider.OPENROUTER -> {
             val isFreeModel = openRouterModel.trim().endsWith(":free", ignoreCase = true)

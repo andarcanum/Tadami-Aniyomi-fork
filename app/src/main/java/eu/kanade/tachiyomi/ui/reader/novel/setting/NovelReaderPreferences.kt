@@ -119,9 +119,6 @@ data class NovelReaderSettings(
     val geminiPrivateUnlocked: Boolean = false,
     val geminiPrivatePythonLikeMode: Boolean = false,
     val translationProvider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
-    val airforceBaseUrl: String = "https://api.airforce",
-    val airforceApiKey: String = "",
-    val airforceModel: String = "",
     val openRouterBaseUrl: String = "https://openrouter.ai/api/v1",
     val openRouterApiKey: String = "",
     val openRouterModel: String = "",
@@ -255,7 +252,6 @@ enum class NovelTranslationStylePreset {
 enum class NovelTranslationProvider {
     GEMINI,
     GEMINI_PRIVATE,
-    AIRFORCE,
     OPENROUTER,
     DEEPSEEK,
     MISTRAL,
@@ -370,9 +366,6 @@ data class NovelReaderOverride(
     val geminiPrivateUnlocked: Boolean? = null,
     val geminiPrivatePythonLikeMode: Boolean? = null,
     val translationProvider: NovelTranslationProvider? = null,
-    val airforceBaseUrl: String? = null,
-    val airforceApiKey: String? = null,
-    val airforceModel: String? = null,
     val openRouterBaseUrl: String? = null,
     val openRouterApiKey: String? = null,
     val openRouterModel: String? = null,
@@ -717,12 +710,6 @@ class NovelReaderPreferences(
             .set(format.name)
     }
 
-    fun airforceBaseUrl() = preferenceStore.getString("novel_reader_airforce_base_url", "https://api.airforce")
-
-    fun airforceApiKey() = preferenceStore.getString("novel_reader_airforce_api_key", "")
-
-    fun airforceModel() = preferenceStore.getString("novel_reader_airforce_model", "")
-
     fun openRouterBaseUrl() = preferenceStore.getString(
         "novel_reader_openrouter_base_url",
         "https://openrouter.ai/api/v1",
@@ -909,9 +896,6 @@ class NovelReaderPreferences(
                 geminiPrefetchNextChapterTranslation = geminiPrefetchNextChapterTranslation().get(),
                 geminiPrivatePythonLikeMode = geminiPrivatePythonLikeMode().get(),
                 translationProvider = translationProvider().get(),
-                airforceBaseUrl = airforceBaseUrl().get(),
-                airforceApiKey = airforceApiKey().get(),
-                airforceModel = airforceModel().get(),
                 openRouterBaseUrl = openRouterBaseUrl().get(),
                 openRouterApiKey = openRouterApiKey().get(),
                 openRouterModel = openRouterModel().get(),
@@ -1050,9 +1034,6 @@ class NovelReaderPreferences(
             geminiPrivatePythonLikeMode =
             override?.geminiPrivatePythonLikeMode ?: geminiPrivatePythonLikeMode().get(),
             translationProvider = override?.translationProvider ?: translationProvider().get(),
-            airforceBaseUrl = override?.airforceBaseUrl ?: airforceBaseUrl().get(),
-            airforceApiKey = override?.airforceApiKey ?: airforceApiKey().get(),
-            airforceModel = override?.airforceModel ?: airforceModel().get(),
             openRouterBaseUrl = override?.openRouterBaseUrl ?: openRouterBaseUrl().get(),
             openRouterApiKey = override?.openRouterApiKey ?: openRouterApiKey().get(),
             openRouterModel = override?.openRouterModel ?: openRouterModel().get(),
@@ -1265,9 +1246,6 @@ class NovelReaderPreferences(
             geminiPrivateUnlocked().changes(),
             geminiPrivatePythonLikeMode().changes(),
             translationProvider().changes(),
-            airforceBaseUrl().changes(),
-            airforceApiKey().changes(),
-            airforceModel().changes(),
             openRouterBaseUrl().changes(),
             openRouterApiKey().changes(),
             openRouterModel().changes(),
@@ -1307,22 +1285,19 @@ class NovelReaderPreferences(
                 privateUnlocked = values[21] as Boolean,
                 privatePythonLikeMode = values[22] as Boolean,
                 translationProvider = values[23] as NovelTranslationProvider,
-                airforceBaseUrl = values[24] as String,
-                airforceApiKey = values[25] as String,
-                airforceModel = values[26] as String,
-                openRouterBaseUrl = values[27] as String,
-                openRouterApiKey = values[28] as String,
-                openRouterModel = values[29] as String,
-                deepSeekBaseUrl = values[30] as String,
-                deepSeekApiKey = values[31] as String,
-                deepSeekModel = values[32] as String,
-                mistralBaseUrl = values[33] as String,
-                mistralApiKey = values[34] as String,
-                mistralModel = values[35] as String,
-                googleTranslationEnabled = values[36] as Boolean,
-                googleTranslationSourceLang = values[37] as String,
-                googleTranslationTargetLang = values[38] as String,
-                googleTranslationAutoStart = values[39] as Boolean,
+                openRouterBaseUrl = values[24] as String,
+                openRouterApiKey = values[25] as String,
+                openRouterModel = values[26] as String,
+                deepSeekBaseUrl = values[27] as String,
+                deepSeekApiKey = values[28] as String,
+                deepSeekModel = values[29] as String,
+                mistralBaseUrl = values[30] as String,
+                mistralApiKey = values[31] as String,
+                mistralModel = values[32] as String,
+                googleTranslationEnabled = values[33] as Boolean,
+                googleTranslationSourceLang = values[34] as String,
+                googleTranslationTargetLang = values[35] as String,
+                googleTranslationAutoStart = values[36] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1474,9 +1449,6 @@ class NovelReaderPreferences(
                 geminiPrivatePythonLikeMode =
                 override?.geminiPrivatePythonLikeMode ?: gemini.privatePythonLikeMode,
                 translationProvider = override?.translationProvider ?: gemini.translationProvider,
-                airforceBaseUrl = override?.airforceBaseUrl ?: gemini.airforceBaseUrl,
-                airforceApiKey = override?.airforceApiKey ?: gemini.airforceApiKey,
-                airforceModel = override?.airforceModel ?: gemini.airforceModel,
                 openRouterBaseUrl = override?.openRouterBaseUrl ?: gemini.openRouterBaseUrl,
                 openRouterApiKey = override?.openRouterApiKey ?: gemini.openRouterApiKey,
                 openRouterModel = override?.openRouterModel ?: gemini.openRouterModel,
@@ -1615,9 +1587,6 @@ class NovelReaderPreferences(
         val privateUnlocked: Boolean,
         val privatePythonLikeMode: Boolean,
         val translationProvider: NovelTranslationProvider,
-        val airforceBaseUrl: String,
-        val airforceApiKey: String,
-        val airforceModel: String,
         val openRouterBaseUrl: String,
         val openRouterApiKey: String,
         val openRouterModel: String,
