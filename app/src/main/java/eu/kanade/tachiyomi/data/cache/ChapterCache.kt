@@ -4,7 +4,6 @@ import android.content.Context
 import android.text.format.Formatter
 import com.jakewharton.disklrucache.DiskLruCache
 import eu.kanade.tachiyomi.source.model.Page
-import eu.kanade.tachiyomi.ui.reader.loader.dedupeByStableIdentity
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.saveTo
 import kotlinx.serialization.encodeToString
@@ -71,7 +70,7 @@ class ChapterCache(
         return runCatching {
             diskCache.get(key).use { snapshot ->
                 snapshot?.getString(0)?.let { cachedValue ->
-                    json.decodeFromString<List<Page>>(cachedValue).dedupeByStableIdentity()
+                    json.decodeFromString<List<Page>>(cachedValue)
                 }.orEmpty()
             }
         }.getOrElse {
@@ -87,9 +86,6 @@ class ChapterCache(
      * @param pages list of pages.
      */
     fun putPageListToCache(chapter: Chapter, pages: List<Page>) {
-        // Convert list of pages to json string.
-        val cachedValue = json.encodeToString(pages.dedupeByStableIdentity())
-
         // Initialize the editor (edits the values for an entry).
         var editor: DiskLruCache.Editor? = null
 
@@ -100,7 +96,7 @@ class ChapterCache(
 
             // Write chapter urls to cache.
             editor.newOutputStream(0).sink().buffer().use {
-                it.write(cachedValue.toByteArray())
+                it.write(json.encodeToString(pages).toByteArray())
                 it.flush()
             }
 

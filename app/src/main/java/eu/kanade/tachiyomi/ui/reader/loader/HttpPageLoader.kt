@@ -39,7 +39,6 @@ internal class HttpPageLoader(
 ) : PageLoader() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val bypassChapterPageListCache = shouldBypassChapterPageListCache(source.baseUrl)
 
     /**
      * A queue used to manage requests one by one while allowing priorities.
@@ -71,29 +70,9 @@ internal class HttpPageLoader(
      * otherwise fallbacks to network.
      */
     override suspend fun getPages(): List<ReaderPage> {
-        val pages = if (bypassChapterPageListCache) {
-            source.getPageList(chapter.chapter)
-        } else {
-            val cachedPages = chapterCache
-                .getPageListFromCache(chapter.chapter.toDomainChapter()!!)
-                .dedupeByStableIdentity()
-            if (cachedPages.isNotEmpty()) {
-                cachedPages
-            } else {
-                try {
-                    source.getPageList(chapter.chapter).dedupeByStableIdentity()
-                } catch (e: Throwable) {
-                    if (e is CancellationException) {
-                        throw e
-                    }
-                    if (cachedPages.isNotEmpty()) {
-                        cachedPages
-                    } else {
-                        throw e
-                    }
-                }
-            }
-        }
+        val domainChapter = chapter.chapter.toDomainChapter()!!
+        val cachedPages = chapterCache.getPageListFromCache(domainChapter)
+        val pages = if (cachedPages.isNotEmpty()) cachedPages else source.getPageList(chapter.chapter)
         return pages.mapIndexed { index, page ->
             // Don't trust sources and use our own indexing
             ReaderPage(index, page.url, page.imageUrl)
@@ -152,7 +131,6 @@ internal class HttpPageLoader(
         super.recycle()
         scope.cancel()
         queue.clear()
-        if (bypassChapterPageListCache) return
 
         // Cache current page list progress for online chapters to allow a faster reopen
         chapter.pages?.let { pages ->
