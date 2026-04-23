@@ -837,24 +837,7 @@ internal fun resolveMainStatusBarStyleMode(
     isAurora: Boolean,
     isLightStatusBarBackground: Boolean,
 ): MainStatusBarStyleMode {
-    if (isHomeScreen && isAurora) {
-        // Aurora home surfaces are dark-toned, so status bar icons must stay light.
-        return MainStatusBarStyleMode.DARK
-    }
-
-    if (isHomeScreen) {
-        return if (isLightStatusBarBackground) {
-            MainStatusBarStyleMode.TRANSPARENT_LIGHT
-        } else {
-            MainStatusBarStyleMode.DARK
-        }
-    }
-
-    return if (isLightStatusBarBackground) {
-        MainStatusBarStyleMode.LIGHT
-    } else {
-        MainStatusBarStyleMode.DARK
-    }
+    return MainStatusBarStyleMode.DARK
 }
 
 internal fun shouldMainActivityApplyEdgeToEdge(screen: Any?): Boolean {
