@@ -180,8 +180,12 @@ object NovelChapterCardCompactUi {
                                         backgroundColor = colors.surface.copy(alpha = 0.24f),
                                         showProgress = translateState == NovelChapterActionIconState.InProgress,
                                         progressColor = colors.accent,
-                                        size = 32.dp,
-                                        iconSize = 18.dp,
+                                        size = 36.dp,
+                                        iconSize = 20.dp,
+                                        contentDescription = stringResource(
+                                            tachiyomi.i18n.aniyomi.AYMR.strings
+                                                .novel_reader_selected_text_translation_action_translate,
+                                        ),
                                     )
                                     val translatedDownloadState = chapterActionState.downloadTranslatedState
                                     NovelChapterActionButton(
@@ -199,11 +203,14 @@ object NovelChapterCardCompactUi {
                                         },
                                         onLongClick = onTranslatedDownloadLongClick,
                                         backgroundColor = colors.surface.copy(alpha = 0.24f),
-                                        showProgress =
-                                        translatedDownloadState == NovelChapterActionIconState.InProgress,
+                                        showProgress = translatedDownloadState ==
+                                            NovelChapterActionIconState.InProgress,
                                         progressColor = colors.accent,
-                                        size = 32.dp,
-                                        iconSize = 18.dp,
+                                        size = 36.dp,
+                                        iconSize = 20.dp,
+                                        contentDescription = stringResource(
+                                            MR.strings.manga_download,
+                                        ),
                                     )
                                 }
                             }

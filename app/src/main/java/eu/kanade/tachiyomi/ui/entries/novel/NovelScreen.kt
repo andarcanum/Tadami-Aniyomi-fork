@@ -2,11 +2,21 @@ package eu.kanade.tachiyomi.ui.entries.novel
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +29,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.DoneAll
@@ -32,10 +44,11 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarResult
@@ -45,6 +58,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,14 +69,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.window.Dialog
 import androidx.core.net.toUri
+import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
@@ -76,6 +93,7 @@ import eu.kanade.presentation.entries.novel.TranslatedDownloadOptionsDialog
 import eu.kanade.presentation.entries.novel.components.NovelCoverDialog
 import eu.kanade.presentation.entries.novel.components.NovelTranslatedDownloadFormatSelector
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
+import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportProgress
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.novelsource.NovelSource
@@ -147,6 +165,7 @@ class NovelScreen(
         var showTranslatedOptionsDialog by remember { mutableStateOf(false) }
         var translatedOptionsChapterId by remember { mutableStateOf<Long?>(null) }
         var showEpubExportDialog by remember { mutableStateOf(false) }
+        var epubExportProgress by remember { mutableStateOf<NovelEpubExportProgress?>(null) }
         val epubExportPreferences = screenModel.getEpubExportPreferences()
         BackHandler(enabled = screenModel.isAnyChapterSelected) {
             screenModel.toggleAllSelection(false)
@@ -617,13 +636,19 @@ class NovelScreen(
         }
 
         if (showEpubExportDialog) {
-            NovelEpubExportDialog(
-                chapterCount = successState.chapters.size,
+            NovelEpubExportSheet(
+                chapters = successState.chapters,
+                downloadedChapterIds = successState.downloadedChapterIds,
                 initialDestinationTreeUri = epubExportPreferences.destinationTreeUri,
                 initialApplyReaderTheme = epubExportPreferences.applyReaderTheme,
                 initialIncludeCustomCss = epubExportPreferences.includeCustomCss,
                 initialIncludeCustomJs = epubExportPreferences.includeCustomJs,
-                onDismissRequest = { showEpubExportDialog = false },
+                progress = epubExportProgress,
+                onDismissRequest = {
+                    if (epubExportProgress == null) {
+                        showEpubExportDialog = false
+                    }
+                },
                 onExportClicked = {
                         downloadedOnly,
                         startChapter,
@@ -633,7 +658,6 @@ class NovelScreen(
                         includeCustomCss,
                         includeCustomJs,
                     ->
-                    showEpubExportDialog = false
                     coroutineScope.launch {
                         screenModel.saveEpubExportPreferences(
                             destinationTreeUri = destinationTreeUri,
@@ -641,20 +665,28 @@ class NovelScreen(
                             includeCustomCss = includeCustomCss,
                             includeCustomJs = includeCustomJs,
                         )
-
-                        val exportFile = screenModel.exportAsEpub(
-                            downloadedOnly = downloadedOnly,
-                            startChapter = startChapter,
-                            endChapter = endChapter,
-                            destinationTreeUri = destinationTreeUri,
-                            applyReaderTheme = applyReaderTheme,
-                            includeCustomCss = includeCustomCss,
-                            includeCustomJs = includeCustomJs,
-                        )
+                        epubExportProgress = NovelEpubExportProgress.Preparing(successState.chapters.size)
+                        val exportFile = try {
+                            screenModel.exportAsEpub(
+                                downloadedOnly = downloadedOnly,
+                                startChapter = startChapter,
+                                endChapter = endChapter,
+                                destinationTreeUri = destinationTreeUri,
+                                applyReaderTheme = applyReaderTheme,
+                                includeCustomCss = includeCustomCss,
+                                includeCustomJs = includeCustomJs,
+                                onProgress = { progress ->
+                                    epubExportProgress = progress
+                                },
+                            )
+                        } finally {
+                            epubExportProgress = null
+                        }
                         if (exportFile == null) {
                             context.toast(context.contextStringResource(AYMR.strings.novel_export_failed))
                             return@launch
                         }
+                        showEpubExportDialog = false
                         if (destinationTreeUri.isNotBlank()) {
                             context.toast(context.contextStringResource(AYMR.strings.novel_export_saved_to_folder))
                             return@launch
@@ -1275,12 +1307,14 @@ internal fun NovelDownloadChapterPickerDialog(
 }
 
 @Composable
-private fun NovelEpubExportDialog(
-    chapterCount: Int,
+private fun NovelEpubExportSheet(
+    chapters: List<DomainNovelChapter>,
+    downloadedChapterIds: Set<Long>,
     initialDestinationTreeUri: String,
     initialApplyReaderTheme: Boolean,
     initialIncludeCustomCss: Boolean,
     initialIncludeCustomJs: Boolean,
+    progress: NovelEpubExportProgress?,
     onDismissRequest: () -> Unit,
     onExportClicked: (
         downloadedOnly: Boolean,
@@ -1293,14 +1327,17 @@ private fun NovelEpubExportDialog(
     ) -> Unit,
 ) {
     val context = LocalContext.current
-    var exportAll by remember { mutableStateOf(true) }
-    var downloadedOnly by remember { mutableStateOf(true) }
-    var startChapterText by remember { mutableStateOf("") }
-    var endChapterText by remember { mutableStateOf("") }
-    var destinationTreeUri by remember(initialDestinationTreeUri) { mutableStateOf(initialDestinationTreeUri) }
-    var applyReaderTheme by remember(initialApplyReaderTheme) { mutableStateOf(initialApplyReaderTheme) }
-    var includeCustomCss by remember(initialIncludeCustomCss) { mutableStateOf(initialIncludeCustomCss) }
-    var includeCustomJs by remember(initialIncludeCustomJs) { mutableStateOf(initialIncludeCustomJs) }
+    val chapterCount = remember(chapters) { chapters.size }
+    var exportAll by rememberSaveable { mutableStateOf(true) }
+    var downloadedOnly by rememberSaveable { mutableStateOf(true) }
+    var startChapterText by rememberSaveable { mutableStateOf("") }
+    var endChapterText by rememberSaveable { mutableStateOf("") }
+    var destinationTreeUri by rememberSaveable(initialDestinationTreeUri) { mutableStateOf(initialDestinationTreeUri) }
+    var applyReaderTheme by rememberSaveable(initialApplyReaderTheme) { mutableStateOf(initialApplyReaderTheme) }
+    var includeCustomCss by rememberSaveable(initialIncludeCustomCss) { mutableStateOf(initialIncludeCustomCss) }
+    var includeCustomJs by rememberSaveable(initialIncludeCustomJs) { mutableStateOf(initialIncludeCustomJs) }
+    val isExporting = progress != null
+    val destinationLabel = remember(destinationTreeUri) { resolveTreeUriDisplayName(context, destinationTreeUri) }
 
     val folderPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -1322,156 +1359,173 @@ private fun NovelEpubExportDialog(
         endChapterText = endChapterText,
         chapterCount = chapterCount,
     )
+    val totalSelectedChapters by remember(
+        chapters,
+        downloadedChapterIds,
+        exportAll,
+        downloadedOnly,
+        rangeSelection,
+    ) {
+        derivedStateOf {
+            calculateEpubSelectedChapterCount(
+                chapters = chapters,
+                downloadedChapterIds = downloadedChapterIds,
+                exportAll = exportAll,
+                rangeSelection = rangeSelection,
+                downloadedOnly = downloadedOnly,
+            )
+        }
+    }
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismissRequest,
-        title = {
+    ) {
+        val pressInteraction = remember { MutableInteractionSource() }
+        val isPressed by pressInteraction.collectIsPressedAsState()
+        val animatedScale by animateFloatAsState(
+            targetValue = if (isPressed) 0.96f else 1f,
+            animationSpec = spring(stiffness = Spring.StiffnessLow),
+            label = "epub_export_cta_scale",
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
             Text(
                 text = stringResource(AYMR.strings.novel_export_as_epub),
                 style = MaterialTheme.typography.headlineSmall,
             )
-        },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = destinationTreeUri,
-                    onValueChange = { destinationTreeUri = it },
-                    label = { Text(stringResource(AYMR.strings.novel_export_destination_folder)) },
-                    placeholder = { Text(stringResource(AYMR.strings.novel_export_select_folder)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    trailingIcon = {
-                        IconButton(onClick = { folderPicker.launch(null) }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Folder,
-                                contentDescription = stringResource(AYMR.strings.novel_export_select_folder),
-                            )
-                        }
-                    },
-                )
+
+            NovelExportCard(
+                title = stringResource(AYMR.strings.novel_export_destination_folder),
+                icon = Icons.Outlined.Folder,
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 8.dp),
+                        .clickable { folderPicker.launch(null) }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = stringResource(AYMR.strings.novel_export_all_chapters),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(top = 12.dp),
+                        text = destinationLabel.ifBlank {
+                            stringResource(AYMR.strings.novel_export_select_folder)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
                     )
-                    Switch(
-                        checked = exportAll,
-                        onCheckedChange = { exportAll = it },
-                    )
-                }
-                if (!exportAll) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                    ) {
-                        OutlinedTextField(
-                            value = startChapterText,
-                            onValueChange = { startChapterText = it.filter(Char::isDigit) },
-                            label = { Text(stringResource(AYMR.strings.novel_export_start_chapter_short)) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                        )
-                        OutlinedTextField(
-                            value = endChapterText,
-                            onValueChange = { endChapterText = it.filter(Char::isDigit) },
-                            label = { Text(stringResource(AYMR.strings.novel_export_end_chapter_short)) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(start = 8.dp),
-                        )
+                    TextButton(onClick = { folderPicker.launch(null) }) {
+                        Text(text = stringResource(AYMR.strings.novel_export_select_folder))
                     }
                 }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
+            }
+
+            NovelExportCard(
+                title = stringResource(AYMR.strings.novel_export_all_chapters),
+                icon = Icons.Outlined.FilterList,
+            ) {
+                NovelExportSwitchRow(
+                    label = stringResource(AYMR.strings.novel_export_all_chapters),
+                    checked = exportAll,
+                    enabled = !isExporting,
+                    onCheckedChange = { exportAll = it },
+                )
+                NovelExportSwitchRow(
+                    label = stringResource(AYMR.strings.novel_export_downloaded_only),
+                    checked = downloadedOnly,
+                    enabled = !isExporting,
+                    onCheckedChange = { downloadedOnly = it },
+                )
+                AnimatedVisibility(
+                    visible = !exportAll,
+                    enter = expandVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)),
+                    exit = shrinkVertically(animationSpec = spring(stiffness = Spring.StiffnessLow)),
                 ) {
-                    Text(
-                        text = stringResource(AYMR.strings.novel_export_downloaded_only),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(top = 12.dp),
-                    )
-                    Switch(
-                        checked = downloadedOnly,
-                        onCheckedChange = { downloadedOnly = it },
-                    )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                ) {
-                    Text(
-                        text = stringResource(AYMR.strings.novel_export_apply_reader_theme),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(top = 12.dp),
-                    )
-                    Switch(
-                        checked = applyReaderTheme,
-                        onCheckedChange = { applyReaderTheme = it },
-                    )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                ) {
-                    Text(
-                        text = stringResource(AYMR.strings.novel_export_include_custom_css),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(top = 12.dp),
-                    )
-                    Switch(
-                        checked = includeCustomCss,
-                        onCheckedChange = { includeCustomCss = it },
-                    )
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                ) {
-                    Text(
-                        text = stringResource(AYMR.strings.novel_export_include_custom_js),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(top = 12.dp),
-                    )
-                    Switch(
-                        checked = includeCustomJs,
-                        onCheckedChange = { includeCustomJs = it },
-                    )
+                    Column(
+                        modifier = Modifier.padding(top = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            OutlinedTextField(
+                                value = startChapterText,
+                                onValueChange = { startChapterText = it.filter(Char::isDigit) },
+                                label = { Text(stringResource(AYMR.strings.novel_export_start_chapter_short)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                enabled = !isExporting,
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = endChapterText,
+                                onValueChange = { endChapterText = it.filter(Char::isDigit) },
+                                label = { Text(stringResource(AYMR.strings.novel_export_end_chapter_short)) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                enabled = !isExporting,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (!rangeSelection.isValid) {
+                            Text(
+                                text = stringResource(AYMR.strings.novel_export_invalid_range),
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
                 Text(
-                    text = stringResource(AYMR.strings.novel_export_custom_js_warning),
-                    modifier = Modifier.padding(top = 4.dp),
+                    text = "Будет обработано: $totalSelectedChapters из $chapterCount",
                     style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 12.dp),
                 )
-                if (!rangeSelection.isValid) {
+            }
+
+            NovelExportCard(
+                title = stringResource(AYMR.strings.novel_export_apply_reader_theme),
+                icon = Icons.Outlined.DoneAll,
+            ) {
+                NovelExportSwitchRow(
+                    label = stringResource(AYMR.strings.novel_export_apply_reader_theme),
+                    checked = applyReaderTheme,
+                    enabled = !isExporting,
+                    onCheckedChange = { applyReaderTheme = it },
+                )
+                NovelExportSwitchRow(
+                    label = stringResource(AYMR.strings.novel_export_include_custom_css),
+                    checked = includeCustomCss,
+                    enabled = !isExporting,
+                    onCheckedChange = { includeCustomCss = it },
+                )
+                NovelExportSwitchRow(
+                    label = stringResource(AYMR.strings.novel_export_include_custom_js),
+                    checked = includeCustomJs,
+                    enabled = !isExporting,
+                    onCheckedChange = { includeCustomJs = it },
+                )
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                ) {
                     Text(
-                        text = stringResource(AYMR.strings.novel_export_invalid_range),
-                        modifier = Modifier.padding(top = 12.dp),
-                        color = MaterialTheme.colorScheme.error,
+                        text = stringResource(AYMR.strings.novel_export_custom_js_warning),
                         style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                     )
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = rangeSelection.isValid,
+
+            Button(
                 onClick = {
                     onExportClicked(
                         downloadedOnly,
@@ -1483,16 +1537,149 @@ private fun NovelEpubExportDialog(
                         includeCustomJs,
                     )
                 },
+                enabled = rangeSelection.isValid && !isExporting,
+                interactionSource = pressInteraction,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        scaleX = animatedScale
+                        scaleY = animatedScale
+                    },
             ) {
-                Text(text = stringResource(AYMR.strings.novel_export_confirm))
+                if (isExporting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(text = resolveEpubProgressLabel(progress))
+                } else {
+                    Text(text = stringResource(AYMR.strings.novel_export_confirm))
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismissRequest) {
+
+            TextButton(
+                onClick = onDismissRequest,
+                enabled = !isExporting,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
                 Text(text = stringResource(MR.strings.action_cancel))
             }
-        },
-    )
+        }
+    }
+}
+
+@Composable
+private fun NovelExportCard(
+    title: String,
+    icon: ImageVector,
+    content: @Composable () -> Unit,
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = colorScheme.outlineVariant.copy(alpha = 0.6f),
+                shape = RoundedCornerShape(24.dp),
+            ),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    letterSpacing = 0.1.em,
+                )
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun NovelExportSwitchRow(
+    label: String,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange,
+        )
+    }
+}
+
+private fun resolveEpubProgressLabel(progress: NovelEpubExportProgress?): String {
+    return when (progress) {
+        null -> ""
+        is NovelEpubExportProgress.Preparing -> "0/${progress.totalChapters}"
+        is NovelEpubExportProgress.ChapterProcessed -> "${progress.current}/${progress.total}"
+        NovelEpubExportProgress.Finalizing -> "..."
+        is NovelEpubExportProgress.Done -> "100%"
+    }
+}
+
+private fun resolveTreeUriDisplayName(
+    context: Context,
+    treeUri: String,
+): String {
+    if (treeUri.isBlank()) return ""
+    val parsed = runCatching { Uri.parse(treeUri) }.getOrNull() ?: return treeUri
+    val displayName = runCatching { DocumentFile.fromTreeUri(context, parsed)?.name }.getOrNull()
+    if (!displayName.isNullOrBlank()) return displayName
+    val segment = parsed.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+    return segment ?: treeUri
+}
+
+private fun calculateEpubSelectedChapterCount(
+    chapters: List<DomainNovelChapter>,
+    downloadedChapterIds: Set<Long>,
+    exportAll: Boolean,
+    rangeSelection: NovelEpubRangeSelection,
+    downloadedOnly: Boolean,
+): Int {
+    if (chapters.isEmpty()) return 0
+    val ordered = chapters.sortedBy { it.sourceOrder }
+    val scoped = if (exportAll) {
+        ordered
+    } else if (rangeSelection.isValid && rangeSelection.startChapter != null && rangeSelection.endChapter != null) {
+        val start = (rangeSelection.startChapter - 1).coerceAtLeast(0)
+        val endExclusive = rangeSelection.endChapter.coerceAtMost(ordered.size)
+        if (start >= endExclusive) emptyList() else ordered.subList(start, endExclusive)
+    } else {
+        emptyList()
+    }
+    return if (downloadedOnly) {
+        scoped.count { it.id in downloadedChapterIds }
+    } else {
+        scoped.size
+    }
 }
 
 internal data class NovelEpubRangeSelection(

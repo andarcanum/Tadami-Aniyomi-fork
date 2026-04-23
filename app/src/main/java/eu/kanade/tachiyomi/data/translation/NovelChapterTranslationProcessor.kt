@@ -4,8 +4,6 @@ import android.app.Application
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationParams
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
@@ -14,8 +12,13 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralPromptResolver
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveNovelTranslationPromptFamily
@@ -45,16 +48,6 @@ class NovelChapterTranslationProcessor(
             promptResolver = GeminiPromptResolver(application),
         )
     },
-    private val airforceTranslationService: AirforceTranslationService = run {
-        val networkHelper = Injekt.get<NetworkHelper>()
-        val json = Injekt.get<Json>()
-        AirforceTranslationService(
-            client = networkHelper.client.newBuilder()
-                .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
-                .build(),
-            json = json,
-        )
-    },
     private val openRouterTranslationService: OpenRouterTranslationService = run {
         val networkHelper = Injekt.get<NetworkHelper>()
         val json = Injekt.get<Json>()
@@ -76,6 +69,27 @@ class NovelChapterTranslationProcessor(
             resolveSystemPrompt = { mode, family ->
                 DeepSeekPromptResolver(application).resolveSystemPrompt(mode, family)
             },
+        )
+    },
+    private val mistralTranslationService: MistralTranslationService = run {
+        val networkHelper = Injekt.get<NetworkHelper>()
+        val json = Injekt.get<Json>()
+        MistralTranslationService(
+            client = networkHelper.client.newBuilder()
+                .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                .build(),
+            json = json,
+            resolveSystemPrompt = { mode, family ->
+                MistralPromptResolver(application).resolveSystemPrompt(mode, family)
+            },
+        )
+    },
+    private val nvidiaTranslationService: NvidiaTranslationService = run {
+        val networkHelper = Injekt.get<NetworkHelper>()
+        val json = Injekt.get<Json>()
+        NvidiaTranslationService(
+            client = networkHelper.client,
+            json = json,
         )
     },
 ) {
@@ -221,13 +235,6 @@ class NovelChapterTranslationProcessor(
                     onLog = onLog,
                 )
             }
-            NovelTranslationProvider.AIRFORCE -> {
-                airforceTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toAirforceTranslationParams(),
-                    onLog = onLog,
-                )
-            }
             NovelTranslationProvider.OPENROUTER -> {
                 openRouterTranslationService.translateBatch(
                     segments = segments,
@@ -242,6 +249,20 @@ class NovelChapterTranslationProcessor(
                     onLog = onLog,
                 )
             }
+            NovelTranslationProvider.MISTRAL -> {
+                mistralTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toMistralTranslationParams(),
+                    onLog = onLog,
+                )
+            }
+            NovelTranslationProvider.NVIDIA -> {
+                nvidiaTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toNvidiaTranslationParams(),
+                    onLog = onLog,
+                )
+            }
         }
     }
 }
@@ -249,11 +270,12 @@ class NovelChapterTranslationProcessor(
 private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {
     return when (translationProvider) {
         NovelTranslationProvider.GEMINI_PRIVATE,
-        NovelTranslationProvider.AIRFORCE,
         -> NovelTranslationPromptFamily.RUSSIAN
         NovelTranslationProvider.GEMINI,
         NovelTranslationProvider.OPENROUTER,
         NovelTranslationProvider.DEEPSEEK,
+        NovelTranslationProvider.MISTRAL,
+        NovelTranslationProvider.NVIDIA,
         -> resolveNovelTranslationPromptFamily(geminiTargetLang)
     }
 }
@@ -297,20 +319,6 @@ private fun NovelReaderSettings.toGeminiTranslationParams(): GeminiTranslationPa
     )
 }
 
-private fun NovelReaderSettings.toAirforceTranslationParams(): AirforceTranslationParams {
-    return AirforceTranslationParams(
-        baseUrl = airforceBaseUrl,
-        apiKey = airforceApiKey,
-        model = airforceModel,
-        sourceLang = geminiSourceLang,
-        targetLang = geminiTargetLang,
-        promptMode = geminiPromptMode,
-        promptModifiers = resolveTranslationPromptModifiers(),
-        temperature = geminiTemperature,
-        topP = geminiTopP,
-    )
-}
-
 private fun NovelReaderSettings.toOpenRouterTranslationParams(): OpenRouterTranslationParams {
     return OpenRouterTranslationParams(
         baseUrl = openRouterBaseUrl,
@@ -341,15 +349,40 @@ private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslati
     )
 }
 
+private fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslationParams {
+    return MistralTranslationParams(
+        baseUrl = mistralBaseUrl,
+        apiKey = mistralApiKey,
+        model = mistralModel,
+        sourceLang = geminiSourceLang,
+        targetLang = geminiTargetLang,
+        promptMode = geminiPromptMode,
+        promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
+        temperature = geminiTemperature,
+        topP = geminiTopP,
+    )
+}
+
+private fun NovelReaderSettings.toNvidiaTranslationParams(): NvidiaTranslationParams {
+    return NvidiaTranslationParams(
+        baseUrl = nvidiaBaseUrl,
+        apiKey = nvidiaApiKey,
+        model = nvidiaModel,
+        sourceLang = geminiSourceLang,
+        targetLang = geminiTargetLang,
+        promptMode = geminiPromptMode,
+        promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
+        temperature = geminiTemperature,
+        topP = geminiTopP,
+    )
+}
+
 private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
     if (!geminiEnabled) return false
     return when (translationProvider) {
         NovelTranslationProvider.GEMINI -> geminiApiKey.isNotBlank()
         NovelTranslationProvider.GEMINI_PRIVATE -> {
             geminiApiKey.isNotBlank() && isPrivateBridgeUnlocked()
-        }
-        NovelTranslationProvider.AIRFORCE -> {
-            airforceBaseUrl.isNotBlank() && airforceApiKey.isNotBlank() && airforceModel.isNotBlank()
         }
         NovelTranslationProvider.OPENROUTER -> {
             openRouterBaseUrl.isNotBlank() &&
@@ -358,6 +391,14 @@ private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
         }
         NovelTranslationProvider.DEEPSEEK -> {
             deepSeekBaseUrl.isNotBlank() && deepSeekApiKey.isNotBlank() && deepSeekModel.isNotBlank()
+        }
+        NovelTranslationProvider.MISTRAL -> {
+            mistralBaseUrl.isNotBlank() && mistralApiKey.isNotBlank() && mistralModel.isNotBlank()
+        }
+        NovelTranslationProvider.NVIDIA -> {
+            nvidiaBaseUrl.isNotBlank() &&
+                nvidiaApiKey.isNotBlank() &&
+                nvidiaModel.isNotBlank()
         }
     }
 }
@@ -368,9 +409,10 @@ private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
         NovelTranslationProvider.GEMINI_PRIVATE -> {
             if (shouldUseSinglePrivateChapterRequestMode()) 1 else geminiConcurrency.coerceIn(1, 8)
         }
-        NovelTranslationProvider.AIRFORCE -> 1
         NovelTranslationProvider.OPENROUTER -> 1
         NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
+        NovelTranslationProvider.MISTRAL -> 1
+        NovelTranslationProvider.NVIDIA -> 1
     }
 }
 
@@ -419,9 +461,6 @@ private fun NovelReaderSettings.translationRequestConfigLog(): String {
                 "pythonLike=$geminiPrivatePythonLikeMode, " +
                 "bridgeInstalled=${GeminiPrivateBridge.isInstalled()}, bridgeUnlocked=${isPrivateBridgeUnlocked()}"
         }
-        NovelTranslationProvider.AIRFORCE -> {
-            "baseUrl=${airforceBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, topP=${geminiTopP.toLogFloat()}"
-        }
         NovelTranslationProvider.OPENROUTER -> {
             val isFreeModel = openRouterModel.trim().endsWith(":free", ignoreCase = true)
             "baseUrl=${openRouterBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
@@ -434,6 +473,14 @@ private fun NovelReaderSettings.translationRequestConfigLog(): String {
                 "topP=${geminiTopP.toLogFloat()}, " +
                 "presencePenalty=$presencePenalty, frequencyPenalty=$frequencyPenalty, " +
                 "stream=false"
+        }
+        NovelTranslationProvider.MISTRAL -> {
+            "baseUrl=${mistralBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
+                "topP=${geminiTopP.toLogFloat()}, stream=false"
+        }
+        NovelTranslationProvider.NVIDIA -> {
+            "baseUrl=${nvidiaBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
+                "topP=${geminiTopP.toLogFloat()}, stream=false"
         }
     }
     return "$common, $sampling"

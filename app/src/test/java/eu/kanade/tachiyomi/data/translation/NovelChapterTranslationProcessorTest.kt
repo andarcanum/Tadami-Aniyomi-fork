@@ -3,9 +3,10 @@ package eu.kanade.tachiyomi.data.translation
 import android.app.Application
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
@@ -25,9 +26,10 @@ class NovelChapterTranslationProcessorTest {
 
     private val application = mockk<Application>(relaxed = true)
     private val geminiTranslationService = mockk<GeminiTranslationService>()
-    private val airforceTranslationService = mockk<AirforceTranslationService>(relaxed = true)
     private val openRouterTranslationService = mockk<OpenRouterTranslationService>(relaxed = true)
     private val deepSeekTranslationService = mockk<DeepSeekTranslationService>(relaxed = true)
+    private val mistralTranslationService = mockk<MistralTranslationService>(relaxed = true)
+    private val nvidiaTranslationService = mockk<NvidiaTranslationService>(relaxed = true)
 
     @Test
     fun `translates segments with configured provider`() {
@@ -35,9 +37,10 @@ class NovelChapterTranslationProcessorTest {
             val processor = NovelChapterTranslationProcessor(
                 application = application,
                 geminiTranslationService = geminiTranslationService,
-                airforceTranslationService = airforceTranslationService,
                 openRouterTranslationService = openRouterTranslationService,
                 deepSeekTranslationService = deepSeekTranslationService,
+                mistralTranslationService = mistralTranslationService,
+                nvidiaTranslationService = nvidiaTranslationService,
             )
             val settings = createNovelReaderPreferences().resolveSettings(sourceId = 1L)
 

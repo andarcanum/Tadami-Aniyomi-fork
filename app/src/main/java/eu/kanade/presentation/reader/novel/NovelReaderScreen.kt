@@ -64,20 +64,24 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SettingsVoice
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -161,6 +165,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationUiState
+import eu.kanade.tachiyomi.ui.reader.novel.ProviderApiTestStatus
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
@@ -296,11 +301,6 @@ fun NovelReaderScreen(
     onSetGeminiPrivateUnlocked: (Boolean) -> Unit = {},
     onSetGeminiPrivatePythonLikeMode: (Boolean) -> Unit = {},
     onSetTranslationProvider: (NovelTranslationProvider) -> Unit = {},
-    onSetAirforceBaseUrl: (String) -> Unit = {},
-    onSetAirforceApiKey: (String) -> Unit = {},
-    onSetAirforceModel: (String) -> Unit = {},
-    onRefreshAirforceModels: () -> Unit = {},
-    onTestAirforceConnection: () -> Unit = {},
     onSetOpenRouterBaseUrl: (String) -> Unit = {},
     onSetOpenRouterApiKey: (String) -> Unit = {},
     onSetOpenRouterModel: (String) -> Unit = {},
@@ -311,6 +311,16 @@ fun NovelReaderScreen(
     onSetDeepSeekModel: (String) -> Unit = {},
     onRefreshDeepSeekModels: () -> Unit = {},
     onTestDeepSeekConnection: () -> Unit = {},
+    onSetMistralBaseUrl: (String) -> Unit = {},
+    onSetMistralApiKey: (String) -> Unit = {},
+    onSetMistralModel: (String) -> Unit = {},
+    onRefreshMistralModels: () -> Unit = {},
+    onTestMistralConnection: () -> Unit = {},
+    onSetNvidiaBaseUrl: (String) -> Unit = {},
+    onSetNvidiaApiKey: (String) -> Unit = {},
+    onSetNvidiaModel: (String) -> Unit = {},
+    onRefreshNvidiaModels: () -> Unit = {},
+    onTestNvidiaConnection: () -> Unit = {},
     onStartGoogleTranslation: () -> Unit = {},
     onStopGoogleTranslation: () -> Unit = {},
     onResumeGoogleTranslation: () -> Unit = {},
@@ -1823,6 +1833,8 @@ fun NovelReaderScreen(
                         backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
                         activeOledEdgeGradient = activeOledEdgeGradient,
                         isDarkTheme = isDarkTheme,
+                        pageEdgeShadow = state.readerSettings.pageEdgeShadow,
+                        pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
                         textTypeface = composeTypeface,
                         chapterTitleTypeface = chapterTitleTypeface,
                         contentPadding = contentPaddingPx,
@@ -1876,6 +1888,8 @@ fun NovelReaderScreen(
                         activeBackgroundTexture = activeBackgroundTexture,
                         activeOledEdgeGradient = activeOledEdgeGradient,
                         isDarkTheme = isDarkTheme,
+                        pageEdgeShadow = state.readerSettings.pageEdgeShadow,
+                        pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
                         textTypeface = composeTypeface,
                         chapterTitleTypeface = chapterTitleTypeface,
                         contentPadding = contentPaddingPx,
@@ -3597,11 +3611,6 @@ fun NovelReaderScreen(
                 onSetGeminiPrivateUnlocked = onSetGeminiPrivateUnlocked,
                 onSetGeminiPrivatePythonLikeMode = onSetGeminiPrivatePythonLikeMode,
                 onSetTranslationProvider = onSetTranslationProvider,
-                onSetAirforceBaseUrl = onSetAirforceBaseUrl,
-                onSetAirforceApiKey = onSetAirforceApiKey,
-                onSetAirforceModel = onSetAirforceModel,
-                onRefreshAirforceModels = onRefreshAirforceModels,
-                onTestAirforceConnection = onTestAirforceConnection,
                 onSetOpenRouterBaseUrl = onSetOpenRouterBaseUrl,
                 onSetOpenRouterApiKey = onSetOpenRouterApiKey,
                 onSetOpenRouterModel = onSetOpenRouterModel,
@@ -3612,15 +3621,36 @@ fun NovelReaderScreen(
                 onSetDeepSeekModel = onSetDeepSeekModel,
                 onRefreshDeepSeekModels = onRefreshDeepSeekModels,
                 onTestDeepSeekConnection = onTestDeepSeekConnection,
-                airforceModels = state.airforceModelIds,
-                isAirforceModelsLoading = state.isAirforceModelsLoading,
-                isTestingAirforceConnection = state.isTestingAirforceConnection,
+                onSetMistralBaseUrl = onSetMistralBaseUrl,
+                onSetMistralApiKey = onSetMistralApiKey,
+                onSetMistralModel = onSetMistralModel,
+                onRefreshMistralModels = onRefreshMistralModels,
+                onTestMistralConnection = onTestMistralConnection,
+                onSetNvidiaBaseUrl = onSetNvidiaBaseUrl,
+                onSetNvidiaApiKey = onSetNvidiaApiKey,
+                onSetNvidiaModel = onSetNvidiaModel,
+                onRefreshNvidiaModels = onRefreshNvidiaModels,
+                onTestNvidiaConnection = onTestNvidiaConnection,
                 openRouterModels = state.openRouterModelIds,
                 isOpenRouterModelsLoading = state.isOpenRouterModelsLoading,
                 isTestingOpenRouterConnection = state.isTestingOpenRouterConnection,
+                openRouterApiTestStatus = state.openRouterApiTestStatus,
+                openRouterApiTestMessage = state.openRouterApiTestMessage,
                 deepSeekModels = state.deepSeekModelIds,
                 isDeepSeekModelsLoading = state.isDeepSeekModelsLoading,
                 isTestingDeepSeekConnection = state.isTestingDeepSeekConnection,
+                deepSeekApiTestStatus = state.deepSeekApiTestStatus,
+                deepSeekApiTestMessage = state.deepSeekApiTestMessage,
+                mistralModels = state.mistralModelIds,
+                isMistralModelsLoading = state.isMistralModelsLoading,
+                isTestingMistralConnection = state.isTestingMistralConnection,
+                mistralApiTestStatus = state.mistralApiTestStatus,
+                mistralApiTestMessage = state.mistralApiTestMessage,
+                nvidiaModels = state.nvidiaModelIds,
+                isNvidiaModelsLoading = state.isNvidiaModelsLoading,
+                isTestingNvidiaConnection = state.isTestingNvidiaConnection,
+                nvidiaApiTestStatus = state.nvidiaApiTestStatus,
+                nvidiaApiTestMessage = state.nvidiaApiTestMessage,
                 onDismiss = { showGeminiDialog = false },
             )
         }
@@ -3728,11 +3758,6 @@ private fun GeminiTranslationDialog(
     onSetGeminiPrivateUnlocked: (Boolean) -> Unit,
     onSetGeminiPrivatePythonLikeMode: (Boolean) -> Unit,
     onSetTranslationProvider: (NovelTranslationProvider) -> Unit,
-    onSetAirforceBaseUrl: (String) -> Unit,
-    onSetAirforceApiKey: (String) -> Unit,
-    onSetAirforceModel: (String) -> Unit,
-    onRefreshAirforceModels: () -> Unit,
-    onTestAirforceConnection: () -> Unit,
     onSetOpenRouterBaseUrl: (String) -> Unit,
     onSetOpenRouterApiKey: (String) -> Unit,
     onSetOpenRouterModel: (String) -> Unit,
@@ -3743,15 +3768,36 @@ private fun GeminiTranslationDialog(
     onSetDeepSeekModel: (String) -> Unit,
     onRefreshDeepSeekModels: () -> Unit,
     onTestDeepSeekConnection: () -> Unit,
-    airforceModels: List<String>,
-    isAirforceModelsLoading: Boolean,
-    isTestingAirforceConnection: Boolean,
+    onSetMistralBaseUrl: (String) -> Unit,
+    onSetMistralApiKey: (String) -> Unit,
+    onSetMistralModel: (String) -> Unit,
+    onRefreshMistralModels: () -> Unit,
+    onTestMistralConnection: () -> Unit,
+    onSetNvidiaBaseUrl: (String) -> Unit,
+    onSetNvidiaApiKey: (String) -> Unit,
+    onSetNvidiaModel: (String) -> Unit,
+    onRefreshNvidiaModels: () -> Unit,
+    onTestNvidiaConnection: () -> Unit,
     openRouterModels: List<String>,
     isOpenRouterModelsLoading: Boolean,
     isTestingOpenRouterConnection: Boolean,
+    openRouterApiTestStatus: ProviderApiTestStatus,
+    openRouterApiTestMessage: String?,
     deepSeekModels: List<String>,
     isDeepSeekModelsLoading: Boolean,
     isTestingDeepSeekConnection: Boolean,
+    deepSeekApiTestStatus: ProviderApiTestStatus,
+    deepSeekApiTestMessage: String?,
+    mistralModels: List<String>,
+    isMistralModelsLoading: Boolean,
+    isTestingMistralConnection: Boolean,
+    mistralApiTestStatus: ProviderApiTestStatus,
+    mistralApiTestMessage: String?,
+    nvidiaModels: List<String>,
+    isNvidiaModelsLoading: Boolean,
+    isTestingNvidiaConnection: Boolean,
+    nvidiaApiTestStatus: ProviderApiTestStatus,
+    nvidiaApiTestMessage: String?,
     onDismiss: () -> Unit,
 ) {
     val modelEntries = remember {
@@ -3781,6 +3827,24 @@ private fun GeminiTranslationDialog(
     }
     val deepSeekAllModelEntries = remember(deepSeekModels) {
         deepSeekModels
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+            .associateWith { it }
+    }
+    val mistralAllModelEntries = remember(mistralModels) {
+        mistralModels
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+            .associateWith { it }
+    }
+    val nvidiaAllModelEntries = remember(nvidiaModels) {
+        nvidiaModels
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -3860,6 +3924,8 @@ private fun GeminiTranslationDialog(
     val geminiModelLabel = stringResource(AYMR.strings.novel_reader_gemini_model)
     val openRouterModelLabel = stringResource(AYMR.strings.novel_reader_openrouter_model)
     val deepSeekModelLabel = stringResource(AYMR.strings.novel_reader_deepseek_model)
+    val mistralModelLabel = stringResource(AYMR.strings.novel_reader_mistral_model)
+    val nvidiaModelLabel = stringResource(AYMR.strings.novel_reader_nvidia_model)
     val promptModeLabel = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode)
     val styleLabel = stringResource(AYMR.strings.novel_reader_ai_translator_style_title)
     val speedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism)
@@ -3874,17 +3940,11 @@ private fun GeminiTranslationDialog(
     val topKLabel = stringResource(AYMR.strings.novel_reader_gemini_top_k)
     val relaxedStateLabel = stringResource(AYMR.strings.novel_reader_ai_translator_relaxed_state)
     val cacheStateLabel = stringResource(AYMR.strings.novel_reader_ai_translator_cache_state)
-    val airforceHiddenSwitchedLabel =
-        stringResource(AYMR.strings.novel_reader_ai_translator_log_airforce_hidden_switched)
     val bridgeLockedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_locked)
     val bridgeEnterPasswordLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_enter_password)
     val bridgeUnlockedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_unlocked)
     val bridgeDebugLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_bridge_debug)
     val invalidBridgePasswordLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_invalid_bridge_password)
-    val openRouterSettingsSavedLabel =
-        stringResource(AYMR.strings.novel_reader_ai_translator_log_openrouter_settings_saved)
-    val deepSeekSettingsSavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_deepseek_settings_saved)
-    val geminiApiKeySavedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_gemini_api_key_saved)
     val cacheClearedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_cache_cleared)
     val customPromptUpdatedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_log_custom_prompt_updated)
 
@@ -3924,22 +3984,27 @@ private fun GeminiTranslationDialog(
     var tempOpenRouterBaseUrl by remember(readerSettings.openRouterBaseUrl) {
         mutableStateOf(readerSettings.openRouterBaseUrl)
     }
-    var tempOpenRouterApiKey by remember(readerSettings.openRouterApiKey) {
-        mutableStateOf(readerSettings.openRouterApiKey)
-    }
     var tempOpenRouterModel by remember(readerSettings.openRouterModel) {
         mutableStateOf(readerSettings.openRouterModel)
     }
     var tempDeepSeekBaseUrl by remember(readerSettings.deepSeekBaseUrl) {
         mutableStateOf(readerSettings.deepSeekBaseUrl)
     }
-    var tempDeepSeekApiKey by remember(readerSettings.deepSeekApiKey) {
-        mutableStateOf(readerSettings.deepSeekApiKey)
-    }
     var tempDeepSeekModel by remember(readerSettings.deepSeekModel) {
         mutableStateOf(readerSettings.deepSeekModel)
     }
-    var showAdvanced by remember { mutableStateOf(false) }
+    var tempMistralBaseUrl by remember(readerSettings.mistralBaseUrl) {
+        mutableStateOf(readerSettings.mistralBaseUrl)
+    }
+    var tempNvidiaBaseUrl by remember(readerSettings.nvidiaBaseUrl) {
+        mutableStateOf(readerSettings.nvidiaBaseUrl)
+    }
+    var tempMistralModel by remember(readerSettings.mistralModel) {
+        mutableStateOf(readerSettings.mistralModel)
+    }
+    var tempNvidiaModel by remember(readerSettings.nvidiaModel) {
+        mutableStateOf(readerSettings.nvidiaModel)
+    }
     var showGenerationConfig by remember { mutableStateOf(false) }
     var showLogs by remember { mutableStateOf(false) }
     var showCustomPromptDialog by remember { mutableStateOf(false) }
@@ -4111,6 +4176,8 @@ private fun GeminiTranslationDialog(
     val privateBridgeUnlocked = !privateBridgeRequiresUnlock || isPrivateProviderUnlocked
     val isOpenRouterSelected = tempProvider == NovelTranslationProvider.OPENROUTER
     val isDeepSeekSelected = tempProvider == NovelTranslationProvider.DEEPSEEK
+    val isMistralSelected = tempProvider == NovelTranslationProvider.MISTRAL
+    val isNvidiaSelected = tempProvider == NovelTranslationProvider.NVIDIA
     val activeGenerationPresets = if (isDeepSeekSelected) {
         deepSeekGenerationPresets
     } else {
@@ -4121,17 +4188,6 @@ private fun GeminiTranslationDialog(
         stringResource(MR.strings.ai_translator_tab_prompt),
         stringResource(MR.strings.ai_translator_tab_more),
     )
-
-    LaunchedEffect(tempProvider) {
-        if (tempProvider == NovelTranslationProvider.AIRFORCE) {
-            tempProvider = NovelTranslationProvider.GEMINI
-            onSetTranslationProvider(NovelTranslationProvider.GEMINI)
-            logTemplate(
-                airforceHiddenSwitchedLabel,
-                geminiProviderLabel,
-            )
-        }
-    }
 
     LaunchedEffect(isPrivateProviderInstalled, readerSettings.geminiPrivateUnlocked) {
         isPrivateProviderUnlocked = isPrivateProviderInstalled &&
@@ -4147,6 +4203,18 @@ private fun GeminiTranslationDialog(
     LaunchedEffect(isDeepSeekSelected, deepSeekModels.size) {
         if (isDeepSeekSelected && deepSeekModels.isEmpty()) {
             onRefreshDeepSeekModels()
+        }
+    }
+
+    LaunchedEffect(isMistralSelected, mistralModels.size) {
+        if (isMistralSelected && mistralModels.isEmpty()) {
+            onRefreshMistralModels()
+        }
+    }
+
+    LaunchedEffect(isNvidiaSelected, nvidiaModels.size) {
+        if (isNvidiaSelected && nvidiaModels.isEmpty()) {
+            onRefreshNvidiaModels()
         }
     }
 
@@ -4196,6 +4264,20 @@ private fun GeminiTranslationDialog(
                             }
                             Text(
                                 text = stringResource(status.subtitleRes),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = buildString {
+                                    append(stringResource(AYMR.strings.novel_reader_translation_provider))
+                                    append(": ")
+                                    append(getAiTranslatorProviderLabel(tempProvider))
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = "${tempSourceLang.ifBlank { "?" }} → ${tempTargetLang.ifBlank { "?" }}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -4283,33 +4365,38 @@ private fun GeminiTranslationDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        OutlinedTextField(
-                            value = tempSourceLang,
-                            onValueChange = {
-                                tempSourceLang = it
-                                onSetGeminiSourceLang(it)
-                            },
-                            label = {
-                                Text(stringResource(AYMR.strings.novel_reader_gemini_source_lang))
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                        )
-                        OutlinedTextField(
-                            value = tempTargetLang,
-                            onValueChange = {
-                                tempTargetLang = it
-                                onSetGeminiTargetLang(it)
-                            },
-                            label = {
-                                Text(stringResource(AYMR.strings.novel_reader_gemini_target_lang))
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = tempSourceLang,
+                                onValueChange = {
+                                    tempSourceLang = it
+                                    onSetGeminiSourceLang(it)
+                                },
+                                label = {
+                                    Text(stringResource(AYMR.strings.novel_reader_gemini_source_lang))
+                                },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                            )
+                            OutlinedTextField(
+                                value = tempTargetLang,
+                                onValueChange = {
+                                    tempTargetLang = it
+                                    onSetGeminiTargetLang(it)
+                                },
+                                label = {
+                                    Text(stringResource(AYMR.strings.novel_reader_gemini_target_lang))
+                                },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                            )
+                        }
                         Text(
                             stringResource(AYMR.strings.novel_reader_translation_provider),
                             style = MaterialTheme.typography.labelLarge,
+                        )
+                        AiTranslatorSupportText(
+                            stringResource(AYMR.strings.novel_reader_ai_translator_provider_summary),
                         )
                         val providerCards = listOf(
                             NovelTranslationProvider.GEMINI to stringResource(
@@ -4322,18 +4409,48 @@ private fun GeminiTranslationDialog(
                             NovelTranslationProvider.DEEPSEEK to stringResource(
                                 AYMR.strings.novel_reader_translation_provider_deepseek,
                             ),
+                            NovelTranslationProvider.MISTRAL to stringResource(
+                                AYMR.strings.novel_reader_translation_provider_mistral,
+                            ),
+                            NovelTranslationProvider.NVIDIA to stringResource(
+                                AYMR.strings.novel_reader_translation_provider_nvidia,
+                            ),
                         )
-                        providerCards.chunked(2).forEach { row ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                row.forEach { option ->
-                                    val selected = tempProvider == option.first
-                                    Surface(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clickable {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            providerCards.chunked(2).forEach { rowProviders ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    rowProviders.forEach { option ->
+                                        val selected = tempProvider == option.first
+                                        val apiConfigured = when (option.first) {
+                                            NovelTranslationProvider.GEMINI -> tempKey.isNotBlank()
+                                            NovelTranslationProvider.GEMINI_PRIVATE ->
+                                                tempKey.isNotBlank() && isPrivateProviderUnlocked
+                                            NovelTranslationProvider.OPENROUTER ->
+                                                tempOpenRouterBaseUrl.isNotBlank() &&
+                                                    readerSettings.openRouterApiKey.isNotBlank() &&
+                                                    tempOpenRouterModel.isNotBlank()
+                                            NovelTranslationProvider.DEEPSEEK ->
+                                                tempDeepSeekBaseUrl.isNotBlank() &&
+                                                    readerSettings.deepSeekApiKey.isNotBlank() &&
+                                                    tempDeepSeekModel.isNotBlank()
+                                            NovelTranslationProvider.MISTRAL ->
+                                                tempMistralBaseUrl.isNotBlank() &&
+                                                    readerSettings.mistralApiKey.isNotBlank() &&
+                                                    tempMistralModel.isNotBlank()
+                                            NovelTranslationProvider.NVIDIA ->
+                                                tempNvidiaBaseUrl.isNotBlank() &&
+                                                    readerSettings.nvidiaApiKey.isNotBlank() &&
+                                                    tempNvidiaModel.isNotBlank()
+                                        }
+                                        AiTranslatorProviderCard(
+                                            title = option.second,
+                                            apiConfigured = apiConfigured,
+                                            selected = selected,
+                                            modifier = Modifier.weight(1f),
+                                            onClick = {
                                                 tempProvider = option.first
                                                 onSetTranslationProvider(option.first)
                                                 logPair(providerLabel, option.second)
@@ -4342,36 +4459,15 @@ private fun GeminiTranslationDialog(
                                                     NovelTranslationProvider.GEMINI_PRIVATE -> Unit
                                                     NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
                                                     NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
-                                                    NovelTranslationProvider.AIRFORCE -> Unit
+                                                    NovelTranslationProvider.MISTRAL -> onRefreshMistralModels()
+                                                    NovelTranslationProvider.NVIDIA -> onRefreshNvidiaModels()
                                                 }
                                             },
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = BorderStroke(
-                                            width = if (selected) 1.5.dp else 1.dp,
-                                            color = if (selected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-                                            },
-                                        ),
-                                        color = if (selected) {
-                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                                        } else {
-                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                        },
-                                    ) {
-                                        Text(
-                                            text = option.second,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 10.dp, vertical = 12.dp),
-                                            style = MaterialTheme.typography.labelLarge,
-                                            textAlign = TextAlign.Center,
                                         )
                                     }
-                                }
-                                if (row.size == 1) {
-                                    Spacer(modifier = Modifier.weight(1f))
+                                    if (rowProviders.size == 1) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
                                 }
                             }
                         }
@@ -4460,9 +4556,11 @@ private fun GeminiTranslationDialog(
                             NovelTranslationProvider.GEMINI,
                             NovelTranslationProvider.GEMINI_PRIVATE,
                             -> {
-                                Text(
-                                    stringResource(AYMR.strings.novel_reader_gemini_model),
-                                    style = MaterialTheme.typography.labelLarge,
+                                AiTranslatorMiniSection(
+                                    title = stringResource(AYMR.strings.novel_reader_gemini_model),
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_model_summary,
+                                    ),
                                 )
                                 eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
                                     value = tempModel,
@@ -4480,11 +4578,13 @@ private fun GeminiTranslationDialog(
                                 )
                             }
                             NovelTranslationProvider.OPENROUTER -> {
-                                Text(
-                                    stringResource(
+                                AiTranslatorMiniSection(
+                                    title = stringResource(
                                         AYMR.strings.novel_reader_ai_translator_openrouter_models_title,
                                     ),
-                                    style = MaterialTheme.typography.labelLarge,
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_model_summary,
+                                    ),
                                 )
                                 if (openRouterAllModelEntries.isNotEmpty()) {
                                     eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
@@ -4538,11 +4638,13 @@ private fun GeminiTranslationDialog(
                                 )
                             }
                             NovelTranslationProvider.DEEPSEEK -> {
-                                Text(
-                                    stringResource(
+                                AiTranslatorMiniSection(
+                                    title = stringResource(
                                         AYMR.strings.novel_reader_ai_translator_deepseek_models_title,
                                     ),
-                                    style = MaterialTheme.typography.labelLarge,
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_model_summary,
+                                    ),
                                 )
                                 if (deepSeekAllModelEntries.isNotEmpty()) {
                                     eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
@@ -4595,7 +4697,129 @@ private fun GeminiTranslationDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
-                            NovelTranslationProvider.AIRFORCE -> Unit
+                            NovelTranslationProvider.MISTRAL -> {
+                                AiTranslatorMiniSection(
+                                    title = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_mistral_models_title,
+                                    ),
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_model_summary,
+                                    ),
+                                )
+                                if (mistralAllModelEntries.isNotEmpty()) {
+                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                                        value = tempMistralModel,
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_models_count,
+                                        ).format(mistralAllModelEntries.size),
+                                        subtitle = tempMistralModel.ifBlank {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_choose_model,
+                                            )
+                                        },
+                                        icon = null,
+                                        entries = mistralAllModelEntries,
+                                        onValueChange = { selected ->
+                                            tempMistralModel = selected
+                                            onSetMistralModel(selected)
+                                            logPair(mistralModelLabel, selected)
+                                        },
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = onRefreshMistralModels) {
+                                        Text(
+                                            if (isMistralModelsLoading) {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                )
+                                            } else {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = tempMistralModel,
+                                    onValueChange = {
+                                        tempMistralModel = it
+                                        onSetMistralModel(it)
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_model_id,
+                                            ),
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                            NovelTranslationProvider.NVIDIA -> {
+                                AiTranslatorMiniSection(
+                                    title = stringResource(
+                                        AYMR.strings.novel_reader_nvidia_section_title,
+                                    ),
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_nvidia_section_summary,
+                                    ),
+                                )
+                                AiTranslatorSupportText(
+                                    stringResource(AYMR.strings.novel_reader_ai_translator_model_summary),
+                                )
+                                if (nvidiaAllModelEntries.isNotEmpty()) {
+                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                                        value = tempNvidiaModel,
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_models_count,
+                                        ).format(nvidiaAllModelEntries.size),
+                                        subtitle = tempNvidiaModel.ifBlank {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_choose_model,
+                                            )
+                                        },
+                                        icon = null,
+                                        entries = nvidiaAllModelEntries,
+                                        onValueChange = { selected ->
+                                            tempNvidiaModel = selected
+                                            onSetNvidiaModel(selected)
+                                            logPair(nvidiaModelLabel, selected)
+                                        },
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = onRefreshNvidiaModels) {
+                                        Text(
+                                            if (isNvidiaModelsLoading) {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                )
+                                            } else {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = tempNvidiaModel,
+                                    onValueChange = {
+                                        tempNvidiaModel = it
+                                        onSetNvidiaModel(it)
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                AYMR.strings.novel_reader_nvidia_model,
+                                            ),
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                         }
                     }
 
@@ -4604,6 +4828,9 @@ private fun GeminiTranslationDialog(
                             Text(
                                 stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
                                 style = MaterialTheme.typography.labelLarge,
+                            )
+                            AiTranslatorSupportText(
+                                stringResource(AYMR.strings.novel_reader_ai_translator_prompt_mode_summary),
                             )
                             val promptModeClassicLabel = stringResource(
                                 AYMR.strings.novel_reader_gemini_prompt_mode_classic,
@@ -4619,15 +4846,15 @@ private fun GeminiTranslationDialog(
                                     ),
                                 ) { option ->
                                     val selected = tempPromptMode == option.first
-                                    OutlinedButton(
+                                    AiTranslatorChoiceChip(
+                                        text = option.second,
+                                        selected = selected,
                                         onClick = {
                                             tempPromptMode = option.first
                                             onSetGeminiPromptMode(option.first)
                                             logPair(promptModeLabel, option.second)
                                         },
-                                    ) {
-                                        Text(if (selected) "• ${option.second}" else option.second)
-                                    }
+                                    )
                                 }
                             }
 
@@ -4635,19 +4862,22 @@ private fun GeminiTranslationDialog(
                                 stringResource(AYMR.strings.novel_reader_ai_translator_style_title),
                                 style = MaterialTheme.typography.labelLarge,
                             )
+                            AiTranslatorSupportText(
+                                stringResource(AYMR.strings.novel_reader_ai_translator_style_summary),
+                            )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(stylePresets) { preset ->
                                     val selected = tempStylePreset == preset.id
                                     val presetTitle = stringResource(preset.titleRes)
-                                    OutlinedButton(
+                                    AiTranslatorChoiceChip(
+                                        text = presetTitle,
+                                        selected = selected,
                                         onClick = {
                                             tempStylePreset = preset.id
                                             onSetGeminiStylePreset(preset.id)
                                             logPair(styleLabel, presetTitle)
                                         },
-                                    ) {
-                                        Text(if (selected) "• $presetTitle" else presetTitle)
-                                    }
+                                    )
                                 }
                             }
                             val selectedStylePreset = stylePresets.firstOrNull { it.id == tempStylePreset }
@@ -4689,6 +4919,9 @@ private fun GeminiTranslationDialog(
                             Text(
                                 stringResource(AYMR.strings.novel_reader_gemini_prompt_modifiers),
                                 style = MaterialTheme.typography.labelLarge,
+                            )
+                            AiTranslatorSupportText(
+                                stringResource(AYMR.strings.novel_reader_gemini_prompt_modifiers_hint),
                             )
                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 items(GeminiPromptModifiers.all) { modifier ->
@@ -4774,7 +5007,9 @@ private fun GeminiTranslationDialog(
                                 val concurrency = preset.second.second
                                 val selected = tempBatch == batch.toString() &&
                                     tempConcurrency == concurrency.toString()
-                                OutlinedButton(
+                                AiTranslatorChoiceChip(
+                                    text = label,
+                                    selected = selected,
                                     onClick = {
                                         tempBatch = batch.toString()
                                         tempConcurrency = concurrency.toString()
@@ -4782,9 +5017,7 @@ private fun GeminiTranslationDialog(
                                         onSetGeminiConcurrency(concurrency)
                                         logPair(speedLabel, label)
                                     },
-                                ) {
-                                    Text(if (selected) "• $label" else label)
-                                }
+                                )
                             }
                         }
                     }
@@ -4849,21 +5082,39 @@ private fun GeminiTranslationDialog(
             }
 
             if (page == 2) {
+                val apiTestStatus = when (tempProvider) {
+                    NovelTranslationProvider.OPENROUTER -> openRouterApiTestStatus
+                    NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestStatus
+                    NovelTranslationProvider.MISTRAL -> mistralApiTestStatus
+                    NovelTranslationProvider.NVIDIA -> nvidiaApiTestStatus
+                    NovelTranslationProvider.GEMINI,
+                    NovelTranslationProvider.GEMINI_PRIVATE,
+                    -> ProviderApiTestStatus.Idle
+                }
+                val apiTestMessage = when (tempProvider) {
+                    NovelTranslationProvider.OPENROUTER -> openRouterApiTestMessage
+                    NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestMessage
+                    NovelTranslationProvider.MISTRAL -> mistralApiTestMessage
+                    NovelTranslationProvider.NVIDIA -> nvidiaApiTestMessage
+                    NovelTranslationProvider.GEMINI,
+                    NovelTranslationProvider.GEMINI_PRIVATE,
+                    -> null
+                }
                 GeminiSettingsBlock(
                     title = stringResource(AYMR.strings.novel_reader_ai_translator_system_title),
                     subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_system_summary),
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    AiTranslatorPanelCard(
+                        title = stringResource(AYMR.strings.novel_reader_ai_translator_more_automation_title),
+                        subtitle = stringResource(
+                            AYMR.strings.novel_reader_ai_translator_system_automation_summary,
+                        ),
                     ) {
-                        Text(
-                            text = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
+                        AiTranslatorToggleRow(
+                            title = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
+                            subtitle = stringResource(
+                                AYMR.strings.novel_reader_ai_translator_more_auto_english_summary,
+                            ),
                             checked = tempAutoTranslateEnglish,
                             onCheckedChange = { enabled ->
                                 tempAutoTranslateEnglish = enabled
@@ -4871,18 +5122,11 @@ private fun GeminiTranslationDialog(
                                 logState(autoEnglishLabel, enabled)
                             },
                         )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(
+                        AiTranslatorToggleRow(
+                            title = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
+                            subtitle = stringResource(
+                                AYMR.strings.novel_reader_ai_translator_more_prefetch_summary,
+                            ),
                             checked = tempPrefetchNextChapterTranslation,
                             onCheckedChange = { enabled ->
                                 tempPrefetchNextChapterTranslation = enabled
@@ -4890,19 +5134,24 @@ private fun GeminiTranslationDialog(
                                 logState(prefetchNextLabel, enabled)
                             },
                         )
-                    }
-                    if (isGeminiPrivateSelected) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = stringResource(AYMR.strings.novel_reader_gemini_private_python_like_mode),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Switch(
+                        AiTranslatorToggleRow(
+                            title = stringResource(AYMR.strings.novel_reader_ai_translator_more_cache_title),
+                            subtitle = stringResource(
+                                AYMR.strings.novel_reader_ai_translator_more_cache_summary,
+                            ),
+                            checked = !tempDisableCache,
+                            onCheckedChange = { enabled ->
+                                tempDisableCache = !enabled
+                                onSetGeminiDisableCache(tempDisableCache)
+                                onAddLog(cacheStateLabel.format(visibilityStateLabel(!tempDisableCache)))
+                            },
+                        )
+                        if (isGeminiPrivateSelected) {
+                            AiTranslatorToggleRow(
+                                title = stringResource(AYMR.strings.novel_reader_gemini_private_python_like_mode),
+                                subtitle = stringResource(
+                                    AYMR.strings.novel_reader_ai_translator_more_private_python_summary,
+                                ),
                                 checked = tempPrivatePythonLikeMode,
                                 onCheckedChange = { enabled ->
                                     tempPrivatePythonLikeMode = enabled
@@ -4911,52 +5160,107 @@ private fun GeminiTranslationDialog(
                                 },
                             )
                         }
-                    }
-                    TextButton(onClick = { showAdvanced = !showAdvanced }) {
-                        Text(
-                            text = if (showAdvanced) {
-                                stringResource(AYMR.strings.novel_reader_gemini_advanced_hide)
-                            } else {
-                                stringResource(AYMR.strings.novel_reader_gemini_advanced_show)
+                        OutlinedButton(
+                            onClick = {
+                                onClearAllCache()
+                                onAddLog(cacheClearedLabel)
                             },
-                        )
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(AYMR.strings.novel_reader_ai_translator_clear_all_cache))
+                        }
                     }
-                    if (showAdvanced) {
-                        if (isOpenRouterSelected || isDeepSeekSelected) {
+
+                    AiTranslatorPanelCard(
+                        title = stringResource(AYMR.strings.novel_reader_ai_translator_more_connection_title),
+                        subtitle = stringResource(
+                            AYMR.strings.novel_reader_ai_translator_system_connection_summary,
+                        ),
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    AYMR.strings.novel_reader_ai_translator_more_active_provider,
+                                ).format(getAiTranslatorProviderLabel(tempProvider)),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected || isNvidiaSelected) {
+                            AiTranslatorSupportText(
+                                stringResource(AYMR.strings.novel_reader_ai_translator_more_base_url_summary),
+                            )
                             OutlinedTextField(
-                                value = if (isOpenRouterSelected) tempOpenRouterBaseUrl else tempDeepSeekBaseUrl,
+                                value = when {
+                                    isOpenRouterSelected -> tempOpenRouterBaseUrl
+                                    isDeepSeekSelected -> tempDeepSeekBaseUrl
+                                    isMistralSelected -> tempMistralBaseUrl
+                                    else -> tempNvidiaBaseUrl
+                                },
                                 onValueChange = {
                                     if (isOpenRouterSelected) {
                                         tempOpenRouterBaseUrl = it
-                                    } else {
+                                        onSetOpenRouterBaseUrl(it)
+                                    } else if (isDeepSeekSelected) {
                                         tempDeepSeekBaseUrl = it
+                                        onSetDeepSeekBaseUrl(it)
+                                    } else if (isMistralSelected) {
+                                        tempMistralBaseUrl = it
+                                        onSetMistralBaseUrl(it)
+                                    } else {
+                                        tempNvidiaBaseUrl = it
+                                        onSetNvidiaBaseUrl(it)
                                     }
                                 },
                                 label = {
                                     Text(
-                                        if (isOpenRouterSelected) {
-                                            stringResource(AYMR.strings.novel_reader_openrouter_base_url)
-                                        } else {
-                                            stringResource(AYMR.strings.novel_reader_deepseek_base_url)
+                                        when {
+                                            isOpenRouterSelected -> stringResource(
+                                                AYMR.strings.novel_reader_openrouter_base_url,
+                                            )
+                                            isDeepSeekSelected -> stringResource(
+                                                AYMR.strings.novel_reader_deepseek_base_url,
+                                            )
+                                            isMistralSelected -> stringResource(
+                                                AYMR.strings.novel_reader_mistral_base_url,
+                                            )
+                                            else -> stringResource(
+                                                AYMR.strings.novel_reader_nvidia_base_url,
+                                            )
                                         },
                                     )
                                 },
                                 modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
                             )
                         }
+                        AiTranslatorSupportText(
+                            stringResource(AYMR.strings.novel_reader_ai_translator_more_api_key_summary),
+                        )
                         OutlinedTextField(
                             value = when {
-                                isOpenRouterSelected -> tempOpenRouterApiKey
-                                isDeepSeekSelected -> tempDeepSeekApiKey
+                                isOpenRouterSelected -> readerSettings.openRouterApiKey
+                                isDeepSeekSelected -> readerSettings.deepSeekApiKey
+                                isMistralSelected -> readerSettings.mistralApiKey
+                                isNvidiaSelected -> readerSettings.nvidiaApiKey
                                 else -> tempKey
                             },
                             onValueChange = {
                                 if (isOpenRouterSelected) {
-                                    tempOpenRouterApiKey = it
+                                    onSetOpenRouterApiKey(it)
                                 } else if (isDeepSeekSelected) {
-                                    tempDeepSeekApiKey = it
+                                    onSetDeepSeekApiKey(it)
+                                } else if (isMistralSelected) {
+                                    onSetMistralApiKey(it)
+                                } else if (isNvidiaSelected) {
+                                    onSetNvidiaApiKey(it)
                                 } else {
                                     tempKey = it
+                                    onSetGeminiApiKey(it)
                                 }
                             },
                             label = {
@@ -4966,112 +5270,58 @@ private fun GeminiTranslationDialog(
                                             AYMR.strings.novel_reader_openrouter_api_key,
                                         )
                                         isDeepSeekSelected -> stringResource(AYMR.strings.novel_reader_deepseek_api_key)
+                                        isMistralSelected -> stringResource(AYMR.strings.novel_reader_mistral_api_key)
+                                        isNvidiaSelected -> stringResource(AYMR.strings.novel_reader_nvidia_api_key)
                                         else -> stringResource(AYMR.strings.novel_reader_gemini_api_key)
                                     },
                                 )
                             },
                             modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
                         )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            TextButton(
-                                onClick = {
-                                    if (isOpenRouterSelected) {
-                                        onSetOpenRouterBaseUrl(tempOpenRouterBaseUrl)
-                                        onSetOpenRouterApiKey(tempOpenRouterApiKey)
-                                        onSetOpenRouterModel(tempOpenRouterModel)
-                                        onAddLog(openRouterSettingsSavedLabel)
-                                    } else if (isDeepSeekSelected) {
-                                        onSetDeepSeekBaseUrl(tempDeepSeekBaseUrl)
-                                        onSetDeepSeekApiKey(tempDeepSeekApiKey)
-                                        onSetDeepSeekModel(tempDeepSeekModel)
-                                        onAddLog(deepSeekSettingsSavedLabel)
-                                    } else {
-                                        onSetGeminiApiKey(tempKey)
-                                        onAddLog(geminiApiKeySavedLabel)
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Text(stringResource(AYMR.strings.novel_reader_ai_translator_save))
-                            }
-                            TextButton(
-                                onClick = {
-                                    tempRelaxed = !tempRelaxed
-                                    onSetGeminiRelaxedMode(tempRelaxed)
-                                    onAddLog(relaxedStateLabel.format(visibilityStateLabel(tempRelaxed)))
-                                },
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Text(
-                                    stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_relaxed_state,
-                                    ).format(
-                                        stringResource(
-                                            if (tempRelaxed) {
-                                                AYMR.strings.novel_reader_gemini_visibility_on
-                                            } else {
-                                                AYMR.strings.novel_reader_gemini_visibility_off
-                                            },
-                                        ),
-                                    ),
-                                )
-                            }
-                        }
-                        if (isOpenRouterSelected || isDeepSeekSelected) {
+                        AiTranslatorToggleRow(
+                            title = stringResource(AYMR.strings.novel_reader_ai_translator_more_relaxed_title),
+                            subtitle = stringResource(
+                                AYMR.strings.novel_reader_ai_translator_more_relaxed_summary,
+                            ),
+                            checked = tempRelaxed,
+                            onCheckedChange = { enabled ->
+                                tempRelaxed = enabled
+                                onSetGeminiRelaxedMode(enabled)
+                                onAddLog(relaxedStateLabel.format(visibilityStateLabel(enabled)))
+                            },
+                        )
+                        if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                TextButton(
-                                    onClick = if (isOpenRouterSelected) {
-                                        onTestOpenRouterConnection
-                                    } else {
-                                        onTestDeepSeekConnection
+                                AiTranslatorApiTestButton(
+                                    status = apiTestStatus,
+                                    onClick = when {
+                                        isOpenRouterSelected -> onTestOpenRouterConnection
+                                        isDeepSeekSelected -> onTestDeepSeekConnection
+                                        else -> onTestMistralConnection
                                     },
-                                    enabled = if (isOpenRouterSelected) {
-                                        !isTestingOpenRouterConnection
-                                    } else {
-                                        !isTestingDeepSeekConnection
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlinedButton(
+                                    onClick = when {
+                                        isOpenRouterSelected -> onRefreshOpenRouterModels
+                                        isDeepSeekSelected -> onRefreshDeepSeekModels
+                                        else -> onRefreshMistralModels
+                                    },
+                                    enabled = when {
+                                        isOpenRouterSelected -> !isOpenRouterModelsLoading
+                                        isDeepSeekSelected -> !isDeepSeekModelsLoading
+                                        else -> !isMistralModelsLoading
                                     },
                                     modifier = Modifier.weight(1f),
                                 ) {
-                                    val isTesting = if (isOpenRouterSelected) {
-                                        isTestingOpenRouterConnection
-                                    } else {
-                                        isTestingDeepSeekConnection
-                                    }
-                                    Text(
-                                        if (isTesting) {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_testing_connection,
-                                            )
-                                        } else {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_test_connection,
-                                            )
-                                        },
-                                    )
-                                }
-                                TextButton(
-                                    onClick = if (isOpenRouterSelected) {
-                                        onRefreshOpenRouterModels
-                                    } else {
-                                        onRefreshDeepSeekModels
-                                    },
-                                    enabled = if (isOpenRouterSelected) {
-                                        !isOpenRouterModelsLoading
-                                    } else {
-                                        !isDeepSeekModelsLoading
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    val isLoading = if (isOpenRouterSelected) {
-                                        isOpenRouterModelsLoading
-                                    } else {
-                                        isDeepSeekModelsLoading
+                                    val isLoading = when {
+                                        isOpenRouterSelected -> isOpenRouterModelsLoading
+                                        isDeepSeekSelected -> isDeepSeekModelsLoading
+                                        else -> isMistralModelsLoading
                                     }
                                     Text(
                                         if (isLoading) {
@@ -5086,61 +5336,59 @@ private fun GeminiTranslationDialog(
                                     )
                                 }
                             }
+                            if (!apiTestMessage.isNullOrBlank() &&
+                                apiTestStatus == ProviderApiTestStatus.Error
+                            ) {
+                                AiTranslatorSupportText(apiTestMessage)
+                            }
                         }
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    AYMR.strings.novel_reader_ai_translator_cache_state,
-                                ).format(
-                                    stringResource(
-                                        if (tempDisableCache) {
-                                            AYMR.strings.novel_reader_gemini_visibility_off
+                        if (isNvidiaSelected) {
+                            AiTranslatorSupportText(
+                                stringResource(AYMR.strings.novel_reader_ai_translator_more_api_key_summary),
+                            )
+                            OutlinedTextField(
+                                value = readerSettings.nvidiaApiKey,
+                                onValueChange = onSetNvidiaApiKey,
+                                label = {
+                                    Text(
+                                        stringResource(AYMR.strings.novel_reader_nvidia_api_key),
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                AiTranslatorApiTestButton(
+                                    status = apiTestStatus,
+                                    onClick = onTestNvidiaConnection,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlinedButton(
+                                    onClick = onRefreshNvidiaModels,
+                                    enabled = !isNvidiaModelsLoading,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(
+                                        if (isNvidiaModelsLoading) {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                            )
                                         } else {
-                                            AYMR.strings.novel_reader_gemini_visibility_on
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_refresh_models,
+                                            )
                                         },
-                                    ),
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Switch(
-                                checked = !tempDisableCache,
-                                onCheckedChange = { enabled ->
-                                    tempDisableCache = !enabled
-                                    onSetGeminiDisableCache(tempDisableCache)
-                                    onAddLog(cacheStateLabel.format(visibilityStateLabel(!tempDisableCache)))
-                                },
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = tempBatch,
-                                onValueChange = {
-                                    tempBatch = it
-                                    applyBatchAndConcurrency()
-                                },
-                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_batch_size)) },
-                                modifier = Modifier.weight(1f),
-                            )
-                            OutlinedTextField(
-                                value = tempConcurrency,
-                                onValueChange = {
-                                    tempConcurrency = it
-                                    applyBatchAndConcurrency()
-                                },
-                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_concurrency)) },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        TextButton(onClick = {
-                            onClearAllCache()
-                            onAddLog(cacheClearedLabel)
-                        }) {
-                            Text(stringResource(AYMR.strings.novel_reader_ai_translator_clear_all_cache))
+                                    )
+                                }
+                            }
+                            if (!apiTestMessage.isNullOrBlank() &&
+                                apiTestStatus == ProviderApiTestStatus.Error
+                            ) {
+                                AiTranslatorSupportText(apiTestMessage)
+                            }
                         }
                     }
                 }
@@ -5164,7 +5412,9 @@ private fun GeminiTranslationDialog(
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(activeGenerationPresets) { preset ->
                                 val isSelected = preset.id == selectedGenerationPresetId
-                                OutlinedButton(
+                                AiTranslatorChoiceChip(
+                                    text = preset.title,
+                                    selected = isSelected,
                                     onClick = {
                                         selectedGenerationPresetId = preset.id
                                         val name = preset.title
@@ -5187,9 +5437,7 @@ private fun GeminiTranslationDialog(
                                             )
                                         }
                                     },
-                                ) {
-                                    Text(if (isSelected) "• ${preset.title}" else preset.title)
-                                }
+                                )
                             }
                         }
                         val selectedPreset = activeGenerationPresets.firstOrNull { it.id == selectedGenerationPresetId }
@@ -5223,6 +5471,14 @@ private fun GeminiTranslationDialog(
                                 )
                             }
                         }
+                        AiTranslatorMiniSection(
+                            title = stringResource(
+                                AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism,
+                            ),
+                            subtitle = stringResource(
+                                AYMR.strings.novel_reader_ai_translator_generation_speed_summary,
+                            ),
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 value = tempTemperature,
@@ -5272,6 +5528,28 @@ private fun GeminiTranslationDialog(
                                     modifier = Modifier.weight(1f),
                                 )
                             }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = tempBatch,
+                                onValueChange = {
+                                    tempBatch = it
+                                    applyBatchAndConcurrency()
+                                },
+                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_batch_size)) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                            )
+                            OutlinedTextField(
+                                value = tempConcurrency,
+                                onValueChange = {
+                                    tempConcurrency = it
+                                    applyBatchAndConcurrency()
+                                },
+                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_concurrency)) },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                            )
                         }
                         if (isDeepSeekSelected) {
                             Text(
@@ -5710,6 +5988,288 @@ private fun rememberCurrentTimeText(context: Context): State<String> {
     }
 
     return timeState
+}
+
+@Composable
+private fun AiTranslatorChoiceChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(
+            width = if (selected) 1.5.dp else 1.dp,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+            },
+        ),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        },
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelLarge,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun AiTranslatorSupportText(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+@Composable
+private fun AiTranslatorMiniSection(
+    title: String,
+    subtitle: String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        AiTranslatorSupportText(subtitle)
+    }
+}
+
+@Composable
+private fun AiTranslatorPanelCard(
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            AiTranslatorMiniSection(
+                title = title,
+                subtitle = subtitle,
+            )
+            content()
+        }
+    }
+}
+
+@Composable
+private fun AiTranslatorProviderCard(
+    title: String,
+    apiConfigured: Boolean,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
+        },
+        border = BorderStroke(
+            width = if (selected) 1.5.dp else 1.dp,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+            } else {
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            },
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = if (apiConfigured) {
+                        Icons.Filled.CheckCircle
+                    } else {
+                        Icons.Outlined.RadioButtonUnchecked
+                    },
+                    contentDescription = null,
+                    tint = if (apiConfigured) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            AiTranslatorSupportText(
+                text = stringResource(
+                    if (apiConfigured) {
+                        AYMR.strings.novel_reader_ai_translator_provider_api_ready
+                    } else {
+                        AYMR.strings.novel_reader_ai_translator_provider_api_missing
+                    },
+                ),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AiTranslatorToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            AiTranslatorSupportText(subtitle)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+        )
+    }
+}
+
+@Composable
+private fun AiTranslatorApiTestButton(
+    status: ProviderApiTestStatus,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val labelRes = when (status) {
+        ProviderApiTestStatus.Idle -> AYMR.strings.novel_reader_ai_translator_api_test_idle
+        ProviderApiTestStatus.Loading -> AYMR.strings.novel_reader_ai_translator_api_test_loading
+        ProviderApiTestStatus.Success -> AYMR.strings.novel_reader_ai_translator_api_test_success
+        ProviderApiTestStatus.Error -> AYMR.strings.novel_reader_ai_translator_api_test_error
+    }
+    val (containerColor, contentColor) = when (status) {
+        ProviderApiTestStatus.Idle ->
+            MaterialTheme.colorScheme.primaryContainer to
+                MaterialTheme.colorScheme.onPrimaryContainer
+        ProviderApiTestStatus.Loading ->
+            MaterialTheme.colorScheme.secondaryContainer to
+                MaterialTheme.colorScheme.onSecondaryContainer
+        ProviderApiTestStatus.Success ->
+            MaterialTheme.colorScheme.primaryContainer to
+                MaterialTheme.colorScheme.onPrimaryContainer
+        ProviderApiTestStatus.Error ->
+            MaterialTheme.colorScheme.errorContainer to
+                MaterialTheme.colorScheme.onErrorContainer
+    }
+    Button(
+        onClick = onClick,
+        enabled = status != ProviderApiTestStatus.Loading,
+        modifier = modifier,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = containerColor,
+            contentColor = contentColor,
+        ),
+    ) {
+        when (status) {
+            ProviderApiTestStatus.Loading -> {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = contentColor,
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+            }
+            ProviderApiTestStatus.Success -> {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+            }
+            ProviderApiTestStatus.Error -> {
+                Icon(
+                    imageVector = Icons.Outlined.ErrorOutline,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+            }
+            ProviderApiTestStatus.Idle -> {
+                Icon(
+                    imageVector = Icons.Outlined.RadioButtonUnchecked,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+            }
+        }
+        Text(stringResource(labelRes))
+    }
+}
+
+@Composable
+private fun getAiTranslatorProviderLabel(provider: NovelTranslationProvider): String {
+    return when (provider) {
+        NovelTranslationProvider.GEMINI ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_gemini)
+        NovelTranslationProvider.GEMINI_PRIVATE ->
+            if (GeminiPrivateBridge.isInstalled()) {
+                GeminiPrivateBridge.providerLabel()
+            } else {
+                stringResource(AYMR.strings.novel_reader_translation_provider_gemini_private)
+            }
+        NovelTranslationProvider.OPENROUTER ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_openrouter)
+        NovelTranslationProvider.DEEPSEEK ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_deepseek)
+        NovelTranslationProvider.MISTRAL ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_mistral)
+        NovelTranslationProvider.NVIDIA ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_nvidia)
+    }
 }
 
 @Composable

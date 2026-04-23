@@ -13,8 +13,6 @@ import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterPrefetchCache
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
@@ -72,8 +70,6 @@ class NovelSelectedTextTranslationScreenModelTest {
     private val activeScreenModels = mutableListOf<NovelReaderScreenModel>()
     private val syncNovelChaptersWithSource = mockk<SyncNovelChaptersWithSource>(relaxed = true)
     private val geminiTranslationService = mockk<GeminiTranslationService>(relaxed = true)
-    private val airforceTranslationService = mockk<AirforceTranslationService>(relaxed = true)
-    private val airforceModelsService = mockk<AirforceModelsService>(relaxed = true)
     private val openRouterTranslationService = mockk<OpenRouterTranslationService>(relaxed = true)
     private val openRouterModelsService = mockk<OpenRouterModelsService>(relaxed = true)
     private val deepSeekTranslationService = mockk<DeepSeekTranslationService>(relaxed = true)
@@ -458,8 +454,6 @@ class NovelSelectedTextTranslationScreenModelTest {
             ),
             isSystemDark = { false },
             geminiTranslationService = geminiTranslationService,
-            airforceTranslationService = airforceTranslationService,
-            airforceModelsService = airforceModelsService,
             openRouterTranslationService = openRouterTranslationService,
             openRouterModelsService = openRouterModelsService,
             deepSeekTranslationService = deepSeekTranslationService,

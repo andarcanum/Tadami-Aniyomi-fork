@@ -30,9 +30,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceModelsService
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationParams
-import eu.kanade.tachiyomi.ui.reader.novel.translation.AirforceTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationParams
@@ -47,6 +44,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationSessionCache
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleUnofficialSelectedTextTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralModelsService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralPromptResolver
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
@@ -54,6 +55,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslat
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationRequest
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaModelsService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
@@ -141,6 +145,14 @@ import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
+
+enum class ProviderApiTestStatus {
+    Idle,
+    Loading,
+    Success,
+    Error,
+}
+
 class NovelReaderScreenModel(
     private val chapterId: Long,
     private val seriesId: Long? = null,
@@ -172,25 +184,6 @@ class NovelReaderScreenModel(
             client = networkHelper.client,
             json = json,
             promptResolver = GeminiPromptResolver(app),
-        )
-    },
-    private val airforceTranslationService: AirforceTranslationService = run {
-        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
-        val json = Injekt.get<Json>()
-        val airforceClient = networkHelper.client.newBuilder()
-            .readTimeout(180, TimeUnit.SECONDS)
-            .build()
-        AirforceTranslationService(
-            client = airforceClient,
-            json = json,
-        )
-    },
-    private val airforceModelsService: AirforceModelsService = run {
-        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
-        val json = Injekt.get<Json>()
-        AirforceModelsService(
-            client = networkHelper.client,
-            json = json,
         )
     },
     private val openRouterTranslationService: OpenRouterTranslationService = run {
@@ -231,6 +224,45 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
         DeepSeekModelsService(
+            client = networkHelper.client,
+            json = json,
+        )
+    },
+    private val mistralTranslationService: MistralTranslationService = run {
+        val app = Injekt.get<Application>()
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        val mistralClient = networkHelper.client.newBuilder()
+            .readTimeout(180, TimeUnit.SECONDS)
+            .build()
+        MistralTranslationService(
+            client = mistralClient,
+            json = json,
+            resolveSystemPrompt = { mode, family ->
+                MistralPromptResolver(app).resolveSystemPrompt(mode, family)
+            },
+        )
+    },
+    private val mistralModelsService: MistralModelsService = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        MistralModelsService(
+            client = networkHelper.client,
+            json = json,
+        )
+    },
+    private val nvidiaTranslationService: NvidiaTranslationService = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        NvidiaTranslationService(
+            client = networkHelper.client,
+            json = json,
+        )
+    },
+    private val nvidiaModelsService: NvidiaModelsService = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        NvidiaModelsService(
             client = networkHelper.client,
             json = json,
         )
@@ -348,15 +380,26 @@ class NovelReaderScreenModel(
     private var initializedTtsEnginePackage: String? = null
     private var pendingTtsStartRequest: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest? = null
 
-    private var airforceModelIds: List<String> = emptyList()
-    private var isAirforceModelsLoading: Boolean = false
-    private var isTestingAirforceConnection: Boolean = false
     private var openRouterModelIds: List<String> = emptyList()
     private var isOpenRouterModelsLoading: Boolean = false
     private var isTestingOpenRouterConnection: Boolean = false
+    private var openRouterApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle
+    private var openRouterApiTestMessage: String? = null
     private var deepSeekModelIds: List<String> = emptyList()
     private var isDeepSeekModelsLoading: Boolean = false
     private var isTestingDeepSeekConnection: Boolean = false
+    private var deepSeekApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle
+    private var deepSeekApiTestMessage: String? = null
+    private var mistralModelIds: List<String> = emptyList()
+    private var isMistralModelsLoading: Boolean = false
+    private var isTestingMistralConnection: Boolean = false
+    private var mistralApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle
+    private var mistralApiTestMessage: String? = null
+    private var nvidiaModelIds: List<String> = emptyList()
+    private var isNvidiaModelsLoading: Boolean = false
+    private var isTestingNvidiaConnection: Boolean = false
+    private var nvidiaApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle
+    private var nvidiaApiTestMessage: String? = null
     private var selectedTextTranslationSelection: NovelSelectedTextSelection? = null
     private var selectedTextTranslationUiState: NovelSelectedTextTranslationUiState =
         NovelSelectedTextTranslationUiState.Idle
@@ -490,9 +533,10 @@ class NovelReaderScreenModel(
         when (initialSettings.translationProvider) {
             NovelTranslationProvider.GEMINI -> Unit
             NovelTranslationProvider.GEMINI_PRIVATE -> Unit
-            NovelTranslationProvider.AIRFORCE -> refreshAirforceModels()
             NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
+            NovelTranslationProvider.MISTRAL -> refreshMistralModels()
+            NovelTranslationProvider.NVIDIA -> refreshNvidiaModels()
         }
     }
     private fun setError(message: String?) {
@@ -860,15 +904,26 @@ class NovelReaderScreenModel(
                 speechRate = settings.ttsSpeechRate,
                 pitch = settings.ttsPitch,
             ),
-            airforceModelIds = airforceModelIds,
-            isAirforceModelsLoading = isAirforceModelsLoading,
-            isTestingAirforceConnection = isTestingAirforceConnection,
             openRouterModelIds = openRouterModelIds,
             isOpenRouterModelsLoading = isOpenRouterModelsLoading,
             isTestingOpenRouterConnection = isTestingOpenRouterConnection,
+            openRouterApiTestStatus = openRouterApiTestStatus,
+            openRouterApiTestMessage = openRouterApiTestMessage,
             deepSeekModelIds = deepSeekModelIds,
             isDeepSeekModelsLoading = isDeepSeekModelsLoading,
             isTestingDeepSeekConnection = isTestingDeepSeekConnection,
+            deepSeekApiTestStatus = deepSeekApiTestStatus,
+            deepSeekApiTestMessage = deepSeekApiTestMessage,
+            mistralModelIds = mistralModelIds,
+            isMistralModelsLoading = isMistralModelsLoading,
+            isTestingMistralConnection = isTestingMistralConnection,
+            mistralApiTestStatus = mistralApiTestStatus,
+            mistralApiTestMessage = mistralApiTestMessage,
+            nvidiaModelIds = nvidiaModelIds,
+            isNvidiaModelsLoading = isNvidiaModelsLoading,
+            isTestingNvidiaConnection = isTestingNvidiaConnection,
+            nvidiaApiTestStatus = nvidiaApiTestStatus,
+            nvidiaApiTestMessage = nvidiaApiTestMessage,
         )
     }
     private suspend fun refreshTtsEngines() {
@@ -1830,12 +1885,18 @@ class NovelReaderScreenModel(
         geminiLogs = emptyList()
         googleLogs = emptyList()
         googleRateLimited = false
-        isAirforceModelsLoading = false
-        isTestingAirforceConnection = false
         isOpenRouterModelsLoading = false
         isTestingOpenRouterConnection = false
+        openRouterApiTestStatus = ProviderApiTestStatus.Idle
+        openRouterApiTestMessage = null
         isDeepSeekModelsLoading = false
         isTestingDeepSeekConnection = false
+        deepSeekApiTestStatus = ProviderApiTestStatus.Idle
+        deepSeekApiTestMessage = null
+        isMistralModelsLoading = false
+        isTestingMistralConnection = false
+        mistralApiTestStatus = ProviderApiTestStatus.Idle
+        mistralApiTestMessage = null
         ttsWordProgressJob?.cancel()
         ttsWordProgressJob = null
         pendingTtsStartRequest = null
@@ -1949,12 +2010,48 @@ class NovelReaderScreenModel(
         setGlobal = { novelReaderPreferences.translationProvider().set(value) },
         setOverride = { it.copy(translationProvider = value) },
     ).also {
+        openRouterApiTestStatus = ProviderApiTestStatus.Idle
+        openRouterApiTestMessage = null
+        deepSeekApiTestStatus = ProviderApiTestStatus.Idle
+        deepSeekApiTestMessage = null
+        mistralApiTestStatus = ProviderApiTestStatus.Idle
+        mistralApiTestMessage = null
+        nvidiaApiTestStatus = ProviderApiTestStatus.Idle
+        nvidiaApiTestMessage = null
         when (value) {
             NovelTranslationProvider.GEMINI -> Unit
             NovelTranslationProvider.GEMINI_PRIVATE -> Unit
-            NovelTranslationProvider.AIRFORCE -> refreshAirforceModels()
             NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
+            NovelTranslationProvider.MISTRAL -> refreshMistralModels()
+            NovelTranslationProvider.NVIDIA -> refreshNvidiaModels()
+        }
+    }
+    private fun setProviderApiTestState(
+        provider: NovelTranslationProvider,
+        status: ProviderApiTestStatus,
+        message: String? = null,
+    ) {
+        when (provider) {
+            NovelTranslationProvider.OPENROUTER -> {
+                openRouterApiTestStatus = status
+                openRouterApiTestMessage = message
+            }
+            NovelTranslationProvider.DEEPSEEK -> {
+                deepSeekApiTestStatus = status
+                deepSeekApiTestMessage = message
+            }
+            NovelTranslationProvider.MISTRAL -> {
+                mistralApiTestStatus = status
+                mistralApiTestMessage = message
+            }
+            NovelTranslationProvider.NVIDIA -> {
+                nvidiaApiTestStatus = status
+                nvidiaApiTestMessage = message
+            }
+            NovelTranslationProvider.GEMINI,
+            NovelTranslationProvider.GEMINI_PRIVATE,
+            -> Unit
         }
     }
     fun setGoogleTranslationEnabled(value: Boolean) {
@@ -1969,18 +2066,6 @@ class NovelReaderScreenModel(
     fun setGoogleTranslationTargetLang(value: String) {
         novelReaderPreferences.googleTranslationTargetLang().set(value)
     }
-    fun setAirforceBaseUrl(value: String) = updateGeminiSetting(
-        setGlobal = { novelReaderPreferences.airforceBaseUrl().set(value) },
-        setOverride = { it.copy(airforceBaseUrl = value) },
-    )
-    fun setAirforceApiKey(value: String) = updateGeminiSetting(
-        setGlobal = { novelReaderPreferences.airforceApiKey().set(value) },
-        setOverride = { it.copy(airforceApiKey = value) },
-    )
-    fun setAirforceModel(value: String) = updateGeminiSetting(
-        setGlobal = { novelReaderPreferences.airforceModel().set(value) },
-        setOverride = { it.copy(airforceModel = value) },
-    )
     fun setOpenRouterBaseUrl(value: String) = updateGeminiSetting(
         setGlobal = { novelReaderPreferences.openRouterBaseUrl().set(value) },
         setOverride = { it.copy(openRouterBaseUrl = value) },
@@ -2005,60 +2090,30 @@ class NovelReaderScreenModel(
         setGlobal = { novelReaderPreferences.deepSeekModel().set(value) },
         setOverride = { it.copy(deepSeekModel = value) },
     )
-    fun refreshAirforceModels() {
-        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
-        if (settings.translationProvider != NovelTranslationProvider.AIRFORCE) return
-        if (settings.airforceApiKey.isBlank()) return
-        if (settings.airforceBaseUrl.isBlank()) return
-        isAirforceModelsLoading = true
-        updateContent(settings)
-        screenModelScope.launch(Dispatchers.IO) {
-            val fetched = runCatching {
-                airforceModelsService.fetchModels(
-                    baseUrl = settings.airforceBaseUrl,
-                    apiKey = settings.airforceApiKey,
-                )
-            }.getOrElse { error ->
-                addGeminiLog("? Airforce models load failed: ${formatGeminiThrowableForLog(error)}")
-                emptyList()
-            }
-            airforceModelIds = fetched
-            isAirforceModelsLoading = false
-            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
-            updateContent(currentSettings)
-        }
-    }
-    fun testAirforceConnection() {
-        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
-        if (isTestingAirforceConnection) return
-        if (settings.translationProvider != NovelTranslationProvider.AIRFORCE) return
-        if (!settings.hasConfiguredTranslationProvider()) {
-            addGeminiLog("? Airforce config invalid: fill Base URL, API key and Model")
-            return
-        }
-        isTestingAirforceConnection = true
-        updateContent(settings)
-        screenModelScope.launch {
-            runCatching {
-                val result = requestTranslationBatch(
-                    segments = listOf("Connection test"),
-                    settings = settings,
-                ) { message ->
-                    addGeminiLog("?? Test: $message")
-                }
-                if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
-                    error("Empty response")
-                }
-            }.onSuccess {
-                addGeminiLog("? Airforce connection OK")
-            }.onFailure { error ->
-                addGeminiLog("? Airforce connection failed: ${formatGeminiThrowableForLog(error)}")
-            }
-            isTestingAirforceConnection = false
-            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
-            updateContent(currentSettings)
-        }
-    }
+    fun setMistralBaseUrl(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.mistralBaseUrl().set(value) },
+        setOverride = { it.copy(mistralBaseUrl = value) },
+    )
+    fun setMistralApiKey(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.mistralApiKey().set(value) },
+        setOverride = { it.copy(mistralApiKey = value) },
+    )
+    fun setMistralModel(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.mistralModel().set(value) },
+        setOverride = { it.copy(mistralModel = value) },
+    )
+    fun setNvidiaBaseUrl(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.nvidiaBaseUrl().set(value) },
+        setOverride = { it.copy(nvidiaBaseUrl = value) },
+    )
+    fun setNvidiaApiKey(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.nvidiaApiKey().set(value) },
+        setOverride = { it.copy(nvidiaApiKey = value) },
+    )
+    fun setNvidiaModel(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.nvidiaModel().set(value) },
+        setOverride = { it.copy(nvidiaModel = value) },
+    )
     fun refreshOpenRouterModels() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (settings.translationProvider != NovelTranslationProvider.OPENROUTER) return
@@ -2082,15 +2137,98 @@ class NovelReaderScreenModel(
             updateContent(currentSettings)
         }
     }
+    fun refreshNvidiaModels() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (settings.translationProvider != NovelTranslationProvider.NVIDIA) return
+        if (settings.nvidiaBaseUrl.isBlank()) return
+        if (settings.nvidiaApiKey.isBlank()) return
+        isNvidiaModelsLoading = true
+        updateContent(settings)
+        screenModelScope.launch(Dispatchers.IO) {
+            val fetched = runCatching {
+                nvidiaModelsService.fetchModels(
+                    baseUrl = settings.nvidiaBaseUrl,
+                    apiKey = settings.nvidiaApiKey,
+                )
+            }.getOrElse { error ->
+                addGeminiLog("? NVIDIA models load failed: ${formatGeminiThrowableForLog(error)}")
+                emptyList()
+            }
+            nvidiaModelIds = fetched
+            isNvidiaModelsLoading = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
+    fun testNvidiaConnection() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (isTestingNvidiaConnection) return
+        if (settings.translationProvider != NovelTranslationProvider.NVIDIA) return
+        if (!settings.hasConfiguredTranslationProvider()) {
+            addGeminiLog("? NVIDIA config invalid: fill Base URL, API key and Model")
+            setProviderApiTestState(
+                provider = NovelTranslationProvider.NVIDIA,
+                status = ProviderApiTestStatus.Error,
+                message = "Fill Base URL, API key and Model",
+            )
+            updateContent(settings)
+            return
+        }
+        isTestingNvidiaConnection = true
+        setProviderApiTestState(
+            provider = NovelTranslationProvider.NVIDIA,
+            status = ProviderApiTestStatus.Loading,
+        )
+        updateContent(settings)
+        screenModelScope.launch {
+            runCatching {
+                val result = requestTranslationBatch(
+                    segments = listOf("Connection test"),
+                    settings = settings,
+                ) { message ->
+                    addGeminiLog("?? Test: $message")
+                }
+                if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
+                    error("Empty response")
+                }
+            }.onSuccess {
+                addGeminiLog("? NVIDIA connection OK")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.NVIDIA,
+                    status = ProviderApiTestStatus.Success,
+                )
+            }.onFailure { error ->
+                addGeminiLog("? NVIDIA connection failed: ${formatGeminiThrowableForLog(error)}")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.NVIDIA,
+                    status = ProviderApiTestStatus.Error,
+                    message = formatGeminiThrowableForLog(error),
+                )
+            }
+            isTestingNvidiaConnection = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
     fun testOpenRouterConnection() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (isTestingOpenRouterConnection) return
         if (settings.translationProvider != NovelTranslationProvider.OPENROUTER) return
         if (!settings.hasConfiguredTranslationProvider()) {
             addGeminiLog("? OpenRouter config invalid: fill Base URL, API key and free Model (:free)")
+            setProviderApiTestState(
+                provider = NovelTranslationProvider.OPENROUTER,
+                status = ProviderApiTestStatus.Error,
+                message = "Fill Base URL, API key and free Model (:free)",
+            )
+            updateContent(settings)
             return
         }
         isTestingOpenRouterConnection = true
+        setProviderApiTestState(
+            provider = NovelTranslationProvider.OPENROUTER,
+            status = ProviderApiTestStatus.Loading,
+        )
         updateContent(settings)
         screenModelScope.launch {
             runCatching {
@@ -2105,8 +2243,17 @@ class NovelReaderScreenModel(
                 }
             }.onSuccess {
                 addGeminiLog("? OpenRouter connection OK")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.OPENROUTER,
+                    status = ProviderApiTestStatus.Success,
+                )
             }.onFailure { error ->
                 addGeminiLog("? OpenRouter connection failed: ${formatGeminiThrowableForLog(error)}")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.OPENROUTER,
+                    status = ProviderApiTestStatus.Error,
+                    message = formatGeminiThrowableForLog(error),
+                )
             }
             isTestingOpenRouterConnection = false
             val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
@@ -2142,9 +2289,19 @@ class NovelReaderScreenModel(
         if (settings.translationProvider != NovelTranslationProvider.DEEPSEEK) return
         if (!settings.hasConfiguredTranslationProvider()) {
             addGeminiLog("? DeepSeek config invalid: fill Base URL, API key and Model")
+            setProviderApiTestState(
+                provider = NovelTranslationProvider.DEEPSEEK,
+                status = ProviderApiTestStatus.Error,
+                message = "Fill Base URL, API key and Model",
+            )
+            updateContent(settings)
             return
         }
         isTestingDeepSeekConnection = true
+        setProviderApiTestState(
+            provider = NovelTranslationProvider.DEEPSEEK,
+            status = ProviderApiTestStatus.Loading,
+        )
         updateContent(settings)
         screenModelScope.launch {
             runCatching {
@@ -2159,10 +2316,92 @@ class NovelReaderScreenModel(
                 }
             }.onSuccess {
                 addGeminiLog("? DeepSeek connection OK")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.DEEPSEEK,
+                    status = ProviderApiTestStatus.Success,
+                )
             }.onFailure { error ->
                 addGeminiLog("? DeepSeek connection failed: ${formatGeminiThrowableForLog(error)}")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.DEEPSEEK,
+                    status = ProviderApiTestStatus.Error,
+                    message = formatGeminiThrowableForLog(error),
+                )
             }
             isTestingDeepSeekConnection = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
+    fun refreshMistralModels() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (settings.translationProvider != NovelTranslationProvider.MISTRAL) return
+        if (settings.mistralApiKey.isBlank()) return
+        if (settings.mistralBaseUrl.isBlank()) return
+        isMistralModelsLoading = true
+        updateContent(settings)
+        screenModelScope.launch(Dispatchers.IO) {
+            val fetched = runCatching {
+                mistralModelsService.fetchModels(
+                    baseUrl = settings.mistralBaseUrl,
+                    apiKey = settings.mistralApiKey,
+                )
+            }.getOrElse { error ->
+                addGeminiLog("? Mistral models load failed: ${formatGeminiThrowableForLog(error)}")
+                emptyList()
+            }
+            mistralModelIds = fetched
+            isMistralModelsLoading = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
+    fun testMistralConnection() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (isTestingMistralConnection) return
+        if (settings.translationProvider != NovelTranslationProvider.MISTRAL) return
+        if (!settings.hasConfiguredTranslationProvider()) {
+            addGeminiLog("? Mistral config invalid: fill Base URL, API key and Model")
+            setProviderApiTestState(
+                provider = NovelTranslationProvider.MISTRAL,
+                status = ProviderApiTestStatus.Error,
+                message = "Fill Base URL, API key and Model",
+            )
+            updateContent(settings)
+            return
+        }
+        isTestingMistralConnection = true
+        setProviderApiTestState(
+            provider = NovelTranslationProvider.MISTRAL,
+            status = ProviderApiTestStatus.Loading,
+        )
+        updateContent(settings)
+        screenModelScope.launch {
+            runCatching {
+                val result = requestTranslationBatch(
+                    segments = listOf("Connection test"),
+                    settings = settings,
+                ) { message ->
+                    addGeminiLog("?? Test: $message")
+                }
+                if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
+                    error("Empty response")
+                }
+            }.onSuccess {
+                addGeminiLog("? Mistral connection OK")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.MISTRAL,
+                    status = ProviderApiTestStatus.Success,
+                )
+            }.onFailure { error ->
+                addGeminiLog("? Mistral connection failed: ${formatGeminiThrowableForLog(error)}")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.MISTRAL,
+                    status = ProviderApiTestStatus.Error,
+                    message = formatGeminiThrowableForLog(error),
+                )
+            }
+            isTestingMistralConnection = false
             val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
             updateContent(currentSettings)
         }
@@ -2782,11 +3021,12 @@ class NovelReaderScreenModel(
     private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {
         return when (translationProvider) {
             NovelTranslationProvider.GEMINI_PRIVATE,
-            NovelTranslationProvider.AIRFORCE,
             -> NovelTranslationPromptFamily.RUSSIAN
             NovelTranslationProvider.GEMINI,
             NovelTranslationProvider.OPENROUTER,
             NovelTranslationProvider.DEEPSEEK,
+            NovelTranslationProvider.MISTRAL,
+            NovelTranslationProvider.NVIDIA,
             -> resolveNovelTranslationPromptFamily(geminiTargetLang)
         }
     }
@@ -2828,19 +3068,6 @@ class NovelReaderScreenModel(
             privatePythonLikeMode = geminiPrivatePythonLikeMode,
         )
     }
-    private fun NovelReaderSettings.toAirforceTranslationParams(): AirforceTranslationParams {
-        return AirforceTranslationParams(
-            baseUrl = airforceBaseUrl,
-            apiKey = airforceApiKey,
-            model = airforceModel,
-            sourceLang = geminiSourceLang,
-            targetLang = geminiTargetLang,
-            promptMode = geminiPromptMode,
-            promptModifiers = resolveTranslationPromptModifiers(),
-            temperature = geminiTemperature,
-            topP = geminiTopP,
-        )
-    }
     private fun NovelReaderSettings.toOpenRouterTranslationParams(): OpenRouterTranslationParams {
         return OpenRouterTranslationParams(
             baseUrl = openRouterBaseUrl,
@@ -2867,6 +3094,32 @@ class NovelReaderScreenModel(
             topP = geminiTopP.coerceIn(DEEPSEEK_TOP_P_MIN, DEEPSEEK_TOP_P_MAX),
             presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY,
             frequencyPenalty = DEEPSEEK_DEFAULT_FREQUENCY_PENALTY,
+        )
+    }
+    private fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslationParams {
+        return MistralTranslationParams(
+            baseUrl = mistralBaseUrl,
+            apiKey = mistralApiKey,
+            model = mistralModel,
+            sourceLang = geminiSourceLang,
+            targetLang = geminiTargetLang,
+            promptMode = geminiPromptMode,
+            promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
+            temperature = geminiTemperature,
+            topP = geminiTopP,
+        )
+    }
+    private fun NovelReaderSettings.toNvidiaTranslationParams(): NvidiaTranslationParams {
+        return NvidiaTranslationParams(
+            baseUrl = nvidiaBaseUrl,
+            apiKey = nvidiaApiKey,
+            model = nvidiaModel,
+            sourceLang = geminiSourceLang,
+            targetLang = geminiTargetLang,
+            promptMode = geminiPromptMode,
+            promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
+            temperature = geminiTemperature,
+            topP = geminiTopP,
         )
     }
     private fun NovelReaderSettings.translationRequestConfigLog(): String {
@@ -2898,9 +3151,6 @@ class NovelReaderScreenModel(
                     "pythonLike=$geminiPrivatePythonLikeMode, " +
                     "bridgeInstalled=${GeminiPrivateBridge.isInstalled()}, bridgeUnlocked=${isPrivateBridgeUnlocked()}"
             }
-            NovelTranslationProvider.AIRFORCE -> {
-                "baseUrl=${airforceBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, topP=${geminiTopP.toLogFloat()}"
-            }
             NovelTranslationProvider.OPENROUTER -> {
                 val isFreeModel = openRouterModel.trim().endsWith(":free", ignoreCase = true)
                 "baseUrl=${openRouterBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
@@ -2914,6 +3164,14 @@ class NovelReaderScreenModel(
                     "topP=${params.topP.toLogFloat()}, " +
                     "presencePenalty=$presencePenalty, frequencyPenalty=$frequencyPenalty, " +
                     "stream=false"
+            }
+            NovelTranslationProvider.MISTRAL -> {
+                "baseUrl=${mistralBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
+                    "topP=${geminiTopP.toLogFloat()}, stream=false"
+            }
+            NovelTranslationProvider.NVIDIA -> {
+                "baseUrl=${nvidiaBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
+                    "topP=${geminiTopP.toLogFloat()}, stream=false"
             }
         }
         return "$common, $sampling"
@@ -2939,13 +3197,6 @@ class NovelReaderScreenModel(
                     onLog = onLog,
                 )
             }
-            NovelTranslationProvider.AIRFORCE -> {
-                airforceTranslationService.translateBatch(
-                    segments = segments,
-                    params = settings.toAirforceTranslationParams(),
-                    onLog = onLog,
-                )
-            }
             NovelTranslationProvider.OPENROUTER -> {
                 openRouterTranslationService.translateBatch(
                     segments = segments,
@@ -2960,6 +3211,20 @@ class NovelReaderScreenModel(
                     onLog = onLog,
                 )
             }
+            NovelTranslationProvider.MISTRAL -> {
+                mistralTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toMistralTranslationParams(),
+                    onLog = onLog,
+                )
+            }
+            NovelTranslationProvider.NVIDIA -> {
+                nvidiaTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toNvidiaTranslationParams(),
+                    onLog = onLog,
+                )
+            }
         }
     }
     private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
@@ -2968,9 +3233,6 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.GEMINI -> geminiApiKey.isNotBlank()
             NovelTranslationProvider.GEMINI_PRIVATE -> {
                 geminiApiKey.isNotBlank() && isPrivateBridgeUnlocked()
-            }
-            NovelTranslationProvider.AIRFORCE -> {
-                airforceBaseUrl.isNotBlank() && airforceApiKey.isNotBlank() && airforceModel.isNotBlank()
             }
             NovelTranslationProvider.OPENROUTER -> {
                 openRouterBaseUrl.isNotBlank() &&
@@ -2982,6 +3244,16 @@ class NovelReaderScreenModel(
                     deepSeekApiKey.isNotBlank() &&
                     deepSeekModel.isNotBlank()
             }
+            NovelTranslationProvider.MISTRAL -> {
+                mistralBaseUrl.isNotBlank() &&
+                    mistralApiKey.isNotBlank() &&
+                    mistralModel.isNotBlank()
+            }
+            NovelTranslationProvider.NVIDIA -> {
+                nvidiaBaseUrl.isNotBlank() &&
+                    nvidiaApiKey.isNotBlank() &&
+                    nvidiaModel.isNotBlank()
+            }
         }
     }
     private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
@@ -2990,9 +3262,10 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.GEMINI_PRIVATE -> {
                 if (shouldUseSinglePrivateChapterRequestMode()) 1 else geminiConcurrency.coerceIn(1, 8)
             }
-            NovelTranslationProvider.AIRFORCE -> 1
             NovelTranslationProvider.OPENROUTER -> 1
             NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
+            NovelTranslationProvider.MISTRAL -> 1
+            NovelTranslationProvider.NVIDIA -> 1
         }
     }
     private fun NovelReaderSettings.shouldUseSinglePrivateChapterRequestMode(): Boolean {
@@ -3802,15 +4075,26 @@ class NovelReaderScreenModel(
             val googleLogs: List<String> = emptyList(),
             val translationPhase: TranslationPhase = TranslationPhase.IDLE,
             val ttsUiState: NovelReaderTtsUiState = NovelReaderTtsUiState(),
-            val airforceModelIds: List<String> = emptyList(),
-            val isAirforceModelsLoading: Boolean = false,
-            val isTestingAirforceConnection: Boolean = false,
             val openRouterModelIds: List<String> = emptyList(),
             val isOpenRouterModelsLoading: Boolean = false,
             val isTestingOpenRouterConnection: Boolean = false,
+            val openRouterApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle,
+            val openRouterApiTestMessage: String? = null,
             val deepSeekModelIds: List<String> = emptyList(),
             val isDeepSeekModelsLoading: Boolean = false,
             val isTestingDeepSeekConnection: Boolean = false,
+            val deepSeekApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle,
+            val deepSeekApiTestMessage: String? = null,
+            val mistralModelIds: List<String> = emptyList(),
+            val isMistralModelsLoading: Boolean = false,
+            val isTestingMistralConnection: Boolean = false,
+            val mistralApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle,
+            val mistralApiTestMessage: String? = null,
+            val nvidiaModelIds: List<String> = emptyList(),
+            val isNvidiaModelsLoading: Boolean = false,
+            val isTestingNvidiaConnection: Boolean = false,
+            val nvidiaApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle,
+            val nvidiaApiTestMessage: String? = null,
         ) : State {
             val textBlocks: List<String>
                 get() = contentBlocks

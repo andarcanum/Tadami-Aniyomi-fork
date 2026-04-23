@@ -25,7 +25,7 @@ class ChapterCacheTest {
     }
 
     @Test
-    fun `roundtrips deduped page list through cache`() {
+    fun `roundtrips page list through cache`() {
         val cache = createCache().also { this.cache = it }
         val chapter = createChapter()
         val pages = listOf(
@@ -37,9 +37,10 @@ class ChapterCacheTest {
         cache.putPageListToCache(chapter, pages)
 
         val cachedPages = cache.getPageListFromCache(chapter)
-        cachedPages.size shouldBe 2
+        cachedPages.size shouldBe 3
         cachedPages[0].imageUrl shouldBe "https://example.org/image-a"
-        cachedPages[1].url shouldBe "https://example.org/page-2"
+        cachedPages[1].imageUrl shouldBe "https://example.org/image-b"
+        cachedPages[2].url shouldBe "https://example.org/page-2"
     }
 
     @Test

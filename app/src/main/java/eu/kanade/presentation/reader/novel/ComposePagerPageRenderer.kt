@@ -151,6 +151,8 @@ internal fun ComposePagerPageRenderer(
     backgroundImageModel: Any?,
     activeOledEdgeGradient: Boolean,
     isDarkTheme: Boolean,
+    pageEdgeShadow: Boolean,
+    pageEdgeShadowAlpha: Float,
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
     contentPadding: Dp,
@@ -357,8 +359,8 @@ internal fun ComposePagerPageRenderer(
                 nativeTextureStrengthPercent = nativeTextureStrengthPercent,
                 oledEdgeGradient = activeOledEdgeGradient,
                 isDarkTheme = isDarkTheme,
-                pageEdgeShadow = false,
-                pageEdgeShadowAlpha = 0f,
+                pageEdgeShadow = pageEdgeShadow,
+                pageEdgeShadowAlpha = pageEdgeShadowAlpha,
                 backgroundImageModel = backgroundImageModel,
             )
 
@@ -411,8 +413,8 @@ internal fun ComposePagerPageRenderer(
                         nativeTextureStrengthPercent = nativeTextureStrengthPercent,
                         oledEdgeGradient = activeOledEdgeGradient,
                         isDarkTheme = isDarkTheme,
-                        pageEdgeShadow = false,
-                        pageEdgeShadowAlpha = 0f,
+                        pageEdgeShadow = pageEdgeShadow,
+                        pageEdgeShadowAlpha = pageEdgeShadowAlpha,
                         backgroundImageModel = backgroundImageModel,
                     )
                     Box(

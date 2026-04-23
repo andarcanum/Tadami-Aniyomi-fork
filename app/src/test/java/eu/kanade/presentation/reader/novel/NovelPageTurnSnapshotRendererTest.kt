@@ -72,6 +72,25 @@ class NovelPageTurnSnapshotRendererTest {
     }
 
     @Test
+    fun `snapshot key changes when page edge shadow changes`() {
+        val base = sampleSnapshotKey(
+            pageEdgeShadow = false,
+            pageEdgeShadowAlpha = 0f,
+        )
+        val differentEnabled = sampleSnapshotKey(
+            pageEdgeShadow = true,
+            pageEdgeShadowAlpha = 0f,
+        )
+        val differentAlpha = sampleSnapshotKey(
+            pageEdgeShadow = true,
+            pageEdgeShadowAlpha = 0.35f,
+        )
+
+        assertNotEquals(base, differentEnabled)
+        assertNotEquals(differentEnabled, differentAlpha)
+    }
+
+    @Test
     fun `snapshot cache evicts least recently used entries`() {
         val cache = NovelPageTurnSnapshotCache<String>(maxSize = 2)
         val first = sampleSnapshotKey(pageContentHash = 1)
@@ -109,6 +128,8 @@ class NovelPageTurnSnapshotRendererTest {
         backgroundTexture: NovelReaderBackgroundTexture = NovelReaderBackgroundTexture.PAPER_GRAIN,
         backgroundImageIdentity: String = "",
         isBackgroundMode: Boolean = false,
+        pageEdgeShadow: Boolean = true,
+        pageEdgeShadowAlpha: Float = 0.2f,
     ): NovelPageTurnSnapshotKey {
         return resolveNovelPageTurnSnapshotKey(
             style = NovelPageTransitionStyle.BOOK,
@@ -134,6 +155,8 @@ class NovelPageTurnSnapshotRendererTest {
             nativeTextureStrengthPercentEffective = 80,
             oledEdgeGradient = false,
             isDarkTheme = false,
+            pageEdgeShadow = pageEdgeShadow,
+            pageEdgeShadowAlpha = pageEdgeShadowAlpha,
             backgroundTexture = backgroundTexture,
             nativeTextureStrengthPercent = 80,
             forceBoldText = false,

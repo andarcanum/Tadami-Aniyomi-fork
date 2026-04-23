@@ -23,9 +23,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.browse.BrowseSourceLoadingItem
 import eu.kanade.presentation.browse.InLibraryBadge
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.entries.translation.rememberBrowseNovelTitleTranslation
 import eu.kanade.presentation.library.components.CommonEntryItemDefaults
 import eu.kanade.presentation.library.components.EntryComfortableGridItem
 import eu.kanade.presentation.library.components.EntryCompactGridItem
@@ -50,6 +52,9 @@ import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
 import tachiyomi.presentation.core.util.plus
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
+import tachiyomi.presentation.core.util.collectAsState as collectPreferenceAsState
 
 internal fun novelBrowseItemKey(url: String?, index: Int): String {
     return "novel/${url.orEmpty()}#$index"
@@ -66,6 +71,13 @@ fun BrowseNovelSourceContent(
     onNovelLongClick: ((Novel) -> Unit)? = null,
 ) {
     val context = LocalContext.current
+    val translationPreferences = remember { Injekt.get<UiPreferences>() }
+    val browseTitleTranslationEnabled by translationPreferences
+        .auroraEntryTranslationEnabled()
+        .collectPreferenceAsState()
+    val browseTitleTranslationSourceFamilies by translationPreferences
+        .auroraEntryTranslationSourceLanguages()
+        .collectPreferenceAsState()
     val effectiveContentPadding = contentPadding
 
     val errorState = novels.loadState.refresh.takeIf { it is LoadState.Error }
@@ -115,7 +127,10 @@ fun BrowseNovelSourceContent(
         LibraryDisplayMode.List -> {
             NovelListContent(
                 novels = novels,
+                sourceLanguage = source?.lang,
                 contentPadding = effectiveContentPadding,
+                translationEnabled = browseTitleTranslationEnabled,
+                allowedSourceFamilies = browseTitleTranslationSourceFamilies,
                 onNovelClick = onNovelClick,
                 onNovelLongClick = onNovelLongClick,
             )
@@ -124,7 +139,10 @@ fun BrowseNovelSourceContent(
             NovelComfortableGridContent(
                 novels = novels,
                 columns = GridCells.Adaptive(120.dp),
+                sourceLanguage = source?.lang,
                 contentPadding = effectiveContentPadding,
+                translationEnabled = browseTitleTranslationEnabled,
+                allowedSourceFamilies = browseTitleTranslationSourceFamilies,
                 onNovelClick = onNovelClick,
                 onNovelLongClick = onNovelLongClick,
             )
@@ -133,8 +151,11 @@ fun BrowseNovelSourceContent(
             NovelCompactGridContent(
                 novels = novels,
                 columns = GridCells.Adaptive(96.dp),
+                sourceLanguage = source?.lang,
                 contentPadding = effectiveContentPadding,
                 showTitle = true,
+                translationEnabled = browseTitleTranslationEnabled,
+                allowedSourceFamilies = browseTitleTranslationSourceFamilies,
                 onNovelClick = onNovelClick,
                 onNovelLongClick = onNovelLongClick,
             )
@@ -143,8 +164,11 @@ fun BrowseNovelSourceContent(
             NovelCompactGridContent(
                 novels = novels,
                 columns = GridCells.Adaptive(96.dp),
+                sourceLanguage = source?.lang,
                 contentPadding = effectiveContentPadding,
                 showTitle = false,
+                translationEnabled = browseTitleTranslationEnabled,
+                allowedSourceFamilies = browseTitleTranslationSourceFamilies,
                 onNovelClick = onNovelClick,
                 onNovelLongClick = onNovelLongClick,
             )
@@ -155,7 +179,10 @@ fun BrowseNovelSourceContent(
 @Composable
 private fun NovelListContent(
     novels: LazyPagingItems<StateFlow<Novel>>,
+    sourceLanguage: String?,
     contentPadding: PaddingValues,
+    translationEnabled: Boolean,
+    allowedSourceFamilies: Set<String>,
     onNovelClick: (Novel) -> Unit,
     onNovelLongClick: ((Novel) -> Unit)?,
 ) {
@@ -184,8 +211,14 @@ private fun NovelListContent(
         ) { index ->
             val novel by novels[index]?.collectAsState() ?: return@items
             val cover = novel.asBrowseNovelCover()
-            EntryListItem(
+            val translatedTitle = rememberBrowseNovelTitleTranslation(
                 title = novel.title,
+                sourceLanguage = sourceLanguage,
+                enabled = translationEnabled,
+                allowedSourceFamilies = allowedSourceFamilies,
+            )
+            EntryListItem(
+                title = translatedTitle,
                 coverData = cover,
                 coverAlpha = if (novel.favorite) CommonEntryItemDefaults.BrowseFavoriteCoverAlpha else 1f,
                 badge = { InLibraryBadge(enabled = novel.favorite) },
@@ -200,7 +233,10 @@ private fun NovelListContent(
 private fun NovelComfortableGridContent(
     novels: LazyPagingItems<StateFlow<Novel>>,
     columns: GridCells,
+    sourceLanguage: String?,
     contentPadding: PaddingValues,
+    translationEnabled: Boolean,
+    allowedSourceFamilies: Set<String>,
     onNovelClick: (Novel) -> Unit,
     onNovelLongClick: ((Novel) -> Unit)?,
 ) {
@@ -238,8 +274,14 @@ private fun NovelComfortableGridContent(
         ) { index ->
             val novel by novels[index]?.collectAsState() ?: return@items
             val cover = novel.asBrowseNovelCover()
-            EntryComfortableGridItem(
+            val translatedTitle = rememberBrowseNovelTitleTranslation(
                 title = novel.title,
+                sourceLanguage = sourceLanguage,
+                enabled = translationEnabled,
+                allowedSourceFamilies = allowedSourceFamilies,
+            )
+            EntryComfortableGridItem(
+                title = translatedTitle,
                 coverData = cover,
                 coverAlpha = if (novel.favorite) CommonEntryItemDefaults.BrowseFavoriteCoverAlpha else 1f,
                 coverBadgeStart = { InLibraryBadge(enabled = novel.favorite) },
@@ -260,8 +302,11 @@ private fun NovelComfortableGridContent(
 private fun NovelCompactGridContent(
     novels: LazyPagingItems<StateFlow<Novel>>,
     columns: GridCells,
+    sourceLanguage: String?,
     contentPadding: PaddingValues,
     showTitle: Boolean,
+    translationEnabled: Boolean,
+    allowedSourceFamilies: Set<String>,
     onNovelClick: (Novel) -> Unit,
     onNovelLongClick: ((Novel) -> Unit)?,
 ) {
@@ -299,8 +344,14 @@ private fun NovelCompactGridContent(
         ) { index ->
             val novel by novels[index]?.collectAsState() ?: return@items
             val cover = novel.asBrowseNovelCover()
+            val translatedTitle = rememberBrowseNovelTitleTranslation(
+                title = novel.title,
+                sourceLanguage = sourceLanguage,
+                enabled = translationEnabled,
+                allowedSourceFamilies = allowedSourceFamilies,
+            )
             EntryCompactGridItem(
-                title = novel.title.takeIf { showTitle },
+                title = translatedTitle.takeIf { showTitle },
                 coverData = cover,
                 coverAlpha = if (novel.favorite) CommonEntryItemDefaults.BrowseFavoriteCoverAlpha else 1f,
                 coverBadgeStart = { InLibraryBadge(enabled = novel.favorite) },

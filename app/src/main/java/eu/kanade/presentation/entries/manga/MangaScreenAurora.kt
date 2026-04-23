@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -207,6 +208,7 @@ fun MangaScreenAuroraImpl(
     val chapterModels = remember(chapters) {
         chapters.mapNotNull { (it as? ChapterList.Item)?.chapter }
     }
+    val context = LocalContext.current
     val detailsSnapshot = remember(
         manga,
         chapterModels,
@@ -228,6 +230,7 @@ fun MangaScreenAuroraImpl(
             mangaMetadata = state.mangaMetadata,
             isMetadataLoading = state.isMetadataLoading,
             metadataError = state.metadataError,
+            context = context,
         )
     }
     val auroraTranslationPreferences = remember { Injekt.get<UiPreferences>() }

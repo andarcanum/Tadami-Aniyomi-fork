@@ -30,6 +30,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelQueuedDownloadType
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportOptions
+import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportProgress
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
@@ -48,6 +49,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -64,6 +66,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
@@ -1723,6 +1726,7 @@ class NovelScreenModel(
         applyReaderTheme: Boolean,
         includeCustomCss: Boolean,
         includeCustomJs: Boolean,
+        onProgress: (NovelEpubExportProgress) -> Unit = {},
     ): File? {
         val state = successState ?: return null
         val readerSettings = novelReaderPreferences.resolveSettings(state.novel.source)
@@ -1739,18 +1743,21 @@ class NovelScreenModel(
             includeCustomJs = includeCustomJs,
         )
 
-        return novelEpubExporter.export(
-            novel = state.novel,
-            chapters = state.chapters,
-            options = NovelEpubExportOptions(
-                downloadedOnly = downloadedOnly,
-                startChapter = startChapter,
-                endChapter = endChapter,
-                destinationTreeUri = destinationTreeUri.trim().ifBlank { null },
-                stylesheet = stylesheet,
-                javaScript = javaScript,
-            ),
-        )
+        return withContext(Dispatchers.IO) {
+            novelEpubExporter.export(
+                novel = state.novel,
+                chapters = state.chapters,
+                options = NovelEpubExportOptions(
+                    downloadedOnly = downloadedOnly,
+                    startChapter = startChapter,
+                    endChapter = endChapter,
+                    destinationTreeUri = destinationTreeUri.trim().ifBlank { null },
+                    stylesheet = stylesheet,
+                    javaScript = javaScript,
+                ),
+                onProgress = onProgress,
+            )
+        }
     }
 
     fun showSettingsDialog() {

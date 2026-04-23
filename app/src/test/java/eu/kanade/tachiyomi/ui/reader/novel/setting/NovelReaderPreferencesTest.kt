@@ -81,9 +81,6 @@ class NovelReaderPreferencesTest {
         prefs.selectedTextTranslationEnabled().get() shouldBe false
         prefs.selectedTextTranslationTargetLanguage().get() shouldBe "Russian"
         prefs.translationProvider().get() shouldBe NovelTranslationProvider.GEMINI
-        prefs.airforceBaseUrl().get() shouldBe "https://api.airforce"
-        prefs.airforceApiKey().get() shouldBe ""
-        prefs.airforceModel().get() shouldBe ""
         prefs.openRouterBaseUrl().get() shouldBe "https://openrouter.ai/api/v1"
         prefs.openRouterApiKey().get() shouldBe ""
         prefs.openRouterModel().get() shouldBe ""
@@ -234,11 +231,8 @@ class NovelReaderPreferencesTest {
         prefs.geminiPrefetchNextChapterTranslation().set(true)
         prefs.selectedTextTranslationEnabled().set(false)
         prefs.selectedTextTranslationTargetLanguage().set("English")
-        prefs.translationProvider().set(NovelTranslationProvider.AIRFORCE)
+        prefs.translationProvider().set(NovelTranslationProvider.GEMINI_PRIVATE)
         prefs.bookFlipAnimationSpeed().set(NovelBookFlipAnimationSpeed.SLOW)
-        prefs.airforceBaseUrl().set("https://api.airforce")
-        prefs.airforceApiKey().set("airforce-key")
-        prefs.airforceModel().set("openai/gpt-4.1-mini")
         prefs.openRouterBaseUrl().set("https://openrouter.ai/api/v1")
         prefs.openRouterApiKey().set("openrouter-key")
         prefs.openRouterModel().set("google/gemma-3-27b-it:free")
@@ -305,10 +299,7 @@ class NovelReaderPreferencesTest {
         override?.geminiPromptModifiers shouldBe "modifiers"
         override?.geminiAutoTranslateEnglishSource shouldBe true
         override?.geminiPrefetchNextChapterTranslation shouldBe true
-        override?.translationProvider shouldBe NovelTranslationProvider.AIRFORCE
-        override?.airforceBaseUrl shouldBe "https://api.airforce"
-        override?.airforceApiKey shouldBe "airforce-key"
-        override?.airforceModel shouldBe "openai/gpt-4.1-mini"
+        override?.translationProvider shouldBe NovelTranslationProvider.GEMINI_PRIVATE
         override?.openRouterBaseUrl shouldBe "https://openrouter.ai/api/v1"
         override?.openRouterApiKey shouldBe "openrouter-key"
         override?.openRouterModel shouldBe "google/gemma-3-27b-it:free"
@@ -379,9 +370,6 @@ class NovelReaderPreferencesTest {
         prefs.selectedTextTranslationEnabled().set(false)
         prefs.selectedTextTranslationTargetLanguage().set("English")
         prefs.translationProvider().set(NovelTranslationProvider.GEMINI)
-        prefs.airforceBaseUrl().set("https://api.airforce")
-        prefs.airforceApiKey().set("")
-        prefs.airforceModel().set("")
         prefs.openRouterBaseUrl().set("https://openrouter.ai/api/v1")
         prefs.openRouterApiKey().set("")
         prefs.openRouterModel().set("")
@@ -448,10 +436,7 @@ class NovelReaderPreferencesTest {
                 geminiPromptModifiers = "override-mod",
                 geminiAutoTranslateEnglishSource = true,
                 geminiPrefetchNextChapterTranslation = true,
-                translationProvider = NovelTranslationProvider.AIRFORCE,
-                airforceBaseUrl = "https://api.airforce",
-                airforceApiKey = "airforce-key",
-                airforceModel = "openai/gpt-4.1-mini",
+                translationProvider = NovelTranslationProvider.GEMINI_PRIVATE,
                 openRouterBaseUrl = "https://openrouter.ai/api/v1",
                 openRouterApiKey = "openrouter-key",
                 openRouterModel = "google/gemma-3-27b-it:free",
@@ -519,10 +504,7 @@ class NovelReaderPreferencesTest {
         settings.geminiPromptModifiers shouldBe "override-mod"
         settings.geminiAutoTranslateEnglishSource shouldBe true
         settings.geminiPrefetchNextChapterTranslation shouldBe true
-        settings.translationProvider shouldBe NovelTranslationProvider.AIRFORCE
-        settings.airforceBaseUrl shouldBe "https://api.airforce"
-        settings.airforceApiKey shouldBe "airforce-key"
-        settings.airforceModel shouldBe "openai/gpt-4.1-mini"
+        settings.translationProvider shouldBe NovelTranslationProvider.GEMINI_PRIVATE
         settings.openRouterBaseUrl shouldBe "https://openrouter.ai/api/v1"
         settings.openRouterApiKey shouldBe "openrouter-key"
         settings.openRouterModel shouldBe "google/gemma-3-27b-it:free"

@@ -119,15 +119,18 @@ data class NovelReaderSettings(
     val geminiPrivateUnlocked: Boolean = false,
     val geminiPrivatePythonLikeMode: Boolean = false,
     val translationProvider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
-    val airforceBaseUrl: String = "https://api.airforce",
-    val airforceApiKey: String = "",
-    val airforceModel: String = "",
     val openRouterBaseUrl: String = "https://openrouter.ai/api/v1",
     val openRouterApiKey: String = "",
     val openRouterModel: String = "",
     val deepSeekBaseUrl: String = "https://api.deepseek.com",
     val deepSeekApiKey: String = "",
     val deepSeekModel: String = "deepseek-chat",
+    val mistralBaseUrl: String = "https://api.mistral.ai/v1",
+    val mistralApiKey: String = "",
+    val mistralModel: String = "mistral-large-latest",
+    val nvidiaBaseUrl: String = "https://integrate.api.nvidia.com/v1",
+    val nvidiaApiKey: String = "",
+    val nvidiaModel: String = "",
 
     // Google Translation
     val googleTranslationEnabled: Boolean = false,
@@ -252,9 +255,10 @@ enum class NovelTranslationStylePreset {
 enum class NovelTranslationProvider {
     GEMINI,
     GEMINI_PRIVATE,
-    AIRFORCE,
     OPENROUTER,
     DEEPSEEK,
+    MISTRAL,
+    NVIDIA,
 }
 
 enum class NovelTtsHighlightMode {
@@ -366,15 +370,18 @@ data class NovelReaderOverride(
     val geminiPrivateUnlocked: Boolean? = null,
     val geminiPrivatePythonLikeMode: Boolean? = null,
     val translationProvider: NovelTranslationProvider? = null,
-    val airforceBaseUrl: String? = null,
-    val airforceApiKey: String? = null,
-    val airforceModel: String? = null,
     val openRouterBaseUrl: String? = null,
     val openRouterApiKey: String? = null,
     val openRouterModel: String? = null,
     val deepSeekBaseUrl: String? = null,
     val deepSeekApiKey: String? = null,
     val deepSeekModel: String? = null,
+    val mistralBaseUrl: String? = null,
+    val mistralApiKey: String? = null,
+    val mistralModel: String? = null,
+    val nvidiaBaseUrl: String? = null,
+    val nvidiaApiKey: String? = null,
+    val nvidiaModel: String? = null,
 
     // Google Translation
     val googleTranslationEnabled: Boolean? = null,
@@ -710,12 +717,6 @@ class NovelReaderPreferences(
             .set(format.name)
     }
 
-    fun airforceBaseUrl() = preferenceStore.getString("novel_reader_airforce_base_url", "https://api.airforce")
-
-    fun airforceApiKey() = preferenceStore.getString("novel_reader_airforce_api_key", "")
-
-    fun airforceModel() = preferenceStore.getString("novel_reader_airforce_model", "")
-
     fun openRouterBaseUrl() = preferenceStore.getString(
         "novel_reader_openrouter_base_url",
         "https://openrouter.ai/api/v1",
@@ -730,6 +731,21 @@ class NovelReaderPreferences(
     fun deepSeekApiKey() = preferenceStore.getString("novel_reader_deepseek_api_key", "")
 
     fun deepSeekModel() = preferenceStore.getString("novel_reader_deepseek_model", "deepseek-chat")
+
+    fun mistralBaseUrl() = preferenceStore.getString("novel_reader_mistral_base_url", "https://api.mistral.ai/v1")
+
+    fun mistralApiKey() = preferenceStore.getString("novel_reader_mistral_api_key", "")
+
+    fun mistralModel() = preferenceStore.getString("novel_reader_mistral_model", "mistral-large-latest")
+
+    fun nvidiaBaseUrl() = preferenceStore.getString(
+        "novel_reader_nvidia_base_url",
+        "https://integrate.api.nvidia.com/v1",
+    )
+
+    fun nvidiaApiKey() = preferenceStore.getString("novel_reader_nvidia_api_key", "")
+
+    fun nvidiaModel() = preferenceStore.getString("novel_reader_nvidia_model", "")
 
     private fun translatedDownloadFormatKey(novelId: Long): String {
         return "novel_reader_translated_download_format_$novelId"
@@ -896,15 +912,17 @@ class NovelReaderPreferences(
                 geminiPrefetchNextChapterTranslation = geminiPrefetchNextChapterTranslation().get(),
                 geminiPrivatePythonLikeMode = geminiPrivatePythonLikeMode().get(),
                 translationProvider = translationProvider().get(),
-                airforceBaseUrl = airforceBaseUrl().get(),
-                airforceApiKey = airforceApiKey().get(),
-                airforceModel = airforceModel().get(),
                 openRouterBaseUrl = openRouterBaseUrl().get(),
                 openRouterApiKey = openRouterApiKey().get(),
                 openRouterModel = openRouterModel().get(),
                 deepSeekBaseUrl = deepSeekBaseUrl().get(),
                 deepSeekApiKey = deepSeekApiKey().get(),
                 deepSeekModel = deepSeekModel().get(),
+                mistralBaseUrl = mistralBaseUrl().get(),
+                mistralApiKey = mistralApiKey().get(),
+                mistralModel = mistralModel().get(),
+                nvidiaApiKey = nvidiaApiKey().get(),
+                nvidiaModel = nvidiaModel().get(),
                 googleTranslationEnabled = googleTranslationEnabled().get(),
                 googleTranslationSourceLang = googleTranslationSourceLang().get(),
                 googleTranslationTargetLang = googleTranslationTargetLang().get(),
@@ -1034,15 +1052,17 @@ class NovelReaderPreferences(
             geminiPrivatePythonLikeMode =
             override?.geminiPrivatePythonLikeMode ?: geminiPrivatePythonLikeMode().get(),
             translationProvider = override?.translationProvider ?: translationProvider().get(),
-            airforceBaseUrl = override?.airforceBaseUrl ?: airforceBaseUrl().get(),
-            airforceApiKey = override?.airforceApiKey ?: airforceApiKey().get(),
-            airforceModel = override?.airforceModel ?: airforceModel().get(),
             openRouterBaseUrl = override?.openRouterBaseUrl ?: openRouterBaseUrl().get(),
             openRouterApiKey = override?.openRouterApiKey ?: openRouterApiKey().get(),
             openRouterModel = override?.openRouterModel ?: openRouterModel().get(),
             deepSeekBaseUrl = override?.deepSeekBaseUrl ?: deepSeekBaseUrl().get(),
             deepSeekApiKey = override?.deepSeekApiKey ?: deepSeekApiKey().get(),
             deepSeekModel = override?.deepSeekModel ?: deepSeekModel().get(),
+            mistralBaseUrl = override?.mistralBaseUrl ?: mistralBaseUrl().get(),
+            mistralApiKey = override?.mistralApiKey ?: mistralApiKey().get(),
+            mistralModel = override?.mistralModel ?: mistralModel().get(),
+            nvidiaApiKey = override?.nvidiaApiKey ?: nvidiaApiKey().get(),
+            nvidiaModel = override?.nvidiaModel ?: nvidiaModel().get(),
             googleTranslationEnabled = override?.googleTranslationEnabled ?: googleTranslationEnabled().get(),
             googleTranslationSourceLang = override?.googleTranslationSourceLang ?: googleTranslationSourceLang().get(),
             googleTranslationTargetLang = override?.googleTranslationTargetLang ?: googleTranslationTargetLang().get(),
@@ -1246,15 +1266,18 @@ class NovelReaderPreferences(
             geminiPrivateUnlocked().changes(),
             geminiPrivatePythonLikeMode().changes(),
             translationProvider().changes(),
-            airforceBaseUrl().changes(),
-            airforceApiKey().changes(),
-            airforceModel().changes(),
             openRouterBaseUrl().changes(),
             openRouterApiKey().changes(),
             openRouterModel().changes(),
             deepSeekBaseUrl().changes(),
             deepSeekApiKey().changes(),
             deepSeekModel().changes(),
+            mistralBaseUrl().changes(),
+            mistralApiKey().changes(),
+            mistralModel().changes(),
+            nvidiaBaseUrl().changes(),
+            nvidiaApiKey().changes(),
+            nvidiaModel().changes(),
             googleTranslationEnabled().changes(),
             googleTranslationSourceLang().changes(),
             googleTranslationTargetLang().changes(),
@@ -1285,19 +1308,22 @@ class NovelReaderPreferences(
                 privateUnlocked = values[21] as Boolean,
                 privatePythonLikeMode = values[22] as Boolean,
                 translationProvider = values[23] as NovelTranslationProvider,
-                airforceBaseUrl = values[24] as String,
-                airforceApiKey = values[25] as String,
-                airforceModel = values[26] as String,
-                openRouterBaseUrl = values[27] as String,
-                openRouterApiKey = values[28] as String,
-                openRouterModel = values[29] as String,
-                deepSeekBaseUrl = values[30] as String,
-                deepSeekApiKey = values[31] as String,
-                deepSeekModel = values[32] as String,
-                googleTranslationEnabled = values[33] as Boolean,
-                googleTranslationSourceLang = values[34] as String,
-                googleTranslationTargetLang = values[35] as String,
-                googleTranslationAutoStart = values[36] as Boolean,
+                openRouterBaseUrl = values[24] as String,
+                openRouterApiKey = values[25] as String,
+                openRouterModel = values[26] as String,
+                deepSeekBaseUrl = values[27] as String,
+                deepSeekApiKey = values[28] as String,
+                deepSeekModel = values[29] as String,
+                mistralBaseUrl = values[30] as String,
+                mistralApiKey = values[31] as String,
+                mistralModel = values[32] as String,
+                nvidiaBaseUrl = values[33] as String,
+                nvidiaApiKey = values[34] as String,
+                nvidiaModel = values[35] as String,
+                googleTranslationEnabled = values[36] as Boolean,
+                googleTranslationSourceLang = values[37] as String,
+                googleTranslationTargetLang = values[38] as String,
+                googleTranslationAutoStart = values[39] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1449,15 +1475,15 @@ class NovelReaderPreferences(
                 geminiPrivatePythonLikeMode =
                 override?.geminiPrivatePythonLikeMode ?: gemini.privatePythonLikeMode,
                 translationProvider = override?.translationProvider ?: gemini.translationProvider,
-                airforceBaseUrl = override?.airforceBaseUrl ?: gemini.airforceBaseUrl,
-                airforceApiKey = override?.airforceApiKey ?: gemini.airforceApiKey,
-                airforceModel = override?.airforceModel ?: gemini.airforceModel,
                 openRouterBaseUrl = override?.openRouterBaseUrl ?: gemini.openRouterBaseUrl,
                 openRouterApiKey = override?.openRouterApiKey ?: gemini.openRouterApiKey,
                 openRouterModel = override?.openRouterModel ?: gemini.openRouterModel,
                 deepSeekBaseUrl = override?.deepSeekBaseUrl ?: gemini.deepSeekBaseUrl,
                 deepSeekApiKey = override?.deepSeekApiKey ?: gemini.deepSeekApiKey,
                 deepSeekModel = override?.deepSeekModel ?: gemini.deepSeekModel,
+                mistralBaseUrl = override?.mistralBaseUrl ?: gemini.mistralBaseUrl,
+                mistralApiKey = override?.mistralApiKey ?: gemini.mistralApiKey,
+                mistralModel = override?.mistralModel ?: gemini.mistralModel,
                 googleTranslationEnabled = override?.googleTranslationEnabled ?: gemini.googleTranslationEnabled,
                 googleTranslationSourceLang =
                 override?.googleTranslationSourceLang ?: gemini.googleTranslationSourceLang,
@@ -1587,15 +1613,18 @@ class NovelReaderPreferences(
         val privateUnlocked: Boolean,
         val privatePythonLikeMode: Boolean,
         val translationProvider: NovelTranslationProvider,
-        val airforceBaseUrl: String,
-        val airforceApiKey: String,
-        val airforceModel: String,
         val openRouterBaseUrl: String,
         val openRouterApiKey: String,
         val openRouterModel: String,
         val deepSeekBaseUrl: String,
         val deepSeekApiKey: String,
         val deepSeekModel: String,
+        val mistralBaseUrl: String,
+        val mistralApiKey: String,
+        val mistralModel: String,
+        val nvidiaBaseUrl: String,
+        val nvidiaApiKey: String,
+        val nvidiaModel: String,
         val googleTranslationEnabled: Boolean,
         val googleTranslationSourceLang: String,
         val googleTranslationTargetLang: String,

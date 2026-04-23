@@ -69,3 +69,15 @@ data class DeepSeekTranslationParams(
     val presencePenalty: Float = 0.15f,
     val frequencyPenalty: Float = 0.15f,
 )
+
+data class MistralTranslationParams(
+    val baseUrl: String,
+    val apiKey: String,
+    val model: String,
+    val sourceLang: String,
+    val targetLang: String,
+    val promptMode: GeminiPromptMode,
+    val promptModifiers: String,
+    val temperature: Float,
+    val topP: Float,
+)
