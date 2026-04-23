@@ -1,5 +1,6 @@
 package eu.kanade.presentation.entries.manga.components.aurora
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Immutable
 import eu.kanade.domain.entries.manga.model.SourceMangaRatingParser
@@ -73,6 +74,7 @@ fun resolveMangaDetailsSnapshot(
     mangaMetadata: ExternalMetadata?,
     isMetadataLoading: Boolean,
     metadataError: MetadataLoadError?,
+    context: Context? = null,
 ): MangaDetailsSnapshot {
     val ratingValue = resolveMangaRatingValue(
         manga = manga,
@@ -89,8 +91,12 @@ fun resolveMangaDetailsSnapshot(
     }
     val statusText = when {
         isMetadataLoading -> "..."
-        metadataError == MetadataLoadError.NotAuthenticated -> MangaStatusFormatter.formatStatus(manga.status)
-        else -> mangaMetadata?.displayStatus() ?: MangaStatusFormatter.formatStatus(manga.status)
+        metadataError == MetadataLoadError.NotAuthenticated ->
+            context?.let { MangaStatusFormatter.formatStatus(it, manga.status) }
+                ?: MangaStatusFormatter.formatStatus(manga.status)
+        else -> mangaMetadata?.displayStatus() ?: context?.let {
+            MangaStatusFormatter.formatStatus(it, manga.status)
+        } ?: MangaStatusFormatter.formatStatus(manga.status)
     }
     val progress = resolveMangaProgressSnapshot(chapters)
     val metadataCompleted = mangaMetadata?.let { it.isCompleted() } == true
