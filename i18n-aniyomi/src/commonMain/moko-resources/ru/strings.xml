@@ -477,6 +477,7 @@
     <string name="novel_reader_translation_provider_gemini_private">Gemini Private</string>
     <string name="novel_reader_translation_provider_deepseek">DeepSeek</string>
     <string name="novel_reader_translation_provider_mistral">Mistral</string>
+    <string name="novel_reader_translation_provider_nvidia">NVIDIA</string>
     <string name="novel_reader_translation_auto_english_title">Автозапуск перевода для английского</string>
     <string name="novel_reader_translation_auto_english_summary">Автоматически запускать перевод, когда язык источника английский</string>
     <string name="novel_reader_translation_prefetch_next_title">Предперевод следующей главы (30%)</string>
@@ -490,6 +491,11 @@
     <string name="novel_reader_mistral_base_url">Базовый URL Mistral</string>
     <string name="novel_reader_mistral_api_key">API-ключ Mistral</string>
     <string name="novel_reader_mistral_model">Модель Mistral</string>
+    <string name="novel_reader_nvidia_section_title">NVIDIA</string>
+    <string name="novel_reader_nvidia_section_summary">OpenAI-compatible NVIDIA translation provider.</string>
+    <string name="novel_reader_nvidia_base_url">Базовый URL NVIDIA</string>
+    <string name="novel_reader_nvidia_api_key">API-ключ NVIDIA</string>
+    <string name="novel_reader_nvidia_model">Модель NVIDIA</string>
     <string name="novel_reader_gemini_section_title">AI перевод</string>
     <string name="novel_reader_gemini_section_summary">Настройки пакетного перевода для кнопки AI в ридере.</string>
     <string name="novel_reader_gemini_api_key">Gemini API ключ</string>

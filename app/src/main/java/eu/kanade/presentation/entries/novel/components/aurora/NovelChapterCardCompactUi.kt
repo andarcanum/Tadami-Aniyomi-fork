@@ -169,43 +169,49 @@ object NovelChapterCardCompactUi {
                             if (chapterActionState?.showGeminiRow == true) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     val translateState = chapterActionState.translateState
-                                NovelChapterActionButton(
-                                    icon = Icons.Outlined.Translate,
-                                    iconTint = when (translateState) {
-                                        NovelChapterActionIconState.Active -> colors.accent
-                                        NovelChapterActionIconState.InProgress -> colors.accent
-                                        else -> colors.textSecondary
-                                    },
-                                    onClick = onTranslateClick,
-                                    backgroundColor = colors.surface.copy(alpha = 0.24f),
-                                    showProgress = translateState == NovelChapterActionIconState.InProgress,
-                                    progressColor = colors.accent,
-                                    size = 36.dp,
-                                    iconSize = 20.dp,
-                                    contentDescription = stringResource(tachiyomi.i18n.aniyomi.AYMR.strings.novel_reader_selected_text_translation_action_translate),
-                                )
-                                val translatedDownloadState = chapterActionState.downloadTranslatedState
-                                NovelChapterActionButton(
-                                    icon = Icons.Outlined.Download,
-                                    iconTint = when (translatedDownloadState) {
-                                        NovelChapterActionIconState.Active -> colors.accent
-                                        NovelChapterActionIconState.InProgress -> colors.accent
-                                        else -> colors.textSecondary
-                                    },
-                                    onClick = {
-                                        when (translatedDownloadState) {
-                                            NovelChapterActionIconState.Active -> onTranslatedDownloadOpenFolder()
-                                            else -> onTranslatedDownloadClick()
-                                        }
-                                    },
-                                    onLongClick = onTranslatedDownloadLongClick,
-                                    backgroundColor = colors.surface.copy(alpha = 0.24f),
-                                    showProgress = translatedDownloadState == NovelChapterActionIconState.InProgress,
-                                    progressColor = colors.accent,
-                                    size = 36.dp,
-                                    iconSize = 20.dp,
-                                    contentDescription = stringResource(MR.strings.manga_download),
-                                )
+                                    NovelChapterActionButton(
+                                        icon = Icons.Outlined.Translate,
+                                        iconTint = when (translateState) {
+                                            NovelChapterActionIconState.Active -> colors.accent
+                                            NovelChapterActionIconState.InProgress -> colors.accent
+                                            else -> colors.textSecondary
+                                        },
+                                        onClick = onTranslateClick,
+                                        backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                        showProgress = translateState == NovelChapterActionIconState.InProgress,
+                                        progressColor = colors.accent,
+                                        size = 36.dp,
+                                        iconSize = 20.dp,
+                                        contentDescription = stringResource(
+                                            tachiyomi.i18n.aniyomi.AYMR.strings
+                                                .novel_reader_selected_text_translation_action_translate,
+                                        ),
+                                    )
+                                    val translatedDownloadState = chapterActionState.downloadTranslatedState
+                                    NovelChapterActionButton(
+                                        icon = Icons.Outlined.Download,
+                                        iconTint = when (translatedDownloadState) {
+                                            NovelChapterActionIconState.Active -> colors.accent
+                                            NovelChapterActionIconState.InProgress -> colors.accent
+                                            else -> colors.textSecondary
+                                        },
+                                        onClick = {
+                                            when (translatedDownloadState) {
+                                                NovelChapterActionIconState.Active -> onTranslatedDownloadOpenFolder()
+                                                else -> onTranslatedDownloadClick()
+                                            }
+                                        },
+                                        onLongClick = onTranslatedDownloadLongClick,
+                                        backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                        showProgress = translatedDownloadState ==
+                                            NovelChapterActionIconState.InProgress,
+                                        progressColor = colors.accent,
+                                        size = 36.dp,
+                                        iconSize = 20.dp,
+                                        contentDescription = stringResource(
+                                            MR.strings.manga_download,
+                                        ),
+                                    )
                                 }
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -67,11 +67,11 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Public
@@ -316,6 +316,11 @@ fun NovelReaderScreen(
     onSetMistralModel: (String) -> Unit = {},
     onRefreshMistralModels: () -> Unit = {},
     onTestMistralConnection: () -> Unit = {},
+    onSetNvidiaBaseUrl: (String) -> Unit = {},
+    onSetNvidiaApiKey: (String) -> Unit = {},
+    onSetNvidiaModel: (String) -> Unit = {},
+    onRefreshNvidiaModels: () -> Unit = {},
+    onTestNvidiaConnection: () -> Unit = {},
     onStartGoogleTranslation: () -> Unit = {},
     onStopGoogleTranslation: () -> Unit = {},
     onResumeGoogleTranslation: () -> Unit = {},
@@ -3621,6 +3626,11 @@ fun NovelReaderScreen(
                 onSetMistralModel = onSetMistralModel,
                 onRefreshMistralModels = onRefreshMistralModels,
                 onTestMistralConnection = onTestMistralConnection,
+                onSetNvidiaBaseUrl = onSetNvidiaBaseUrl,
+                onSetNvidiaApiKey = onSetNvidiaApiKey,
+                onSetNvidiaModel = onSetNvidiaModel,
+                onRefreshNvidiaModels = onRefreshNvidiaModels,
+                onTestNvidiaConnection = onTestNvidiaConnection,
                 openRouterModels = state.openRouterModelIds,
                 isOpenRouterModelsLoading = state.isOpenRouterModelsLoading,
                 isTestingOpenRouterConnection = state.isTestingOpenRouterConnection,
@@ -3636,6 +3646,11 @@ fun NovelReaderScreen(
                 isTestingMistralConnection = state.isTestingMistralConnection,
                 mistralApiTestStatus = state.mistralApiTestStatus,
                 mistralApiTestMessage = state.mistralApiTestMessage,
+                nvidiaModels = state.nvidiaModelIds,
+                isNvidiaModelsLoading = state.isNvidiaModelsLoading,
+                isTestingNvidiaConnection = state.isTestingNvidiaConnection,
+                nvidiaApiTestStatus = state.nvidiaApiTestStatus,
+                nvidiaApiTestMessage = state.nvidiaApiTestMessage,
                 onDismiss = { showGeminiDialog = false },
             )
         }
@@ -3758,6 +3773,11 @@ private fun GeminiTranslationDialog(
     onSetMistralModel: (String) -> Unit,
     onRefreshMistralModels: () -> Unit,
     onTestMistralConnection: () -> Unit,
+    onSetNvidiaBaseUrl: (String) -> Unit,
+    onSetNvidiaApiKey: (String) -> Unit,
+    onSetNvidiaModel: (String) -> Unit,
+    onRefreshNvidiaModels: () -> Unit,
+    onTestNvidiaConnection: () -> Unit,
     openRouterModels: List<String>,
     isOpenRouterModelsLoading: Boolean,
     isTestingOpenRouterConnection: Boolean,
@@ -3773,6 +3793,11 @@ private fun GeminiTranslationDialog(
     isTestingMistralConnection: Boolean,
     mistralApiTestStatus: ProviderApiTestStatus,
     mistralApiTestMessage: String?,
+    nvidiaModels: List<String>,
+    isNvidiaModelsLoading: Boolean,
+    isTestingNvidiaConnection: Boolean,
+    nvidiaApiTestStatus: ProviderApiTestStatus,
+    nvidiaApiTestMessage: String?,
     onDismiss: () -> Unit,
 ) {
     val modelEntries = remember {
@@ -3811,6 +3836,15 @@ private fun GeminiTranslationDialog(
     }
     val mistralAllModelEntries = remember(mistralModels) {
         mistralModels
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+            .associateWith { it }
+    }
+    val nvidiaAllModelEntries = remember(nvidiaModels) {
+        nvidiaModels
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -3891,6 +3925,7 @@ private fun GeminiTranslationDialog(
     val openRouterModelLabel = stringResource(AYMR.strings.novel_reader_openrouter_model)
     val deepSeekModelLabel = stringResource(AYMR.strings.novel_reader_deepseek_model)
     val mistralModelLabel = stringResource(AYMR.strings.novel_reader_mistral_model)
+    val nvidiaModelLabel = stringResource(AYMR.strings.novel_reader_nvidia_model)
     val promptModeLabel = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode)
     val styleLabel = stringResource(AYMR.strings.novel_reader_ai_translator_style_title)
     val speedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism)
@@ -3961,8 +3996,14 @@ private fun GeminiTranslationDialog(
     var tempMistralBaseUrl by remember(readerSettings.mistralBaseUrl) {
         mutableStateOf(readerSettings.mistralBaseUrl)
     }
+    var tempNvidiaBaseUrl by remember(readerSettings.nvidiaBaseUrl) {
+        mutableStateOf(readerSettings.nvidiaBaseUrl)
+    }
     var tempMistralModel by remember(readerSettings.mistralModel) {
         mutableStateOf(readerSettings.mistralModel)
+    }
+    var tempNvidiaModel by remember(readerSettings.nvidiaModel) {
+        mutableStateOf(readerSettings.nvidiaModel)
     }
     var showGenerationConfig by remember { mutableStateOf(false) }
     var showLogs by remember { mutableStateOf(false) }
@@ -4136,6 +4177,7 @@ private fun GeminiTranslationDialog(
     val isOpenRouterSelected = tempProvider == NovelTranslationProvider.OPENROUTER
     val isDeepSeekSelected = tempProvider == NovelTranslationProvider.DEEPSEEK
     val isMistralSelected = tempProvider == NovelTranslationProvider.MISTRAL
+    val isNvidiaSelected = tempProvider == NovelTranslationProvider.NVIDIA
     val activeGenerationPresets = if (isDeepSeekSelected) {
         deepSeekGenerationPresets
     } else {
@@ -4167,6 +4209,12 @@ private fun GeminiTranslationDialog(
     LaunchedEffect(isMistralSelected, mistralModels.size) {
         if (isMistralSelected && mistralModels.isEmpty()) {
             onRefreshMistralModels()
+        }
+    }
+
+    LaunchedEffect(isNvidiaSelected, nvidiaModels.size) {
+        if (isNvidiaSelected && nvidiaModels.isEmpty()) {
+            onRefreshNvidiaModels()
         }
     }
 
@@ -4364,6 +4412,9 @@ private fun GeminiTranslationDialog(
                             NovelTranslationProvider.MISTRAL to stringResource(
                                 AYMR.strings.novel_reader_translation_provider_mistral,
                             ),
+                            NovelTranslationProvider.NVIDIA to stringResource(
+                                AYMR.strings.novel_reader_translation_provider_nvidia,
+                            ),
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             providerCards.chunked(2).forEach { rowProviders ->
@@ -4389,6 +4440,10 @@ private fun GeminiTranslationDialog(
                                                 tempMistralBaseUrl.isNotBlank() &&
                                                     readerSettings.mistralApiKey.isNotBlank() &&
                                                     tempMistralModel.isNotBlank()
+                                            NovelTranslationProvider.NVIDIA ->
+                                                tempNvidiaBaseUrl.isNotBlank() &&
+                                                    readerSettings.nvidiaApiKey.isNotBlank() &&
+                                                    tempNvidiaModel.isNotBlank()
                                         }
                                         AiTranslatorProviderCard(
                                             title = option.second,
@@ -4405,6 +4460,7 @@ private fun GeminiTranslationDialog(
                                                     NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
                                                     NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
                                                     NovelTranslationProvider.MISTRAL -> onRefreshMistralModels()
+                                                    NovelTranslationProvider.NVIDIA -> onRefreshNvidiaModels()
                                                 }
                                             },
                                         )
@@ -4701,6 +4757,69 @@ private fun GeminiTranslationDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
+                            NovelTranslationProvider.NVIDIA -> {
+                                AiTranslatorMiniSection(
+                                    title = stringResource(
+                                        AYMR.strings.novel_reader_nvidia_section_title,
+                                    ),
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_nvidia_section_summary,
+                                    ),
+                                )
+                                AiTranslatorSupportText(
+                                    stringResource(AYMR.strings.novel_reader_ai_translator_model_summary),
+                                )
+                                if (nvidiaAllModelEntries.isNotEmpty()) {
+                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                                        value = tempNvidiaModel,
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_models_count,
+                                        ).format(nvidiaAllModelEntries.size),
+                                        subtitle = tempNvidiaModel.ifBlank {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_choose_model,
+                                            )
+                                        },
+                                        icon = null,
+                                        entries = nvidiaAllModelEntries,
+                                        onValueChange = { selected ->
+                                            tempNvidiaModel = selected
+                                            onSetNvidiaModel(selected)
+                                            logPair(nvidiaModelLabel, selected)
+                                        },
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = onRefreshNvidiaModels) {
+                                        Text(
+                                            if (isNvidiaModelsLoading) {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                )
+                                            } else {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = tempNvidiaModel,
+                                    onValueChange = {
+                                        tempNvidiaModel = it
+                                        onSetNvidiaModel(it)
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                AYMR.strings.novel_reader_nvidia_model,
+                                            ),
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                         }
                     }
 
@@ -4967,6 +5086,7 @@ private fun GeminiTranslationDialog(
                     NovelTranslationProvider.OPENROUTER -> openRouterApiTestStatus
                     NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestStatus
                     NovelTranslationProvider.MISTRAL -> mistralApiTestStatus
+                    NovelTranslationProvider.NVIDIA -> nvidiaApiTestStatus
                     NovelTranslationProvider.GEMINI,
                     NovelTranslationProvider.GEMINI_PRIVATE,
                     -> ProviderApiTestStatus.Idle
@@ -4975,6 +5095,7 @@ private fun GeminiTranslationDialog(
                     NovelTranslationProvider.OPENROUTER -> openRouterApiTestMessage
                     NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestMessage
                     NovelTranslationProvider.MISTRAL -> mistralApiTestMessage
+                    NovelTranslationProvider.NVIDIA -> nvidiaApiTestMessage
                     NovelTranslationProvider.GEMINI,
                     NovelTranslationProvider.GEMINI_PRIVATE,
                     -> null
@@ -5069,28 +5190,32 @@ private fun GeminiTranslationDialog(
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
-                        if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected) {
+                        if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected || isNvidiaSelected) {
                             AiTranslatorSupportText(
                                 stringResource(AYMR.strings.novel_reader_ai_translator_more_base_url_summary),
                             )
-                        OutlinedTextField(
-                            value = when {
-                                isOpenRouterSelected -> tempOpenRouterBaseUrl
-                                isDeepSeekSelected -> tempDeepSeekBaseUrl
-                                else -> tempMistralBaseUrl
+                            OutlinedTextField(
+                                value = when {
+                                    isOpenRouterSelected -> tempOpenRouterBaseUrl
+                                    isDeepSeekSelected -> tempDeepSeekBaseUrl
+                                    isMistralSelected -> tempMistralBaseUrl
+                                    else -> tempNvidiaBaseUrl
                                 },
-                            onValueChange = {
-                                if (isOpenRouterSelected) {
-                                    tempOpenRouterBaseUrl = it
-                                    onSetOpenRouterBaseUrl(it)
-                                } else if (isDeepSeekSelected) {
-                                    tempDeepSeekBaseUrl = it
-                                    onSetDeepSeekBaseUrl(it)
-                                } else {
-                                    tempMistralBaseUrl = it
-                                    onSetMistralBaseUrl(it)
-                                }
-                            },
+                                onValueChange = {
+                                    if (isOpenRouterSelected) {
+                                        tempOpenRouterBaseUrl = it
+                                        onSetOpenRouterBaseUrl(it)
+                                    } else if (isDeepSeekSelected) {
+                                        tempDeepSeekBaseUrl = it
+                                        onSetDeepSeekBaseUrl(it)
+                                    } else if (isMistralSelected) {
+                                        tempMistralBaseUrl = it
+                                        onSetMistralBaseUrl(it)
+                                    } else {
+                                        tempNvidiaBaseUrl = it
+                                        onSetNvidiaBaseUrl(it)
+                                    }
+                                },
                                 label = {
                                     Text(
                                         when {
@@ -5100,7 +5225,12 @@ private fun GeminiTranslationDialog(
                                             isDeepSeekSelected -> stringResource(
                                                 AYMR.strings.novel_reader_deepseek_base_url,
                                             )
-                                            else -> stringResource(AYMR.strings.novel_reader_mistral_base_url)
+                                            isMistralSelected -> stringResource(
+                                                AYMR.strings.novel_reader_mistral_base_url,
+                                            )
+                                            else -> stringResource(
+                                                AYMR.strings.novel_reader_nvidia_base_url,
+                                            )
                                         },
                                     )
                                 },
@@ -5116,6 +5246,7 @@ private fun GeminiTranslationDialog(
                                 isOpenRouterSelected -> readerSettings.openRouterApiKey
                                 isDeepSeekSelected -> readerSettings.deepSeekApiKey
                                 isMistralSelected -> readerSettings.mistralApiKey
+                                isNvidiaSelected -> readerSettings.nvidiaApiKey
                                 else -> tempKey
                             },
                             onValueChange = {
@@ -5125,6 +5256,8 @@ private fun GeminiTranslationDialog(
                                     onSetDeepSeekApiKey(it)
                                 } else if (isMistralSelected) {
                                     onSetMistralApiKey(it)
+                                } else if (isNvidiaSelected) {
+                                    onSetNvidiaApiKey(it)
                                 } else {
                                     tempKey = it
                                     onSetGeminiApiKey(it)
@@ -5138,6 +5271,7 @@ private fun GeminiTranslationDialog(
                                         )
                                         isDeepSeekSelected -> stringResource(AYMR.strings.novel_reader_deepseek_api_key)
                                         isMistralSelected -> stringResource(AYMR.strings.novel_reader_mistral_api_key)
+                                        isNvidiaSelected -> stringResource(AYMR.strings.novel_reader_nvidia_api_key)
                                         else -> stringResource(AYMR.strings.novel_reader_gemini_api_key)
                                     },
                                 )
@@ -5191,6 +5325,54 @@ private fun GeminiTranslationDialog(
                                     }
                                     Text(
                                         if (isLoading) {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                            )
+                                        } else {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_refresh_models,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                            if (!apiTestMessage.isNullOrBlank() &&
+                                apiTestStatus == ProviderApiTestStatus.Error
+                            ) {
+                                AiTranslatorSupportText(apiTestMessage)
+                            }
+                        }
+                        if (isNvidiaSelected) {
+                            AiTranslatorSupportText(
+                                stringResource(AYMR.strings.novel_reader_ai_translator_more_api_key_summary),
+                            )
+                            OutlinedTextField(
+                                value = readerSettings.nvidiaApiKey,
+                                onValueChange = onSetNvidiaApiKey,
+                                label = {
+                                    Text(
+                                        stringResource(AYMR.strings.novel_reader_nvidia_api_key),
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                AiTranslatorApiTestButton(
+                                    status = apiTestStatus,
+                                    onClick = onTestNvidiaConnection,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlinedButton(
+                                    onClick = onRefreshNvidiaModels,
+                                    enabled = !isNvidiaModelsLoading,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(
+                                        if (isNvidiaModelsLoading) {
                                             stringResource(
                                                 AYMR.strings.novel_reader_ai_translator_loading_models,
                                             )
@@ -6008,10 +6190,18 @@ private fun AiTranslatorApiTestButton(
         ProviderApiTestStatus.Error -> AYMR.strings.novel_reader_ai_translator_api_test_error
     }
     val (containerColor, contentColor) = when (status) {
-        ProviderApiTestStatus.Idle -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-        ProviderApiTestStatus.Loading -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
-        ProviderApiTestStatus.Success -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-        ProviderApiTestStatus.Error -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        ProviderApiTestStatus.Idle ->
+            MaterialTheme.colorScheme.primaryContainer to
+                MaterialTheme.colorScheme.onPrimaryContainer
+        ProviderApiTestStatus.Loading ->
+            MaterialTheme.colorScheme.secondaryContainer to
+                MaterialTheme.colorScheme.onSecondaryContainer
+        ProviderApiTestStatus.Success ->
+            MaterialTheme.colorScheme.primaryContainer to
+                MaterialTheme.colorScheme.onPrimaryContainer
+        ProviderApiTestStatus.Error ->
+            MaterialTheme.colorScheme.errorContainer to
+                MaterialTheme.colorScheme.onErrorContainer
     }
     Button(
         onClick = onClick,
@@ -6077,6 +6267,8 @@ private fun getAiTranslatorProviderLabel(provider: NovelTranslationProvider): St
             stringResource(AYMR.strings.novel_reader_translation_provider_deepseek)
         NovelTranslationProvider.MISTRAL ->
             stringResource(AYMR.strings.novel_reader_translation_provider_mistral)
+        NovelTranslationProvider.NVIDIA ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_nvidia)
     }
 }
 

@@ -27,11 +27,11 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.browse.BrowseSourceLoadingItem
 import eu.kanade.presentation.browse.InLibraryBadge
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.entries.translation.rememberBrowseNovelTitleTranslation
 import eu.kanade.presentation.library.components.CommonEntryItemDefaults
 import eu.kanade.presentation.library.components.EntryComfortableGridItem
 import eu.kanade.presentation.library.components.EntryCompactGridItem
 import eu.kanade.presentation.library.components.EntryListItem
-import eu.kanade.presentation.entries.translation.rememberBrowseNovelTitleTranslation
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.formattedMessage
@@ -52,9 +52,9 @@ import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
 import tachiyomi.presentation.core.util.plus
-import tachiyomi.presentation.core.util.collectAsState as collectPreferenceAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import tachiyomi.presentation.core.util.collectAsState as collectPreferenceAsState
 
 internal fun novelBrowseItemKey(url: String?, index: Int): String {
     return "novel/${url.orEmpty()}#$index"

@@ -128,6 +128,9 @@ data class NovelReaderSettings(
     val mistralBaseUrl: String = "https://api.mistral.ai/v1",
     val mistralApiKey: String = "",
     val mistralModel: String = "mistral-large-latest",
+    val nvidiaBaseUrl: String = "https://integrate.api.nvidia.com/v1",
+    val nvidiaApiKey: String = "",
+    val nvidiaModel: String = "",
 
     // Google Translation
     val googleTranslationEnabled: Boolean = false,
@@ -255,6 +258,7 @@ enum class NovelTranslationProvider {
     OPENROUTER,
     DEEPSEEK,
     MISTRAL,
+    NVIDIA,
 }
 
 enum class NovelTtsHighlightMode {
@@ -375,6 +379,9 @@ data class NovelReaderOverride(
     val mistralBaseUrl: String? = null,
     val mistralApiKey: String? = null,
     val mistralModel: String? = null,
+    val nvidiaBaseUrl: String? = null,
+    val nvidiaApiKey: String? = null,
+    val nvidiaModel: String? = null,
 
     // Google Translation
     val googleTranslationEnabled: Boolean? = null,
@@ -731,6 +738,15 @@ class NovelReaderPreferences(
 
     fun mistralModel() = preferenceStore.getString("novel_reader_mistral_model", "mistral-large-latest")
 
+    fun nvidiaBaseUrl() = preferenceStore.getString(
+        "novel_reader_nvidia_base_url",
+        "https://integrate.api.nvidia.com/v1",
+    )
+
+    fun nvidiaApiKey() = preferenceStore.getString("novel_reader_nvidia_api_key", "")
+
+    fun nvidiaModel() = preferenceStore.getString("novel_reader_nvidia_model", "")
+
     private fun translatedDownloadFormatKey(novelId: Long): String {
         return "novel_reader_translated_download_format_$novelId"
     }
@@ -905,6 +921,8 @@ class NovelReaderPreferences(
                 mistralBaseUrl = mistralBaseUrl().get(),
                 mistralApiKey = mistralApiKey().get(),
                 mistralModel = mistralModel().get(),
+                nvidiaApiKey = nvidiaApiKey().get(),
+                nvidiaModel = nvidiaModel().get(),
                 googleTranslationEnabled = googleTranslationEnabled().get(),
                 googleTranslationSourceLang = googleTranslationSourceLang().get(),
                 googleTranslationTargetLang = googleTranslationTargetLang().get(),
@@ -1043,6 +1061,8 @@ class NovelReaderPreferences(
             mistralBaseUrl = override?.mistralBaseUrl ?: mistralBaseUrl().get(),
             mistralApiKey = override?.mistralApiKey ?: mistralApiKey().get(),
             mistralModel = override?.mistralModel ?: mistralModel().get(),
+            nvidiaApiKey = override?.nvidiaApiKey ?: nvidiaApiKey().get(),
+            nvidiaModel = override?.nvidiaModel ?: nvidiaModel().get(),
             googleTranslationEnabled = override?.googleTranslationEnabled ?: googleTranslationEnabled().get(),
             googleTranslationSourceLang = override?.googleTranslationSourceLang ?: googleTranslationSourceLang().get(),
             googleTranslationTargetLang = override?.googleTranslationTargetLang ?: googleTranslationTargetLang().get(),
@@ -1255,6 +1275,9 @@ class NovelReaderPreferences(
             mistralBaseUrl().changes(),
             mistralApiKey().changes(),
             mistralModel().changes(),
+            nvidiaBaseUrl().changes(),
+            nvidiaApiKey().changes(),
+            nvidiaModel().changes(),
             googleTranslationEnabled().changes(),
             googleTranslationSourceLang().changes(),
             googleTranslationTargetLang().changes(),
@@ -1294,10 +1317,13 @@ class NovelReaderPreferences(
                 mistralBaseUrl = values[30] as String,
                 mistralApiKey = values[31] as String,
                 mistralModel = values[32] as String,
-                googleTranslationEnabled = values[33] as Boolean,
-                googleTranslationSourceLang = values[34] as String,
-                googleTranslationTargetLang = values[35] as String,
-                googleTranslationAutoStart = values[36] as Boolean,
+                nvidiaBaseUrl = values[33] as String,
+                nvidiaApiKey = values[34] as String,
+                nvidiaModel = values[35] as String,
+                googleTranslationEnabled = values[36] as Boolean,
+                googleTranslationSourceLang = values[37] as String,
+                googleTranslationTargetLang = values[38] as String,
+                googleTranslationAutoStart = values[39] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1596,6 +1622,9 @@ class NovelReaderPreferences(
         val mistralBaseUrl: String,
         val mistralApiKey: String,
         val mistralModel: String,
+        val nvidiaBaseUrl: String,
+        val nvidiaApiKey: String,
+        val nvidiaModel: String,
         val googleTranslationEnabled: Boolean,
         val googleTranslationSourceLang: String,
         val googleTranslationTargetLang: String,

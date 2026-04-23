@@ -421,6 +421,8 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
                     NovelTranslationProvider.MISTRAL to
                         stringResource(AYMR.strings.novel_reader_translation_provider_mistral),
+                    NovelTranslationProvider.NVIDIA to
+                        stringResource(AYMR.strings.novel_reader_translation_provider_nvidia),
                 ),
                 title = stringResource(AYMR.strings.novel_reader_translation_provider),
             )
@@ -483,6 +485,26 @@ object SettingsNovelReaderScreen : SearchableSettings {
                         preference = prefs.mistralModel(),
                         dialogSubtitle = null,
                         title = stringResource(AYMR.strings.novel_reader_mistral_model),
+                        subtitle = "%s",
+                    )
+                }
+                NovelTranslationProvider.NVIDIA -> {
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.nvidiaBaseUrl(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_nvidia_base_url),
+                        subtitle = "%s",
+                    )
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.nvidiaApiKey(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_nvidia_api_key),
+                        subtitle = "%s",
+                    )
+                    items += Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = prefs.nvidiaModel(),
+                        dialogSubtitle = null,
+                        title = stringResource(AYMR.strings.novel_reader_nvidia_model),
                         subtitle = "%s",
                     )
                 }

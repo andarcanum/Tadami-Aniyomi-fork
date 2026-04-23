@@ -1482,7 +1482,9 @@ private fun NovelClassicChapterRow(
                                     progressColor = MaterialTheme.colorScheme.primary,
                                     size = 36.dp,
                                     iconSize = 20.dp,
-                                    contentDescription = stringResource(AYMR.strings.novel_reader_selected_text_translation_action_translate),
+                                    contentDescription = stringResource(
+                                        AYMR.strings.novel_reader_selected_text_translation_action_translate,
+                                    ),
                                 )
                                 val translatedDownloadState = chapterActionState.downloadTranslatedState
                                 NovelChapterActionButton(

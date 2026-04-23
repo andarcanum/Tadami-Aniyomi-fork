@@ -17,6 +17,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveNovelTranslationPromptFamily
@@ -80,6 +82,14 @@ class NovelChapterTranslationProcessor(
             resolveSystemPrompt = { mode, family ->
                 MistralPromptResolver(application).resolveSystemPrompt(mode, family)
             },
+        )
+    },
+    private val nvidiaTranslationService: NvidiaTranslationService = run {
+        val networkHelper = Injekt.get<NetworkHelper>()
+        val json = Injekt.get<Json>()
+        NvidiaTranslationService(
+            client = networkHelper.client,
+            json = json,
         )
     },
 ) {
@@ -246,18 +256,26 @@ class NovelChapterTranslationProcessor(
                     onLog = onLog,
                 )
             }
+            NovelTranslationProvider.NVIDIA -> {
+                nvidiaTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toNvidiaTranslationParams(),
+                    onLog = onLog,
+                )
+            }
         }
     }
 }
 
 private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {
-        return when (translationProvider) {
-            NovelTranslationProvider.GEMINI_PRIVATE,
-            -> NovelTranslationPromptFamily.RUSSIAN
-            NovelTranslationProvider.GEMINI,
-            NovelTranslationProvider.OPENROUTER,
-            NovelTranslationProvider.DEEPSEEK,
+    return when (translationProvider) {
+        NovelTranslationProvider.GEMINI_PRIVATE,
+        -> NovelTranslationPromptFamily.RUSSIAN
+        NovelTranslationProvider.GEMINI,
+        NovelTranslationProvider.OPENROUTER,
+        NovelTranslationProvider.DEEPSEEK,
         NovelTranslationProvider.MISTRAL,
+        NovelTranslationProvider.NVIDIA,
         -> resolveNovelTranslationPromptFamily(geminiTargetLang)
     }
 }
@@ -345,6 +363,20 @@ private fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslation
     )
 }
 
+private fun NovelReaderSettings.toNvidiaTranslationParams(): NvidiaTranslationParams {
+    return NvidiaTranslationParams(
+        baseUrl = nvidiaBaseUrl,
+        apiKey = nvidiaApiKey,
+        model = nvidiaModel,
+        sourceLang = geminiSourceLang,
+        targetLang = geminiTargetLang,
+        promptMode = geminiPromptMode,
+        promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
+        temperature = geminiTemperature,
+        topP = geminiTopP,
+    )
+}
+
 private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
     if (!geminiEnabled) return false
     return when (translationProvider) {
@@ -363,18 +395,24 @@ private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
         NovelTranslationProvider.MISTRAL -> {
             mistralBaseUrl.isNotBlank() && mistralApiKey.isNotBlank() && mistralModel.isNotBlank()
         }
+        NovelTranslationProvider.NVIDIA -> {
+            nvidiaBaseUrl.isNotBlank() &&
+                nvidiaApiKey.isNotBlank() &&
+                nvidiaModel.isNotBlank()
+        }
     }
 }
 
 private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
-        return when (translationProvider) {
-            NovelTranslationProvider.GEMINI -> geminiConcurrency.coerceIn(1, 8)
-            NovelTranslationProvider.GEMINI_PRIVATE -> {
-                if (shouldUseSinglePrivateChapterRequestMode()) 1 else geminiConcurrency.coerceIn(1, 8)
-            }
-            NovelTranslationProvider.OPENROUTER -> 1
-            NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
-            NovelTranslationProvider.MISTRAL -> 1
+    return when (translationProvider) {
+        NovelTranslationProvider.GEMINI -> geminiConcurrency.coerceIn(1, 8)
+        NovelTranslationProvider.GEMINI_PRIVATE -> {
+            if (shouldUseSinglePrivateChapterRequestMode()) 1 else geminiConcurrency.coerceIn(1, 8)
+        }
+        NovelTranslationProvider.OPENROUTER -> 1
+        NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
+        NovelTranslationProvider.MISTRAL -> 1
+        NovelTranslationProvider.NVIDIA -> 1
     }
 }
 
@@ -438,6 +476,10 @@ private fun NovelReaderSettings.translationRequestConfigLog(): String {
         }
         NovelTranslationProvider.MISTRAL -> {
             "baseUrl=${mistralBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
+                "topP=${geminiTopP.toLogFloat()}, stream=false"
+        }
+        NovelTranslationProvider.NVIDIA -> {
+            "baseUrl=${nvidiaBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
                 "topP=${geminiTopP.toLogFloat()}, stream=false"
         }
     }
