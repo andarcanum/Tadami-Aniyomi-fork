@@ -8,5 +8,6 @@ internal fun shouldBypassChapterPageListCache(sourceBaseUrl: String?): Boolean {
         ?.host
         ?: return false
     return host.equals("inkstory.net", ignoreCase = true) ||
-        host.equals("api.inkstory.net", ignoreCase = true)
+        host.equals("api.inkstory.net", ignoreCase = true) ||
+        host.equals("nartag.com", ignoreCase = true)
 }

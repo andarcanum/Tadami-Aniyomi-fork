@@ -12,6 +12,11 @@ class InkStoryChapterPageListPolicyTest {
     }
 
     @Test
+    fun `bypasses chapter page list cache for nartag hosts`() {
+        shouldBypassChapterPageListCache("https://nartag.com") shouldBe true
+    }
+
+    @Test
     fun `does not bypass chapter page list cache for other hosts`() {
         shouldBypassChapterPageListCache("https://example.org") shouldBe false
         shouldBypassChapterPageListCache(null) shouldBe false
