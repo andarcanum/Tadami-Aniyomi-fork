@@ -774,7 +774,7 @@ class MangaLibraryScreenModel(
                     ?.filterIsInstance<MangaLibraryItem.Single>()
                     ?.fastMap { it.libraryManga }
                     .orEmpty()
-                val lastMangaIndex = items.indexOf(lastSelected?.libraryManga)
+                val lastMangaIndex = items.indexOf(lastSelected.libraryManga)
                 val curMangaIndex = items.indexOf(manga)
 
                 val selectedIds = list.fastMap { it.id }
