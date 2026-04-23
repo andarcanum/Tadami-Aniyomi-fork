@@ -477,6 +477,8 @@ internal fun PageTurnPageRenderer(
     activeBackgroundTexture: NovelReaderBackgroundTexture,
     activeOledEdgeGradient: Boolean,
     isDarkTheme: Boolean,
+    pageEdgeShadow: Boolean,
+    pageEdgeShadowAlpha: Float,
     textTypeface: Typeface?,
     chapterTitleTypeface: Typeface?,
     contentPadding: Dp,
@@ -827,6 +829,8 @@ internal fun PageTurnPageRenderer(
                 nativeTextureStrengthPercentEffective = pageTextureStrengthPercent,
                 oledEdgeGradient = if (isBackgroundMode) activeOledEdgeGradient else false,
                 isDarkTheme = isDarkTheme,
+                pageEdgeShadow = pageEdgeShadow,
+                pageEdgeShadowAlpha = pageEdgeShadowAlpha,
                 backgroundTexture = pageTexture,
                 nativeTextureStrengthPercent = pageTextureStrengthPercent,
                 forceBoldText = readerSettings.forceBoldText,
@@ -850,8 +854,8 @@ internal fun PageTurnPageRenderer(
                     nativeTextureStrengthPercent = pageTextureStrengthPercent,
                     oledEdgeGradient = activeOledEdgeGradient,
                     isDarkTheme = isDarkTheme,
-                    pageEdgeShadow = false,
-                    pageEdgeShadowAlpha = 0f,
+                    pageEdgeShadow = pageEdgeShadow,
+                    pageEdgeShadowAlpha = pageEdgeShadowAlpha,
                     backgroundImageModel = backgroundImageModel,
                 )
                 if (boundaryPreview != null) {
