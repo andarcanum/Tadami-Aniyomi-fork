@@ -71,6 +71,17 @@ class DeepSeekTranslationService(
                     )
                 },
             )
+            val reasoningEffort = params.reasoningEffort.trim().lowercase()
+            val thinkingEnabled = reasoningEffort != "none"
+            put(
+                "thinking",
+                buildJsonObject {
+                    put("type", if (thinkingEnabled) "enabled" else "disabled")
+                },
+            )
+            if (thinkingEnabled) {
+                put("reasoning_effort", if (reasoningEffort == "max") "max" else "high")
+            }
             put("temperature", params.temperature)
             put("top_p", params.topP)
             put("presence_penalty", params.presencePenalty)

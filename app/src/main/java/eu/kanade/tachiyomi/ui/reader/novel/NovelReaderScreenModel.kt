@@ -65,6 +65,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.TranslationPhase
 import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
 import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeGeminiModelId
+import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeTranslationReasoningEffort
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveNovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
@@ -3079,6 +3080,11 @@ class NovelReaderScreenModel(
             promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
             temperature = geminiTemperature,
             topP = geminiTopP,
+            reasoningEffort = normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.OPENROUTER,
+                model = openRouterModel,
+                value = geminiReasoningEffort,
+            ),
         )
     }
     private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslationParams {
@@ -3092,6 +3098,11 @@ class NovelReaderScreenModel(
             promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
             temperature = geminiTemperature.coerceIn(DEEPSEEK_TEMPERATURE_MIN, DEEPSEEK_TEMPERATURE_MAX),
             topP = geminiTopP.coerceIn(DEEPSEEK_TOP_P_MIN, DEEPSEEK_TOP_P_MAX),
+            reasoningEffort = normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.DEEPSEEK,
+                model = deepSeekModel,
+                value = geminiReasoningEffort,
+            ) ?: "none",
             presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY,
             frequencyPenalty = DEEPSEEK_DEFAULT_FREQUENCY_PENALTY,
         )
@@ -3107,6 +3118,11 @@ class NovelReaderScreenModel(
             promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
             temperature = geminiTemperature,
             topP = geminiTopP,
+            reasoningEffort = normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.MISTRAL,
+                model = mistralModel,
+                value = geminiReasoningEffort,
+            ),
         )
     }
     private fun NovelReaderSettings.toNvidiaTranslationParams(): NvidiaTranslationParams {

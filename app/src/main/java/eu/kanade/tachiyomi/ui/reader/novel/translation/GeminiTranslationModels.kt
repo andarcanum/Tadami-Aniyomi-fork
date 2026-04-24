@@ -54,6 +54,7 @@ data class OpenRouterTranslationParams(
     val promptModifiers: String,
     val temperature: Float,
     val topP: Float,
+    val reasoningEffort: String? = null,
 )
 
 data class DeepSeekTranslationParams(
@@ -66,6 +67,7 @@ data class DeepSeekTranslationParams(
     val promptModifiers: String,
     val temperature: Float,
     val topP: Float,
+    val reasoningEffort: String = "none",
     val presencePenalty: Float = 0.15f,
     val frequencyPenalty: Float = 0.15f,
 )
@@ -80,4 +82,5 @@ data class MistralTranslationParams(
     val promptModifiers: String,
     val temperature: Float,
     val topP: Float,
+    val reasoningEffort: String? = null,
 )

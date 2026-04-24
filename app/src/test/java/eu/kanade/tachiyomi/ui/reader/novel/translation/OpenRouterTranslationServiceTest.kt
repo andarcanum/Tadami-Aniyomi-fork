@@ -51,13 +51,16 @@ class OpenRouterTranslationServiceTest {
                 promptModifiers = "",
                 temperature = 0.7f,
                 topP = 0.95f,
+                reasoningEffort = "medium",
             ),
         )
 
         translated shouldBe listOf("Privet", "Mir")
         val request = server.takeRequest()
         request.path shouldBe "/api/v1/chat/completions"
-        request.body.readUtf8().shouldContain("\"stream\":false")
+        val body = request.body.readUtf8()
+        body.shouldContain("\"stream\":false")
+        body.shouldContain("\"reasoning\":{\"effort\":\"medium\"}")
     }
 
     @Test

@@ -139,6 +139,7 @@ import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -182,6 +183,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
+import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveTranslationReasoningOptions
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigationAdapter
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigator
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsNavigationAnchor
@@ -3955,6 +3957,8 @@ private fun GeminiTranslationDialog(
     }
 
     fun reasoningDisplayLabel(option: String): String = when (option) {
+        "none" -> "OFF"
+        "max" -> "MAX"
         "minimal" -> reasoningMinimalLabel
         "low" -> reasoningLowLabel
         "medium" -> reasoningMediumLabel
@@ -4178,6 +4182,18 @@ private fun GeminiTranslationDialog(
     val isDeepSeekSelected = tempProvider == NovelTranslationProvider.DEEPSEEK
     val isMistralSelected = tempProvider == NovelTranslationProvider.MISTRAL
     val isNvidiaSelected = tempProvider == NovelTranslationProvider.NVIDIA
+    val activeReasoningModel = when (tempProvider) {
+        NovelTranslationProvider.GEMINI,
+        NovelTranslationProvider.GEMINI_PRIVATE,
+        -> tempModel
+        NovelTranslationProvider.OPENROUTER -> tempOpenRouterModel
+        NovelTranslationProvider.MISTRAL -> tempMistralModel
+        NovelTranslationProvider.DEEPSEEK -> tempDeepSeekModel
+        NovelTranslationProvider.NVIDIA -> tempNvidiaModel
+    }
+    val reasoningOptions = remember(tempProvider, activeReasoningModel) {
+        resolveTranslationReasoningOptions(tempProvider, activeReasoningModel)
+    }
     val activeGenerationPresets = if (isDeepSeekSelected) {
         deepSeekGenerationPresets
     } else {
@@ -5040,23 +5056,17 @@ private fun GeminiTranslationDialog(
                         }
                     }
 
-                    if (
-                        page == 1 &&
-                        isGeminiFamilySelected &&
-                        (
-                            tempModel == "gemini-3-flash-preview" ||
-                                tempModel == "gemini-3-pro-preview" ||
-                                tempModel == "gemini-3.1-flash-lite-preview"
-                            )
-                    ) {
+                    if (page == 0 && reasoningOptions.isNotEmpty()) {
                         Text(
-                            "Уровень размышления",
+                            text = reasoningLabel,
                             style = MaterialTheme.typography.labelLarge,
                         )
-                        val reasoningOptions = if (tempModel == "gemini-3-pro-preview") {
-                            listOf("low", "high")
-                        } else {
-                            listOf("minimal", "low", "medium", "high")
+                        if (isDeepSeekSelected && tempReasoning != "none") {
+                            AiTranslatorSupportText(
+                                stringResource(
+                                    AYMR.strings.novel_reader_ai_translator_deepseek_reasoning_hint,
+                                ),
+                            )
                         }
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(reasoningOptions) { option ->
@@ -5066,12 +5076,20 @@ private fun GeminiTranslationDialog(
                                         onSetGeminiReasoningEffort(option)
                                         logPair(reasoningLabel, reasoningDisplayLabel(option))
                                     },
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = if (tempReasoning == option) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    ),
                                 ) {
                                     Text(
-                                        if (tempReasoning == option) {
-                                            "• ${option.uppercase()}"
+                                        reasoningDisplayLabel(option),
+                                        fontWeight = if (tempReasoning == option) {
+                                            FontWeight.SemiBold
                                         } else {
-                                            option.uppercase()
+                                            FontWeight.Normal
                                         },
                                     )
                                 }
@@ -6018,6 +6036,12 @@ private fun AiTranslatorChoiceChip(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             style = MaterialTheme.typography.labelLarge,
             textAlign = TextAlign.Center,
+            color = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
         )
     }
 }

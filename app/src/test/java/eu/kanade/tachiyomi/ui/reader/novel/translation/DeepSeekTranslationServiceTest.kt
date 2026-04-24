@@ -57,6 +57,7 @@ class DeepSeekTranslationServiceTest {
                 promptModifiers = "",
                 temperature = 0.7f,
                 topP = 0.95f,
+                reasoningEffort = "max",
             ),
         )
 
@@ -66,6 +67,8 @@ class DeepSeekTranslationServiceTest {
         val body = request.body.readUtf8()
         body.shouldContain("\"stream\":false")
         body.shouldContain("adult_system")
+        body.shouldContain("\"thinking\":{\"type\":\"enabled\"}")
+        body.shouldContain("\"reasoning_effort\":\"max\"")
     }
 
     @Test
@@ -88,10 +91,45 @@ class DeepSeekTranslationServiceTest {
                 promptModifiers = "",
                 temperature = 0.7f,
                 topP = 0.95f,
+                reasoningEffort = "none",
             ),
         )
 
         translated.shouldBeNull()
         server.requestCount shouldBe 0
+    }
+
+    @Test
+    fun `disables thinking when reasoning effort is none`() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"choices":[{"message":{"content":"<s i='0'>Privet</s>"}}]}""",
+            ),
+        )
+        val service = DeepSeekTranslationService(
+            client = OkHttpClient(),
+            json = Json { ignoreUnknownKeys = true },
+            resolveSystemPrompt = { _, _ -> "system" },
+        )
+
+        val translated = service.translateBatch(
+            segments = listOf("Hello"),
+            params = DeepSeekTranslationParams(
+                baseUrl = server.url("/").toString().trimEnd('/'),
+                apiKey = "test-key",
+                model = "deepseek-v4-pro",
+                sourceLang = "English",
+                targetLang = "Russian",
+                promptMode = GeminiPromptMode.CLASSIC,
+                promptModifiers = "",
+                temperature = 0.7f,
+                topP = 0.95f,
+                reasoningEffort = "none",
+            ),
+        )
+
+        translated shouldBe listOf("Privet")
+        val body = server.takeRequest().body.readUtf8()
+        body.shouldContain("\"thinking\":{\"type\":\"disabled\"}")
     }
 }
