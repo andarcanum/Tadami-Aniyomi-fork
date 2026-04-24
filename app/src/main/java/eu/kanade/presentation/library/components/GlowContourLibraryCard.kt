@@ -614,10 +614,10 @@ private fun GlowContourLibraryTextBlock(
             if (!seriesHeaderText.isNullOrBlank()) {
                 Text(
                     text = seriesHeaderText,
-                    color = colors.textSecondary.copy(alpha = 0.9f),
+                    color = colors.accent,
                     fontSize = 11.sp,
                     lineHeight = 12.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

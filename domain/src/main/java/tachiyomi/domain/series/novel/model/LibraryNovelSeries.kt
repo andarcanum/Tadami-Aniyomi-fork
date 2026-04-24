@@ -54,7 +54,7 @@ data class LibraryNovelSeries(
 
     val coverNovels: List<Novel>
         get() {
-            val base = entries.take(3).map { it.novel }
+            val base = entries.take(5).map { it.novel }
             val selected = selectedCoverNovel ?: return base
             return listOf(selected) + base.filterNot { it.id == selected.id }
         }

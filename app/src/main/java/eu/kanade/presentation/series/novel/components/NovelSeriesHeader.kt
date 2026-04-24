@@ -55,6 +55,7 @@ fun NovelSeriesHeader(
                 covers = series.coverNovels.map { it.asNovelCover() },
                 customCoverData = customCoverData,
                 isSelected = false,
+                widthFactor = 0.85f,
             )
         }
 
