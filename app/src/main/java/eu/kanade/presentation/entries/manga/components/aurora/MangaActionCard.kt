@@ -79,7 +79,7 @@ fun MangaActionCard(
                     stringResource(MR.strings.add_to_library)
                 },
                 onClick = onAddToLibraryClicked,
-        onLongClick = onAddToLibraryLongClicked,
+                onLongClick = onAddToLibraryLongClicked,
                 modifier = Modifier.weight(1f),
             )
 

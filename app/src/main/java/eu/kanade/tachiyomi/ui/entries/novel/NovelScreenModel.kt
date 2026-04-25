@@ -849,12 +849,12 @@ class NovelScreenModel(
             val defaultCategoryId = libraryPreferences.defaultNovelCategory().get().toLong()
             val defaultCategory = categories.find { it.id == defaultCategoryId }
             when {
-            defaultCategory != null -> moveNovelToCategories(novel.id, listOf(defaultCategory.id))
-            defaultCategoryId == 0L || categories.isEmpty() -> moveNovelToCategories(novel.id, emptyList())
-            else -> {
-                isFromChangeCategory = true
-                showChangeCategoryDialog()
-            }
+                defaultCategory != null -> moveNovelToCategories(novel.id, listOf(defaultCategory.id))
+                defaultCategoryId == 0L || categories.isEmpty() -> moveNovelToCategories(novel.id, emptyList())
+                else -> {
+                    isFromChangeCategory = true
+                    showChangeCategoryDialog()
+                }
             }
         }
     }

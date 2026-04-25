@@ -475,17 +475,17 @@ fun AnimeScreenAuroraImpl(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
-AnimeActionCard(
-                anime = anime,
-                trackingCount = state.trackingCount,
-                onAddToLibraryClicked = onAddToLibraryClicked,
-                onAddToLibraryLongClicked = onEditCategoryClicked,
-                onWebViewClicked = onWebViewClicked,
-                onTrackingClicked = onTrackingClicked,
-                onShareClicked = onShareClicked,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(modifier = Modifier.height(24.dp))
+                                AnimeActionCard(
+                                    anime = anime,
+                                    trackingCount = state.trackingCount,
+                                    onAddToLibraryClicked = onAddToLibraryClicked,
+                                    onAddToLibraryLongClicked = onEditCategoryClicked,
+                                    onWebViewClicked = onWebViewClicked,
+                                    onTrackingClicked = onTrackingClicked,
+                                    onShareClicked = onShareClicked,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
                             }
                         }
                     },
@@ -719,16 +719,16 @@ AnimeActionCard(
                                 )
 
                                 Spacer(modifier = Modifier.height(12.dp))
-AnimeActionCard(
-                    anime = anime,
-                    trackingCount = state.trackingCount,
-                    onAddToLibraryClicked = onAddToLibraryClicked,
-                    onAddToLibraryLongClicked = onEditCategoryClicked,
-                    onWebViewClicked = onWebViewClicked,
-                    onTrackingClicked = onTrackingClicked,
-                    onShareClicked = onShareClicked,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                                AnimeActionCard(
+                                    anime = anime,
+                                    trackingCount = state.trackingCount,
+                                    onAddToLibraryClicked = onAddToLibraryClicked,
+                                    onAddToLibraryLongClicked = onEditCategoryClicked,
+                                    onWebViewClicked = onWebViewClicked,
+                                    onTrackingClicked = onTrackingClicked,
+                                    onShareClicked = onShareClicked,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
                             }
                         }
 

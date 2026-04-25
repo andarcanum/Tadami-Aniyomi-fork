@@ -115,7 +115,6 @@ import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
-import tachiyomi.core.common.util.lang.launchIO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import logcat.logcat
@@ -371,7 +370,7 @@ class NovelScreen(
             },
             isReading = isReading,
             onToggleFavorite = screenModel::toggleFavorite,
-    onEditCategoryClicked = screenModel::showChangeCategoryDialog.takeIf { successState.novel.favorite },
+            onEditCategoryClicked = screenModel::showChangeCategoryDialog.takeIf { successState.novel.favorite },
             onRefresh = screenModel::refreshChapters,
             onSearch = { query, global ->
                 coroutineScope.launch {

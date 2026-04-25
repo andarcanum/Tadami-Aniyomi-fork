@@ -187,7 +187,7 @@ fun NovelScreen(
             onStartReading = onStartReading,
             isReading = isReading,
             onToggleFavorite = onToggleFavorite,
-        onEditCategoryClicked = onEditCategoryClicked,
+            onEditCategoryClicked = onEditCategoryClicked,
             onRefresh = onRefresh,
             onSearch = onSearch,
             onPosterLongClicked = onPosterLongClicked,
