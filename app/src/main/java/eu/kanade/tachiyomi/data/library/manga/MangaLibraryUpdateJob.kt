@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.manga.model.toSManga
 import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
@@ -87,6 +88,11 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private var mangaToUpdate: List<LibraryManga> = mutableListOf()
 
     override suspend fun doWork(): Result {
+        val uiPreferences: UiPreferences = Injekt.get()
+        if (!uiPreferences.showMangaSection().get()) {
+            return Result.success()
+        }
+
         try {
             setForeground(getForegroundInfo())
         } catch (e: IllegalStateException) {

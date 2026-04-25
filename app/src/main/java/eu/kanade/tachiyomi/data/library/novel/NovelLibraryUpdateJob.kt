@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
@@ -82,6 +83,11 @@ class NovelLibraryUpdateJob(
     private var novelCategoryIdsByNovelId: Map<Long, Set<Long>> = emptyMap()
 
     override suspend fun doWork(): Result {
+        val uiPreferences: UiPreferences = Injekt.get()
+        if (!uiPreferences.showNovelSection().get()) {
+            return Result.success()
+        }
+
         try {
             setForeground(getForegroundInfo())
         } catch (e: IllegalStateException) {

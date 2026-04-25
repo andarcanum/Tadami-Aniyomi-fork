@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.util.system.notify
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import java.math.RoundingMode
 import java.text.NumberFormat
 import tachiyomi.i18n.R as I18nR
@@ -34,7 +35,7 @@ class NovelLibraryUpdateNotifier(
 
     val progressNotificationBuilder by lazy {
         context.notificationBuilder(Notifications.CHANNEL_LIBRARY_PROGRESS) {
-            setContentTitle(context.stringResource(MR.strings.app_name))
+            setContentTitle(context.stringResource(AYMR.strings.aurora_updating_novel))
             setSmallIcon(R.drawable.ic_refresh_24dp)
             setOngoing(true)
             setOnlyAlertOnce(true)
@@ -82,7 +83,7 @@ class NovelLibraryUpdateNotifier(
             Notifications.ID_NEW_NOVEL_CHAPTERS,
             Notifications.CHANNEL_LIBRARY_PROGRESS,
         ) {
-            setContentTitle(context.stringResource(MR.strings.updating_library))
+            setContentTitle(context.stringResource(AYMR.strings.aurora_updating_novel))
             setContentText(context.stringResource(MR.strings.update_check_no_new_updates))
             setSubText("$checked")
             setSmallIcon(R.drawable.ic_ani)

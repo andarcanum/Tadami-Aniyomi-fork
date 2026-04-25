@@ -83,7 +83,7 @@ class AnimeMetadataUpdateJob(private val context: Context, workerParams: WorkerP
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val notifier = AnimeLibraryUpdateNotifier(context)
         return ForegroundInfo(
-            Notifications.ID_LIBRARY_PROGRESS,
+            Notifications.ID_ANIME_LIBRARY_PROGRESS,
             notifier.progressNotificationBuilder.build(),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC

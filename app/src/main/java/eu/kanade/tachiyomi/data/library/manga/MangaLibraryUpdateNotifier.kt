@@ -38,6 +38,7 @@ import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.math.RoundingMode
@@ -75,7 +76,7 @@ class MangaLibraryUpdateNotifier(
      */
     val progressNotificationBuilder by lazy {
         context.notificationBuilder(Notifications.CHANNEL_LIBRARY_PROGRESS) {
-            setContentTitle(context.stringResource(MR.strings.app_name))
+            setContentTitle(context.stringResource(AYMR.strings.aurora_updating_manga))
             setSmallIcon(R.drawable.ic_refresh_24dp)
             setLargeIcon(notificationBitmap)
             setOngoing(true)
@@ -122,7 +123,7 @@ class MangaLibraryUpdateNotifier(
             Notifications.ID_NEW_CHAPTERS,
             Notifications.CHANNEL_LIBRARY_PROGRESS,
         ) {
-            setContentTitle(context.stringResource(MR.strings.updating_library))
+            setContentTitle(context.stringResource(AYMR.strings.aurora_updating_manga))
             setContentText(context.stringResource(MR.strings.update_check_no_new_updates))
             setSubText("$checked")
             setSmallIcon(R.drawable.ic_ani)
