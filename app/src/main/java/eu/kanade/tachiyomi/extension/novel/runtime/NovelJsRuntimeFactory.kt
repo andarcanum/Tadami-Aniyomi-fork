@@ -19,6 +19,7 @@ import kotlinx.serialization.protobuf.ProtoIntegerType
 import kotlinx.serialization.protobuf.ProtoNumber
 import kotlinx.serialization.protobuf.ProtoType
 import logcat.LogPriority
+import logcat.logcat
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
@@ -78,7 +79,7 @@ class NovelJsRuntimeFactory(
                     val body = bodyBytes.toString(bodyCharset)
                     val bodyBase64 = Base64.getEncoder().encodeToString(bodyBytes)
                     if (!response.isSuccessful) {
-                        logcat(LogPriority.WARN) {
+                        logcat(priority = LogPriority.WARN, tag = "NovelFetch") {
                             "Novel plugin fetch $pluginId: HTTP ${response.code} " +
                                 "url=${response.request.url} resolved=$resolvedUrl " +
                                 "body=${body.take(240)}"
@@ -171,7 +172,13 @@ class NovelJsRuntimeFactory(
         }
 
         override fun localStorageGet(key: String): String? {
-            return webStorageBridge.localStorageGet(key)
+            val value = webStorageBridge.localStorageGet(key)
+            if (key == "auth") {
+                logcat(LogPriority.DEBUG, "NovelStorage") {
+                    "plugin=$pluginId key=auth valueLen=${value?.length ?: 0} valuePreview=${value?.take(80) ?: "null"}"
+                }
+            }
+            return value
         }
 
         override fun localStorageSet(key: String, value: String) {

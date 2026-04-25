@@ -50,6 +50,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import logcat.LogPriority
+import logcat.logcat
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
@@ -273,10 +275,13 @@ private suspend fun applyNovelPluginWebViewBindings(
     assetBindings: NovelPluginAssetBindings,
     webViewCoordinator: NovelPluginWebViewCoordinator,
 ) {
-    val snapshot = webViewCoordinator.syncBeforeParsing(pluginId)
-
     view.evaluateJavascript(buildWebStorageSnapshotScript()) { result ->
         val snapshotData = decodeWebStorageSnapshot(result)
+        val localKeys = snapshotData?.first?.keys?.joinToString() ?: "null"
+        val hasAuth = snapshotData?.first?.containsKey("auth") == true
+        logcat(priority = LogPriority.DEBUG, tag = "WebViewBindings") {
+            "extract plugin=$pluginId hasAuth=$hasAuth localKeys=[$localKeys]"
+        }
         if (snapshotData != null) {
             val (localStorage, sessionStorage) = snapshotData
             if (sessionStorage.isNotEmpty()) {
@@ -298,14 +303,9 @@ private suspend fun applyNovelPluginWebViewBindings(
         }
     }
 
-    val storageInjectionScript = webViewCoordinator.generateStorageInjectionScript(snapshot)
     val assetInjectionScript = assetBindings.generateAssetInjectionScript(pluginId)
-    val combinedScript = listOf(storageInjectionScript, assetInjectionScript)
-        .filter { it.isNotBlank() }
-        .joinToString("\n\n")
-
-    if (combinedScript.isNotBlank()) {
-        view.evaluateJavascript(combinedScript, null)
+    if (assetInjectionScript.isNotBlank()) {
+        view.evaluateJavascript(assetInjectionScript, null)
     }
 }
 

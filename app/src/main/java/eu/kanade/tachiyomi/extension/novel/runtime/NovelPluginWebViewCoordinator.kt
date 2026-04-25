@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.extension.novel.runtime
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import logcat.LogPriority
+import logcat.logcat
 import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 
 /**
@@ -61,6 +63,12 @@ class NovelPluginWebViewCoordinator(
         pluginId: String,
         webStorageData: Map<String, String>,
     ) = mutex.withLock {
+        val hasAuth = webStorageData.containsKey("auth")
+        val authLen = webStorageData["auth"]?.length ?: 0
+        val authPreview = webStorageData["auth"]?.take(80) ?: "null"
+        logcat(priority = LogPriority.DEBUG, tag = "WebViewCoordinator") {
+            "sync plugin=$pluginId hasAuth=$hasAuth keys=${webStorageData.keys} authLen=$authLen authPreview=$authPreview"
+        }
         val bridge = getStorageBridge(pluginId)
         syncLocalStorageSnapshot(bridge, webStorageData)
     }
