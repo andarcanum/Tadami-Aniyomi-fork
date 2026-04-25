@@ -6,6 +6,6 @@ import tachiyomi.domain.entries.novel.model.NovelCover
 
 class NovelCoverKeyer : Keyer<NovelCover> {
     override fun key(data: NovelCover, options: Options): String {
-        return "novel;${data.url};${data.lastModified}"
+        return "novel;${data.novelId};${data.url};${data.lastModified}"
     }
 }
