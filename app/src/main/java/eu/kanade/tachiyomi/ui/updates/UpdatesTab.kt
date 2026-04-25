@@ -1,6 +1,11 @@
 package eu.kanade.tachiyomi.ui.updates
 
 import android.widget.Toast
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
@@ -39,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
@@ -81,6 +87,8 @@ import eu.kanade.tachiyomi.ui.updates.manga.MangaUpdatesScreenModel
 import eu.kanade.tachiyomi.ui.updates.manga.mangaUpdatesTab
 import eu.kanade.tachiyomi.ui.updates.novel.NovelUpdatesScreenModel
 import eu.kanade.tachiyomi.ui.updates.novel.novelUpdatesTab
+import eu.kanade.tachiyomi.util.system.isRunningFlow
+import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.launch
@@ -142,6 +150,16 @@ data object UpdatesTab : Tab {
             val scope = rememberCoroutineScope()
             val playerPreferences = remember { Injekt.get<PlayerPreferences>() }
 
+            val isAnimeUpdating by remember(context) {
+                context.workManager.isRunningFlow("AnimeLibraryUpdate")
+            }.collectAsState(initial = false)
+            val isMangaUpdating by remember(context) {
+                context.workManager.isRunningFlow("LibraryUpdate")
+            }.collectAsState(initial = false)
+            val isNovelUpdating by remember(context) {
+                context.workManager.isRunningFlow("NovelLibraryUpdate")
+            }.collectAsState(initial = false)
+
             val animeScreenModel = rememberScreenModel { AnimeUpdatesScreenModel() }
             val animeState by animeScreenModel.state.collectAsState()
             val mangaScreenModel = rememberScreenModel { MangaUpdatesScreenModel() }
@@ -150,6 +168,13 @@ data object UpdatesTab : Tab {
             val novelState by novelScreenModel.state.collectAsState()
 
             var selectedTab by rememberSaveable { mutableIntStateOf(TAB_ANIME) }
+            var refreshingTabId by rememberSaveable { mutableStateOf<Int?>(null) }
+
+            LaunchedEffect(isAnimeUpdating, isMangaUpdating, isNovelUpdating) {
+                if (refreshingTabId == TAB_ANIME && !isAnimeUpdating) refreshingTabId = null
+                if (refreshingTabId == TAB_MANGA && !isMangaUpdating) refreshingTabId = null
+                if (refreshingTabId == TAB_NOVEL && !isNovelUpdating) refreshingTabId = null
+            }
 
             fun showUpdateToast(started: Boolean, startedMessage: String) {
                 val message = resolveUpdateToastMessage(
@@ -257,6 +282,7 @@ data object UpdatesTab : Tab {
             val state = rememberPagerState(initialPage) { tabs.size }
 
             fun refreshCurrentTab() {
+                refreshingTabId = selectedTab
                 when (selectedTab) {
                     TAB_ANIME -> animeScreenModel.updateLibrary()
                     TAB_MANGA -> mangaScreenModel.updateLibrary()
@@ -287,6 +313,7 @@ data object UpdatesTab : Tab {
             }
 
             fun refreshAllTabs() {
+                refreshingTabId = null
                 val animeStarted = if (showAnimeSection) AnimeLibraryUpdateJob.startNow(context) else false
                 val mangaStarted = if (showMangaSection) MangaLibraryUpdateJob.startNow(context) else false
                 val novelStarted = if (showNovelSection) NovelLibraryUpdateJob.startNow(context) else false
@@ -337,6 +364,16 @@ data object UpdatesTab : Tab {
                 extraHeaderContent = {
                     val currentPage = state.currentPage.coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
                     val currentTabId = tabIds.getOrElse(currentPage) { TAB_ANIME }
+                    val isCurrentTabUpdating = when (currentTabId) {
+                        TAB_ANIME -> isAnimeUpdating
+                        TAB_MANGA -> isMangaUpdating
+                        TAB_NOVEL -> isNovelUpdating
+                        else -> false
+                    }
+                    val isAnyUpdating = isAnimeUpdating || isMangaUpdating || isNovelUpdating
+                    val isSyncSpinning = isAnyUpdating && refreshingTabId != currentTabId
+                    val isRefreshSpinning = isCurrentTabUpdating && refreshingTabId == currentTabId
+
                     AuroraUpdatesPinnedHeader(
                         tabs = tabs,
                         selectedIndex = currentPage,
@@ -345,6 +382,8 @@ data object UpdatesTab : Tab {
                         } else {
                             null
                         },
+                        isRefreshSpinning = isRefreshSpinning,
+                        isSyncSpinning = isSyncSpinning,
                         onTabSelected = { page ->
                             if (page in tabs.indices && state.currentPage != page) {
                                 scope.launch {
@@ -422,6 +461,8 @@ private fun AuroraUpdatesPinnedHeader(
     tabs: kotlinx.collections.immutable.ImmutableList<TabContent>,
     selectedIndex: Int,
     subtitle: String?,
+    isRefreshSpinning: Boolean,
+    isSyncSpinning: Boolean,
     onTabSelected: (Int) -> Unit,
     onRefreshCurrent: () -> Unit,
     onRefreshAll: () -> Unit,
@@ -430,6 +471,16 @@ private fun AuroraUpdatesPinnedHeader(
     val colors = AuroraTheme.colors
     val selected = selectedIndex.coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
     var pacingMenuExpanded by rememberSaveable { mutableStateOf(false) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "update_rotation")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+        ),
+        label = "icon_rotation",
+    )
 
     Column(
         modifier = Modifier
@@ -475,6 +526,7 @@ private fun AuroraUpdatesPinnedHeader(
                         imageVector = Icons.Filled.Refresh,
                         contentDescription = stringResource(AYMR.strings.aurora_refresh_current_tab),
                         tint = colors.textPrimary,
+                        modifier = Modifier.rotate(if (isRefreshSpinning) rotation else 0f),
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -488,6 +540,7 @@ private fun AuroraUpdatesPinnedHeader(
                         imageVector = Icons.Filled.Sync,
                         contentDescription = stringResource(AYMR.strings.aurora_refresh_all_tabs),
                         tint = colors.textOnAccent,
+                        modifier = Modifier.rotate(if (isSyncSpinning) rotation else 0f),
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
