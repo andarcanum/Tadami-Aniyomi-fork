@@ -5361,20 +5361,6 @@ private fun GeminiTranslationDialog(
                             }
                         }
                         if (isNvidiaSelected) {
-                            AiTranslatorSupportText(
-                                stringResource(AYMR.strings.novel_reader_ai_translator_more_api_key_summary),
-                            )
-                            OutlinedTextField(
-                                value = readerSettings.nvidiaApiKey,
-                                onValueChange = onSetNvidiaApiKey,
-                                label = {
-                                    Text(
-                                        stringResource(AYMR.strings.novel_reader_nvidia_api_key),
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                            )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
