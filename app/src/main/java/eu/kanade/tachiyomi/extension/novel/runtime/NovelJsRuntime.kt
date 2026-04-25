@@ -1045,8 +1045,8 @@ class NovelJsModuleRegistry(
               var keys = JSON.parse(keysNative());
               for (var index = 0; index < keys.length; index++) {
                 var key = keys[index];
-                var value = readParsed(key);
-                if (value !== undefined) {
+                var value = readRaw(key);
+                if (typeof value !== "undefined" && value !== null) {
                   result[key] = value;
                 }
               }
