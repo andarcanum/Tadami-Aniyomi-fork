@@ -272,15 +272,6 @@ private suspend fun applyNovelPluginWebViewBindings(
     webViewCoordinator: NovelPluginWebViewCoordinator,
 ) {
     val snapshot = webViewCoordinator.syncBeforeParsing(pluginId)
-    val storageInjectionScript = webViewCoordinator.generateStorageInjectionScript(snapshot)
-    val assetInjectionScript = assetBindings.generateAssetInjectionScript(pluginId)
-    val combinedScript = listOf(storageInjectionScript, assetInjectionScript)
-        .filter { it.isNotBlank() }
-        .joinToString("\n\n")
-
-    if (combinedScript.isNotBlank()) {
-        view.evaluateJavascript(combinedScript, null)
-    }
 
     view.evaluateJavascript(buildWebStorageSnapshotScript()) { result ->
         val snapshotData = decodeWebStorageSnapshot(result)
@@ -303,6 +294,16 @@ private suspend fun applyNovelPluginWebViewBindings(
                 }
             }
         }
+    }
+
+    val storageInjectionScript = webViewCoordinator.generateStorageInjectionScript(snapshot)
+    val assetInjectionScript = assetBindings.generateAssetInjectionScript(pluginId)
+    val combinedScript = listOf(storageInjectionScript, assetInjectionScript)
+        .filter { it.isNotBlank() }
+        .joinToString("\n\n")
+
+    if (combinedScript.isNotBlank()) {
+        view.evaluateJavascript(combinedScript, null)
     }
 }
 
