@@ -444,9 +444,9 @@ class MainActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (restorePortraitAfterPlayerExit) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            restorePortraitAfterPlayerExit = false
+        restoreOrientationAfterPlayerExit?.let { orientation ->
+            requestedOrientation = orientation
+            restoreOrientationAfterPlayerExit = null
         }
         lifecycleScope.launch {
             val todayLevel = activityDataRepository
@@ -765,7 +765,7 @@ class MainActivity : BaseActivity() {
         const val SAVED_STATE_EPISODE_KEY = "saved_state_episode_key"
 
         private var externalPlayerResult: ActivityResultLauncher<Intent>? = null
-        private var restorePortraitAfterPlayerExit: Boolean = false
+        private var restoreOrientationAfterPlayerExit: Int? = null
 
         suspend fun startPlayerActivity(
             context: Context,
@@ -787,7 +787,9 @@ class MainActivity : BaseActivity() {
                 } ?: return
                 externalPlayerResult?.launch(intent) ?: return
             } else {
-                restorePortraitAfterPlayerExit = true
+                val currentOrientation = (context as? Activity)?.requestedOrientation
+                    ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                restoreOrientationAfterPlayerExit = currentOrientation
                 context.startActivity(
                     PlayerActivity.newIntent(
                         context,
