@@ -49,6 +49,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -68,7 +70,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
+import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
+import tachiyomi.core.common.preference.mapAsCheckboxState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withIOContext
@@ -199,6 +203,7 @@ class NovelScreenModel(
     private val downloadedStateVersion = AtomicLong(0L)
     private var downloadedStateJob: Job? = null
     private var chapterActionStatesJob: Job? = null
+    internal var isFromChangeCategory: Boolean = false
 
     private val successState: State.Success?
         get() = state.value as? State.Success
@@ -844,9 +849,12 @@ class NovelScreenModel(
             val defaultCategoryId = libraryPreferences.defaultNovelCategory().get().toLong()
             val defaultCategory = categories.find { it.id == defaultCategoryId }
             when {
-                defaultCategory != null -> moveNovelToCategories(novel.id, listOf(defaultCategory.id))
-                defaultCategoryId == 0L || categories.isEmpty() -> moveNovelToCategories(novel.id, emptyList())
-                else -> moveNovelToCategories(novel.id, emptyList())
+            defaultCategory != null -> moveNovelToCategories(novel.id, listOf(defaultCategory.id))
+            defaultCategoryId == 0L || categories.isEmpty() -> moveNovelToCategories(novel.id, emptyList())
+            else -> {
+                isFromChangeCategory = true
+                showChangeCategoryDialog()
+            }
             }
         }
     }
@@ -868,6 +876,42 @@ class NovelScreenModel(
 
     private suspend fun moveNovelToCategories(novelId: Long, categoryIds: List<Long>) {
         setNovelCategories.await(novelId, categoryIds)
+    }
+
+    fun showChangeCategoryDialog() {
+        val novel = successState?.novel ?: return
+        screenModelScope.launchIO {
+            val categories = getCategories()
+            val selection = getNovelCategoryIds(novel)
+            updateSuccessState { successState ->
+                successState.copy(
+                    dialog = Dialog.ChangeCategory(
+                        novel = novel,
+                        initialSelection = categories.mapAsCheckboxState { it.id in selection }.toImmutableList(),
+                    ),
+                )
+            }
+        }
+    }
+
+    private suspend fun getNovelCategoryIds(novel: Novel): List<Long> {
+        return getNovelCategories.await(novel.id)
+            .map { it.id }
+    }
+
+    fun moveNovelToCategoriesAndAddToLibrary(novel: Novel, categoryIds: List<Long>) {
+        screenModelScope.launchIO {
+            setNovelCategories.await(novel.id, categoryIds)
+            if (!novel.favorite) {
+                updateNovel.await(
+                    NovelUpdate(
+                        id = novel.id,
+                        favorite = true,
+                        dateAdded = Instant.now().toEpochMilli(),
+                    ),
+                )
+            }
+        }
     }
 
     private fun isLikelyWebViewLoginRequired(
@@ -1877,6 +1921,10 @@ class NovelScreenModel(
     }
 
     sealed interface Dialog {
+        data class ChangeCategory(
+            val novel: Novel,
+            val initialSelection: ImmutableList<CheckboxState<Category>>,
+        ) : Dialog
         data object SettingsSheet : Dialog
         data object TrackSheet : Dialog
         data object FullCover : Dialog

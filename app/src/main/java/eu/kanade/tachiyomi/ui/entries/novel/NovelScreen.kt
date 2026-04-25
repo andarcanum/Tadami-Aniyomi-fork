@@ -85,6 +85,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.NavigatorAdaptiveSheet
 import eu.kanade.presentation.entries.EditCoverAction
 import eu.kanade.presentation.entries.novel.NovelChapterSettingsDialog
@@ -103,6 +104,7 @@ import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelSourcePreferen
 import eu.kanade.tachiyomi.ui.browse.novel.migration.search.MigrateNovelSearchScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
+import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.manga.track.MangaTrackInfoDialogHomeScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryTab
@@ -113,6 +115,7 @@ import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
+import tachiyomi.core.common.util.lang.launchIO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import logcat.logcat
@@ -368,6 +371,7 @@ class NovelScreen(
             },
             isReading = isReading,
             onToggleFavorite = screenModel::toggleFavorite,
+    onEditCategoryClicked = screenModel::showChangeCategoryDialog.takeIf { successState.novel.favorite },
             onRefresh = screenModel::refreshChapters,
             onSearch = { query, global ->
                 coroutineScope.launch {
@@ -697,7 +701,7 @@ class NovelScreen(
             )
         }
 
-        when (successState.dialog) {
+        when (val dialog = successState.dialog) {
             null -> Unit
             NovelScreenModel.Dialog.SettingsSheet -> {
                 NovelChapterSettingsDialog(
@@ -754,6 +758,24 @@ class NovelScreen(
                 } else {
                     LoadingScreen()
                 }
+            }
+            is NovelScreenModel.Dialog.ChangeCategory -> {
+                ChangeCategoryDialog(
+                    initialSelection = dialog.initialSelection,
+                    onDismissRequest = {
+                        if (screenModel.isFromChangeCategory) {
+                            screenModel.isFromChangeCategory = false
+                        }
+                        screenModel.dismissDialog()
+                    },
+                    onEditCategories = {
+                        navigator.push(CategoriesTab)
+                        CategoriesTab.showNovelCategory()
+                    },
+                    onConfirm = { include, _ ->
+                        screenModel.moveNovelToCategoriesAndAddToLibrary(dialog.novel, include)
+                    },
+                )
             }
         }
     }

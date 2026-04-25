@@ -130,6 +130,7 @@ fun NovelScreenAuroraImpl(
     onStartReading: (() -> Unit)?,
     isReading: Boolean,
     onToggleFavorite: () -> Unit,
+    onEditCategoryClicked: (() -> Unit)? = null,
     onRefresh: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
     onPosterLongClicked: (() -> Unit)? = null,
@@ -402,17 +403,18 @@ fun NovelScreenAuroraImpl(
                                 )
 
                                 Spacer(modifier = Modifier.height(12.dp))
-                                NovelActionCard(
-                                    novel = novel,
-                                    trackingCount = trackingCount,
-                                    onAddToLibraryClicked = onToggleFavorite,
-                                    onTrackingClicked = onTrackingClicked,
-                                    onBatchDownloadClicked = onOpenBatchDownloadDialog,
-                                    onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
-                                    onExportEpubClicked = onOpenEpubExportDialog,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(modifier = Modifier.height(24.dp))
+                NovelActionCard(
+                    novel = novel,
+                    trackingCount = trackingCount,
+                    onAddToLibraryClicked = onToggleFavorite,
+                    onAddToLibraryLongClicked = onEditCategoryClicked,
+                    onTrackingClicked = onTrackingClicked,
+                    onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                    onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
+                    onExportEpubClicked = onOpenEpubExportDialog,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(24.dp))
                             }
                         }
                     },
@@ -945,16 +947,17 @@ fun NovelScreenAuroraImpl(
                             )
 
                             Spacer(modifier = Modifier.height(12.dp))
-                            NovelActionCard(
-                                novel = novel,
-                                trackingCount = trackingCount,
-                                onAddToLibraryClicked = onToggleFavorite,
-                                onTrackingClicked = onTrackingClicked,
-                                onBatchDownloadClicked = onOpenBatchDownloadDialog,
-                                onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
-                                onExportEpubClicked = onOpenEpubExportDialog,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+            NovelActionCard(
+                novel = novel,
+                trackingCount = trackingCount,
+                onAddToLibraryClicked = onToggleFavorite,
+                onAddToLibraryLongClicked = onEditCategoryClicked,
+                onTrackingClicked = onTrackingClicked,
+                onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
+                onExportEpubClicked = onOpenEpubExportDialog,
+                modifier = Modifier.fillMaxWidth(),
+            )
                         }
                     }
 

@@ -432,16 +432,17 @@ fun MangaScreenAuroraImpl(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Spacer(modifier = Modifier.height(12.dp))
-                                MangaActionCard(
-                                    manga = manga,
-                                    trackingCount = state.trackingCount,
-                                    onAddToLibraryClicked = onAddToLibraryClicked,
-                                    onWebViewClicked = onWebViewClicked,
-                                    onTrackingClicked = onTrackingClicked,
-                                    onShareClicked = onShareClicked,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(modifier = Modifier.height(24.dp))
+MangaActionCard(
+                manga = manga,
+                trackingCount = state.trackingCount,
+                onAddToLibraryClicked = onAddToLibraryClicked,
+                onAddToLibraryLongClicked = onEditCategoryClicked,
+                onWebViewClicked = onWebViewClicked,
+                onTrackingClicked = onTrackingClicked,
+                onShareClicked = onShareClicked,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(modifier = Modifier.height(24.dp))
                             }
                         }
                     },
@@ -685,15 +686,16 @@ fun MangaScreenAuroraImpl(
                                 )
 
                                 Spacer(modifier = Modifier.height(12.dp))
-                                MangaActionCard(
-                                    manga = manga,
-                                    trackingCount = state.trackingCount,
-                                    onAddToLibraryClicked = onAddToLibraryClicked,
-                                    onWebViewClicked = onWebViewClicked,
-                                    onTrackingClicked = onTrackingClicked,
-                                    onShareClicked = onShareClicked,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+MangaActionCard(
+                    manga = manga,
+                    trackingCount = state.trackingCount,
+                    onAddToLibraryClicked = onAddToLibraryClicked,
+                    onAddToLibraryLongClicked = onEditCategoryClicked,
+                    onWebViewClicked = onWebViewClicked,
+                    onTrackingClicked = onTrackingClicked,
+                    onShareClicked = onShareClicked,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                             }
                         }
 
