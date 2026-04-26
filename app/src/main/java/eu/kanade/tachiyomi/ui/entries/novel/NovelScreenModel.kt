@@ -2,7 +2,9 @@ package eu.kanade.tachiyomi.ui.entries.novel
 
 import android.app.Application
 import android.net.Uri
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
@@ -32,7 +34,6 @@ import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportOptions
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportProgress
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
-import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
@@ -98,6 +99,13 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
+import eu.kanade.domain.track.model.AutoTrackState
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
+import eu.kanade.domain.track.service.TrackPreferences
+import eu.kanade.tachiyomi.util.system.toast
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -145,6 +153,7 @@ internal fun buildNovelChapterActionUiStates(
 class NovelScreenModel(
     private val lifecycle: Lifecycle,
     private val novelId: Long,
+    private val context: Application = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val getNovelWithChapters: GetNovelWithChapters = Injekt.get(),
@@ -164,6 +173,8 @@ class NovelScreenModel(
     private val novelRatingFetcher: NovelRatingFetcher = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
     private val getTracks: GetNovelTracks = Injekt.get(),
+    private val trackNovelChapter: TrackNovelChapter = Injekt.get(),
+    private val trackPreferences: TrackPreferences = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
     private val downloadCacheChanges: Flow<NovelDownloadCacheEvent> = runCatching {
@@ -219,6 +230,7 @@ class NovelScreenModel(
 
     val chapterSwipeStartAction = libraryPreferences.swipeNovelChapterEndAction().get()
     val chapterSwipeEndAction = libraryPreferences.swipeNovelChapterStartAction().get()
+    var autoTrackState = trackPreferences.autoUpdateTrackOnMarkRead().get()
 
     private var scanlatorSelectionJob: Job? = null
 
@@ -1284,6 +1296,9 @@ class NovelScreenModel(
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(chapter.novelId))
                 }
             }
+            if (newRead) {
+                trackNovelChapter.await(context, novelId, chapter.chapterNumber)
+            }
         }
     }
 
@@ -1339,6 +1354,10 @@ class NovelScreenModel(
                     )
                 }
                 eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersBecomingRead.first().novelId))
+            }
+            if (markRead && chaptersBecomingRead.isNotEmpty()) {
+                val maxChapter = chaptersBecomingRead.maxOf { it.chapterNumber }
+                trackNovelChapter.await(context, novelId, maxChapter)
             }
         }
     }
@@ -1437,6 +1456,29 @@ class NovelScreenModel(
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersToMarkRead.first().novelId))
                 }
             }
+            if (!markRead || chaptersToMarkRead.isEmpty() || successState?.hasLoggedInTrackers == false || autoTrackState == AutoTrackState.NEVER) {
+                toggleAllSelection(false)
+                return@launchIO
+            }
+                val maxChapterNumber = chaptersToMarkRead.maxOf { it.chapterNumber }
+            if (autoTrackState == AutoTrackState.ALWAYS) {
+                trackNovelChapter.await(context, novelId, maxChapterNumber)
+                withUIContext {
+                    context.toast(
+                        context.stringResource(MR.strings.trackers_updated_summary, maxChapterNumber.toInt()),
+                    )
+                }
+            } else {
+                val result = snackbarHostState.showSnackbar(
+                    message = context.stringResource(MR.strings.confirm_tracker_update, maxChapterNumber.toInt()),
+                    actionLabel = context.stringResource(MR.strings.action_ok),
+                    duration = SnackbarDuration.Short,
+                    withDismissAction = true,
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    trackNovelChapter.await(context, novelId, maxChapterNumber)
+                }
+            }
             toggleAllSelection(false)
         }
     }
@@ -1479,6 +1521,10 @@ class NovelScreenModel(
                 if (willComplete) {
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersToAchieve.first().novelId))
                 }
+            }
+            if (chaptersToAchieve.isNotEmpty()) {
+                val maxChapter = chaptersToAchieve.maxOf { it.chapterNumber }
+                trackNovelChapter.await(context, novelId, maxChapter)
             }
             toggleAllSelection(false)
         }
@@ -1895,16 +1941,15 @@ class NovelScreenModel(
         screenModelScope.launchIO {
             combine(
                 getTracks.subscribe(novelId).catch { logcat(LogPriority.ERROR, it) },
-                trackerManager.loggedInTrackersFlow(),
+                trackerManager.loggedInNovelTrackersFlow(),
             ) { novelTracks, loggedInTrackers ->
-                val loggedInMangaTrackerIds = loggedInTrackers
+                val loggedInNovelTrackerIds = loggedInTrackers
                     .asSequence()
-                    .filter { it is MangaTracker }
                     .map { it.id }
                     .toSet()
                 resolveNovelTrackingSummary(
                     tracks = novelTracks,
-                    loggedInMangaTrackerIds = loggedInMangaTrackerIds,
+                    loggedInNovelTrackerIds = loggedInNovelTrackerIds,
                 )
             }
                 .flowWithLifecycle(lifecycle)
@@ -2124,12 +2169,12 @@ internal data class NovelTrackingSummary(
 
 internal fun resolveNovelTrackingSummary(
     tracks: List<NovelTrack>,
-    loggedInMangaTrackerIds: Set<Long>,
+    loggedInNovelTrackerIds: Set<Long>,
 ): NovelTrackingSummary {
-    val trackingCount = tracks.count { it.trackerId in loggedInMangaTrackerIds }
+    val trackingCount = tracks.count { it.trackerId in loggedInNovelTrackerIds }
     return NovelTrackingSummary(
         trackingCount = trackingCount,
-        hasLoggedInTrackers = loggedInMangaTrackerIds.isNotEmpty(),
+        hasLoggedInTrackers = loggedInNovelTrackerIds.isNotEmpty(),
     )
 }
 

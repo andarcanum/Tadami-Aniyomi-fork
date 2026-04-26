@@ -62,6 +62,9 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
+import eu.kanade.domain.track.model.AutoTrackState
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
+import eu.kanade.domain.track.service.TrackPreferences
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
 import uy.kohesive.injekt.api.get
@@ -101,6 +104,37 @@ class NovelScreenModelTest {
                         translationQueueManager.activeTranslation
                     } returns MutableStateFlow<TranslationQueueItem?>(null)
                     Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
+                }
+            runCatching { Injekt.get<TrackNovelChapter>() }
+                .getOrElse {
+                    Injekt.addSingleton(fullType<TrackNovelChapter>(), mockk<TrackNovelChapter>(relaxed = true))
+                }
+            runCatching { Injekt.get<TrackPreferences>() }
+                .getOrElse {
+                    val trackPreferences = mockk<TrackPreferences>(relaxed = true)
+                    every { trackPreferences.autoUpdateTrackOnMarkRead() } returns object :
+                        tachiyomi.core.common.preference.Preference<AutoTrackState> {
+                        override fun get() = AutoTrackState.ALWAYS
+                        override fun set(value: AutoTrackState) {}
+                        override fun isSet() = true
+                        override fun defaultValue() = AutoTrackState.ALWAYS
+                        override fun key() = "pref_auto_update_manga_on_mark_read"
+                                override fun changes() = kotlinx.coroutines.flow.MutableStateFlow(get())
+                                override fun stateIn(scope: kotlinx.coroutines.CoroutineScope) = kotlinx.coroutines.flow.MutableStateFlow(get())
+                                override fun delete() {}
+                    }
+                    every { trackPreferences.autoUpdateTrack() } returns object :
+                        tachiyomi.core.common.preference.Preference<Boolean> {
+                        override fun get() = true
+                        override fun set(value: Boolean) {}
+                        override fun isSet() = true
+                        override fun defaultValue() = true
+                        override fun key() = "pref_auto_update_manga_sync_key"
+                        override fun changes() = kotlinx.coroutines.flow.MutableStateFlow(get())
+                        override fun stateIn(scope: kotlinx.coroutines.CoroutineScope) = kotlinx.coroutines.flow.MutableStateFlow(get())
+                        override fun delete() {}
+                    }
+                    Injekt.addSingleton(fullType<TrackPreferences>(), trackPreferences)
                 }
         }
 

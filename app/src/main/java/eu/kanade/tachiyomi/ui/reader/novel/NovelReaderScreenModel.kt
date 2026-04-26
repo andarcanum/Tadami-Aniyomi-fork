@@ -5,6 +5,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.SeriesInterstitialState
@@ -1593,6 +1594,14 @@ class NovelReaderScreenModel(
                 )
                 if (nextUpdate.emitNovelCompleted) {
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(nextUpdate.novelId))
+                }
+                if (Injekt.get<eu.kanade.domain.track.service.TrackPreferences>().autoUpdateTrack().get()) {
+                    val context = Injekt.get<Application>()
+                    Injekt.get<TrackNovelChapter>().await(
+                        context,
+                        nextUpdate.novelId,
+                        nextUpdate.chapterNumber.toDouble(),
+                    )
                 }
             }
 

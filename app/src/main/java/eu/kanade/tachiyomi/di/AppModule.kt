@@ -18,6 +18,7 @@ import datanovel.Novels
 import eu.kanade.domain.sync.SyncPreferences
 import eu.kanade.domain.track.anime.store.DelayedAnimeTrackingStore
 import eu.kanade.domain.track.manga.store.DelayedMangaTrackingStore
+import eu.kanade.domain.track.novel.store.DelayedNovelTrackingStore
 import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.cache.ChapterCache
@@ -434,6 +435,7 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { TrackerManager(app) }
         addSingletonFactory { DelayedAnimeTrackingStore(app) }
         addSingletonFactory { DelayedMangaTrackingStore(app) }
+        addSingletonFactory { DelayedNovelTrackingStore(app) }
 
         // Anime metadata integration
         addSingletonFactory {
