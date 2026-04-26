@@ -186,19 +186,19 @@ class AnimeExtensionsScreenModel(
                 .map { it.extension }
                 .filterIsInstance<AnimeExtension.Installed>()
                 .filter { it.hasUpdate }
-                .forEach(::updateExtension)
+                .forEach { updateExtensionNow(it) }
         }
     }
 
     fun installExtension(extension: AnimeExtension.Available) {
         screenModelScope.launchIO {
-            extensionManager.installExtension(extension).collectToInstallUpdate(extension)
+            installExtensionNow(extension)
         }
     }
 
     fun updateExtension(extension: AnimeExtension.Installed) {
         screenModelScope.launchIO {
-            extensionManager.updateExtension(extension).collectToInstallUpdate(extension)
+            updateExtensionNow(extension)
         }
     }
 
@@ -212,6 +212,14 @@ class AnimeExtensionsScreenModel(
 
     private fun removeDownloadState(extension: AnimeExtension) {
         currentDownloads.update { it - extension.pkgName }
+    }
+
+    private suspend fun installExtensionNow(extension: AnimeExtension.Available) {
+        extensionManager.installExtension(extension).collectToInstallUpdate(extension)
+    }
+
+    private suspend fun updateExtensionNow(extension: AnimeExtension.Installed) {
+        extensionManager.updateExtension(extension).collectToInstallUpdate(extension)
     }
 
     private suspend fun Flow<InstallStep>.collectToInstallUpdate(extension: AnimeExtension) =

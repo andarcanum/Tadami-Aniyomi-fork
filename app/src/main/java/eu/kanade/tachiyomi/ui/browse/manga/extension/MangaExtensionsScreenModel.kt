@@ -185,19 +185,19 @@ class MangaExtensionsScreenModel(
                 .map { it.extension }
                 .filterIsInstance<MangaExtension.Installed>()
                 .filter { it.hasUpdate }
-                .forEach(::updateExtension)
+                .forEach { updateExtensionNow(it) }
         }
     }
 
     fun installExtension(extension: MangaExtension.Available) {
         screenModelScope.launchIO {
-            extensionManager.installExtension(extension).collectToInstallUpdate(extension)
+            installExtensionNow(extension)
         }
     }
 
     fun updateExtension(extension: MangaExtension.Installed) {
         screenModelScope.launchIO {
-            extensionManager.updateExtension(extension).collectToInstallUpdate(extension)
+            updateExtensionNow(extension)
         }
     }
 
@@ -211,6 +211,14 @@ class MangaExtensionsScreenModel(
 
     private fun removeDownloadState(extension: MangaExtension) {
         currentDownloads.update { it - extension.pkgName }
+    }
+
+    private suspend fun installExtensionNow(extension: MangaExtension.Available) {
+        extensionManager.installExtension(extension).collectToInstallUpdate(extension)
+    }
+
+    private suspend fun updateExtensionNow(extension: MangaExtension.Installed) {
+        extensionManager.updateExtension(extension).collectToInstallUpdate(extension)
     }
 
     private suspend fun Flow<InstallStep>.collectToInstallUpdate(extension: MangaExtension) =
