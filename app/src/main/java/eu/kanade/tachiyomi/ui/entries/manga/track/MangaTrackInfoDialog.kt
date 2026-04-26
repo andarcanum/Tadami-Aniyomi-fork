@@ -93,12 +93,14 @@ data class MangaTrackInfoDialogHomeScreen(
     private val mangaId: Long,
     private val mangaTitle: String,
     private val sourceId: Long,
+    private val isNovelEntry: Boolean = false,
+    private val header: String? = null,
 ) : Screen() {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val context = LocalContext.current
-        val screenModel = rememberScreenModel { Model(mangaId, sourceId) }
+        val screenModel = rememberScreenModel { Model(mangaId, sourceId, isNovelEntry) }
 
         val dateFormat = remember {
             UiPreferences.dateFormat(
@@ -108,6 +110,7 @@ data class MangaTrackInfoDialogHomeScreen(
         val state by screenModel.state.collectAsState()
 
         MangaTrackInfoDialogHome(
+            header = header,
             trackItems = state.trackItems,
             dateFormat = dateFormat,
             onStatusClick = {
@@ -201,6 +204,7 @@ data class MangaTrackInfoDialogHomeScreen(
     private class Model(
         private val mangaId: Long,
         private val sourceId: Long,
+        private val isNovelEntry: Boolean,
         private val getTracks: GetMangaTracks = Injekt.get(),
     ) : StateScreenModel<Model.State>(State()) {
 
@@ -266,11 +270,14 @@ data class MangaTrackInfoDialogHomeScreen(
         }
 
         private fun List<MangaTrack>.mapToTrackItem(): List<MangaTrackItem> {
-            val loggedInTrackers = Injekt.get<TrackerManager>().loggedInTrackers().filter {
-                it is MangaTracker
+            val trackerManager = Injekt.get<TrackerManager>()
+            val visibleTrackers = if (isNovelEntry) {
+                trackerManager.novelTrackers
+            } else {
+                trackerManager.loggedInMangaTrackers()
             }
             val source = Injekt.get<MangaSourceManager>().getOrStub(sourceId)
-            return loggedInTrackers
+            return visibleTrackers
                 // Map to TrackItem
                 .map { service -> MangaTrackItem(find { it.trackerId == service.id }, service) }
                 // Show only if the service supports this manga's source
@@ -282,6 +289,14 @@ data class MangaTrackInfoDialogHomeScreen(
             val trackItems: List<MangaTrackItem> = emptyList(),
         )
     }
+}
+
+internal fun selectTrackersForEntry(
+    isNovelEntry: Boolean,
+    novelTrackers: List<Tracker>,
+    mangaTrackers: List<Tracker>,
+): List<Tracker> {
+    return if (isNovelEntry) novelTrackers else mangaTrackers
 }
 
 private data class TrackStatusSelectorScreen(
@@ -707,8 +722,9 @@ data class TrackServiceSearchScreen(
             onConfirmSelection = f@{ private: Boolean ->
                 val selected = state.selected ?: return@f
                 selected.private = private
-                screenModel.registerTracking(selected)
-                navigator.pop()
+                screenModel.registerTracking(selected) {
+                    navigator.pop()
+                }
             },
             onDismissRequest = navigator::pop,
             supportsPrivateTracking = screenModel.supportsPrivateTracking,
@@ -753,8 +769,11 @@ data class TrackServiceSearchScreen(
             }
         }
 
-        fun registerTracking(item: MangaTrackSearch) {
-            screenModelScope.launchNonCancellable { tracker.mangaService.register(item, mangaId) }
+        fun registerTracking(item: MangaTrackSearch, onComplete: () -> Unit) {
+            screenModelScope.launchNonCancellable {
+                tracker.mangaService.register(item, mangaId)
+                onComplete()
+            }
         }
 
         fun updateSelection(selected: MangaTrackSearch) {

@@ -36,6 +36,17 @@
     <string name="novel_series_cta_start_reading">Начать чтение</string>
     <string name="novel_series_cta_continue_reading">Продолжить чтение</string>
     <string name="pref_library_summary">Категории, глобальное обновление, смахивание глав/эпизодов</string>
+    <string name="novel_trackers_title">Трекеры новелл</string>
+    <string name="novel_trackers_info">Используйте эти сервисы для отслеживания прогресса и списков чтения новелл.</string>
+    <string name="novel_updates_use_custom_list_mapping_title">Использовать собственное сопоставление списков NovelUpdates</string>
+    <string name="novel_updates_use_custom_list_mapping_summary">Сопоставлять статусы чтения с пользовательскими списками NovelUpdates.</string>
+    <string name="novel_updates_configure_list_mapping_title">Настроить сопоставление списков NovelUpdates</string>
+    <string name="novel_updates_configure_list_mapping_summary">Выберите, какой список NovelUpdates используется для каждого статуса.</string>
+    <string name="novel_updates_list_mapping_title">Сопоставление списков NovelUpdates</string>
+    <string name="novel_updates_list_mapping_loaded">%1$d списков загружено</string>
+    <string name="novel_updates_list_mapping_refresh">Обновить</string>
+    <string name="novel_updates_list_mapping_failed">Не удалось загрузить списки NovelUpdates</string>
+    <string name="novel_updates_list_mapping_unknown_list">Список №%1$s</string>
     <string name="pref_library_update_show_tab_badge">Показывать количество непросмотренных/непрочитанных на значке обновлений</string>
     <string name="pref_aurora_library_immersive_mode">Режим погружения</string>
     <string name="pref_aurora_library_immersive_mode_summary">Скрывать верхнюю панель и нижнюю навигацию при прокрутке, но оставлять категории видимыми.</string>

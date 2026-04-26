@@ -722,6 +722,8 @@ class NovelScreen(
                         mangaId = successState.novel.id,
                         mangaTitle = successState.novel.title,
                         sourceId = successState.source.id,
+                        isNovelEntry = true,
+                header = stringResource(AYMR.strings.novel_trackers_title),
                     ),
                     enableSwipeDismiss = { it.lastItem is MangaTrackInfoDialogHomeScreen },
                     onDismissRequest = screenModel::dismissDialog,

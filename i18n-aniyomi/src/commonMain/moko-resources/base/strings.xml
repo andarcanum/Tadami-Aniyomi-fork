@@ -1067,6 +1067,17 @@
     <string name="auto_download_while_watching">Auto download while watching</string>
     <string name="download_ahead_info_anime">Only works on entries in library and if the current episode plus the next one are already downloaded</string>
     <string name="pref_track_on_add_library">Open track menu on adding to library</string>
+    <string name="novel_trackers_title">Novel Trackers</string>
+    <string name="novel_trackers_info">Use these services to track novel progress and reading lists.</string>
+    <string name="novel_updates_use_custom_list_mapping_title">Use custom NovelUpdates list mapping</string>
+    <string name="novel_updates_use_custom_list_mapping_summary">Map reading statuses to custom NovelUpdates lists.</string>
+    <string name="novel_updates_configure_list_mapping_title">Configure NovelUpdates list mapping</string>
+    <string name="novel_updates_configure_list_mapping_summary">Choose which NovelUpdates list each status uses.</string>
+    <string name="novel_updates_list_mapping_title">NovelUpdates list mapping</string>
+    <string name="novel_updates_list_mapping_loaded">%1$d lists loaded</string>
+    <string name="novel_updates_list_mapping_refresh">Refresh</string>
+    <string name="novel_updates_list_mapping_failed">Failed to fetch NovelUpdates lists</string>
+    <string name="novel_updates_list_mapping_unknown_list">List #%1$s</string>
     <string name="pref_show_next_episode_airing_time">Show next episode\'s airing time </string>
     <string name="pref_backup_flags_summary">What information to include in the backup file</string>
     <string name="pref_anime_storage_usage">Anime Storage usage</string>

@@ -1,42 +1,81 @@
 package tachiyomi.data.track.novel
 
+import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import datanovel.Novel_history
+import datanovel.Novels
+import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import tachiyomi.domain.track.manga.model.MangaTrack
-import tachiyomi.domain.track.manga.repository.MangaTrackRepository
+import tachiyomi.data.DateColumnAdapter
+import tachiyomi.data.MangaUpdateStrategyColumnAdapter
+import tachiyomi.data.StringListColumnAdapter
+import tachiyomi.data.handlers.novel.AndroidNovelDatabaseHandler
 import tachiyomi.domain.track.novel.model.NovelTrack
+import tachiyomi.novel.data.NovelDatabase
 
 class NovelTrackRepositoryImplTest {
 
-    @Test
-    fun `maps manga tracks to novel tracks on reads`() = runBlocking {
-        val fakeRepository = FakeMangaTrackRepository(
-            tracksByMangaId = mapOf(
-                10L to listOf(mangaTrack(id = 1L, mangaId = 10L, trackerId = 2L)),
+    private lateinit var database: NovelDatabase
+    private lateinit var repository: NovelTrackRepositoryImpl
+    private var novelId: Long = -1L
+
+    @BeforeEach
+    fun setup() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        NovelDatabase.Schema.create(driver)
+        database = NovelDatabase(
+            driver = driver,
+            novel_historyAdapter = Novel_history.Adapter(
+                last_readAdapter = DateColumnAdapter,
+            ),
+            novelsAdapter = Novels.Adapter(
+                genreAdapter = StringListColumnAdapter,
+                update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
             ),
         )
-        val repository = NovelTrackRepositoryImpl(fakeRepository)
+        val handler = AndroidNovelDatabaseHandler(
+            db = database,
+            driver = driver,
+            queryDispatcher = Dispatchers.Default,
+            transactionDispatcher = Dispatchers.Default,
+        )
+        repository = NovelTrackRepositoryImpl(handler)
 
-        val tracks = repository.getTracksByNovelId(10L)
-
-        tracks shouldHaveSize 1
-        tracks.first().novelId shouldBe 10L
-        tracks.first().trackerId shouldBe 2L
+        database.novelsQueries.insert(
+            source = 1L,
+            url = "/novel",
+            author = "Author",
+            description = "Desc",
+            genre = listOf("Action"),
+            title = "Novel",
+            status = 1L,
+            thumbnailUrl = null,
+            favorite = true,
+            lastUpdate = 0,
+            nextUpdate = 0,
+            initialized = false,
+            viewerFlags = 0,
+            chapterFlags = 0,
+            coverLastModified = 0,
+            dateAdded = 0,
+            updateStrategy = UpdateStrategy.ALWAYS_UPDATE,
+            calculateInterval = 0,
+            pinned = false,
+            version = 0,
+        )
+        novelId = database.novelsQueries.selectLastInsertedRowId().executeAsOne()
     }
 
     @Test
-    fun `maps novel track to manga track on insert`() = runBlocking {
-        val fakeRepository = FakeMangaTrackRepository()
-        val repository = NovelTrackRepositoryImpl(fakeRepository)
-
+    fun `insertNovel persists rows in novel sync table`() = runTest {
         repository.insertNovel(
             NovelTrack(
                 id = 55L,
-                novelId = 77L,
+                novelId = novelId,
                 trackerId = 5L,
                 remoteId = 88L,
                 libraryId = 99L,
@@ -52,70 +91,40 @@ class NovelTrackRepositoryImplTest {
             ),
         )
 
-        fakeRepository.insertedTracks shouldHaveSize 1
-        val inserted = fakeRepository.insertedTracks.first()
-        inserted.mangaId shouldBe 77L
-        inserted.trackerId shouldBe 5L
-        inserted.remoteId shouldBe 88L
-        inserted.title shouldBe "Novel"
-    }
-}
+        val tracks = repository.getTracksByNovelId(novelId)
 
-private class FakeMangaTrackRepository(
-    private val tracksByMangaId: Map<Long, List<MangaTrack>> = emptyMap(),
-) : MangaTrackRepository {
-
-    val insertedTracks = mutableListOf<MangaTrack>()
-    private val allTracksFlow = MutableStateFlow(emptyList<MangaTrack>())
-
-    override suspend fun getTrackByMangaId(id: Long): MangaTrack? {
-        return tracksByMangaId[id]?.firstOrNull()
+        tracks shouldHaveSize 1
+        tracks.first().novelId shouldBe novelId
+        tracks.first().trackerId shouldBe 5L
+        tracks.first().remoteId shouldBe 88L
+        tracks.first().title shouldBe "Novel"
     }
 
-    override suspend fun getTracksByMangaId(mangaId: Long): List<MangaTrack> {
-        return tracksByMangaId[mangaId].orEmpty()
-    }
+    @Test
+    fun `getTrackByNovelId returns inserted track`() = runTest {
+        repository.insertNovel(
+            NovelTrack(
+                id = 0L,
+                novelId = novelId,
+                trackerId = 7L,
+                remoteId = 99L,
+                libraryId = null,
+                title = "Novel Two",
+                lastChapterRead = 1.0,
+                totalChapters = 10L,
+                status = 2L,
+                score = 0.0,
+                remoteUrl = "https://example.org/novel-two",
+                startDate = 0L,
+                finishDate = 0L,
+                private = false,
+            ),
+        )
 
-    override fun getMangaTracksAsFlow(): Flow<List<MangaTrack>> {
-        return allTracksFlow
-    }
+        val track = repository.getTrackByNovelId(novelId)
 
-    override fun getTracksByMangaIdAsFlow(mangaId: Long): Flow<List<MangaTrack>> {
-        return MutableStateFlow(tracksByMangaId[mangaId].orEmpty())
+        track?.novelId shouldBe novelId
+        track?.trackerId shouldBe 7L
+        track?.title shouldBe "Novel Two"
     }
-
-    override suspend fun delete(mangaId: Long, trackerId: Long) {
-        Unit
-    }
-
-    override suspend fun insertManga(track: MangaTrack) {
-        insertedTracks += track
-    }
-
-    override suspend fun insertAllManga(tracks: List<MangaTrack>) {
-        insertedTracks += tracks
-    }
-}
-
-private fun mangaTrack(
-    id: Long,
-    mangaId: Long,
-    trackerId: Long,
-): MangaTrack {
-    return MangaTrack(
-        id = id,
-        mangaId = mangaId,
-        trackerId = trackerId,
-        remoteId = 0L,
-        libraryId = null,
-        title = "Track",
-        lastChapterRead = 0.0,
-        totalChapters = 0L,
-        status = 0L,
-        score = 0.0,
-        remoteUrl = "",
-        startDate = 0L,
-        finishDate = 0L,
-        private = false,
-    )
 }

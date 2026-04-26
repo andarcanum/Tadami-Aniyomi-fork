@@ -65,6 +65,7 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun MangaTrackInfoDialogHome(
+    header: String? = null,
     trackItems: List<MangaTrackItem>,
     dateFormat: DateTimeFormatter,
     onStatusClick: (MangaTrackItem) -> Unit,
@@ -87,6 +88,12 @@ fun MangaTrackInfoDialogHome(
             .windowInsetsPadding(WindowInsets.systemBars),
         verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
+        if (!header.isNullOrBlank()) {
+            Text(
+                text = header,
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
         trackItems.forEach { item ->
             if (item.track != null) {
                 val supportsScoring = item.tracker.mangaService.getScoreList().isNotEmpty()
