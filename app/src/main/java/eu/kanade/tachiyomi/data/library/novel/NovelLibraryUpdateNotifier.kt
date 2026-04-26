@@ -1,13 +1,17 @@
 package eu.kanade.tachiyomi.data.library.novel
 
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.tadami.aurora.R
+import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailureNotificationFormatter
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.util.lang.chop
 import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.notificationBuilder
@@ -116,6 +120,7 @@ class NovelLibraryUpdateNotifier(
             )
             setGroup(Notifications.GROUP_NEW_NOVEL_CHAPTERS)
             setGroupSummary(true)
+            setContentIntent(getNotificationIntent())
             setAutoCancel(true)
         }
     }
@@ -145,5 +150,21 @@ class NovelLibraryUpdateNotifier(
 
     fun cancelProgressNotification() {
         context.cancelNotification(Notifications.ID_NOVEL_LIBRARY_PROGRESS)
+    }
+
+    /**
+     * Returns an intent to open the main activity.
+     */
+    private fun getNotificationIntent(): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            action = Constants.SHORTCUT_UPDATES
+        }
+        return PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 }
