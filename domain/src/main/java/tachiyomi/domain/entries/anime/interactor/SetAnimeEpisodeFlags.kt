@@ -124,6 +124,10 @@ class SetAnimeEpisodeFlags(
         )
     }
 
+    suspend fun awaitSetAllFlags(animeUpdates: List<AnimeUpdate>): Boolean {
+        return animeRepository.updateAllAnime(animeUpdates)
+    }
+
     private fun Long.setFlag(flag: Long, mask: Long): Long {
         return this and mask.inv() or (flag and mask)
     }
