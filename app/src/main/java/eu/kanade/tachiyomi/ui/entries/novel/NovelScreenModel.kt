@@ -52,6 +52,7 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
+import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
@@ -790,13 +791,14 @@ class NovelScreenModel(
         queueState: NovelDownloadQueueState = NovelDownloadQueueManager.state.value,
     ): State.Success {
         val readerSettings = novelReaderPreferences.resolveSettings(novel.source)
+        val translationCacheRequirements = readerSettings.toTranslationCacheRequirements()
         val translatedDownloadFormat = novelReaderPreferences.translatedDownloadFormat(novel.id)
         val translatedQueueChapterIds = resolveTranslatedQueueChapterIds(
             queueState = queueState,
             novelId = novel.id,
             format = translatedDownloadFormat,
         )
-        val translatedCacheChapterIds = NovelReaderTranslationDiskCacheStore.chapterIds()
+        val translatedCacheChapterIds = NovelReaderTranslationDiskCacheStore.chapterIds(translationCacheRequirements)
         val translatedDownloadedIds = novelTranslatedDownloadManager.getTranslatedChapterIds(
             novel = novel,
             chapters = chapters,
@@ -1829,6 +1831,9 @@ class NovelScreenModel(
         if (chapterIds.isEmpty()) return
 
         updateSuccessState { current ->
+            val translationCacheRequirements = novelReaderPreferences
+                .resolveSettings(current.novel.source)
+                .toTranslationCacheRequirements()
             val updatedChapterActionStates = current.chapterActionStates.toMutableMap()
             var changed = false
 
@@ -1836,7 +1841,10 @@ class NovelScreenModel(
                 val chapterActionState = updatedChapterActionStates[chapterId] ?: return@forEach
                 val translatedState = when {
                     isTranslating -> NovelChapterActionIconState.InProgress
-                    NovelReaderTranslationDiskCacheStore.has(chapterId) -> NovelChapterActionIconState.Active
+                    NovelReaderTranslationDiskCacheStore.has(
+                        chapterId = chapterId,
+                        requirements = translationCacheRequirements,
+                    ) -> NovelChapterActionIconState.Active
                     else -> NovelChapterActionIconState.Neutral
                 }
                 val updatedState = chapterActionState.copy(translateState = translatedState)

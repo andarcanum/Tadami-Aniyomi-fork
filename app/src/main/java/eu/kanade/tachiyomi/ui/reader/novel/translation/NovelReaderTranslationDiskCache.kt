@@ -23,14 +23,7 @@ internal class NovelReaderTranslationDiskCache(
 
     fun get(chapterId: Long): GeminiTranslationCacheEntry? {
         synchronized(lock) {
-            val file = fileFor(chapterId)
-            if (!file.isFile) return null
-            return runCatching {
-                json.decodeFromString<GeminiTranslationCacheDiskModel>(file.readText(Charsets.UTF_8)).toDomain()
-            }.onFailure { error ->
-                logcat(LogPriority.WARN, error) { "Failed to parse novel translation cache for chapter=$chapterId" }
-                file.delete()
-            }.getOrNull()
+            return readEntryLocked(chapterId)
         }
     }
 
@@ -56,7 +49,19 @@ internal class NovelReaderTranslationDiskCache(
 
     fun has(chapterId: Long): Boolean {
         synchronized(lock) {
-            return fileFor(chapterId).isFile
+            return readEntryLocked(chapterId)?.translatedByIndex?.isNotEmpty() == true
+        }
+    }
+
+    fun has(
+        chapterId: Long,
+        requirements: NovelReaderTranslationCacheRequirements,
+    ): Boolean {
+        synchronized(lock) {
+            return NovelReaderTranslationCacheResolver.matches(
+                cached = readEntryLocked(chapterId),
+                requirements = requirements,
+            )
         }
     }
 
@@ -67,7 +72,32 @@ internal class NovelReaderTranslationDiskCache(
                 ?.asSequence()
                 ?.filter { it.isFile }
                 ?.mapNotNull { file ->
-                    file.nameWithoutExtension.toLongOrNull()
+                    val chapterId = file.nameWithoutExtension.toLongOrNull() ?: return@mapNotNull null
+                    readEntryLocked(chapterId)
+                        ?.takeIf { it.translatedByIndex.isNotEmpty() }
+                        ?.chapterId
+                }
+                ?.toSet()
+                ?: emptySet()
+        }
+    }
+
+    fun chapterIds(requirements: NovelReaderTranslationCacheRequirements): Set<Long> {
+        synchronized(lock) {
+            if (!directory.exists()) return emptySet()
+            return directory.listFiles()
+                ?.asSequence()
+                ?.filter { it.isFile }
+                ?.mapNotNull { file ->
+                    val chapterId = file.nameWithoutExtension.toLongOrNull() ?: return@mapNotNull null
+                    readEntryLocked(chapterId)
+                        ?.takeIf { cached ->
+                            NovelReaderTranslationCacheResolver.matches(
+                                cached = cached,
+                                requirements = requirements,
+                            )
+                        }
+                        ?.chapterId
                 }
                 ?.toSet()
                 ?: emptySet()
@@ -84,6 +114,17 @@ internal class NovelReaderTranslationDiskCache(
     }
 
     private fun fileFor(chapterId: Long): File = File(directory, "$chapterId.json")
+
+    private fun readEntryLocked(chapterId: Long): GeminiTranslationCacheEntry? {
+        val file = fileFor(chapterId)
+        if (!file.isFile) return null
+        return runCatching {
+            json.decodeFromString<GeminiTranslationCacheDiskModel>(file.readText(Charsets.UTF_8)).toDomain()
+        }.onFailure { error ->
+            logcat(LogPriority.WARN, error) { "Failed to parse novel translation cache for chapter=$chapterId" }
+            file.delete()
+        }.getOrNull()
+    }
 }
 
 @Serializable
@@ -143,7 +184,14 @@ internal object NovelReaderTranslationDiskCacheStore {
 
     fun has(chapterId: Long): Boolean = cache.has(chapterId)
 
+    fun has(
+        chapterId: Long,
+        requirements: NovelReaderTranslationCacheRequirements,
+    ): Boolean = cache.has(chapterId, requirements)
+
     fun chapterIds(): Set<Long> = cache.chapterIds()
+
+    fun chapterIds(requirements: NovelReaderTranslationCacheRequirements): Set<Long> = cache.chapterIds(requirements)
 
     fun remove(chapterId: Long) = cache.remove(chapterId)
 
