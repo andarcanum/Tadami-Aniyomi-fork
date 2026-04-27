@@ -23,22 +23,36 @@ class TranslationNotificationManager(
 
     private val notificationManager = NotificationManagerCompat.from(context)
 
-    fun showProgress(update: TranslationProgressUpdate) {
-        val notificationId = getNotificationId(update.chapterId)
-
+    fun showProgress(
+        chapterName: String,
+        chapterId: Long,
+        progress: Int,
+        pendingCount: Int,
+    ) {
         val builder = context.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
-            setContentTitle("${context.stringResource(MR.strings.notification_translation_in_progress)}: ${update.chapterName}")
-            setContentText("${update.progress}%")
+            setContentTitle(context.stringResource(MR.strings.notification_translation_in_progress))
+            setContentText(buildProgressText(chapterName, progress, pendingCount))
             setSmallIcon(android.R.drawable.ic_menu_edit)
-            setProgress(100, update.progress, false)
+            setProgress(100, progress, false)
             setOngoing(true)
             setOnlyAlertOnce(true)
+            setStyle(NotificationCompat.BigTextStyle().bigText(buildProgressText(chapterName, progress, pendingCount)))
+            addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                context.stringResource(MR.strings.notification_action_cancel_current),
+                cancelChapterIntent(chapterId),
+            )
+            addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                context.stringResource(MR.strings.notification_action_cancel_all),
+                cancelAllIntent(),
+            )
         }
 
-        context.notify(notificationId, builder.build())
+        context.notify(Notifications.ID_TRANSLATION_PROGRESS, builder.build())
     }
 
-    fun showComplete(chapterName: String, chapterId: Long) {
+    fun showChapterComplete(chapterName: String, chapterId: Long) {
         val notificationId = getNotificationId(chapterId)
 
         val builder = context.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
@@ -65,6 +79,10 @@ class TranslationNotificationManager(
         context.notify(notificationId, builder.build())
     }
 
+    fun showQueueComplete() {
+        context.cancelNotification(Notifications.ID_TRANSLATION_PROGRESS)
+    }
+
     fun showError(chapterName: String, error: String, chapterId: Long) {
         val notificationId = getNotificationId(chapterId)
 
@@ -83,6 +101,48 @@ class TranslationNotificationManager(
     fun cancel(chapterId: Long) {
         val notificationId = getNotificationId(chapterId)
         context.cancelNotification(notificationId)
+    }
+
+    fun cancelQueueProgress() {
+        context.cancelNotification(Notifications.ID_TRANSLATION_PROGRESS)
+    }
+
+    private fun buildProgressText(
+        chapterName: String,
+        progress: Int,
+        pendingCount: Int,
+    ): String {
+        val remaining = pendingCount.coerceAtLeast(0)
+        return if (remaining > 0) {
+            "$chapterName • $progress% • ${context.stringResource(MR.strings.notification_translation_queue_remaining, remaining)}"
+        } else {
+            "$chapterName • $progress%"
+        }
+    }
+
+    private fun cancelChapterIntent(chapterId: Long): PendingIntent {
+        val intent = Intent(context, TranslationCancelReceiver::class.java).apply {
+            action = TranslationCancelReceiver.ACTION_CANCEL_CHAPTER
+            putExtra(TranslationCancelReceiver.EXTRA_CHAPTER_ID, chapterId)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            chapterId.toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun cancelAllIntent(): PendingIntent {
+        val intent = Intent(context, TranslationCancelReceiver::class.java).apply {
+            action = TranslationCancelReceiver.ACTION_CANCEL_ALL
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            Notifications.ID_TRANSLATION_PROGRESS,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun getNotificationId(chapterId: Long): Int {

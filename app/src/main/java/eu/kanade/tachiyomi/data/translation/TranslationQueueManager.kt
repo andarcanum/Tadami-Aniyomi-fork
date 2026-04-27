@@ -49,9 +49,14 @@ class TranslationQueueManager(
         }
     }
 
-    suspend fun addToQueue(chapterIds: List<Long>, novelId: Long) {
+    suspend fun addToQueue(chapterIds: List<Long>, novelId: Long): Int {
         val currentTime = System.currentTimeMillis()
+        var addedCount = 0
         chapterIds.forEach { chapterId ->
+            val existing = getQueueItemByChapterId(chapterId)
+            if (existing?.status == TranslationStatus.PENDING || existing?.status == TranslationStatus.IN_PROGRESS) {
+                return@forEach
+            }
             handler.await { db ->
                 db.translation_queueQueries.insert(
                     chapterId = chapterId,
@@ -59,18 +64,19 @@ class TranslationQueueManager(
                     createdAt = currentTime,
                 )
             }
+            addedCount++
         }
         refreshQueue()
-        logcat(LogPriority.DEBUG) { "Added ${chapterIds.size} chapters to translation queue" }
+        logcat(LogPriority.DEBUG) {
+            "Added $addedCount/${chapterIds.size} chapters to translation queue"
+        }
+        return addedCount
     }
 
     fun removeFromQueue(chapterId: Long) {
         scope.launch {
             try {
-                handler.await { db ->
-                    db.translation_queueQueries.delete(chapterId)
-                }
-                refreshQueue()
+                cancelChapter(chapterId)
                 logcat(LogPriority.DEBUG) { "Removed chapter $chapterId from translation queue" }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "Failed to remove chapter from queue: ${e.message}" }
@@ -111,96 +117,121 @@ class TranslationQueueManager(
         }
     }
 
+    suspend fun updateStatusAwait(
+        chapterId: Long,
+        status: TranslationStatus,
+        chapterName: String = "",
+    ) {
+        handler.await { db ->
+            db.translation_queueQueries.updateStatus(
+                chapterId = chapterId,
+                status = status.ordinal.toLong(),
+                updatedAt = System.currentTimeMillis(),
+            )
+        }
+        refreshQueue()
+        getQueueItemByChapterId(chapterId)?.let { item ->
+            _progressUpdates.emit(
+                TranslationProgressUpdate(
+                    chapterId = item.chapterId,
+                    novelId = item.novelId,
+                    status = status,
+                    progress = item.progress,
+                    currentChunk = 0,
+                    totalChunks = 0,
+                    chapterName = chapterName,
+                    errorMessage = item.errorMessage,
+                ),
+            )
+        }
+        logcat(LogPriority.DEBUG) { "Updated chapter $chapterId status to $status" }
+    }
+
     fun updateStatus(chapterId: Long, status: TranslationStatus) {
         scope.launch {
             try {
-                handler.await { db ->
-                    db.translation_queueQueries.updateStatus(
-                        chapterId = chapterId,
-                        status = status.ordinal.toLong(),
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                }
-                refreshQueue()
-                getQueueItemByChapterId(chapterId)?.let { item ->
-                    _progressUpdates.tryEmit(
-                        TranslationProgressUpdate(
-                            chapterId = item.chapterId,
-                            novelId = item.novelId,
-                            status = status,
-                            progress = item.progress,
-                            currentChunk = 0,
-                            totalChunks = 0,
-                            chapterName = "",
-                            errorMessage = item.errorMessage,
-                        ),
-                    )
-                }
-                logcat(LogPriority.DEBUG) { "Updated chapter $chapterId status to $status" }
+                updateStatusAwait(chapterId, status)
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "Failed to update chapter status: ${e.message}" }
             }
         }
     }
 
+    suspend fun updateProgressAwait(
+        chapterId: Long,
+        progress: Int,
+        status: TranslationStatus,
+        chapterName: String = "",
+    ) {
+        handler.await { db ->
+            db.translation_queueQueries.updateStatusAndProgress(
+                chapterId = chapterId,
+                status = status.ordinal.toLong(),
+                progress = progress.toLong(),
+                updatedAt = System.currentTimeMillis(),
+            )
+        }
+        refreshQueue()
+        getQueueItemByChapterId(chapterId)?.let { item ->
+            _progressUpdates.emit(
+                TranslationProgressUpdate(
+                    chapterId = chapterId,
+                    novelId = item.novelId,
+                    status = status,
+                    progress = progress,
+                    currentChunk = 0,
+                    totalChunks = 0,
+                    chapterName = chapterName,
+                    errorMessage = null,
+                ),
+            )
+        }
+    }
+
     fun updateProgress(chapterId: Long, progress: Int, status: TranslationStatus) {
         scope.launch {
             try {
-                handler.await { db ->
-                    db.translation_queueQueries.updateStatusAndProgress(
-                        chapterId = chapterId,
-                        status = status.ordinal.toLong(),
-                        progress = progress.toLong(),
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                }
-                refreshQueue()
-                getQueueItemByChapterId(chapterId)?.let { item ->
-                    _progressUpdates.tryEmit(
-                        TranslationProgressUpdate(
-                            chapterId = chapterId,
-                            novelId = item.novelId,
-                            status = status,
-                            progress = progress,
-                            currentChunk = 0,
-                            totalChunks = 0,
-                            chapterName = "",
-                            errorMessage = null,
-                        ),
-                    )
-                }
+                updateProgressAwait(chapterId, progress, status)
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "Failed to update chapter progress: ${e.message}" }
             }
         }
     }
 
+    suspend fun setErrorAwait(
+        chapterId: Long,
+        error: String,
+        chapterName: String = "",
+    ) {
+        handler.await { db ->
+            db.translation_queueQueries.setError(
+                chapterId = chapterId,
+                error = error,
+                updatedAt = System.currentTimeMillis(),
+            )
+        }
+        refreshQueue()
+        getQueueItemByChapterId(chapterId)?.let { item ->
+            _progressUpdates.emit(
+                TranslationProgressUpdate(
+                    chapterId = chapterId,
+                    novelId = item.novelId,
+                    status = TranslationStatus.FAILED,
+                    progress = item.progress,
+                    currentChunk = 0,
+                    totalChunks = 0,
+                    chapterName = chapterName,
+                    errorMessage = error,
+                ),
+            )
+        }
+        logcat(LogPriority.DEBUG) { "Set error for chapter $chapterId: $error" }
+    }
+
     fun setError(chapterId: Long, error: String) {
         scope.launch {
             try {
-                handler.await { db ->
-                    db.translation_queueQueries.setError(
-                        chapterId = chapterId,
-                        error = error,
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                }
-                refreshQueue()
-                getQueueItemByChapterId(chapterId)?.let { item ->
-                    _progressUpdates.tryEmit(
-                        TranslationProgressUpdate(
-                            chapterId = chapterId,
-                            novelId = item.novelId,
-                            status = TranslationStatus.FAILED,
-                            progress = item.progress,
-                            currentChunk = 0,
-                            totalChunks = 0,
-                            chapterName = "",
-                            errorMessage = error,
-                        ),
-                    )
-                }
-                logcat(LogPriority.DEBUG) { "Set error for chapter $chapterId: $error" }
+                setErrorAwait(chapterId, error)
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "Failed to set chapter error: ${e.message}" }
             }
@@ -231,6 +262,55 @@ class TranslationQueueManager(
 
     fun setActiveTranslation(item: TranslationQueueItem?) {
         _activeTranslation.value = item
+    }
+
+    suspend fun cancelChapter(chapterId: Long): Boolean {
+        val item = getQueueItemByChapterId(chapterId) ?: return false
+        _progressUpdates.emit(
+            TranslationProgressUpdate(
+                chapterId = item.chapterId,
+                novelId = item.novelId,
+                status = TranslationStatus.CANCELLED,
+                progress = item.progress,
+                currentChunk = 0,
+                totalChunks = 0,
+                chapterName = "",
+                errorMessage = null,
+            ),
+        )
+        handler.await { db ->
+            db.translation_queueQueries.delete(chapterId)
+        }
+        if (_activeTranslation.value?.chapterId == chapterId) {
+            setActiveTranslation(null)
+        }
+        refreshQueue()
+        return item.status == TranslationStatus.IN_PROGRESS
+    }
+
+    suspend fun cancelAll(): Boolean {
+        val items = queue.value + activeTranslation.value.let(::listOfNotNull)
+        if (items.isEmpty()) return false
+        items.distinctBy { it.chapterId }.forEach { item ->
+            _progressUpdates.emit(
+                TranslationProgressUpdate(
+                    chapterId = item.chapterId,
+                    novelId = item.novelId,
+                    status = TranslationStatus.CANCELLED,
+                    progress = item.progress,
+                    currentChunk = 0,
+                    totalChunks = 0,
+                    chapterName = "",
+                    errorMessage = null,
+                ),
+            )
+            handler.await { db ->
+                db.translation_queueQueries.delete(item.chapterId)
+            }
+        }
+        setActiveTranslation(null)
+        refreshQueue()
+        return true
     }
 
     fun incrementRetry(chapterId: Long) {

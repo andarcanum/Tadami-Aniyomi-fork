@@ -526,11 +526,22 @@ class NovelScreenModel(
             screenModelScope.launchIO {
                 translationQueueManager.progressUpdates
                     .collectLatest { update ->
-                        if (update.novelId == novelId && update.status == TranslationStatus.COMPLETED) {
-                            updateChapterTranslateStates(
-                                chapterIds = setOf(update.chapterId),
-                                isTranslating = false,
-                            )
+                        if (update.novelId == novelId) {
+                            when (update.status) {
+                                TranslationStatus.COMPLETED,
+                                TranslationStatus.FAILED,
+                                TranslationStatus.CANCELLED,
+                                -> updateChapterTranslateStates(
+                                    chapterIds = setOf(update.chapterId),
+                                    isTranslating = false,
+                                )
+                                TranslationStatus.IN_PROGRESS,
+                                TranslationStatus.PENDING,
+                                -> updateChapterTranslateStates(
+                                    chapterIds = setOf(update.chapterId),
+                                    isTranslating = true,
+                                )
+                            }
                         }
                     }
             }

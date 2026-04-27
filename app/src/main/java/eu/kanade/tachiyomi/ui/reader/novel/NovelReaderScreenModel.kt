@@ -572,6 +572,12 @@ class NovelReaderScreenModel(
                             addGeminiLog("Queue translation failed: ${update.errorMessage ?: "Unknown error"}")
                             refreshGeminiUiState()
                         }
+                        TranslationStatus.CANCELLED -> {
+                            isGeminiTranslating = false
+                            geminiTranslationProgress = 0
+                            addGeminiLog("Translation cancelled.")
+                            refreshGeminiUiState()
+                        }
                         TranslationStatus.PENDING -> {
                             isGeminiTranslating = true
                             geminiTranslationProgress = 0
@@ -2580,9 +2586,7 @@ class NovelReaderScreenModel(
                 translationQueueManager.addToQueue(listOf(chapter.id), currentState.novel.id)
                 if (!isActive) return@launch
                 val appContext = Injekt.get<Application>()
-                if (!TranslationJob.isRunning(appContext)) {
-                    TranslationJob.runImmediately(appContext)
-                }
+                TranslationJob.runImmediately(appContext)
                 addGeminiLog("Gemini translation queued.")
             } catch (_: CancellationException) {
                 // Job cancelled intentionally by the user or screen teardown.
@@ -2599,12 +2603,20 @@ class NovelReaderScreenModel(
         val chapter = currentChapter ?: return
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
-        TranslationJob.stop(Injekt.get<Application>())
-        translationQueueManager.removeFromQueue(chapter.id)
         isGeminiTranslating = false
         isGeminiTranslationVisible = false
         geminiTranslationProgress = 0
         addGeminiLog("?? Stop requested")
+        screenModelScope.launch(Dispatchers.IO) {
+            val wasActive = translationQueueManager.cancelChapter(chapter.id)
+            val appContext = Injekt.get<Application>()
+            if (wasActive) {
+                TranslationJob.stop(appContext)
+                if (translationQueueManager.hasNext()) {
+                    TranslationJob.runImmediately(appContext)
+                }
+            }
+        }
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }

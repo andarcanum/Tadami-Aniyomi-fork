@@ -1169,6 +1169,9 @@
     <string name="notification_translation_in_progress">Translation in progress</string>
     <string name="notification_translation_complete">Translation complete</string>
     <string name="notification_translation_error">Translation error</string>
+    <string name="notification_translation_queue_remaining">%1$d left in queue</string>
+    <string name="notification_action_cancel_current">Cancel current</string>
+    <string name="notification_action_cancel_all">Cancel all</string>
     <string name="snackbar_translation_queued">Translation queued</string>
     <string name="snackbar_translation_start_error">Failed to start translation:</string>
     <string name="notification_action_open">Open</string>

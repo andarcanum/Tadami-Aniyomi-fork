@@ -68,16 +68,37 @@ class TranslationJob(
                 val item = queueManager.getNextPending() ?: break
 
                 logcat(LogPriority.DEBUG) { "Processing translation for chapter ${item.chapterId}" }
-
-                processItem(item)
+                try {
+                    processItem(item)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    val chapterName = "Chapter ${item.chapterId}"
+                    val message = e.message ?: e::class.java.simpleName
+                    queueManager.setErrorAwait(
+                        chapterId = item.chapterId,
+                        error = message,
+                        chapterName = chapterName,
+                    )
+                    queueManager.setActiveTranslation(null)
+                    notificationManager.showError(
+                        chapterName = chapterName,
+                        error = message,
+                        chapterId = item.chapterId,
+                    )
+                    logcat(LogPriority.ERROR, e) {
+                        "Translation failed for chapter ${item.chapterId}"
+                    }
+                }
             }
 
+            notificationManager.showQueueComplete()
             return Result.success()
         } catch (_: CancellationException) {
             val activeItem = queueManager.activeTranslation.value
             if (activeItem != null) {
                 if (queueManager.hasPendingOrActive(activeItem.chapterId)) {
-                    queueManager.updateStatus(activeItem.chapterId, TranslationStatus.PENDING)
+                    queueManager.updateStatusAwait(activeItem.chapterId, TranslationStatus.PENDING)
                 }
                 queueManager.setActiveTranslation(null)
             }
@@ -104,7 +125,7 @@ class TranslationJob(
 
     private suspend fun processItem(item: TranslationQueueItem) {
         queueManager.setActiveTranslation(item)
-        queueManager.updateStatus(item.chapterId, TranslationStatus.IN_PROGRESS)
+        queueManager.updateStatusAwait(item.chapterId, TranslationStatus.IN_PROGRESS)
 
         val snapshot = chapterRepository.loadChapterSnapshot(item.chapterId)
         val settings = readerPreferences.resolveSettings(snapshot.novel.source)
@@ -119,6 +140,13 @@ class TranslationJob(
         }
 
         val chapterName = snapshot.chapter.name.ifBlank { "Chapter ${item.chapterId}" }
+        queueManager.updateStatusAwait(item.chapterId, TranslationStatus.IN_PROGRESS, chapterName)
+        notificationManager.showProgress(
+            chapterName = chapterName,
+            chapterId = item.chapterId,
+            progress = 0,
+            pendingCount = queueManager.queue.value.size,
+        )
         val translatedByIndex = translationProcessor.translateSegments(
             segments = textSegments,
             settings = settings,
@@ -132,16 +160,10 @@ class TranslationJob(
                     status = TranslationStatus.IN_PROGRESS,
                 )
                 notificationManager.showProgress(
-                    TranslationProgressUpdate(
-                        chapterId = item.chapterId,
-                        novelId = item.novelId,
-                        status = TranslationStatus.IN_PROGRESS,
-                        progress = progress,
-                        currentChunk = 0,
-                        totalChunks = 0,
-                        chapterName = chapterName,
-                        errorMessage = null,
-                    ),
+                    chapterName = chapterName,
+                    chapterId = item.chapterId,
+                    progress = progress,
+                    pendingCount = queueManager.queue.value.size,
                 )
             },
         )
@@ -161,10 +183,15 @@ class TranslationJob(
             )
         }
 
-        queueManager.updateStatus(item.chapterId, TranslationStatus.COMPLETED)
+        queueManager.updateProgressAwait(
+            chapterId = item.chapterId,
+            progress = 100,
+            status = TranslationStatus.COMPLETED,
+            chapterName = chapterName,
+        )
         queueManager.setActiveTranslation(null)
 
-        notificationManager.showComplete(
+        notificationManager.showChapterComplete(
             chapterName = chapterName,
             chapterId = item.chapterId,
         )
