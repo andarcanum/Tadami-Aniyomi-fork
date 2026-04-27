@@ -51,6 +51,6 @@ class SourceAwareNovelCoverModelTest {
             url = "https://example.org/cover.jpg",
             lastModified = 5678L,
         )
-        request.placeholderMemoryCacheKey?.key shouldBe "novel;https://example.org/cover.jpg;5678"
+        request.placeholderMemoryCacheKey?.key shouldBe "novel;42;https://example.org/cover.jpg;5678"
     }
 }
