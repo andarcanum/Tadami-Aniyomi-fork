@@ -75,11 +75,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.tadami.aurora.R
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.DropdownMenu
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.entries.components.ItemCover
@@ -121,13 +121,14 @@ fun MangaInfoBox(
         )
         val blurRadiusPx = with(LocalDensity.current) { 4.dp.roundToPx() }
         val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
+        val context = LocalContext.current
         AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(manga)
-                .crossfade(true)
-                .placeholderMemoryCacheKey(manga.thumbnailUrl)
-                .staticBlur(blurRadiusPx, intensityFactor = 0.6f)
-                .build(),
+            model = remember(manga) {
+                buildAuroraCoverImageRequest(context, manga) {
+                    crossfade(true)
+                    staticBlur(blurRadiusPx, intensityFactor = 0.6f)
+                }
+            },
             error = fallbackPainter,
             fallback = fallbackPainter,
             contentDescription = null,
@@ -357,13 +358,14 @@ private fun MangaAndSourceTitlesLarge(
             .padding(start = 16.dp, top = appBarPadding + 16.dp, end = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        val context = LocalContext.current
         ItemCover.Book(
             modifier = Modifier.fillMaxWidth(0.65f),
-            data = ImageRequest.Builder(LocalContext.current)
-                .data(manga)
-                .crossfade(true)
-                .placeholderMemoryCacheKey(manga.thumbnailUrl)
-                .build(),
+            data = remember(manga) {
+                buildAuroraCoverImageRequest(context, manga) {
+                    crossfade(true)
+                }
+            },
             contentDescription = stringResource(MR.strings.manga_cover),
             onClick = onCoverClick,
         )
@@ -397,15 +399,16 @@ private fun MangaAndSourceTitlesSmall(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        val context = LocalContext.current
         ItemCover.Book(
             modifier = Modifier
                 .sizeIn(maxWidth = 100.dp)
                 .align(Alignment.Top),
-            data = ImageRequest.Builder(LocalContext.current)
-                .data(manga)
-                .crossfade(true)
-                .placeholderMemoryCacheKey(manga.thumbnailUrl)
-                .build(),
+            data = remember(manga) {
+                buildAuroraCoverImageRequest(context, manga) {
+                    crossfade(true)
+                }
+            },
             contentDescription = stringResource(MR.strings.manga_cover),
             onClick = onCoverClick,
         )

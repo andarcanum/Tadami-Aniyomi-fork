@@ -1,13 +1,17 @@
 package eu.kanade.tachiyomi.data.library.novel
 
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.tadami.aurora.R
+import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailureNotificationFormatter
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
+import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.util.lang.chop
 import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.notificationBuilder
@@ -15,6 +19,7 @@ import eu.kanade.tachiyomi.util.system.notify
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import java.math.RoundingMode
 import java.text.NumberFormat
 import tachiyomi.i18n.R as I18nR
@@ -34,7 +39,7 @@ class NovelLibraryUpdateNotifier(
 
     val progressNotificationBuilder by lazy {
         context.notificationBuilder(Notifications.CHANNEL_LIBRARY_PROGRESS) {
-            setContentTitle(context.stringResource(MR.strings.app_name))
+            setContentTitle(context.stringResource(AYMR.strings.aurora_updating_novel))
             setSmallIcon(R.drawable.ic_refresh_24dp)
             setOngoing(true)
             setOnlyAlertOnce(true)
@@ -82,7 +87,7 @@ class NovelLibraryUpdateNotifier(
             Notifications.ID_NEW_NOVEL_CHAPTERS,
             Notifications.CHANNEL_LIBRARY_PROGRESS,
         ) {
-            setContentTitle(context.stringResource(MR.strings.updating_library))
+            setContentTitle(context.stringResource(AYMR.strings.aurora_updating_novel))
             setContentText(context.stringResource(MR.strings.update_check_no_new_updates))
             setSubText("$checked")
             setSmallIcon(R.drawable.ic_ani)
@@ -115,6 +120,7 @@ class NovelLibraryUpdateNotifier(
             )
             setGroup(Notifications.GROUP_NEW_NOVEL_CHAPTERS)
             setGroupSummary(true)
+            setContentIntent(getNotificationIntent())
             setAutoCancel(true)
         }
     }
@@ -144,5 +150,21 @@ class NovelLibraryUpdateNotifier(
 
     fun cancelProgressNotification() {
         context.cancelNotification(Notifications.ID_NOVEL_LIBRARY_PROGRESS)
+    }
+
+    /**
+     * Returns an intent to open the main activity.
+     */
+    private fun getNotificationIntent(): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            action = Constants.SHORTCUT_UPDATES
+        }
+        return PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 }

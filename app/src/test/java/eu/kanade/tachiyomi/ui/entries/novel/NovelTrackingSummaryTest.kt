@@ -10,7 +10,7 @@ class NovelTrackingSummaryTest {
     fun `returns zero count and false when no logged in trackers`() {
         val summary = resolveNovelTrackingSummary(
             tracks = listOf(track(id = 1L, trackerId = 2L)),
-            loggedInMangaTrackerIds = emptySet(),
+            loggedInNovelTrackerIds = emptySet(),
         )
 
         summary.trackingCount shouldBe 0
@@ -25,7 +25,7 @@ class NovelTrackingSummaryTest {
                 track(id = 2L, trackerId = 3L),
                 track(id = 3L, trackerId = 5L),
             ),
-            loggedInMangaTrackerIds = setOf(2L, 3L, 7L),
+            loggedInNovelTrackerIds = setOf(2L, 3L, 7L),
         )
 
         summary.trackingCount shouldBe 2
@@ -36,7 +36,7 @@ class NovelTrackingSummaryTest {
     fun `returns has logged in trackers true when tracker set is not empty`() {
         val summary = resolveNovelTrackingSummary(
             tracks = emptyList(),
-            loggedInMangaTrackerIds = setOf(9L),
+            loggedInNovelTrackerIds = setOf(9L),
         )
 
         summary.trackingCount shouldBe 0

@@ -13,13 +13,19 @@ import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlators
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.domain.track.model.AutoTrackState
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
+import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
+import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.novelsource.NovelSource
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.every
@@ -34,6 +40,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import kotlinx.serialization.json.Json
@@ -98,9 +105,47 @@ class NovelScreenModelTest {
                 .getOrElse {
                     val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true)
                     every {
+                        translationQueueManager.queue
+                    } returns MutableStateFlow<List<TranslationQueueItem>>(emptyList())
+                    every {
                         translationQueueManager.activeTranslation
                     } returns MutableStateFlow<TranslationQueueItem?>(null)
                     Injekt.addSingleton(fullType<TranslationQueueManager>(), translationQueueManager)
+                }
+            runCatching { Injekt.get<TrackNovelChapter>() }
+                .getOrElse {
+                    Injekt.addSingleton(fullType<TrackNovelChapter>(), mockk<TrackNovelChapter>(relaxed = true))
+                }
+            runCatching { Injekt.get<TrackPreferences>() }
+                .getOrElse {
+                    val trackPreferences = mockk<TrackPreferences>(relaxed = true)
+                    every { trackPreferences.autoUpdateTrackOnMarkRead() } returns object :
+                        tachiyomi.core.common.preference.Preference<AutoTrackState> {
+                        override fun get() = AutoTrackState.ALWAYS
+                        override fun set(value: AutoTrackState) {}
+                        override fun isSet() = true
+                        override fun defaultValue() = AutoTrackState.ALWAYS
+                        override fun key() = "pref_auto_update_manga_on_mark_read"
+                        override fun changes() = kotlinx.coroutines.flow.MutableStateFlow(get())
+                        override fun stateIn(
+                            scope: kotlinx.coroutines.CoroutineScope,
+                        ) = kotlinx.coroutines.flow.MutableStateFlow(get())
+                        override fun delete() {}
+                    }
+                    every { trackPreferences.autoUpdateTrack() } returns object :
+                        tachiyomi.core.common.preference.Preference<Boolean> {
+                        override fun get() = true
+                        override fun set(value: Boolean) {}
+                        override fun isSet() = true
+                        override fun defaultValue() = true
+                        override fun key() = "pref_auto_update_manga_sync_key"
+                        override fun changes() = kotlinx.coroutines.flow.MutableStateFlow(get())
+                        override fun stateIn(
+                            scope: kotlinx.coroutines.CoroutineScope,
+                        ) = kotlinx.coroutines.flow.MutableStateFlow(get())
+                        override fun delete() {}
+                    }
+                    Injekt.addSingleton(fullType<TrackPreferences>(), trackPreferences)
                 }
         }
 
@@ -258,6 +303,7 @@ class NovelScreenModelTest {
             )
             val trackerManager = mockk<TrackerManager>().also { manager ->
                 every { manager.loggedInTrackersFlow() } returns MutableStateFlow(emptyList())
+                every { manager.loggedInNovelTrackersFlow() } returns MutableStateFlow(emptyList())
             }
             val getNovelTracks = mockk<GetNovelTracks>().also { tracks ->
                 every { tracks.subscribe(any()) } returns MutableStateFlow(
@@ -461,6 +507,12 @@ class NovelScreenModelTest {
                 runBlocking { blocker.await() }
                 false
             }
+            every {
+                translatedDownloadManager.getTranslatedChapterIds(any(), any(), any())
+            } answers {
+                runBlocking { blocker.await() }
+                emptySet()
+            }
 
             val screenModel = createResumeScreenModel(
                 novel = novel,
@@ -528,6 +580,190 @@ class NovelScreenModelTest {
             } finally {
                 screenModel.onDispose()
             }
+        }
+    }
+
+    @org.junit.jupiter.api.Disabled("Requires test dispatcher for IO coroutine state propagation")
+    @Test
+    fun `queued translation updates icon immediately`() {
+        runBlocking {
+            val novel = novelForResumeTests(108L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+            )
+            val translatedDownloadManager = mockk<NovelTranslatedDownloadManager>()
+            every {
+                translatedDownloadManager.isTranslatedChapterDownloaded(any(), any(), any())
+            } returns false
+            every {
+                translatedDownloadManager.getTranslatedChapterIds(any(), any(), any())
+            } returns emptySet()
+
+            val queueFlow = MutableStateFlow<List<TranslationQueueItem>>(emptyList())
+            val activeTranslationFlow = MutableStateFlow<TranslationQueueItem?>(null)
+            val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true).also { manager ->
+                every { manager.queue } returns queueFlow
+                every { manager.activeTranslation } returns activeTranslationFlow
+            }
+
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                novelTranslatedDownloadManager = translatedDownloadManager,
+                geminiEnabled = true,
+                translationQueueManager = translationQueueManager,
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                queueFlow.value = listOf(
+                    TranslationQueueItem(
+                        id = 1L,
+                        chapterId = 1L,
+                        novelId = novel.id,
+                        status = TranslationStatus.PENDING,
+                        progress = 0,
+                        errorMessage = null,
+                        retryCount = 0,
+                        createdAt = 1L,
+                        updatedAt = 1L,
+                    ),
+                )
+
+                // Queue subscription dispatches refresh on IO; loop with IO-friendly delay until resolved.
+                withTimeout(10_000) {
+                    while (
+                        withContext(Dispatchers.IO) {
+                            (screenModel.state.value as? NovelScreenModel.State.Success)
+                                ?.chapterActionStates?.get(1L)?.translateState
+                        } != NovelChapterActionIconState.InProgress
+                    ) {
+                        delay(100)
+                    }
+                }
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.chapterActionStates[1L]?.translateState shouldBe NovelChapterActionIconState.InProgress
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `active translation keeps icon in progress while queue clears`() {
+        runBlocking {
+            val novel = novelForResumeTests(109L)
+            val chapter = novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false)
+            val blocker = CompletableDeferred<Unit>()
+            val translatedDownloadManager = mockk<NovelTranslatedDownloadManager>()
+            every {
+                translatedDownloadManager.isTranslatedChapterDownloaded(any(), any(), any())
+            } answers {
+                runBlocking { blocker.await() }
+                false
+            }
+            every {
+                translatedDownloadManager.getTranslatedChapterIds(any(), any(), any())
+            } answers {
+                runBlocking { blocker.await() }
+                emptySet()
+            }
+
+            val queueFlow = MutableStateFlow<List<TranslationQueueItem>>(emptyList())
+            val activeTranslationFlow = MutableStateFlow<TranslationQueueItem?>(null)
+            val translationQueueManager = mockk<TranslationQueueManager>(relaxed = true).also { manager ->
+                every { manager.queue } returns queueFlow
+                every { manager.activeTranslation } returns activeTranslationFlow
+            }
+
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = listOf(chapter),
+                novelTranslatedDownloadManager = translatedDownloadManager,
+                geminiEnabled = true,
+                translationQueueManager = translationQueueManager,
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                val queuedItem = TranslationQueueItem(
+                    id = 1L,
+                    chapterId = chapter.id,
+                    novelId = novel.id,
+                    status = TranslationStatus.PENDING,
+                    progress = 0,
+                    errorMessage = null,
+                    retryCount = 0,
+                    createdAt = 1L,
+                    updatedAt = 1L,
+                )
+                queueFlow.value = listOf(queuedItem)
+
+                withTimeout(5_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.chapterActionStates
+                            ?.get(chapter.id)
+                            ?.translateState != NovelChapterActionIconState.InProgress
+                    ) {
+                        yield()
+                    }
+                }
+
+                activeTranslationFlow.value = queuedItem
+                queueFlow.value = emptyList()
+
+                withTimeout(5_000) {
+                    while ((screenModel.state.value as? NovelScreenModel.State.Success)
+                            ?.chapterActionStates
+                            ?.get(chapter.id)
+                            ?.translateState != NovelChapterActionIconState.InProgress
+                    ) {
+                        yield()
+                    }
+                }
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.chapterActionStates[chapter.id]?.translateState shouldBe NovelChapterActionIconState.InProgress
+            } finally {
+                blocker.complete(Unit)
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `translation cache chapter ids are loaded in bulk`() {
+        NovelReaderTranslationDiskCacheStore.clear()
+        try {
+            NovelReaderTranslationDiskCacheStore.put(
+                GeminiTranslationCacheEntry(
+                    chapterId = 11L,
+                    translatedByIndex = mapOf(0 to "hello"),
+                    model = "gemini-3.1-flash-lite-preview",
+                    sourceLang = "English",
+                    targetLang = "Russian",
+                    promptMode = eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode.ADULT_18,
+                    stylePreset = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset.PROFESSIONAL,
+                ),
+            )
+            NovelReaderTranslationDiskCacheStore.put(
+                GeminiTranslationCacheEntry(
+                    chapterId = 42L,
+                    translatedByIndex = mapOf(0 to "world"),
+                    model = "gemini-3.1-flash-lite-preview",
+                    sourceLang = "English",
+                    targetLang = "Russian",
+                    promptMode = eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode.ADULT_18,
+                    stylePreset = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset.PROFESSIONAL,
+                ),
+            )
+
+            NovelReaderTranslationDiskCacheStore.chapterIds() shouldBe setOf(11L, 42L)
+        } finally {
+            NovelReaderTranslationDiskCacheStore.clear()
         }
     }
 
@@ -1018,6 +1254,7 @@ class NovelScreenModelTest {
         downloadQueueState: Flow<NovelDownloadQueueState> = MutableStateFlow(NovelDownloadQueueState()),
         getNovelWithChaptersOverride: GetNovelWithChapters? = null,
         novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
+        translationQueueManager: TranslationQueueManager = Injekt.get(),
         geminiEnabled: Boolean = false,
         excludedScanlators: Set<String> = emptySet(),
         resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { _, _ -> emptySet() },
@@ -1036,6 +1273,7 @@ class NovelScreenModelTest {
         val sourceManager = FakeNovelSourceManager()
         val trackerManager = mockk<TrackerManager>().also { manager ->
             every { manager.loggedInTrackersFlow() } returns MutableStateFlow(emptyList())
+            every { manager.loggedInNovelTrackersFlow() } returns MutableStateFlow(emptyList())
         }
         val getNovelTracks = mockk<GetNovelTracks>().also { tracks ->
             every { tracks.subscribe(any()) } returns MutableStateFlow(emptyList<NovelTrack>())
@@ -1119,6 +1357,7 @@ class NovelScreenModelTest {
             snackbarHostState = snackbarHostState,
             novelReaderPreferences = novelReaderPreferences,
             novelTranslatedDownloadManager = novelTranslatedDownloadManager,
+            translationQueueManager = translationQueueManager,
         )
     }
 

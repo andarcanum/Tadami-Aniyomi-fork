@@ -414,7 +414,8 @@ class NovelEpubExporter(
             }
             uri?.scheme.equals("file", ignoreCase = true) -> {
                 runCatching {
-                    val file = File(uri)
+                    val fileUri = uri ?: return@runCatching null
+                    val file = File(fileUri)
                     if (!file.exists()) return@runCatching null
                     val bytes = file.readBytes()
                     if (bytes.isEmpty()) return@runCatching null

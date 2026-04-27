@@ -74,9 +74,9 @@ class PackageInstallerInstallerManga(private val service: Service) : InstallerMa
                     PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED,
                 )
             }
-            activeSession = entry to packageInstaller.createSession(installParams)
             val fileSize = service.getUriSize(entry.uri) ?: throw IllegalStateException()
             installParams.setSize(fileSize)
+            activeSession = entry to packageInstaller.createSession(installParams)
 
             val inputStream = service.contentResolver.openInputStream(entry.uri) ?: throw IllegalStateException()
             val session = packageInstaller.openSession(activeSession!!.second)

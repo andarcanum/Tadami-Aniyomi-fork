@@ -1,10 +1,14 @@
 package eu.kanade.tachiyomi.util.system
 
 import android.content.Context
+import androidx.lifecycle.asFlow
 import androidx.work.CoroutineWorker
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 
@@ -14,6 +18,12 @@ val Context.workManager: WorkManager
 fun WorkManager.isRunning(tag: String): Boolean {
     val list = this.getWorkInfosByTag(tag).get()
     return list.any { it.state == WorkInfo.State.RUNNING }
+}
+
+fun WorkManager.isRunningFlow(tag: String): Flow<Boolean> {
+    return this.getWorkInfosByTagLiveData(tag).asFlow()
+        .map { list -> list.any { it.state == WorkInfo.State.RUNNING } }
+        .distinctUntilChanged()
 }
 
 /**

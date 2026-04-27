@@ -34,6 +34,26 @@ class TrackPreferences(
 
     fun trackToken(tracker: Tracker) = preferenceStore.getString(Preference.privateKey("track_token_${tracker.id}"), "")
 
+    fun novelUpdatesUseCustomListMapping() = preferenceStore.getBoolean(
+        "novel_updates_use_custom_list_mapping",
+        false,
+    )
+
+    fun novelUpdatesCustomListMapping() = preferenceStore.getString(
+        "novel_updates_custom_list_mapping",
+        "{}",
+    )
+
+    fun novelUpdatesCachedLists() = preferenceStore.getString(
+        "novel_updates_cached_lists",
+        "[]",
+    )
+
+    fun novelUpdatesLastListRefresh() = preferenceStore.getLong(
+        "novel_updates_last_list_refresh",
+        0L,
+    )
+
     fun anilistScoreType() = preferenceStore.getString("anilist_score_type", Anilist.POINT_10)
 
     fun autoUpdateTrack() = preferenceStore.getBoolean("pref_auto_update_manga_sync_key", true)

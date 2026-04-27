@@ -8,9 +8,11 @@ import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -28,6 +30,7 @@ import tachiyomi.data.extension.novel.toInstalled
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 
 class NovelExtensionsScreenModelTest {
 
@@ -201,6 +204,75 @@ class NovelExtensionsScreenModelTest {
             screenModel.state.value.items
                 .first { it.plugin.id == "id-timeout" }
                 .installStep shouldBe InstallStep.Error
+        }
+    }
+
+    @Test
+    fun `update all extensions waits for each install to finish`() {
+        runBlocking {
+            val installed = listOf(
+                pluginInstalled("id-1", 1),
+                pluginInstalled("id-2", 1),
+            )
+            val available = listOf(
+                pluginAvailable("id-1", 2),
+                pluginAvailable("id-2", 2),
+            )
+            val installStarted = AtomicInteger(0)
+            val firstInstallStarted = CompletableDeferred<Unit>()
+            val releaseInstall = CompletableDeferred<Unit>()
+
+            val extensionManager = mockk<NovelExtensionManager>(relaxed = true)
+            every { extensionManager.installedSourcesFlow } returns MutableStateFlow(emptyList())
+            every { extensionManager.installedPluginsFlow } returns MutableStateFlow(installed)
+            every { extensionManager.availablePluginsFlow } returns MutableStateFlow(available)
+            every { extensionManager.updatesFlow } returns MutableStateFlow(installed)
+            coEvery { extensionManager.refreshAvailablePlugins() } returns Unit
+            coEvery { extensionManager.installPlugin(available[0]) } coAnswers {
+                if (installStarted.incrementAndGet() == 1) {
+                    firstInstallStarted.complete(Unit)
+                }
+                releaseInstall.await()
+                available[0].toInstalled()
+            }
+            coEvery { extensionManager.installPlugin(available[1]) } coAnswers {
+                installStarted.incrementAndGet()
+                releaseInstall.await()
+                available[1].toInstalled()
+            }
+
+            val screenModel = NovelExtensionsScreenModel(
+                extensionManager = extensionManager,
+                sourcePreferences = sourcePreferences,
+            ).also(activeScreenModels::add)
+
+            withTimeout(1_000) {
+                while (screenModel.state.value.isLoading) {
+                    yield()
+                }
+            }
+
+            screenModel.updateAllExtensions()
+
+            withTimeout(1_000) {
+                firstInstallStarted.await()
+            }
+
+            repeat(5) {
+                yield()
+            }
+
+            installStarted.get() shouldBe 1
+
+            releaseInstall.complete(Unit)
+
+            withTimeout(1_000) {
+                while (installStarted.get() < 2) {
+                    yield()
+                }
+            }
+
+            installStarted.get() shouldBe 2
         }
     }
 

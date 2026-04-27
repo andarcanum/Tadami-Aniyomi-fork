@@ -8,7 +8,9 @@ import coil3.request.ImageRequest
 import com.tadami.aurora.R
 import eu.kanade.presentation.theme.LocalIsAuroraTheme
 import eu.kanade.presentation.util.rememberResourceBitmapPainter
+import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeCover
+import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.entries.novel.model.NovelCover
 
@@ -48,9 +50,11 @@ fun resolveAuroraCoverPlaceholderMemoryCacheKey(data: Any?): String? {
     return when (val candidate = resolveAuroraCoverModelCandidate(data)) {
         null -> null
         is String -> candidate
-        is AnimeCover -> "anime;${candidate.url};${candidate.lastModified}"
-        is MangaCover -> "manga;${candidate.url};${candidate.lastModified}"
-        is NovelCover -> "novel;${candidate.url};${candidate.lastModified}"
+        is Anime -> "anime;${candidate.id};${candidate.thumbnailUrl};${candidate.coverLastModified}"
+        is AnimeCover -> "anime;${candidate.animeId};${candidate.url};${candidate.lastModified}"
+        is Manga -> "manga;${candidate.id};${candidate.thumbnailUrl};${candidate.coverLastModified}"
+        is MangaCover -> "manga;${candidate.mangaId};${candidate.url};${candidate.lastModified}"
+        is NovelCover -> "novel;${candidate.novelId};${candidate.url};${candidate.lastModified}"
         else -> candidate.toString()
     }
 }

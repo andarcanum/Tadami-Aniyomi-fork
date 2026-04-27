@@ -444,9 +444,9 @@ class MainActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (restorePortraitAfterPlayerExit) {
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-            restorePortraitAfterPlayerExit = false
+        restoreOrientationAfterPlayerExit?.let { orientation ->
+            requestedOrientation = orientation
+            restoreOrientationAfterPlayerExit = null
         }
         lifecycleScope.launch {
             val todayLevel = activityDataRepository
@@ -707,6 +707,14 @@ class MainActivity : BaseActivity() {
                 }
                 null
             }
+            INTENT_OPEN_NOVEL_CHAPTER -> {
+                val chapterId = intent.getLongExtra(INTENT_NOVEL_CHAPTER_ID, -1L)
+                if (chapterId > -1L) {
+                    navigator.popUntilRoot()
+                    navigator.push(NovelReaderScreen(chapterId))
+                }
+                null
+            }
             Intent.ACTION_VIEW -> {
                 // Handling opening of backup files
                 if (intent.data.toString().endsWith(".tachibk")) {
@@ -757,6 +765,8 @@ class MainActivity : BaseActivity() {
         const val INTENT_SEARCH = "eu.kanade.tachiyomi.SEARCH"
         const val INTENT_ANIMESEARCH = "eu.kanade.tachiyomi.ANIMESEARCH"
         const val INTENT_NOVELSEARCH = "eu.kanade.tachiyomi.NOVELSEARCH"
+        const val INTENT_OPEN_NOVEL_CHAPTER = "eu.kanade.tachiyomi.OPEN_NOVEL_CHAPTER"
+        const val INTENT_NOVEL_CHAPTER_ID = "novel_chapter_id"
         const val INTENT_SEARCH_QUERY = "query"
         const val INTENT_SEARCH_FILTER = "filter"
         const val INTENT_SEARCH_TYPE = "type"
@@ -765,7 +775,7 @@ class MainActivity : BaseActivity() {
         const val SAVED_STATE_EPISODE_KEY = "saved_state_episode_key"
 
         private var externalPlayerResult: ActivityResultLauncher<Intent>? = null
-        private var restorePortraitAfterPlayerExit: Boolean = false
+        private var restoreOrientationAfterPlayerExit: Int? = null
 
         suspend fun startPlayerActivity(
             context: Context,
@@ -787,7 +797,9 @@ class MainActivity : BaseActivity() {
                 } ?: return
                 externalPlayerResult?.launch(intent) ?: return
             } else {
-                restorePortraitAfterPlayerExit = true
+                val currentOrientation = (context as? Activity)?.requestedOrientation
+                    ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                restoreOrientationAfterPlayerExit = currentOrientation
                 context.startActivity(
                     PlayerActivity.newIntent(
                         context,
@@ -837,24 +849,7 @@ internal fun resolveMainStatusBarStyleMode(
     isAurora: Boolean,
     isLightStatusBarBackground: Boolean,
 ): MainStatusBarStyleMode {
-    if (isHomeScreen && isAurora) {
-        // Aurora home surfaces are dark-toned, so status bar icons must stay light.
-        return MainStatusBarStyleMode.DARK
-    }
-
-    if (isHomeScreen) {
-        return if (isLightStatusBarBackground) {
-            MainStatusBarStyleMode.TRANSPARENT_LIGHT
-        } else {
-            MainStatusBarStyleMode.DARK
-        }
-    }
-
-    return if (isLightStatusBarBackground) {
-        MainStatusBarStyleMode.LIGHT
-    } else {
-        MainStatusBarStyleMode.DARK
-    }
+    return MainStatusBarStyleMode.DARK
 }
 
 internal fun shouldMainActivityApplyEdgeToEdge(screen: Any?): Boolean {

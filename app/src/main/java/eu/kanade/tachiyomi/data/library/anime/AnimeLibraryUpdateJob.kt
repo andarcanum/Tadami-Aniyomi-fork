@@ -16,6 +16,7 @@ import eu.kanade.domain.entries.anime.interactor.AnimeRatingFetcher
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.entries.anime.model.toSAnime
 import eu.kanade.domain.items.episode.interactor.SyncEpisodesWithSource
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -94,6 +95,11 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private var animeToUpdate: List<LibraryAnime> = mutableListOf()
 
     override suspend fun doWork(): Result {
+        val uiPreferences: UiPreferences = Injekt.get()
+        if (!uiPreferences.showAnimeSection().get()) {
+            return Result.success()
+        }
+
         try {
             setForeground(getForegroundInfo())
         } catch (e: IllegalStateException) {
@@ -133,7 +139,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val notifier = AnimeLibraryUpdateNotifier(context)
         return ForegroundInfo(
-            Notifications.ID_LIBRARY_PROGRESS,
+            Notifications.ID_ANIME_LIBRARY_PROGRESS,
             notifier.progressNotificationBuilder.build(),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC

@@ -5,4 +5,5 @@ enum class TranslationStatus {
     IN_PROGRESS,
     COMPLETED,
     FAILED,
+    CANCELLED,
 }

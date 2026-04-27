@@ -24,7 +24,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import logcat.LogPriority
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -41,7 +43,7 @@ class TranslationJob(
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val notification = applicationContext.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
-            setContentTitle("Translation in progress")
+            setContentTitle(applicationContext.stringResource(MR.strings.notification_translation_in_progress))
             setSmallIcon(android.R.drawable.ic_menu_edit)
         }.build()
         return ForegroundInfo(
@@ -66,16 +68,37 @@ class TranslationJob(
                 val item = queueManager.getNextPending() ?: break
 
                 logcat(LogPriority.DEBUG) { "Processing translation for chapter ${item.chapterId}" }
-
-                processItem(item)
+                try {
+                    processItem(item)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    val chapterName = "Chapter ${item.chapterId}"
+                    val message = e.message ?: e::class.java.simpleName
+                    queueManager.setErrorAwait(
+                        chapterId = item.chapterId,
+                        error = message,
+                        chapterName = chapterName,
+                    )
+                    queueManager.setActiveTranslation(null)
+                    notificationManager.showError(
+                        chapterName = chapterName,
+                        error = message,
+                        chapterId = item.chapterId,
+                    )
+                    logcat(LogPriority.ERROR, e) {
+                        "Translation failed for chapter ${item.chapterId}"
+                    }
+                }
             }
 
+            notificationManager.showQueueComplete()
             return Result.success()
         } catch (_: CancellationException) {
             val activeItem = queueManager.activeTranslation.value
             if (activeItem != null) {
                 if (queueManager.hasPendingOrActive(activeItem.chapterId)) {
-                    queueManager.updateStatus(activeItem.chapterId, TranslationStatus.PENDING)
+                    queueManager.updateStatusAwait(activeItem.chapterId, TranslationStatus.PENDING)
                 }
                 queueManager.setActiveTranslation(null)
             }
@@ -87,7 +110,6 @@ class TranslationJob(
             val activeItem = queueManager.activeTranslation.value
             if (activeItem != null) {
                 queueManager.setError(activeItem.chapterId, e.message ?: "Unknown error")
-                queueManager.updateStatus(activeItem.chapterId, TranslationStatus.FAILED)
                 queueManager.setActiveTranslation(null)
 
                 notificationManager.showError(
@@ -103,7 +125,7 @@ class TranslationJob(
 
     private suspend fun processItem(item: TranslationQueueItem) {
         queueManager.setActiveTranslation(item)
-        queueManager.updateStatus(item.chapterId, TranslationStatus.IN_PROGRESS)
+        queueManager.updateStatusAwait(item.chapterId, TranslationStatus.IN_PROGRESS)
 
         val snapshot = chapterRepository.loadChapterSnapshot(item.chapterId)
         val settings = readerPreferences.resolveSettings(snapshot.novel.source)
@@ -118,6 +140,13 @@ class TranslationJob(
         }
 
         val chapterName = snapshot.chapter.name.ifBlank { "Chapter ${item.chapterId}" }
+        queueManager.updateStatusAwait(item.chapterId, TranslationStatus.IN_PROGRESS, chapterName)
+        notificationManager.showProgress(
+            chapterName = chapterName,
+            chapterId = item.chapterId,
+            progress = 0,
+            pendingCount = queueManager.queue.value.size,
+        )
         val translatedByIndex = translationProcessor.translateSegments(
             segments = textSegments,
             settings = settings,
@@ -131,16 +160,10 @@ class TranslationJob(
                     status = TranslationStatus.IN_PROGRESS,
                 )
                 notificationManager.showProgress(
-                    TranslationProgressUpdate(
-                        chapterId = item.chapterId,
-                        novelId = item.novelId,
-                        status = TranslationStatus.IN_PROGRESS,
-                        progress = progress,
-                        currentChunk = 0,
-                        totalChunks = 0,
-                        chapterName = chapterName,
-                        errorMessage = null,
-                    ),
+                    chapterName = chapterName,
+                    chapterId = item.chapterId,
+                    progress = progress,
+                    pendingCount = queueManager.queue.value.size,
                 )
             },
         )
@@ -160,10 +183,15 @@ class TranslationJob(
             )
         }
 
-        queueManager.updateStatus(item.chapterId, TranslationStatus.COMPLETED)
+        queueManager.updateProgressAwait(
+            chapterId = item.chapterId,
+            progress = 100,
+            status = TranslationStatus.COMPLETED,
+            chapterName = chapterName,
+        )
         queueManager.setActiveTranslation(null)
 
-        notificationManager.showComplete(
+        notificationManager.showChapterComplete(
             chapterName = chapterName,
             chapterId = item.chapterId,
         )
@@ -180,7 +208,7 @@ class TranslationJob(
                 .addTag(TAG)
                 .build()
             WorkManager.getInstance(context)
-                .enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, request)
+                .enqueueUniqueWork(TAG, ExistingWorkPolicy.KEEP, request)
             logcat(LogPriority.DEBUG) { "TranslationJob work request enqueued" }
         }
 

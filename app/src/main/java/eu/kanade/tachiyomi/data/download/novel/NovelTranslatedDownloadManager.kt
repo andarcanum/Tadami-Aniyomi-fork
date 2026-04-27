@@ -43,6 +43,28 @@ class NovelTranslatedDownloadManager(
         return translatedFile(novel, fileName)?.exists() == true
     }
 
+    fun getTranslatedChapterIds(
+        novel: Novel,
+        chapters: List<NovelChapter>,
+        format: NovelTranslatedDownloadFormat,
+    ): Set<Long> {
+        if (chapters.isEmpty()) return emptySet()
+
+        val translatedFileNames = translatedNovelDirectories(novel)
+            .asSequence()
+            .flatMap { directory -> directory.listFiles()?.asSequence().orEmpty() }
+            .filter { file -> file.isFile }
+            .mapNotNull { file -> file.name }
+            .toSet()
+        if (translatedFileNames.isEmpty()) return emptySet()
+
+        return chapters
+            .asSequence()
+            .filter { chapter -> buildTranslatedFileName(chapter, format) in translatedFileNames }
+            .map { chapter -> chapter.id }
+            .toSet()
+    }
+
     fun getTranslatedFile(
         novel: Novel,
         chapter: NovelChapter,
@@ -130,6 +152,16 @@ class NovelTranslatedDownloadManager(
         if (stable != null) return stable
 
         return legacyTranslatedFile(novel, fileName)
+    }
+
+    private fun translatedNovelDirectories(novel: Novel): List<UniFile> {
+        val baseDir = rootDir ?: return emptyList()
+        return listOfNotNull(
+            baseDir.findFile(getStableSourceDirName(novel))
+                ?.findFile(getStableNovelDirName(novel)),
+            baseDir.findFile(getLegacySourceDirName(novel))
+                ?.findFile(getLegacyNovelDirName(novel)),
+        )
     }
 
     private fun translatedFileInDirectory(

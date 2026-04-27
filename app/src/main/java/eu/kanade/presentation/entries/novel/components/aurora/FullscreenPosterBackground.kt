@@ -57,7 +57,6 @@ fun FullscreenPosterBackground(
     val posterModel = resolvedCoverUrl?.takeIf { it.isNotBlank() } ?: sourceAwareNovelCoverModel(novel)
     val isPosterLoadable = when (posterModel) {
         is String -> posterModel.isNotBlank()
-        null -> false
         else -> true
     }
     val posterColorFilter = rememberAuroraPosterColorFilter()

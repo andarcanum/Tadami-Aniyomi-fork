@@ -67,6 +67,9 @@ import eu.kanade.domain.track.manga.interactor.AddMangaTracks
 import eu.kanade.domain.track.manga.interactor.RefreshMangaTracks
 import eu.kanade.domain.track.manga.interactor.SyncChapterProgressWithTrack
 import eu.kanade.domain.track.manga.interactor.TrackChapter
+import eu.kanade.domain.track.novel.interactor.RefreshNovelTracks
+import eu.kanade.domain.track.novel.interactor.SyncNovelChapterProgressWithTrack
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.tachiyomi.data.updater.AppUpdateFileManager
@@ -483,6 +486,9 @@ class DomainModule : InjektModule {
         addFactory { GetTracksPerNovel(get()) }
         addFactory { GetNovelTracks(get()) }
         addFactory { InsertNovelTrack(get()) }
+        addFactory { TrackNovelChapter(get(), get(), get(), get()) }
+        addFactory { SyncNovelChapterProgressWithTrack(get(), get(), get()) }
+        addFactory { RefreshNovelTracks(get(), get(), get(), get()) }
 
         addSingletonFactory<EpisodeRepository> { EpisodeRepositoryImpl(get()) }
         addFactory { GetEpisode(get()) }

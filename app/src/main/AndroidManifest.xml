@@ -246,6 +246,11 @@
             android:exported="false" />
 
         <activity
+            android:name="eu.kanade.tachiyomi.ui.webview.TrackerWebViewLoginActivity"
+            android:configChanges="uiMode|orientation|screenSize"
+            android:exported="false" />
+
+        <activity
             android:name="eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstallActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />

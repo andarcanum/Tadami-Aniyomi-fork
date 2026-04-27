@@ -77,6 +77,14 @@ class OpenRouterTranslationService(
             )
             put("temperature", params.temperature)
             put("top_p", params.topP)
+            params.reasoningEffort?.let { effort ->
+                put(
+                    "reasoning",
+                    buildJsonObject {
+                        put("effort", effort)
+                    },
+                )
+            }
             put("max_tokens", 4096)
             put("stream", false)
         }

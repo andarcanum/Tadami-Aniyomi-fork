@@ -380,11 +380,17 @@ internal fun resolveStaticLayoutHeight(
     return layout.getLineBottom(layout.lineCount - 1) - layout.getLineTop(0)
 }
 
+/**
+ * Returns null when [allowOversizedFirstLine] is false and the next line does not fully fit.
+ * Block pagination uses this on non-empty pages so a leftover bottom sliver does not pull
+ * one more line into a separate TextView and visually collapse the final inter-line gap.
+ */
 internal fun resolveStaticLayoutSliceForHeight(
     text: CharSequence,
     layout: StaticLayout,
     startLine: Int,
     availableHeight: Int,
+    allowOversizedFirstLine: Boolean = true,
 ): StaticLayoutSlice? {
     if (startLine >= layout.lineCount || availableHeight <= 0) return null
 
@@ -395,6 +401,9 @@ internal fun resolveStaticLayoutSliceForHeight(
         layout.getLineBottom(endLineExclusive) - layout.getLineTop(startLine) <= availableHeight
     ) {
         endLineExclusive++
+    }
+    if (endLineExclusive == startLine && !allowOversizedFirstLine) {
+        return null
     }
     val endLine = if (endLineExclusive > startLine) endLineExclusive - 1 else startLine
     val endOffset = layout.getLineEnd(endLine).coerceIn(startOffset, text.length)
@@ -415,6 +424,49 @@ internal fun measureApproximateTextHeight(
         ceil(line.length.toDouble() / metrics.charsPerLine.toDouble()).toInt().coerceAtLeast(1)
     }.coerceAtLeast(1)
     return lineCount * metrics.lineHeightPx
+}
+
+private fun resolveApproximateTextRangeForHeight(
+    text: String,
+    start: Int,
+    availableHeight: Int,
+    metrics: ApproximateTextMetrics,
+    allowOversizedFirstLine: Boolean = true,
+): TextPageRange? {
+    if (start >= text.length || availableHeight <= 0) return null
+    val lineHeightPx = metrics.lineHeightPx.coerceAtLeast(1)
+    if (!allowOversizedFirstLine && availableHeight < lineHeightPx) return null
+    val linesPerPage = (availableHeight / lineHeightPx).coerceAtLeast(1)
+    val charsPerLine = metrics.charsPerLine.coerceAtLeast(1)
+    var end = start
+    var usedLines = 1
+    var charsOnLine = 0
+    while (end < text.length) {
+        val char = text[end]
+        if (char == '\n') {
+            if (usedLines >= linesPerPage) break
+            usedLines++
+            charsOnLine = 0
+            end++
+            continue
+        }
+        if (charsOnLine >= charsPerLine) {
+            if (usedLines >= linesPerPage) break
+            usedLines++
+            charsOnLine = 0
+        }
+        charsOnLine++
+        end++
+    }
+    if (end == start) {
+        if (!allowOversizedFirstLine) return null
+        end = (start + charsPerLine).coerceAtMost(text.length)
+    }
+    return trimTextRange(
+        text = text,
+        startInclusive = start,
+        endExclusive = end,
+    )
 }
 
 private fun resolvePageReaderFirstLineIndentPx(
@@ -443,6 +495,20 @@ private fun resolvePageReaderBlockLayoutMetrics(
             lineHeightMultiplier = lineHeightMultiplier,
         )
     }
+}
+
+private fun resolvePageReaderInterBlockSpacingPx(
+    paragraphSpacingPx: Int,
+    textSizePx: Float,
+    lineHeightMultiplier: Float,
+): Int {
+    val lineSpacingExtraPx = (
+        textSizePx.coerceAtLeast(1f) *
+            (lineHeightMultiplier.coerceAtLeast(1f) - 1f)
+        )
+        .roundToInt()
+        .coerceAtLeast(0)
+    return paragraphSpacingPx.coerceAtLeast(0).coerceAtLeast(lineSpacingExtraPx)
 }
 
 private fun ReaderTextAlign.toLayoutAlignment(): Layout.Alignment {
@@ -476,6 +542,7 @@ internal fun toBionicText(text: String): AnnotatedString {
 internal data class PlainPageSlice(
     val blockIndex: Int,
     val range: TextPageRange,
+    val spacingBeforePx: Int = 0,
 )
 
 internal data class PlainPageReaderTextBlock(
@@ -487,6 +554,7 @@ internal sealed interface RichPageSlice {
     data class Text(
         val blockIndex: Int,
         val range: TextPageRange,
+        val spacingBeforePx: Int = 0,
     ) : RichPageSlice
 
     data class Image(
@@ -641,57 +709,61 @@ internal fun paginatePlainPageBlocks(
             firstLineIndentPx = firstLineIndentPx,
         )
         if (layout == null) {
-            val blockPages = paginateTextIntoPageRanges(
-                text = text,
-                widthPx = widthPx,
-                heightPx = safeHeight,
-                textSizePx = textSizePx,
-                lineHeightMultiplier = lineHeightMultiplier,
-                typeface = typeface,
-                textAlign = textAlign,
-                firstLineIndentPx = firstLineIndentPx,
-            )
-            val blockHeight = measureApproximateTextHeight(
-                text = text,
-                metrics = approximateMetrics,
-            )
-            blockPages.forEachIndexed { sliceIndex, range ->
-                val spacingBefore = if (currentPage.isNotEmpty() && sliceIndex == 0) {
-                    paragraphSpacingPx.coerceAtLeast(0)
+            var start = 0
+            var isFirstSliceOfBlock = true
+            while (start < text.length) {
+                val spacingBefore = if (currentPage.isNotEmpty() && isFirstSliceOfBlock) {
+                    resolvePageReaderInterBlockSpacingPx(
+                        paragraphSpacingPx = paragraphSpacingPx,
+                        textSizePx = blockMetrics.textSizePx,
+                        lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                    )
                 } else {
                     0
                 }
                 if (remainingHeight <= spacingBefore) {
                     flushPage()
+                    continue
                 }
-                if (
-                    currentPage.isNotEmpty() &&
-                    sliceIndex == 0 &&
-                    blockHeight <= safeHeight &&
-                    blockHeight + spacingBefore > remainingHeight
-                ) {
+                val range = resolveApproximateTextRangeForHeight(
+                    text = text,
+                    start = start,
+                    availableHeight = remainingHeight - spacingBefore,
+                    metrics = approximateMetrics,
+                    allowOversizedFirstLine = currentPage.isEmpty(),
+                ) ?: run {
                     flushPage()
+                    continue
                 }
                 val sliceHeight = measureApproximateTextHeight(
                     text = text.substring(range.start, range.endExclusive),
                     metrics = approximateMetrics,
                 ).coerceAtMost(safeHeight)
-                currentPage += PlainPageSlice(blockIndex = blockIndex, range = range)
+                currentPage += PlainPageSlice(
+                    blockIndex = blockIndex,
+                    range = range,
+                    spacingBeforePx = spacingBefore,
+                )
                 remainingHeight -= spacingBefore + sliceHeight
-                if (sliceIndex < blockPages.lastIndex || remainingHeight <= 0) {
+                start = range.endExclusive
+                isFirstSliceOfBlock = false
+                if (remainingHeight <= 0) {
                     flushPage()
                 }
             }
             return@forEach
         }
 
-        val blockHeight = resolveStaticLayoutHeight(layout)
         var startLine = 0
         var isFirstSliceOfBlock = true
 
         while (startLine < layout.lineCount) {
             val spacingBefore = if (currentPage.isNotEmpty() && isFirstSliceOfBlock) {
-                paragraphSpacingPx.coerceAtLeast(0)
+                resolvePageReaderInterBlockSpacingPx(
+                    paragraphSpacingPx = paragraphSpacingPx,
+                    textSizePx = blockMetrics.textSizePx,
+                    lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                )
             } else {
                 0
             }
@@ -701,21 +773,12 @@ internal fun paginatePlainPageBlocks(
                 continue
             }
 
-            if (
-                currentPage.isNotEmpty() &&
-                isFirstSliceOfBlock &&
-                blockHeight <= safeHeight &&
-                blockHeight + spacingBefore > remainingHeight
-            ) {
-                flushPage()
-                continue
-            }
-
             val slice = resolveStaticLayoutSliceForHeight(
                 text = text,
                 layout = layout,
                 startLine = startLine,
                 availableHeight = remainingHeight - spacingBefore,
+                allowOversizedFirstLine = currentPage.isEmpty(),
             )
 
             if (slice == null) {
@@ -723,7 +786,11 @@ internal fun paginatePlainPageBlocks(
                 continue
             }
 
-            currentPage += PlainPageSlice(blockIndex = blockIndex, range = slice.range)
+            currentPage += PlainPageSlice(
+                blockIndex = blockIndex,
+                range = slice.range,
+                spacingBeforePx = spacingBefore,
+            )
             remainingHeight -= spacingBefore + slice.heightPx
             startLine = slice.nextStartLine
             isFirstSliceOfBlock = false
@@ -881,36 +948,31 @@ internal fun paginateRichPageBlocks(
             firstLineIndentPx = firstLineIndentPx,
         )
         if (layout == null) {
-            val blockPages = paginateTextIntoPageRanges(
-                text = blockText.text.text,
-                widthPx = widthPx,
-                heightPx = safeHeight,
-                textSizePx = textSizePx,
-                lineHeightMultiplier = lineHeightMultiplier,
-                typeface = typeface,
-                textAlign = textAlign,
-                firstLineIndentPx = firstLineIndentPx,
-            )
-            val blockHeight = measureApproximateTextHeight(
-                text = blockText.text.text,
-                metrics = approximateMetrics,
-            )
-            blockPages.forEachIndexed { sliceIndex, range ->
-                val spacingBefore = if (currentPage.isNotEmpty() && sliceIndex == 0) {
-                    paragraphSpacingPx.coerceAtLeast(0)
+            var start = 0
+            var isFirstSliceOfBlock = true
+            while (start < blockText.text.text.length) {
+                val spacingBefore = if (currentPage.isNotEmpty() && isFirstSliceOfBlock) {
+                    resolvePageReaderInterBlockSpacingPx(
+                        paragraphSpacingPx = paragraphSpacingPx,
+                        textSizePx = blockMetrics.textSizePx,
+                        lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                    )
                 } else {
                     0
                 }
                 if (remainingHeight <= spacingBefore) {
                     flushPage()
+                    continue
                 }
-                if (
-                    currentPage.isNotEmpty() &&
-                    sliceIndex == 0 &&
-                    blockHeight <= safeHeight &&
-                    blockHeight + spacingBefore > remainingHeight
-                ) {
+                val range = resolveApproximateTextRangeForHeight(
+                    text = blockText.text.text,
+                    start = start,
+                    availableHeight = remainingHeight - spacingBefore,
+                    metrics = approximateMetrics,
+                    allowOversizedFirstLine = currentPage.isEmpty(),
+                ) ?: run {
                     flushPage()
+                    continue
                 }
                 val sliceHeight = measureApproximateTextHeight(
                     text = blockText.text.text.substring(range.start, range.endExclusive),
@@ -919,22 +981,28 @@ internal fun paginateRichPageBlocks(
                 currentPage += RichPageSlice.Text(
                     blockIndex = blockIndex,
                     range = range,
+                    spacingBeforePx = spacingBefore,
                 )
                 remainingHeight -= spacingBefore + sliceHeight
-                if (sliceIndex < blockPages.lastIndex || remainingHeight <= 0) {
+                start = range.endExclusive
+                isFirstSliceOfBlock = false
+                if (remainingHeight <= 0) {
                     flushPage()
                 }
             }
             return@forEachIndexed
         }
 
-        val blockHeight = resolveStaticLayoutHeight(layout)
         var startLine = 0
         var isFirstSliceOfBlock = true
 
         while (startLine < layout.lineCount) {
             val spacingBefore = if (currentPage.isNotEmpty() && isFirstSliceOfBlock) {
-                paragraphSpacingPx.coerceAtLeast(0)
+                resolvePageReaderInterBlockSpacingPx(
+                    paragraphSpacingPx = paragraphSpacingPx,
+                    textSizePx = blockMetrics.textSizePx,
+                    lineHeightMultiplier = blockMetrics.lineHeightMultiplier,
+                )
             } else {
                 0
             }
@@ -944,21 +1012,12 @@ internal fun paginateRichPageBlocks(
                 continue
             }
 
-            if (
-                currentPage.isNotEmpty() &&
-                isFirstSliceOfBlock &&
-                blockHeight <= safeHeight &&
-                blockHeight + spacingBefore > remainingHeight
-            ) {
-                flushPage()
-                continue
-            }
-
             val slice = resolveStaticLayoutSliceForHeight(
                 text = blockText.text.text,
                 layout = layout,
                 startLine = startLine,
                 availableHeight = remainingHeight - spacingBefore,
+                allowOversizedFirstLine = currentPage.isEmpty(),
             )
 
             if (slice == null) {
@@ -969,6 +1028,7 @@ internal fun paginateRichPageBlocks(
             currentPage += RichPageSlice.Text(
                 blockIndex = blockIndex,
                 range = slice.range,
+                spacingBeforePx = spacingBefore,
             )
             remainingHeight -= spacingBefore + slice.heightPx
             startLine = slice.nextStartLine
@@ -1084,7 +1144,7 @@ internal fun buildPlainPageRenderBlocks(
             text = fullBlockText.substring(slice.range.start, slice.range.endExclusive),
             sourceTextStart = slice.range.start,
             sourceTextEndExclusive = slice.range.endExclusive,
-            spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
+            spacingBeforePx = if (startsNewBlock) slice.spacingBeforePx.coerceAtLeast(0) else 0,
             firstLineIndentEm = if (
                 forceParagraphIndent &&
                 slice.range.start == 0 &&
@@ -1132,7 +1192,7 @@ internal fun buildRichPageRenderBlocks(
             text = blockText.text.subSequence(TextRange(slice.range.start, slice.range.endExclusive)),
             sourceTextStart = slice.range.start,
             sourceTextEndExclusive = slice.range.endExclusive,
-            spacingBeforePx = if (startsNewBlock) paragraphSpacingPx.coerceAtLeast(0) else 0,
+            spacingBeforePx = if (startsNewBlock) slice.spacingBeforePx.coerceAtLeast(0) else 0,
             firstLineIndentEm = if (slice.range.start == 0 && !isChapterTitle) blockText.firstLineIndentEm else null,
             sourceTextAlign = blockText.sourceTextAlign,
             isChapterTitle = isChapterTitle,

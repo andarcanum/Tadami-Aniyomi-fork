@@ -1,7 +1,8 @@
 package eu.kanade.presentation.entries.novel.components.aurora
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +47,7 @@ fun NovelActionCard(
     novel: Novel,
     trackingCount: Int,
     onAddToLibraryClicked: () -> Unit,
+    onAddToLibraryLongClicked: (() -> Unit)? = null,
     onTrackingClicked: (() -> Unit)?,
     onBatchDownloadClicked: (() -> Unit)?,
     onTranslatedDownloadClicked: (() -> Unit)?,
@@ -81,6 +83,7 @@ fun NovelActionCard(
                     stringResource(MR.strings.add_to_library)
                 },
                 onClick = onAddToLibraryClicked,
+                onLongClick = onAddToLibraryLongClicked,
                 modifier = Modifier.weight(1f),
             )
 
@@ -155,11 +158,13 @@ fun NovelActionCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ActionButton(
     icon: @Composable () -> Unit,
     label: String,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -167,7 +172,10 @@ private fun ActionButton(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
             .padding(horizontal = 2.dp, vertical = 4.dp),
     ) {
         Box(

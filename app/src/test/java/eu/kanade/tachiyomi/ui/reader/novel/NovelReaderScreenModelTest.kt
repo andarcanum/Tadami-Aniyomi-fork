@@ -435,6 +435,7 @@ class NovelReaderScreenModelTest {
             mockkObject(TranslationJob.Companion)
             every { TranslationJob.isRunning(any()) } returns true
             justRun { TranslationJob.stop(any()) }
+            justRun { TranslationJob.runImmediately(any()) }
 
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
             val chapter = NovelChapter.create().copy(
@@ -449,7 +450,8 @@ class NovelReaderScreenModelTest {
                 it.geminiApiKey().set("test-key")
             }
 
-            coEvery { translationQueueManager.hasPendingOrActive(chapter.id) } returns true
+            coEvery { translationQueueManager.cancelChapter(chapter.id) } returns true
+            coEvery { translationQueueManager.hasNext() } returns false
 
             val screenModel = trackedNovelReaderScreenModel(
                 chapterId = chapter.id,
@@ -474,7 +476,7 @@ class NovelReaderScreenModelTest {
             screenModel.stopGeminiTranslation()
 
             coVerify(timeout = 1_000) {
-                translationQueueManager.removeFromQueue(chapter.id)
+                translationQueueManager.cancelChapter(chapter.id)
             }
             verify(timeout = 1_000) {
                 TranslationJob.stop(any())
@@ -483,6 +485,125 @@ class NovelReaderScreenModelTest {
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
             state.isGeminiTranslating shouldBe false
             state.geminiTranslationProgress shouldBe 0
+        }
+    }
+
+    @Test
+    fun `re-starting gemini translation after completion processes second completion event`() {
+        runBlocking {
+            mockkObject(TranslationJob.Companion)
+            every { TranslationJob.isRunning(any()) } returns false
+            justRun { TranslationJob.runImmediately(any()) }
+            justRun { TranslationJob.stop(any()) }
+
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+
+            val prefs = createNovelReaderPreferences().also {
+                it.geminiEnabled().set(true)
+                it.geminiApiKey().set("test-key")
+            }
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = "<p>Hello</p><p>World</p>",
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+            val initialState = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+
+            NovelReaderTranslationDiskCacheStore.put(
+                GeminiTranslationCacheEntry(
+                    chapterId = chapter.id,
+                    translatedByIndex = mapOf(0 to "Translated hello", 1 to "Translated world"),
+                    provider = initialState.readerSettings.translationProvider,
+                    model = initialState.readerSettings.translationCacheModelId(),
+                    sourceLang = initialState.readerSettings.geminiSourceLang,
+                    targetLang = initialState.readerSettings.geminiTargetLang,
+                    promptMode = initialState.readerSettings.geminiPromptMode,
+                    stylePreset = initialState.readerSettings.geminiStylePreset,
+                ),
+            )
+
+            // First translation cycle
+            screenModel.startGeminiTranslation()
+            withTimeout(1_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating !=
+                    true
+                ) {
+                    yield()
+                }
+            }
+
+            translationQueueUpdates.emit(
+                TranslationProgressUpdate(
+                    chapterId = chapter.id,
+                    novelId = novel.id,
+                    status = TranslationStatus.COMPLETED,
+                    progress = 100,
+                    currentChunk = 0,
+                    totalChunks = 0,
+                    chapterName = chapter.name,
+                    errorMessage = null,
+                ),
+            )
+            withTimeout(1_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating !=
+                    false
+                ) {
+                    yield()
+                }
+            }
+
+            // Second translation cycle — subscription must be alive
+            screenModel.startGeminiTranslation()
+            withTimeout(1_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating !=
+                    true
+                ) {
+                    yield()
+                }
+            }
+
+            translationQueueUpdates.emit(
+                TranslationProgressUpdate(
+                    chapterId = chapter.id,
+                    novelId = novel.id,
+                    status = TranslationStatus.COMPLETED,
+                    progress = 100,
+                    currentChunk = 0,
+                    totalChunks = 0,
+                    chapterName = chapter.name,
+                    errorMessage = null,
+                ),
+            )
+            withTimeout(1_000) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating !=
+                    false
+                ) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.isGeminiTranslating shouldBe false
         }
     }
 

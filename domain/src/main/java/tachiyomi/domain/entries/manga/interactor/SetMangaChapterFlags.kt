@@ -91,6 +91,10 @@ class SetMangaChapterFlags(
         )
     }
 
+    suspend fun awaitSetAllFlags(mangaUpdates: List<MangaUpdate>): Boolean {
+        return mangaRepository.updateAllManga(mangaUpdates)
+    }
+
     private fun Long.setFlag(flag: Long, mask: Long): Long {
         return this and mask.inv() or (flag and mask)
     }

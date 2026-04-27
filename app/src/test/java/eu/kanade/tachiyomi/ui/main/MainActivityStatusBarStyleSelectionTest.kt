@@ -23,12 +23,12 @@ class MainActivityStatusBarStyleSelectionTest {
     }
 
     @Test
-    fun `non aurora home screen keeps transparent light style on light background`() {
+    fun `non aurora home screen keeps dark status bar style on light background`() {
         resolveMainStatusBarStyleMode(
             isHomeScreen = true,
             isAurora = false,
             isLightStatusBarBackground = true,
-        ) shouldBe MainStatusBarStyleMode.TRANSPARENT_LIGHT
+        ) shouldBe MainStatusBarStyleMode.DARK
     }
 
     @Test
@@ -41,12 +41,12 @@ class MainActivityStatusBarStyleSelectionTest {
     }
 
     @Test
-    fun `non home screen uses light style on light background`() {
+    fun `non home screen keeps dark status bar style on light background`() {
         resolveMainStatusBarStyleMode(
             isHomeScreen = false,
             isAurora = true,
             isLightStatusBarBackground = true,
-        ) shouldBe MainStatusBarStyleMode.LIGHT
+        ) shouldBe MainStatusBarStyleMode.DARK
     }
 
     @Test
@@ -75,7 +75,7 @@ class MainActivityStatusBarStyleSelectionTest {
             isHomeScreen = true,
             isAurora = false,
             isLightStatusBarBackground = true,
-        ) shouldBe MainStatusBarStyleMode.TRANSPARENT_LIGHT
+        ) shouldBe MainStatusBarStyleMode.DARK
 
         resolveMainStatusBarStyleMode(
             isHomeScreen = true,
@@ -94,7 +94,7 @@ class MainActivityStatusBarStyleSelectionTest {
             isHomeScreen = true,
             isAurora = false,
             isLightStatusBarBackground = true,
-        ) shouldBe MainStatusBarStyleMode.TRANSPARENT_LIGHT
+        ) shouldBe MainStatusBarStyleMode.DARK
 
         resolveMainStatusBarStyleMode(
             isHomeScreen = true,

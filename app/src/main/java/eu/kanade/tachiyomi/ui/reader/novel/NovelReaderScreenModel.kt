@@ -6,6 +6,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.SeriesInterstitialState
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
@@ -65,6 +66,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.TranslationPhase
 import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
 import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
 import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeGeminiModelId
+import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeTranslationReasoningEffort
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveNovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
@@ -103,7 +105,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -570,16 +571,18 @@ class NovelReaderScreenModel(
                             addGeminiLog("Queue translation failed: ${update.errorMessage ?: "Unknown error"}")
                             refreshGeminiUiState()
                         }
+                        TranslationStatus.CANCELLED -> {
+                            isGeminiTranslating = false
+                            geminiTranslationProgress = 0
+                            addGeminiLog("Translation cancelled.")
+                            refreshGeminiUiState()
+                        }
                         TranslationStatus.PENDING -> {
                             isGeminiTranslating = true
                             geminiTranslationProgress = 0
                             refreshGeminiUiState()
                         }
                     }
-                }
-                .takeWhile { update ->
-                    update.status != TranslationStatus.COMPLETED &&
-                        update.status != TranslationStatus.FAILED
                 }
                 .collect { }
         }
@@ -1593,6 +1596,14 @@ class NovelReaderScreenModel(
                 if (nextUpdate.emitNovelCompleted) {
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(nextUpdate.novelId))
                 }
+                if (Injekt.get<eu.kanade.domain.track.service.TrackPreferences>().autoUpdateTrack().get()) {
+                    val context = Injekt.get<Application>()
+                    Injekt.get<TrackNovelChapter>().await(
+                        context,
+                        nextUpdate.novelId,
+                        nextUpdate.chapterNumber.toDouble(),
+                    )
+                }
             }
 
             val now = System.currentTimeMillis()
@@ -2571,22 +2582,11 @@ class NovelReaderScreenModel(
         refreshGeminiUiState()
         geminiTranslationJob = screenModelScope.launch(Dispatchers.IO) {
             try {
-                val alreadyQueued = translationQueueManager.hasPendingOrActive(chapter.id)
-                if (!alreadyQueued) {
-                    translationQueueManager.addToQueue(listOf(chapter.id), currentState.novel.id)
-                }
+                translationQueueManager.addToQueue(listOf(chapter.id), currentState.novel.id)
                 if (!isActive) return@launch
                 val appContext = Injekt.get<Application>()
-                if (!TranslationJob.isRunning(appContext)) {
-                    TranslationJob.runImmediately(appContext)
-                }
-                addGeminiLog(
-                    if (alreadyQueued) {
-                        "Gemini translation is already queued."
-                    } else {
-                        "Gemini translation started in background."
-                    },
-                )
+                TranslationJob.runImmediately(appContext)
+                addGeminiLog("Gemini translation queued.")
             } catch (_: CancellationException) {
                 // Job cancelled intentionally by the user or screen teardown.
             } catch (error: Exception) {
@@ -2600,14 +2600,22 @@ class NovelReaderScreenModel(
     }
     fun stopGeminiTranslation() {
         val chapter = currentChapter ?: return
-        translationQueueManager.removeFromQueue(chapter.id)
-        TranslationJob.stop(Injekt.get<Application>())
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
         isGeminiTranslating = false
         isGeminiTranslationVisible = false
         geminiTranslationProgress = 0
         addGeminiLog("?? Stop requested")
+        screenModelScope.launch(Dispatchers.IO) {
+            val wasActive = translationQueueManager.cancelChapter(chapter.id)
+            val appContext = Injekt.get<Application>()
+            if (wasActive) {
+                TranslationJob.stop(appContext)
+                if (translationQueueManager.hasNext()) {
+                    TranslationJob.runImmediately(appContext)
+                }
+            }
+        }
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
@@ -3079,6 +3087,11 @@ class NovelReaderScreenModel(
             promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
             temperature = geminiTemperature,
             topP = geminiTopP,
+            reasoningEffort = normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.OPENROUTER,
+                model = openRouterModel,
+                value = geminiReasoningEffort,
+            ),
         )
     }
     private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslationParams {
@@ -3092,6 +3105,11 @@ class NovelReaderScreenModel(
             promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
             temperature = geminiTemperature.coerceIn(DEEPSEEK_TEMPERATURE_MIN, DEEPSEEK_TEMPERATURE_MAX),
             topP = geminiTopP.coerceIn(DEEPSEEK_TOP_P_MIN, DEEPSEEK_TOP_P_MAX),
+            reasoningEffort = normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.DEEPSEEK,
+                model = deepSeekModel,
+                value = geminiReasoningEffort,
+            ) ?: "none",
             presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY,
             frequencyPenalty = DEEPSEEK_DEFAULT_FREQUENCY_PENALTY,
         )
@@ -3107,6 +3125,11 @@ class NovelReaderScreenModel(
             promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
             temperature = geminiTemperature,
             topP = geminiTopP,
+            reasoningEffort = normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.MISTRAL,
+                model = mistralModel,
+                value = geminiReasoningEffort,
+            ),
         )
     }
     private fun NovelReaderSettings.toNvidiaTranslationParams(): NvidiaTranslationParams {

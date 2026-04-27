@@ -28,10 +28,13 @@ object Notifications {
     private const val GROUP_LIBRARY = "group_library"
     const val CHANNEL_LIBRARY_PROGRESS = "library_progress_channel"
     const val ID_LIBRARY_PROGRESS = -101
+    const val ID_ANIME_LIBRARY_PROGRESS = -121
     const val ID_NOVEL_LIBRARY_PROGRESS = -111
     const val ID_LIBRARY_SIZE_WARNING = -103
+    const val ID_ANIME_LIBRARY_SIZE_WARNING = -123
     const val CHANNEL_LIBRARY_ERROR = "library_errors_channel"
     const val ID_LIBRARY_ERROR = -102
+    const val ID_ANIME_LIBRARY_ERROR = -122
     const val ID_NOVEL_LIBRARY_ERROR = -112
 
     /**
@@ -87,8 +90,6 @@ object Notifications {
      */
     const val CHANNEL_TRANSLATION_PROGRESS = "translation_progress"
     const val ID_TRANSLATION_PROGRESS = -1003
-    const val ID_TRANSLATION_COMPLETE = -1004
-    const val ID_TRANSLATION_ERROR = -1005
 
     /**
      * Notification channel and ids used for app and extension updates.
@@ -190,7 +191,8 @@ object Notifications {
                     setShowBadge(false)
                 },
                 buildNotificationChannel(CHANNEL_TRANSLATION_PROGRESS, IMPORTANCE_LOW) {
-                    setName("Translation Progress")
+                    setName(context.stringResource(MR.strings.channel_translation_progress))
+                    setDescription(context.stringResource(MR.strings.channel_translation_progress_description))
                     setShowBadge(false)
                 },
                 buildNotificationChannel(CHANNEL_APP_UPDATE, IMPORTANCE_DEFAULT) {

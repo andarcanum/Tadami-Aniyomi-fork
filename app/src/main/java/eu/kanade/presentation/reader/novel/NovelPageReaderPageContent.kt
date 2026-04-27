@@ -63,6 +63,8 @@ import kotlin.math.hypot
 import kotlin.math.roundToInt
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
+private const val GLYPH_OVERFLOW_RATIO = 0.1f
+
 internal data class NovelPageReaderContentLayout(
     val textPadding: PaddingValues,
 )
@@ -91,6 +93,19 @@ internal fun resolveNovelPageReaderBookBottomInset(
         val oneLineInset = fontSize.sp.toDp() * lineHeight.coerceAtLeast(1f)
         val conservativeInset = oneLineInset * 1.25f
         if (conservativeInset.value > 24.dp.value) conservativeInset else 24.dp
+    }
+}
+
+internal fun resolveNovelPageReaderPageFitSafetyInset(
+    density: Density,
+    fontSize: Int,
+    lineHeight: Float,
+): Dp {
+    return with(density) {
+        val scaledFontInset = fontSize.sp.toDp() * 0.5f
+        val lineHeightInset = fontSize.sp.toDp() * (lineHeight.coerceAtLeast(1f) - 1f) * 1.0f
+        val resolvedInset = maxOf(8.dp, scaledFontInset, lineHeightInset)
+        resolvedInset
     }
 }
 
@@ -706,7 +721,7 @@ internal fun NovelPageReaderPageContent(
         }
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(contentLayout.textPadding)
                 .padding(bottom = bookBottomInset),
         ) {
@@ -936,7 +951,8 @@ internal fun NovelPageReaderTextBlock(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 )
-                setPadding(0, 0, 0, 0)
+                val glyphPadBottom = (blockTextSizePx * GLYPH_OVERFLOW_RATIO).roundToInt()
+                setPadding(0, 0, 0, glyphPadBottom)
                 includeFontPadding = false
                 setTextColor(blockTextColor.toArgb())
                 applyNovelPageReaderTextViewMetrics(textView = this, metrics = blockTextViewMetrics)
@@ -945,6 +961,8 @@ internal fun NovelPageReaderTextBlock(
         update = { textView ->
             textView.updatePlainTapHandler(onPlainTap)
             textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
+            val glyphPadBottom = (blockTextSizePx * GLYPH_OVERFLOW_RATIO).roundToInt()
+            textView.setPadding(textView.paddingLeft, textView.paddingTop, textView.paddingRight, glyphPadBottom)
             applyNovelPageReaderTextViewMetrics(textView = textView, metrics = blockTextViewMetrics)
             val forcedTypefaceStyle = combineTypefaceStyles(
                 first = baseTypefaceStyle,

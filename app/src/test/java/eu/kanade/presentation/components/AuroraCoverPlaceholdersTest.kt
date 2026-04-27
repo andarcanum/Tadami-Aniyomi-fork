@@ -21,7 +21,7 @@ class AuroraCoverPlaceholdersTest {
             ),
         )
 
-        key shouldBe "anime;https://example.org/anime.jpg;1234"
+        key shouldBe "anime;1;https://example.org/anime.jpg;1234"
     }
 
     @Test
@@ -37,6 +37,6 @@ class AuroraCoverPlaceholdersTest {
             ),
         )
 
-        request.placeholderMemoryCacheKey?.key shouldBe "manga;https://example.org/manga.jpg;5678"
+        request.placeholderMemoryCacheKey?.key shouldBe "manga;3;https://example.org/manga.jpg;5678"
     }
 }

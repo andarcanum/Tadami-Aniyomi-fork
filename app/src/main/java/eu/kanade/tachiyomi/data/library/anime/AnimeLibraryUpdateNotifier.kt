@@ -76,7 +76,7 @@ class AnimeLibraryUpdateNotifier(
      */
     val progressNotificationBuilder by lazy {
         context.notificationBuilder(Notifications.CHANNEL_LIBRARY_PROGRESS) {
-            setContentTitle(context.stringResource(MR.strings.app_name))
+            setContentTitle(context.stringResource(AYMR.strings.aurora_updating_anime))
             setSmallIcon(R.drawable.ic_refresh_24dp)
             setLargeIcon(notificationBitmap)
             setOngoing(true)
@@ -111,7 +111,7 @@ class AnimeLibraryUpdateNotifier(
         }
 
         context.notify(
-            Notifications.ID_LIBRARY_PROGRESS,
+            Notifications.ID_ANIME_LIBRARY_PROGRESS,
             progressNotificationBuilder
                 .setProgress(total, current, false)
                 .build(),
@@ -123,7 +123,7 @@ class AnimeLibraryUpdateNotifier(
             Notifications.ID_NEW_EPISODES,
             Notifications.CHANNEL_LIBRARY_PROGRESS,
         ) {
-            setContentTitle(context.stringResource(MR.strings.updating_library))
+            setContentTitle(context.stringResource(AYMR.strings.aurora_updating_anime))
             setContentText(context.stringResource(MR.strings.update_check_no_new_updates))
             setSubText("$checked")
             setSmallIcon(R.drawable.ic_ani)
@@ -133,7 +133,7 @@ class AnimeLibraryUpdateNotifier(
 
     fun showQueueSizeWarningNotification() {
         context.notify(
-            Notifications.ID_LIBRARY_SIZE_WARNING,
+            Notifications.ID_ANIME_LIBRARY_SIZE_WARNING,
             Notifications.CHANNEL_LIBRARY_PROGRESS,
         ) {
             setContentTitle(context.stringResource(MR.strings.label_warning))
@@ -162,7 +162,7 @@ class AnimeLibraryUpdateNotifier(
         }
 
         context.notify(
-            Notifications.ID_LIBRARY_SIZE_WARNING,
+            Notifications.ID_ANIME_LIBRARY_SIZE_WARNING,
             Notifications.CHANNEL_LIBRARY_PROGRESS,
         ) {
             setContentTitle(context.stringResource(MR.strings.label_warning))
@@ -194,7 +194,7 @@ class AnimeLibraryUpdateNotifier(
         )
 
         context.notify(
-            Notifications.ID_LIBRARY_ERROR,
+            Notifications.ID_ANIME_LIBRARY_ERROR,
             Notifications.CHANNEL_LIBRARY_ERROR,
         ) {
             setContentTitle(context.stringResource(MR.strings.notification_update_error, errors.size))
@@ -325,7 +325,7 @@ class AnimeLibraryUpdateNotifier(
                         context,
                         anime,
                         episodes,
-                        Notifications.ID_NEW_CHAPTERS,
+                        Notifications.ID_NEW_EPISODES,
                     ),
                 )
             }
@@ -336,7 +336,7 @@ class AnimeLibraryUpdateNotifier(
      * Cancels the progress notification.
      */
     fun cancelProgressNotification() {
-        context.cancelNotification(Notifications.ID_LIBRARY_PROGRESS)
+        context.cancelNotification(Notifications.ID_ANIME_LIBRARY_PROGRESS)
     }
 
     private suspend fun getAnimeIcon(anime: Anime): Bitmap? {

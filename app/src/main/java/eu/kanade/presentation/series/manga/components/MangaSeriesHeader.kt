@@ -54,6 +54,7 @@ fun MangaSeriesHeader(
                 covers = series.coverMangas.map { it.asMangaCover() },
                 customCoverData = customCoverData,
                 isSelected = false,
+                widthFactor = 0.85f,
             )
         }
 

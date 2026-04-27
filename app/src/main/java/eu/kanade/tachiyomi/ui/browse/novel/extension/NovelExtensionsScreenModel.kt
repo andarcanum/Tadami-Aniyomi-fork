@@ -160,18 +160,7 @@ class NovelExtensionsScreenModel(
 
     fun installExtension(plugin: NovelPlugin.Available) {
         screenModelScope.launchIO {
-            addDownloadState(plugin, InstallStep.Installing)
-            try {
-                extensionManager.installPlugin(plugin)
-                addDownloadState(plugin, InstallStep.Installed)
-                removeDownloadState(plugin)
-            } catch (e: CancellationException) {
-                removeDownloadState(plugin)
-                throw e
-            } catch (e: Throwable) {
-                logcat(LogPriority.WARN, e) { "Failed to install novel plugin ${plugin.id}" }
-                addDownloadState(plugin, InstallStep.Error)
-            }
+            installExtensionNow(plugin)
         }
     }
 
@@ -188,7 +177,7 @@ class NovelExtensionsScreenModel(
                 .toSet()
             availablePlugins.value
                 .filter { it.id in updateIds }
-                .forEach { installExtension(it) }
+                .forEach { installExtensionNow(it) }
         }
     }
 
@@ -211,6 +200,21 @@ class NovelExtensionsScreenModel(
 
     private fun removeDownloadState(plugin: NovelPlugin) {
         currentDownloads.update { it - plugin.id }
+    }
+
+    private suspend fun installExtensionNow(plugin: NovelPlugin.Available) {
+        addDownloadState(plugin, InstallStep.Installing)
+        try {
+            extensionManager.installPlugin(plugin)
+            addDownloadState(plugin, InstallStep.Installed)
+            removeDownloadState(plugin)
+        } catch (e: CancellationException) {
+            removeDownloadState(plugin)
+            throw e
+        } catch (e: Throwable) {
+            logcat(LogPriority.WARN, e) { "Failed to install novel plugin ${plugin.id}" }
+            addDownloadState(plugin, InstallStep.Error)
+        }
     }
 
     @Immutable

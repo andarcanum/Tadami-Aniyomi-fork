@@ -130,6 +130,7 @@ fun NovelScreenAuroraImpl(
     onStartReading: (() -> Unit)?,
     isReading: Boolean,
     onToggleFavorite: () -> Unit,
+    onEditCategoryClicked: (() -> Unit)? = null,
     onRefresh: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
     onPosterLongClicked: (() -> Unit)? = null,
@@ -406,6 +407,7 @@ fun NovelScreenAuroraImpl(
                                     novel = novel,
                                     trackingCount = trackingCount,
                                     onAddToLibraryClicked = onToggleFavorite,
+                                    onAddToLibraryLongClicked = onEditCategoryClicked,
                                     onTrackingClicked = onTrackingClicked,
                                     onBatchDownloadClicked = onOpenBatchDownloadDialog,
                                     onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
@@ -417,19 +419,6 @@ fun NovelScreenAuroraImpl(
                         }
                     },
                     endContent = {
-                        val chapterListState = rememberLazyListState()
-
-                        NovelAuroraTargetAutoScrollEffect(
-                            targetChapterIndex = state.targetChapterIndex,
-                            chaptersExpanded = chaptersExpanded,
-                            listChapterCount = listChapterCount,
-                            displayRows = displayRows,
-                            chapters = chapters,
-                            isAutoJumpToNextEnabled = isAutoJumpToNextEnabled,
-                            restoredScrollIndex = state.scrollIndex,
-                            listState = chapterListState,
-                        )
-
                         val paneDensity = LocalDensity.current
                         val paneTopPaddingPx = with(paneDensity) { topContentPadding.roundToPx() }
                         val paneFastScrollBlockStartIndex = resolveNovelAuroraFastScrollBlockStartIndex(
@@ -442,9 +431,9 @@ fun NovelScreenAuroraImpl(
                             derivedStateOf {
                                 resolveTitleListFastScrollSpec(
                                     baseTopPaddingPx = paneTopPaddingPx,
-                                    firstVisibleItemIndex = chapterListState.firstVisibleItemIndex,
+                                    firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
                                     blockStartIndex = paneFastScrollBlockStartIndex,
-                                    blockStartOffsetPx = chapterListState.layoutInfo.visibleItemsInfo
+                                    blockStartOffsetPx = lazyListState.layoutInfo.visibleItemsInfo
                                         .firstOrNull { it.index == paneFastScrollBlockStartIndex }
                                         ?.offset
                                         ?.plus(
@@ -456,7 +445,7 @@ fun NovelScreenAuroraImpl(
                             }
                         }
                         VerticalFastScroller(
-                            listState = chapterListState,
+                            listState = lazyListState,
                             onThumbDragStarted = {
                                 if (groupedByChapter) {
                                     expandedGroupKeys = allGroupKeys
@@ -476,7 +465,7 @@ fun NovelScreenAuroraImpl(
                             modifier = Modifier.zIndex(AuroraZIndex.BASE),
                         ) {
                             LazyColumn(
-                                state = chapterListState,
+                                state = lazyListState,
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .padding(start = 6.dp, end = 12.dp),
@@ -708,6 +697,7 @@ fun NovelScreenAuroraImpl(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .zIndex(AuroraZIndex.HERO)
                         .graphicsLayer {
                             alpha = overlayChromeAlphaTwoPane
                             translationY = overlayChromeOffsetYTwoPane * size.height
@@ -961,6 +951,7 @@ fun NovelScreenAuroraImpl(
                                 novel = novel,
                                 trackingCount = trackingCount,
                                 onAddToLibraryClicked = onToggleFavorite,
+                                onAddToLibraryLongClicked = onEditCategoryClicked,
                                 onTrackingClicked = onTrackingClicked,
                                 onBatchDownloadClicked = onOpenBatchDownloadDialog,
                                 onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
