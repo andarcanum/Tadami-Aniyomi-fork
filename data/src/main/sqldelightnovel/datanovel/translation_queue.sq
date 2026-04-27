@@ -19,7 +19,13 @@ CREATE INDEX translation_queue_chapter_id_index ON translation_queue(chapter_id)
 -- Queries
 insert:
 INSERT INTO translation_queue(chapter_id, novel_id, status, progress, created_at, updated_at, retry_count)
-VALUES (:chapterId, :novelId, 0, 0, :createdAt, :createdAt, 0);
+VALUES (:chapterId, :novelId, 0, 0, :createdAt, :createdAt, 0)
+ON CONFLICT(chapter_id) DO UPDATE SET
+    status = 0,
+    progress = 0,
+    retry_count = 0,
+    error_message = NULL,
+    updated_at = excluded.updated_at;
 
 getByChapterId:
 SELECT * FROM translation_queue
