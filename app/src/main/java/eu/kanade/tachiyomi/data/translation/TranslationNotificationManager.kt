@@ -5,9 +5,12 @@ import android.app.PendingIntent
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.ui.main.MainActivity
+import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.cancelNotification
+import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import eu.kanade.tachiyomi.util.system.notificationBuilder
 import eu.kanade.tachiyomi.util.system.notify
 import tachiyomi.core.common.i18n.stringResource
@@ -36,6 +39,7 @@ class TranslationNotificationManager(
             setOngoing(true)
             setOnlyAlertOnce(true)
             setStyle(NotificationCompat.BigTextStyle().bigText(buildProgressText(chapterName, progress, pendingCount)))
+            setContentIntent(openChapterIntent(chapterId))
             addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
                 context.stringResource(MR.strings.notification_action_cancel_current),
@@ -60,22 +64,11 @@ class TranslationNotificationManager(
             setSmallIcon(android.R.drawable.ic_menu_edit)
             setAutoCancel(true)
             setProgress(0, 0, false)
-
-            val openIntent = Intent(context, MainActivity::class.java).apply {
-                action = Intent.ACTION_VIEW
-                putExtra("chapterId", chapterId)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            }
-            val openPendingIntent = PendingIntent.getActivity(
-                context,
-                chapterId.toInt(),
-                openIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
+            setContentIntent(openChapterIntent(chapterId))
             addAction(
                 android.R.drawable.ic_menu_view,
                 context.stringResource(MR.strings.notification_action_open),
-                openPendingIntent,
+                openChapterIntent(chapterId),
             )
         }
 
@@ -96,6 +89,23 @@ class TranslationNotificationManager(
             setAutoCancel(true)
             setProgress(0, 0, false)
             setStyle(NotificationCompat.BigTextStyle().bigText("$chapterName\n$error"))
+            createErrorLogFile(chapterName, error, chapterId)?.let { file ->
+                val openLogIntent = NotificationReceiver.openErrorLogPendingActivity(
+                    context,
+                    file.getUriCompat(context),
+                )
+                setContentIntent(openLogIntent)
+                addAction(
+                    android.R.drawable.ic_menu_upload,
+                    context.stringResource(MR.strings.action_open_log),
+                    openLogIntent,
+                )
+            } ?: setContentIntent(openChapterIntent(chapterId))
+            addAction(
+                android.R.drawable.ic_menu_view,
+                context.stringResource(MR.strings.notification_action_open),
+                openChapterIntent(chapterId),
+            )
         }
 
         context.notify(notificationId, builder.build())
@@ -125,6 +135,36 @@ class TranslationNotificationManager(
             "$chapterName • $progress%"
         }
     }
+
+    private fun openChapterIntent(chapterId: Long): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = MainActivity.INTENT_OPEN_NOVEL_CHAPTER
+            putExtra(MainActivity.INTENT_NOVEL_CHAPTER_ID, chapterId)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            chapterId.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    private fun createErrorLogFile(
+        chapterName: String,
+        error: String,
+        chapterId: Long,
+    ) = runCatching {
+        context.createFileInCacheDir("tadami_translation_error_$chapterId.txt").apply {
+            bufferedWriter().use { out ->
+                out.write("Novel translation error\n\n")
+                out.write("Chapter ID: $chapterId\n")
+                out.write("Chapter: $chapterName\n\n")
+                out.write(error)
+                out.write("\n")
+            }
+        }
+    }.getOrNull()
 
     private fun cancelChapterIntent(chapterId: Long): PendingIntent {
         val intent = Intent(context, TranslationCancelReceiver::class.java).apply {

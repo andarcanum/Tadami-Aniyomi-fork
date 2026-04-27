@@ -707,6 +707,14 @@ class MainActivity : BaseActivity() {
                 }
                 null
             }
+            INTENT_OPEN_NOVEL_CHAPTER -> {
+                val chapterId = intent.getLongExtra(INTENT_NOVEL_CHAPTER_ID, -1L)
+                if (chapterId > -1L) {
+                    navigator.popUntilRoot()
+                    navigator.push(NovelReaderScreen(chapterId))
+                }
+                null
+            }
             Intent.ACTION_VIEW -> {
                 // Handling opening of backup files
                 if (intent.data.toString().endsWith(".tachibk")) {
@@ -757,6 +765,8 @@ class MainActivity : BaseActivity() {
         const val INTENT_SEARCH = "eu.kanade.tachiyomi.SEARCH"
         const val INTENT_ANIMESEARCH = "eu.kanade.tachiyomi.ANIMESEARCH"
         const val INTENT_NOVELSEARCH = "eu.kanade.tachiyomi.NOVELSEARCH"
+        const val INTENT_OPEN_NOVEL_CHAPTER = "eu.kanade.tachiyomi.OPEN_NOVEL_CHAPTER"
+        const val INTENT_NOVEL_CHAPTER_ID = "novel_chapter_id"
         const val INTENT_SEARCH_QUERY = "query"
         const val INTENT_SEARCH_FILTER = "filter"
         const val INTENT_SEARCH_TYPE = "type"
