@@ -579,10 +579,6 @@ class NovelReaderScreenModel(
                         }
                     }
                 }
-                .takeWhile { update ->
-                    update.status != TranslationStatus.COMPLETED &&
-                        update.status != TranslationStatus.FAILED
-                }
                 .collect { }
         }
     }
@@ -2581,22 +2577,13 @@ class NovelReaderScreenModel(
         refreshGeminiUiState()
         geminiTranslationJob = screenModelScope.launch(Dispatchers.IO) {
             try {
-                val alreadyQueued = translationQueueManager.hasPendingOrActive(chapter.id)
-                if (!alreadyQueued) {
-                    translationQueueManager.addToQueue(listOf(chapter.id), currentState.novel.id)
-                }
+                translationQueueManager.addToQueue(listOf(chapter.id), currentState.novel.id)
                 if (!isActive) return@launch
                 val appContext = Injekt.get<Application>()
                 if (!TranslationJob.isRunning(appContext)) {
                     TranslationJob.runImmediately(appContext)
                 }
-                addGeminiLog(
-                    if (alreadyQueued) {
-                        "Gemini translation is already queued."
-                    } else {
-                        "Gemini translation started in background."
-                    },
-                )
+                addGeminiLog("Gemini translation queued.")
             } catch (_: CancellationException) {
                 // Job cancelled intentionally by the user or screen teardown.
             } catch (error: Exception) {
@@ -2610,10 +2597,10 @@ class NovelReaderScreenModel(
     }
     fun stopGeminiTranslation() {
         val chapter = currentChapter ?: return
-        translationQueueManager.removeFromQueue(chapter.id)
-        TranslationJob.stop(Injekt.get<Application>())
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
+        TranslationJob.stop(Injekt.get<Application>())
+        translationQueueManager.removeFromQueue(chapter.id)
         isGeminiTranslating = false
         isGeminiTranslationVisible = false
         geminiTranslationProgress = 0
