@@ -54,7 +54,13 @@ class TranslationQueueManager(
         var addedCount = 0
         chapterIds.forEach { chapterId ->
             val existing = getQueueItemByChapterId(chapterId)
-            if (existing?.status == TranslationStatus.PENDING || existing?.status == TranslationStatus.IN_PROGRESS) {
+            if (
+                shouldSkipTranslationQueueInsert(
+                    existingStatus = existing?.status,
+                    activeChapterId = activeTranslation.value?.chapterId,
+                    chapterId = chapterId,
+                )
+            ) {
                 return@forEach
             }
             handler.await { db ->
@@ -406,4 +412,13 @@ class TranslationQueueManager(
             updatedAt = updatedAt,
         )
     }
+}
+
+internal fun shouldSkipTranslationQueueInsert(
+    existingStatus: TranslationStatus?,
+    activeChapterId: Long?,
+    chapterId: Long,
+): Boolean {
+    return existingStatus == TranslationStatus.PENDING ||
+        (existingStatus == TranslationStatus.IN_PROGRESS && activeChapterId == chapterId)
 }
