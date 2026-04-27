@@ -54,6 +54,26 @@ internal class NovelReaderTranslationDiskCache(
         }
     }
 
+    fun has(chapterId: Long): Boolean {
+        synchronized(lock) {
+            return fileFor(chapterId).isFile
+        }
+    }
+
+    fun chapterIds(): Set<Long> {
+        synchronized(lock) {
+            if (!directory.exists()) return emptySet()
+            return directory.listFiles()
+                ?.asSequence()
+                ?.filter { it.isFile }
+                ?.mapNotNull { file ->
+                    file.nameWithoutExtension.toLongOrNull()
+                }
+                ?.toSet()
+                ?: emptySet()
+        }
+    }
+
     fun clear() {
         synchronized(lock) {
             if (!directory.exists()) return
@@ -120,6 +140,10 @@ internal object NovelReaderTranslationDiskCacheStore {
     fun get(chapterId: Long): GeminiTranslationCacheEntry? = cache.get(chapterId)
 
     fun put(entry: GeminiTranslationCacheEntry) = cache.put(entry)
+
+    fun has(chapterId: Long): Boolean = cache.has(chapterId)
+
+    fun chapterIds(): Set<Long> = cache.chapterIds()
 
     fun remove(chapterId: Long) = cache.remove(chapterId)
 
