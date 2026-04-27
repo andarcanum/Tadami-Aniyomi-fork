@@ -435,6 +435,7 @@ class NovelReaderScreenModelTest {
             mockkObject(TranslationJob.Companion)
             every { TranslationJob.isRunning(any()) } returns true
             justRun { TranslationJob.stop(any()) }
+            justRun { TranslationJob.runImmediately(any()) }
 
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
             val chapter = NovelChapter.create().copy(
@@ -449,7 +450,8 @@ class NovelReaderScreenModelTest {
                 it.geminiApiKey().set("test-key")
             }
 
-            coEvery { translationQueueManager.hasPendingOrActive(chapter.id) } returns true
+            coEvery { translationQueueManager.cancelChapter(chapter.id) } returns true
+            coEvery { translationQueueManager.hasNext() } returns false
 
             val screenModel = trackedNovelReaderScreenModel(
                 chapterId = chapter.id,
@@ -474,7 +476,7 @@ class NovelReaderScreenModelTest {
             screenModel.stopGeminiTranslation()
 
             coVerify(timeout = 1_000) {
-                translationQueueManager.removeFromQueue(chapter.id)
+                translationQueueManager.cancelChapter(chapter.id)
             }
             verify(timeout = 1_000) {
                 TranslationJob.stop(any())
@@ -543,7 +545,9 @@ class NovelReaderScreenModelTest {
             // First translation cycle
             screenModel.startGeminiTranslation()
             withTimeout(1_000) {
-                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating != true) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating !=
+                    true
+                ) {
                     yield()
                 }
             }
@@ -561,7 +565,9 @@ class NovelReaderScreenModelTest {
                 ),
             )
             withTimeout(1_000) {
-                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating != false) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating !=
+                    false
+                ) {
                     yield()
                 }
             }
@@ -569,7 +575,9 @@ class NovelReaderScreenModelTest {
             // Second translation cycle — subscription must be alive
             screenModel.startGeminiTranslation()
             withTimeout(1_000) {
-                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating != true) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating !=
+                    true
+                ) {
                     yield()
                 }
             }
@@ -587,7 +595,9 @@ class NovelReaderScreenModelTest {
                 ),
             )
             withTimeout(1_000) {
-                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating != false) {
+                while ((screenModel.state.value as? NovelReaderScreenModel.State.Success)?.isGeminiTranslating !=
+                    false
+                ) {
                     yield()
                 }
             }

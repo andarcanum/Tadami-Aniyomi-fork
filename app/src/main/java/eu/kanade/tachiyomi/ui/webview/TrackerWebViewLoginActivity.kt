@@ -219,7 +219,11 @@ private fun TrackerWebViewLoginScreen(
                                 isLoading = false
                             }
 
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                            override fun onPageStarted(
+                                view: WebView?,
+                                url: String?,
+                                favicon: android.graphics.Bitmap?,
+                            ) {
                                 super.onPageStarted(view, url, favicon)
                                 isLoading = true
                             }
