@@ -5,8 +5,8 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
-import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.SeriesInterstitialState
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
@@ -105,7 +105,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking

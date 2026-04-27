@@ -21,6 +21,9 @@ import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlators
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.domain.track.model.AutoTrackState
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
+import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.util.TargetChapterCalculator
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
@@ -49,6 +52,7 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -70,12 +74,14 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.preference.mapAsCheckboxState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
@@ -98,12 +104,6 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
-import eu.kanade.domain.track.model.AutoTrackState
-import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
-import eu.kanade.domain.track.service.TrackPreferences
-import eu.kanade.tachiyomi.util.system.toast
-import tachiyomi.core.common.i18n.stringResource
-import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -214,6 +214,7 @@ class NovelScreenModel(
     private var downloadedStateJob: Job? = null
     private var chapterActionStatesJob: Job? = null
     private var queueSubscriptionJob: Job? = null
+
     @Volatile private var queuedChapterIds: Set<Long> = emptySet()
     internal var isFromChangeCategory: Boolean = false
 
@@ -1497,11 +1498,15 @@ class NovelScreenModel(
                     eventBus?.tryEmit(AchievementEvent.NovelCompleted(chaptersToMarkRead.first().novelId))
                 }
             }
-            if (!markRead || chaptersToMarkRead.isEmpty() || successState?.hasLoggedInTrackers == false || autoTrackState == AutoTrackState.NEVER) {
+            if (!markRead ||
+                chaptersToMarkRead.isEmpty() ||
+                successState?.hasLoggedInTrackers == false ||
+                autoTrackState == AutoTrackState.NEVER
+            ) {
                 toggleAllSelection(false)
                 return@launchIO
             }
-                val maxChapterNumber = chaptersToMarkRead.maxOf { it.chapterNumber }
+            val maxChapterNumber = chaptersToMarkRead.maxOf { it.chapterNumber }
             if (autoTrackState == AutoTrackState.ALWAYS) {
                 trackNovelChapter.await(context, novelId, maxChapterNumber)
                 withUIContext {
@@ -1807,7 +1812,9 @@ class NovelScreenModel(
                 val appContext = Injekt.get<Application>()
                 TranslationJob.runImmediately(appContext)
             } catch (e: Exception) {
-                snackbarHostState.showSnackbar(message = "${context.stringResource(MR.strings.snackbar_translation_start_error)} ${e.message}")
+                snackbarHostState.showSnackbar(
+                    message = "${context.stringResource(MR.strings.snackbar_translation_start_error)} ${e.message}",
+                )
                 return@launchIO
             }
             snackbarHostState.showSnackbar(message = context.stringResource(MR.strings.snackbar_translation_queued))

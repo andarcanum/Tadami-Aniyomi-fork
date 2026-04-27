@@ -1,7 +1,7 @@
 package eu.kanade.domain.track.novel.model
 
-import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack as DbMangaTrack
 import tachiyomi.domain.track.novel.model.NovelTrack
+import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack as DbMangaTrack
 
 fun DbMangaTrack.toNovelTrack(idRequired: Boolean = true): NovelTrack? {
     val trackId = id ?: if (!idRequired) -1 else return null

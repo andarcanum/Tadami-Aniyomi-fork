@@ -1,10 +1,11 @@
 package eu.kanade.tachiyomi.data.track.novelupdates
 
+import android.app.Application
 import android.graphics.Color
 import com.tadami.aurora.R
-import android.app.Application
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.track.novel.model.toNovelTrack
+import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
 import eu.kanade.tachiyomi.data.track.BaseTracker
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.model.MangaTrackSearch
@@ -12,22 +13,21 @@ import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.util.asJsoup
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
 import okhttp3.FormBody
 import okhttp3.Headers
-import tachiyomi.core.common.util.system.logcat
-import tachiyomi.i18n.MR
-import tachiyomi.domain.track.novel.interactor.InsertNovelTrack
 import tachiyomi.core.common.util.lang.withUIContext
-import eu.kanade.tachiyomi.util.system.toast
+import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.track.novel.interactor.InsertNovelTrack
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import tachiyomi.domain.track.manga.model.MangaTrack as DomainTrack
-import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
 
 class NovelUpdates(id: Long) : BaseTracker(id, "NovelUpdates"), MangaTracker {
 
@@ -200,7 +200,9 @@ class NovelUpdates(id: Long) : BaseTracker(id, "NovelUpdates"), MangaTracker {
 
     private suspend fun moveToList(novelId: String, listId: Long) {
         try {
-            client.newCall(GET("$baseUrl/updatelist.php?sid=$novelId&lid=$listId&act=move", getAuthHeaders())).awaitSuccess()
+            client.newCall(
+                GET("$baseUrl/updatelist.php?sid=$novelId&lid=$listId&act=move", getAuthHeaders()),
+            ).awaitSuccess()
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to move to list" }
         }
@@ -242,7 +244,9 @@ class NovelUpdates(id: Long) : BaseTracker(id, "NovelUpdates"), MangaTracker {
             if (item.status == PLAN_TO_READ) {
                 item.status = READING
             }
-            logcat(LogPriority.DEBUG) { "NovelUpdates register: after bind, remote_id=${item.remote_id}, status=${item.status}, calling update()" }
+            logcat(LogPriority.DEBUG) {
+                "NovelUpdates register: after bind, remote_id=${item.remote_id}, status=${item.status}, calling update()"
+            }
             update(item)
             logcat(LogPriority.DEBUG) { "NovelUpdates register: update() completed, saving to DB" }
             item.toNovelTrack(idRequired = false)?.let { insertTrack.await(it) }
@@ -264,7 +268,9 @@ class NovelUpdates(id: Long) : BaseTracker(id, "NovelUpdates"), MangaTracker {
         }
 
         val currentStatus = getReadingListStatus(track.remote_id.toString())
-        logcat(LogPriority.DEBUG) { "NovelUpdates bind: remote_id=${track.remote_id}, status=$currentStatus, slug=$slug" }
+        logcat(LogPriority.DEBUG) {
+            "NovelUpdates bind: remote_id=${track.remote_id}, status=$currentStatus, slug=$slug"
+        }
         track.status = currentStatus ?: if (hasReadChapters) READING else PLAN_TO_READ
 
         val progress = getNotesProgress(track.remote_id.toString())

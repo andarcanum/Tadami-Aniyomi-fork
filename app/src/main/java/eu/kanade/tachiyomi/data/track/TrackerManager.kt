@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.track
 
 import android.content.Context
+import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.anilist.Anilist
 import eu.kanade.tachiyomi.data.track.bangumi.Bangumi
 import eu.kanade.tachiyomi.data.track.jellyfin.Jellyfin
@@ -9,7 +10,6 @@ import eu.kanade.tachiyomi.data.track.kitsu.Kitsu
 import eu.kanade.tachiyomi.data.track.komga.Komga
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates
 import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeList
-import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.novellist.NovelList
 import eu.kanade.tachiyomi.data.track.novelupdates.NovelUpdates
 import eu.kanade.tachiyomi.data.track.shikimori.Shikimori
@@ -62,7 +62,7 @@ class TrackerManager(context: Context) {
         novelTrackerIds = novelTrackerIds,
     )
 
-fun loggedInTrackersFlow() = combine(trackers.map { it.isLoggedInFlow }) {
+    fun loggedInTrackersFlow() = combine(trackers.map { it.isLoggedInFlow }) {
         it.mapIndexedNotNull { index, isLoggedIn ->
             if (isLoggedIn) trackers[index] else null
         }

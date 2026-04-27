@@ -2,8 +2,8 @@ package eu.kanade.tachiyomi.data.track
 
 import eu.kanade.tachiyomi.data.track.novellist.NovelList
 import io.kotest.matchers.shouldBe
-import org.junit.jupiter.api.Test
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Test
 
 class NovelListTrackerTest {
 

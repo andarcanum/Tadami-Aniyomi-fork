@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.data.translation
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -73,7 +72,11 @@ class TranslationNotificationManager(
                 openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-            addAction(android.R.drawable.ic_menu_view, context.stringResource(MR.strings.notification_action_open), openPendingIntent)
+            addAction(
+                android.R.drawable.ic_menu_view,
+                context.stringResource(MR.strings.notification_action_open),
+                openPendingIntent,
+            )
         }
 
         context.notify(notificationId, builder.build())
@@ -114,7 +117,10 @@ class TranslationNotificationManager(
     ): String {
         val remaining = pendingCount.coerceAtLeast(0)
         return if (remaining > 0) {
-            "$chapterName • $progress% • ${context.stringResource(MR.strings.notification_translation_queue_remaining, remaining)}"
+            "$chapterName • $progress% • ${context.stringResource(
+                MR.strings.notification_translation_queue_remaining,
+                remaining,
+            )}"
         } else {
             "$chapterName • $progress%"
         }

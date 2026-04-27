@@ -60,7 +60,8 @@ class TrackerManagerNovelFilteringTest {
         name = name,
         isLoggedIn = true,
         valLogoColor = 0,
-    ), MangaTracker {
+    ),
+        MangaTracker {
 
         override fun getStatusListManga(): List<Long> = listOf(1L, 2L, 3L, 4L, 5L)
 

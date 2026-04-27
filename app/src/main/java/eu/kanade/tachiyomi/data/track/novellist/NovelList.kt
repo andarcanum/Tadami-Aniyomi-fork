@@ -1,15 +1,17 @@
 package eu.kanade.tachiyomi.data.track.novellist
 
+import android.app.Application
 import android.graphics.Color
 import com.tadami.aurora.R
-import android.app.Application
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.track.novel.model.toNovelTrack
+import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
 import eu.kanade.tachiyomi.data.track.BaseTracker
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.model.MangaTrackSearch
 import eu.kanade.tachiyomi.network.awaitSuccess
 import eu.kanade.tachiyomi.network.parseAs
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.serialization.json.Json
@@ -23,16 +25,14 @@ import logcat.LogPriority
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import tachiyomi.core.common.util.system.logcat
-import tachiyomi.i18n.MR
 import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.track.novel.interactor.InsertNovelTrack
-import eu.kanade.tachiyomi.util.system.toast
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import tachiyomi.domain.track.manga.model.MangaTrack as DomainTrack
-import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
 
 class NovelList(id: Long) : BaseTracker(id, "NovelList"), MangaTracker {
 
