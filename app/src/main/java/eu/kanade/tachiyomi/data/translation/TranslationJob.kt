@@ -24,7 +24,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import logcat.LogPriority
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -41,7 +43,7 @@ class TranslationJob(
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val notification = applicationContext.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
-            setContentTitle("Translation in progress")
+            setContentTitle(applicationContext.stringResource(MR.strings.notification_translation_in_progress))
             setSmallIcon(android.R.drawable.ic_menu_edit)
         }.build()
         return ForegroundInfo(
@@ -87,7 +89,6 @@ class TranslationJob(
             val activeItem = queueManager.activeTranslation.value
             if (activeItem != null) {
                 queueManager.setError(activeItem.chapterId, e.message ?: "Unknown error")
-                queueManager.updateStatus(activeItem.chapterId, TranslationStatus.FAILED)
                 queueManager.setActiveTranslation(null)
 
                 notificationManager.showError(
@@ -180,7 +181,7 @@ class TranslationJob(
                 .addTag(TAG)
                 .build()
             WorkManager.getInstance(context)
-                .enqueueUniqueWork(TAG, ExistingWorkPolicy.REPLACE, request)
+                .enqueueUniqueWork(TAG, ExistingWorkPolicy.KEEP, request)
             logcat(LogPriority.DEBUG) { "TranslationJob work request enqueued" }
         }
 

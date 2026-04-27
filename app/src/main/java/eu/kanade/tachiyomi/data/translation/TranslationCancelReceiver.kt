@@ -15,8 +15,8 @@ class TranslationCancelReceiver : BroadcastReceiver() {
         if (chapterId == -1L) return
 
         val queueManager = Injekt.get<TranslationQueueManager>()
-        queueManager.removeFromQueue(chapterId)
         TranslationJob.stop(context)
+        queueManager.removeFromQueue(chapterId)
         context.cancelNotification(Notifications.ID_TRANSLATION_PROGRESS + chapterId.toInt())
     }
 }
