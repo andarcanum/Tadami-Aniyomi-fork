@@ -4,7 +4,6 @@ import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
-import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -12,6 +11,8 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.notificationBuilder
 import eu.kanade.tachiyomi.util.system.notify
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -22,29 +23,11 @@ class TranslationNotificationManager(
 
     private val notificationManager = NotificationManagerCompat.from(context)
 
-    init {
-        createNotificationChannel()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannelCompat.Builder(
-                Notifications.CHANNEL_TRANSLATION_PROGRESS,
-                NotificationManagerCompat.IMPORTANCE_LOW,
-            )
-                .setName("Translation Progress")
-                .setDescription("Shows translation progress")
-                .setShowBadge(false)
-                .build()
-            notificationManager.createNotificationChannel(channel)
-        }
-    }
-
     fun showProgress(update: TranslationProgressUpdate) {
         val notificationId = getNotificationId(update.chapterId)
 
         val builder = context.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
-            setContentTitle("Перевод: ${update.chapterName}")
+            setContentTitle("${context.stringResource(MR.strings.notification_translation_in_progress)}: ${update.chapterName}")
             setContentText("${update.progress}%")
             setSmallIcon(android.R.drawable.ic_menu_edit)
             setProgress(100, update.progress, false)
@@ -59,7 +42,7 @@ class TranslationNotificationManager(
         val notificationId = getNotificationId(chapterId)
 
         val builder = context.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
-            setContentTitle("Перевод завершен")
+            setContentTitle(context.stringResource(MR.strings.notification_translation_complete))
             setContentText(chapterName)
             setSmallIcon(android.R.drawable.ic_menu_edit)
             setAutoCancel(true)
@@ -76,7 +59,7 @@ class TranslationNotificationManager(
                 openIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
-            addAction(android.R.drawable.ic_menu_view, "Открыть", openPendingIntent)
+            addAction(android.R.drawable.ic_menu_view, context.stringResource(MR.strings.notification_action_open), openPendingIntent)
         }
 
         context.notify(notificationId, builder.build())
@@ -86,7 +69,7 @@ class TranslationNotificationManager(
         val notificationId = getNotificationId(chapterId)
 
         val builder = context.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
-            setContentTitle("Ошибка перевода")
+            setContentTitle(context.stringResource(MR.strings.notification_translation_error))
             setContentText("$chapterName: $error")
             setSmallIcon(android.R.drawable.ic_dialog_alert)
             setAutoCancel(true)

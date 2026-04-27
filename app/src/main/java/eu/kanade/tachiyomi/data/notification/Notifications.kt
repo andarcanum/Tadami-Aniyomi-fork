@@ -90,8 +90,6 @@ object Notifications {
      */
     const val CHANNEL_TRANSLATION_PROGRESS = "translation_progress"
     const val ID_TRANSLATION_PROGRESS = -1003
-    const val ID_TRANSLATION_COMPLETE = -1004
-    const val ID_TRANSLATION_ERROR = -1005
 
     /**
      * Notification channel and ids used for app and extension updates.
@@ -193,7 +191,8 @@ object Notifications {
                     setShowBadge(false)
                 },
                 buildNotificationChannel(CHANNEL_TRANSLATION_PROGRESS, IMPORTANCE_LOW) {
-                    setName("Translation Progress")
+                    setName(context.stringResource(MR.strings.channel_translation_progress))
+                    setDescription(context.stringResource(MR.strings.channel_translation_progress_description))
                     setShowBadge(false)
                 },
                 buildNotificationChannel(CHANNEL_APP_UPDATE, IMPORTANCE_DEFAULT) {

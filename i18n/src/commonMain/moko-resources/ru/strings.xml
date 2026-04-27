@@ -1031,4 +1031,12 @@
     <string name="label_library_update_pacing_empty">Источники не найдены</string>
     <string name="label_library_update_pacing_empty_search">По вашему запросу ничего не найдено</string>
     <string name="action_timeout_settings">Настройка таймаута</string>
+    <string name="channel_translation_progress">Перевод</string>
+    <string name="channel_translation_progress_description">Уведомления о ходе перевода</string>
+    <string name="notification_translation_in_progress">Перевод выполняется</string>
+    <string name="notification_translation_complete">Перевод завершен</string>
+    <string name="notification_translation_error">Ошибка перевода</string>
+    <string name="snackbar_translation_queued">Перевод добавлен в очередь</string>
+    <string name="snackbar_translation_start_error">Ошибка запуска переводчика:</string>
+    <string name="notification_action_open">Открыть</string>
 </resources>
