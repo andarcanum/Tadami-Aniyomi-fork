@@ -94,6 +94,19 @@ internal fun resolveNovelPageReaderBookBottomInset(
     }
 }
 
+internal fun resolveNovelPageReaderPageFitSafetyInset(
+    density: Density,
+    fontSize: Int,
+    lineHeight: Float,
+): Dp {
+    return with(density) {
+        val scaledFontInset = fontSize.sp.toDp() * 0.5f
+        val lineHeightInset = fontSize.sp.toDp() * (lineHeight.coerceAtLeast(1f) - 1f) * 1.0f
+        val resolvedInset = maxOf(8.dp, scaledFontInset, lineHeightInset)
+        resolvedInset
+    }
+}
+
 internal data class NovelPageReaderSpanSpec(
     val start: Int,
     val end: Int,
