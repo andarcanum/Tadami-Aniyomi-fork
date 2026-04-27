@@ -874,7 +874,13 @@ fun NovelReaderScreen(
                     lineHeight = state.readerSettings.lineHeight,
                 ).roundToPx()
             }
-            val pageFitSafetyPx = with(density) { 4.dp.roundToPx() }
+            val pageFitSafetyPx = with(density) {
+                resolveNovelPageReaderPageFitSafetyInset(
+                    density = this,
+                    fontSize = state.readerSettings.fontSize,
+                    lineHeight = state.readerSettings.lineHeight,
+                ).roundToPx()
+            }
             val verticalPaddingPx = topPaddingPx + bottomPaddingPx + bookBottomInsetPx + pageFitSafetyPx
             paginatePlainPageBlocks(
                 textBlocks = pageReaderTextBlocks,
@@ -931,7 +937,13 @@ fun NovelReaderScreen(
                     lineHeight = state.readerSettings.lineHeight,
                 ).roundToPx()
             }
-            val pageFitSafetyPx = with(density) { 4.dp.roundToPx() }
+            val pageFitSafetyPx = with(density) {
+                resolveNovelPageReaderPageFitSafetyInset(
+                    density = this,
+                    fontSize = state.readerSettings.fontSize,
+                    lineHeight = state.readerSettings.lineHeight,
+                ).roundToPx()
+            }
             val verticalPaddingPx = topPaddingPx + bottomPaddingPx + bookBottomInsetPx + pageFitSafetyPx
             paginateMixedRichPageBlocks(
                 richBlocks = pageReaderRichBlocks,
