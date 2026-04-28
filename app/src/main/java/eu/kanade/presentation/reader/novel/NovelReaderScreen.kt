@@ -2595,9 +2595,9 @@ fun NovelReaderScreen(
                                         val gestureDurationMillis = (event.eventTime - touchStartEventTime)
                                             .coerceAtLeast(0L)
                                         val isNearChapterEnd =
-                                            wasNearChapterEndAtDown || !webView.canScrollVertically(1)
+                                            wasNearChapterEndAtDown && !webView.canScrollVertically(1)
                                         val isNearChapterStart =
-                                            wasNearChapterStartAtDown || !webView.canScrollVertically(-1)
+                                            wasNearChapterStartAtDown && !webView.canScrollVertically(-1)
 
                                         when (
                                             resolveWebViewVerticalChapterSwipeAction(
@@ -3206,8 +3206,14 @@ fun NovelReaderScreen(
                                 if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
                                     pageTurnRequestedPage = target
                                 } else {
+                                    val virtualTarget = resolveComposePagerVirtualPageIndex(
+                                        actualPageIndex = target,
+                                        hasPreviousChapter = composePagerHasPreviousChapter,
+                                    )
                                     coroutineScope.launch {
-                                        pagerState.scrollToPage(target)
+                                        pagerState.scrollToPage(
+                                            virtualTarget.coerceIn(0, (pagerState.pageCount - 1).coerceAtLeast(0)),
+                                        )
                                     }
                                 }
                             } else {
