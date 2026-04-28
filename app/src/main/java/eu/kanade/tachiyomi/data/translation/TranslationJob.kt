@@ -152,6 +152,7 @@ class TranslationJob(
             settings = settings,
             onLog = { message ->
                 logcat(LogPriority.DEBUG) { "TranslationJob[${item.chapterId}]: $message" }
+                queueManager.emitLog(item.chapterId, message)
             },
             onProgress = { progress ->
                 queueManager.updateProgress(

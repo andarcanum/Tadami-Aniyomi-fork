@@ -204,6 +204,29 @@ class TranslationQueueManager(
         }
     }
 
+    fun emitLog(chapterId: Long, message: String) {
+        scope.launch {
+            try {
+                val item = getQueueItemByChapterId(chapterId) ?: return@launch
+                _progressUpdates.emit(
+                    TranslationProgressUpdate(
+                        chapterId = item.chapterId,
+                        novelId = item.novelId,
+                        status = item.status,
+                        progress = item.progress,
+                        currentChunk = 0,
+                        totalChunks = 0,
+                        chapterName = "",
+                        errorMessage = null,
+                        logMessage = message,
+                    ),
+                )
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) { "Failed to emit translation log: ${e.message}" }
+            }
+        }
+    }
+
     suspend fun setErrorAwait(
         chapterId: Long,
         error: String,

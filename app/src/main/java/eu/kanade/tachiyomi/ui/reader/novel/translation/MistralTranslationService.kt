@@ -145,6 +145,14 @@ class MistralTranslationService(
                     }
                     val parsed = GeminiXmlSegmentParser.parse(sanitizedCandidate, expectedCount = segments.size)
                     if (parsed.all { it.isNullOrBlank() }) {
+                        val parsedPlaintext = GeminiXmlSegmentParser.parsePlaintext(
+                            rawResponse = candidateText,
+                            expectedCount = segments.size,
+                        )
+                        if (parsedPlaintext.any { !it.isNullOrBlank() }) {
+                            onLog?.invoke("Mistral parse warning: no XML segments found; used plaintext fallback")
+                            return parsedPlaintext
+                        }
                         onLog?.invoke("Mistral parse warning: no XML segments found in message")
                         onLog?.invoke("Mistral content preview: ${sanitizedCandidate.take(600)}")
                         return null

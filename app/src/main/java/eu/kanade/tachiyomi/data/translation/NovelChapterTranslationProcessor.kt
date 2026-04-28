@@ -76,6 +76,7 @@ class NovelChapterTranslationProcessor(
         val json = Injekt.get<Json>()
         MistralTranslationService(
             client = networkHelper.client.newBuilder()
+                .callTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
                 .build(),
             json = json,
@@ -89,6 +90,7 @@ class NovelChapterTranslationProcessor(
         val json = Injekt.get<Json>()
         NvidiaTranslationService(
             client = networkHelper.client.newBuilder()
+                .callTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
                 .build(),
             json = json,
@@ -134,8 +136,15 @@ class NovelChapterTranslationProcessor(
                     async {
                         semaphore.withPermit {
                             onLog?.invoke("Requesting chunk ${chunkIndex + 1}/${chunks.size}")
-                            val result = requestTranslationBatch(
+                            val primaryResult = requestTranslationBatch(
                                 segments = chunk.map { it.second },
+                                settings = settings,
+                                onLog = onLog,
+                            )
+                            val result = recoverChunkIfEmpty(
+                                provider = settings.translationProvider,
+                                chunk = chunk,
+                                result = primaryResult,
                                 settings = settings,
                                 onLog = onLog,
                             )
@@ -143,6 +152,9 @@ class NovelChapterTranslationProcessor(
                                 throw IllegalStateException(
                                     "${settings.translationProvider} returned an empty response for chunk ${chunkIndex + 1}",
                                 )
+                            }
+                            if (result == null) {
+                                onLog?.invoke("[${settings.translationProvider}] Chunk ${chunkIndex + 1}/${chunks.size} returned empty response (skipped)")
                             }
 
                             updateMutex.withLock {
@@ -211,7 +223,8 @@ class NovelChapterTranslationProcessor(
         }
 
         if (translated.isEmpty()) {
-            throw IllegalStateException("Translation service returned no translated blocks")
+            val providerName = settings.translationProvider.name
+            throw IllegalStateException("$providerName returned no translated blocks. Check model, API key, and quota in logs.")
         }
 
         return translated.toMap()
@@ -267,6 +280,37 @@ class NovelChapterTranslationProcessor(
             }
         }
     }
+
+    private suspend fun recoverChunkIfEmpty(
+        provider: NovelTranslationProvider,
+        chunk: List<Pair<Int, String>>,
+        result: List<String?>?,
+        settings: NovelReaderSettings,
+        onLog: ((String) -> Unit)?,
+    ): List<String?>? {
+        if (result != null && result.any { !it.isNullOrBlank() }) return result
+        if (!provider.supportsGranularFallback()) return result
+        if (chunk.isEmpty()) return result
+
+        onLog?.invoke("[$provider] Chunk response had no translated blocks, retrying segments individually")
+        val recovered = MutableList<String?>(chunk.size) { null }
+        chunk.forEachIndexed { index, (_, text) ->
+            val single = requestTranslationBatch(
+                segments = listOf(text),
+                settings = settings,
+                onLog = onLog,
+            )
+            val translated = single?.firstOrNull()?.takeIf { !it.isNullOrBlank() }
+            if (translated != null) {
+                recovered[index] = translated
+            }
+        }
+        return if (recovered.any { !it.isNullOrBlank() }) recovered else result
+    }
+}
+
+private fun NovelTranslationProvider.supportsGranularFallback(): Boolean {
+    return this == NovelTranslationProvider.MISTRAL || this == NovelTranslationProvider.NVIDIA
 }
 
 private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {

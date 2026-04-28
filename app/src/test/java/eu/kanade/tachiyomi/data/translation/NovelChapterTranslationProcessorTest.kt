@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.Test
@@ -72,6 +73,100 @@ class NovelChapterTranslationProcessorTest {
         }
     }
 
+    @Test
+    fun `mistral recovers chunk when provider returns only empty blocks`() = runTest {
+        val processor = NovelChapterTranslationProcessor(
+            application = application,
+            geminiTranslationService = geminiTranslationService,
+            openRouterTranslationService = openRouterTranslationService,
+            deepSeekTranslationService = deepSeekTranslationService,
+            mistralTranslationService = mistralTranslationService,
+            nvidiaTranslationService = nvidiaTranslationService,
+        )
+        val settings = createNovelReaderPreferences()
+            .applyMistralDefaults()
+            .resolveSettings(sourceId = 1L)
+
+        coEvery {
+            mistralTranslationService.translateBatch(
+                segments = listOf("Hello", "World"),
+                params = any(),
+                onLog = any(),
+            )
+        } returns listOf(null, null)
+        coEvery {
+            mistralTranslationService.translateBatch(
+                segments = listOf("Hello"),
+                params = any(),
+                onLog = any(),
+            )
+        } returns listOf("Привет")
+        coEvery {
+            mistralTranslationService.translateBatch(
+                segments = listOf("World"),
+                params = any(),
+                onLog = any(),
+            )
+        } returns listOf("Мир")
+
+        val translated = processor.translateSegments(
+            segments = listOf("Hello", "World"),
+            settings = settings,
+        )
+
+        translated shouldBe mapOf(
+            0 to "Привет",
+            1 to "Мир",
+        )
+    }
+
+    @Test
+    fun `nvidia recovers chunk when provider returns only empty blocks`() = runTest {
+        val processor = NovelChapterTranslationProcessor(
+            application = application,
+            geminiTranslationService = geminiTranslationService,
+            openRouterTranslationService = openRouterTranslationService,
+            deepSeekTranslationService = deepSeekTranslationService,
+            mistralTranslationService = mistralTranslationService,
+            nvidiaTranslationService = nvidiaTranslationService,
+        )
+        val settings = createNovelReaderPreferences()
+            .applyNvidiaDefaults()
+            .resolveSettings(sourceId = 1L)
+
+        coEvery {
+            nvidiaTranslationService.translateBatch(
+                segments = listOf("Hello", "World"),
+                params = any(),
+                onLog = any(),
+            )
+        } returns listOf(null, null)
+        coEvery {
+            nvidiaTranslationService.translateBatch(
+                segments = listOf("Hello"),
+                params = any(),
+                onLog = any(),
+            )
+        } returns listOf("Привет")
+        coEvery {
+            nvidiaTranslationService.translateBatch(
+                segments = listOf("World"),
+                params = any(),
+                onLog = any(),
+            )
+        } returns listOf("Мир")
+
+        val translated = processor.translateSegments(
+            segments = listOf("Hello", "World"),
+            settings = settings,
+        )
+
+        translated shouldBe mapOf(
+            0 to "Привет",
+            1 to "Мир",
+        )
+    }
+
     private fun createNovelReaderPreferences(): NovelReaderPreferences {
         val prefs = NovelReaderPreferences(
             preferenceStore = FakePreferenceStore(),
@@ -85,6 +180,22 @@ class NovelChapterTranslationProcessorTest {
         prefs.geminiBatchSize().set(2)
         prefs.geminiConcurrency().set(1)
         return prefs
+    }
+
+    private fun NovelReaderPreferences.applyMistralDefaults(): NovelReaderPreferences {
+        translationProvider().set(NovelTranslationProvider.MISTRAL)
+        mistralBaseUrl().set("https://api.mistral.ai")
+        mistralApiKey().set("mistral-key")
+        mistralModel().set("mistral-small-latest")
+        return this
+    }
+
+    private fun NovelReaderPreferences.applyNvidiaDefaults(): NovelReaderPreferences {
+        translationProvider().set(NovelTranslationProvider.NVIDIA)
+        nvidiaBaseUrl().set("https://integrate.api.nvidia.com/v1")
+        nvidiaApiKey().set("nvidia-key")
+        nvidiaModel().set("nvidia/model")
+        return this
     }
 
     private class FakePreferenceStore : PreferenceStore {
