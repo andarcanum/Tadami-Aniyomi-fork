@@ -1312,11 +1312,11 @@ class NovelReaderScreenModel(
         val reachedReadThreshold = totalItems == 1 ||
             ((currentIndex + 1).toFloat() / totalItems.toFloat()) >= readThreshold
         val shouldPersistRead = (lastSavedRead == true) || chapter.read || reachedReadThreshold
-        val newProgress = if (shouldPersistRead) {
-            maxOf(lastSavedProgress ?: 0L, resolvedPersistedProgress)
-        } else {
-            resolvedPersistedProgress
-        }
+        val newProgress = resolveProgressToPersist(
+            shouldPersistRead = shouldPersistRead,
+            currentIndex = currentIndex,
+            resolvedPersistedProgress = resolvedPersistedProgress,
+        ) ?: return
         maybePrefetchNextChapterOnProgress(
             currentIndex = currentIndex,
             totalItems = totalItems,
@@ -1353,6 +1353,18 @@ class NovelReaderScreenModel(
                 sessionReadDurationMs = System.currentTimeMillis() - chapterReadStartTimeMs,
             ),
         )
+    }
+
+    private fun resolveProgressToPersist(
+        shouldPersistRead: Boolean,
+        currentIndex: Int,
+        resolvedPersistedProgress: Long,
+    ): Long? {
+        val previousProgress = lastSavedProgress ?: return resolvedPersistedProgress
+        if (!shouldPersistRead) return resolvedPersistedProgress
+        if (resolvedPersistedProgress >= previousProgress) return resolvedPersistedProgress
+        if (currentIndex <= 0) return null
+        return resolvedPersistedProgress
     }
     fun toggleTtsPlayback(
         startRequest: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackStartRequest =

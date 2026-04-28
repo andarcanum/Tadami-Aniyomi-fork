@@ -1920,6 +1920,50 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `read chapter can move saved native progress back from chapter end`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val endProgress = encodeNativeScrollProgress(index = 9, offsetPx = 0)
+            val middleProgress = encodeNativeScrollProgress(index = 4, offsetPx = 320)
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                read = true,
+                lastPageRead = endProgress,
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.updateReadingProgress(
+                currentIndex = 4,
+                totalItems = 10,
+                persistedProgress = middleProgress,
+            )
+            yield()
+
+            chapterRepo.lastUpdate?.read shouldBe true
+            chapterRepo.lastUpdate?.lastPageRead shouldBe middleProgress
+        }
+    }
+
+    @Test
     fun `defers history writes for progress updates until reader is disposed`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
