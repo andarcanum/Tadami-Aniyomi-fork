@@ -323,6 +323,11 @@ fun NovelReaderScreen(
     onSetNvidiaModel: (String) -> Unit = {},
     onRefreshNvidiaModels: () -> Unit = {},
     onTestNvidiaConnection: () -> Unit = {},
+    onSetOllamaCloudBaseUrl: (String) -> Unit = {},
+    onSetOllamaCloudApiKey: (String) -> Unit = {},
+    onSetOllamaCloudModel: (String) -> Unit = {},
+    onRefreshOllamaCloudModels: () -> Unit = {},
+    onTestOllamaCloudConnection: () -> Unit = {},
     onStartGoogleTranslation: () -> Unit = {},
     onStopGoogleTranslation: () -> Unit = {},
     onResumeGoogleTranslation: () -> Unit = {},
@@ -3651,6 +3656,11 @@ fun NovelReaderScreen(
                 onSetNvidiaModel = onSetNvidiaModel,
                 onRefreshNvidiaModels = onRefreshNvidiaModels,
                 onTestNvidiaConnection = onTestNvidiaConnection,
+                onSetOllamaCloudBaseUrl = onSetOllamaCloudBaseUrl,
+                onSetOllamaCloudApiKey = onSetOllamaCloudApiKey,
+                onSetOllamaCloudModel = onSetOllamaCloudModel,
+                onRefreshOllamaCloudModels = onRefreshOllamaCloudModels,
+                onTestOllamaCloudConnection = onTestOllamaCloudConnection,
                 openRouterModels = state.openRouterModelIds,
                 isOpenRouterModelsLoading = state.isOpenRouterModelsLoading,
                 isTestingOpenRouterConnection = state.isTestingOpenRouterConnection,
@@ -3671,6 +3681,11 @@ fun NovelReaderScreen(
                 isTestingNvidiaConnection = state.isTestingNvidiaConnection,
                 nvidiaApiTestStatus = state.nvidiaApiTestStatus,
                 nvidiaApiTestMessage = state.nvidiaApiTestMessage,
+                ollamaCloudModels = state.ollamaCloudModelIds,
+                isOllamaCloudModelsLoading = state.isOllamaCloudModelsLoading,
+                isTestingOllamaCloudConnection = state.isTestingOllamaCloudConnection,
+                ollamaCloudApiTestStatus = state.ollamaCloudApiTestStatus,
+                ollamaCloudApiTestMessage = state.ollamaCloudApiTestMessage,
                 onDismiss = { showGeminiDialog = false },
             )
         }
@@ -3798,6 +3813,11 @@ private fun GeminiTranslationDialog(
     onSetNvidiaModel: (String) -> Unit,
     onRefreshNvidiaModels: () -> Unit,
     onTestNvidiaConnection: () -> Unit,
+    onSetOllamaCloudBaseUrl: (String) -> Unit,
+    onSetOllamaCloudApiKey: (String) -> Unit,
+    onSetOllamaCloudModel: (String) -> Unit,
+    onRefreshOllamaCloudModels: () -> Unit,
+    onTestOllamaCloudConnection: () -> Unit,
     openRouterModels: List<String>,
     isOpenRouterModelsLoading: Boolean,
     isTestingOpenRouterConnection: Boolean,
@@ -3818,6 +3838,11 @@ private fun GeminiTranslationDialog(
     isTestingNvidiaConnection: Boolean,
     nvidiaApiTestStatus: ProviderApiTestStatus,
     nvidiaApiTestMessage: String?,
+    ollamaCloudModels: List<String>,
+    isOllamaCloudModelsLoading: Boolean,
+    isTestingOllamaCloudConnection: Boolean,
+    ollamaCloudApiTestStatus: ProviderApiTestStatus,
+    ollamaCloudApiTestMessage: String?,
     onDismiss: () -> Unit,
 ) {
     val modelEntries = remember {
@@ -3865,6 +3890,15 @@ private fun GeminiTranslationDialog(
     }
     val nvidiaAllModelEntries = remember(nvidiaModels) {
         nvidiaModels
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+            .associateWith { it }
+    }
+    val ollamaCloudAllModelEntries = remember(ollamaCloudModels) {
+        ollamaCloudModels
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -3946,6 +3980,7 @@ private fun GeminiTranslationDialog(
     val deepSeekModelLabel = stringResource(AYMR.strings.novel_reader_deepseek_model)
     val mistralModelLabel = stringResource(AYMR.strings.novel_reader_mistral_model)
     val nvidiaModelLabel = stringResource(AYMR.strings.novel_reader_nvidia_model)
+    val ollamaCloudModelLabel = stringResource(AYMR.strings.novel_reader_ollama_cloud_model)
     val promptModeLabel = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode)
     val styleLabel = stringResource(AYMR.strings.novel_reader_ai_translator_style_title)
     val speedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism)
@@ -4026,6 +4061,12 @@ private fun GeminiTranslationDialog(
     }
     var tempNvidiaModel by remember(readerSettings.nvidiaModel) {
         mutableStateOf(readerSettings.nvidiaModel)
+    }
+    var tempOllamaCloudBaseUrl by remember(readerSettings.ollamaCloudBaseUrl) {
+        mutableStateOf(readerSettings.ollamaCloudBaseUrl)
+    }
+    var tempOllamaCloudModel by remember(readerSettings.ollamaCloudModel) {
+        mutableStateOf(readerSettings.ollamaCloudModel)
     }
     var showGenerationConfig by remember { mutableStateOf(false) }
     var showLogs by remember { mutableStateOf(false) }
@@ -4200,6 +4241,7 @@ private fun GeminiTranslationDialog(
     val isDeepSeekSelected = tempProvider == NovelTranslationProvider.DEEPSEEK
     val isMistralSelected = tempProvider == NovelTranslationProvider.MISTRAL
     val isNvidiaSelected = tempProvider == NovelTranslationProvider.NVIDIA
+    val isOllamaCloudSelected = tempProvider == NovelTranslationProvider.OLLAMA_CLOUD
     val activeReasoningModel = when (tempProvider) {
         NovelTranslationProvider.GEMINI,
         NovelTranslationProvider.GEMINI_PRIVATE,
@@ -4208,6 +4250,7 @@ private fun GeminiTranslationDialog(
         NovelTranslationProvider.MISTRAL -> tempMistralModel
         NovelTranslationProvider.DEEPSEEK -> tempDeepSeekModel
         NovelTranslationProvider.NVIDIA -> tempNvidiaModel
+        NovelTranslationProvider.OLLAMA_CLOUD -> tempOllamaCloudModel
     }
     val reasoningOptions = remember(tempProvider, activeReasoningModel) {
         resolveTranslationReasoningOptions(tempProvider, activeReasoningModel)
@@ -4249,6 +4292,12 @@ private fun GeminiTranslationDialog(
     LaunchedEffect(isNvidiaSelected, nvidiaModels.size) {
         if (isNvidiaSelected && nvidiaModels.isEmpty()) {
             onRefreshNvidiaModels()
+        }
+    }
+
+    LaunchedEffect(isOllamaCloudSelected, ollamaCloudModels.size) {
+        if (isOllamaCloudSelected && ollamaCloudModels.isEmpty()) {
+            onRefreshOllamaCloudModels()
         }
     }
 
@@ -4449,6 +4498,9 @@ private fun GeminiTranslationDialog(
                             NovelTranslationProvider.NVIDIA to stringResource(
                                 AYMR.strings.novel_reader_translation_provider_nvidia,
                             ),
+                            NovelTranslationProvider.OLLAMA_CLOUD to stringResource(
+                                AYMR.strings.novel_reader_translation_provider_ollama_cloud,
+                            ),
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             providerCards.chunked(2).forEach { rowProviders ->
@@ -4478,6 +4530,10 @@ private fun GeminiTranslationDialog(
                                                 tempNvidiaBaseUrl.isNotBlank() &&
                                                     readerSettings.nvidiaApiKey.isNotBlank() &&
                                                     tempNvidiaModel.isNotBlank()
+                                            NovelTranslationProvider.OLLAMA_CLOUD ->
+                                                tempOllamaCloudBaseUrl.isNotBlank() &&
+                                                    readerSettings.ollamaCloudApiKey.isNotBlank() &&
+                                                    tempOllamaCloudModel.isNotBlank()
                                         }
                                         AiTranslatorProviderCard(
                                             title = option.second,
@@ -4495,6 +4551,8 @@ private fun GeminiTranslationDialog(
                                                     NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
                                                     NovelTranslationProvider.MISTRAL -> onRefreshMistralModels()
                                                     NovelTranslationProvider.NVIDIA -> onRefreshNvidiaModels()
+                                                    NovelTranslationProvider.OLLAMA_CLOUD ->
+                                                        onRefreshOllamaCloudModels()
                                                 }
                                             },
                                         )
@@ -4854,6 +4912,66 @@ private fun GeminiTranslationDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
+                            NovelTranslationProvider.OLLAMA_CLOUD -> {
+                                AiTranslatorMiniSection(
+                                    title = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_ollama_cloud_models_title,
+                                    ),
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_model_summary,
+                                    ),
+                                )
+                                if (ollamaCloudAllModelEntries.isNotEmpty()) {
+                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                                        value = tempOllamaCloudModel,
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_models_count,
+                                        ).format(ollamaCloudAllModelEntries.size),
+                                        subtitle = tempOllamaCloudModel.ifBlank {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_choose_model,
+                                            )
+                                        },
+                                        icon = null,
+                                        entries = ollamaCloudAllModelEntries,
+                                        onValueChange = { selected ->
+                                            tempOllamaCloudModel = selected
+                                            onSetOllamaCloudModel(selected)
+                                            logPair(ollamaCloudModelLabel, selected)
+                                        },
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = onRefreshOllamaCloudModels) {
+                                        Text(
+                                            if (isOllamaCloudModelsLoading) {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                )
+                                            } else {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = tempOllamaCloudModel,
+                                    onValueChange = {
+                                        tempOllamaCloudModel = it
+                                        onSetOllamaCloudModel(it)
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ollama_cloud_model,
+                                            ),
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                         }
                     }
 
@@ -5123,6 +5241,7 @@ private fun GeminiTranslationDialog(
                     NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestStatus
                     NovelTranslationProvider.MISTRAL -> mistralApiTestStatus
                     NovelTranslationProvider.NVIDIA -> nvidiaApiTestStatus
+                    NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudApiTestStatus
                     NovelTranslationProvider.GEMINI,
                     NovelTranslationProvider.GEMINI_PRIVATE,
                     -> ProviderApiTestStatus.Idle
@@ -5132,6 +5251,7 @@ private fun GeminiTranslationDialog(
                     NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestMessage
                     NovelTranslationProvider.MISTRAL -> mistralApiTestMessage
                     NovelTranslationProvider.NVIDIA -> nvidiaApiTestMessage
+                    NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudApiTestMessage
                     NovelTranslationProvider.GEMINI,
                     NovelTranslationProvider.GEMINI_PRIVATE,
                     -> null
@@ -5226,7 +5346,12 @@ private fun GeminiTranslationDialog(
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
-                        if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected || isNvidiaSelected) {
+                        if (isOpenRouterSelected ||
+                            isDeepSeekSelected ||
+                            isMistralSelected ||
+                            isNvidiaSelected ||
+                            isOllamaCloudSelected
+                        ) {
                             AiTranslatorSupportText(
                                 stringResource(AYMR.strings.novel_reader_ai_translator_more_base_url_summary),
                             )
@@ -5235,7 +5360,8 @@ private fun GeminiTranslationDialog(
                                     isOpenRouterSelected -> tempOpenRouterBaseUrl
                                     isDeepSeekSelected -> tempDeepSeekBaseUrl
                                     isMistralSelected -> tempMistralBaseUrl
-                                    else -> tempNvidiaBaseUrl
+                                    isNvidiaSelected -> tempNvidiaBaseUrl
+                                    else -> tempOllamaCloudBaseUrl
                                 },
                                 onValueChange = {
                                     if (isOpenRouterSelected) {
@@ -5247,9 +5373,12 @@ private fun GeminiTranslationDialog(
                                     } else if (isMistralSelected) {
                                         tempMistralBaseUrl = it
                                         onSetMistralBaseUrl(it)
-                                    } else {
+                                    } else if (isNvidiaSelected) {
                                         tempNvidiaBaseUrl = it
                                         onSetNvidiaBaseUrl(it)
+                                    } else {
+                                        tempOllamaCloudBaseUrl = it
+                                        onSetOllamaCloudBaseUrl(it)
                                     }
                                 },
                                 label = {
@@ -5264,8 +5393,11 @@ private fun GeminiTranslationDialog(
                                             isMistralSelected -> stringResource(
                                                 AYMR.strings.novel_reader_mistral_base_url,
                                             )
-                                            else -> stringResource(
+                                            isNvidiaSelected -> stringResource(
                                                 AYMR.strings.novel_reader_nvidia_base_url,
+                                            )
+                                            else -> stringResource(
+                                                AYMR.strings.novel_reader_ollama_cloud_base_url,
                                             )
                                         },
                                     )
@@ -5283,6 +5415,7 @@ private fun GeminiTranslationDialog(
                                 isDeepSeekSelected -> readerSettings.deepSeekApiKey
                                 isMistralSelected -> readerSettings.mistralApiKey
                                 isNvidiaSelected -> readerSettings.nvidiaApiKey
+                                isOllamaCloudSelected -> readerSettings.ollamaCloudApiKey
                                 else -> tempKey
                             },
                             onValueChange = {
@@ -5294,6 +5427,8 @@ private fun GeminiTranslationDialog(
                                     onSetMistralApiKey(it)
                                 } else if (isNvidiaSelected) {
                                     onSetNvidiaApiKey(it)
+                                } else if (isOllamaCloudSelected) {
+                                    onSetOllamaCloudApiKey(it)
                                 } else {
                                     tempKey = it
                                     onSetGeminiApiKey(it)
@@ -5308,6 +5443,9 @@ private fun GeminiTranslationDialog(
                                         isDeepSeekSelected -> stringResource(AYMR.strings.novel_reader_deepseek_api_key)
                                         isMistralSelected -> stringResource(AYMR.strings.novel_reader_mistral_api_key)
                                         isNvidiaSelected -> stringResource(AYMR.strings.novel_reader_nvidia_api_key)
+                                        isOllamaCloudSelected -> stringResource(
+                                            AYMR.strings.novel_reader_ollama_cloud_api_key,
+                                        )
                                         else -> stringResource(AYMR.strings.novel_reader_gemini_api_key)
                                     },
                                 )
@@ -5395,6 +5533,40 @@ private fun GeminiTranslationDialog(
                                 ) {
                                     Text(
                                         if (isNvidiaModelsLoading) {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                            )
+                                        } else {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_refresh_models,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                            if (!apiTestMessage.isNullOrBlank() &&
+                                apiTestStatus == ProviderApiTestStatus.Error
+                            ) {
+                                AiTranslatorSupportText(apiTestMessage)
+                            }
+                        }
+                        if (isOllamaCloudSelected) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                AiTranslatorApiTestButton(
+                                    status = apiTestStatus,
+                                    onClick = onTestOllamaCloudConnection,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlinedButton(
+                                    onClick = onRefreshOllamaCloudModels,
+                                    enabled = !isOllamaCloudModelsLoading,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(
+                                        if (isOllamaCloudModelsLoading) {
                                             stringResource(
                                                 AYMR.strings.novel_reader_ai_translator_loading_models,
                                             )
@@ -5581,7 +5753,9 @@ private fun GeminiTranslationDialog(
                             )
                         } else if (isMistralSelected || isNvidiaSelected) {
                             Text(
-                                text = stringResource(AYMR.strings.novel_reader_ai_translator_mistral_nvidia_batch_hint),
+                                text = stringResource(
+                                    AYMR.strings.novel_reader_ai_translator_mistral_nvidia_batch_hint,
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -6303,6 +6477,8 @@ private fun getAiTranslatorProviderLabel(provider: NovelTranslationProvider): St
             stringResource(AYMR.strings.novel_reader_translation_provider_mistral)
         NovelTranslationProvider.NVIDIA ->
             stringResource(AYMR.strings.novel_reader_translation_provider_nvidia)
+        NovelTranslationProvider.OLLAMA_CLOUD ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_ollama_cloud)
     }
 }
 

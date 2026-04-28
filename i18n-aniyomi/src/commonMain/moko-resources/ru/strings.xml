@@ -489,6 +489,7 @@
     <string name="novel_reader_translation_provider_deepseek">DeepSeek</string>
     <string name="novel_reader_translation_provider_mistral">Mistral</string>
     <string name="novel_reader_translation_provider_nvidia">NVIDIA</string>
+    <string name="novel_reader_translation_provider_ollama_cloud">Ollama Cloud</string>
     <string name="novel_reader_translation_auto_english_title">Автозапуск перевода для английского</string>
     <string name="novel_reader_translation_auto_english_summary">Автоматически запускать перевод, когда язык источника английский</string>
     <string name="novel_reader_translation_prefetch_next_title">Предперевод следующей главы (30%)</string>
@@ -507,6 +508,11 @@
     <string name="novel_reader_nvidia_base_url">Базовый URL NVIDIA</string>
     <string name="novel_reader_nvidia_api_key">API-ключ NVIDIA</string>
     <string name="novel_reader_nvidia_model">Модель NVIDIA</string>
+    <string name="novel_reader_ollama_cloud_section_title">Ollama Cloud</string>
+    <string name="novel_reader_ollama_cloud_section_summary">Облачные модели Ollama через нативный Ollama API.</string>
+    <string name="novel_reader_ollama_cloud_base_url">Базовый URL Ollama Cloud</string>
+    <string name="novel_reader_ollama_cloud_api_key">API-ключ Ollama Cloud</string>
+    <string name="novel_reader_ollama_cloud_model">Модель Ollama Cloud</string>
     <string name="novel_reader_gemini_section_title">AI перевод</string>
     <string name="novel_reader_gemini_section_summary">Настройки пакетного перевода для кнопки AI в ридере.</string>
     <string name="novel_reader_gemini_api_key">Gemini API ключ</string>
@@ -571,6 +577,7 @@
     <string name="novel_reader_ai_translator_provider_openrouter_description">Широкий каталог моделей и гибкая маршрутизация через одну точку входа.</string>
     <string name="novel_reader_ai_translator_provider_deepseek_description">Сильнее держит длинный контекст и работает через собственные hosted-модели.</string>
     <string name="novel_reader_ai_translator_provider_mistral_description">Быстрые модели Mistral с более лаконичной схемой подключения.</string>
+    <string name="novel_reader_ai_translator_provider_ollama_cloud_description">Облачные модели Ollama через нативный endpoint /api/chat.</string>
     <string name="novel_reader_ai_translator_provider_api_ready">API добавлен</string>
     <string name="novel_reader_ai_translator_provider_api_missing">API не добавлен</string>
     <string name="novel_reader_ai_translator_model_summary">Выберите модель, которая будет переводить главу. Быстрые модели отвечают быстрее, а более крупные обычно лучше держат тон и контекст.</string>
@@ -584,6 +591,7 @@
     <string name="novel_reader_ai_translator_model_id">ID модели</string>
     <string name="novel_reader_ai_translator_deepseek_models_title">Модели DeepSeek</string>
     <string name="novel_reader_ai_translator_mistral_models_title">Модели Mistral</string>
+    <string name="novel_reader_ai_translator_ollama_cloud_models_title">Модели Ollama Cloud</string>
     <string name="novel_reader_ai_translator_models_count">Модели (%d)</string>
     <string name="novel_reader_ai_translator_choose_model">Выберите модель</string>
     <string name="novel_reader_ai_translator_style_title">Стиль перевода</string>

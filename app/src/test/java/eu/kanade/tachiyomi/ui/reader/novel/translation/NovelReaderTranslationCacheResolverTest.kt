@@ -18,7 +18,7 @@ class NovelReaderTranslationCacheResolverTest {
     }
 
     @Test
-    fun `cache remains valid after switching provider and model`() {
+    fun `cache becomes invalid after switching provider and model`() {
         NovelReaderTranslationCacheResolver.matches(
             cached = cache(
                 provider = NovelTranslationProvider.MISTRAL,
@@ -28,7 +28,7 @@ class NovelReaderTranslationCacheResolverTest {
                 translationProvider = NovelTranslationProvider.NVIDIA,
                 modelId = "nvidia/llama-3.1-nemotron-ultra-253b-v1",
             ),
-        ) shouldBe true
+        ) shouldBe false
     }
 
     @Test

@@ -712,6 +712,7 @@
     <string name="novel_reader_translation_provider_deepseek">DeepSeek</string>
     <string name="novel_reader_translation_provider_mistral">Mistral</string>
     <string name="novel_reader_translation_provider_nvidia">NVIDIA</string>
+    <string name="novel_reader_translation_provider_ollama_cloud">Ollama Cloud</string>
     <string name="novel_reader_translation_auto_english_title">Auto-start translation for English</string>
     <string name="novel_reader_translation_auto_english_summary">Automatically start translation when source language is English</string>
     <string name="novel_reader_translation_prefetch_next_title">Pre-translate next chapter (30%)</string>
@@ -730,6 +731,11 @@
     <string name="novel_reader_nvidia_base_url">NVIDIA base URL</string>
     <string name="novel_reader_nvidia_api_key">NVIDIA API key</string>
     <string name="novel_reader_nvidia_model">NVIDIA model</string>
+    <string name="novel_reader_ollama_cloud_section_title">Ollama Cloud</string>
+    <string name="novel_reader_ollama_cloud_section_summary">Cloud-hosted Ollama models through the native Ollama API.</string>
+    <string name="novel_reader_ollama_cloud_base_url">Ollama Cloud base URL</string>
+    <string name="novel_reader_ollama_cloud_api_key">Ollama Cloud API key</string>
+    <string name="novel_reader_ollama_cloud_model">Ollama Cloud model</string>
     <string name="novel_reader_gemini_section_title">AI Translation</string>
     <string name="novel_reader_gemini_section_summary">Chunk translation settings used by the AI button in reader.</string>
     <string name="novel_reader_gemini_api_key">Gemini API key</string>
@@ -794,6 +800,7 @@
     <string name="novel_reader_ai_translator_provider_openrouter_description">Wide model catalog and flexible routing through one endpoint.</string>
     <string name="novel_reader_ai_translator_provider_deepseek_description">Strong long-form reasoning with its own hosted models.</string>
     <string name="novel_reader_ai_translator_provider_mistral_description">Fast European-hosted models with a leaner setup.</string>
+    <string name="novel_reader_ai_translator_provider_ollama_cloud_description">Ollama-hosted cloud models through the native /api/chat endpoint.</string>
     <string name="novel_reader_ai_translator_model_summary">Choose the model that will translate this chapter. Faster models respond sooner, larger models usually keep tone better.</string>
     <string name="novel_reader_ai_translator_provider_api_ready">API added</string>
     <string name="novel_reader_ai_translator_provider_api_missing">API not added</string>
@@ -807,6 +814,7 @@
     <string name="novel_reader_ai_translator_model_id">Model ID</string>
     <string name="novel_reader_ai_translator_deepseek_models_title">DeepSeek models</string>
     <string name="novel_reader_ai_translator_mistral_models_title">Mistral models</string>
+    <string name="novel_reader_ai_translator_ollama_cloud_models_title">Ollama Cloud models</string>
     <string name="novel_reader_ai_translator_models_count">Models (%d)</string>
     <string name="novel_reader_ai_translator_choose_model">Choose a model</string>
     <string name="novel_reader_ai_translator_style_title">Translation style</string>

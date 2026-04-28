@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationServic
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
@@ -16,8 +17,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.Test
 import tachiyomi.core.common.preference.Preference
@@ -31,6 +32,7 @@ class NovelChapterTranslationProcessorTest {
     private val deepSeekTranslationService = mockk<DeepSeekTranslationService>(relaxed = true)
     private val mistralTranslationService = mockk<MistralTranslationService>(relaxed = true)
     private val nvidiaTranslationService = mockk<NvidiaTranslationService>(relaxed = true)
+    private val ollamaCloudTranslationService = mockk<OllamaCloudTranslationService>(relaxed = true)
 
     @Test
     fun `translates segments with configured provider`() {
@@ -42,6 +44,7 @@ class NovelChapterTranslationProcessorTest {
                 deepSeekTranslationService = deepSeekTranslationService,
                 mistralTranslationService = mistralTranslationService,
                 nvidiaTranslationService = nvidiaTranslationService,
+                ollamaCloudTranslationService = ollamaCloudTranslationService,
             )
             val settings = createNovelReaderPreferences().resolveSettings(sourceId = 1L)
 
@@ -82,6 +85,7 @@ class NovelChapterTranslationProcessorTest {
             deepSeekTranslationService = deepSeekTranslationService,
             mistralTranslationService = mistralTranslationService,
             nvidiaTranslationService = nvidiaTranslationService,
+            ollamaCloudTranslationService = ollamaCloudTranslationService,
         )
         val settings = createNovelReaderPreferences()
             .applyMistralDefaults()
@@ -129,6 +133,7 @@ class NovelChapterTranslationProcessorTest {
             deepSeekTranslationService = deepSeekTranslationService,
             mistralTranslationService = mistralTranslationService,
             nvidiaTranslationService = nvidiaTranslationService,
+            ollamaCloudTranslationService = ollamaCloudTranslationService,
         )
         val settings = createNovelReaderPreferences()
             .applyNvidiaDefaults()

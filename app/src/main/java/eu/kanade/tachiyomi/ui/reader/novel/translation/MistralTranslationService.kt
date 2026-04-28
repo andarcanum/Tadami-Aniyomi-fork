@@ -265,7 +265,8 @@ private fun JsonObject.extractAssistantContent(): String {
         .firstOrNull()
         ?.let { return it }
 
-    val sources = listOf(message?.get("content"), message?.get("text"), this["text"], this["output_text"], this["content"])
+    val sources =
+        listOf(message?.get("content"), message?.get("text"), this["text"], this["output_text"], this["content"])
     return sources.firstNotNullOfOrNull { it.extractTextCandidates(includeThinking = false).firstOrNull() }.orEmpty()
 }
 

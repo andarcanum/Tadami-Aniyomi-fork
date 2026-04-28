@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.novel.translation
 
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
-import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.test.runTest
@@ -60,11 +60,16 @@ class OpenRouterTranslationServiceTest {
         request.path shouldBe "/api/v1/chat/completions"
         val body = request.body.readUtf8()
         body.shouldContain("\"stream\":false")
-        body.shouldContain("\"reasoning\":{\"effort\":\"medium\"}")
+        body.shouldContain("\"reasoning\":{\"effort\":\"medium\",\"exclude\":true}")
     }
 
     @Test
-    fun `rejects non free model id`() = runTest {
+    fun `accepts configured non free model id`() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"choices":[{"message":{"content":"<s i='0'>Privet</s>"}}]}""",
+            ),
+        )
         val service = OpenRouterTranslationService(
             client = OkHttpClient(),
             json = Json { ignoreUnknownKeys = true },
@@ -85,7 +90,8 @@ class OpenRouterTranslationServiceTest {
             ),
         )
 
-        translated.shouldBeNull()
-        server.requestCount shouldBe 0
+        translated.shouldNotBeNull()
+        translated shouldBe listOf("Privet")
+        server.requestCount shouldBe 1
     }
 }

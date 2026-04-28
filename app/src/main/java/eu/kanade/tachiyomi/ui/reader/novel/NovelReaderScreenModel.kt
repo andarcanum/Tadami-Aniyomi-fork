@@ -59,6 +59,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePres
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudModelsService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
@@ -127,6 +130,7 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.achievement.model.AchievementEvent
@@ -139,6 +143,7 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.series.novel.interactor.GetNovelSeriesWithEntries
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Date
@@ -146,8 +151,6 @@ import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
-import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.core.common.i18n.stringResource
 
 enum class ProviderApiTestStatus {
     Idle,
@@ -271,6 +274,26 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
         NvidiaModelsService(
+            client = networkHelper.client,
+            json = json,
+        )
+    },
+    private val ollamaCloudTranslationService: OllamaCloudTranslationService = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        val ollamaClient = networkHelper.client.newBuilder()
+            .callTimeout(300, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS)
+            .build()
+        OllamaCloudTranslationService(
+            client = ollamaClient,
+            json = json,
+        )
+    },
+    private val ollamaCloudModelsService: OllamaCloudModelsService = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        OllamaCloudModelsService(
             client = networkHelper.client,
             json = json,
         )
@@ -408,6 +431,11 @@ class NovelReaderScreenModel(
     private var isTestingNvidiaConnection: Boolean = false
     private var nvidiaApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle
     private var nvidiaApiTestMessage: String? = null
+    private var ollamaCloudModelIds: List<String> = emptyList()
+    private var isOllamaCloudModelsLoading: Boolean = false
+    private var isTestingOllamaCloudConnection: Boolean = false
+    private var ollamaCloudApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle
+    private var ollamaCloudApiTestMessage: String? = null
     private var selectedTextTranslationSelection: NovelSelectedTextSelection? = null
     private var selectedTextTranslationUiState: NovelSelectedTextTranslationUiState =
         NovelSelectedTextTranslationUiState.Idle
@@ -545,6 +573,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
             NovelTranslationProvider.MISTRAL -> refreshMistralModels()
             NovelTranslationProvider.NVIDIA -> refreshNvidiaModels()
+            NovelTranslationProvider.OLLAMA_CLOUD -> refreshOllamaCloudModels()
         }
     }
     private fun setError(message: String?) {
@@ -946,6 +975,11 @@ class NovelReaderScreenModel(
             isTestingNvidiaConnection = isTestingNvidiaConnection,
             nvidiaApiTestStatus = nvidiaApiTestStatus,
             nvidiaApiTestMessage = nvidiaApiTestMessage,
+            ollamaCloudModelIds = ollamaCloudModelIds,
+            isOllamaCloudModelsLoading = isOllamaCloudModelsLoading,
+            isTestingOllamaCloudConnection = isTestingOllamaCloudConnection,
+            ollamaCloudApiTestStatus = ollamaCloudApiTestStatus,
+            ollamaCloudApiTestMessage = ollamaCloudApiTestMessage,
         )
     }
     private suspend fun refreshTtsEngines() {
@@ -1724,7 +1758,7 @@ class NovelReaderScreenModel(
                     .ifBlank { normalizedNextHtml }
                 val nextTextBlocks = extractTextBlocks(sanitizedNextHtml)
                 if (nextTextBlocks.isEmpty()) return@runCatching
-                val chunkSize = settings.geminiBatchSize.coerceIn(1, 80)
+                val chunkSize = settings.effectiveTranslationBatchSize()
                 val chunks = nextTextBlocks.chunked(chunkSize)
                 val semaphore = Semaphore(settings.translationConcurrencyLimit())
                 val translated = mutableMapOf<Int, String>()
@@ -2050,13 +2084,6 @@ class NovelReaderScreenModel(
         setGlobal = { novelReaderPreferences.translationProvider().set(value) },
         setOverride = { it.copy(translationProvider = value) },
     ).also {
-        val currentBatchSize = (mutableState.value as? State.Success)?.readerSettings?.geminiBatchSize
-            ?: novelReaderPreferences.geminiBatchSize().get()
-        if ((value == NovelTranslationProvider.MISTRAL || value == NovelTranslationProvider.NVIDIA) &&
-            currentBatchSize == DEFAULT_TRANSLATION_BATCH_SIZE
-        ) {
-            setGeminiBatchSize(MISTRAL_NVIDIA_RECOMMENDED_BATCH_SIZE)
-        }
         openRouterApiTestStatus = ProviderApiTestStatus.Idle
         openRouterApiTestMessage = null
         deepSeekApiTestStatus = ProviderApiTestStatus.Idle
@@ -2065,6 +2092,8 @@ class NovelReaderScreenModel(
         mistralApiTestMessage = null
         nvidiaApiTestStatus = ProviderApiTestStatus.Idle
         nvidiaApiTestMessage = null
+        ollamaCloudApiTestStatus = ProviderApiTestStatus.Idle
+        ollamaCloudApiTestMessage = null
         when (value) {
             NovelTranslationProvider.GEMINI -> Unit
             NovelTranslationProvider.GEMINI_PRIVATE -> Unit
@@ -2072,6 +2101,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
             NovelTranslationProvider.MISTRAL -> refreshMistralModels()
             NovelTranslationProvider.NVIDIA -> refreshNvidiaModels()
+            NovelTranslationProvider.OLLAMA_CLOUD -> refreshOllamaCloudModels()
         }
     }
     private fun setProviderApiTestState(
@@ -2095,6 +2125,10 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.NVIDIA -> {
                 nvidiaApiTestStatus = status
                 nvidiaApiTestMessage = message
+            }
+            NovelTranslationProvider.OLLAMA_CLOUD -> {
+                ollamaCloudApiTestStatus = status
+                ollamaCloudApiTestMessage = message
             }
             NovelTranslationProvider.GEMINI,
             NovelTranslationProvider.GEMINI_PRIVATE,
@@ -2161,6 +2195,18 @@ class NovelReaderScreenModel(
         setGlobal = { novelReaderPreferences.nvidiaModel().set(value) },
         setOverride = { it.copy(nvidiaModel = value) },
     )
+    fun setOllamaCloudBaseUrl(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.ollamaCloudBaseUrl().set(value) },
+        setOverride = { it.copy(ollamaCloudBaseUrl = value) },
+    )
+    fun setOllamaCloudApiKey(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.ollamaCloudApiKey().set(value) },
+        setOverride = { it.copy(ollamaCloudApiKey = value) },
+    )
+    fun setOllamaCloudModel(value: String) = updateGeminiSetting(
+        setGlobal = { novelReaderPreferences.ollamaCloudModel().set(value) },
+        setOverride = { it.copy(ollamaCloudModel = value) },
+    )
     fun refreshOpenRouterModels() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (settings.translationProvider != NovelTranslationProvider.OPENROUTER) return
@@ -2170,7 +2216,7 @@ class NovelReaderScreenModel(
         updateContent(settings)
         screenModelScope.launch(Dispatchers.IO) {
             val fetched = runCatching {
-                openRouterModelsService.fetchFreeModels(
+                openRouterModelsService.fetchModels(
                     baseUrl = settings.openRouterBaseUrl,
                     apiKey = settings.openRouterApiKey,
                 )
@@ -2257,16 +2303,91 @@ class NovelReaderScreenModel(
             updateContent(currentSettings)
         }
     }
+    fun refreshOllamaCloudModels() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (settings.translationProvider != NovelTranslationProvider.OLLAMA_CLOUD) return
+        if (settings.ollamaCloudBaseUrl.isBlank()) return
+        if (settings.ollamaCloudApiKey.isBlank()) return
+        isOllamaCloudModelsLoading = true
+        updateContent(settings)
+        screenModelScope.launch(Dispatchers.IO) {
+            val fetched = runCatching {
+                ollamaCloudModelsService.fetchModels(
+                    baseUrl = settings.ollamaCloudBaseUrl,
+                    apiKey = settings.ollamaCloudApiKey,
+                )
+            }.getOrElse { error ->
+                addAiTranslationLog("? Ollama Cloud models load failed: ${formatAiTranslationThrowableForLog(error)}")
+                emptyList()
+            }
+            ollamaCloudModelIds = fetched
+            isOllamaCloudModelsLoading = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
+    fun testOllamaCloudConnection() {
+        val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
+        if (isTestingOllamaCloudConnection) return
+        if (settings.translationProvider != NovelTranslationProvider.OLLAMA_CLOUD) return
+        if (!settings.hasConfiguredTranslationProvider()) {
+            addAiTranslationLog("? Ollama Cloud config invalid: fill Base URL, API key and Model")
+            setProviderApiTestState(
+                provider = NovelTranslationProvider.OLLAMA_CLOUD,
+                status = ProviderApiTestStatus.Error,
+                message = application.stringResource(AYMR.strings.novel_reader_ai_translator_api_invalid_config),
+            )
+            updateContent(settings)
+            return
+        }
+        isTestingOllamaCloudConnection = true
+        setProviderApiTestState(
+            provider = NovelTranslationProvider.OLLAMA_CLOUD,
+            status = ProviderApiTestStatus.Loading,
+        )
+        updateContent(settings)
+        screenModelScope.launch {
+            runCatching {
+                val result = requestTranslationBatch(
+                    segments = listOf("Connection test"),
+                    settings = settings,
+                ) { message ->
+                    addAiTranslationLog("?? Test: $message")
+                }
+                if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
+                    error(application.stringResource(AYMR.strings.novel_reader_ai_translator_api_empty_response))
+                }
+            }.onSuccess {
+                addAiTranslationLog("? Ollama Cloud connection OK")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.OLLAMA_CLOUD,
+                    status = ProviderApiTestStatus.Success,
+                )
+            }.onFailure { error ->
+                addAiTranslationLog("? Ollama Cloud connection failed: ${formatAiTranslationThrowableForLog(error)}")
+                setProviderApiTestState(
+                    provider = NovelTranslationProvider.OLLAMA_CLOUD,
+                    status = ProviderApiTestStatus.Error,
+                    message = formatAiTranslationThrowableForLog(error),
+                )
+            }
+            isTestingOllamaCloudConnection = false
+            val currentSettings = (mutableState.value as? State.Success)?.readerSettings ?: settings
+            updateContent(currentSettings)
+        }
+    }
     fun testOpenRouterConnection() {
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         if (isTestingOpenRouterConnection) return
         if (settings.translationProvider != NovelTranslationProvider.OPENROUTER) return
         if (!settings.hasConfiguredTranslationProvider()) {
-            addAiTranslationLog("? OpenRouter config invalid: fill Base URL, API key and free Model (:free)")
+            addAiTranslationLog("? OpenRouter config invalid: fill Base URL, API key and Model")
             setProviderApiTestState(
                 provider = NovelTranslationProvider.OPENROUTER,
                 status = ProviderApiTestStatus.Error,
-                message = application.stringResource(AYMR.strings.novel_reader_ai_translator_api_invalid_openrouter_config),
+                message = application.stringResource(
+                    AYMR.strings.novel_reader_ai_translator_api_invalid_openrouter_config,
+                ),
             )
             updateContent(settings)
             return
@@ -3058,7 +3179,9 @@ class NovelReaderScreenModel(
                 it is NovelRichContentBlock.Heading ||
                 it is NovelRichContentBlock.Paragraph
         }
-        addGoogleLog("Applied to rich content blocks with inline style projection: replaced=$replacedCount/$richContentBlockCount")
+        addGoogleLog(
+            "Applied to rich content blocks with inline style projection: replaced=$replacedCount/$richContentBlockCount",
+        )
         return updated
     }
     private fun buildRawHtmlFromContentBlocks(blocks: List<ContentBlock>): String {
@@ -3327,6 +3450,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.DEEPSEEK,
             NovelTranslationProvider.MISTRAL,
             NovelTranslationProvider.NVIDIA,
+            NovelTranslationProvider.OLLAMA_CLOUD,
             -> resolveNovelTranslationPromptFamily(geminiTargetLang)
         }
     }
@@ -3437,6 +3561,24 @@ class NovelReaderScreenModel(
             topP = geminiTopP,
         )
     }
+    private fun NovelReaderSettings.toOllamaCloudTranslationParams(): OllamaCloudTranslationParams {
+        return OllamaCloudTranslationParams(
+            baseUrl = ollamaCloudBaseUrl,
+            apiKey = ollamaCloudApiKey,
+            model = ollamaCloudModel,
+            sourceLang = geminiSourceLang,
+            targetLang = geminiTargetLang,
+            promptMode = geminiPromptMode,
+            promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
+            temperature = geminiTemperature,
+            topP = geminiTopP,
+            reasoningEffort = normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.OLLAMA_CLOUD,
+                model = ollamaCloudModel,
+                value = geminiReasoningEffort,
+            ),
+        )
+    }
     private fun NovelReaderSettings.translationRequestConfigLog(): String {
         val common = buildString {
             append("provider=").append(translationProvider.name)
@@ -3448,7 +3590,7 @@ class NovelReaderScreenModel(
                 append(", batch=chapter")
                 append(", concurrency=1")
             } else {
-                append(", batch=").append(geminiBatchSize.coerceIn(1, 80))
+                append(", batch=").append(effectiveTranslationBatchSize())
                 append(", concurrency=").append(translationConcurrencyLimit())
             }
             append(", relaxed=").append(geminiRelaxedMode)
@@ -3467,9 +3609,13 @@ class NovelReaderScreenModel(
                     "bridgeInstalled=${GeminiPrivateBridge.isInstalled()}, bridgeUnlocked=${isPrivateBridgeUnlocked()}"
             }
             NovelTranslationProvider.OPENROUTER -> {
-                val isFreeModel = openRouterModel.trim().endsWith(":free", ignoreCase = true)
+                val reasoning = normalizeTranslationReasoningEffort(
+                    provider = NovelTranslationProvider.OPENROUTER,
+                    model = openRouterModel,
+                    value = geminiReasoningEffort,
+                ) ?: "none"
                 "baseUrl=${openRouterBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
-                    "topP=${geminiTopP.toLogFloat()}, freeModel=$isFreeModel"
+                    "topP=${geminiTopP.toLogFloat()}, reasoning=$reasoning"
             }
             NovelTranslationProvider.DEEPSEEK -> {
                 val params = toDeepSeekTranslationParams()
@@ -3487,6 +3633,12 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.NVIDIA -> {
                 "baseUrl=${nvidiaBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
                     "topP=${geminiTopP.toLogFloat()}, stream=false"
+            }
+            NovelTranslationProvider.OLLAMA_CLOUD -> {
+                val params = toOllamaCloudTranslationParams()
+                val reasoning = params.reasoningEffort ?: "none"
+                "baseUrl=${params.baseUrl.trim()}, temp=${params.temperature.toLogFloat()}, " +
+                    "topP=${params.topP.toLogFloat()}, think=$reasoning, stream=false"
             }
         }
         return "$common, $sampling"
@@ -3540,6 +3692,13 @@ class NovelReaderScreenModel(
                     onLog = onLog,
                 )
             }
+            NovelTranslationProvider.OLLAMA_CLOUD -> {
+                ollamaCloudTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toOllamaCloudTranslationParams(),
+                    onLog = onLog,
+                )
+            }
         }
     }
     private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
@@ -3552,7 +3711,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.OPENROUTER -> {
                 openRouterBaseUrl.isNotBlank() &&
                     openRouterApiKey.isNotBlank() &&
-                    openRouterModel.trim().endsWith(":free", ignoreCase = true)
+                    openRouterModel.isNotBlank()
             }
             NovelTranslationProvider.DEEPSEEK -> {
                 deepSeekBaseUrl.isNotBlank() &&
@@ -3568,6 +3727,11 @@ class NovelReaderScreenModel(
                 nvidiaApiKey.isNotBlank() &&
                     nvidiaModel.isNotBlank()
             }
+            NovelTranslationProvider.OLLAMA_CLOUD -> {
+                ollamaCloudBaseUrl.isNotBlank() &&
+                    ollamaCloudApiKey.isNotBlank() &&
+                    ollamaCloudModel.isNotBlank()
+            }
         }
     }
     private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
@@ -3580,6 +3744,17 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
             NovelTranslationProvider.MISTRAL -> 1
             NovelTranslationProvider.NVIDIA -> 1
+            NovelTranslationProvider.OLLAMA_CLOUD -> geminiConcurrency.coerceIn(1, 8)
+        }
+    }
+
+    private fun NovelReaderSettings.effectiveTranslationBatchSize(): Int {
+        val requested = geminiBatchSize.coerceIn(1, 80)
+        return when (translationProvider) {
+            NovelTranslationProvider.MISTRAL,
+            NovelTranslationProvider.NVIDIA,
+            -> requested.coerceAtMost(20)
+            else -> requested
         }
     }
     private fun NovelReaderSettings.shouldUseSinglePrivateChapterRequestMode(): Boolean {
@@ -4409,6 +4584,11 @@ class NovelReaderScreenModel(
             val isTestingNvidiaConnection: Boolean = false,
             val nvidiaApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle,
             val nvidiaApiTestMessage: String? = null,
+            val ollamaCloudModelIds: List<String> = emptyList(),
+            val isOllamaCloudModelsLoading: Boolean = false,
+            val isTestingOllamaCloudConnection: Boolean = false,
+            val ollamaCloudApiTestStatus: ProviderApiTestStatus = ProviderApiTestStatus.Idle,
+            val ollamaCloudApiTestMessage: String? = null,
         ) : State {
             val textBlocks: List<String>
                 get() = contentBlocks
@@ -4465,8 +4645,6 @@ class NovelReaderScreenModel(
         private const val DEEPSEEK_TOP_P_MAX = 0.95f
         private const val DEEPSEEK_DEFAULT_PRESENCE_PENALTY = 0.15f
         private const val DEEPSEEK_DEFAULT_FREQUENCY_PENALTY = 0.15f
-        private const val DEFAULT_TRANSLATION_BATCH_SIZE = 40
-        private const val MISTRAL_NVIDIA_RECOMMENDED_BATCH_SIZE = 20
         private const val PARAGRAPH_LIKE_SELECTOR = "p, li, blockquote, h1, h2, h3, h4, h5, h6, pre"
         private const val TRANSLATED_TEXT_STRONG_BOUNDARY_CHARS = ".,!?;:…)]}»”’"
         private const val TRANSLATED_TEXT_OPENING_BOUNDARY_CHARS = "([{«“‘"

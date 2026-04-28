@@ -39,7 +39,9 @@ class TranslationNotificationManager(
             setProgress(100, safeProgress, false)
             setOngoing(true)
             setOnlyAlertOnce(true)
-            setStyle(NotificationCompat.BigTextStyle().bigText(buildProgressText(chapterName, safeProgress, pendingCount)))
+            setStyle(
+                NotificationCompat.BigTextStyle().bigText(buildProgressText(chapterName, safeProgress, pendingCount)),
+            )
             setContentIntent(openChapterIntent(chapterId))
             addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,

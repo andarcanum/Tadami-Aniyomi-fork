@@ -162,8 +162,17 @@ open class BaseOpenAiTranslationService(
             .firstOrNull()
             ?.let { return it }
 
-        val sources = listOf(message?.get("content"), message?.get("text"), choice["text"], choice["output_text"], choice["content"])
-        return sources.firstNotNullOfOrNull { it.extractTextCandidates(includeThinking = false).firstOrNull() }.orEmpty()
+        val sources =
+            listOf(
+                message?.get("content"),
+                message?.get("text"),
+                choice["text"],
+                choice["output_text"],
+                choice["content"],
+            )
+        return sources.firstNotNullOfOrNull {
+            it.extractTextCandidates(includeThinking = false).firstOrNull()
+        }.orEmpty()
     }
 
     private fun JsonElement?.extractContentArrayTextCandidates(): List<String> {

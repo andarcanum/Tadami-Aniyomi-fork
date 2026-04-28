@@ -111,10 +111,10 @@ class GoogleTranslationService(
                         async {
                             val percent = ((chunkIndex + 1) * 100) / chunks.size
                             onProgress?.invoke(TranslationPhase.TRANSLATING, percent)
+                            val chunkChars = chunk.sumOf { it.second.length }
                             onLog?.invoke(
-                                "Simple chunk ${chunkIndex + 1}/${chunks.size}: paragraphs=${chunk.size}, chars=${chunk.sumOf {
-                                    it.second.length
-                                }}",
+                                "Simple chunk ${chunkIndex + 1}/${chunks.size}: " +
+                                    "paragraphs=${chunk.size}, chars=$chunkChars",
                             )
                             val wrappedRequest = chunk.joinToString("\n\n") { (index, text) -> "[$index]\n$text" }
                             val translatedBody = translateSingle(
