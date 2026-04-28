@@ -77,7 +77,6 @@ class NovelChapterTranslationProcessor(
         val json = Injekt.get<Json>()
         MistralTranslationService(
             client = networkHelper.client.newBuilder()
-                .callTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
                 .build(),
             json = json,
@@ -91,7 +90,6 @@ class NovelChapterTranslationProcessor(
         val json = Injekt.get<Json>()
         NvidiaTranslationService(
             client = networkHelper.client.newBuilder()
-                .callTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
                 .build(),
             json = json,

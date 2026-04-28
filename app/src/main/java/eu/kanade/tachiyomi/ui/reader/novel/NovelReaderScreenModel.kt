@@ -236,7 +236,6 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
         val mistralClient = networkHelper.client.newBuilder()
-            .callTimeout(300, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
             .build()
         MistralTranslationService(
@@ -259,7 +258,6 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
         val nvidiaClient = networkHelper.client.newBuilder()
-            .callTimeout(300, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
             .build()
         NvidiaTranslationService(
