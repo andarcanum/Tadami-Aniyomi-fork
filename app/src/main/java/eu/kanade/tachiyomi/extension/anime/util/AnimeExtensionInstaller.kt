@@ -57,6 +57,12 @@ internal class AnimeExtensionInstaller(private val context: Context) {
      */
     private val activeDownloads = hashMapOf<String, Long>()
 
+    /**
+     * Reverse mapping from download id to package name. Used to register the extension directly
+     * after install without relying on the broadcast receiver.
+     */
+    private val downloadIdToPkgName = hashMapOf<Long, String>()
+
     private val downloadsStateFlows = hashMapOf<Long, MutableStateFlow<InstallStep>>()
 
     private val extensionInstaller = Injekt.get<BasePreferences>().extensionInstaller()
@@ -92,6 +98,7 @@ internal class AnimeExtensionInstaller(private val context: Context) {
 
         val id = downloadManager.enqueue(request)
         activeDownloads[pkgName] = id
+        downloadIdToPkgName[id] = pkgName
 
         val downloadStateFlow = MutableStateFlow(InstallStep.Pending)
         downloadsStateFlows[id] = downloadStateFlow
@@ -158,12 +165,16 @@ internal class AnimeExtensionInstaller(private val context: Context) {
     fun installApk(downloadId: Long, uri: Uri) {
         when (val installer = extensionInstaller.get()) {
             BasePreferences.ExtensionInstaller.LEGACY -> {
+                val pkgName = downloadIdToPkgName[downloadId]
                 val intent = Intent(context, AnimeExtensionInstallActivity::class.java)
                     .setDataAndType(uri, APK_MIME)
                     .putExtra(EXTRA_DOWNLOAD_ID, downloadId)
                     .setFlags(
                         Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION,
                     )
+                if (pkgName != null) {
+                    intent.putExtra(EXTRA_PACKAGE_NAME, pkgName)
+                }
 
                 context.startActivity(intent)
             }
@@ -185,6 +196,10 @@ internal class AnimeExtensionInstaller(private val context: Context) {
                     }
 
                     if (AnimeExtensionLoader.installPrivateExtensionFile(context, tempFile)) {
+                        val pkgName = downloadIdToPkgName[downloadId]
+                        if (pkgName != null) {
+                            extensionManager.reloadAndRegisterExtension(pkgName)
+                        }
                         extensionManager.updateInstallStep(downloadId, InstallStep.Installed)
                     } else {
                         extensionManager.updateInstallStep(downloadId, InstallStep.Error)
@@ -250,6 +265,7 @@ internal class AnimeExtensionInstaller(private val context: Context) {
         if (downloadId != null) {
             downloadManager.remove(downloadId)
             downloadsStateFlows.remove(downloadId)
+            downloadIdToPkgName.remove(downloadId)
         }
         if (activeDownloads.isEmpty()) {
             downloadReceiver.unregister()
@@ -322,6 +338,7 @@ internal class AnimeExtensionInstaller(private val context: Context) {
     companion object {
         const val APK_MIME = "application/vnd.android.package-archive"
         const val EXTRA_DOWNLOAD_ID = "AnimeExtensionInstaller.extra.DOWNLOAD_ID"
+        const val EXTRA_PACKAGE_NAME = "AnimeExtensionInstaller.extra.PACKAGE_NAME"
         const val FILE_SCHEME = "file://"
     }
 }

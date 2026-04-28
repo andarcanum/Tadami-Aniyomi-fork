@@ -124,7 +124,7 @@ class PackageInstallerInstallerManga(private val service: Service) : InstallerMa
             service,
             packageActionReceiver,
             IntentFilter(INSTALL_ACTION),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
+            ContextCompat.RECEIVER_EXPORTED,
         )
     }
 }

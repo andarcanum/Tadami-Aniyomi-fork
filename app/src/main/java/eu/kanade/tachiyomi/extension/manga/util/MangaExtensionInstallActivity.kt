@@ -68,7 +68,13 @@ class MangaExtensionInstallActivity : Activity() {
         val downloadId = intent.extras!!.getLong(MangaExtensionInstaller.EXTRA_DOWNLOAD_ID)
         val extensionManager = Injekt.get<MangaExtensionManager>()
         val newStep = when (resultCode) {
-            RESULT_OK -> InstallStep.Installed
+            RESULT_OK -> {
+                val pkgName = intent.extras?.getString(MangaExtensionInstaller.EXTRA_PACKAGE_NAME)
+                if (pkgName != null) {
+                    extensionManager.reloadAndRegisterExtension(pkgName)
+                }
+                InstallStep.Installed
+            }
             RESULT_CANCELED -> InstallStep.Idle
             else -> InstallStep.Error
         }
