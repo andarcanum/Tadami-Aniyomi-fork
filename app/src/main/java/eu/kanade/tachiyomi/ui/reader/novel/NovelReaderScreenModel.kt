@@ -255,8 +255,11 @@ class NovelReaderScreenModel(
     private val nvidiaTranslationService: NvidiaTranslationService = run {
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
+        val nvidiaClient = networkHelper.client.newBuilder()
+            .readTimeout(180, TimeUnit.SECONDS)
+            .build()
         NvidiaTranslationService(
-            client = networkHelper.client,
+            client = nvidiaClient,
             json = json,
         )
     },
@@ -1747,14 +1750,10 @@ class NovelReaderScreenModel(
         chapterId: Long,
         settings: NovelReaderSettings,
     ): Boolean {
-        val cached = NovelReaderTranslationDiskCacheStore.get(chapterId) ?: return false
-        if (cached.translatedByIndex.isEmpty()) return false
-        return cached.provider == settings.translationProvider &&
-            cached.model == settings.translationCacheModelId() &&
-            cached.sourceLang == settings.geminiSourceLang &&
-            cached.targetLang == settings.geminiTargetLang &&
-            cached.promptMode == settings.geminiPromptMode &&
-            cached.stylePreset == settings.geminiStylePreset
+        return NovelReaderTranslationDiskCacheStore.has(
+            chapterId = chapterId,
+            requirements = settings.toTranslationCacheRequirements(),
+        )
     }
     private fun applyLocalChapterProgress(
         chapter: NovelChapter,

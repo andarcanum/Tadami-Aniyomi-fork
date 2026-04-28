@@ -1061,6 +1061,7 @@ class NovelReaderPreferences(
             mistralBaseUrl = override?.mistralBaseUrl ?: mistralBaseUrl().get(),
             mistralApiKey = override?.mistralApiKey ?: mistralApiKey().get(),
             mistralModel = override?.mistralModel ?: mistralModel().get(),
+            nvidiaBaseUrl = override?.nvidiaBaseUrl ?: nvidiaBaseUrl().get(),
             nvidiaApiKey = override?.nvidiaApiKey ?: nvidiaApiKey().get(),
             nvidiaModel = override?.nvidiaModel ?: nvidiaModel().get(),
             googleTranslationEnabled = override?.googleTranslationEnabled ?: googleTranslationEnabled().get(),
@@ -1484,6 +1485,9 @@ class NovelReaderPreferences(
                 mistralBaseUrl = override?.mistralBaseUrl ?: gemini.mistralBaseUrl,
                 mistralApiKey = override?.mistralApiKey ?: gemini.mistralApiKey,
                 mistralModel = override?.mistralModel ?: gemini.mistralModel,
+                nvidiaBaseUrl = override?.nvidiaBaseUrl ?: gemini.nvidiaBaseUrl,
+                nvidiaApiKey = override?.nvidiaApiKey ?: gemini.nvidiaApiKey,
+                nvidiaModel = override?.nvidiaModel ?: gemini.nvidiaModel,
                 googleTranslationEnabled = override?.googleTranslationEnabled ?: gemini.googleTranslationEnabled,
                 googleTranslationSourceLang =
                 override?.googleTranslationSourceLang ?: gemini.googleTranslationSourceLang,

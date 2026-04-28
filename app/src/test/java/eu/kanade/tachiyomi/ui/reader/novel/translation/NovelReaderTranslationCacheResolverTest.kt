@@ -18,11 +18,17 @@ class NovelReaderTranslationCacheResolverTest {
     }
 
     @Test
-    fun `mismatched model is invalid`() {
+    fun `cache remains valid after switching provider and model`() {
         NovelReaderTranslationCacheResolver.matches(
-            cached = cache(model = "different"),
-            requirements = requirements(),
-        ) shouldBe false
+            cached = cache(
+                provider = NovelTranslationProvider.MISTRAL,
+                model = "mistral-small-latest",
+            ),
+            requirements = requirements(
+                translationProvider = NovelTranslationProvider.NVIDIA,
+                modelId = "nvidia/llama-3.1-nemotron-ultra-253b-v1",
+            ),
+        ) shouldBe true
     }
 
     @Test
@@ -41,12 +47,15 @@ class NovelReaderTranslationCacheResolverTest {
         ) shouldBe false
     }
 
-    private fun requirements(): NovelReaderTranslationCacheRequirements {
+    private fun requirements(
+        translationProvider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
+        modelId: String = "gemini-3.1-flash-lite-preview",
+    ): NovelReaderTranslationCacheRequirements {
         return NovelReaderTranslationCacheRequirements(
             geminiEnabled = true,
             geminiDisableCache = false,
-            translationProvider = NovelTranslationProvider.GEMINI,
-            modelId = "gemini-3.1-flash-lite-preview",
+            translationProvider = translationProvider,
+            modelId = modelId,
             sourceLang = "English",
             targetLang = "Russian",
             promptMode = GeminiPromptMode.ADULT_18,
@@ -55,6 +64,7 @@ class NovelReaderTranslationCacheResolverTest {
     }
 
     private fun cache(
+        provider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
         model: String = "gemini-3.1-flash-lite-preview",
         sourceLang: String = "English",
         targetLang: String = "Russian",
@@ -62,6 +72,7 @@ class NovelReaderTranslationCacheResolverTest {
         return GeminiTranslationCacheEntry(
             chapterId = 1L,
             translatedByIndex = mapOf(0 to "hello"),
+            provider = provider,
             model = model,
             sourceLang = sourceLang,
             targetLang = targetLang,

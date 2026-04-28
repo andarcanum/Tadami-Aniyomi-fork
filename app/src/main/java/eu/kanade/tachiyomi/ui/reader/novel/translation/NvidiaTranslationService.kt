@@ -44,8 +44,11 @@ class NvidiaTranslationService(
             put("stream", false)
         }
 
+        val baseUrl = normalizeNvidiaBaseUrl(params.baseUrl)
+        if (baseUrl.isBlank()) return null
+
         val payload = executeChatCompletion(
-            baseUrl = params.baseUrl.trim().ifBlank { NVIDIA_BASE_URL },
+            baseUrl = baseUrl,
             apiKey = params.apiKey,
             requestBody = requestBody.toString(),
             logLabel = "NVIDIA",
@@ -64,6 +67,14 @@ class NvidiaTranslationService(
             expectedCount = segments.size,
         )
         if (parsed.all { it.isNullOrBlank() }) {
+            val parsedPlaintext = GeminiXmlSegmentParser.parsePlaintext(
+                rawResponse = candidateText,
+                expectedCount = segments.size,
+            )
+            if (parsedPlaintext.any { !it.isNullOrBlank() }) {
+                onLog?.invoke("NVIDIA parse warning: no XML segments found; used plaintext fallback")
+                return parsedPlaintext
+            }
             onLog?.invoke("NVIDIA parse warning: no XML segments found in message")
             onLog?.invoke("NVIDIA content preview: ${candidateText.take(600)}")
             return null
@@ -94,6 +105,18 @@ class NvidiaTranslationService(
     }
 }
 private const val NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+
+internal fun normalizeNvidiaBaseUrl(baseUrl: String): String {
+    val trimmed = baseUrl.trim().trimEnd('/')
+    if (trimmed.isBlank()) return NVIDIA_BASE_URL
+    val lower = trimmed.lowercase()
+    return when {
+        lower.endsWith("/v1/chat/completions") -> trimmed.dropLast("/chat/completions".length)
+        lower.endsWith("/chat/completions") -> trimmed.dropLast("/chat/completions".length)
+        lower.endsWith("/v1") -> trimmed
+        else -> "$trimmed/v1"
+    }
+}
 
 private val xmlSegmentStartRegex =
     Regex("(?i)<s\\s+i=['\"]\\d+['\"]>")

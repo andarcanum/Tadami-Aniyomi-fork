@@ -93,3 +93,9 @@
 
 # XmlUtil
 -keep public enum nl.adaptivity.xmlutil.EventType { *; }
+
+# Secret Hall — loaded via Class.forName, prevent R8 merge/optimize in AGP 9.x
+-keep class eu.kanade.presentation.browse.local.SecretHallGateImpl { *; }
+-keep class eu.kanade.presentation.browse.local.SecretHallOfFameScreen { *; }
+-keep class eu.kanade.presentation.browse.local.SecretHallSceneConfig { *; }
+-keep class eu.kanade.presentation.browse.SecretHallGate { *; }

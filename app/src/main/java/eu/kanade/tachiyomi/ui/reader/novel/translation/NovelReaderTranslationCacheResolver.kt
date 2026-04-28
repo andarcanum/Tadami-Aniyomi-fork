@@ -25,9 +25,7 @@ internal object NovelReaderTranslationCacheResolver {
         if (cached == null) return false
         if (cached.translatedByIndex.isEmpty()) return false
 
-        return cached.provider == requirements.translationProvider &&
-            cached.model == requirements.modelId &&
-            cached.sourceLang == requirements.sourceLang &&
+        return cached.sourceLang == requirements.sourceLang &&
             cached.targetLang == requirements.targetLang &&
             cached.promptMode == requirements.promptMode &&
             cached.stylePreset == requirements.stylePreset
