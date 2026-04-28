@@ -998,10 +998,10 @@
     <string name="ai_translator_label_advantage">Преимущество:</string>
     <string name="ai_translator_loading_models">Загрузка моделей…</string>
     <string name="ai_translator_action_refresh_list">Обновить список</string>
-    <string name="ai_translator_label_free_models">Бесплатные модели</string>
-    <string name="ai_translator_select_free_model">Выберите free модель (:free)</string>
+    <string name="ai_translator_label_free_models">Модели</string>
+    <string name="ai_translator_select_free_model">Выберите модель</string>
     <string name="ai_translator_select_model">Выберите модель</string>
-    <string name="ai_translator_enter_model_id">Model ID (только :free)</string>
+    <string name="ai_translator_enter_model_id">Model ID</string>
     <string name="ai_translator_checking">Проверка…</string>
     <string name="ai_translator_updating">Обновление…</string>
     <string name="ai_translator_password_label">Пароль %s bridge</string>

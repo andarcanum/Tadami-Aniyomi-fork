@@ -56,6 +56,13 @@ class GoogleTranslationService(
                     val body = response.body.string()
                     if (!response.isSuccessful || body.isBlank()) {
                         lastFailure = IllegalStateException("HTTP ${response.code}")
+                        if (response.code == 429 && attempt < retryCount - 1) {
+                            val retryAfterMs = response.header("Retry-After")
+                                ?.toLongOrNull()
+                                ?.times(1000L)
+                                ?: (1_500L * (attempt + 1))
+                            delay(retryAfterMs.coerceIn(1_000L, 15_000L))
+                        }
                     } else {
                         parseTranslatedText(body)?.let { translated ->
                             if (translated.isNotBlank()) {
@@ -97,65 +104,69 @@ class GoogleTranslationService(
         val chunks = buildChunks(texts)
 
         coroutineScope {
-            chunks.mapIndexed { chunkIndex, chunk ->
-                async {
-                    val percent = ((chunkIndex + 1) * 100) / chunks.size
-                    onProgress?.invoke(TranslationPhase.TRANSLATING, percent)
-                    onLog?.invoke(
-                        "Simple chunk ${chunkIndex + 1}/${chunks.size}: paragraphs=${chunk.size}, chars=${chunk.sumOf {
-                            it.second.length
-                        }}",
-                    )
-                    val wrappedRequest = chunk.joinToString("\n\n") { (index, text) -> "[$index]\n$text" }
-                    val translatedBody = translateSingle(
-                        text = wrappedRequest,
-                        sourceLanguage = normalizedSource,
-                        targetLanguage = normalizedTarget,
-                    )
-
-                    if (translatedBody == null) {
-                        onLog?.invoke(
-                            "Simple chunk ${chunkIndex + 1}/${chunks.size}: chunk request failed, falling back",
-                        )
-                        fallbackChunk(
-                            chunk = chunk,
-                            sourceLanguage = normalizedSource,
-                            targetLanguage = normalizedTarget,
-                            translations = translations,
-                        )
-                        return@async
-                    }
-
-                    var applied = 0
-                    chunk.forEach { (index, original) ->
-                        val markerRegex = Regex(
-                            pattern = """^\[\s*$index\s*\.?\]\s*\n?(.*?)(?=\n*\[\s*\d+\s*\.?\]|\z)""",
-                            options = setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.MULTILINE),
-                        )
-                        val result = markerRegex.find(translatedBody)?.groupValues?.getOrNull(1)?.trim()
-                        if (result.isNullOrBlank()) {
-                            translateSingle(
-                                text = original,
+            chunks.withIndex()
+                .chunked(DEFAULT_MAX_PARALLEL_CHUNKS)
+                .forEach { chunkGroup ->
+                    chunkGroup.map { (chunkIndex, chunk) ->
+                        async {
+                            val percent = ((chunkIndex + 1) * 100) / chunks.size
+                            onProgress?.invoke(TranslationPhase.TRANSLATING, percent)
+                            onLog?.invoke(
+                                "Simple chunk ${chunkIndex + 1}/${chunks.size}: paragraphs=${chunk.size}, chars=${chunk.sumOf {
+                                    it.second.length
+                                }}",
+                            )
+                            val wrappedRequest = chunk.joinToString("\n\n") { (index, text) -> "[$index]\n$text" }
+                            val translatedBody = translateSingle(
+                                text = wrappedRequest,
                                 sourceLanguage = normalizedSource,
                                 targetLanguage = normalizedTarget,
-                            )?.let { fallback ->
-                                synchronized(translations) {
-                                    translations[original] = fallback
+                            )
+
+                            if (translatedBody == null) {
+                                onLog?.invoke(
+                                    "Simple chunk ${chunkIndex + 1}/${chunks.size}: chunk request failed, falling back",
+                                )
+                                fallbackChunk(
+                                    chunk = chunk,
+                                    sourceLanguage = normalizedSource,
+                                    targetLanguage = normalizedTarget,
+                                    translations = translations,
+                                )
+                                return@async
+                            }
+
+                            var applied = 0
+                            chunk.forEach { (index, original) ->
+                                val markerRegex = Regex(
+                                    pattern = """^\[\s*$index\s*\.?\]\s*\n?(.*?)(?=\n*\[\s*\d+\s*\.?\]|\z)""",
+                                    options = setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.MULTILINE),
+                                )
+                                val result = markerRegex.find(translatedBody)?.groupValues?.getOrNull(1)?.trim()
+                                if (result.isNullOrBlank()) {
+                                    translateSingle(
+                                        text = original,
+                                        sourceLanguage = normalizedSource,
+                                        targetLanguage = normalizedTarget,
+                                    )?.let { fallback ->
+                                        synchronized(translations) {
+                                            translations[original] = fallback
+                                        }
+                                        applied += 1
+                                    }
+                                } else {
+                                    synchronized(translations) {
+                                        translations[original] = result
+                                    }
+                                    applied += 1
                                 }
-                                applied += 1
                             }
-                        } else {
-                            synchronized(translations) {
-                                translations[original] = result
-                            }
-                            applied += 1
+                            onLog?.invoke(
+                                "Simple chunk ${chunkIndex + 1}/${chunks.size} applied: translated=$applied/${chunk.size}",
+                            )
                         }
-                    }
-                    onLog?.invoke(
-                        "Simple chunk ${chunkIndex + 1}/${chunks.size} applied: translated=$applied/${chunk.size}",
-                    )
+                    }.awaitAll()
                 }
-            }.awaitAll()
         }
 
         GoogleTranslationBatchResponse(
@@ -290,7 +301,8 @@ class GoogleTranslationService(
         const val DEFAULT_MAX_CHUNK_CHARS = 8_000
         const val DEFAULT_POST_THRESHOLD_CHARS = 500
         const val DEFAULT_MAX_DIRECT_TEXT_CHARS = 13_000
-        const val DEFAULT_RETRY_COUNT = 2
+        const val DEFAULT_RETRY_COUNT = 3
+        const val DEFAULT_MAX_PARALLEL_CHUNKS = 3
         const val DEFAULT_USER_AGENT =
             "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/UQ1A.240205.004) " +
                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.6834.83 Mobile Safari/537.36"

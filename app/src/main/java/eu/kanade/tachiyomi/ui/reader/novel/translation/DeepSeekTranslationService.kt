@@ -104,11 +104,16 @@ class DeepSeekTranslationService(
                     return null
                 }
                 is DeepSeekRequestOutcome.RateLimited -> {
+                    if (attempt == MAX_ATTEMPTS) {
+                        onLog?.invoke(
+                            "DeepSeek rate limited (attempt $attempt/$MAX_ATTEMPTS): ${outcome.details}. No retries left",
+                        )
+                        return null
+                    }
                     onLog?.invoke(
                         "DeepSeek rate limited (attempt $attempt/$MAX_ATTEMPTS): ${outcome.details}. " +
                             "Retrying in ${"%.1f".format(outcome.waitMs / 1000f)}s",
                     )
-                    if (attempt == MAX_ATTEMPTS) return null
                     retryDelay(outcome.waitMs)
                 }
                 is DeepSeekRequestOutcome.Success -> {
@@ -155,6 +160,14 @@ class DeepSeekTranslationService(
                     }
                     val parsed = GeminiXmlSegmentParser.parse(sanitizedCandidate, expectedCount = segments.size)
                     if (parsed.all { it.isNullOrBlank() }) {
+                        val parsedPlaintext = GeminiXmlSegmentParser.parsePlaintext(
+                            rawResponse = candidateText,
+                            expectedCount = segments.size,
+                        )
+                        if (parsedPlaintext.any { !it.isNullOrBlank() }) {
+                            onLog?.invoke("DeepSeek parse warning: no XML segments found; used plaintext fallback")
+                            return parsedPlaintext
+                        }
                         onLog?.invoke("DeepSeek parse warning: no XML segments found in message")
                         onLog?.invoke("DeepSeek content preview: ${sanitizedCandidate.take(600)}")
                         return null
@@ -192,14 +205,6 @@ class DeepSeekTranslationService(
             taggedInput = taggedInput,
             family = family,
         )
-        return "TRANSLATE from $sourceLang to $targetLang.\n" +
-            "Inject soul into the text. Make the reader believe this was written by a Russian author.\n\n" +
-            "Use popular genre terminology (Magic -> Магия, etc.). Make it sound like high-quality fiction.\n\n" +
-            "1. Keep the XML structure exactly as is (<s i='...'>...</s>).\n" +
-            "2. NO PREAMBLE. NO ANALYSIS TEXT. NO MARKDOWN HEADERS.\n" +
-            "3. Start your response IMMEDIATELY with the first XML tag.\n\n" +
-            "INPUT BLOCK:\n" +
-            taggedInput
     }
 
     private suspend fun executeRequest(
@@ -354,4 +359,4 @@ private fun String.trimNonXmlTail(): String {
     return source.substring(start, end + 1).trim()
 }
 
-private const val MAX_ATTEMPTS = 1
+private const val MAX_ATTEMPTS = 3

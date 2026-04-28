@@ -495,7 +495,7 @@
     <string name="novel_reader_translation_prefetch_next_summary">Запускать перевод следующей главы в фоне после 30% прогресса чтения</string>
     <string name="novel_reader_openrouter_base_url">Базовый URL OpenRouter</string>
     <string name="novel_reader_openrouter_api_key">API-ключ OpenRouter</string>
-    <string name="novel_reader_openrouter_model">Модель OpenRouter (:free only)</string>
+    <string name="novel_reader_openrouter_model">Модель OpenRouter</string>
     <string name="novel_reader_deepseek_base_url">Базовый URL DeepSeek</string>
     <string name="novel_reader_deepseek_api_key">API-ключ DeepSeek</string>
     <string name="novel_reader_deepseek_model">Модель DeepSeek</string>
@@ -575,12 +575,12 @@
     <string name="novel_reader_ai_translator_provider_api_missing">API не добавлен</string>
     <string name="novel_reader_ai_translator_model_summary">Выберите модель, которая будет переводить главу. Быстрые модели отвечают быстрее, а более крупные обычно лучше держат тон и контекст.</string>
     <string name="novel_reader_ai_translator_current_model">Текущая модель</string>
-    <string name="novel_reader_ai_translator_openrouter_models_title">Бесплатные модели OpenRouter</string>
-    <string name="novel_reader_ai_translator_openrouter_models_count">Бесплатные модели (%d)</string>
-    <string name="novel_reader_ai_translator_choose_free_model">Выберите бесплатную модель (:free)</string>
+    <string name="novel_reader_ai_translator_openrouter_models_title">Модели OpenRouter</string>
+    <string name="novel_reader_ai_translator_openrouter_models_count">Модели (%d)</string>
+    <string name="novel_reader_ai_translator_choose_free_model">Выберите модель</string>
     <string name="novel_reader_ai_translator_loading_models">Загрузка моделей...</string>
     <string name="novel_reader_ai_translator_refresh_list">Обновить список</string>
-    <string name="novel_reader_ai_translator_model_id_free_only">ID модели (только :free)</string>
+    <string name="novel_reader_ai_translator_model_id_free_only">ID модели</string>
     <string name="novel_reader_ai_translator_model_id">ID модели</string>
     <string name="novel_reader_ai_translator_deepseek_models_title">Модели DeepSeek</string>
     <string name="novel_reader_ai_translator_mistral_models_title">Модели Mistral</string>
@@ -620,7 +620,7 @@
     <string name="novel_reader_ai_translator_api_test_success">API OK</string>
     <string name="novel_reader_ai_translator_api_test_error">Ошибка API</string>
     <string name="novel_reader_ai_translator_api_invalid_config">Заполните Base URL, API-ключ и модель</string>
-    <string name="novel_reader_ai_translator_api_invalid_openrouter_config">Заполните Base URL, API-ключ и бесплатную модель (:free)</string>
+    <string name="novel_reader_ai_translator_api_invalid_openrouter_config">Заполните Base URL, API-ключ и модель</string>
     <string name="novel_reader_ai_translator_api_connection_ok">Подключение OK</string>
     <string name="novel_reader_ai_translator_api_empty_response">Пустой ответ</string>
     <string name="novel_reader_ai_translator_save">Сохранить</string>
@@ -1892,6 +1892,7 @@
     <string name="novel_reader_google_translate_translated">Перевод</string>
     <string name="novel_reader_google_translate_clear">Очистить перевод</string>
     <string name="novel_reader_google_translate_progress">Перевод: %1$d%%</string>
+    <string name="novel_reader_google_translate_preparing">Подготовка перевода…</string>
     <string name="novel_reader_google_translate_backend_simple">Перевод Google онлайн</string>
     <string name="novel_reader_google_translate_show_translation">Показать перевод</string>
     <string name="novel_reader_google_translate_hide_translation">Скрыть перевод</string>

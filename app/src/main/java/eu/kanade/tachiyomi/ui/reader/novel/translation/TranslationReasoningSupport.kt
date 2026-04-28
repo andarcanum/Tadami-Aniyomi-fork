@@ -34,7 +34,7 @@ internal fun resolveTranslationReasoningOptions(
     }
 }
 
-internal fun normalizeTranslationReasoningEffort(
+fun normalizeTranslationReasoningEffort(
     provider: NovelTranslationProvider,
     model: String,
     value: String,

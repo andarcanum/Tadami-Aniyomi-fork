@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeTranslationReasoningEffort
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveNovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import kotlinx.coroutines.async
@@ -310,7 +311,7 @@ class NovelChapterTranslationProcessor(
 }
 
 private fun NovelTranslationProvider.supportsGranularFallback(): Boolean {
-    return this == NovelTranslationProvider.MISTRAL || this == NovelTranslationProvider.NVIDIA
+    return true
 }
 
 private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {
@@ -376,6 +377,11 @@ private fun NovelReaderSettings.toOpenRouterTranslationParams(): OpenRouterTrans
         promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         temperature = geminiTemperature,
         topP = geminiTopP,
+        reasoningEffort = normalizeTranslationReasoningEffort(
+            provider = NovelTranslationProvider.OPENROUTER,
+            model = openRouterModel,
+            value = geminiReasoningEffort,
+        ),
     )
 }
 
@@ -390,6 +396,11 @@ private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslati
         promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         temperature = geminiTemperature.coerceIn(DEEPSEEK_TEMPERATURE_MIN, DEEPSEEK_TEMPERATURE_MAX),
         topP = geminiTopP.coerceIn(DEEPSEEK_TOP_P_MIN, DEEPSEEK_TOP_P_MAX),
+        reasoningEffort = normalizeTranslationReasoningEffort(
+            provider = NovelTranslationProvider.DEEPSEEK,
+            model = deepSeekModel,
+            value = geminiReasoningEffort,
+        ) ?: "none",
         presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY,
         frequencyPenalty = DEEPSEEK_DEFAULT_FREQUENCY_PENALTY,
     )
@@ -406,6 +417,11 @@ private fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslation
         promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         temperature = geminiTemperature,
         topP = geminiTopP,
+        reasoningEffort = normalizeTranslationReasoningEffort(
+            provider = NovelTranslationProvider.MISTRAL,
+            model = mistralModel,
+            value = geminiReasoningEffort,
+        ),
     )
 }
 
@@ -433,7 +449,7 @@ private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
         NovelTranslationProvider.OPENROUTER -> {
             openRouterBaseUrl.isNotBlank() &&
                 openRouterApiKey.isNotBlank() &&
-                openRouterModel.trim().endsWith(":free", ignoreCase = true)
+                openRouterModel.isNotBlank()
         }
         NovelTranslationProvider.DEEPSEEK -> {
             deepSeekBaseUrl.isNotBlank() && deepSeekApiKey.isNotBlank() && deepSeekModel.isNotBlank()
@@ -507,21 +523,32 @@ private fun NovelReaderSettings.translationRequestConfigLog(): String {
                 "bridgeInstalled=${GeminiPrivateBridge.isInstalled()}, bridgeUnlocked=${isPrivateBridgeUnlocked()}"
         }
         NovelTranslationProvider.OPENROUTER -> {
-            val isFreeModel = openRouterModel.trim().endsWith(":free", ignoreCase = true)
+            val tier = if (openRouterModel.trim().endsWith(":free", ignoreCase = true)) "free" else "paid/custom"
+            val reasoning = normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.OPENROUTER,
+                model = openRouterModel,
+                value = geminiReasoningEffort,
+            ) ?: "off"
             "baseUrl=${openRouterBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
-                "topP=${geminiTopP.toLogFloat()}, freeModel=$isFreeModel"
+                "topP=${geminiTopP.toLogFloat()}, modelTier=$tier, reasoning=$reasoning"
         }
         NovelTranslationProvider.DEEPSEEK -> {
-            val presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY.toLogFloat()
-            val frequencyPenalty = DEEPSEEK_DEFAULT_FREQUENCY_PENALTY.toLogFloat()
-            "baseUrl=${deepSeekBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
-                "topP=${geminiTopP.toLogFloat()}, " +
+            val params = toDeepSeekTranslationParams()
+            val presencePenalty = params.presencePenalty.toLogFloat()
+            val frequencyPenalty = params.frequencyPenalty.toLogFloat()
+            "baseUrl=${params.baseUrl.trim()}, temp=${params.temperature.toLogFloat()}, " +
+                "topP=${params.topP.toLogFloat()}, reasoning=${params.reasoningEffort}, " +
                 "presencePenalty=$presencePenalty, frequencyPenalty=$frequencyPenalty, " +
                 "stream=false"
         }
         NovelTranslationProvider.MISTRAL -> {
+            val reasoning = normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.MISTRAL,
+                model = mistralModel,
+                value = geminiReasoningEffort,
+            ) ?: "off"
             "baseUrl=${mistralBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
-                "topP=${geminiTopP.toLogFloat()}, stream=false"
+                "topP=${geminiTopP.toLogFloat()}, reasoning=$reasoning, stream=false"
         }
         NovelTranslationProvider.NVIDIA -> {
             "baseUrl=${nvidiaBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +

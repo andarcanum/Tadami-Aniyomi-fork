@@ -94,11 +94,16 @@ class MistralTranslationService(
                     return null
                 }
                 is MistralRequestOutcome.RateLimited -> {
+                    if (attempt == MAX_ATTEMPTS) {
+                        onLog?.invoke(
+                            "Mistral rate limited (attempt $attempt/$MAX_ATTEMPTS): ${outcome.details}. No retries left",
+                        )
+                        return null
+                    }
                     onLog?.invoke(
                         "Mistral rate limited (attempt $attempt/$MAX_ATTEMPTS): ${outcome.details}. " +
                             "Retrying in ${"%.1f".format(outcome.waitMs / 1000f)}s",
                     )
-                    if (attempt == MAX_ATTEMPTS) return null
                     retryDelay(outcome.waitMs)
                 }
                 is MistralRequestOutcome.Success -> {

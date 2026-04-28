@@ -718,7 +718,7 @@
     <string name="novel_reader_translation_prefetch_next_summary">Start next chapter translation in background after 30% reading progress</string>
     <string name="novel_reader_openrouter_base_url">OpenRouter Base URL</string>
     <string name="novel_reader_openrouter_api_key">OpenRouter API key</string>
-    <string name="novel_reader_openrouter_model">OpenRouter model (:free only)</string>
+    <string name="novel_reader_openrouter_model">OpenRouter model</string>
     <string name="novel_reader_deepseek_base_url">DeepSeek Base URL</string>
     <string name="novel_reader_deepseek_api_key">DeepSeek API key</string>
     <string name="novel_reader_deepseek_model">DeepSeek model</string>
@@ -798,12 +798,12 @@
     <string name="novel_reader_ai_translator_provider_api_ready">API added</string>
     <string name="novel_reader_ai_translator_provider_api_missing">API not added</string>
     <string name="novel_reader_ai_translator_current_model">Current model</string>
-    <string name="novel_reader_ai_translator_openrouter_models_title">OpenRouter free models</string>
-    <string name="novel_reader_ai_translator_openrouter_models_count">Free models (%d)</string>
-    <string name="novel_reader_ai_translator_choose_free_model">Choose a free model (:free)</string>
+    <string name="novel_reader_ai_translator_openrouter_models_title">OpenRouter models</string>
+    <string name="novel_reader_ai_translator_openrouter_models_count">Models (%d)</string>
+    <string name="novel_reader_ai_translator_choose_free_model">Choose a model</string>
     <string name="novel_reader_ai_translator_loading_models">Loading models...</string>
     <string name="novel_reader_ai_translator_refresh_list">Refresh list</string>
-    <string name="novel_reader_ai_translator_model_id_free_only">Model ID (free only)</string>
+    <string name="novel_reader_ai_translator_model_id_free_only">Model ID</string>
     <string name="novel_reader_ai_translator_model_id">Model ID</string>
     <string name="novel_reader_ai_translator_deepseek_models_title">DeepSeek models</string>
     <string name="novel_reader_ai_translator_mistral_models_title">Mistral models</string>
@@ -843,7 +843,7 @@
     <string name="novel_reader_ai_translator_api_test_success">API OK</string>
     <string name="novel_reader_ai_translator_api_test_error">API error</string>
     <string name="novel_reader_ai_translator_api_invalid_config">Fill Base URL, API key and Model</string>
-    <string name="novel_reader_ai_translator_api_invalid_openrouter_config">Fill Base URL, API key and free Model (:free)</string>
+    <string name="novel_reader_ai_translator_api_invalid_openrouter_config">Fill Base URL, API key and Model</string>
     <string name="novel_reader_ai_translator_api_connection_ok">Connection OK</string>
     <string name="novel_reader_ai_translator_api_empty_response">Empty response</string>
     <string name="novel_reader_ai_translator_save">Save</string>
@@ -1964,6 +1964,7 @@
     <string name="novel_reader_google_translate_translated">Translation</string>
     <string name="novel_reader_google_translate_clear">Clear Translation</string>
     <string name="novel_reader_google_translate_progress">Translating: %1$d%%</string>
+    <string name="novel_reader_google_translate_preparing">Preparing translation…</string>
     <string name="novel_reader_google_translate_backend_simple">Google Translate online</string>
     <string name="novel_reader_google_translate_show_translation">Show Translation</string>
     <string name="novel_reader_google_translate_hide_translation">Hide Translation</string>

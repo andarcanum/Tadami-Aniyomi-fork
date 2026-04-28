@@ -31,14 +31,15 @@ class TranslationNotificationManager(
         progress: Int,
         pendingCount: Int,
     ) {
+        val safeProgress = progress.coerceIn(0, 100)
         val builder = context.notificationBuilder(Notifications.CHANNEL_TRANSLATION_PROGRESS) {
             setContentTitle(context.stringResource(MR.strings.notification_translation_in_progress))
-            setContentText(buildProgressText(chapterName, progress, pendingCount))
+            setContentText(buildProgressText(chapterName, safeProgress, pendingCount))
             setSmallIcon(android.R.drawable.ic_menu_edit)
-            setProgress(100, progress, false)
+            setProgress(100, safeProgress, false)
             setOngoing(true)
             setOnlyAlertOnce(true)
-            setStyle(NotificationCompat.BigTextStyle().bigText(buildProgressText(chapterName, progress, pendingCount)))
+            setStyle(NotificationCompat.BigTextStyle().bigText(buildProgressText(chapterName, safeProgress, pendingCount)))
             setContentIntent(openChapterIntent(chapterId))
             addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
@@ -144,7 +145,7 @@ class TranslationNotificationManager(
         }
         return PendingIntent.getActivity(
             context,
-            chapterId.hashCode(),
+            stableNotificationId(chapterId),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -173,7 +174,7 @@ class TranslationNotificationManager(
         }
         return PendingIntent.getBroadcast(
             context,
-            chapterId.toInt(),
+            stableNotificationId(chapterId),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -192,6 +193,11 @@ class TranslationNotificationManager(
     }
 
     private fun getNotificationId(chapterId: Long): Int {
-        return Notifications.ID_TRANSLATION_PROGRESS + chapterId.toInt()
+        return Notifications.ID_TRANSLATION_PROGRESS + stableNotificationId(chapterId)
+    }
+
+    private fun stableNotificationId(chapterId: Long): Int {
+        val mixed = chapterId xor (chapterId ushr 32)
+        return (mixed and 0x3FFFFFFF).toInt().coerceAtLeast(1)
     }
 }

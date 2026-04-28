@@ -921,6 +921,7 @@ class NovelReaderPreferences(
                 mistralBaseUrl = mistralBaseUrl().get(),
                 mistralApiKey = mistralApiKey().get(),
                 mistralModel = mistralModel().get(),
+                nvidiaBaseUrl = nvidiaBaseUrl().get(),
                 nvidiaApiKey = nvidiaApiKey().get(),
                 nvidiaModel = nvidiaModel().get(),
                 googleTranslationEnabled = googleTranslationEnabled().get(),

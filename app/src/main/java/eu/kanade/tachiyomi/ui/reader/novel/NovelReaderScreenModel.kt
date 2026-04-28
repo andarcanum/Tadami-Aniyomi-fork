@@ -2155,7 +2155,7 @@ class NovelReaderScreenModel(
         updateContent(settings)
         screenModelScope.launch(Dispatchers.IO) {
             val fetched = runCatching {
-                openRouterModelsService.fetchFreeModels(
+                openRouterModelsService.fetchModels(
                     baseUrl = settings.openRouterBaseUrl,
                     apiKey = settings.openRouterApiKey,
                 )
@@ -2247,7 +2247,7 @@ class NovelReaderScreenModel(
         if (isTestingOpenRouterConnection) return
         if (settings.translationProvider != NovelTranslationProvider.OPENROUTER) return
         if (!settings.hasConfiguredTranslationProvider()) {
-            addAiTranslationLog("? OpenRouter config invalid: fill Base URL, API key and free Model (:free)")
+            addAiTranslationLog("? OpenRouter config invalid: fill Base URL, API key and Model")
             setProviderApiTestState(
                 provider = NovelTranslationProvider.OPENROUTER,
                 status = ProviderApiTestStatus.Error,
@@ -3198,22 +3198,32 @@ class NovelReaderScreenModel(
                     "bridgeInstalled=${GeminiPrivateBridge.isInstalled()}, bridgeUnlocked=${isPrivateBridgeUnlocked()}"
             }
             NovelTranslationProvider.OPENROUTER -> {
-                val isFreeModel = openRouterModel.trim().endsWith(":free", ignoreCase = true)
+                val tier = if (openRouterModel.trim().endsWith(":free", ignoreCase = true)) "free" else "paid/custom"
+                val reasoning = normalizeTranslationReasoningEffort(
+                    provider = NovelTranslationProvider.OPENROUTER,
+                    model = openRouterModel,
+                    value = geminiReasoningEffort,
+                ) ?: "off"
                 "baseUrl=${openRouterBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
-                    "topP=${geminiTopP.toLogFloat()}, freeModel=$isFreeModel"
+                    "topP=${geminiTopP.toLogFloat()}, modelTier=$tier, reasoning=$reasoning"
             }
             NovelTranslationProvider.DEEPSEEK -> {
                 val params = toDeepSeekTranslationParams()
                 val presencePenalty = params.presencePenalty.toLogFloat()
                 val frequencyPenalty = params.frequencyPenalty.toLogFloat()
                 "baseUrl=${params.baseUrl.trim()}, temp=${params.temperature.toLogFloat()}, " +
-                    "topP=${params.topP.toLogFloat()}, " +
+                    "topP=${params.topP.toLogFloat()}, reasoning=${params.reasoningEffort}, " +
                     "presencePenalty=$presencePenalty, frequencyPenalty=$frequencyPenalty, " +
                     "stream=false"
             }
             NovelTranslationProvider.MISTRAL -> {
+                val reasoning = normalizeTranslationReasoningEffort(
+                    provider = NovelTranslationProvider.MISTRAL,
+                    model = mistralModel,
+                    value = geminiReasoningEffort,
+                ) ?: "off"
                 "baseUrl=${mistralBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
-                    "topP=${geminiTopP.toLogFloat()}, stream=false"
+                    "topP=${geminiTopP.toLogFloat()}, reasoning=$reasoning, stream=false"
             }
             NovelTranslationProvider.NVIDIA -> {
                 "baseUrl=${nvidiaBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
@@ -3283,7 +3293,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.OPENROUTER -> {
                 openRouterBaseUrl.isNotBlank() &&
                     openRouterApiKey.isNotBlank() &&
-                    openRouterModel.trim().endsWith(":free", ignoreCase = true)
+                    openRouterModel.isNotBlank()
             }
             NovelTranslationProvider.DEEPSEEK -> {
                 deepSeekBaseUrl.isNotBlank() &&

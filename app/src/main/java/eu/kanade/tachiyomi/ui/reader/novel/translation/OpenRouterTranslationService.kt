@@ -33,10 +33,7 @@ class OpenRouterTranslationService(
         if (params.apiKey.isBlank()) return null
 
         val model = params.model.trim()
-        if (!model.endsWith(":free", ignoreCase = true)) {
-            onLog?.invoke("OpenRouter model must be free (:free): $model")
-            return null
-        }
+        if (model.isBlank()) return null
 
         val baseUrl = normalizeOpenRouterBaseUrl(params.baseUrl)
         if (baseUrl.isBlank()) return null
@@ -77,14 +74,18 @@ class OpenRouterTranslationService(
             )
             put("temperature", params.temperature)
             put("top_p", params.topP)
-            params.reasoningEffort?.let { effort ->
-                put(
-                    "reasoning",
-                    buildJsonObject {
-                        put("effort", effort)
-                    },
-                )
-            }
+            params.reasoningEffort
+                ?.trim()
+                ?.takeIf { it.isNotBlank() && !it.equals("none", ignoreCase = true) }
+                ?.let { effort ->
+                    put(
+                        "reasoning",
+                        buildJsonObject {
+                            put("effort", effort)
+                            put("exclude", true)
+                        },
+                    )
+                }
             put("max_tokens", 4096)
             put("stream", false)
         }
@@ -103,11 +104,16 @@ class OpenRouterTranslationService(
                     return null
                 }
                 is OpenRouterRequestOutcome.RateLimited -> {
+                    if (attempt == MAX_ATTEMPTS) {
+                        onLog?.invoke(
+                            "OpenRouter rate limited (attempt $attempt/$MAX_ATTEMPTS): ${outcome.details}. No retries left",
+                        )
+                        return null
+                    }
                     onLog?.invoke(
                         "OpenRouter rate limited (attempt $attempt/$MAX_ATTEMPTS): ${outcome.details}. " +
                             "Retrying in ${"%.1f".format(outcome.waitMs / 1000f)}s",
                     )
-                    if (attempt == MAX_ATTEMPTS) return null
                     retryDelay(outcome.waitMs)
                 }
                 is OpenRouterRequestOutcome.Success -> {
@@ -154,6 +160,14 @@ class OpenRouterTranslationService(
                     }
                     val parsed = GeminiXmlSegmentParser.parse(sanitizedCandidate, expectedCount = segments.size)
                     if (parsed.all { it.isNullOrBlank() }) {
+                        val parsedPlaintext = GeminiXmlSegmentParser.parsePlaintext(
+                            rawResponse = candidateText,
+                            expectedCount = segments.size,
+                        )
+                        if (parsedPlaintext.any { !it.isNullOrBlank() }) {
+                            onLog?.invoke("OpenRouter parse warning: no XML segments found; used plaintext fallback")
+                            return parsedPlaintext
+                        }
                         onLog?.invoke("OpenRouter parse warning: no XML segments found in message")
                         onLog?.invoke("OpenRouter content preview: ${sanitizedCandidate.take(600)}")
                         return null
@@ -376,5 +390,5 @@ private fun String.trimNonXmlTail(): String {
     return source.substring(start, end + 1).trim()
 }
 
-private const val MAX_ATTEMPTS = 1
+private const val MAX_ATTEMPTS = 3
 private val openRouterErrorJson = Json { ignoreUnknownKeys = true }

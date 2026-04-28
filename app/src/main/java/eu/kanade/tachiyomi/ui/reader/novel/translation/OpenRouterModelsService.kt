@@ -14,7 +14,7 @@ class OpenRouterModelsService(
     private val json: Json,
 ) {
 
-    suspend fun fetchFreeModels(
+    suspend fun fetchModels(
         baseUrl: String,
         apiKey: String,
     ): List<String> {
@@ -44,9 +44,16 @@ class OpenRouterModelsService(
         val data = payload["data"].asArrayOrNull().orEmpty()
         return data.mapNotNull { entry ->
             entry.asObjectOrNull()?.get("id").asStringOrNull()?.trim()?.takeIf { it.isNotBlank() }
-        }.filter { it.endsWith(":free", ignoreCase = true) }
-            .distinct()
+        }.distinct()
             .sorted()
+    }
+
+    suspend fun fetchFreeModels(
+        baseUrl: String,
+        apiKey: String,
+    ): List<String> {
+        return fetchModels(baseUrl, apiKey)
+            .filter { it.endsWith(":free", ignoreCase = true) }
     }
 }
 

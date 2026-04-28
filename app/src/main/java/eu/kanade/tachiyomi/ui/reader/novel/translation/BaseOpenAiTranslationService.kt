@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.reader.novel.translation
 import eu.kanade.tachiyomi.network.POST
 import eu.kanade.tachiyomi.network.await
 import eu.kanade.tachiyomi.network.jsonMime
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -19,6 +20,7 @@ import tachiyomi.core.common.util.lang.withIOContext
 open class BaseOpenAiTranslationService(
     private val client: OkHttpClient,
     private val json: Json,
+    private val retryDelay: suspend (Long) -> Unit = { delay(it) },
 ) {
     protected fun buildMessages(
         systemPrompt: String,
@@ -47,8 +49,63 @@ open class BaseOpenAiTranslationService(
         extraHeaders: Map<String, String> = emptyMap(),
         logLabel: String,
         onLog: ((String) -> Unit)? = null,
+        maxAttempts: Int = OPENAI_LIKE_MAX_ATTEMPTS,
     ): JsonObject? {
         if (baseUrl.isBlank() || apiKey.isBlank()) return null
+
+        val attempts = maxAttempts.coerceAtLeast(1)
+        for (attempt in 1..attempts) {
+            when (
+                val outcome = executeChatCompletionRequest(
+                    baseUrl = baseUrl,
+                    apiKey = apiKey,
+                    requestBody = requestBody,
+                    extraHeaders = extraHeaders,
+                    logLabel = logLabel,
+                    attempt = attempt,
+                )
+            ) {
+                is BaseOpenAiRequestOutcome.Success -> {
+                    return runCatching { json.parseToJsonElement(outcome.body) as? JsonObject }
+                        .getOrNull()
+                        ?: run {
+                            onLog?.invoke("$logLabel response is not valid JSON object")
+                            onLog?.invoke("$logLabel response payload: ${outcome.body.take(1200)}")
+                            null
+                        }
+                }
+                is BaseOpenAiRequestOutcome.Retriable -> {
+                    if (attempt == attempts) {
+                        onLog?.invoke(
+                            "$logLabel temporary API failure (attempt $attempt/$attempts): ${outcome.message}. " +
+                                "No retries left",
+                        )
+                        return null
+                    }
+                    onLog?.invoke(
+                        "$logLabel temporary API failure (attempt $attempt/$attempts): ${outcome.message}. " +
+                            "Retrying in ${"%.1f".format(outcome.waitMs / 1000f)}s",
+                    )
+                    retryDelay(outcome.waitMs)
+                }
+                is BaseOpenAiRequestOutcome.Failure -> {
+                    onLog?.invoke(outcome.message)
+                    return null
+                }
+            }
+        }
+
+        return null
+    }
+
+    private suspend fun executeChatCompletionRequest(
+        baseUrl: String,
+        apiKey: String,
+        requestBody: String,
+        extraHeaders: Map<String, String>,
+        logLabel: String,
+        attempt: Int,
+    ): BaseOpenAiRequestOutcome {
         return runCatching {
             withIOContext {
                 val request = POST(
@@ -67,21 +124,29 @@ open class BaseOpenAiTranslationService(
                     val rawBody = it.body.string()
                     if (!it.isSuccessful) {
                         val details = extractOpenAiApiErrorMessage(rawBody) ?: rawBody.take(1200)
-                        onLog?.invoke("$logLabel API error ${it.code}: $details")
-                        return@withIOContext null
-                    }
-                    runCatching { json.parseToJsonElement(rawBody) as? JsonObject }
-                        .getOrNull()
-                        ?: run {
-                            onLog?.invoke("$logLabel response is not valid JSON object")
-                            onLog?.invoke("$logLabel response payload: ${rawBody.take(1200)}")
-                            null
+                        if (it.code == 429 || it.code in 500..599) {
+                            val hintSeconds = it.header("Retry-After")?.toDoubleOrNull()
+                                ?: extractRetryAfterSeconds(rawBody)
+                            return@withIOContext BaseOpenAiRequestOutcome.Retriable(
+                                waitMs = computeOpenAiLikeRetryDelayMs(
+                                    attempt = attempt,
+                                    hintSeconds = hintSeconds,
+                                ),
+                                message = "$logLabel API error ${it.code}: $details",
+                            )
                         }
+                        return@withIOContext BaseOpenAiRequestOutcome.Failure(
+                            "$logLabel API error ${it.code}: $details",
+                        )
+                    }
+                    BaseOpenAiRequestOutcome.Success(rawBody)
                 }
             }
-        }.onFailure { error ->
-            onLog?.invoke("$logLabel request exception: ${formatAiTranslationThrowableForLog(error)}")
-        }.getOrNull()
+        }.getOrElse { error ->
+            BaseOpenAiRequestOutcome.Failure(
+                "$logLabel request exception: ${formatAiTranslationThrowableForLog(error)}",
+            )
+        }
     }
 
     protected fun JsonObject.extractAssistantContent(): String {
@@ -123,6 +188,12 @@ open class BaseOpenAiTranslationService(
     }
 }
 
+private sealed interface BaseOpenAiRequestOutcome {
+    data class Success(val body: String) : BaseOpenAiRequestOutcome
+    data class Retriable(val waitMs: Long, val message: String) : BaseOpenAiRequestOutcome
+    data class Failure(val message: String) : BaseOpenAiRequestOutcome
+}
+
 private fun kotlinx.serialization.json.JsonElement?.asObjectOrNull(): JsonObject? {
     return this as? JsonObject
 }
@@ -130,3 +201,29 @@ private fun kotlinx.serialization.json.JsonElement?.asObjectOrNull(): JsonObject
 private fun kotlinx.serialization.json.JsonElement?.asArrayOrNull(): JsonArray? {
     return this as? JsonArray
 }
+
+private val retryAfterSecondsRegex =
+    Regex("(?i)try\\s+again\\s+in\\s+([0-9]+(?:\\.[0-9]+)?)\\s*seconds?")
+
+private fun extractRetryAfterSeconds(raw: String): Double? {
+    val match = retryAfterSecondsRegex.find(raw) ?: return null
+    return match.groupValues.getOrNull(1)?.toDoubleOrNull()
+}
+
+private fun computeOpenAiLikeRetryDelayMs(
+    attempt: Int,
+    hintSeconds: Double?,
+): Long {
+    if (hintSeconds != null) {
+        val ms = ((hintSeconds + 0.3) * 1000.0).toLong()
+        return ms.coerceIn(1_200L, 120_000L)
+    }
+    return when (attempt) {
+        1 -> 2_000L
+        2 -> 5_000L
+        3 -> 15_000L
+        else -> 60_000L
+    }
+}
+
+private const val OPENAI_LIKE_MAX_ATTEMPTS = 3
