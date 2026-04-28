@@ -240,7 +240,7 @@ class GeminiTranslationService(
                 }
             }
         }.onFailure { error ->
-            onLog?.invoke("🚫 Gemini request exception: ${formatGeminiThrowableForLog(error)}")
+            onLog?.invoke("🚫 Gemini request exception: ${formatAiTranslationThrowableForLog(error)}")
         }.getOrNull() ?: return null
 
         val payload = runCatching { json.parseToJsonElement(responseText) as? JsonObject }

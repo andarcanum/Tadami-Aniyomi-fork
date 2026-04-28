@@ -245,7 +245,9 @@ class OpenRouterTranslationService(
                 }
             }
         }.getOrElse { error ->
-            OpenRouterRequestOutcome.Failure("OpenRouter request exception: ${formatGeminiThrowableForLog(error)}")
+            OpenRouterRequestOutcome.Failure(
+                "OpenRouter request exception: ${formatAiTranslationThrowableForLog(error)}",
+            )
         }
     }
 }

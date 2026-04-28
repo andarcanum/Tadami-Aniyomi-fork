@@ -37,7 +37,7 @@ internal fun extractOpenAiApiErrorMessage(rawBody: String): String? {
     }
 }
 
-internal fun formatGeminiThrowableForLog(error: Throwable): String {
+internal fun formatAiTranslationThrowableForLog(error: Throwable): String {
     val details = mutableListOf(
         "${error.javaClass.simpleName}: ${error.message.orEmpty().ifBlank { "no message" }}",
     )

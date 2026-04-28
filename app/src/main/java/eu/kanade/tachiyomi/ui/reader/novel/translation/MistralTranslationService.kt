@@ -223,7 +223,7 @@ class MistralTranslationService(
                 }
             }
         }.getOrElse { error ->
-            MistralRequestOutcome.Failure("Mistral request exception: ${formatGeminiThrowableForLog(error)}")
+            MistralRequestOutcome.Failure("Mistral request exception: ${formatAiTranslationThrowableForLog(error)}")
         }
     }
 }

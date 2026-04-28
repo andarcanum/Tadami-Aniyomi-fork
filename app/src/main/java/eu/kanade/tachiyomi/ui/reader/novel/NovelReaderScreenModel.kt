@@ -64,7 +64,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationPara
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.TranslationPhase
 import eu.kanade.tachiyomi.ui.reader.novel.translation.buildNovelSelectedTextTranslationRequestKey
-import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
+import eu.kanade.tachiyomi.ui.reader.novel.translation.formatAiTranslationThrowableForLog
 import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeGeminiModelId
 import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeTranslationReasoningEffort
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveNovelTranslationPromptFamily
@@ -571,13 +571,13 @@ class NovelReaderScreenModel(
                         TranslationStatus.FAILED -> {
                             isGeminiTranslating = false
                             geminiTranslationProgress = 0
-                            addGeminiLog("Queue translation failed: ${update.errorMessage ?: "Unknown error"}")
+                            addAiTranslationLog("Queue translation failed: ${update.errorMessage ?: "Unknown error"}")
                             refreshGeminiUiState()
                         }
                         TranslationStatus.CANCELLED -> {
                             isGeminiTranslating = false
                             geminiTranslationProgress = 0
-                            addGeminiLog("Translation cancelled.")
+                            addAiTranslationLog("Translation cancelled.")
                             refreshGeminiUiState()
                         }
                         TranslationStatus.PENDING -> {
@@ -624,7 +624,7 @@ class NovelReaderScreenModel(
         if (isGeminiTranslating || hasGeminiTranslationCache || geminiTranslatedByIndex.isNotEmpty()) return
         hasTriggeredGeminiAutoStart = true
         pendingAutoStartGeminiTranslation = false
-        addGeminiLog("?? Auto-start translation for English source")
+        addAiTranslationLog("?? Auto-start translation for English source")
         startGeminiTranslation()
     }
     private fun findNextChapter(currentChapter: NovelChapter): NovelChapter? {
@@ -773,7 +773,7 @@ class NovelReaderScreenModel(
             isGeminiTranslating = false
             isGeminiTranslationVisible = false
             geminiTranslationProgress = 0
-            addGeminiLog("Gemini translation stopped because Gemini is disabled.")
+            addAiTranslationLog("AI translation stopped because AI translation is disabled.")
         }
         val geminiVisibleInUi = settings.geminiEnabled && isGeminiTranslationVisible
         val geminiCacheAvailableInUi = settings.geminiEnabled && hasGeminiTranslationCache
@@ -1712,7 +1712,7 @@ class NovelReaderScreenModel(
                 val chunks = nextTextBlocks.chunked(chunkSize)
                 val semaphore = Semaphore(settings.translationConcurrencyLimit())
                 val translated = mutableMapOf<Int, String>()
-                addGeminiLog("?? ${settings.translationRequestConfigLog()} (prefetch)")
+                addAiTranslationLog("?? ${settings.translationRequestConfigLog()} (prefetch)")
                 coroutineScope {
                     chunks.mapIndexed { chunkIndex, chunk ->
                         async {
@@ -1721,7 +1721,7 @@ class NovelReaderScreenModel(
                                     segments = chunk,
                                     settings = settings,
                                 ) { message ->
-                                    addGeminiLog("?? Next chapter: $message")
+                                    addAiTranslationLog("?? Next chapter: $message")
                                 }
                                 if (result == null && !settings.geminiRelaxedMode) {
                                     throw IllegalStateException(
@@ -1751,10 +1751,12 @@ class NovelReaderScreenModel(
                         stylePreset = settings.geminiStylePreset,
                     ),
                 )
-                addGeminiLog("?? Cached ${settings.translationProvider} translation for next chapter ${nextChapter.id}")
+                addAiTranslationLog(
+                    "?? Cached ${settings.translationProvider} translation for next chapter ${nextChapter.id}",
+                )
             }.onFailure { error ->
-                logcat(LogPriority.WARN, error) { "Failed to prefetch Gemini translation for next chapter" }
-                addGeminiLog("?? Next chapter prefetch failed: ${formatGeminiThrowableForLog(error)}")
+                logcat(LogPriority.WARN, error) { "Failed to prefetch AI translation for next chapter" }
+                addAiTranslationLog("?? Next chapter prefetch failed: ${formatAiTranslationThrowableForLog(error)}")
             }
         }
     }
@@ -1926,7 +1928,7 @@ class NovelReaderScreenModel(
         seriesInterstitialShownForChapterId = null
         chapterReadStartTimeMs = System.currentTimeMillis()
     }
-    fun addGeminiLog(message: String) {
+    fun addAiTranslationLog(message: String) {
         val text = message.trim()
         if (text.isBlank()) return
         geminiLogs = (listOf(text) + geminiLogs).take(100)
@@ -1938,7 +1940,7 @@ class NovelReaderScreenModel(
     }
     fun clearAllGeminiTranslationCache() {
         NovelReaderTranslationDiskCacheStore.clear()
-        addGeminiLog("??? Clear ALL cache")
+        addAiTranslationLog("??? Clear ALL cache")
         val chapter = currentChapter ?: return
         if (NovelReaderTranslationDiskCacheStore.get(chapter.id) == null) {
             hasGeminiTranslationCache = false
@@ -2150,7 +2152,7 @@ class NovelReaderScreenModel(
                     apiKey = settings.openRouterApiKey,
                 )
             }.getOrElse { error ->
-                addGeminiLog("? OpenRouter models load failed: ${formatGeminiThrowableForLog(error)}")
+                addAiTranslationLog("? OpenRouter models load failed: ${formatAiTranslationThrowableForLog(error)}")
                 emptyList()
             }
             openRouterModelIds = fetched
@@ -2173,7 +2175,7 @@ class NovelReaderScreenModel(
                     apiKey = settings.nvidiaApiKey,
                 )
             }.getOrElse { error ->
-                addGeminiLog("? NVIDIA models load failed: ${formatGeminiThrowableForLog(error)}")
+                addAiTranslationLog("? NVIDIA models load failed: ${formatAiTranslationThrowableForLog(error)}")
                 emptyList()
             }
             nvidiaModelIds = fetched
@@ -2187,7 +2189,7 @@ class NovelReaderScreenModel(
         if (isTestingNvidiaConnection) return
         if (settings.translationProvider != NovelTranslationProvider.NVIDIA) return
         if (!settings.hasConfiguredTranslationProvider()) {
-            addGeminiLog("? NVIDIA config invalid: fill Base URL, API key and Model")
+            addAiTranslationLog("? NVIDIA config invalid: fill Base URL, API key and Model")
             setProviderApiTestState(
                 provider = NovelTranslationProvider.NVIDIA,
                 status = ProviderApiTestStatus.Error,
@@ -2208,23 +2210,23 @@ class NovelReaderScreenModel(
                     segments = listOf("Connection test"),
                     settings = settings,
                 ) { message ->
-                    addGeminiLog("?? Test: $message")
+                    addAiTranslationLog("?? Test: $message")
                 }
                 if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
                     error("Empty response")
                 }
             }.onSuccess {
-                addGeminiLog("? NVIDIA connection OK")
+                addAiTranslationLog("? NVIDIA connection OK")
                 setProviderApiTestState(
                     provider = NovelTranslationProvider.NVIDIA,
                     status = ProviderApiTestStatus.Success,
                 )
             }.onFailure { error ->
-                addGeminiLog("? NVIDIA connection failed: ${formatGeminiThrowableForLog(error)}")
+                addAiTranslationLog("? NVIDIA connection failed: ${formatAiTranslationThrowableForLog(error)}")
                 setProviderApiTestState(
                     provider = NovelTranslationProvider.NVIDIA,
                     status = ProviderApiTestStatus.Error,
-                    message = formatGeminiThrowableForLog(error),
+                    message = formatAiTranslationThrowableForLog(error),
                 )
             }
             isTestingNvidiaConnection = false
@@ -2237,7 +2239,7 @@ class NovelReaderScreenModel(
         if (isTestingOpenRouterConnection) return
         if (settings.translationProvider != NovelTranslationProvider.OPENROUTER) return
         if (!settings.hasConfiguredTranslationProvider()) {
-            addGeminiLog("? OpenRouter config invalid: fill Base URL, API key and free Model (:free)")
+            addAiTranslationLog("? OpenRouter config invalid: fill Base URL, API key and free Model (:free)")
             setProviderApiTestState(
                 provider = NovelTranslationProvider.OPENROUTER,
                 status = ProviderApiTestStatus.Error,
@@ -2258,23 +2260,23 @@ class NovelReaderScreenModel(
                     segments = listOf("Connection test"),
                     settings = settings,
                 ) { message ->
-                    addGeminiLog("?? Test: $message")
+                    addAiTranslationLog("?? Test: $message")
                 }
                 if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
                     error("Empty response")
                 }
             }.onSuccess {
-                addGeminiLog("? OpenRouter connection OK")
+                addAiTranslationLog("? OpenRouter connection OK")
                 setProviderApiTestState(
                     provider = NovelTranslationProvider.OPENROUTER,
                     status = ProviderApiTestStatus.Success,
                 )
             }.onFailure { error ->
-                addGeminiLog("? OpenRouter connection failed: ${formatGeminiThrowableForLog(error)}")
+                addAiTranslationLog("? OpenRouter connection failed: ${formatAiTranslationThrowableForLog(error)}")
                 setProviderApiTestState(
                     provider = NovelTranslationProvider.OPENROUTER,
                     status = ProviderApiTestStatus.Error,
-                    message = formatGeminiThrowableForLog(error),
+                    message = formatAiTranslationThrowableForLog(error),
                 )
             }
             isTestingOpenRouterConnection = false
@@ -2296,7 +2298,7 @@ class NovelReaderScreenModel(
                     apiKey = settings.deepSeekApiKey,
                 )
             }.getOrElse { error ->
-                addGeminiLog("? DeepSeek models load failed: ${formatGeminiThrowableForLog(error)}")
+                addAiTranslationLog("? DeepSeek models load failed: ${formatAiTranslationThrowableForLog(error)}")
                 emptyList()
             }
             deepSeekModelIds = fetched
@@ -2310,7 +2312,7 @@ class NovelReaderScreenModel(
         if (isTestingDeepSeekConnection) return
         if (settings.translationProvider != NovelTranslationProvider.DEEPSEEK) return
         if (!settings.hasConfiguredTranslationProvider()) {
-            addGeminiLog("? DeepSeek config invalid: fill Base URL, API key and Model")
+            addAiTranslationLog("? DeepSeek config invalid: fill Base URL, API key and Model")
             setProviderApiTestState(
                 provider = NovelTranslationProvider.DEEPSEEK,
                 status = ProviderApiTestStatus.Error,
@@ -2331,23 +2333,23 @@ class NovelReaderScreenModel(
                     segments = listOf("Connection test"),
                     settings = settings,
                 ) { message ->
-                    addGeminiLog("?? Test: $message")
+                    addAiTranslationLog("?? Test: $message")
                 }
                 if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
                     error("Empty response")
                 }
             }.onSuccess {
-                addGeminiLog("? DeepSeek connection OK")
+                addAiTranslationLog("? DeepSeek connection OK")
                 setProviderApiTestState(
                     provider = NovelTranslationProvider.DEEPSEEK,
                     status = ProviderApiTestStatus.Success,
                 )
             }.onFailure { error ->
-                addGeminiLog("? DeepSeek connection failed: ${formatGeminiThrowableForLog(error)}")
+                addAiTranslationLog("? DeepSeek connection failed: ${formatAiTranslationThrowableForLog(error)}")
                 setProviderApiTestState(
                     provider = NovelTranslationProvider.DEEPSEEK,
                     status = ProviderApiTestStatus.Error,
-                    message = formatGeminiThrowableForLog(error),
+                    message = formatAiTranslationThrowableForLog(error),
                 )
             }
             isTestingDeepSeekConnection = false
@@ -2369,7 +2371,7 @@ class NovelReaderScreenModel(
                     apiKey = settings.mistralApiKey,
                 )
             }.getOrElse { error ->
-                addGeminiLog("? Mistral models load failed: ${formatGeminiThrowableForLog(error)}")
+                addAiTranslationLog("? Mistral models load failed: ${formatAiTranslationThrowableForLog(error)}")
                 emptyList()
             }
             mistralModelIds = fetched
@@ -2383,7 +2385,7 @@ class NovelReaderScreenModel(
         if (isTestingMistralConnection) return
         if (settings.translationProvider != NovelTranslationProvider.MISTRAL) return
         if (!settings.hasConfiguredTranslationProvider()) {
-            addGeminiLog("? Mistral config invalid: fill Base URL, API key and Model")
+            addAiTranslationLog("? Mistral config invalid: fill Base URL, API key and Model")
             setProviderApiTestState(
                 provider = NovelTranslationProvider.MISTRAL,
                 status = ProviderApiTestStatus.Error,
@@ -2404,23 +2406,23 @@ class NovelReaderScreenModel(
                     segments = listOf("Connection test"),
                     settings = settings,
                 ) { message ->
-                    addGeminiLog("?? Test: $message")
+                    addAiTranslationLog("?? Test: $message")
                 }
                 if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
                     error("Empty response")
                 }
             }.onSuccess {
-                addGeminiLog("? Mistral connection OK")
+                addAiTranslationLog("? Mistral connection OK")
                 setProviderApiTestState(
                     provider = NovelTranslationProvider.MISTRAL,
                     status = ProviderApiTestStatus.Success,
                 )
             }.onFailure { error ->
-                addGeminiLog("? Mistral connection failed: ${formatGeminiThrowableForLog(error)}")
+                addAiTranslationLog("? Mistral connection failed: ${formatAiTranslationThrowableForLog(error)}")
                 setProviderApiTestState(
                     provider = NovelTranslationProvider.MISTRAL,
                     status = ProviderApiTestStatus.Error,
-                    message = formatGeminiThrowableForLog(error),
+                    message = formatAiTranslationThrowableForLog(error),
                 )
             }
             isTestingMistralConnection = false
@@ -2575,11 +2577,11 @@ class NovelReaderScreenModel(
         if (baseTextBlocks.isEmpty()) return
         val settings = currentState.readerSettings
         if (!settings.geminiEnabled) {
-            addGeminiLog("Gemini translation is disabled.")
+            addAiTranslationLog("AI translation is disabled.")
             return
         }
         if (!settings.hasConfiguredTranslationProvider()) {
-            addGeminiLog("? Translation provider is not configured")
+            addAiTranslationLog("? Translation provider is not configured")
             return
         }
         geminiTranslatedByIndex = emptyMap()
@@ -2589,7 +2591,7 @@ class NovelReaderScreenModel(
         geminiTranslationProgress = 0
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
-        addGeminiLog("Gemini translation queued in background.")
+        addAiTranslationLog("AI translation queued in background.")
         refreshGeminiUiState()
         geminiTranslationJob = screenModelScope.launch(Dispatchers.IO) {
             try {
@@ -2597,12 +2599,14 @@ class NovelReaderScreenModel(
                 if (!isActive) return@launch
                 val appContext = Injekt.get<Application>()
                 TranslationJob.runImmediately(appContext)
-                addGeminiLog("Gemini translation queued.")
+                addAiTranslationLog("AI translation queued.")
             } catch (_: CancellationException) {
                 // Job cancelled intentionally by the user or screen teardown.
             } catch (error: Exception) {
-                logcat(LogPriority.WARN, error) { "Failed to queue Gemini translation for chapter=${chapter.id}" }
-                addGeminiLog("Failed to start background translation: ${error.message ?: error::class.java.simpleName}")
+                logcat(LogPriority.WARN, error) { "Failed to queue AI translation for chapter=${chapter.id}" }
+                addAiTranslationLog(
+                    "Failed to start background translation: ${error.message ?: error::class.java.simpleName}",
+                )
                 isGeminiTranslating = false
                 geminiTranslationProgress = 0
                 refreshGeminiUiState()
@@ -2616,7 +2620,7 @@ class NovelReaderScreenModel(
         isGeminiTranslating = false
         isGeminiTranslationVisible = false
         geminiTranslationProgress = 0
-        addGeminiLog("?? Stop requested")
+        addAiTranslationLog("?? Stop requested")
         screenModelScope.launch(Dispatchers.IO) {
             val wasActive = translationQueueManager.cancelChapter(chapter.id)
             val appContext = Injekt.get<Application>()
@@ -2633,7 +2637,7 @@ class NovelReaderScreenModel(
     fun toggleGeminiTranslationVisibility() {
         if (geminiTranslatedByIndex.isEmpty()) return
         isGeminiTranslationVisible = !isGeminiTranslationVisible
-        addGeminiLog("??? Visibility: ${if (isGeminiTranslationVisible) "ON" else "OFF"}")
+        addAiTranslationLog("??? Visibility: ${if (isGeminiTranslationVisible) "ON" else "OFF"}")
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
@@ -2650,7 +2654,7 @@ class NovelReaderScreenModel(
         geminiTranslationProgress = 0
         hasGeminiTranslationCache = false
         NovelReaderTranslationDiskCacheStore.remove(chapter.id)
-        addGeminiLog("??? Cleared chapter cache")
+        addAiTranslationLog("??? Cleared chapter cache")
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
     }
@@ -2667,7 +2671,7 @@ class NovelReaderScreenModel(
         }
 
         if (isGeminiTranslating) {
-            addGoogleLog("Cannot start: Gemini translation is active.")
+            addGoogleLog("Cannot start: AI translation is active.")
             updateContent(settings)
             return
         }
@@ -2889,7 +2893,7 @@ class NovelReaderScreenModel(
         hasGeminiTranslationCache = true
         geminiTranslationProgress = 100
         isGeminiTranslationVisible = true
-        addGeminiLog("?? Restored cached translation")
+        addAiTranslationLog("?? Restored cached translation")
     }
     private fun applyGeminiTranslationToContentBlocks(
         blocks: List<ContentBlock>,

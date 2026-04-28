@@ -241,7 +241,7 @@ class DeepSeekTranslationService(
                 }
             }
         }.getOrElse { error ->
-            DeepSeekRequestOutcome.Failure("DeepSeek request exception: ${formatGeminiThrowableForLog(error)}")
+            DeepSeekRequestOutcome.Failure("DeepSeek request exception: ${formatAiTranslationThrowableForLog(error)}")
         }
     }
 }

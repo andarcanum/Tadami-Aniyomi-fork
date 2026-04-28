@@ -80,7 +80,7 @@ open class BaseOpenAiTranslationService(
                 }
             }
         }.onFailure { error ->
-            onLog?.invoke("$logLabel request exception: ${formatGeminiThrowableForLog(error)}")
+            onLog?.invoke("$logLabel request exception: ${formatAiTranslationThrowableForLog(error)}")
         }.getOrNull()
     }
 

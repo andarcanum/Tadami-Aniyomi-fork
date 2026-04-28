@@ -366,7 +366,7 @@ class NovelReaderScreenModelTest {
                 (block as? NovelReaderScreenModel.ContentBlock.Text)?.text?.startsWith("Translated") == true
             } shouldBe true
 
-            screenModel.addGeminiLog("Gemini UI log")
+            screenModel.addAiTranslationLog("Gemini UI log")
 
             val after = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
             after.geminiLogs.firstOrNull() shouldBe "Gemini UI log"

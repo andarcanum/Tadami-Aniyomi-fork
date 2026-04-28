@@ -1,6 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
-import eu.kanade.tachiyomi.ui.reader.novel.translation.formatGeminiThrowableForLog
+import eu.kanade.tachiyomi.ui.reader.novel.translation.formatAiTranslationThrowableForLog
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
 import org.junit.jupiter.api.Test
@@ -10,7 +10,7 @@ class NovelReaderGeminiFailureLogTest {
 
     @Test
     fun `failure log includes exception type and message`() {
-        val message = formatGeminiThrowableForLog(SocketTimeoutException("timeout"))
+        val message = formatAiTranslationThrowableForLog(SocketTimeoutException("timeout"))
 
         message.shouldContain("SocketTimeoutException")
         message.shouldContain("timeout")
@@ -22,7 +22,7 @@ class NovelReaderGeminiFailureLogTest {
     fun `failure log includes cause chain`() {
         val error = IllegalStateException("chunk failed", SocketTimeoutException("read timed out"))
 
-        val message = formatGeminiThrowableForLog(error)
+        val message = formatAiTranslationThrowableForLog(error)
 
         message.shouldContain("IllegalStateException: chunk failed")
         message.shouldContain("Caused by SocketTimeoutException: read timed out")
