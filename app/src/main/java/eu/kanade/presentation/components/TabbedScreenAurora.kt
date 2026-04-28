@@ -66,6 +66,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -551,6 +553,7 @@ internal fun AuroraTabRow(
                     isSelected = isSelected,
                     badgeCount = tab.badgeNumber,
                     onClick = { onTabSelected(index) },
+                    fillAvailableWidth = !scrollable,
                     modifier = if (scrollable) Modifier.padding(horizontal = 4.dp) else Modifier.weight(1f),
                 )
             }
@@ -564,6 +567,7 @@ internal fun AuroraTab(
     isSelected: Boolean,
     badgeCount: Int?,
     onClick: () -> Unit,
+    fillAvailableWidth: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -615,16 +619,22 @@ internal fun AuroraTab(
         contentAlignment = Alignment.Center,
     ) {
         Row(
+            modifier = if (fillAvailableWidth) Modifier.fillMaxWidth() else Modifier,
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
             Text(
                 text = text,
+                modifier = if (fillAvailableWidth) Modifier.weight(1f) else Modifier,
                 color = if (isSelected) colors.textPrimary else colors.textSecondary,
                 style = resolveAuroraTabTextStyle(
                     baseStyle = MaterialTheme.typography.bodyLarge,
                     isSelected = isSelected,
                 ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                textAlign = TextAlign.Center,
             )
 
             if (badgeCount != null && badgeCount > 0) {
