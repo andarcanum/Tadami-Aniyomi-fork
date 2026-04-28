@@ -146,6 +146,8 @@ import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.core.common.i18n.stringResource
 
 enum class ProviderApiTestStatus {
     Idle,
@@ -2199,7 +2201,7 @@ class NovelReaderScreenModel(
             setProviderApiTestState(
                 provider = NovelTranslationProvider.NVIDIA,
                 status = ProviderApiTestStatus.Error,
-                message = "Fill Base URL, API key and Model",
+                message = application.stringResource(AYMR.strings.novel_reader_ai_translator_api_invalid_config),
             )
             updateContent(settings)
             return
@@ -2219,7 +2221,7 @@ class NovelReaderScreenModel(
                     addAiTranslationLog("?? Test: $message")
                 }
                 if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
-                    error("Empty response")
+                    error(application.stringResource(AYMR.strings.novel_reader_ai_translator_api_empty_response))
                 }
             }.onSuccess {
                 addAiTranslationLog("? NVIDIA connection OK")
@@ -2249,7 +2251,7 @@ class NovelReaderScreenModel(
             setProviderApiTestState(
                 provider = NovelTranslationProvider.OPENROUTER,
                 status = ProviderApiTestStatus.Error,
-                message = "Fill Base URL, API key and free Model (:free)",
+                message = application.stringResource(AYMR.strings.novel_reader_ai_translator_api_invalid_openrouter_config),
             )
             updateContent(settings)
             return
@@ -2269,7 +2271,7 @@ class NovelReaderScreenModel(
                     addAiTranslationLog("?? Test: $message")
                 }
                 if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
-                    error("Empty response")
+                    error(application.stringResource(AYMR.strings.novel_reader_ai_translator_api_empty_response))
                 }
             }.onSuccess {
                 addAiTranslationLog("? OpenRouter connection OK")
@@ -2322,7 +2324,7 @@ class NovelReaderScreenModel(
             setProviderApiTestState(
                 provider = NovelTranslationProvider.DEEPSEEK,
                 status = ProviderApiTestStatus.Error,
-                message = "Fill Base URL, API key and Model",
+                message = application.stringResource(AYMR.strings.novel_reader_ai_translator_api_invalid_config),
             )
             updateContent(settings)
             return
@@ -2342,7 +2344,7 @@ class NovelReaderScreenModel(
                     addAiTranslationLog("?? Test: $message")
                 }
                 if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
-                    error("Empty response")
+                    error(application.stringResource(AYMR.strings.novel_reader_ai_translator_api_empty_response))
                 }
             }.onSuccess {
                 addAiTranslationLog("? DeepSeek connection OK")
@@ -2395,7 +2397,7 @@ class NovelReaderScreenModel(
             setProviderApiTestState(
                 provider = NovelTranslationProvider.MISTRAL,
                 status = ProviderApiTestStatus.Error,
-                message = "Fill Base URL, API key and Model",
+                message = application.stringResource(AYMR.strings.novel_reader_ai_translator_api_invalid_config),
             )
             updateContent(settings)
             return
@@ -2415,7 +2417,7 @@ class NovelReaderScreenModel(
                     addAiTranslationLog("?? Test: $message")
                 }
                 if (result.isNullOrEmpty() || result.firstOrNull().isNullOrBlank()) {
-                    error("Empty response")
+                    error(application.stringResource(AYMR.strings.novel_reader_ai_translator_api_empty_response))
                 }
             }.onSuccess {
                 addAiTranslationLog("? Mistral connection OK")
@@ -3294,8 +3296,7 @@ class NovelReaderScreenModel(
                     mistralModel.isNotBlank()
             }
             NovelTranslationProvider.NVIDIA -> {
-                nvidiaBaseUrl.isNotBlank() &&
-                    nvidiaApiKey.isNotBlank() &&
+                nvidiaApiKey.isNotBlank() &&
                     nvidiaModel.isNotBlank()
             }
         }

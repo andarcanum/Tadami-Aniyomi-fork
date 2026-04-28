@@ -442,8 +442,7 @@ private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
             mistralBaseUrl.isNotBlank() && mistralApiKey.isNotBlank() && mistralModel.isNotBlank()
         }
         NovelTranslationProvider.NVIDIA -> {
-            nvidiaBaseUrl.isNotBlank() &&
-                nvidiaApiKey.isNotBlank() &&
+            nvidiaApiKey.isNotBlank() &&
                 nvidiaModel.isNotBlank()
         }
     }

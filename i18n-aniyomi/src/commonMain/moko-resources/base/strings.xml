@@ -842,6 +842,10 @@
     <string name="novel_reader_ai_translator_api_test_loading">Checking API...</string>
     <string name="novel_reader_ai_translator_api_test_success">API OK</string>
     <string name="novel_reader_ai_translator_api_test_error">API error</string>
+    <string name="novel_reader_ai_translator_api_invalid_config">Fill Base URL, API key and Model</string>
+    <string name="novel_reader_ai_translator_api_invalid_openrouter_config">Fill Base URL, API key and free Model (:free)</string>
+    <string name="novel_reader_ai_translator_api_connection_ok">Connection OK</string>
+    <string name="novel_reader_ai_translator_api_empty_response">Empty response</string>
     <string name="novel_reader_ai_translator_save">Save</string>
     <string name="novel_reader_ai_translator_relaxed_state">Relaxed: %s</string>
     <string name="novel_reader_ai_translator_testing_connection">Checking...</string>

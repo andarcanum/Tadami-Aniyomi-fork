@@ -619,6 +619,10 @@
     <string name="novel_reader_ai_translator_api_test_loading">Проверка API...</string>
     <string name="novel_reader_ai_translator_api_test_success">API OK</string>
     <string name="novel_reader_ai_translator_api_test_error">Ошибка API</string>
+    <string name="novel_reader_ai_translator_api_invalid_config">Заполните Base URL, API-ключ и модель</string>
+    <string name="novel_reader_ai_translator_api_invalid_openrouter_config">Заполните Base URL, API-ключ и бесплатную модель (:free)</string>
+    <string name="novel_reader_ai_translator_api_connection_ok">Подключение OK</string>
+    <string name="novel_reader_ai_translator_api_empty_response">Пустой ответ</string>
     <string name="novel_reader_ai_translator_save">Сохранить</string>
     <string name="novel_reader_ai_translator_relaxed_state">Мягкий режим: %s</string>
     <string name="novel_reader_ai_translator_testing_connection">Проверка...</string>
