@@ -777,6 +777,11 @@ class MangaLibraryScreenModel(
                 val lastMangaIndex = items.indexOf(lastSelected.libraryManga)
                 val curMangaIndex = items.indexOf(manga)
 
+                if (lastMangaIndex < 0 || curMangaIndex < 0) {
+                    list.add(item)
+                    return@mutate
+                }
+
                 val selectedIds = list.fastMap { it.id }
                 val selectionRange = when {
                     lastMangaIndex < curMangaIndex -> IntRange(lastMangaIndex, curMangaIndex)
