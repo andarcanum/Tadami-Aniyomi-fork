@@ -236,6 +236,7 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
         val mistralClient = networkHelper.client.newBuilder()
+            .callTimeout(300, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
             .build()
         MistralTranslationService(
@@ -258,6 +259,7 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
         val nvidiaClient = networkHelper.client.newBuilder()
+            .callTimeout(300, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
             .build()
         NvidiaTranslationService(
@@ -861,13 +863,21 @@ class NovelReaderScreenModel(
         }
         val displayContent = when {
             geminiVisibleInUi && geminiTranslatedByIndex.isNotEmpty() -> normalizeHtml(
-                rawHtml = buildRawHtmlFromContentBlocks(displayContentBlocks),
+                rawHtml = buildTranslatedRawHtmlForDisplay(
+                    templateHtml = html,
+                    fallbackBlocks = displayContentBlocks,
+                    translatedByIndex = geminiTranslatedByIndex,
+                ),
                 settings = settings,
                 customCss = pluginCss,
                 customJs = pluginJs,
             )
             googleVisibleInUi && googleTranslatedByIndex.isNotEmpty() -> normalizeHtml(
-                rawHtml = buildRawHtmlFromContentBlocks(displayContentBlocks),
+                rawHtml = buildTranslatedRawHtmlForDisplay(
+                    templateHtml = html,
+                    fallbackBlocks = displayContentBlocks,
+                    translatedByIndex = googleTranslatedByIndex,
+                ),
                 settings = settings,
                 customCss = pluginCss,
                 customJs = pluginJs,
@@ -2040,6 +2050,13 @@ class NovelReaderScreenModel(
         setGlobal = { novelReaderPreferences.translationProvider().set(value) },
         setOverride = { it.copy(translationProvider = value) },
     ).also {
+        val currentBatchSize = (mutableState.value as? State.Success)?.readerSettings?.geminiBatchSize
+            ?: novelReaderPreferences.geminiBatchSize().get()
+        if ((value == NovelTranslationProvider.MISTRAL || value == NovelTranslationProvider.NVIDIA) &&
+            currentBatchSize == DEFAULT_TRANSLATION_BATCH_SIZE
+        ) {
+            setGeminiBatchSize(MISTRAL_NVIDIA_RECOMMENDED_BATCH_SIZE)
+        }
         openRouterApiTestStatus = ProviderApiTestStatus.Idle
         openRouterApiTestMessage = null
         deepSeekApiTestStatus = ProviderApiTestStatus.Idle
@@ -2153,7 +2170,7 @@ class NovelReaderScreenModel(
         updateContent(settings)
         screenModelScope.launch(Dispatchers.IO) {
             val fetched = runCatching {
-                openRouterModelsService.fetchModels(
+                openRouterModelsService.fetchFreeModels(
                     baseUrl = settings.openRouterBaseUrl,
                     apiKey = settings.openRouterApiKey,
                 )
@@ -2245,7 +2262,7 @@ class NovelReaderScreenModel(
         if (isTestingOpenRouterConnection) return
         if (settings.translationProvider != NovelTranslationProvider.OPENROUTER) return
         if (!settings.hasConfiguredTranslationProvider()) {
-            addAiTranslationLog("? OpenRouter config invalid: fill Base URL, API key and Model")
+            addAiTranslationLog("? OpenRouter config invalid: fill Base URL, API key and free Model (:free)")
             setProviderApiTestState(
                 provider = NovelTranslationProvider.OPENROUTER,
                 status = ProviderApiTestStatus.Error,
@@ -2931,21 +2948,48 @@ class NovelReaderScreenModel(
         return blocks.map { block ->
             when (block) {
                 is NovelRichContentBlock.BlockQuote -> {
-                    val replacement = geminiTranslatedByIndex[textIndex] ?: block.segments.joinToString("") { it.text }
+                    val replacement = geminiTranslatedByIndex[textIndex]
                     textIndex += 1
-                    block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                    if (replacement.isNullOrBlank()) {
+                        block
+                    } else {
+                        block.copy(
+                            segments = projectTranslatedTextOntoRichSegments(
+                                originalSegments = block.segments,
+                                translatedText = replacement,
+                            ),
+                        )
+                    }
                 }
                 is NovelRichContentBlock.Heading -> {
-                    val replacement = geminiTranslatedByIndex[textIndex] ?: block.segments.joinToString("") { it.text }
+                    val replacement = geminiTranslatedByIndex[textIndex]
                     textIndex += 1
-                    block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                    if (replacement.isNullOrBlank()) {
+                        block
+                    } else {
+                        block.copy(
+                            segments = projectTranslatedTextOntoRichSegments(
+                                originalSegments = block.segments,
+                                translatedText = replacement,
+                            ),
+                        )
+                    }
                 }
                 is NovelRichContentBlock.Image -> block
                 is NovelRichContentBlock.HorizontalRule -> block
                 is NovelRichContentBlock.Paragraph -> {
-                    val replacement = geminiTranslatedByIndex[textIndex] ?: block.segments.joinToString("") { it.text }
+                    val replacement = geminiTranslatedByIndex[textIndex]
                     textIndex += 1
-                    block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                    if (replacement.isNullOrBlank()) {
+                        block
+                    } else {
+                        block.copy(
+                            segments = projectTranslatedTextOntoRichSegments(
+                                originalSegments = block.segments,
+                                translatedText = replacement,
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -2967,7 +3011,12 @@ class NovelReaderScreenModel(
                         block
                     } else {
                         replacedCount += 1
-                        block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                        block.copy(
+                            segments = projectTranslatedTextOntoRichSegments(
+                                originalSegments = block.segments,
+                                translatedText = replacement,
+                            ),
+                        )
                     }
                 }
                 is NovelRichContentBlock.Heading -> {
@@ -2977,7 +3026,12 @@ class NovelReaderScreenModel(
                         block
                     } else {
                         replacedCount += 1
-                        block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                        block.copy(
+                            segments = projectTranslatedTextOntoRichSegments(
+                                originalSegments = block.segments,
+                                translatedText = replacement,
+                            ),
+                        )
                     }
                 }
                 is NovelRichContentBlock.Image -> block
@@ -2989,7 +3043,12 @@ class NovelReaderScreenModel(
                         block
                     } else {
                         replacedCount += 1
-                        block.copy(segments = listOf(NovelRichTextSegment(replacement)))
+                        block.copy(
+                            segments = projectTranslatedTextOntoRichSegments(
+                                originalSegments = block.segments,
+                                translatedText = replacement,
+                            ),
+                        )
                     }
                 }
             }
@@ -2999,7 +3058,7 @@ class NovelReaderScreenModel(
                 it is NovelRichContentBlock.Heading ||
                 it is NovelRichContentBlock.Paragraph
         }
-        addGoogleLog("Applied to rich content blocks: replaced=$replacedCount/$richContentBlockCount")
+        addGoogleLog("Applied to rich content blocks with inline style projection: replaced=$replacedCount/$richContentBlockCount")
         return updated
     }
     private fun buildRawHtmlFromContentBlocks(blocks: List<ContentBlock>): String {
@@ -3022,6 +3081,218 @@ class NovelReaderScreenModel(
             }
         }
     }
+    private fun buildTranslatedRawHtmlForDisplay(
+        templateHtml: String,
+        fallbackBlocks: List<ContentBlock>,
+        translatedByIndex: Map<Int, String>,
+    ): String {
+        if (translatedByIndex.isEmpty()) return buildRawHtmlFromContentBlocks(fallbackBlocks)
+        return buildTranslatedHtmlFromTemplate(
+            templateHtml = templateHtml,
+            translatedByIndex = translatedByIndex,
+        ) ?: buildRawHtmlFromContentBlocks(fallbackBlocks)
+    }
+
+    private fun buildTranslatedHtmlFromTemplate(
+        templateHtml: String,
+        translatedByIndex: Map<Int, String>,
+    ): String? {
+        if (templateHtml.isBlank() || translatedByIndex.isEmpty()) return null
+        return runCatching {
+            val document = Jsoup.parse(templateHtml)
+            document.outputSettings().prettyPrint(false)
+            val textBlocks = document.select(PARAGRAPH_LIKE_SELECTOR)
+                .filterNot { element ->
+                    element.tagName().equals("p", ignoreCase = true) &&
+                        element.parent()?.tagName()?.equals("li", ignoreCase = true) == true
+                }
+            if (textBlocks.isEmpty()) return@runCatching null
+
+            var textIndex = 0
+            var replacedCount = 0
+            textBlocks.forEach { element ->
+                val originalText = element.text().sanitizeTextBlock()
+                if (originalText.isBlank()) return@forEach
+                val translated = translatedByIndex[textIndex]
+                textIndex += 1
+                if (translated.isNullOrBlank()) return@forEach
+                replaceElementTextPreservingInlineMarkup(
+                    element = element,
+                    translatedText = translated.normalizedForHtmlElement(element),
+                )
+                replacedCount += 1
+            }
+            if (replacedCount <= 0) return@runCatching null
+            if (templateHtml.contains("<html", ignoreCase = true)) {
+                document.outerHtml()
+            } else {
+                document.body().html()
+            }
+        }.getOrNull()
+    }
+
+    private fun replaceElementTextPreservingInlineMarkup(
+        element: Element,
+        translatedText: String,
+    ) {
+        val cleanedText = translatedText.sanitizeTranslatedDisplayText()
+        if (cleanedText.isBlank()) return
+
+        val textNodes = mutableListOf<TextNode>()
+        collectInlineTextNodes(element, textNodes)
+        if (textNodes.isEmpty()) {
+            element.text(cleanedText)
+            return
+        }
+
+        val pieces = splitTranslatedTextBySourceWeights(
+            sourceParts = textNodes.map { it.text() },
+            translatedText = cleanedText,
+        )
+        textNodes.forEachIndexed { index, textNode ->
+            textNode.text(pieces.getOrNull(index).orEmpty())
+        }
+    }
+
+    private fun collectInlineTextNodes(
+        node: Node,
+        out: MutableList<TextNode>,
+    ) {
+        when (node) {
+            is TextNode -> {
+                if (node.text().isNotBlank()) {
+                    out += node
+                }
+            }
+            is Element -> {
+                val tag = node.tagName().lowercase()
+                if (tag == "script" || tag == "style" || tag == "noscript") return
+                node.childNodes().forEach { child ->
+                    collectInlineTextNodes(child, out)
+                }
+            }
+        }
+    }
+
+    private fun projectTranslatedTextOntoRichSegments(
+        originalSegments: List<NovelRichTextSegment>,
+        translatedText: String,
+    ): List<NovelRichTextSegment> {
+        val cleanedText = translatedText.sanitizeTranslatedDisplayText()
+        if (cleanedText.isBlank()) return originalSegments
+        if (originalSegments.isEmpty()) return listOf(NovelRichTextSegment(cleanedText))
+        if (originalSegments.size == 1) return listOf(originalSegments.first().copy(text = cleanedText))
+
+        val pieces = splitTranslatedTextBySourceWeights(
+            sourceParts = originalSegments.map { it.text },
+            translatedText = cleanedText,
+        )
+        return originalSegments.mapIndexedNotNull { index, segment ->
+            val piece = pieces.getOrNull(index).orEmpty()
+            when {
+                piece.isEmpty() && segment.text.isNotEmpty() -> null
+                else -> segment.copy(text = piece)
+            }
+        }.ifEmpty {
+            listOf(originalSegments.first().copy(text = cleanedText))
+        }
+    }
+
+    private fun splitTranslatedTextBySourceWeights(
+        sourceParts: List<String>,
+        translatedText: String,
+    ): List<String> {
+        if (sourceParts.isEmpty()) return emptyList()
+        val cleanedText = translatedText.sanitizeTranslatedDisplayText()
+        if (sourceParts.size == 1) return listOf(cleanedText)
+        if (cleanedText.isEmpty()) return List(sourceParts.size) { "" }
+
+        val weights = sourceParts.map { part ->
+            part.count { char -> !char.isWhitespace() }.coerceAtLeast(0)
+        }
+        val totalWeight = weights.sum()
+        if (totalWeight <= 0) {
+            return List(sourceParts.size) { index -> if (index == 0) cleanedText else "" }
+        }
+
+        val boundaries = mutableListOf<Int>()
+        var cumulativeWeight = 0
+        var previousBoundary = 0
+        weights.dropLast(1).forEach { weight ->
+            cumulativeWeight += weight
+            val preferred = ((cleanedText.length.toFloat() * cumulativeWeight.toFloat()) / totalWeight.toFloat())
+                .roundToInt()
+                .coerceIn(previousBoundary, cleanedText.length)
+            val boundary = findNearestTranslatedTextBoundary(
+                text = cleanedText,
+                preferred = preferred,
+                min = previousBoundary,
+            )
+            boundaries += boundary
+            previousBoundary = boundary
+        }
+
+        val pieces = mutableListOf<String>()
+        var start = 0
+        boundaries.forEach { boundary ->
+            pieces += cleanedText.substring(start, boundary)
+            start = boundary
+        }
+        pieces += cleanedText.substring(start)
+        return pieces
+    }
+
+    private fun findNearestTranslatedTextBoundary(
+        text: String,
+        preferred: Int,
+        min: Int,
+    ): Int {
+        if (preferred <= min) return min
+        if (preferred >= text.length) return text.length
+        val radius = maxOf(8, text.length / 32)
+        var best = preferred
+        var bestScore = boundaryScore(text, preferred) * 100
+        val start = maxOf(min, preferred - radius)
+        val end = minOf(text.length, preferred + radius)
+        for (candidate in start..end) {
+            val score = boundaryScore(text, candidate) * 100 + kotlin.math.abs(candidate - preferred)
+            if (score < bestScore) {
+                best = candidate
+                bestScore = score
+            }
+        }
+        return best.coerceIn(min, text.length)
+    }
+
+    private fun boundaryScore(text: String, index: Int): Int {
+        if (index <= 0 || index >= text.length) return 0
+        val before = text[index - 1]
+        val after = text[index]
+        return when {
+            before.isWhitespace() || after.isWhitespace() -> 0
+            before in TRANSLATED_TEXT_STRONG_BOUNDARY_CHARS -> 1
+            after in TRANSLATED_TEXT_OPENING_BOUNDARY_CHARS -> 1
+            before in TRANSLATED_TEXT_SOFT_BOUNDARY_CHARS -> 2
+            else -> 8
+        }
+    }
+
+    private fun String.normalizedForHtmlElement(element: Element): String {
+        val cleaned = sanitizeTranslatedDisplayText()
+        if (!element.tagName().equals("li", ignoreCase = true)) return cleaned
+        return cleaned
+            .removePrefix("•")
+            .removePrefix("-")
+            .removePrefix("*")
+            .trimStart()
+    }
+
+    private fun String.sanitizeTranslatedDisplayText(): String {
+        return replace('\u00A0', ' ')
+            .replace("\r", "")
+            .trim()
+    }
+
     private fun currentParsedTextBlocks(): List<String> {
         parsedContentBlocks?.let { blocks ->
             return blocks
@@ -3196,32 +3467,22 @@ class NovelReaderScreenModel(
                     "bridgeInstalled=${GeminiPrivateBridge.isInstalled()}, bridgeUnlocked=${isPrivateBridgeUnlocked()}"
             }
             NovelTranslationProvider.OPENROUTER -> {
-                val tier = if (openRouterModel.trim().endsWith(":free", ignoreCase = true)) "free" else "paid/custom"
-                val reasoning = normalizeTranslationReasoningEffort(
-                    provider = NovelTranslationProvider.OPENROUTER,
-                    model = openRouterModel,
-                    value = geminiReasoningEffort,
-                ) ?: "off"
+                val isFreeModel = openRouterModel.trim().endsWith(":free", ignoreCase = true)
                 "baseUrl=${openRouterBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
-                    "topP=${geminiTopP.toLogFloat()}, modelTier=$tier, reasoning=$reasoning"
+                    "topP=${geminiTopP.toLogFloat()}, freeModel=$isFreeModel"
             }
             NovelTranslationProvider.DEEPSEEK -> {
                 val params = toDeepSeekTranslationParams()
                 val presencePenalty = params.presencePenalty.toLogFloat()
                 val frequencyPenalty = params.frequencyPenalty.toLogFloat()
                 "baseUrl=${params.baseUrl.trim()}, temp=${params.temperature.toLogFloat()}, " +
-                    "topP=${params.topP.toLogFloat()}, reasoning=${params.reasoningEffort}, " +
+                    "topP=${params.topP.toLogFloat()}, " +
                     "presencePenalty=$presencePenalty, frequencyPenalty=$frequencyPenalty, " +
                     "stream=false"
             }
             NovelTranslationProvider.MISTRAL -> {
-                val reasoning = normalizeTranslationReasoningEffort(
-                    provider = NovelTranslationProvider.MISTRAL,
-                    model = mistralModel,
-                    value = geminiReasoningEffort,
-                ) ?: "off"
                 "baseUrl=${mistralBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
-                    "topP=${geminiTopP.toLogFloat()}, reasoning=$reasoning, stream=false"
+                    "topP=${geminiTopP.toLogFloat()}, stream=false"
             }
             NovelTranslationProvider.NVIDIA -> {
                 "baseUrl=${nvidiaBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
@@ -3291,7 +3552,7 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.OPENROUTER -> {
                 openRouterBaseUrl.isNotBlank() &&
                     openRouterApiKey.isNotBlank() &&
-                    openRouterModel.isNotBlank()
+                    openRouterModel.trim().endsWith(":free", ignoreCase = true)
             }
             NovelTranslationProvider.DEEPSEEK -> {
                 deepSeekBaseUrl.isNotBlank() &&
@@ -4204,6 +4465,12 @@ class NovelReaderScreenModel(
         private const val DEEPSEEK_TOP_P_MAX = 0.95f
         private const val DEEPSEEK_DEFAULT_PRESENCE_PENALTY = 0.15f
         private const val DEEPSEEK_DEFAULT_FREQUENCY_PENALTY = 0.15f
+        private const val DEFAULT_TRANSLATION_BATCH_SIZE = 40
+        private const val MISTRAL_NVIDIA_RECOMMENDED_BATCH_SIZE = 20
+        private const val PARAGRAPH_LIKE_SELECTOR = "p, li, blockquote, h1, h2, h3, h4, h5, h6, pre"
+        private const val TRANSLATED_TEXT_STRONG_BOUNDARY_CHARS = ".,!?;:…)]}»”’"
+        private const val TRANSLATED_TEXT_OPENING_BOUNDARY_CHARS = "([{«“‘"
+        private const val TRANSLATED_TEXT_SOFT_BOUNDARY_CHARS = "—–-"
         private val STRUCTURED_NODE_TYPES = setOf(
             "doc",
             "paragraph",

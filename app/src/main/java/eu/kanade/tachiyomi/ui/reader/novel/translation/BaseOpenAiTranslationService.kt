@@ -157,17 +157,30 @@ open class BaseOpenAiTranslationService(
             ?: return ""
 
         val message = choice["message"].asObjectOrNull()
-        val sources = listOf(
-            message?.get("content"),
-            message?.get("text"),
-            choice["text"],
-            choice["output_text"],
-            choice["content"],
-        )
-        return sources.firstNotNullOfOrNull { it.extractTextCandidates().firstOrNull() }.orEmpty()
+        message?.get("content")
+            .extractContentArrayTextCandidates()
+            .firstOrNull()
+            ?.let { return it }
+
+        val sources = listOf(message?.get("content"), message?.get("text"), choice["text"], choice["output_text"], choice["content"])
+        return sources.firstNotNullOfOrNull { it.extractTextCandidates(includeThinking = false).firstOrNull() }.orEmpty()
     }
 
-    private fun JsonElement?.extractTextCandidates(): List<String> {
+    private fun JsonElement?.extractContentArrayTextCandidates(): List<String> {
+        val array = this as? JsonArray ?: return emptyList()
+        return array
+            .flatMap { entry ->
+                val obj = entry as? JsonObject ?: return@flatMap entry.extractTextCandidates(includeThinking = false)
+                if (obj["type"].asStringOrNull()?.equals("thinking", ignoreCase = true) == true) {
+                    emptyList()
+                } else {
+                    obj["text"].extractTextCandidates(includeThinking = false)
+                }
+            }
+            .distinct()
+    }
+
+    private fun JsonElement?.extractTextCandidates(includeThinking: Boolean): List<String> {
         return when (this) {
             is JsonPrimitive -> {
                 if (isString) {
@@ -176,11 +189,14 @@ open class BaseOpenAiTranslationService(
                     emptyList()
                 }
             }
-            is JsonArray -> flatMap { it.extractTextCandidates() }
+            is JsonArray -> flatMap { it.extractTextCandidates(includeThinking = includeThinking) }
             is JsonObject -> {
+                val isThinking = this["type"].asStringOrNull()?.equals("thinking", ignoreCase = true) == true
+                if (isThinking && !includeThinking) return emptyList()
                 val direct = listOf("text", "content", "output_text")
-                    .flatMap { key -> this[key].extractTextCandidates() }
-                val functionArgs = this["function"].asObjectOrNull()?.get("arguments").extractTextCandidates()
+                    .flatMap { key -> this[key].extractTextCandidates(includeThinking = includeThinking) }
+                val functionArgs = this["function"].asObjectOrNull()?.get("arguments")
+                    .extractTextCandidates(includeThinking = includeThinking)
                 (direct + functionArgs).distinct()
             }
             else -> emptyList()
@@ -200,6 +216,11 @@ private fun kotlinx.serialization.json.JsonElement?.asObjectOrNull(): JsonObject
 
 private fun kotlinx.serialization.json.JsonElement?.asArrayOrNull(): JsonArray? {
     return this as? JsonArray
+}
+
+private fun kotlinx.serialization.json.JsonElement?.asStringOrNull(): String? {
+    val primitive = this as? JsonPrimitive ?: return null
+    return if (primitive.isString) primitive.content else null
 }
 
 private val retryAfterSecondsRegex =

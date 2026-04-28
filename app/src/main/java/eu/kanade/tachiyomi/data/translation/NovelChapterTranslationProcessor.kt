@@ -232,6 +232,7 @@ class NovelChapterTranslationProcessor(
     private suspend fun requestTranslationBatch(
         segments: List<String>,
         settings: NovelReaderSettings,
+        forceNoReasoning: Boolean = false,
         onLog: ((String) -> Unit)? = null,
     ): List<String?>? {
         return when (settings.translationProvider) {
@@ -264,9 +265,12 @@ class NovelChapterTranslationProcessor(
                 )
             }
             NovelTranslationProvider.MISTRAL -> {
+                val disableReasoningForBatch =
+                    forceNoReasoning ||
+                        (segments.size > 1 && settings.geminiReasoningEffort.trim().lowercase() != "none")
                 mistralTranslationService.translateBatch(
                     segments = segments,
-                    params = settings.toMistralTranslationParams(),
+                    params = settings.toMistralTranslationParams(forceNoReasoning = disableReasoningForBatch),
                     onLog = onLog,
                 )
             }
@@ -287,16 +291,77 @@ class NovelChapterTranslationProcessor(
         settings: NovelReaderSettings,
         onLog: ((String) -> Unit)?,
     ): List<String?>? {
-        if (result != null && result.any { !it.isNullOrBlank() }) return result
         if (!provider.supportsGranularFallback()) return result
         if (chunk.isEmpty()) return result
 
-        onLog?.invoke("[$provider] Chunk response had no translated blocks, retrying segments individually")
-        val recovered = MutableList<String?>(chunk.size) { null }
-        chunk.forEachIndexed { index, (_, text) ->
+        val recovered = MutableList<String?>(chunk.size) { index ->
+            result?.getOrNull(index)
+        }
+        val missingIndices = recovered.mapIndexedNotNull { index, text ->
+            if (text.isNullOrBlank()) index else null
+        }
+        if (missingIndices.isEmpty()) return result
+
+        val reason = if (result == null || result.none { !it.isNullOrBlank() }) {
+            "no translated blocks"
+        } else {
+            "missing ${missingIndices.size}/${chunk.size} blocks"
+        }
+        onLog?.invoke("[$provider] Chunk response had $reason, retrying missing segments")
+
+        val disableReasoningForRecovery = provider == NovelTranslationProvider.MISTRAL
+
+        if (missingIndices.size >= MISSING_REBATCH_MIN_SEGMENTS) {
+            val missingTexts = missingIndices.map { chunk[it].second }
+            val rebatch = requestTranslationBatch(
+                segments = missingTexts,
+                settings = settings,
+                forceNoReasoning = disableReasoningForRecovery,
+                onLog = onLog,
+            )
+            rebatch.orEmpty().forEachIndexed { localIndex, text ->
+                if (!text.isNullOrBlank()) {
+                    val originalMissingIndex = missingIndices.getOrNull(localIndex) ?: return@forEachIndexed
+                    recovered[originalMissingIndex] = text
+                }
+            }
+        }
+
+        var stillMissing = recovered.mapIndexedNotNull { index, text ->
+            if (text.isNullOrBlank()) index else null
+        }
+        if (stillMissing.isEmpty()) return recovered
+
+        if (stillMissing.size >= MISSING_MINIBATCH_MIN_SEGMENTS) {
+            stillMissing.chunked(MISSING_MINIBATCH_SIZE).forEach { miniBatchIndices ->
+                val miniBatchTexts = miniBatchIndices.map { chunk[it].second }
+                val miniBatchResult = requestTranslationBatch(
+                    segments = miniBatchTexts,
+                    settings = settings,
+                    forceNoReasoning = disableReasoningForRecovery,
+                    onLog = onLog,
+                )
+                miniBatchResult.orEmpty().forEachIndexed { localIndex, text ->
+                    if (!text.isNullOrBlank()) {
+                        val originalMissingIndex = miniBatchIndices.getOrNull(localIndex) ?: return@forEachIndexed
+                        recovered[originalMissingIndex] = text
+                    }
+                }
+            }
+        }
+
+        stillMissing = recovered.mapIndexedNotNull { index, text ->
+            if (text.isNullOrBlank()) index else null
+        }
+        if (stillMissing.isNotEmpty()) {
+            onLog?.invoke("[$provider] Still missing ${stillMissing.size}/${chunk.size} blocks after batched recovery, retrying individually")
+        }
+        stillMissing.forEach { index ->
+            val text = chunk[index].second
             val single = requestTranslationBatch(
                 segments = listOf(text),
                 settings = settings,
+                forceNoReasoning = disableReasoningForRecovery,
                 onLog = onLog,
             )
             val translated = single?.firstOrNull()?.takeIf { !it.isNullOrBlank() }
@@ -309,7 +374,7 @@ class NovelChapterTranslationProcessor(
 }
 
 private fun NovelTranslationProvider.supportsGranularFallback(): Boolean {
-    return true
+    return this == NovelTranslationProvider.MISTRAL || this == NovelTranslationProvider.NVIDIA
 }
 
 private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {
@@ -404,7 +469,7 @@ private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslati
     )
 }
 
-private fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslationParams {
+private fun NovelReaderSettings.toMistralTranslationParams(forceNoReasoning: Boolean = false): MistralTranslationParams {
     return MistralTranslationParams(
         baseUrl = mistralBaseUrl,
         apiKey = mistralApiKey,
@@ -415,11 +480,15 @@ private fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslation
         promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         temperature = geminiTemperature,
         topP = geminiTopP,
-        reasoningEffort = normalizeTranslationReasoningEffort(
-            provider = NovelTranslationProvider.MISTRAL,
-            model = mistralModel,
-            value = geminiReasoningEffort,
-        ),
+        reasoningEffort = if (forceNoReasoning) {
+            null
+        } else {
+            normalizeTranslationReasoningEffort(
+                provider = NovelTranslationProvider.MISTRAL,
+                model = mistralModel,
+                value = geminiReasoningEffort,
+            )
+        },
     )
 }
 
@@ -575,3 +644,6 @@ private const val DEEPSEEK_TOP_P_MIN = 0.9f
 private const val DEEPSEEK_TOP_P_MAX = 0.95f
 private const val DEEPSEEK_DEFAULT_PRESENCE_PENALTY = 0.15f
 private const val DEEPSEEK_DEFAULT_FREQUENCY_PENALTY = 0.15f
+private const val MISSING_REBATCH_MIN_SEGMENTS = 3
+private const val MISSING_MINIBATCH_MIN_SEGMENTS = 2
+private const val MISSING_MINIBATCH_SIZE = 4

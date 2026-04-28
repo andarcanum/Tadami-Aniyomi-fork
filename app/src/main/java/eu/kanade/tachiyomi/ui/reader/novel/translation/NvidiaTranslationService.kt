@@ -40,7 +40,7 @@ class NvidiaTranslationService(
             put("messages", buildMessages(systemPrompt, userPrompt))
             put("temperature", params.temperature)
             put("top_p", params.topP)
-            put("max_tokens", 4096)
+            put("max_tokens", computeTranslationMaxTokens(segments))
             put("stream", false)
         }
 
@@ -129,4 +129,9 @@ private fun String.trimNonXmlTail(): String {
     val end = xmlSegmentEndRegex.findAll(source).lastOrNull()?.range?.last ?: return source
     if (end < start) return source
     return source.substring(start, end + 1).trim()
+}
+
+private fun computeTranslationMaxTokens(segments: List<String>): Int {
+    val estimated = segments.sumOf { (it.length / 2).coerceAtLeast(32) } + segments.size * 24
+    return estimated.coerceIn(4096, 8192)
 }
