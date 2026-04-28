@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -62,6 +63,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -529,6 +531,7 @@ internal fun AuroraTabRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(28.dp))
             .background(
                 tabContainerColor,
                 RoundedCornerShape(28.dp),
@@ -573,6 +576,11 @@ internal fun AuroraTab(
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val tabShape = RoundedCornerShape(20.dp)
+    val maxTabTextWidth = if (!fillAvailableWidth) {
+        (LocalConfiguration.current.screenWidthDp.dp - 72.dp).coerceAtMost(220.dp)
+    } else {
+        Dp.Unspecified
+    }
     val selectedTabBrush = remember(colors.accent) {
         Brush.linearGradient(
             colors = listOf(
@@ -625,7 +633,11 @@ internal fun AuroraTab(
         ) {
             Text(
                 text = text,
-                modifier = if (fillAvailableWidth) Modifier.weight(1f) else Modifier,
+                modifier = if (fillAvailableWidth) {
+                    Modifier.weight(1f)
+                } else {
+                    Modifier.widthIn(max = maxTabTextWidth)
+                },
                 color = if (isSelected) colors.textPrimary else colors.textSecondary,
                 style = resolveAuroraTabTextStyle(
                     baseStyle = MaterialTheme.typography.bodyLarge,
