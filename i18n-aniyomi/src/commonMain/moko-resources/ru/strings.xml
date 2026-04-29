@@ -631,6 +631,13 @@
     <string name="novel_reader_ai_translator_api_invalid_openrouter_config">Заполните Base URL, API-ключ и модель</string>
     <string name="novel_reader_ai_translator_api_connection_ok">Подключение OK</string>
     <string name="novel_reader_ai_translator_api_empty_response">Пустой ответ</string>
+    <string name="novel_reader_ai_translator_get_api_key">Получить API ключ</string>
+    <string name="novel_reader_ai_translator_api_url_gemini">https://aistudio.google.com/app/apikey</string>
+    <string name="novel_reader_ai_translator_api_url_openrouter">https://openrouter.ai/keys</string>
+    <string name="novel_reader_ai_translator_api_url_deepseek">https://platform.deepseek.com/api_keys</string>
+    <string name="novel_reader_ai_translator_api_url_mistral">https://console.mistral.ai/api-keys/</string>
+    <string name="novel_reader_ai_translator_api_url_nvidia">https://build.nvidia.com/</string>
+    <string name="novel_reader_ai_translator_api_url_ollama_cloud">https://ollama.com/</string>
     <string name="novel_reader_ai_translator_save">Сохранить</string>
     <string name="novel_reader_ai_translator_relaxed_state">Мягкий режим: %s</string>
     <string name="novel_reader_ai_translator_testing_connection">Проверка...</string>

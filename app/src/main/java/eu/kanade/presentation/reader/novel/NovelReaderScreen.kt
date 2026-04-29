@@ -64,6 +64,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -133,6 +134,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.imageResource
@@ -5409,6 +5411,24 @@ private fun GeminiTranslationDialog(
                         AiTranslatorSupportText(
                             stringResource(AYMR.strings.novel_reader_ai_translator_more_api_key_summary),
                         )
+                        val apiKeyUrl = getApiKeyUrl(tempProvider)
+                        if (apiKeyUrl != null) {
+                            val uriHandler = LocalUriHandler.current
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                TextButton(onClick = { uriHandler.openUri(apiKeyUrl) }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(Modifier.size(4.dp))
+                                    Text(stringResource(AYMR.strings.novel_reader_ai_translator_get_api_key))
+                                }
+                            }
+                        }
                         OutlinedTextField(
                             value = when {
                                 isOpenRouterSelected -> readerSettings.openRouterApiKey
@@ -6455,6 +6475,25 @@ private fun AiTranslatorApiTestButton(
             }
         }
         Text(stringResource(labelRes))
+    }
+}
+
+@Composable
+private fun getApiKeyUrl(provider: NovelTranslationProvider): String? {
+    return when (provider) {
+        NovelTranslationProvider.GEMINI ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_gemini)
+        NovelTranslationProvider.GEMINI_PRIVATE -> null
+        NovelTranslationProvider.OPENROUTER ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_openrouter)
+        NovelTranslationProvider.DEEPSEEK ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_deepseek)
+        NovelTranslationProvider.MISTRAL ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_mistral)
+        NovelTranslationProvider.NVIDIA ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_nvidia)
+        NovelTranslationProvider.OLLAMA_CLOUD ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_ollama_cloud)
     }
 }
 

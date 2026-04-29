@@ -49,6 +49,7 @@ internal class AnimeExtensionApi(
                 .map { async { getExtensions(it) } }
                 .awaitAll()
                 .flatten()
+                .distinctBy { it.pkgName }
         }
     }
 

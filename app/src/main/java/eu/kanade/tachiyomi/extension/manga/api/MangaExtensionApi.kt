@@ -49,6 +49,7 @@ internal class MangaExtensionApi(
                 .map { async { getExtensions(it) } }
                 .awaitAll()
                 .flatten()
+                .distinctBy { it.pkgName }
         }
     }
 

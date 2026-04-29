@@ -14,6 +14,7 @@ class NovelPluginApi(
         return withContext(Dispatchers.IO) {
             val repos = repoProvider.getAll()
             repos.flatMap { fetchPluginsFromRepo(it) }
+                .distinctBy { it.id }
         }
     }
 
