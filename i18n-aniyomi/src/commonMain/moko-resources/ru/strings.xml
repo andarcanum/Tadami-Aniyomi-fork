@@ -1909,4 +1909,24 @@
     <string name="novel_reader_google_translate_log">Лог:</string>
     <string name="novel_reader_google_translate_rate_limited">Ограничение частоты. Нажмите Продолжить для повтора.</string>
     <string name="novel_reader_google_translate_error">Ошибка перевода: %1$s</string>
+
+    <!-- Feed -->
+    <string name="feed">Лента</string>
+    <string name="feed_add">Добавить источник в ленту</string>
+    <string name="feed_empty">Источники ленты не настроены. Нажмите +, чтобы добавить источник с поддержкой Latest.</string>
+    <string name="feed_delete_source_title">Удалить источник из ленты?</string>
+    <string name="feed_delete_source_message">Источник будет удалён из ленты.</string>
+    <string name="pref_feed_hide_tab">Скрыть вкладку ленты</string>
+    <string name="pref_feed_tab_in_front">Показывать вкладку ленты первой</string>
+    <string name="pref_feed_hide_in_library_items">Скрыть записи ленты уже в библиотеке</string>
+
+    <!-- Saved Search / Feed v3 -->
+    <string name="save_search">Сохранить поиск</string>
+    <string name="saved_search">Сохранённый поиск</string>
+    <string name="saved_search_name">Имя поиска</string>
+    <string name="saved_search_delete">Удалить сохранённый поиск?</string>
+    <string name="saved_search_delete_message">Сохранённый поиск будет удалён навсегда.</string>
+    <string name="feed_add_search_title">Выберите тип ленты</string>
+    <string name="feed_latest">Новинки</string>
+    <string name="feed_popular">Популярное</string>
 </resources>

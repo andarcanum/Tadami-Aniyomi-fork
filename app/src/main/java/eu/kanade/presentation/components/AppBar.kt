@@ -474,6 +474,7 @@ sealed interface AppBar {
         val iconTint: Color? = null,
         val onClick: () -> Unit,
         val enabled: Boolean = true,
+        val iconRotation: Float = 0f,
     ) : AppBarAction
 
     data class OverflowAction(

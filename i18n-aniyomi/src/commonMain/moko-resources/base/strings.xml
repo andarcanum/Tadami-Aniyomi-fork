@@ -1981,4 +1981,24 @@
     <string name="novel_reader_google_translate_log">Log:</string>
     <string name="novel_reader_google_translate_rate_limited">Rate limited. Tap Resume to retry.</string>
     <string name="novel_reader_google_translate_error">Translation error: %1$s</string>
+
+    <!-- Feed -->
+    <string name="feed">Feed</string>
+    <string name="feed_add">Add source to feed</string>
+    <string name="feed_empty">Feed sources not configured. Tap + to add a source that supports Latest.</string>
+    <string name="feed_delete_source_title">Remove source from feed?</string>
+    <string name="feed_delete_source_message">This source will be removed from your feed.</string>
+    <string name="pref_feed_hide_tab">Hide feed tab</string>
+    <string name="pref_feed_tab_in_front">Show feed tab first</string>
+    <string name="pref_feed_hide_in_library_items">Hide feed entries already in library</string>
+
+    <!-- Saved Search / Feed v3 -->
+    <string name="save_search">Save search</string>
+    <string name="saved_search">Saved search</string>
+    <string name="saved_search_name">Search name</string>
+    <string name="saved_search_delete">Delete saved search?</string>
+    <string name="saved_search_delete_message">This saved search will be permanently deleted.</string>
+    <string name="feed_add_search_title">Select feed type</string>
+    <string name="feed_latest">Latest</string>
+    <string name="feed_popular">Popular</string>
 </resources>

@@ -28,6 +28,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -243,6 +244,7 @@ internal fun AuroraTopBarIconButton(
     contentDescription: String,
     modifier: Modifier = Modifier,
     tint: Color = AuroraTheme.colors.textPrimary,
+    iconRotation: Float = 0f,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
@@ -259,6 +261,7 @@ internal fun AuroraTopBarIconButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = tint,
+            modifier = Modifier.rotate(iconRotation),
         )
     }
 }

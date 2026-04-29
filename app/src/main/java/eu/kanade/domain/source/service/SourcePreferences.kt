@@ -77,6 +77,11 @@ class SourcePreferences(
     fun pinnedMangaSources() = preferenceStore.getStringSet("pinned_catalogues", emptySet())
     fun pinnedNovelSources() = preferenceStore.getStringSet("pinned_novel_catalogues", emptySet())
 
+    fun mangaFeedSources() = preferenceStore.getStringSet(
+        Preference.appStateKey("manga_feed_sources"),
+        emptySet(),
+    )
+
     fun lastUsedAnimeSource() = preferenceStore.getLong(
         Preference.appStateKey("last_anime_catalogue_source"),
         -1,
@@ -103,6 +108,8 @@ class SourcePreferences(
         "browse_hide_in_library_items",
         false,
     )
+
+    fun hideInLibraryFeedItems() = preferenceStore.getBoolean("feed_hide_in_library_items", false)
 
     fun hideInNovelLibraryItems() = preferenceStore.getBoolean(
         "browse_hide_in_novel_library_items",

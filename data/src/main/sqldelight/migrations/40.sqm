@@ -1,0 +1,7 @@
+CREATE TABLE feed_saved_search (
+    _id INTEGER NOT NULL PRIMARY KEY,
+    source INTEGER NOT NULL,
+    saved_search INTEGER,
+    global INTEGER NOT NULL DEFAULT 1,
+    feed_order INTEGER NOT NULL DEFAULT 0
+);

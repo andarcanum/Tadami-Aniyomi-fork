@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.NewReleases
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -20,11 +21,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -59,10 +63,13 @@ import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
 import mihon.presentation.core.util.collectAsLazyPagingItems
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.source.manga.model.StubMangaSource
+import tachiyomi.domain.source.model.SavedSearch
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
@@ -72,6 +79,7 @@ import tachiyomi.source.local.entries.manga.LocalMangaSource
 data class BrowseMangaSourceScreen(
     val sourceId: Long,
     private val listingQuery: String?,
+    private val savedSearchId: Long? = null,
 ) : Screen(), AssistContentScreen {
 
     private var assistUrl: String? = null
@@ -85,7 +93,7 @@ data class BrowseMangaSourceScreen(
             return
         }
 
-        val screenModel = rememberScreenModel { BrowseMangaSourceScreenModel(sourceId, listingQuery) }
+        val screenModel = rememberScreenModel { BrowseMangaSourceScreenModel(sourceId, listingQuery, savedSearchId) }
         val state by screenModel.state.collectAsState()
 
         val navigator = LocalNavigator.currentOrThrow
@@ -136,16 +144,18 @@ data class BrowseMangaSourceScreen(
                         .onSizeChanged { topBarHeight = it.height },
                 ) {
                     BrowseMangaSourceToolbar(
-                        searchQuery = state.toolbarQuery,
-                        onSearchQueryChange = screenModel::setToolbarQuery,
+                        searchQuery = screenModel.state.value.toolbarQuery,
+                        onSearchQueryChange = { screenModel.search(it) },
                         source = screenModel.source,
                         displayMode = screenModel.displayMode,
                         onDisplayModeChange = { screenModel.displayMode = it },
-                        navigateUp = navigateUp,
+                        navigateUp = navigator::pop,
                         onWebViewClick = onWebViewClick,
                         onHelpClick = onHelpClick,
-                        onSettingsClick = { navigator.push(MangaSourcePreferencesScreen(sourceId)) },
-                        onSearch = screenModel::search,
+                        onSettingsClick = {
+                            navigator.push(MangaSourcePreferencesScreen(sourceId))
+                        },
+                        onSearch = { filterQuery -> scope.launch { queryEvent.send(SearchType.Text(filterQuery)) } },
                     )
 
                     Row(
@@ -209,6 +219,13 @@ data class BrowseMangaSourceScreen(
                                 },
                             )
                         }
+                        state.savedSearches.forEach { (search, isActive) ->
+                            FilterChip(
+                                selected = isActive,
+                                onClick = { screenModel.openSavedSearch(search) },
+                                label = { Text(text = search.name) },
+                            )
+                        }
                     }
 
                     HorizontalDivider()
@@ -259,6 +276,12 @@ data class BrowseMangaSourceScreen(
                     onReset = screenModel::resetFilters,
                     onFilter = { screenModel.search(filters = state.filters) },
                     onUpdate = screenModel::setFilters,
+                    savedSearches = screenModel.state.value.savedSearches,
+                    onSaveSearch = screenModel::openSaveSearchDialog,
+                    onOpenSavedSearch = screenModel::openSavedSearch,
+                    onDeleteSavedSearch = {
+                        screenModel.setDialog(BrowseMangaSourceScreenModel.Dialog.DeleteSavedSearch(it))
+                    },
                 )
             }
             is BrowseMangaSourceScreenModel.Dialog.AddDuplicateManga -> {
@@ -293,6 +316,19 @@ data class BrowseMangaSourceScreen(
                         screenModel.changeMangaFavorite(dialog.manga)
                     },
                     entryToRemove = dialog.manga.title,
+                )
+            }
+            is BrowseMangaSourceScreenModel.Dialog.CreateSavedSearch -> {
+                CreateSavedSearchDialog(
+                    onDismiss = onDismissRequest,
+                    onSave = { name -> screenModel.saveSearch(name) },
+                )
+            }
+            is BrowseMangaSourceScreenModel.Dialog.DeleteSavedSearch -> {
+                DeleteSavedSearchDialog(
+                    savedSearch = dialog.savedSearch,
+                    onDismiss = onDismissRequest,
+                    onConfirm = { screenModel.deleteSearch(dialog.savedSearch) },
                 )
             }
             is BrowseMangaSourceScreenModel.Dialog.ChangeMangaCategory -> {
@@ -334,4 +370,52 @@ data class BrowseMangaSourceScreen(
         class Text(txt: String) : SearchType(txt)
         class Genre(txt: String) : SearchType(txt)
     }
+}
+
+@Composable
+private fun CreateSavedSearchDialog(
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(AYMR.strings.save_search)) },
+        text = {
+            TextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(AYMR.strings.saved_search_name)) },
+                singleLine = true,
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSave(name.trim()) },
+                enabled = name.isNotBlank(),
+            ) { Text(stringResource(MR.strings.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(MR.strings.action_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun DeleteSavedSearchDialog(
+    savedSearch: SavedSearch,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(AYMR.strings.saved_search_delete)) },
+        text = { Text(stringResource(AYMR.strings.saved_search_delete_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(MR.strings.action_delete)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(MR.strings.action_cancel)) }
+        },
+    )
 }

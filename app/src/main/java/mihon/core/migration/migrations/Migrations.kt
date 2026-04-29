@@ -55,4 +55,5 @@ val migrations: List<Migration>
         DefaultChapterEpisodeSortNumberMigration(),
         DefaultChapterSortAscendingMigration(),
         EInkProfileMigration(),
+        MoveLatestToFeedMigration(),
     )

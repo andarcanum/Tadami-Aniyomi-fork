@@ -450,7 +450,7 @@ private fun AuroraTabHeader(
                 AuroraTopBarTitleText(title = title)
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (currentTab?.searchEnabled == true) {
                     AuroraTopBarIconButton(
                         onClick = onSearchClick,
@@ -465,6 +465,11 @@ private fun AuroraTabHeader(
                 }
 
                 iconActions.forEachIndexed { index, appBarAction ->
+                    val buttonModifier = if (index > 0) {
+                        Modifier.padding(start = 4.dp)
+                    } else {
+                        Modifier
+                    }
                     AuroraTopBarIconButton(
                         onClick = appBarAction.onClick,
                         icon = appBarAction.icon,
@@ -474,6 +479,8 @@ private fun AuroraTabHeader(
                         } else {
                             colors.textPrimary
                         },
+                        modifier = buttonModifier,
+                        iconRotation = appBarAction.iconRotation,
                     )
 
                     if (
