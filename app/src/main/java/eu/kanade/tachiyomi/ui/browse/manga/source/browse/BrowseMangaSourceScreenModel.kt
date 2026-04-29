@@ -61,6 +61,7 @@ import tachiyomi.domain.source.interactor.InsertSavedSearch
 import tachiyomi.domain.source.manga.interactor.GetRemoteManga
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.domain.source.model.SavedSearch
+import tachiyomi.domain.source.model.SourceType
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import xyz.nulldev.ts.api.http.serializer.FilterSerializer
@@ -143,7 +144,7 @@ class BrowseMangaSourceScreenModel(
 
     fun loadSavedSearches() {
         screenModelScope.launch {
-            val searches = getSavedSearchBySourceId.await(sourceId)
+            val searches = getSavedSearchBySourceId.await(sourceId, SourceType.MANGA)
             val currentActiveId = mutableState.value.savedSearches.find { it.second }?.first?.id
             mutableState.update {
                 it.copy(
@@ -166,6 +167,7 @@ class BrowseMangaSourceScreenModel(
             val savedSearch = SavedSearch(
                 id = -1,
                 source = sourceId,
+                sourceType = SourceType.MANGA,
                 name = name,
                 query = state.listing.query,
                 filtersJson = filtersJson,

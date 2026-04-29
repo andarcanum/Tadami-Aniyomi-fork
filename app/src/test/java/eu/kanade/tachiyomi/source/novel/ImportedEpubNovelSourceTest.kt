@@ -11,6 +11,8 @@ import org.junit.jupiter.api.io.TempDir
 import tachiyomi.domain.entries.novel.repository.NovelRepository
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
+import tachiyomi.source.local.entries.anime.LocalAnimeSource
+import tachiyomi.source.local.entries.manga.LocalMangaSource
 import java.nio.file.Path
 
 class ImportedEpubNovelSourceTest {
@@ -77,5 +79,19 @@ class ImportedEpubNovelSourceTest {
 
         val chapterHtml = source.getChapterText(chapters.single())
         chapterHtml shouldBe "<html><body>Stored chapter</body></html>"
+    }
+}
+
+class SourceIdCollisionTest {
+
+    @Test
+    fun `built-in source ids should be unique across media`() {
+        val builtInIds = listOf(
+            "manga_local" to LocalMangaSource.ID,
+            "anime_local" to LocalAnimeSource.ID,
+            "novel_imported_epub" to IMPORTED_EPUB_NOVEL_SOURCE_ID,
+        )
+
+        builtInIds.map { it.second }.toSet().size shouldBe builtInIds.size
     }
 }

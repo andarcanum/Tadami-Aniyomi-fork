@@ -82,6 +82,16 @@ class SourcePreferences(
         emptySet(),
     )
 
+    fun animeFeedSources() = preferenceStore.getStringSet(
+        Preference.appStateKey("anime_feed_sources"),
+        emptySet(),
+    )
+
+    fun novelFeedSources() = preferenceStore.getStringSet(
+        Preference.appStateKey("novel_feed_sources"),
+        emptySet(),
+    )
+
     fun lastUsedAnimeSource() = preferenceStore.getLong(
         Preference.appStateKey("last_anime_catalogue_source"),
         -1,

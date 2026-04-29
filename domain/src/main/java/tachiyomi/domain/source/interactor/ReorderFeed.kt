@@ -13,7 +13,7 @@ class ReorderFeed(
 
     suspend fun changeOrder(feed: FeedSavedSearch, newIndex: Int): Result = mutex.withLock {
         try {
-            val feeds = feedSavedSearchRepository.getGlobal().toMutableList()
+            val feeds = feedSavedSearchRepository.getGlobal(feed.sourceType).toMutableList()
             val currentIndex = feeds.indexOfFirst { it.id == feed.id }
             if (currentIndex == -1) return@withLock Result.Unchanged
 

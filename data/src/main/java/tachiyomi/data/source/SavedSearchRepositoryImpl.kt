@@ -2,6 +2,7 @@ package tachiyomi.data.source
 
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
 import tachiyomi.domain.source.model.SavedSearch
+import tachiyomi.domain.source.model.SourceType
 import tachiyomi.domain.source.repository.SavedSearchRepository
 
 class SavedSearchRepositoryImpl(
@@ -14,9 +15,9 @@ class SavedSearchRepositoryImpl(
         }
     }
 
-    override suspend fun getBySourceId(sourceId: Long): List<SavedSearch> {
+    override suspend fun getBySourceId(sourceId: Long, sourceType: SourceType): List<SavedSearch> {
         return handler.awaitList { db ->
-            db.saved_searchQueries.selectBySource(sourceId, SavedSearchMapper::map)
+            db.saved_searchQueries.selectBySource(sourceId, sourceType.id, SavedSearchMapper::map)
         }
     }
 
@@ -27,10 +28,15 @@ class SavedSearchRepositoryImpl(
     override suspend fun insert(savedSearch: SavedSearch): Long? {
         return handler.await(inTransaction = true) {
             val existing = handler.awaitList { db ->
-                db.saved_searchQueries.selectBySource(savedSearch.source, SavedSearchMapper::map)
+                db.saved_searchQueries.selectBySource(
+                    savedSearch.source,
+                    savedSearch.sourceType.id,
+                    SavedSearchMapper::map,
+                )
             }
             val duplicate = existing.find {
                 it.source == savedSearch.source &&
+                    it.sourceType == savedSearch.sourceType &&
                     it.name == savedSearch.name &&
                     it.query == savedSearch.query &&
                     it.filtersJson == savedSearch.filtersJson
@@ -38,6 +44,7 @@ class SavedSearchRepositoryImpl(
             duplicate?.id ?: handler.awaitOneExecutable { db ->
                 db.saved_searchQueries.insert(
                     savedSearch.source,
+                    savedSearch.sourceType.id,
                     savedSearch.name,
                     savedSearch.query,
                     savedSearch.filtersJson,

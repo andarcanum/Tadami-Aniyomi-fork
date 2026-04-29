@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.ui.browse.manga.feed
+package eu.kanade.tachiyomi.ui.browse.anime.feed
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -34,17 +34,17 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.FeedOrderScreen
-import eu.kanade.presentation.browse.manga.MangaFeedScreen
+import eu.kanade.presentation.browse.anime.AnimeFeedScreen
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
-import eu.kanade.tachiyomi.source.CatalogueSource
-import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
-import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
+import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
+import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import tachiyomi.domain.source.manga.interactor.GetRemoteManga
+import tachiyomi.domain.source.anime.interactor.GetRemoteAnime
 import tachiyomi.domain.source.model.SavedSearch
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -52,9 +52,9 @@ import tachiyomi.presentation.core.i18n.stringResource
 import java.util.TreeMap
 
 @Composable
-fun Screen.mangaFeedTab(): TabContent {
+fun Screen.animeFeedTab(): TabContent {
     val navigator = LocalNavigator.currentOrThrow
-    val screenModel = rememberScreenModel { MangaFeedScreenModel() }
+    val screenModel = rememberScreenModel { AnimeFeedScreenModel() }
     val state by screenModel.state.collectAsState()
     val reorderRotation by animateFloatAsState(
         targetValue = if (state.isReordering) 90f else 0f,
@@ -90,34 +90,34 @@ fun Screen.mangaFeedTab(): TabContent {
                     onChangeOrder = { feed, newIndex -> screenModel.reorderFeed(feed, newIndex) },
                 )
             } else {
-                MangaFeedScreen(
+                AnimeFeedScreen(
                     state = state,
                     contentPadding = contentPadding,
                     onClickSource = { source, item ->
                         if (item.feed.savedSearch != null) {
-                            navigator.push(BrowseMangaSourceScreen(source.id, null, item.feed.savedSearch))
+                            navigator.push(BrowseAnimeSourceScreen(source.id, null, item.feed.savedSearch))
                         } else {
-                            navigator.push(BrowseMangaSourceScreen(source.id, GetRemoteManga.QUERY_LATEST))
+                            navigator.push(BrowseAnimeSourceScreen(source.id, GetRemoteAnime.QUERY_LATEST))
                         }
                     },
-                    onClickManga = { manga ->
-                        navigator.push(MangaScreen(manga.id, true))
+                    onClickAnime = { anime ->
+                        navigator.push(AnimeScreen(anime.id, true))
                     },
-                    getMangaState = { manga -> screenModel.getManga(manga) },
+                    getAnimeState = { anime -> screenModel.getAnime(anime) },
                     onRefresh = screenModel::refresh,
                 )
             }
 
             state.dialog?.let { dialog ->
                 when (dialog) {
-                    is MangaFeedScreenModel.Dialog.AddSource -> {
+                    is AnimeFeedScreenModel.Dialog.AddSource -> {
                         FeedAddSourceDialog(
                             sources = dialog.sources,
                             onDismiss = screenModel::dismissDialog,
                             onAdd = { source -> screenModel.onSourceSelected(source) },
                         )
                     }
-                    is MangaFeedScreenModel.Dialog.AddSearch -> {
+                    is AnimeFeedScreenModel.Dialog.AddSearch -> {
                         FeedAddSearchDialog(
                             source = dialog.source,
                             savedSearches = dialog.savedSearches,
@@ -125,7 +125,7 @@ fun Screen.mangaFeedTab(): TabContent {
                             onAdd = { savedSearch -> screenModel.addFeed(dialog.source, savedSearch) },
                         )
                     }
-                    is MangaFeedScreenModel.Dialog.DeleteSource -> {
+                    is AnimeFeedScreenModel.Dialog.DeleteSource -> {
                         FeedDeleteSourceDialog(
                             source = dialog.source,
                             onDismiss = screenModel::dismissDialog,
@@ -139,7 +139,7 @@ fun Screen.mangaFeedTab(): TabContent {
             LaunchedEffect(Unit) {
                 screenModel.events.collectLatest { event ->
                     when (event) {
-                        MangaFeedScreenModel.Event.FailedFetchingSources -> {
+                        AnimeFeedScreenModel.Event.FailedFetchingSources -> {
                             launch { snackbarHostState.showSnackbar(internalErrString) }
                         }
                     }
@@ -151,12 +151,12 @@ fun Screen.mangaFeedTab(): TabContent {
 
 @Composable
 private fun FeedAddSourceDialog(
-    sources: List<CatalogueSource>,
+    sources: List<AnimeCatalogueSource>,
     onDismiss: () -> Unit,
-    onAdd: (CatalogueSource) -> Unit,
+    onAdd: (AnimeCatalogueSource) -> Unit,
 ) {
     val grouped = remember(sources) {
-        TreeMap<String, MutableList<CatalogueSource>>().apply {
+        TreeMap<String, MutableList<AnimeCatalogueSource>>().apply {
             sources.forEach { source ->
                 val langName = LocaleHelper.getLocalizedDisplayName(source.lang)
                 getOrPut(langName) { mutableListOf() }.add(source)
@@ -212,7 +212,7 @@ private fun FeedAddSourceDialog(
 
 @Composable
 private fun FeedAddSearchDialog(
-    source: CatalogueSource,
+    source: AnimeCatalogueSource,
     savedSearches: List<SavedSearch>,
     onDismiss: () -> Unit,
     onAdd: (SavedSearch?) -> Unit,
@@ -224,7 +224,7 @@ private fun FeedAddSearchDialog(
     val options = remember(savedSearches, source.supportsLatest) {
         buildList {
             if (source.supportsLatest) add(null as SavedSearch?)
-            add(null as SavedSearch?) // Popular (always available)
+            add(null as SavedSearch?)
             savedSearches.forEach { add(it) }
         }
     }
@@ -279,7 +279,7 @@ private fun FeedAddSearchDialog(
 
 @Composable
 private fun FeedDeleteSourceDialog(
-    source: CatalogueSource,
+    source: AnimeCatalogueSource,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {

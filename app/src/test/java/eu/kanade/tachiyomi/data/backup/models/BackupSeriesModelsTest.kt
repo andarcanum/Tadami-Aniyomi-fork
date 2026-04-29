@@ -55,4 +55,42 @@ class BackupSeriesModelsTest {
         backup.backupMangaSeries.map { it.title } shouldBe listOf("Legacy Manga Series")
         backup.backupNovelSeries.map { it.title } shouldBe listOf("Legacy Novel Series")
     }
+
+    @Test
+    fun `Feed Backup Restore mapper keeps source type and saved search payload`() {
+        val mapped = backupFeedMapper(
+            123L,
+            2L,
+            true,
+            7L,
+            10L,
+            "name",
+            "query",
+            """{"k":"v"}""",
+        )
+
+        mapped.source shouldBe 123L
+        mapped.sourceType shouldBe 2L
+        mapped.savedSearchName shouldBe "name"
+        mapped.savedSearchQuery shouldBe "query"
+        mapped.savedSearchFiltersJson shouldBe """{"k":"v"}"""
+    }
+
+    @Test
+    fun `Feed Backup Restore mapper clears saved search payload when relation is null`() {
+        val mapped = backupFeedMapper(
+            123L,
+            1L,
+            true,
+            3L,
+            null,
+            "name",
+            "query",
+            """{"k":"v"}""",
+        )
+
+        mapped.savedSearchName shouldBe null
+        mapped.savedSearchQuery shouldBe null
+        mapped.savedSearchFiltersJson shouldBe null
+    }
 }
