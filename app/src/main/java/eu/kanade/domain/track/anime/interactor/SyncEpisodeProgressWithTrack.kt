@@ -1,8 +1,9 @@
 package eu.kanade.domain.track.anime.interactor
 
 import eu.kanade.domain.track.anime.model.toDbTrack
+import eu.kanade.domain.track.service.ResolveTrackProgressSync
+import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.tachiyomi.data.track.AnimeTracker
-import eu.kanade.tachiyomi.data.track.EnhancedAnimeTracker
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.items.episode.interactor.GetEpisodesByAnimeId
@@ -10,12 +11,13 @@ import tachiyomi.domain.items.episode.interactor.UpdateEpisode
 import tachiyomi.domain.items.episode.model.toEpisodeUpdate
 import tachiyomi.domain.track.anime.interactor.InsertAnimeTrack
 import tachiyomi.domain.track.anime.model.AnimeTrack
-import kotlin.math.max
 
 class SyncEpisodeProgressWithTrack(
     private val updateEpisode: UpdateEpisode,
     private val insertTrack: InsertAnimeTrack,
     private val getEpisodesByAnimeId: GetEpisodesByAnimeId,
+    private val trackPreferences: TrackPreferences,
+    private val resolveTrackProgressSync: ResolveTrackProgressSync,
 ) {
 
     suspend fun await(
@@ -23,29 +25,39 @@ class SyncEpisodeProgressWithTrack(
         remoteTrack: AnimeTrack,
         service: AnimeTracker,
     ) {
-        if (service !is EnhancedAnimeTracker) {
-            return
-        }
-
         val sortedEpisodes = getEpisodesByAnimeId.await(animeId)
             .sortedBy { it.episodeNumber }
             .filter { it.isRecognizedNumber }
 
-        val episodeUpdates = sortedEpisodes
-            .filter { episode -> episode.episodeNumber <= remoteTrack.lastEpisodeSeen && !episode.seen }
-            .map { it.copy(seen = true).toEpisodeUpdate() }
+        val localLastSeen = sortedEpisodes.takeWhile { it.seen }
+            .lastOrNull()
+            ?.episodeNumber
+            ?.toDouble()
+            ?: 0.0
+        val action = resolveTrackProgressSync.resolve(
+            local = localLastSeen,
+            remote = remoteTrack.lastEpisodeSeen,
+            pullEnabled = trackPreferences.autoSyncProgressFromTracker().get(),
+            trigger = ResolveTrackProgressSync.Trigger.OPEN_REFRESH,
+        )
 
-        // only take into account continuous watching
-        val localLastSeen = sortedEpisodes.takeWhile { it.seen }.lastOrNull()?.episodeNumber ?: 0F
-        val lastSeen = max(remoteTrack.lastEpisodeSeen, localLastSeen.toDouble())
-        val updatedTrack = remoteTrack.copy(lastEpisodeSeen = lastSeen)
-
-        try {
-            service.update(updatedTrack.toDbTrack())
-            updateEpisode.awaitAll(episodeUpdates)
-            insertTrack.await(updatedTrack)
-        } catch (e: Throwable) {
-            logcat(LogPriority.WARN, e)
+        when (action) {
+            ResolveTrackProgressSync.SyncAction.NoOp -> Unit
+            is ResolveTrackProgressSync.SyncAction.MarkLocalUntil -> {
+                val episodeUpdates = sortedEpisodes
+                    .filter { episode -> episode.episodeNumber <= action.value && !episode.seen }
+                    .map { it.copy(seen = true).toEpisodeUpdate() }
+                updateEpisode.awaitAll(episodeUpdates)
+            }
+            is ResolveTrackProgressSync.SyncAction.PushRemoteTo -> {
+                val updatedTrack = remoteTrack.copy(lastEpisodeSeen = action.value)
+                try {
+                    service.update(updatedTrack.toDbTrack())
+                    insertTrack.await(updatedTrack)
+                } catch (e: Throwable) {
+                    logcat(LogPriority.WARN, e)
+                }
+            }
         }
     }
 }

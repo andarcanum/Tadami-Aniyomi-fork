@@ -1,7 +1,8 @@
 package eu.kanade.domain.track.manga.interactor
 
 import eu.kanade.domain.track.manga.model.toDbTrack
-import eu.kanade.tachiyomi.data.track.EnhancedMangaTracker
+import eu.kanade.domain.track.service.ResolveTrackProgressSync
+import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -10,12 +11,13 @@ import tachiyomi.domain.items.chapter.interactor.UpdateChapter
 import tachiyomi.domain.items.chapter.model.toChapterUpdate
 import tachiyomi.domain.track.manga.interactor.InsertMangaTrack
 import tachiyomi.domain.track.manga.model.MangaTrack
-import kotlin.math.max
 
 class SyncChapterProgressWithTrack(
     private val updateChapter: UpdateChapter,
     private val insertTrack: InsertMangaTrack,
     private val getChaptersByMangaId: GetChaptersByMangaId,
+    private val trackPreferences: TrackPreferences,
+    private val resolveTrackProgressSync: ResolveTrackProgressSync,
 ) {
 
     suspend fun await(
@@ -27,26 +29,35 @@ class SyncChapterProgressWithTrack(
             .sortedBy { it.chapterNumber }
             .filter { it.isRecognizedNumber }
 
-        val chapterUpdates = sortedChapters
-            .filter { chapter -> chapter.chapterNumber <= remoteTrack.lastChapterRead && !chapter.read }
-            .map { it.copy(read = true).toChapterUpdate() }
+        val localLastRead = sortedChapters.takeWhile { it.read }
+            .lastOrNull()
+            ?.chapterNumber
+            ?.toDouble()
+            ?: 0.0
+        val action = resolveTrackProgressSync.resolve(
+            local = localLastRead,
+            remote = remoteTrack.lastChapterRead,
+            pullEnabled = trackPreferences.autoSyncProgressFromTracker().get(),
+            trigger = ResolveTrackProgressSync.Trigger.OPEN_REFRESH,
+        )
 
-        if (tracker !is EnhancedMangaTracker) {
-            updateChapter.awaitAll(chapterUpdates)
-            return
-        }
-
-        // only take into account continuous reading
-        val localLastRead = sortedChapters.takeWhile { it.read }.lastOrNull()?.chapterNumber ?: 0F
-        val lastRead = max(remoteTrack.lastChapterRead, localLastRead.toDouble())
-        val updatedTrack = remoteTrack.copy(lastChapterRead = lastRead)
-
-        try {
-            tracker.update(updatedTrack.toDbTrack())
-            updateChapter.awaitAll(chapterUpdates)
-            insertTrack.await(updatedTrack)
-        } catch (e: Throwable) {
-            logcat(LogPriority.WARN, e)
+        when (action) {
+            ResolveTrackProgressSync.SyncAction.NoOp -> Unit
+            is ResolveTrackProgressSync.SyncAction.MarkLocalUntil -> {
+                val chapterUpdates = sortedChapters
+                    .filter { chapter -> chapter.chapterNumber <= action.value && !chapter.read }
+                    .map { it.copy(read = true).toChapterUpdate() }
+                updateChapter.awaitAll(chapterUpdates)
+            }
+            is ResolveTrackProgressSync.SyncAction.PushRemoteTo -> {
+                val updatedTrack = remoteTrack.copy(lastChapterRead = action.value)
+                try {
+                    tracker.update(updatedTrack.toDbTrack())
+                    insertTrack.await(updatedTrack)
+                } catch (e: Throwable) {
+                    logcat(LogPriority.WARN, e)
+                }
+            }
         }
     }
 }

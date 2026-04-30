@@ -185,6 +185,10 @@ object SettingsTrackingScreen : SearchableSettings {
                     .toPersistentMap(),
                 title = stringResource(AYMR.strings.pref_auto_update_manga_on_mark_read),
             ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = trackPreferences.autoSyncProgressFromTracker(),
+                title = stringResource(MR.strings.pref_auto_sync_progress_from_tracker),
+            ),
             Preference.PreferenceGroup(
                 title = stringResource(AYMR.strings.novel_trackers_title),
                 preferenceItems = persistentListOf(

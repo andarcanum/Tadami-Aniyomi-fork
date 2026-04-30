@@ -14,6 +14,7 @@ import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlator
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.track.model.AutoTrackState
+import eu.kanade.domain.track.novel.interactor.RefreshNovelTracks
 import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
@@ -28,6 +29,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEnt
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
@@ -115,6 +117,10 @@ class NovelScreenModelTest {
             runCatching { Injekt.get<TrackNovelChapter>() }
                 .getOrElse {
                     Injekt.addSingleton(fullType<TrackNovelChapter>(), mockk<TrackNovelChapter>(relaxed = true))
+                }
+            runCatching { Injekt.get<RefreshNovelTracks>() }
+                .getOrElse {
+                    Injekt.addSingleton(fullType<RefreshNovelTracks>(), mockk<RefreshNovelTracks>(relaxed = true))
                 }
             runCatching { Injekt.get<TrackPreferences>() }
                 .getOrElse {
@@ -1232,6 +1238,29 @@ class NovelScreenModelTest {
         }
     }
 
+    @Test
+    fun `opening screen triggers novel track refresh`() {
+        runBlocking {
+            val novel = novelForResumeTests(303L)
+            val refreshNovelTracks = mockk<RefreshNovelTracks>(relaxed = true)
+            coEvery { refreshNovelTracks.await(novel.id) } returns emptyList()
+
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = emptyList(),
+                refreshNovelTracks = refreshNovelTracks,
+            )
+
+            try {
+                awaitResumeScreenModel(screenModel)
+                withTimeout(1_000) { yield() }
+                coVerify(exactly = 1) { refreshNovelTracks.await(novel.id) }
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
     private class FakeLifecycleOwner : LifecycleOwner {
         private class NoopStartedLifecycle : Lifecycle() {
             override val currentState: State
@@ -1257,6 +1286,7 @@ class NovelScreenModelTest {
         translationQueueManager: TranslationQueueManager = Injekt.get(),
         geminiEnabled: Boolean = false,
         excludedScanlators: Set<String> = emptySet(),
+        refreshNovelTracks: RefreshNovelTracks = mockk(relaxed = true),
         resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { _, _ -> emptySet() },
         enqueueOriginal: (Novel, List<NovelChapter>) -> Int = { novel, queuedChapters ->
             eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager.enqueueOriginal(novel, queuedChapters)
@@ -1350,6 +1380,7 @@ class NovelScreenModelTest {
             sourceManager = sourceManager,
             trackerManager = trackerManager,
             getTracks = getNovelTracks,
+            refreshNovelTracks = refreshNovelTracks,
             downloadCacheChanges = downloadCacheChanges,
             downloadQueueState = downloadQueueState,
             resolveDownloadedChapterIds = resolveDownloadedChapterIds,

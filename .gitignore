@@ -135,3 +135,7 @@ ReBorn.md
 # Added by code-review-graph
 .code-review-graph/
 Test/
+!app/src/test/
+!app/src/test/**
+!app/src/test/java/eu/kanade/domain/track/anime/interactor/SyncEpisodeProgressWithTrackTest.kt
+!app/src/test/java/eu/kanade/domain/track/novel/interactor/SyncNovelChapterProgressWithTrackTest.kt
