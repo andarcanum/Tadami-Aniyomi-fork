@@ -980,6 +980,51 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `touch cooldown constant is positive`() {
+        assertTrue(AUTO_SCROLL_COOLDOWN_MS > 0)
+    }
+
+    @Test
+    fun `speed factor ramps down during cooldown`() {
+        var factor = 1f
+        val delta = AUTO_SCROLL_SPEED_FACTOR_DELTA
+        factor = (factor - delta).coerceAtLeast(0f)
+        assertTrue(factor < 1f)
+        assertTrue(factor >= 0f)
+        factor = (factor - delta).coerceAtLeast(0f)
+        assertTrue(factor < 1f - delta)
+    }
+
+    @Test
+    fun `speed factor ramps up after cooldown`() {
+        var factor = 0f
+        val delta = AUTO_SCROLL_SPEED_FACTOR_DELTA
+        factor = (factor + delta).coerceAtMost(1f)
+        assertTrue(factor > 0f)
+        factor = (factor + delta).coerceAtMost(1f)
+        assertTrue(factor > delta)
+    }
+
+    @Test
+    fun `speed factor stays within bounds`() {
+        var factor = 1f
+        val delta = AUTO_SCROLL_SPEED_FACTOR_DELTA
+        repeat(100) { factor = (factor - delta).coerceAtLeast(0f) }
+        assertEquals(0f, factor)
+        factor = 0f
+        repeat(100) { factor = (factor + delta).coerceAtMost(1f) }
+        assertEquals(1f, factor)
+    }
+
+    @Test
+    fun `estimated time shows correct seconds for speed`() {
+        val delayMs = autoScrollPageDelayMs(50)
+        // 10_000 - (50 - 1) * 80 = 10_000 - 3_920 = 6_080ms
+        assertEquals(6080L, delayMs)
+        assertEquals(6, delayMs / 1000)
+    }
+
+    @Test
     fun `page pagination splits long text and keeps order`() {
         val text = buildString {
             repeat(120) { append("Paragraph $it line of text.\n\n") }

@@ -74,6 +74,7 @@ data class NovelReaderSettings(
     val autoScroll: Boolean,
     val autoScrollInterval: Int,
     val autoScrollOffset: Int,
+    val showAutoScrollFloatingButton: Boolean,
     val prefetchNextChapter: Boolean,
 
     // Accessibility
@@ -333,6 +334,7 @@ data class NovelReaderOverride(
     val autoScroll: Boolean? = null,
     val autoScrollInterval: Int? = null,
     val autoScrollOffset: Int? = null,
+    val showAutoScrollFloatingButton: Boolean? = null,
     val prefetchNextChapter: Boolean? = null,
 
     // Accessibility
@@ -571,6 +573,9 @@ class NovelReaderPreferences(
     fun autoScrollInterval() = preferenceStore.getInt("novel_reader_auto_scroll_interval", DEFAULT_AUTO_SCROLL_INTERVAL)
 
     fun autoScrollOffset() = preferenceStore.getInt("novel_reader_auto_scroll_offset", DEFAULT_AUTO_SCROLL_OFFSET)
+
+    fun showAutoScrollFloatingButton() =
+        preferenceStore.getBoolean("novel_reader_show_auto_scroll_floating_button", true)
 
     fun prefetchNextChapter() = preferenceStore.getBoolean("novel_reader_prefetch_next_chapter", false)
 
@@ -895,6 +900,7 @@ class NovelReaderPreferences(
                 autoScroll = autoScroll().get(),
                 autoScrollInterval = autoScrollInterval().get(),
                 autoScrollOffset = autoScrollOffset().get(),
+                showAutoScrollFloatingButton = showAutoScrollFloatingButton().get(),
                 prefetchNextChapter = prefetchNextChapter().get(),
                 fullScreenMode = fullScreenMode().get(),
                 keepScreenOn = keepScreenOn().get(),
@@ -1029,6 +1035,8 @@ class NovelReaderPreferences(
             autoScroll = override?.autoScroll ?: autoScroll().get(),
             autoScrollInterval = override?.autoScrollInterval ?: autoScrollInterval().get(),
             autoScrollOffset = override?.autoScrollOffset ?: autoScrollOffset().get(),
+            showAutoScrollFloatingButton =
+            override?.showAutoScrollFloatingButton ?: showAutoScrollFloatingButton().get(),
             prefetchNextChapter = override?.prefetchNextChapter ?: prefetchNextChapter().get(),
             fullScreenMode = override?.fullScreenMode ?: fullScreenMode().get(),
             keepScreenOn = override?.keepScreenOn ?: keepScreenOn().get(),
@@ -1203,6 +1211,7 @@ class NovelReaderPreferences(
             autoScroll().changes(),
             autoScrollInterval().changes(),
             autoScrollOffset().changes(),
+            showAutoScrollFloatingButton().changes(),
             prefetchNextChapter().changes(),
         ) { values: Array<Any?> ->
             NavigationSettings(
@@ -1226,6 +1235,7 @@ class NovelReaderPreferences(
                 values[17] as Int,
                 values[18] as Int,
                 values[19] as Boolean,
+                values[20] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1465,6 +1475,8 @@ class NovelReaderPreferences(
                 autoScroll = override?.autoScroll ?: navigation.autoScroll,
                 autoScrollInterval = override?.autoScrollInterval ?: navigation.autoScrollInterval,
                 autoScrollOffset = override?.autoScrollOffset ?: navigation.autoScrollOffset,
+                showAutoScrollFloatingButton =
+                override?.showAutoScrollFloatingButton ?: navigation.showAutoScrollFloatingButton,
                 prefetchNextChapter = override?.prefetchNextChapter ?: navigation.prefetchNextChapter,
                 fullScreenMode = override?.fullScreenMode ?: accessibility.fullScreenMode,
                 keepScreenOn = override?.keepScreenOn ?: accessibility.keepScreenOn,
@@ -1603,6 +1615,7 @@ class NovelReaderPreferences(
         val autoScroll: Boolean,
         val autoScrollInterval: Int,
         val autoScrollOffset: Int,
+        val showAutoScrollFloatingButton: Boolean,
         val prefetchNextChapter: Boolean,
     )
 

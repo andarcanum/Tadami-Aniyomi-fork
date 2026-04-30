@@ -11,4 +11,5 @@ data class AutoScrollState(
     val isActive: Boolean = false,
     val speed: Int = 50,
     val isPaused: Boolean = false,
+    val cooldownUntilMs: Long = 0L,
 )

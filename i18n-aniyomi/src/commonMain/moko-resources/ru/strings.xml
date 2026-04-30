@@ -1805,8 +1805,10 @@
     <string name="novel_reader_auto_scroll">Автопрокрутка</string>
     <string name="novel_reader_auto_scroll_speed">Скорость автопрокрутки</string>
     <string name="reader_auto_scroll_speed_value">%1$s: %2$d</string>
+    <string name="reader_auto_scroll_page_time">~%1$d сек/страница</string>
     <string name="novel_reader_auto_scroll_interval">Интервал автопрокрутки (сек)</string>
     <string name="novel_reader_auto_scroll_offset">Смещение автопрокрутки (px)</string>
+    <string name="reader_auto_scroll_floating_button">Показывать плавающую кнопку управления</string>
     <string name="novel_reader_prefetch_next_chapter">Предзагрузка следующей главы</string>
     <string name="novel_reader_prefetch_next_chapter_summary">Тихо предзагружать следующую главу после достижения 50% прогресса</string>
     <string name="novel_reader_cache_read_chapters">Кэшировать прочитанные главы</string>

@@ -25,6 +25,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,6 +52,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -87,6 +89,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -118,6 +121,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -160,6 +164,7 @@ import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.reader.DisplayRefreshHost
 import eu.kanade.presentation.reader.ReaderChapterListItem
 import eu.kanade.presentation.reader.ReaderChapterListSheet
+import eu.kanade.presentation.reader.components.AutoScrollActionFab
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
@@ -270,6 +275,7 @@ private fun buildSourceIndexedPageReaderTextList(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NovelReaderScreen(
     state: NovelReaderScreenModel.State.Success,
@@ -430,6 +436,9 @@ fun NovelReaderScreen(
         mutableIntStateOf(intervalToAutoScrollSpeed(state.readerSettings.autoScrollInterval))
     }
     var autoScrollExpanded by remember(state.chapter.id) { mutableStateOf(false) }
+    var autoScrollWasUsed by remember(state.chapter.id) { mutableStateOf(false) }
+    var touchCooldownUntilNanos by remember(state.chapter.id) { mutableLongStateOf(0L) }
+    var speedFactor by remember(state.chapter.id) { mutableFloatStateOf(1f) }
     var showGeminiDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var showGoogleDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var translationSwitchRequest by remember(state.chapter.id) {
@@ -1668,6 +1677,22 @@ fun NovelReaderScreen(
                 delay(120)
                 continue
             }
+
+            // Touch cooldown + smooth acceleration/deceleration
+            val isInCooldown = System.nanoTime() < touchCooldownUntilNanos
+            when {
+                isInCooldown && speedFactor > 0f -> {
+                    speedFactor = (speedFactor - AUTO_SCROLL_SPEED_FACTOR_DELTA).coerceAtLeast(0f)
+                    if (speedFactor <= 0f) {
+                        delay(100)
+                        continue
+                    }
+                }
+                !isInCooldown && speedFactor < 1f -> {
+                    speedFactor = (speedFactor + AUTO_SCROLL_SPEED_FACTOR_DELTA).coerceAtMost(1f)
+                }
+            }
+
             if (showWebView) {
                 val webView = webViewInstance
                 if (webView == null) {
@@ -1684,7 +1709,7 @@ fun NovelReaderScreen(
                 val frameStepPx = autoScrollFrameStepPx(
                     speed = autoScrollSpeed,
                     frameDeltaNanos = frameDeltaNanos,
-                )
+                ) * speedFactor
                 val resolvedStep = resolveAutoScrollStep(frameStepPx, stepRemainderPx)
                 val stepPx = resolvedStep.stepPx
                 stepRemainderPx = resolvedStep.remainderPx
@@ -1725,7 +1750,7 @@ fun NovelReaderScreen(
                 val frameStepPx = autoScrollFrameStepPx(
                     speed = autoScrollSpeed,
                     frameDeltaNanos = frameDeltaNanos,
-                )
+                ) * speedFactor
                 val resolvedStep = resolveAutoScrollStep(frameStepPx, stepRemainderPx)
                 val stepPx = resolvedStep.stepPx
                 stepRemainderPx = resolvedStep.remainderPx
@@ -1746,7 +1771,13 @@ fun NovelReaderScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(textBackground)
-            .onSizeChanged { pageViewportSize = it },
+            .onSizeChanged { pageViewportSize = it }
+            .pointerInput(autoScrollEnabled) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    touchCooldownUntilNanos = System.nanoTime() + AUTO_SCROLL_COOLDOWN_MS * 1_000_000L
+                }
+            },
     ) {
         if (
             shouldShowNovelAtmosphereBackground(
@@ -3308,57 +3339,142 @@ fun NovelReaderScreen(
                     },
                 )
 
+                if (autoScrollExpanded) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                    )
+                }
                 AnimatedVisibility(visible = autoScrollExpanded) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = MaterialTheme.padding.medium),
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.medium),
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    val nextState = resolveAutoScrollUiStateOnToggle(
-                                        currentEnabled = autoScrollEnabled,
-                                        showReaderUi = showReaderUi,
-                                        autoScrollExpanded = autoScrollExpanded,
-                                    )
-                                    autoScrollEnabled = nextState.autoScrollEnabled
-                                    onSetShowReaderUi(nextState.showReaderUi)
-                                    autoScrollExpanded = nextState.autoScrollExpanded
-                                },
-                                modifier = Modifier.padding(top = 12.dp),
+                        // Speed section
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             ) {
-                                Icon(
-                                    imageVector = if (autoScrollEnabled) {
-                                        Icons.Outlined.Pause
-                                    } else {
-                                        Icons.Outlined.PlayArrow
-                                    },
-                                    contentDescription = null,
+                                Text(
+                                    text = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                )
+                                Text(
+                                    text = "$autoScrollSpeed",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
-                            Column(modifier = Modifier.weight(1f)) {
+                            Slider(
+                                value = autoScrollSpeed.toFloat(),
+                                onValueChange = {
+                                    val newSpeed = it.roundToInt().coerceIn(1, 100)
+                                    autoScrollSpeed = newSpeed
+                                    persistAutoScrollIntervalPreference(
+                                        interval = autoScrollSpeedToInterval(newSpeed),
+                                    )
+                                },
+                                valueRange = 1f..100f,
+                                steps = 98,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                            if (usePageReader) {
                                 Text(
                                     text = stringResource(
-                                        AYMR.strings.novel_reader_auto_scroll_speed,
-                                    ) + ": $autoScrollSpeed",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                        AYMR.strings.reader_auto_scroll_page_time,
+                                        autoScrollPageDelayMs(autoScrollSpeed) / 1000,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally),
                                 )
-                                Slider(
-                                    value = autoScrollSpeed.toFloat(),
-                                    onValueChange = {
-                                        val newSpeed = it.roundToInt().coerceIn(1, 100)
-                                        autoScrollSpeed = newSpeed
-                                        persistAutoScrollIntervalPreference(
-                                            interval = autoScrollSpeedToInterval(newSpeed),
+                            }
+                        }
+
+                        // Play/Pause + FAB toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            Surface(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .clickable {
+                                        val nextState = resolveAutoScrollUiStateOnToggle(
+                                            currentEnabled = autoScrollEnabled,
+                                            showReaderUi = showReaderUi,
+                                            autoScrollExpanded = autoScrollExpanded,
+                                        )
+                                        autoScrollEnabled = nextState.autoScrollEnabled
+                                        onSetShowReaderUi(nextState.showReaderUi)
+                                        autoScrollExpanded = nextState.autoScrollExpanded
+                                    },
+                                color = if (autoScrollEnabled) {
+                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                } else {
+                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                                },
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = if (autoScrollEnabled) {
+                                            Icons.Outlined.Pause
+                                        } else {
+                                            Icons.Outlined.PlayArrow
+                                        },
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = stringResource(
+                                            if (autoScrollEnabled) {
+                                                MR.strings.action_pause
+                                            } else {
+                                                MR.strings.action_start
+                                            },
+                                        ),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = Color.White,
+                                    )
+                                }
+                            }
+                            Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .padding(start = 12.dp, end = 4.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        readerPreferences.showAutoScrollFloatingButton().set(
+                                            !state.readerSettings.showAutoScrollFloatingButton,
                                         )
                                     },
-                                    valueRange = 1f..100f,
-                                    steps = 98,
+                            ) {
+                                Text(
+                                    text = stringResource(AYMR.strings.reader_auto_scroll_floating_button),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.widthIn(max = 180.dp),
+                                )
+                                Switch(
+                                    checked = state.readerSettings.showAutoScrollFloatingButton,
+                                    onCheckedChange = {
+                                        readerPreferences.showAutoScrollFloatingButton().set(it)
+                                    },
+                                    modifier = Modifier.padding(start = 8.dp),
                                 )
                             }
                         }
@@ -3551,11 +3667,28 @@ fun NovelReaderScreen(
             modifier = Modifier.align(Alignment.BottomEnd),
         )
 
+        if (autoScrollEnabled) {
+            autoScrollWasUsed = true
+        }
+
         if (flashOnPageChange && eInkProfile.isEnabled) {
             DisplayRefreshHost(
                 hostState = displayRefreshHost,
             )
         }
+
+        AutoScrollActionFab(
+            autoScrollEnabled = autoScrollEnabled,
+            showFab = state.readerSettings.showAutoScrollFloatingButton && !showReaderUi,
+            onClick = {
+                autoScrollEnabled = !autoScrollEnabled
+                if (autoScrollEnabled) onSetShowReaderUi(false)
+            },
+            onLongClick = { autoScrollExpanded = !autoScrollExpanded },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+        )
 
         // Settings dialog
         if (showSettings) {

@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.autoscroll
 
+import android.os.SystemClock
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -15,10 +16,12 @@ interface AutoScrollManager {
     val state: StateFlow<AutoScrollState>
 
     /**
-     * Whether auto-scroll is currently active and running (not paused).
+     * Whether auto-scroll is currently active and running (not paused or in cooldown).
      */
     val isRunning: Boolean
-        get() = state.value.isActive && !state.value.isPaused
+        get() = state.value.isActive &&
+            !state.value.isPaused &&
+            state.value.cooldownUntilMs <= SystemClock.elapsedRealtime()
 
     /**
      * Starts auto-scroll with the current or specified speed.
@@ -54,6 +57,15 @@ interface AutoScrollManager {
      * @param speed The new scroll speed (1-100).
      */
     fun setSpeed(speed: Int)
+
+    /**
+     * Sets a cooldown period during which auto-scroll pauses (or slows down).
+     * Used for touch-cooldown: after a user touch, auto-scroll pauses briefly
+     * and then smoothly resumes.
+     *
+     * @param delayMs The duration of the cooldown in milliseconds.
+     */
+    fun setCooldown(delayMs: Long)
 
     /**
      * Cleans up any resources used by the auto-scroll manager.

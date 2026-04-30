@@ -155,9 +155,6 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
             },
         )
         recycler.tapListener = { event ->
-            // Pause auto-scroll on user tap
-            pauseAutoScroll()
-
             val viewPosition = IntArray(2)
             recycler.getLocationOnScreen(viewPosition)
             val viewPositionRelativeToWindow = IntArray(2)
@@ -295,6 +292,16 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
      */
     fun setAutoScrollSpeed(speed: Int) {
         autoScrollManager.setSpeed(speed)
+    }
+
+    /**
+     * Sets a cooldown period during which auto-scroll gradually slows down.
+     * Used after touch events so the user can interact without scroll interference.
+     *
+     * @param delayMs Duration of the cooldown in milliseconds.
+     */
+    fun setAutoScrollCooldown(delayMs: Long) {
+        autoScrollManager.setCooldown(delayMs)
     }
 
     /**

@@ -600,8 +600,10 @@
     <string name="novel_reader_auto_scroll">Auto-scroll</string>
     <string name="novel_reader_auto_scroll_speed">Auto-scroll speed</string>
     <string name="reader_auto_scroll_speed_value">%1$s: %2$d</string>
+    <string name="reader_auto_scroll_page_time">~%1$d sec/page</string>
     <string name="novel_reader_auto_scroll_interval">Auto-scroll interval (sec)</string>
     <string name="novel_reader_auto_scroll_offset">Auto-scroll offset (px)</string>
+    <string name="reader_auto_scroll_floating_button">Show floating control button</string>
     <string name="novel_reader_prefetch_next_chapter">Prefetch next chapter</string>
     <string name="novel_reader_prefetch_next_chapter_summary">Silently prefetch next chapter after reaching 50% progress</string>
     <string name="novel_reader_cache_read_chapters">Cache read chapters</string>
