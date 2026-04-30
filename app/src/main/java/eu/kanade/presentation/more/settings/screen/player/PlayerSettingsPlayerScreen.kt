@@ -5,9 +5,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.SearchableSettings
+import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutMainScreen
 import eu.kanade.tachiyomi.ui.player.JUST_PLAYER
 import eu.kanade.tachiyomi.ui.player.MPV_KT
 import eu.kanade.tachiyomi.ui.player.MPV_KT_PREVIEW
@@ -73,6 +76,8 @@ object PlayerSettingsPlayerScreen : SearchableSettings {
             getControlsGroup(playerPreferences = playerPreferences),
             getHosterGroup(playerPreferences = playerPreferences),
             getDisplayGroup(playerPreferences = playerPreferences),
+            getChromeGroup(playerPreferences = playerPreferences),
+            getLayoutGroup(),
             getIntroSkipGroup(playerPreferences = playerPreferences),
             if (deviceSupportsPip) getPipGroup(playerPreferences = playerPreferences) else null,
             getExternalPlayerGroup(
@@ -204,6 +209,38 @@ object PlayerSettingsPlayerScreen : SearchableSettings {
                         panelOpacityPref.set(it)
                         true
                     },
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getChromeGroup(playerPreferences: PlayerPreferences): Preference.PreferenceGroup {
+        val showCustomButtons = playerPreferences.showCustomButtons()
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.pref_category_player_chrome),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = showCustomButtons,
+                    title = stringResource(AYMR.strings.pref_show_custom_buttons),
+                    subtitle = stringResource(AYMR.strings.pref_show_custom_buttons_summary),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getLayoutGroup(): Preference.PreferenceGroup {
+        val navigator = LocalNavigator.currentOrThrow
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.pref_player_layout),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.pref_player_layout_editor),
+                    subtitle = stringResource(AYMR.strings.pref_player_layout_editor_summary),
+                    onClick = { navigator.push(PlayerSettingsLayoutMainScreen) },
                 ),
             ),
         )

@@ -1936,4 +1936,80 @@
     <string name="feed_add_search_title">Выберите тип ленты</string>
     <string name="feed_latest">Новинки</string>
     <string name="feed_popular">Популярное</string>
+
+    <!-- Player settings — missing translations -->
+    <string name="pref_player_settings_summary">Внутренний плеер, жесты, декодеры, субтитры, расположение</string>
+    <string name="pref_hosters">Хостеры</string>
+    <string name="pref_hosters_show_failure">Показывать неработающие хостеры</string>
+    <string name="pref_hosters_show_empty">Показывать пустые хостеры</string>
+    <string name="pref_hoster_source_filter">Фильтр источников</string>
+    <string name="pref_hoster_source_all">Все источники</string>
+    <string name="pref_hoster_source_cdn_only">Только CDN (префикс [C])</string>
+    <string name="pref_hoster_source_kodik_only">Только Kodik (префикс [K])</string>
+    <string name="pref_always_ask_on_episode_click">Всегда спрашивать качество видео при нажатии на эпизод</string>
+    <string name="enable_horizontal_seek_gesture_summary">Свайпните влево или вправо для перемотки</string>
+    <!-- Optional chrome -->
+    <string name="pref_category_player_chrome">Дополнительные элементы</string>
+    <string name="pref_show_custom_buttons">Показывать пользовательские кнопки</string>
+    <string name="pref_show_custom_buttons_summary">Отображать пользовательские кнопки в плеере</string>
+    <!-- Layout -->
+    <string name="pref_player_layout">Расположение</string>
+    <string name="pref_player_layout_summary">Настройка расположения кнопок плеера по ориентации</string>
+    <string name="pref_player_layout_editor">Редактор расположения</string>
+    <string name="pref_player_layout_editor_summary">Настройте расположение кнопок для портретного и ландшафтного режимов</string>
+    <string name="pref_player_layout_preview">Текущая схема</string>
+    <string name="pref_player_layout_slots">Слоты кнопок</string>
+    <string name="pref_player_layout_portrait">Портретная ориентация</string>
+    <string name="pref_player_layout_portrait_summary">Настройка расположения кнопок в портретном режиме</string>
+    <string name="pref_player_layout_landscape">Ландшафтная ориентация</string>
+    <string name="pref_player_layout_landscape_summary">Настройка расположения кнопок в ландшафтном режиме</string>
+    <string name="pref_player_layout_region_bottom_left">Снизу слева</string>
+    <string name="pref_player_layout_region_bottom_right">Снизу справа</string>
+    <string name="pref_player_layout_region_hidden">Скрыто</string>
+    <string name="pref_player_layout_slot_playback_speed">Скорость воспроизведения</string>
+    <string name="pref_player_layout_slot_lock_controls">Блокировка управления</string>
+    <string name="pref_player_layout_slot_rotate_screen">Поворот экрана</string>
+    <string name="pref_player_layout_slot_skip_intro">Пропустить интро</string>
+    <string name="pref_player_layout_slot_custom_button">Пользовательская кнопка</string>
+    <string name="pref_player_layout_slot_picture_in_picture">Картинка в картинке</string>
+    <string name="pref_player_layout_slot_aspect_ratio">Соотношение сторон</string>
+    <!-- Intro skip -->
+    <string name="pref_category_intro_skip">Пропуск интро</string>
+    <string name="pref_enable_intro_skip">Включить пропуск интро</string>
+    <string name="pref_disable_aniskip_chapter">Отключать AniSkip, если видео уже содержит главы</string>
+    <!-- Subtitle exact match -->
+    <string name="pref_player_subtitle_exact_match">Предпочитать точное совпадение языка субтитров</string>
+    <string name="pref_player_subtitle_exact_match_summary">Выбирать субтитры с точным совпадением метки языка до перехода к более широким совпадениям</string>
+    <string name="pref_player_subtitle_invalid_lang">Неверный код: \"%s\"</string>
+    <!-- Skip button text -->
+    <string name="player_skip_action">Пропустить %1$s</string>
+    <string name="player_intro_skipped">%1$s пропущено</string>
+    <string name="player_chapter_type_opening">Опенинг</string>
+    <string name="player_chapter_type_ending">Эндинг</string>
+    <string name="player_chapter_type_recap">Резюме</string>
+    <string name="player_chapter_type_mixedop">Смешанный опенинг</string>
+    <!-- Script editor -->
+    <string name="pref_player_editor">Редактор скриптов</string>
+    <string name="pref_player_editor_summary">Редактирование и создание скриптов и опций скриптов</string>
+    <string name="pref_player_editor_script">Скрипты</string>
+    <string name="pref_player_editor_script_opts">Опции скриптов</string>
+    <string name="pref_player_no_items">Директория пуста. Нажмите +, чтобы добавить новый файл.</string>
+    <string name="editor_unsaved_progress">У вас есть несохранённые изменения. Всё равно вернуться назад?</string>
+    <string name="editor_save_error">Не удалось сохранить файл</string>
+    <string name="editor_save_success">Файл сохранён</string>
+    <string name="editor_action_rename">Переименовать</string>
+    <string name="editor_action_delete">Удалить</string>
+    <string name="editor_file_already_exists">Файл уже существует</string>
+    <string name="editor_invalid_filename">Недопустимое имя файла</string>
+    <string name="editor_create_file">Создать файл</string>
+    <string name="editor_edit_file">Изменить имя файла</string>
+    <string name="editor_filename">Имя файла</string>
+    <string name="editor_create_error">Не удалось создать файл</string>
+    <string name="editor_rename_error">Не удалось переименовать файл</string>
+    <string name="editor_delete_error">Не удалось удалить файл</string>
+    <string name="editor_delete_file">Удалить файл</string>
+    <string name="editor_delete_file_confirmation">Вы действительно хотите удалить файл \"%s\"?</string>
+    <!-- Player advanced -->
+    <string name="pref_mpv_user_files">Использовать пользовательские MPV-файлы</string>
+    <string name="pref_mpv_user_files_summary">Использовать файлы из директории mpv-config</string>
 </resources>

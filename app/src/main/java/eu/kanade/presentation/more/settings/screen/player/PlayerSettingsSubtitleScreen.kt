@@ -24,6 +24,7 @@ object PlayerSettingsSubtitleScreen : SearchableSettings {
         val subtitlePreferences = remember { Injekt.get<SubtitlePreferences>() }
 
         val langPref = subtitlePreferences.preferredSubLanguages()
+        val exactMatchPref = subtitlePreferences.preferExactSubtitleMatch()
         val whitelist = subtitlePreferences.subtitleWhitelist()
         val blacklist = subtitlePreferences.subtitleBlacklist()
 
@@ -68,6 +69,11 @@ object PlayerSettingsSubtitleScreen : SearchableSettings {
                     }
                     ""
                 },
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = exactMatchPref,
+                title = stringResource(AYMR.strings.pref_player_subtitle_exact_match),
+                subtitle = stringResource(AYMR.strings.pref_player_subtitle_exact_match_summary),
             ),
             Preference.PreferenceItem.EditTextInfoPreference(
                 preference = whitelist,

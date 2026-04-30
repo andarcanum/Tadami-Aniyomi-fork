@@ -54,4 +54,25 @@ class PlayerBridgeBehaviorTest {
         copiedFiles shouldBe listOf("TestFont.ttf")
         targetDir.resolve("fonts").resolve("TestFont.ttf").readText() shouldBe "font-bytes"
     }
+
+    @Test
+    fun `setup custom buttons returns null when disabled`() {
+        val result = PlayerCustomButtonBridge::class.java
+            .getMethod(
+                "setupCustomButtons",
+                File::class.java,
+                List::class.java,
+                Long::class.javaPrimitiveType,
+                Boolean::class.javaPrimitiveType,
+            )
+            .invoke(
+                PlayerCustomButtonBridge,
+                tempDir,
+                emptyList<CustomButton>(),
+                0L,
+                false,
+            )
+
+        result shouldBe null
+    }
 }

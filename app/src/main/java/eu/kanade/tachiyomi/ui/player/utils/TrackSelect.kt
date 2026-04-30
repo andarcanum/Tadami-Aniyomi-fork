@@ -14,6 +14,8 @@ class TrackSelect(
 ) {
 
     fun getPreferredTrackIndex(tracks: List<VideoTrack>, subtitle: Boolean = true): VideoTrack? {
+        if (tracks.isEmpty()) return null
+
         val prefLangs = if (subtitle) {
             subtitlePreferences.preferredSubLanguages().get()
         } else {
@@ -32,34 +34,71 @@ class TrackSelect(
             ""
         }.split(",").filter(String::isNotEmpty).map(String::trim)
 
+        val preferExactSubtitleMatch = subtitle && subtitlePreferences.preferExactSubtitleMatch().get()
+
         val locales = prefLangs.map(Locale::forLanguageTag).ifEmpty {
             listOf(LocaleListCompat.getDefault()[0]!!)
         }
 
+        val filteredTracks = tracks.filterNot { track ->
+            blacklist.any { track.name.contains(it, true) }
+        }
+
         val chosenLocale = locales.firstOrNull { locale ->
-            tracks.any { t -> containsLang(t, locale) }
+            filteredTracks.any { track -> containsLang(track, locale) }
         } ?: return null
 
-        val filtered = tracks.withIndex()
-            .filterNot { (_, track) ->
-                blacklist.any { track.name.contains(it, true) }
-            }
-            .filter { (_, track) ->
-                containsLang(track, chosenLocale)
-            }
+        val localeMatches = filteredTracks.filter { track ->
+            containsLang(track, chosenLocale)
+        }
 
-        return filtered.firstOrNull { (_, track) ->
+        val prioritizedMatches = if (preferExactSubtitleMatch) {
+            localeMatches.filter { track ->
+                matchesExactLang(track, chosenLocale)
+            }.takeIf { it.isNotEmpty() } ?: localeMatches
+        } else {
+            localeMatches
+        }
+
+        return prioritizedMatches.firstOrNull { track ->
             whitelist.any { track.name.contains(it, true) }
-        }?.value ?: filtered.getOrNull(0)?.value
+        } ?: prioritizedMatches.firstOrNull()
     }
 
     private fun containsLang(track: VideoTrack, locale: Locale): Boolean {
         val localName = locale.getDisplayName(locale)
         val englishName = locale.getDisplayName(Locale.ENGLISH).substringBefore(" (")
-        val langRegex = Regex("""\b${locale.isO3Language}|${locale.language}\b""", RegexOption.IGNORE_CASE)
+        val localeLanguageTokens = localeLanguageTokens(locale)
+        val langRegex = Regex(
+            """\b(?:${localeLanguageTokens.joinToString("|") { Regex.escape(it) }})\b""",
+            RegexOption.IGNORE_CASE,
+        )
 
         return track.name.contains(localName, true) ||
             track.name.contains(englishName, true) ||
             track.language?.let { langRegex.find(it) != null } == true
+    }
+
+    private fun matchesExactLang(track: VideoTrack, locale: Locale): Boolean {
+        val normalizedTrackName = track.name.trim().lowercase(Locale.ROOT)
+        val normalizedTrackLanguage = track.language?.trim()?.lowercase(Locale.ROOT)
+
+        val exactDisplayNames = setOf(
+            locale.getDisplayName(locale).trim().lowercase(Locale.ROOT),
+            locale.getDisplayName(Locale.ENGLISH).substringBefore(" (").trim().lowercase(Locale.ROOT),
+        )
+        val exactLanguageTokens = localeLanguageTokens(locale).map { it.lowercase(Locale.ROOT) }.toSet()
+
+        return normalizedTrackName in exactDisplayNames ||
+            normalizedTrackName in exactLanguageTokens ||
+            (normalizedTrackName.isBlank() && normalizedTrackLanguage in exactLanguageTokens)
+    }
+
+    private fun localeLanguageTokens(locale: Locale): List<String> {
+        return buildList {
+            add(locale.language)
+            runCatching { locale.isO3Language }.getOrNull()?.let { add(it) }
+            add(locale.toLanguageTag())
+        }.filter { it.isNotBlank() }
     }
 }

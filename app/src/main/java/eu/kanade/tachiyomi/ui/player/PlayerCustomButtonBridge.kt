@@ -12,13 +12,17 @@ internal object PlayerCustomButtonBridge {
         filesDir: File,
         buttons: List<CustomButton>,
         primaryButtonId: Long,
-    ) {
+        enabled: Boolean = true,
+    ): File? {
+        if (!enabled) return null
+
         val file = writeCustomButtonsScript(
             filesDir = filesDir,
             buttons = buttons,
             primaryButtonId = primaryButtonId,
         )
         MPVLib.command(arrayOf("load-script", file.absolutePath))
+        return file
     }
 
     internal fun writeCustomButtonsScript(

@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.player.settings
 
 import eu.kanade.tachiyomi.ui.player.PlayerOrientation
 import eu.kanade.tachiyomi.ui.player.VideoAspect
+import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutConfig
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 
@@ -43,6 +44,14 @@ class PlayerPreferences(
     fun reduceMotion() = preferenceStore.getBoolean("pref_reduce_motion", false)
     fun playerTimeToDisappear() = preferenceStore.getInt("pref_player_time_to_disappear", 4000)
     fun panelOpacity() = preferenceStore.getInt("pref_panel_opacity", 60)
+    fun playerLayoutConfig() = preferenceStore.getString(
+        "pref_player_layout_config",
+        PlayerLayoutConfig().toPreferenceValue(),
+    )
+
+    // Optional chrome
+
+    fun showCustomButtons() = preferenceStore.getBoolean("pref_show_custom_buttons", true)
 
     // Skip intro button
 
