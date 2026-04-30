@@ -87,6 +87,30 @@ class NovelExtensionsScreenModelTest {
     }
 
     @Test
+    fun `deduplicates available plugins by id`() {
+        runBlocking {
+            val duplicate = pluginAvailable("id-dup", 1)
+
+            val screenModel = NovelExtensionsScreenModel(
+                extensionManager = FakeNovelExtensionManager(
+                    installed = emptyList(),
+                    available = listOf(duplicate, duplicate),
+                    updates = emptyList(),
+                ),
+                sourcePreferences = sourcePreferences,
+            ).also(activeScreenModels::add)
+
+            withTimeout(1_000) {
+                while (screenModel.state.value.isLoading) {
+                    yield()
+                }
+            }
+
+            screenModel.state.value.items.count { it.plugin.id == "id-dup" } shouldBe 1
+        }
+    }
+
+    @Test
     fun `syncs update count into preferences`() {
         runBlocking {
             val updatesPreference = mockk<Preference<Int>>(relaxed = true)
