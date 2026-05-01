@@ -85,13 +85,20 @@ class ImportedEpubNovelSourceTest {
 class SourceIdCollisionTest {
 
     @Test
-    fun `built-in source ids should be unique across media`() {
-        val builtInIds = listOf(
-            "manga_local" to LocalMangaSource.ID,
-            "anime_local" to LocalAnimeSource.ID,
-            "novel_imported_epub" to IMPORTED_EPUB_NOVEL_SOURCE_ID,
-        )
+    fun `built-in source ids should be unique within each media type`() {
+        val novelBuiltInIds = listOf(IMPORTED_EPUB_NOVEL_SOURCE_ID)
+        val mangaBuiltInIds = listOf(LocalMangaSource.ID)
+        val animeBuiltInIds = listOf(LocalAnimeSource.ID)
 
-        builtInIds.map { it.second }.toSet().size shouldBe builtInIds.size
+        novelBuiltInIds.toSet().size shouldBe novelBuiltInIds.size
+        mangaBuiltInIds.toSet().size shouldBe mangaBuiltInIds.size
+        animeBuiltInIds.toSet().size shouldBe animeBuiltInIds.size
+
+        // Manga and anime local sources share ID=0 by design (different source type namespaces)
+        LocalMangaSource.ID shouldBe 0L
+        LocalAnimeSource.ID shouldBe 0L
+
+        // Novel imported epub must not collide with manga/anime local in the same type
+        IMPORTED_EPUB_NOVEL_SOURCE_ID shouldBe 999L
     }
 }

@@ -5066,7 +5066,8 @@ private fun GeminiTranslationDialog(
                                             AYMR.strings.novel_reader_ai_translator_models_count,
                                         ).format(ollamaCloudAllModelEntries.size),
                                         subtitle = when {
-                                            tempOllamaCloudModel in OLLAMA_CLOUD_FREE_MODELS -> "$tempOllamaCloudModel (Free)"
+                                            tempOllamaCloudModel in OLLAMA_CLOUD_FREE_MODELS ->
+                                                "$tempOllamaCloudModel (Free)"
                                             tempOllamaCloudModel.isNotBlank() -> tempOllamaCloudModel
                                             else -> stringResource(
                                                 AYMR.strings.novel_reader_ai_translator_choose_model,
