@@ -54,6 +54,13 @@ class OllamaCloudModelsService(
 internal const val OLLAMA_CLOUD_DEFAULT_BASE_URL = "https://ollama.com/api"
 internal const val OLLAMA_CLOUD_DEFAULT_MODEL = "gpt-oss:120b"
 
+internal val OLLAMA_CLOUD_FREE_MODELS = setOf(
+    "qwen3-coder:480b",
+    "gpt-oss:120b",
+    "gpt-oss:20b",
+    "deepseek-v3.1:671b",
+)
+
 internal fun normalizeOllamaCloudBaseUrl(baseUrl: String): String {
     val trimmed = baseUrl.trim().trimEnd('/')
     if (trimmed.isBlank()) return OLLAMA_CLOUD_DEFAULT_BASE_URL

@@ -190,6 +190,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OLLAMA_CLOUD_FREE_MODELS
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveTranslationReasoningOptions
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigationAdapter
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigator
@@ -4039,7 +4040,9 @@ private fun GeminiTranslationDialog(
             .filter { it.isNotBlank() }
             .distinct()
             .sorted()
-            .associateWith { it }
+            .associateWith { name ->
+                if (name in OLLAMA_CLOUD_FREE_MODELS) "$name (Free)" else name
+            }
     }
 
     var tempKey by remember(readerSettings.geminiApiKey) { mutableStateOf(readerSettings.geminiApiKey) }
@@ -5062,8 +5065,10 @@ private fun GeminiTranslationDialog(
                                         title = stringResource(
                                             AYMR.strings.novel_reader_ai_translator_models_count,
                                         ).format(ollamaCloudAllModelEntries.size),
-                                        subtitle = tempOllamaCloudModel.ifBlank {
-                                            stringResource(
+                                        subtitle = when {
+                                            tempOllamaCloudModel in OLLAMA_CLOUD_FREE_MODELS -> "$tempOllamaCloudModel (Free)"
+                                            tempOllamaCloudModel.isNotBlank() -> tempOllamaCloudModel
+                                            else -> stringResource(
                                                 AYMR.strings.novel_reader_ai_translator_choose_model,
                                             )
                                         },
