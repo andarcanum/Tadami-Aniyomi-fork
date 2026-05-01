@@ -118,11 +118,25 @@ fun MangaChapterCardCompact(
             ) {
                 // Small status marker
                 Box(
-                    modifier = Modifier
-                        .size(6.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(colors.accent),
-                )
+                    modifier = Modifier.size(18.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (chapter.read) {
+                        Icon(
+                            Icons.Outlined.Done,
+                            contentDescription = null,
+                            tint = colors.accent,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(colors.accent),
+                        )
+                    }
+                }
 
                 // Chapter info
                 Column(
@@ -217,16 +231,6 @@ fun MangaChapterCardCompact(
                             downloadProgressProvider = { item.downloadProgress },
                             onClick = { onDownloadChapter(listOf(item), it) },
                             modifier = Modifier.size(20.dp),
-                        )
-                    }
-
-                    // Read checkmark
-                    if (chapter.read) {
-                        Icon(
-                            Icons.Outlined.Done,
-                            contentDescription = null,
-                            tint = colors.accent,
-                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
