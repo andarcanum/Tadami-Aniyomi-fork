@@ -226,8 +226,8 @@ actual class LocalNovelSource(
 
         allChapters.sortedWith { c1, c2 ->
             when {
-                c1.chapter_number != c2.chapter_number -> c2.chapter_number.compareTo(c1.chapter_number)
-                else -> c2.name.compareToCaseInsensitiveNaturalOrder(c1.name)
+                c1.chapter_number != c2.chapter_number -> c1.chapter_number.compareTo(c2.chapter_number)
+                else -> c1.name.compareToCaseInsensitiveNaturalOrder(c2.name)
             }
         }
     }
