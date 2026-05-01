@@ -32,7 +32,6 @@ class SyncChapterProgressWithTrack(
         val localLastRead = sortedChapters.takeWhile { it.read }
             .lastOrNull()
             ?.chapterNumber
-            ?.toDouble()
             ?: 0.0
         val action = resolveTrackProgressSync.resolve(
             local = localLastRead,
