@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.extension.anime.util
 
 import android.app.DownloadManager
+import android.app.ForegroundServiceStartNotAllowedException
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -10,13 +12,17 @@ import android.os.Environment
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
+import com.tadami.aurora.R
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.anime.installer.InstallerAnime
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
+import eu.kanade.tachiyomi.util.system.notificationBuilder
+import eu.kanade.tachiyomi.util.system.notify
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,8 +33,10 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.transformWhile
 import logcat.LogPriority
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -214,7 +222,30 @@ internal class AnimeExtensionInstaller(private val context: Context) {
             else -> {
                 val intent =
                     AnimeExtensionInstallService.getIntent(context, downloadId, uri, installer)
-                ContextCompat.startForegroundService(context, intent)
+                try {
+                    ContextCompat.startForegroundService(context, intent)
+                } catch (e: ForegroundServiceStartNotAllowedException) {
+                    val pendingIntent = PendingIntent.getService(
+                        context,
+                        downloadId.toInt(),
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    )
+                    val notification = context.notificationBuilder(
+                        Notifications.CHANNEL_EXTENSIONS_UPDATE,
+                    ) {
+                        setSmallIcon(R.drawable.ic_ani)
+                        setContentTitle(
+                            context.stringResource(MR.strings.ext_install_service_notif),
+                        )
+                        setContentIntent(pendingIntent)
+                        setAutoCancel(true)
+                    }.build()
+                    context.notify(
+                        Notifications.ID_EXTENSION_INSTALLER_PENDING,
+                        notification,
+                    )
+                }
             }
         }
     }
