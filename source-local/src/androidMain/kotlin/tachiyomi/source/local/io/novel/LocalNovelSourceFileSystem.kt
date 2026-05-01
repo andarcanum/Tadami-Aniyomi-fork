@@ -1,6 +1,8 @@
 package tachiyomi.source.local.io.novel
 
 import com.hippo.unifile.UniFile
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.storage.service.StorageManager
 
 actual class LocalNovelSourceFileSystem(
@@ -8,11 +10,15 @@ actual class LocalNovelSourceFileSystem(
 ) {
 
     actual fun getBaseDirectory(): UniFile? {
-        return storageManager.getLocalNovelSourceDirectory()
+        val dir = storageManager.getLocalNovelSourceDirectory()
+        logcat(LogPriority.DEBUG) { "LocalNovelFileSystem: getBaseDirectory=$dir" }
+        return dir
     }
 
     actual fun getFilesInBaseDirectory(): List<UniFile> {
-        return getBaseDirectory()?.listFiles().orEmpty().toList()
+        val files = getBaseDirectory()?.listFiles()
+        logcat(LogPriority.DEBUG) { "LocalNovelFileSystem: listFiles direct=${files?.map { it.name }}" }
+        return files.orEmpty().toList()
     }
 
     actual fun getNovelDirectory(name: String): UniFile? {
