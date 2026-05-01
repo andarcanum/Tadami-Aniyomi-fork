@@ -67,13 +67,7 @@ actual class LocalNovelSource(
             0L
         }
 
-        val baseDir = fileSystem.getBaseDirectory()
-        logcat(LogPriority.DEBUG) { "LocalNovelSource: baseDir=$baseDir" }
-
-        val allFiles = fileSystem.getFilesInBaseDirectory()
-        logcat(LogPriority.DEBUG) { "LocalNovelSource: allFiles count=${allFiles.size}, names=${allFiles.map { it.name }}" }
-
-        var novelDirs = allFiles
+        var novelDirs = fileSystem.getFilesInBaseDirectory()
             .filter { it.isDirectory && !it.name.orEmpty().startsWith('.') }
             .distinctBy { it.name }
             .filter {
@@ -121,7 +115,6 @@ actual class LocalNovelSource(
             }
             .awaitAll()
 
-        logcat(LogPriority.DEBUG) { "LocalNovelSource: returning ${novels.size} novels" }
         NovelsPage(novels, false)
     }
 
