@@ -159,9 +159,11 @@ actual class LocalNovelSource(
 
     // Chapters
     override suspend fun getChapterList(novel: SNovel): List<SNovelChapter> = withIOContext {
-        val chapters = fileSystem.getFilesInNovelDirectory(novel.url)
+        val epubFiles = fileSystem.getFilesInNovelDirectory(novel.url)
             .filterNot { it.name.orEmpty().startsWith('.') }
             .filter { it.extension.equals("epub", true) }
+        logcat(LogPriority.WARN) { "ChapterList: novel=${novel.title} epubCount=${epubFiles.size}" }
+        val chapters = epubFiles
             .flatMap { chapterFile ->
                 try {
                     chapterFile.epubReader(context).use { epub ->
@@ -176,7 +178,7 @@ actual class LocalNovelSource(
                             .map { manifestItems[it.attr("idref")]?.attr("href") }
                             .filterNotNull()
 
-                        logcat(LogPriority.DEBUG) {
+                        logcat(LogPriority.WARN) {
                             "ChapterList epub=${chapterFile.name} manifestXhtml=${manifestItems.size} " +
                                 "spineRefs=${packageDoc.select("spine > itemref").size} " +
                                 "spinePages=${spinePages.size}"
