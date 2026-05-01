@@ -51,7 +51,6 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
-import eu.kanade.tachiyomi.util.chapter.removeDuplicateChapters
 import eu.kanade.tachiyomi.util.removeCovers
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
@@ -247,22 +246,14 @@ class MangaScreenModel(
         screenModelScope.launchIO {
             val manga = getMangaAndChapters.awaitManga(mangaId)
 
-            if (!manga.favorite) {
+            if (shouldApplyDefaultChapterFlags(manga)) {
                 setMangaDefaultChapterFlags.await(manga)
             }
 
             val availableScanlators = getAvailableScanlators.await(mangaId)
             val scanlatorChapterCounts = getScanlatorChapterCounts.await(mangaId)
             val storedExcludedScanlators = getExcludedScanlators.await(mangaId)
-            val initialExcludedScanlators = resolveDefaultExcludedScanlatorsByChapterCount(
-                scanlatorChapterCounts = scanlatorChapterCounts,
-                availableScanlators = availableScanlators,
-                excludedScanlators = storedExcludedScanlators,
-            ) ?: storedExcludedScanlators
-
-            if (initialExcludedScanlators != storedExcludedScanlators) {
-                setExcludedScanlators.await(mangaId, initialExcludedScanlators)
-            }
+            val initialExcludedScanlators = storedExcludedScanlators
 
             val chapters = getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
                 .toChapterListItems(manga)
@@ -279,7 +270,6 @@ class MangaScreenModel(
                     source = Injekt.get<MangaSourceManager>().getOrStub(manga.source),
                     isFromSource = isFromSource,
                     chapters = chapters,
-                    useAuroraChapterDedupe = uiPreferences.appTheme().get().isAuroraStyle,
                     availableScanlators = availableScanlators,
                     scanlatorChapterCounts = scanlatorChapterCounts,
                     excludedScanlators = initialExcludedScanlators,
@@ -1402,15 +1392,9 @@ class MangaScreenModel(
             val metadataError: MetadataLoadError? = null,
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
-            val useAuroraChapterDedupe: Boolean = false,
         ) : State {
             val processedChapters by lazy {
-                val filtered = chapters.applyFilters(manga).toList()
-                if (useAuroraChapterDedupe) {
-                    filtered.removeDuplicateChapters { it.chapter }
-                } else {
-                    filtered
-                }
+                chapters.applyFilters(manga).toList()
             }
 
             val targetChapterIndex by lazy {
@@ -1516,14 +1500,6 @@ internal fun resolveSelectedScanlator(
 }
 
 @Suppress("UNUSED_PARAMETER")
-internal fun resolveDefaultExcludedScanlatorsByChapterCount(
-    scanlatorChapterCounts: Map<String, Int>,
-    availableScanlators: Set<String>,
-    excludedScanlators: Set<String>,
-): Set<String>? {
-    return null
-}
-
 internal fun resolveExcludedScanlatorsForSelection(
     selectedScanlator: String?,
     availableScanlators: Set<String>,
@@ -1537,6 +1513,10 @@ internal fun resolveExcludedScanlatorsForSelection(
         .toSet()
     if (selection !in normalizedAvailable) return emptySet()
     return normalizedAvailable - selection
+}
+
+internal fun shouldApplyDefaultChapterFlags(manga: Manga): Boolean {
+    return !manga.favorite && manga.chapterFlags == Manga.SHOW_ALL
 }
 
 @Immutable

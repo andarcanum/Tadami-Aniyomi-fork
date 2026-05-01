@@ -1,10 +1,9 @@
 package eu.kanade.presentation.entries.manga.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -107,7 +106,10 @@ fun ScanlatorFilterDialog(
                     Text(text = stringResource(MR.strings.action_cancel))
                 }
             } else {
-                FlowRow {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
                     if (mutableExcludedScanlators.isEmpty()) {
                         TextButton(onClick = { mutableExcludedScanlators.addAll(availableScanlators) }) {
                             Text(text = stringResource(MR.strings.action_select_all))
@@ -117,17 +119,18 @@ fun ScanlatorFilterDialog(
                             Text(text = stringResource(MR.strings.action_reset))
                         }
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                    TextButton(onClick = onDismissRequest) {
-                        Text(text = stringResource(MR.strings.action_cancel))
-                    }
-                    TextButton(
-                        onClick = {
-                            onConfirm(mutableExcludedScanlators.toSet())
-                            onDismissRequest()
-                        },
-                    ) {
-                        Text(text = stringResource(MR.strings.action_ok))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onDismissRequest) {
+                            Text(text = stringResource(MR.strings.action_cancel))
+                        }
+                        TextButton(
+                            onClick = {
+                                onConfirm(mutableExcludedScanlators.toSet())
+                                onDismissRequest()
+                            },
+                        ) {
+                            Text(text = stringResource(MR.strings.action_ok))
+                        }
                     }
                 }
             }
