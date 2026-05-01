@@ -27,10 +27,12 @@ import eu.kanade.tachiyomi.ui.player.controls.components.ControlsButton
 import eu.kanade.tachiyomi.ui.player.controls.components.FilledControlsButton
 import eu.kanade.tachiyomi.ui.player.execute
 import eu.kanade.tachiyomi.ui.player.executeLongPress
+import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutSlot
 import tachiyomi.domain.custombuttons.model.CustomButton
 
 @Composable
 fun BottomRightPlayerControls(
+    layoutSlots: Set<PlayerLayoutSlot>,
     customButton: CustomButton?,
     customButtonTitle: String,
     skipIntroButton: String?,
@@ -41,13 +43,15 @@ fun BottomRightPlayerControls(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier) {
-        if (skipIntroButton != null) {
+        if (PlayerLayoutSlot.SkipIntro in layoutSlots && skipIntroButton != null) {
             FilledControlsButton(
                 text = skipIntroButton,
                 onClick = onPressSkipIntroButton,
                 onLongClick = {},
             )
-        } else if (customButton != null) {
+        }
+
+        if (PlayerLayoutSlot.CustomButton in layoutSlots && customButton != null) {
             FilledControlsButton(
                 text = customButtonTitle,
                 onClick = customButton::execute,
@@ -55,16 +59,18 @@ fun BottomRightPlayerControls(
             )
         }
 
-        if (isPipAvailable) {
+        if (PlayerLayoutSlot.PictureInPicture in layoutSlots && isPipAvailable) {
             ControlsButton(
                 Icons.Default.PictureInPictureAlt,
                 onClick = onPipClick,
             )
         }
 
-        ControlsButton(
-            Icons.Default.AspectRatio,
-            onClick = onAspectClick,
-        )
+        if (PlayerLayoutSlot.AspectRatio in layoutSlots) {
+            ControlsButton(
+                Icons.Default.AspectRatio,
+                onClick = onAspectClick,
+            )
+        }
     }
 }

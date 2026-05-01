@@ -1,25 +1,37 @@
 package eu.kanade.tachiyomi.ui.browse.novel.source.browse
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AdaptiveSheet
 import eu.kanade.tachiyomi.novelsource.model.NovelFilter
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.core.common.preference.TriState
+import tachiyomi.domain.source.model.SavedSearch
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.CheckboxItem
 import tachiyomi.presentation.core.components.CollapsibleBox
 import tachiyomi.presentation.core.components.HeadingItem
@@ -37,6 +49,10 @@ fun SourceFilterNovelDialog(
     onReset: () -> Unit,
     onFilter: () -> Unit,
     onUpdate: (NovelFilterList) -> Unit,
+    savedSearches: ImmutableList<Pair<SavedSearch, Boolean>> = persistentListOf(),
+    onSaveSearch: () -> Unit = {},
+    onOpenSavedSearch: (SavedSearch) -> Unit = {},
+    onDeleteSavedSearch: (SavedSearch) -> Unit = {},
 ) {
     val updateFilters = { onUpdate(filters) }
 
@@ -57,6 +73,13 @@ fun SourceFilterNovelDialog(
                         )
                     }
 
+                    TextButton(onClick = onSaveSearch) {
+                        Icon(
+                            imageVector = Icons.Outlined.Save,
+                            contentDescription = stringResource(AYMR.strings.save_search),
+                        )
+                    }
+
                     Spacer(modifier = Modifier.weight(1f))
 
                     Button(onClick = {
@@ -71,6 +94,39 @@ fun SourceFilterNovelDialog(
 
             items(filters) {
                 FilterItem(it, updateFilters)
+            }
+
+            if (savedSearches.isNotEmpty()) {
+                item {
+                    HorizontalDivider()
+                    Text(
+                        text = stringResource(AYMR.strings.saved_search),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+                items(savedSearches) { (search, isActive) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenSavedSearch(search) }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = search.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (isActive) MaterialTheme.colorScheme.primary else LocalTextStyle.current.color,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { onDeleteSavedSearch(search) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Delete,
+                                contentDescription = stringResource(MR.strings.action_delete),
+                            )
+                        }
+                    }
+                }
             }
         }
     }

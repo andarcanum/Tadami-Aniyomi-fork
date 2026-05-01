@@ -117,6 +117,9 @@ internal fun resolveWebViewPaddingBottomPx(
     return navigationBarHeightPx.coerceAtLeast(0) + basePaddingPx.coerceAtLeast(0)
 }
 
+internal const val AUTO_SCROLL_COOLDOWN_MS = 2000L
+internal const val AUTO_SCROLL_SPEED_FACTOR_DELTA = 0.02f
+
 internal fun intervalToAutoScrollSpeed(intervalSeconds: Int): Int {
     val clamped = intervalSeconds.coerceIn(1, 60)
     val normalized = (60 - clamped).toFloat() / 59f

@@ -68,29 +68,4 @@ class MangaScreenModelScanlatorSelectionTest {
             availableScanlators = setOf("Team A", "Team B"),
         ) shouldBe emptySet()
     }
-
-    @Test
-    fun `resolveDefaultExcludedScanlatorsByChapterCount keeps all branches by default`() {
-        resolveDefaultExcludedScanlatorsByChapterCount(
-            scanlatorChapterCounts = mapOf(
-                "Team A" to 3,
-                "Team B" to 10,
-                "Team C" to 7,
-            ),
-            availableScanlators = setOf("Team A", "Team B", "Team C"),
-            excludedScanlators = emptySet(),
-        ) shouldBe null
-    }
-
-    @Test
-    fun `resolveDefaultExcludedScanlatorsByChapterCount keeps existing selection`() {
-        resolveDefaultExcludedScanlatorsByChapterCount(
-            scanlatorChapterCounts = mapOf(
-                "Team A" to 3,
-                "Team B" to 10,
-            ),
-            availableScanlators = setOf("Team A", "Team B"),
-            excludedScanlators = setOf("Team A"),
-        ) shouldBe null
-    }
 }

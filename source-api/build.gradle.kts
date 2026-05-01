@@ -27,6 +27,7 @@ kotlin {
         val commonMain by getting {
             dependencies {
                 api(kotlinx.serialization.json)
+                api(kotlinx.reflect)
                 api(libs.injekt)
                 api(libs.rxjava)
                 api(libs.jsoup)

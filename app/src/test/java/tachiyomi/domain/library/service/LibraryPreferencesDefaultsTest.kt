@@ -26,7 +26,7 @@ class LibraryPreferencesDefaultsTest {
             type = MangaLibrarySort.Type.LastRead,
             direction = MangaLibrarySort.Direction.Descending,
         )
-        prefs.sortChapterBySourceOrNumber().get() shouldBe Manga.CHAPTER_SORTING_NUMBER
+        prefs.sortChapterBySourceOrNumber().get() shouldBe Manga.CHAPTER_SORTING_SOURCE
         prefs.novelSortingMode().get() shouldBe NovelLibrarySort(
             type = NovelLibrarySort.Type.LastRead,
             direction = NovelLibrarySort.Direction.Descending,

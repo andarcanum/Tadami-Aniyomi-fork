@@ -104,9 +104,10 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
 
                 override fun onPageScrollStateChanged(state: Int) {
                     isIdle = state == ViewPager.SCROLL_STATE_IDLE
-                    // Pause auto-scroll when user is dragging the pager
                     if (state == ViewPager.SCROLL_STATE_DRAGGING) {
                         pauseAutoScroll()
+                    } else if (state == ViewPager.SCROLL_STATE_IDLE) {
+                        resumeAutoScroll()
                     }
                 }
             },
@@ -123,19 +124,15 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
             when (config.navigator.getAction(pos)) {
                 NavigationRegion.MENU -> activity.toggleMenu()
                 NavigationRegion.NEXT -> {
-                    pauseAutoScroll()
                     moveToNext()
                 }
                 NavigationRegion.PREV -> {
-                    pauseAutoScroll()
                     moveToPrevious()
                 }
                 NavigationRegion.RIGHT -> {
-                    pauseAutoScroll()
                     moveRight()
                 }
                 NavigationRegion.LEFT -> {
-                    pauseAutoScroll()
                     moveLeft()
                 }
             }
@@ -194,6 +191,23 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      */
     fun pauseAutoScroll() {
         autoScrollManager.pause()
+    }
+
+    /**
+     * Resumes auto-scroll after a temporary pause.
+     */
+    fun resumeAutoScroll() {
+        autoScrollManager.resume()
+    }
+
+    /**
+     * Sets a cooldown period during which auto-scroll pauses.
+     * Used after touch events so the user can interact without scroll interference.
+     *
+     * @param delayMs Duration of the cooldown in milliseconds.
+     */
+    fun setAutoScrollCooldown(delayMs: Long) {
+        autoScrollManager.setCooldown(delayMs)
     }
 
     /**

@@ -55,6 +55,7 @@ internal fun NovelReaderSettings.translationCacheModelId(): String {
         NovelTranslationProvider.DEEPSEEK -> deepSeekModel.trim()
         NovelTranslationProvider.MISTRAL -> mistralModel.trim()
         NovelTranslationProvider.NVIDIA -> nvidiaModel.trim()
+        NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudModel.trim()
     }
 }
 

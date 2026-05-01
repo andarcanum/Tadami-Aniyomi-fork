@@ -1,5 +1,8 @@
 package eu.kanade.domain.track.novel.interactor
 
+import eu.kanade.domain.track.novel.model.toDbTrack
+import eu.kanade.domain.track.service.ResolveTrackProgressSync
+import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -13,6 +16,8 @@ class SyncNovelChapterProgressWithTrack(
     private val novelChapterRepository: NovelChapterRepository,
     private val insertTrack: InsertNovelTrack,
     private val getNovelChapters: GetNovelChapters,
+    private val trackPreferences: TrackPreferences,
+    private val resolveTrackProgressSync: ResolveTrackProgressSync,
 ) {
 
     suspend fun await(
@@ -24,15 +29,39 @@ class SyncNovelChapterProgressWithTrack(
             .sortedBy { it.chapterNumber }
             .filter { it.isRecognizedNumber }
 
-        val chapterUpdates = sortedChapters
-            .filter { chapter -> chapter.chapterNumber <= remoteTrack.lastChapterRead && !chapter.read }
-            .map { it.copy(read = true).toNovelChapterUpdate() }
+        val localLastRead = sortedChapters.takeWhile { it.read }
+            .lastOrNull()
+            ?.chapterNumber
+            ?.toDouble()
+            ?: 0.0
+        val action = resolveTrackProgressSync.resolve(
+            local = localLastRead,
+            remote = remoteTrack.lastChapterRead,
+            pullEnabled = trackPreferences.autoSyncProgressFromTracker().get(),
+            trigger = ResolveTrackProgressSync.Trigger.OPEN_REFRESH,
+        )
 
-        try {
-            novelChapterRepository.updateAllChapters(chapterUpdates)
-            insertTrack.await(remoteTrack)
-        } catch (e: Throwable) {
-            logcat(LogPriority.WARN, e)
+        when (action) {
+            ResolveTrackProgressSync.SyncAction.NoOp -> Unit
+            is ResolveTrackProgressSync.SyncAction.MarkLocalUntil -> {
+                val chapterUpdates = sortedChapters
+                    .filter { chapter -> chapter.chapterNumber <= action.value && !chapter.read }
+                    .map { it.copy(read = true).toNovelChapterUpdate() }
+                try {
+                    novelChapterRepository.updateAllChapters(chapterUpdates)
+                } catch (e: Throwable) {
+                    logcat(LogPriority.WARN, e)
+                }
+            }
+            is ResolveTrackProgressSync.SyncAction.PushRemoteTo -> {
+                val updatedTrack = remoteTrack.copy(lastChapterRead = action.value)
+                try {
+                    tracker.update(updatedTrack.toDbTrack())
+                    insertTrack.await(updatedTrack)
+                } catch (e: Throwable) {
+                    logcat(LogPriority.WARN, e)
+                }
+            }
         }
     }
 }

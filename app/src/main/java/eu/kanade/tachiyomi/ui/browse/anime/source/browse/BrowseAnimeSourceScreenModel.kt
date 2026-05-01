@@ -24,9 +24,11 @@ import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
+import eu.kanade.tachiyomi.ui.browse.search.SavedSearchFilterSerializer
 import eu.kanade.tachiyomi.util.removeBackgrounds
 import eu.kanade.tachiyomi.util.removeCovers
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -54,6 +56,12 @@ import tachiyomi.domain.items.episode.interactor.SetAnimeDefaultEpisodeFlags
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.anime.interactor.GetRemoteAnime
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
+import tachiyomi.domain.source.interactor.DeleteSavedSearchById
+import tachiyomi.domain.source.interactor.GetSavedSearchById
+import tachiyomi.domain.source.interactor.GetSavedSearchBySourceId
+import tachiyomi.domain.source.interactor.InsertSavedSearch
+import tachiyomi.domain.source.model.SavedSearch
+import tachiyomi.domain.source.model.SourceType
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.time.Instant
@@ -62,6 +70,7 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilter as AnimeSourceModelFilt
 class BrowseAnimeSourceScreenModel(
     private val sourceId: Long,
     listingQuery: String?,
+    private val savedSearchId: Long? = null,
     sourceManager: AnimeSourceManager = Injekt.get(),
     sourcePreferences: SourcePreferences = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
@@ -78,6 +87,10 @@ class BrowseAnimeSourceScreenModel(
     private val addTracks: AddAnimeTracks = Injekt.get(),
     private val getIncognitoState: GetAnimeIncognitoState = Injekt.get(),
     private val achievementHandler: AchievementHandler = Injekt.get(),
+    private val getSavedSearchById: GetSavedSearchById = Injekt.get(),
+    private val getSavedSearchBySourceId: GetSavedSearchBySourceId = Injekt.get(),
+    private val insertSavedSearch: InsertSavedSearch = Injekt.get(),
+    private val deleteSavedSearchById: DeleteSavedSearchById = Injekt.get(),
 ) : StateScreenModel<BrowseAnimeSourceScreenModel.State>(State(Listing.valueOf(listingQuery))) {
 
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
@@ -106,6 +119,92 @@ class BrowseAnimeSourceScreenModel(
         if (!getIncognitoState.await(source.id)) {
             sourcePreferences.lastUsedAnimeSource().set(source.id)
         }
+
+        loadSavedSearches()
+
+        if (savedSearchId != null && source is AnimeCatalogueSource) {
+            screenModelScope.launch {
+                val savedSearch = getSavedSearchById.await(savedSearchId) ?: return@launch
+                val baseFilters = source.getFilterList()
+                val filtersJson = savedSearch.filtersJson
+                if (filtersJson != null) {
+                    SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
+                }
+                mutableState.update {
+                    it.copy(
+                        listing = Listing.Search(savedSearch.query, baseFilters),
+                        filters = baseFilters,
+                        toolbarQuery = savedSearch.query,
+                    )
+                }
+            }
+        }
+    }
+
+    fun loadSavedSearches() {
+        screenModelScope.launch {
+            val searches = getSavedSearchBySourceId.await(sourceId, SourceType.ANIME)
+            val currentActiveId = mutableState.value.savedSearches.find { it.second }?.first?.id
+            mutableState.update {
+                it.copy(
+                    savedSearches = searches.map { search ->
+                        search to (search.id == currentActiveId)
+                    }.toImmutableList(),
+                )
+            }
+        }
+    }
+
+    fun openSaveSearchDialog() {
+        mutableState.update { it.copy(dialog = Dialog.CreateSavedSearch) }
+    }
+
+    fun saveSearch(name: String) {
+        screenModelScope.launch {
+            val state = mutableState.value
+            val filtersJson = SavedSearchFilterSerializer.serialize(state.filters)
+            val savedSearch = SavedSearch(
+                id = -1,
+                source = sourceId,
+                sourceType = SourceType.ANIME,
+                name = name,
+                query = state.listing.query,
+                filtersJson = filtersJson,
+            )
+            insertSavedSearch.await(savedSearch)
+            dismissDialog()
+            loadSavedSearches()
+        }
+    }
+
+    fun deleteSearch(savedSearch: SavedSearch) {
+        screenModelScope.launch {
+            deleteSavedSearchById.await(savedSearch.id)
+            loadSavedSearches()
+            dismissDialog()
+        }
+    }
+
+    fun openSavedSearch(savedSearch: SavedSearch) {
+        if (source is AnimeCatalogueSource) {
+            val baseFilters = source.getFilterList()
+            val filtersJson = savedSearch.filtersJson
+            if (filtersJson != null) {
+                SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
+            }
+            mutableState.update {
+                it.copy(
+                    listing = Listing.Search(savedSearch.query, baseFilters),
+                    filters = baseFilters,
+                    toolbarQuery = savedSearch.query,
+                    savedSearches = it.savedSearches.map { (s, _) -> s to (s.id == savedSearch.id) }.toImmutableList(),
+                )
+            }
+        }
+    }
+
+    fun dismissDialog() {
+        setDialog(null)
     }
 
     /**
@@ -362,6 +461,8 @@ class BrowseAnimeSourceScreenModel(
 
     sealed interface Dialog {
         data object Filter : Dialog
+        data object CreateSavedSearch : Dialog
+        data class DeleteSavedSearch(val savedSearch: SavedSearch) : Dialog
         data class RemoveAnime(val anime: Anime) : Dialog
         data class AddDuplicateAnime(val anime: Anime, val duplicate: Anime) : Dialog
         data class ChangeAnimeCategory(
@@ -377,7 +478,9 @@ class BrowseAnimeSourceScreenModel(
         val filters: AnimeFilterList = AnimeFilterList(),
         val toolbarQuery: String? = null,
         val dialog: Dialog? = null,
+        val savedSearches: ImmutableList<Pair<SavedSearch, Boolean>> = persistentListOf(),
     ) {
         val isUserQuery get() = listing is Listing.Search && !listing.query.isNullOrEmpty()
+        val filterable get() = savedSearches.isNotEmpty()
     }
 }

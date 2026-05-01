@@ -178,6 +178,7 @@ class NovelEpubStyleBuilderTest {
             customJS = customJS,
             selectedTextTranslationEnabled = selectedTextTranslationEnabled,
             selectedTextTranslationTargetLanguage = selectedTextTranslationTargetLanguage,
+            showAutoScrollFloatingButton = false,
         )
     }
 }

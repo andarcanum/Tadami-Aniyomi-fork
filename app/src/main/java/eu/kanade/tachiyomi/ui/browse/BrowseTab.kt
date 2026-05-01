@@ -34,15 +34,18 @@ import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.ui.browse.anime.extension.AnimeExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.anime.extension.animeExtensionsTab
+import eu.kanade.tachiyomi.ui.browse.anime.feed.animeFeedTab
 import eu.kanade.tachiyomi.ui.browse.anime.migration.sources.migrateAnimeSourceTab
 import eu.kanade.tachiyomi.ui.browse.anime.source.animeSourcesTab
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.extension.MangaExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.manga.extension.mangaExtensionsTab
+import eu.kanade.tachiyomi.ui.browse.manga.feed.mangaFeedTab
 import eu.kanade.tachiyomi.ui.browse.manga.migration.sources.migrateMangaSourceTab
 import eu.kanade.tachiyomi.ui.browse.manga.source.mangaSourcesTab
 import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.novel.extension.novelExtensionsTab
+import eu.kanade.tachiyomi.ui.browse.novel.feed.novelFeedTab
 import eu.kanade.tachiyomi.ui.browse.novel.migration.sources.migrateNovelSourceTab
 import eu.kanade.tachiyomi.ui.browse.novel.source.novelSourcesTab
 import eu.kanade.tachiyomi.ui.main.MainActivity
@@ -96,6 +99,10 @@ data object BrowseTab : Tab {
         }
     }
 
+    internal fun extensionTabIndex(hideFeedTab: Boolean): Int {
+        return if (hideFeedTab) 1 else 2
+    }
+
     fun showExtension() {
         switchToTabNumberChannel.trySend(TAB_MANGA_EXTENSIONS)
     }
@@ -128,20 +135,62 @@ data object BrowseTab : Tab {
         val novelExtensionsScreenModel = rememberScreenModel { NovelExtensionsScreenModel() }
         val novelExtensionsState by novelExtensionsScreenModel.state.collectAsState()
 
+        val hideFeedTab by uiPreferences.hideFeedTab().collectAsState()
+        val feedTabInFront by uiPreferences.feedTabInFront().collectAsState()
+
         val animeTabs = buildList {
-            add(animeSourcesTab())
+            val showFeed = !hideFeedTab
+            when {
+                showFeed && feedTabInFront -> {
+                    add(animeFeedTab())
+                    add(animeSourcesTab())
+                }
+                showFeed -> {
+                    add(animeSourcesTab())
+                    add(animeFeedTab())
+                }
+                else -> {
+                    add(animeSourcesTab())
+                }
+            }
             add(animeExtensionsTab(animeExtensionsScreenModel))
             add(migrateAnimeSourceTab())
         }.toPersistentList()
 
         val mangaTabs = buildList {
-            add(mangaSourcesTab())
+            val showFeed = !hideFeedTab
+            when {
+                showFeed && feedTabInFront -> {
+                    add(mangaFeedTab())
+                    add(mangaSourcesTab())
+                }
+                showFeed -> {
+                    add(mangaSourcesTab())
+                    add(mangaFeedTab())
+                }
+                else -> {
+                    add(mangaSourcesTab())
+                }
+            }
             add(mangaExtensionsTab(mangaExtensionsScreenModel))
             add(migrateMangaSourceTab())
         }.toPersistentList()
 
         val novelTabs = buildList {
-            add(novelSourcesTab())
+            val showFeed = !hideFeedTab
+            when {
+                showFeed && feedTabInFront -> {
+                    add(novelFeedTab())
+                    add(novelSourcesTab())
+                }
+                showFeed -> {
+                    add(novelSourcesTab())
+                    add(novelFeedTab())
+                }
+                else -> {
+                    add(novelSourcesTab())
+                }
+            }
             add(novelExtensionsTab(novelExtensionsScreenModel))
             add(migrateNovelSourceTab())
         }.toPersistentList()
@@ -168,7 +217,6 @@ data object BrowseTab : Tab {
         val isMangaSection = effectiveSection == BrowseSection.Manga
         val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
         val useWideBrowseTabs = auroraAdaptiveSpec.deviceClass != AuroraDeviceClass.Phone
-        val globalSearchTitle = stringResource(MR.strings.action_global_search)
 
         Column(modifier = Modifier.fillMaxSize()) {
             TabbedScreenAurora(
@@ -195,7 +243,7 @@ data object BrowseTab : Tab {
                 applyStatusBarsPadding = true,
                 highlightSearchAction = false,
                 highlightedActionTitle = null,
-                extraActionGapAfterTitle = globalSearchTitle,
+                extraActionGapAfterTitle = null,
                 extraHeaderContent = {
                     if (sections.size > 1) {
                         Column {
@@ -245,16 +293,13 @@ data object BrowseTab : Tab {
                 .collectLatest { targetIndex ->
                     if (targetIndex == TAB_MANGA_EXTENSIONS && showMangaSection) {
                         currentSection = BrowseSection.Manga
-                        // Extensions is index 1 in the manga sub-list
-                        state.scrollToPage(1)
+                        state.scrollToPage(extensionTabIndex(hideFeedTab))
                     } else if (targetIndex == TAB_ANIME_EXTENSIONS) {
                         currentSection = BrowseSection.Anime
-                        // Extensions is index 1 in the anime sub-list
-                        state.scrollToPage(1)
+                        state.scrollToPage(extensionTabIndex(hideFeedTab))
                     } else if (targetIndex == TAB_NOVEL_EXTENSIONS && showNovelSection) {
                         currentSection = BrowseSection.Novel
-                        // Extensions is index 1 in the novel sub-list
-                        state.scrollToPage(1)
+                        state.scrollToPage(extensionTabIndex(hideFeedTab))
                     }
                 }
         }

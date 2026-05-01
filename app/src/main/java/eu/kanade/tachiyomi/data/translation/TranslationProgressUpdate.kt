@@ -9,4 +9,5 @@ data class TranslationProgressUpdate(
     val totalChunks: Int,
     val chapterName: String,
     val errorMessage: String?,
+    val logMessage: String? = null,
 )

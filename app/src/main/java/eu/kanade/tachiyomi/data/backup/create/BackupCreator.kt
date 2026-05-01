@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.data.backup.create.creators.AnimeExtensionRepoBackupC
 import eu.kanade.tachiyomi.data.backup.create.creators.AnimeSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.CustomButtonBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.ExtensionsBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.FeedBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaCategoriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.MangaExtensionRepoBackupCreator
@@ -90,6 +91,7 @@ class BackupCreator(
     private val novelSourcesBackupCreator: NovelSourcesBackupCreator = NovelSourcesBackupCreator(),
     private val mangaSeriesBackupCreator: MangaSeriesBackupCreator = MangaSeriesBackupCreator(),
     private val novelSeriesBackupCreator: NovelSeriesBackupCreator = NovelSeriesBackupCreator(),
+    private val feedBackupCreator: FeedBackupCreator = FeedBackupCreator(),
     private val extensionsBackupCreator: ExtensionsBackupCreator = ExtensionsBackupCreator(context),
     private val achievementBackupCreator: AchievementBackupCreator = AchievementBackupCreator(),
     private val achievementHandler: AchievementHandler = Injekt.get(),
@@ -158,6 +160,7 @@ class BackupCreator(
             val achievementData = achievementBackupCreator(options)
             val backupMangaSeries = if (shouldBackupManga) mangaSeriesBackupCreator() else emptyList()
             val backupNovelSeries = if (shouldBackupNovel) novelSeriesBackupCreator() else emptyList()
+            val backupFeeds = feedBackupCreator()
 
             val backup = Backup(
                 backupManga = backupManga,
@@ -184,6 +187,7 @@ class BackupCreator(
                 backupStats = achievementData.stats,
                 backupMangaSeries = backupMangaSeries,
                 backupNovelSeries = backupNovelSeries,
+                backupFeeds = backupFeeds,
             )
 
             val byteArray = parser.encodeToByteArray(Backup.serializer(), backup)

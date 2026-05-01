@@ -18,7 +18,9 @@ import eu.kanade.presentation.util.ioCoroutineScope
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.SNovel
+import eu.kanade.tachiyomi.ui.browse.search.SavedSearchFilterSerializer
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -44,6 +46,12 @@ import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.items.novelchapter.interactor.SetNovelDefaultChapterFlags
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.source.interactor.DeleteSavedSearchById
+import tachiyomi.domain.source.interactor.GetSavedSearchById
+import tachiyomi.domain.source.interactor.GetSavedSearchBySourceId
+import tachiyomi.domain.source.interactor.InsertSavedSearch
+import tachiyomi.domain.source.model.SavedSearch
+import tachiyomi.domain.source.model.SourceType
 import tachiyomi.domain.source.novel.interactor.GetRemoteNovel
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
@@ -54,6 +62,7 @@ import java.util.concurrent.ConcurrentHashMap
 class BrowseNovelSourceScreenModel(
     private val sourceId: Long,
     listingQuery: String?,
+    private val savedSearchId: Long? = null,
     sourceManager: NovelSourceManager = Injekt.get(),
     getRemoteNovel: GetRemoteNovel = Injekt.get(),
     sourcePreferences: eu.kanade.domain.source.service.SourcePreferences = Injekt.get(),
@@ -66,6 +75,10 @@ class BrowseNovelSourceScreenModel(
     private val getNovelCategoriesInteractor: GetNovelCategories? = null,
     private val setNovelCategoriesInteractor: SetNovelCategories? = null,
     private val setNovelDefaultChapterFlagsInteractor: SetNovelDefaultChapterFlags? = null,
+    private val getSavedSearchByIdInteractor: GetSavedSearchById? = null,
+    private val getSavedSearchBySourceIdInteractor: GetSavedSearchBySourceId? = null,
+    private val insertSavedSearchInteractor: InsertSavedSearch? = null,
+    private val deleteSavedSearchByIdInteractor: DeleteSavedSearchById? = null,
 ) : StateScreenModel<BrowseNovelSourceScreenModel.State>(State(Listing.valueOf(listingQuery))) {
 
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
@@ -123,6 +136,98 @@ class BrowseNovelSourceScreenModel(
         }
 
         sourcePreferences.lastUsedNovelSource().set(source.id)
+
+        loadSavedSearches()
+
+        if (savedSearchId != null && source is NovelCatalogueSource) {
+            screenModelScope.launch {
+                val getSavedSearchById = resolveGetSavedSearchById() ?: return@launch
+                val savedSearch = getSavedSearchById.await(savedSearchId) ?: return@launch
+                val baseFilters = source.getFilterList()
+                val filtersJson = savedSearch.filtersJson
+                if (filtersJson != null) {
+                    SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
+                }
+                mutableState.update {
+                    it.copy(
+                        listing = Listing.Search(savedSearch.query, baseFilters),
+                        filters = baseFilters,
+                        toolbarQuery = savedSearch.query,
+                        filterVersion = it.filterVersion + 1,
+                    )
+                }
+            }
+        }
+    }
+
+    fun loadSavedSearches() {
+        screenModelScope.launch {
+            val getSavedSearchBySourceId = resolveGetSavedSearchBySourceId() ?: return@launch
+            val searches = getSavedSearchBySourceId.await(sourceId, SourceType.NOVEL)
+            val currentActiveId = mutableState.value.savedSearches.find { it.second }?.first?.id
+            mutableState.update {
+                it.copy(
+                    savedSearches = searches.map { search ->
+                        search to (search.id == currentActiveId)
+                    }.toImmutableList(),
+                )
+            }
+        }
+    }
+
+    fun openSaveSearchDialog() {
+        mutableState.update { it.copy(dialog = Dialog.CreateSavedSearch) }
+    }
+
+    fun saveSearch(name: String) {
+        screenModelScope.launch {
+            val insertSavedSearch = resolveInsertSavedSearch() ?: return@launch
+            val state = mutableState.value
+            val filtersJson = SavedSearchFilterSerializer.serialize(state.filters)
+            val savedSearch = SavedSearch(
+                id = -1,
+                source = sourceId,
+                sourceType = SourceType.NOVEL,
+                name = name,
+                query = state.listing.query,
+                filtersJson = filtersJson,
+            )
+            insertSavedSearch.await(savedSearch)
+            dismissDialog()
+            loadSavedSearches()
+        }
+    }
+
+    fun deleteSearch(savedSearch: SavedSearch) {
+        screenModelScope.launch {
+            val deleteSavedSearchById = resolveDeleteSavedSearchById() ?: return@launch
+            deleteSavedSearchById.await(savedSearch.id)
+            loadSavedSearches()
+            dismissDialog()
+        }
+    }
+
+    fun openSavedSearch(savedSearch: SavedSearch) {
+        if (source is NovelCatalogueSource) {
+            val baseFilters = source.getFilterList()
+            val filtersJson = savedSearch.filtersJson
+            if (filtersJson != null) {
+                SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
+            }
+            mutableState.update {
+                it.copy(
+                    listing = Listing.Search(savedSearch.query, baseFilters),
+                    filters = baseFilters,
+                    toolbarQuery = savedSearch.query,
+                    filterVersion = it.filterVersion + 1,
+                    savedSearches = it.savedSearches.map { (s, _) -> s to (s.id == savedSearch.id) }.toImmutableList(),
+                )
+            }
+        }
+    }
+
+    fun dismissDialog() {
+        setDialog(null)
     }
 
     private val hideInLibraryItems = sourcePreferences.hideInNovelLibraryItems().get()
@@ -425,6 +530,26 @@ class BrowseNovelSourceScreenModel(
             ?: runCatching { Injekt.get<GetNovel>() }.getOrNull()
     }
 
+    private fun resolveGetSavedSearchById(): GetSavedSearchById? {
+        return getSavedSearchByIdInteractor
+            ?: runCatching { Injekt.get<GetSavedSearchById>() }.getOrNull()
+    }
+
+    private fun resolveGetSavedSearchBySourceId(): GetSavedSearchBySourceId? {
+        return getSavedSearchBySourceIdInteractor
+            ?: runCatching { Injekt.get<GetSavedSearchBySourceId>() }.getOrNull()
+    }
+
+    private fun resolveInsertSavedSearch(): InsertSavedSearch? {
+        return insertSavedSearchInteractor
+            ?: runCatching { Injekt.get<InsertSavedSearch>() }.getOrNull()
+    }
+
+    private fun resolveDeleteSavedSearchById(): DeleteSavedSearchById? {
+        return deleteSavedSearchByIdInteractor
+            ?: runCatching { Injekt.get<DeleteSavedSearchById>() }.getOrNull()
+    }
+
     sealed class Listing(open val query: String?, open val filters: NovelFilterList) {
         data object Popular : Listing(
             query = GetRemoteNovel.QUERY_POPULAR,
@@ -453,6 +578,8 @@ class BrowseNovelSourceScreenModel(
 
     sealed interface Dialog {
         data object Filter : Dialog
+        data object CreateSavedSearch : Dialog
+        data class DeleteSavedSearch(val savedSearch: SavedSearch) : Dialog
         data class RemoveNovel(val novel: Novel) : Dialog
         data class AddDuplicateNovel(val novel: Novel, val duplicate: Novel) : Dialog
         data class Migrate(val newNovel: Novel, val oldNovel: Novel) : Dialog
@@ -469,8 +596,10 @@ class BrowseNovelSourceScreenModel(
         val toolbarQuery: String? = null,
         val dialog: Dialog? = null,
         val filterVersion: Int = 0,
+        val savedSearches: ImmutableList<Pair<SavedSearch, Boolean>> = persistentListOf(),
     ) {
         val isUserQuery get() = listing is Listing.Search && !listing.query.isNullOrEmpty()
+        val filterable get() = savedSearches.isNotEmpty()
     }
 
     private data class PagingRequest(

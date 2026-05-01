@@ -43,7 +43,7 @@ class SetMangaDefaultChapterFlagsTest {
             .setFlag(Manga.SHOW_ALL, Manga.CHAPTER_UNREAD_MASK)
             .setFlag(Manga.SHOW_ALL, Manga.CHAPTER_DOWNLOADED_MASK)
             .setFlag(Manga.SHOW_ALL, Manga.CHAPTER_BOOKMARKED_MASK)
-            .setFlag(Manga.CHAPTER_SORTING_NUMBER, Manga.CHAPTER_SORTING_MASK)
+            .setFlag(Manga.CHAPTER_SORTING_SOURCE, Manga.CHAPTER_SORTING_MASK)
             .setFlag(Manga.CHAPTER_SORT_ASC, Manga.CHAPTER_SORT_DIR_MASK)
             .setFlag(Manga.CHAPTER_DISPLAY_NAME, Manga.CHAPTER_DISPLAY_MASK)
     }

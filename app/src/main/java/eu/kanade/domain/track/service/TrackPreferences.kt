@@ -69,4 +69,9 @@ class TrackPreferences(
         "pref_auto_update_manga_on_mark_read",
         AutoTrackState.ALWAYS,
     )
+
+    fun autoSyncProgressFromTracker() = preferenceStore.getBoolean(
+        "pref_auto_sync_progress_from_tracker",
+        true,
+    )
 }

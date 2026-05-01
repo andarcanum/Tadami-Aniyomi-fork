@@ -559,6 +559,7 @@
     <string name="tracking_guide">Tracking guide</string>
     <string name="pref_auto_update_manga_sync">Update progress after reading</string>
     <string name="pref_auto_update_manga_on_mark_read">Update progress when marked as read</string>
+    <string name="pref_auto_sync_progress_from_tracker">Auto-sync progress from tracker</string>
     <string name="services">Trackers</string>
     <string name="tracking_info">One-way sync to update the chapter progress in external tracker services. Set up tracking for individual entries from their tracking button.</string>
     <string name="enhanced_services">Enhanced trackers</string>
@@ -1143,10 +1144,10 @@
     <string name="ai_translator_label_advantage">Advantage:</string>
     <string name="ai_translator_loading_models">Loading models…</string>
     <string name="ai_translator_action_refresh_list">Refresh list</string>
-    <string name="ai_translator_label_free_models">Free models</string>
-    <string name="ai_translator_select_free_model">Select a free model (:free)</string>
+    <string name="ai_translator_label_free_models">Models</string>
+    <string name="ai_translator_select_free_model">Select a model</string>
     <string name="ai_translator_select_model">Select a model</string>
-    <string name="ai_translator_enter_model_id">Model ID (only :free)</string>
+    <string name="ai_translator_enter_model_id">Model ID</string>
     <string name="ai_translator_checking">Checking…</string>
     <string name="ai_translator_updating">Updating…</string>
     <string name="ai_translator_password_label">Password for %s bridge</string>

@@ -1,0 +1,47 @@
+import kotlin.Boolean;
+
+CREATE TABLE feed_saved_search (
+    _id INTEGER NOT NULL PRIMARY KEY,
+    source INTEGER NOT NULL,
+    media_type INTEGER NOT NULL DEFAULT 0,
+    saved_search INTEGER,
+    global INTEGER AS Boolean NOT NULL DEFAULT 1,
+    feed_order INTEGER NOT NULL DEFAULT 0
+);
+
+selectAllGlobal:
+SELECT * FROM feed_saved_search WHERE global = 1 AND media_type = :sourceType ORDER BY feed_order;
+
+selectAll:
+SELECT * FROM feed_saved_search ORDER BY feed_order;
+
+countGlobal:
+SELECT count(*) FROM feed_saved_search WHERE global = 1 AND media_type = :sourceType;
+
+selectBySource:
+SELECT * FROM feed_saved_search WHERE source = :sourceId AND media_type = :sourceType AND global = 0 ORDER BY feed_order;
+
+insert:
+INSERT INTO feed_saved_search (source, media_type, saved_search, global, feed_order)
+ VALUES (:sourceId, :sourceType, :savedSearch, :global, (SELECT COALESCE(MAX(feed_order), 0) + 1 FROM feed_saved_search WHERE media_type = :sourceType));
+
+deleteById:
+DELETE FROM feed_saved_search WHERE _id = :id;
+
+selectAllFeedWithSavedSearch:
+SELECT f.source, f.media_type, f.global, f.feed_order, f.saved_search, s.name, s.query, s.filters_json
+ FROM feed_saved_search AS f
+ LEFT JOIN saved_search AS s ON s._id = f.saved_search AND s.media_type = f.media_type
+ ORDER BY f.media_type, f.feed_order;
+
+update:
+UPDATE feed_saved_search
+SET source = coalesce(:source, source),
+    media_type = coalesce(:media_type, media_type),
+    saved_search = coalesce(:saved_search, saved_search),
+    global = coalesce(:global, global),
+    feed_order = coalesce(:feed_order, feed_order)
+WHERE _id = :id;
+
+selectLastInsertedRowId:
+SELECT last_insert_rowid();

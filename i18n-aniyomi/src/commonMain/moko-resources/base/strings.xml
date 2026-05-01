@@ -77,10 +77,10 @@
     <string name="label_player_settings">Player settings</string>
     <string name="label_player">Player</string>
     <string name="action_search_player_settings">Search player settings</string>
-    <string name="pref_player_settings_summary">Internal player, gestures, decoders, subtitles</string>
+    <string name="pref_player_settings_summary">Internal player, gestures, decoders, subtitles, layout</string>
     <!-- Player settings - internal player -->
     <string name="pref_player_internal">Internal player</string>
-    <string name="pref_player_internal_summary">Progress, controls, orientation</string>
+    <string name="pref_player_internal_summary">Progress, controls, orientation, layout</string>
     <string name="pref_progress_mark_as_seen">At what point to mark the episode as seen</string>
     <string name="pref_progress_70" translatable="false">70%</string>
     <string name="pref_progress_75" translatable="false">75%</string>
@@ -117,6 +117,30 @@
     <string name="pref_player_time_to_disappear">Hide player controls time</string>
     <string name="pref_player_time_to_disappear_summary">%1$s ms</string>
     <string name="pref_panel_opacity">Panel opacity</string>
+    <string name="pref_category_player_chrome">Optional chrome</string>
+    <string name="pref_show_custom_buttons">Show custom buttons</string>
+    <string name="pref_show_custom_buttons_summary">Display custom action buttons in the player</string>
+    <!-- Player settings - layout -->
+    <string name="pref_player_layout">Layout</string>
+    <string name="pref_player_layout_summary">Arrange player controls by orientation</string>
+    <string name="pref_player_layout_editor">Edit player layout</string>
+    <string name="pref_player_layout_editor_summary">Configure portrait and landscape control placement</string>
+    <string name="pref_player_layout_preview">Current layout</string>
+    <string name="pref_player_layout_slots">Control slots</string>
+    <string name="pref_player_layout_portrait">Portrait</string>
+    <string name="pref_player_layout_portrait_summary">Configure the player layout in portrait mode</string>
+    <string name="pref_player_layout_landscape">Landscape</string>
+    <string name="pref_player_layout_landscape_summary">Configure the player layout in landscape mode</string>
+    <string name="pref_player_layout_region_bottom_left">Bottom left</string>
+    <string name="pref_player_layout_region_bottom_right">Bottom right</string>
+    <string name="pref_player_layout_region_hidden">Hidden</string>
+    <string name="pref_player_layout_slot_playback_speed">Playback speed</string>
+    <string name="pref_player_layout_slot_lock_controls">Lock controls</string>
+    <string name="pref_player_layout_slot_rotate_screen">Rotate screen</string>
+    <string name="pref_player_layout_slot_skip_intro">Skip intro</string>
+    <string name="pref_player_layout_slot_custom_button">Custom button</string>
+    <string name="pref_player_layout_slot_picture_in_picture">Picture-in-Picture</string>
+    <string name="pref_player_layout_slot_aspect_ratio">Aspect ratio</string>
     <string name="pref_category_intro_skip">Intro skip</string>
     <string name="pref_enable_intro_skip">Enable intro skip</string>
     <string name="pref_enable_auto_skip_ani_skip">Enable auto skip</string>
@@ -195,6 +219,8 @@
     <string name="pref_player_subtitle_lang">Preferred languages</string>
     <string name="pref_player_subtitle_lang_info">Subtitle language(s) to be selected by default on a video with multiple subtitles, Two- or three-letter languages codes work. Multiple values can be delimited by a comma.</string>
     <string name="pref_player_subtitle_invalid_lang">Invalid code: \"%s\"</string>
+    <string name="pref_player_subtitle_exact_match">Prefer exact subtitle match</string>
+    <string name="pref_player_subtitle_exact_match_summary">Pick the subtitle whose language label matches the preferred locale exactly before looser matches</string>
     <string name="pref_player_subtitle_whitelist">Whitelist</string>
     <string name="pref_player_subtitle_whitelist_info">Whitelist for subtitles. If a whitelist is defined, the first subtitle that contains a whitelisted word will be used. Multiple values can be delimited by a comma.</string>
     <string name="pref_player_subtitle_blacklist">Blacklist</string>
@@ -574,8 +600,10 @@
     <string name="novel_reader_auto_scroll">Auto-scroll</string>
     <string name="novel_reader_auto_scroll_speed">Auto-scroll speed</string>
     <string name="reader_auto_scroll_speed_value">%1$s: %2$d</string>
+    <string name="reader_auto_scroll_page_time">~%1$d sec/page</string>
     <string name="novel_reader_auto_scroll_interval">Auto-scroll interval (sec)</string>
     <string name="novel_reader_auto_scroll_offset">Auto-scroll offset (px)</string>
+    <string name="reader_auto_scroll_floating_button">Show floating control button</string>
     <string name="novel_reader_prefetch_next_chapter">Prefetch next chapter</string>
     <string name="novel_reader_prefetch_next_chapter_summary">Silently prefetch next chapter after reaching 50% progress</string>
     <string name="novel_reader_cache_read_chapters">Cache read chapters</string>
@@ -712,13 +740,14 @@
     <string name="novel_reader_translation_provider_deepseek">DeepSeek</string>
     <string name="novel_reader_translation_provider_mistral">Mistral</string>
     <string name="novel_reader_translation_provider_nvidia">NVIDIA</string>
+    <string name="novel_reader_translation_provider_ollama_cloud">Ollama Cloud</string>
     <string name="novel_reader_translation_auto_english_title">Auto-start translation for English</string>
     <string name="novel_reader_translation_auto_english_summary">Automatically start translation when source language is English</string>
     <string name="novel_reader_translation_prefetch_next_title">Pre-translate next chapter (30%)</string>
     <string name="novel_reader_translation_prefetch_next_summary">Start next chapter translation in background after 30% reading progress</string>
     <string name="novel_reader_openrouter_base_url">OpenRouter Base URL</string>
     <string name="novel_reader_openrouter_api_key">OpenRouter API key</string>
-    <string name="novel_reader_openrouter_model">OpenRouter model (:free only)</string>
+    <string name="novel_reader_openrouter_model">OpenRouter model</string>
     <string name="novel_reader_deepseek_base_url">DeepSeek Base URL</string>
     <string name="novel_reader_deepseek_api_key">DeepSeek API key</string>
     <string name="novel_reader_deepseek_model">DeepSeek model</string>
@@ -730,6 +759,11 @@
     <string name="novel_reader_nvidia_base_url">NVIDIA base URL</string>
     <string name="novel_reader_nvidia_api_key">NVIDIA API key</string>
     <string name="novel_reader_nvidia_model">NVIDIA model</string>
+    <string name="novel_reader_ollama_cloud_section_title">Ollama Cloud</string>
+    <string name="novel_reader_ollama_cloud_section_summary">Cloud-hosted Ollama models through the native Ollama API.</string>
+    <string name="novel_reader_ollama_cloud_base_url">Ollama Cloud base URL</string>
+    <string name="novel_reader_ollama_cloud_api_key">Ollama Cloud API key</string>
+    <string name="novel_reader_ollama_cloud_model">Ollama Cloud model</string>
     <string name="novel_reader_gemini_section_title">AI Translation</string>
     <string name="novel_reader_gemini_section_summary">Chunk translation settings used by the AI button in reader.</string>
     <string name="novel_reader_gemini_api_key">Gemini API key</string>
@@ -794,19 +828,21 @@
     <string name="novel_reader_ai_translator_provider_openrouter_description">Wide model catalog and flexible routing through one endpoint.</string>
     <string name="novel_reader_ai_translator_provider_deepseek_description">Strong long-form reasoning with its own hosted models.</string>
     <string name="novel_reader_ai_translator_provider_mistral_description">Fast European-hosted models with a leaner setup.</string>
+    <string name="novel_reader_ai_translator_provider_ollama_cloud_description">Ollama-hosted cloud models through the native /api/chat endpoint.</string>
     <string name="novel_reader_ai_translator_model_summary">Choose the model that will translate this chapter. Faster models respond sooner, larger models usually keep tone better.</string>
     <string name="novel_reader_ai_translator_provider_api_ready">API added</string>
     <string name="novel_reader_ai_translator_provider_api_missing">API not added</string>
     <string name="novel_reader_ai_translator_current_model">Current model</string>
-    <string name="novel_reader_ai_translator_openrouter_models_title">OpenRouter free models</string>
-    <string name="novel_reader_ai_translator_openrouter_models_count">Free models (%d)</string>
-    <string name="novel_reader_ai_translator_choose_free_model">Choose a free model (:free)</string>
+    <string name="novel_reader_ai_translator_openrouter_models_title">OpenRouter models</string>
+    <string name="novel_reader_ai_translator_openrouter_models_count">Models (%d)</string>
+    <string name="novel_reader_ai_translator_choose_free_model">Choose a model</string>
     <string name="novel_reader_ai_translator_loading_models">Loading models...</string>
     <string name="novel_reader_ai_translator_refresh_list">Refresh list</string>
-    <string name="novel_reader_ai_translator_model_id_free_only">Model ID (free only)</string>
+    <string name="novel_reader_ai_translator_model_id_free_only">Model ID</string>
     <string name="novel_reader_ai_translator_model_id">Model ID</string>
     <string name="novel_reader_ai_translator_deepseek_models_title">DeepSeek models</string>
     <string name="novel_reader_ai_translator_mistral_models_title">Mistral models</string>
+    <string name="novel_reader_ai_translator_ollama_cloud_models_title">Ollama Cloud models</string>
     <string name="novel_reader_ai_translator_models_count">Models (%d)</string>
     <string name="novel_reader_ai_translator_choose_model">Choose a model</string>
     <string name="novel_reader_ai_translator_style_title">Translation style</string>
@@ -842,7 +878,18 @@
     <string name="novel_reader_ai_translator_api_test_loading">Checking API...</string>
     <string name="novel_reader_ai_translator_api_test_success">API OK</string>
     <string name="novel_reader_ai_translator_api_test_error">API error</string>
+    <string name="novel_reader_ai_translator_api_invalid_config">Fill Base URL, API key and Model</string>
+    <string name="novel_reader_ai_translator_api_invalid_openrouter_config">Fill Base URL, API key and Model</string>
+    <string name="novel_reader_ai_translator_api_connection_ok">Connection OK</string>
+    <string name="novel_reader_ai_translator_api_empty_response">Empty response</string>
     <string name="novel_reader_ai_translator_save">Save</string>
+    <string name="novel_reader_ai_translator_get_api_key">Get API key</string>
+    <string name="novel_reader_ai_translator_api_url_gemini">https://aistudio.google.com/app/apikey</string>
+    <string name="novel_reader_ai_translator_api_url_openrouter">https://openrouter.ai/keys</string>
+    <string name="novel_reader_ai_translator_api_url_deepseek">https://platform.deepseek.com/api_keys</string>
+    <string name="novel_reader_ai_translator_api_url_mistral">https://console.mistral.ai/api-keys/</string>
+    <string name="novel_reader_ai_translator_api_url_nvidia">https://build.nvidia.com/</string>
+    <string name="novel_reader_ai_translator_api_url_ollama_cloud">https://ollama.com/</string>
     <string name="novel_reader_ai_translator_relaxed_state">Relaxed: %s</string>
     <string name="novel_reader_ai_translator_testing_connection">Checking...</string>
     <string name="novel_reader_ai_translator_test_connection">Test connection</string>
@@ -857,6 +904,7 @@
     <string name="novel_reader_ai_translator_generation_advantage_prefix">Advantage: %s</string>
     <string name="novel_reader_ai_translator_deepseek_reasoning_hint">When thinking mode is enabled, DeepSeek ignores temperature, top_p, presence_penalty, and frequency_penalty.</string>
     <string name="novel_reader_ai_translator_deepseek_hint">For DeepSeek, Temperature should stay in 1.3-1.5 and TopP in 0.9-0.95. TopK is not used.</string>
+    <string name="novel_reader_ai_translator_mistral_nvidia_batch_hint">For Mistral and NVIDIA, Batch size 20 is recommended. Increasing it can reduce translation quality and stability.</string>
     <string name="novel_reader_ai_translator_prompt_mode_summary">Prompt mode changes how strict the system prompt is before your style and modifiers are applied.</string>
     <string name="novel_reader_ai_translator_logs_title">Logs</string>
     <string name="novel_reader_ai_translator_logs_summary">Request and model response diagnostics</string>
@@ -1960,6 +2008,7 @@
     <string name="novel_reader_google_translate_translated">Translation</string>
     <string name="novel_reader_google_translate_clear">Clear Translation</string>
     <string name="novel_reader_google_translate_progress">Translating: %1$d%%</string>
+    <string name="novel_reader_google_translate_preparing">Preparing translation…</string>
     <string name="novel_reader_google_translate_backend_simple">Google Translate online</string>
     <string name="novel_reader_google_translate_show_translation">Show Translation</string>
     <string name="novel_reader_google_translate_hide_translation">Hide Translation</string>
@@ -1967,4 +2016,24 @@
     <string name="novel_reader_google_translate_log">Log:</string>
     <string name="novel_reader_google_translate_rate_limited">Rate limited. Tap Resume to retry.</string>
     <string name="novel_reader_google_translate_error">Translation error: %1$s</string>
+
+    <!-- Feed -->
+    <string name="feed">Feed</string>
+    <string name="feed_add">Add source to feed</string>
+    <string name="feed_empty">Feed sources not configured. Tap + to add a source that supports Latest.</string>
+    <string name="feed_delete_source_title">Remove source from feed?</string>
+    <string name="feed_delete_source_message">This source will be removed from your feed.</string>
+    <string name="pref_feed_hide_tab">Hide feed tab</string>
+    <string name="pref_feed_tab_in_front">Show feed tab first</string>
+    <string name="pref_feed_hide_in_library_items">Hide feed entries already in library</string>
+
+    <!-- Saved Search / Feed v3 -->
+    <string name="save_search">Save search</string>
+    <string name="saved_search">Saved search</string>
+    <string name="saved_search_name">Search name</string>
+    <string name="saved_search_delete">Delete saved search?</string>
+    <string name="saved_search_delete_message">This saved search will be permanently deleted.</string>
+    <string name="feed_add_search_title">Select feed type</string>
+    <string name="feed_latest">Latest</string>
+    <string name="feed_popular">Popular</string>
 </resources>

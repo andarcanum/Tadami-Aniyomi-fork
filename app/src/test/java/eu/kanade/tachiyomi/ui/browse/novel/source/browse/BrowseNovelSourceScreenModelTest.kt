@@ -11,8 +11,10 @@ import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
+import eu.kanade.tachiyomi.ui.browse.search.SavedSearchFilterSerializer
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +35,8 @@ import tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.domain.source.model.SavedSearch
+import tachiyomi.domain.source.model.SourceType
 import tachiyomi.domain.source.novel.interactor.GetRemoteNovel
 import tachiyomi.domain.source.novel.repository.NovelSourceRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
@@ -666,6 +670,74 @@ class BrowseNovelSourceScreenModelTest {
         }
     }
 
+    @Test
+    fun `SavedSearch filterable is false when there are no saved searches`() {
+        val state = BrowseNovelSourceScreenModel.State(
+            listing = BrowseNovelSourceScreenModel.Listing.Popular,
+        )
+
+        state.filterable shouldBe false
+    }
+
+    @Test
+    fun `SavedSearch filterable is true when saved searches exist`() {
+        val state = BrowseNovelSourceScreenModel.State(
+            listing = BrowseNovelSourceScreenModel.Listing.Popular,
+            savedSearches = persistentListOf(
+                SavedSearch(
+                    id = 1L,
+                    source = 42L,
+                    sourceType = SourceType.NOVEL,
+                    name = "saved",
+                    query = "q",
+                    filtersJson = null,
+                ) to false,
+            ),
+        )
+
+        state.filterable shouldBe true
+    }
+
+    @Test
+    fun `novel saved search filters roundtrip`() {
+        val original = NovelFilterList(
+            TestText("Query", "wolf"),
+            TestSelect("Sort", 1),
+            TestPicker("Edition", 0),
+            TestCheckBox("Only Free", true),
+            TestSwitch("Has Audio", true),
+            TestTriState("Dub", NovelFilter.TriState.STATE_INCLUDE),
+            TestXCheckBox("Downloaded", NovelFilter.XCheckBox.STATE_EXCLUDE),
+            TestGroup("Group", listOf(TestCheckBox("Nested", true))),
+            TestSort("Order", NovelFilter.Sort.Selection(1, true)),
+        )
+
+        val json = SavedSearchFilterSerializer.serialize(original)
+        val restored = NovelFilterList(
+            TestText("Query"),
+            TestSelect("Sort"),
+            TestPicker("Edition"),
+            TestCheckBox("Only Free"),
+            TestSwitch("Has Audio"),
+            TestTriState("Dub"),
+            TestXCheckBox("Downloaded"),
+            TestGroup("Group", listOf(TestCheckBox("Nested"))),
+            TestSort("Order"),
+        )
+
+        SavedSearchFilterSerializer.deserialize(json, restored)
+
+        restored[0].state shouldBe "wolf"
+        restored[1].state shouldBe 1
+        restored[2].state shouldBe 0
+        restored[3].state shouldBe true
+        restored[4].state shouldBe true
+        restored[5].state shouldBe NovelFilter.TriState.STATE_INCLUDE
+        restored[6].state shouldBe NovelFilter.XCheckBox.STATE_EXCLUDE
+        (restored[7] as TestGroup).state.first().state shouldBe true
+        (restored[8] as TestSort).state shouldBe NovelFilter.Sort.Selection(1, true)
+    }
+
     @Suppress("OVERRIDE_DEPRECATION")
     private class FakeConfigurableNovelCatalogueSource(
         override val id: Long,
@@ -692,6 +764,51 @@ class BrowseNovelSourceScreenModelTest {
             // No-op for test
         }
     }
+
+    private class TestSelect(
+        name: String,
+        state: Int = 0,
+    ) : NovelFilter.Select<String>(name, arrayOf("A", "B"), state)
+
+    private class TestPicker(
+        name: String,
+        state: Int = 0,
+    ) : NovelFilter.Picker<String>(name, arrayOf("A", "B"), state)
+
+    private class TestText(
+        name: String,
+        state: String = "",
+    ) : NovelFilter.Text(name, state)
+
+    private class TestCheckBox(
+        name: String,
+        state: Boolean = false,
+    ) : NovelFilter.CheckBox(name, state)
+
+    private class TestSwitch(
+        name: String,
+        state: Boolean = false,
+    ) : NovelFilter.Switch(name, state)
+
+    private class TestTriState(
+        name: String,
+        state: Int = NovelFilter.TriState.STATE_IGNORE,
+    ) : NovelFilter.TriState(name, state)
+
+    private class TestXCheckBox(
+        name: String,
+        state: Int = NovelFilter.XCheckBox.STATE_IGNORE,
+    ) : NovelFilter.XCheckBox(name, state)
+
+    private class TestGroup(
+        name: String,
+        state: List<NovelFilter<*>>,
+    ) : NovelFilter.Group<NovelFilter<*>>(name, state)
+
+    private class TestSort(
+        name: String,
+        state: NovelFilter.Sort.Selection? = null,
+    ) : NovelFilter.Sort(name, arrayOf("A", "B"), state)
 
     @Suppress("OVERRIDE_DEPRECATION")
     private class FakeNovelCatalogueSourceWithDetails(

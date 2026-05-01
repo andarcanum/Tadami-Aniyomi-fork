@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.player
 
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.custombuttons.model.CustomButton
 
 class PlaybackPlayerVisibilityTest {
 
@@ -31,5 +32,20 @@ class PlaybackPlayerVisibilityTest {
         )
 
         result shouldBe true
+    }
+
+    @Test
+    fun `optional player chrome hides custom buttons when disabled`() {
+        val chromeVisibilityClass = Class.forName("eu.kanade.tachiyomi.ui.player.PlayerChromeVisibilityKt")
+
+        val customButton = chromeVisibilityClass
+            .getMethod(
+                "resolveVisibleCustomButton",
+                Boolean::class.javaPrimitiveType,
+                CustomButton::class.java,
+            )
+            .invoke(null, false, null)
+
+        customButton shouldBe null
     }
 }

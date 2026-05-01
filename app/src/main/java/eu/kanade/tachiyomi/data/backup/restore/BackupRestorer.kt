@@ -19,6 +19,7 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeExtensionRepoResto
 import eu.kanade.tachiyomi.data.backup.restore.restorers.AnimeRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.CustomButtonRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ExtensionsRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.FeedRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaCategoriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaExtensionRepoRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.MangaRestorer
@@ -60,6 +61,7 @@ class BackupRestorer(
     private val novelRestorer: NovelRestorer = NovelRestorer(),
     private val mangaSeriesRestorer: MangaSeriesRestorer = MangaSeriesRestorer(),
     private val novelSeriesRestorer: NovelSeriesRestorer = NovelSeriesRestorer(),
+    private val feedRestorer: FeedRestorer = FeedRestorer(),
     private val extensionsRestorer: ExtensionsRestorer = ExtensionsRestorer(context),
     private val achievementRestorer: AchievementRestorer = AchievementRestorer(),
 ) {
@@ -207,6 +209,11 @@ class BackupRestorer(
             }
             if (options.extensions) {
                 restoreExtensions(backup.backupExtensions)
+            }
+
+            // Restore feeds (always if present in backup)
+            if (backup.backupFeeds.isNotEmpty()) {
+                feedRestorer.restoreFeeds(backup.backupFeeds)
             }
 
             // Restore achievements if option enabled

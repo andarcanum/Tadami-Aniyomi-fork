@@ -70,6 +70,7 @@ import eu.kanade.domain.track.manga.interactor.TrackChapter
 import eu.kanade.domain.track.novel.interactor.RefreshNovelTracks
 import eu.kanade.domain.track.novel.interactor.SyncNovelChapterProgressWithTrack
 import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
+import eu.kanade.domain.track.service.ResolveTrackProgressSync
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.tachiyomi.data.updater.AppUpdateFileManager
@@ -469,7 +470,7 @@ class DomainModule : InjektModule {
         addFactory { GetTracksPerAnime(get()) }
         addFactory { GetAnimeTracks(get()) }
         addFactory { InsertAnimeTrack(get()) }
-        addFactory { SyncEpisodeProgressWithTrack(get(), get(), get()) }
+        addFactory { SyncEpisodeProgressWithTrack(get(), get(), get(), get(), get()) }
 
         addSingletonFactory<MangaTrackRepository> { MangaTrackRepositoryImpl(get()) }
         addFactory { TrackChapter(get(), get(), get(), get()) }
@@ -479,7 +480,7 @@ class DomainModule : InjektModule {
         addFactory { GetTracksPerManga(get()) }
         addFactory { GetMangaTracks(get()) }
         addFactory { InsertMangaTrack(get()) }
-        addFactory { SyncChapterProgressWithTrack(get(), get(), get()) }
+        addFactory { SyncChapterProgressWithTrack(get(), get(), get(), get(), get()) }
 
         addSingletonFactory<NovelTrackRepository> { NovelTrackRepositoryImpl(get()) }
         addFactory { DeleteNovelTrack(get()) }
@@ -487,7 +488,7 @@ class DomainModule : InjektModule {
         addFactory { GetNovelTracks(get()) }
         addFactory { InsertNovelTrack(get()) }
         addFactory { TrackNovelChapter(get(), get(), get(), get()) }
-        addFactory { SyncNovelChapterProgressWithTrack(get(), get(), get()) }
+        addFactory { SyncNovelChapterProgressWithTrack(get(), get(), get(), get(), get()) }
         addFactory { RefreshNovelTracks(get(), get(), get(), get()) }
 
         addSingletonFactory<EpisodeRepository> { EpisodeRepositoryImpl(get()) }
@@ -648,6 +649,7 @@ class DomainModule : InjektModule {
         addFactory { UiPreferences(get()) }
         addFactory { UserProfilePreferences(get()) }
         addFactory { SourcePreferences(get()) }
+        addFactory { ResolveTrackProgressSync() }
 
         addFactory { TrackSelect(get(), get()) }
 

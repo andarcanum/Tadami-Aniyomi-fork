@@ -22,6 +22,7 @@ import eu.kanade.domain.items.novelchapter.interactor.GetAvailableNovelScanlator
 import eu.kanade.domain.items.novelchapter.interactor.GetNovelScanlatorChapterCounts
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.track.model.AutoTrackState
+import eu.kanade.domain.track.novel.interactor.RefreshNovelTracks
 import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
 import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.presentation.util.TargetChapterCalculator
@@ -173,6 +174,7 @@ class NovelScreenModel(
     private val novelRatingFetcher: NovelRatingFetcher = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
     private val getTracks: GetNovelTracks = Injekt.get(),
+    private val refreshNovelTracks: RefreshNovelTracks = Injekt.get(),
     private val trackNovelChapter: TrackNovelChapter = Injekt.get(),
     private val trackPreferences: TrackPreferences = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
@@ -569,6 +571,14 @@ class NovelScreenModel(
                 )
             }
             observeTrackers()
+            screenModelScope.launchIO {
+                refreshNovelTracks.await(novelId)
+                    .forEach { (service, error) ->
+                        logcat(LogPriority.WARN, error) {
+                            "Failed to refresh novel track data id=$novelId service=${service?.name}"
+                        }
+                    }
+            }
             syncDownloadedState()
 
             if ((shouldAutoRefreshNovel || shouldAutoRefreshChapters) && screenModelScope.isActive) {

@@ -1521,6 +1521,12 @@ class NovelJsModuleRegistry(
             var api = {
               length: handles.length,
               _handles: handles,
+              get attribs() {
+                return handles.length ? JSON.parse(__native.domAttrs(handles[0])) : {};
+              },
+              get tagName() {
+                return handles.length ? __native.domTagName(handles[0]) : '';
+              },
               toArray: function() {
                 var arr = [];
                 for (var i = 0; i < handles.length; i++) {
@@ -1705,7 +1711,8 @@ class NovelJsModuleRegistry(
                 if (typeof selector === "function") {
                   var filtered = [];
                   for (var i = 0; i < handles.length; i++) {
-                    if (!selector.call(null, i, wrapHandles([handles[i]]))) {
+                    var wrapped = wrapHandles([handles[i]]);
+                    if (!selector.call(wrapped, i, wrapped)) {
                       filtered.push(handles[i]);
                     }
                   }
@@ -1721,7 +1728,8 @@ class NovelJsModuleRegistry(
                 if (typeof predicate === "function") {
                   var filtered = [];
                   for (var i = 0; i < handles.length; i++) {
-                    if (predicate.call(null, i, wrapHandles([handles[i]]))) {
+                    var wrapped = wrapHandles([handles[i]]);
+                    if (predicate.call(wrapped, i, wrapped)) {
                       filtered.push(handles[i]);
                     }
                   }
@@ -1738,7 +1746,8 @@ class NovelJsModuleRegistry(
               },
               each: function(fn) {
                 for (var i = 0; i < handles.length; i++) {
-                  var ret = fn.call(null, i, wrapHandles([handles[i]]));
+                  var wrapped = wrapHandles([handles[i]]);
+                  var ret = fn.call(wrapped, i, wrapped);
                   if (ret === false) break;
                 }
                 return api;
@@ -1746,7 +1755,8 @@ class NovelJsModuleRegistry(
               map: function(fn) {
                 var mapped = [];
                 for (var i = 0; i < handles.length; i++) {
-                  mapped.push(fn.call(null, i, wrapHandles([handles[i]])));
+                  var wrapped = wrapHandles([handles[i]]);
+                  mapped.push(fn.call(wrapped, i, wrapped));
                 }
                 return {
                   get: function(index) {
@@ -1818,6 +1828,24 @@ class NovelJsModuleRegistry(
                 return wrapHandles([]);
               }
             };
+            // Array-like index access (e.g., children()[0], siblings()[1])
+            // Cheerio plugins expect [0] to return a DOM node with .attribs
+            for (var i = 0; i < handles.length; i++) {
+              (function(idx) {
+                Object.defineProperty(api, String(idx), {
+                  get: function() {
+                    if (!handles[idx] && handles[idx] !== 0) return undefined;
+                    return {
+                      tagName: __native.domTagName(handles[idx]),
+                      name: __native.domTagName(handles[idx]),
+                      attribs: JSON.parse(__native.domAttrs(handles[idx]))
+                    };
+                  },
+                  enumerable: true,
+                  configurable: true
+                });
+              })(i);
+            }
             return api;
           }
 

@@ -93,6 +93,9 @@ class ReaderPreferences(
 
     fun autoScrollSpeed() = preferenceStore.getInt("pref_auto_scroll_speed", 50)
 
+    fun showAutoScrollFloatingButton() =
+        preferenceStore.getBoolean("pref_show_auto_scroll_floating_button", true)
+
     fun saveLongPagePosition() = preferenceStore.getBoolean("pref_save_long_page_position", true)
 
     fun pageActionButtonColor() = preferenceStore.getInt("reader_page_action_button_color", 0)

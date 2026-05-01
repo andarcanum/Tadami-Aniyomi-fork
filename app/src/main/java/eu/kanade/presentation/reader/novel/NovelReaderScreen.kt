@@ -25,6 +25,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,6 +52,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -64,6 +66,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -86,6 +89,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -117,6 +121,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -133,6 +138,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.res.imageResource
@@ -158,6 +164,7 @@ import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.reader.DisplayRefreshHost
 import eu.kanade.presentation.reader.ReaderChapterListItem
 import eu.kanade.presentation.reader.ReaderChapterListSheet
+import eu.kanade.presentation.reader.components.AutoScrollActionFab
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
@@ -183,6 +190,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OLLAMA_CLOUD_FREE_MODELS
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveTranslationReasoningOptions
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigationAdapter
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NativeScrollTtsNavigator
@@ -268,6 +276,7 @@ private fun buildSourceIndexedPageReaderTextList(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NovelReaderScreen(
     state: NovelReaderScreenModel.State.Success,
@@ -279,7 +288,7 @@ fun NovelReaderScreen(
     onToggleGeminiTranslationVisibility: () -> Unit = {},
     onClearGeminiTranslation: () -> Unit = {},
     onClearAllGeminiTranslationCache: () -> Unit = {},
-    onAddGeminiLog: (String) -> Unit = {},
+    onAddAiTranslationLog: (String) -> Unit = {},
     onClearGeminiLogs: () -> Unit = {},
     onSetGeminiApiKey: (String) -> Unit = {},
     onSetGeminiModel: (String) -> Unit = {},
@@ -323,6 +332,11 @@ fun NovelReaderScreen(
     onSetNvidiaModel: (String) -> Unit = {},
     onRefreshNvidiaModels: () -> Unit = {},
     onTestNvidiaConnection: () -> Unit = {},
+    onSetOllamaCloudBaseUrl: (String) -> Unit = {},
+    onSetOllamaCloudApiKey: (String) -> Unit = {},
+    onSetOllamaCloudModel: (String) -> Unit = {},
+    onRefreshOllamaCloudModels: () -> Unit = {},
+    onTestOllamaCloudConnection: () -> Unit = {},
     onStartGoogleTranslation: () -> Unit = {},
     onStopGoogleTranslation: () -> Unit = {},
     onResumeGoogleTranslation: () -> Unit = {},
@@ -423,6 +437,9 @@ fun NovelReaderScreen(
         mutableIntStateOf(intervalToAutoScrollSpeed(state.readerSettings.autoScrollInterval))
     }
     var autoScrollExpanded by remember(state.chapter.id) { mutableStateOf(false) }
+    var autoScrollWasUsed by remember(state.chapter.id) { mutableStateOf(false) }
+    var touchCooldownUntilNanos by remember(state.chapter.id) { mutableLongStateOf(0L) }
+    var speedFactor by remember(state.chapter.id) { mutableFloatStateOf(1f) }
     var showGeminiDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var showGoogleDialog by remember(state.chapter.id) { mutableStateOf(false) }
     var translationSwitchRequest by remember(state.chapter.id) {
@@ -1661,6 +1678,22 @@ fun NovelReaderScreen(
                 delay(120)
                 continue
             }
+
+            // Touch cooldown + smooth acceleration/deceleration
+            val isInCooldown = System.nanoTime() < touchCooldownUntilNanos
+            when {
+                isInCooldown && speedFactor > 0f -> {
+                    speedFactor = (speedFactor - AUTO_SCROLL_SPEED_FACTOR_DELTA).coerceAtLeast(0f)
+                    if (speedFactor <= 0f) {
+                        delay(100)
+                        continue
+                    }
+                }
+                !isInCooldown && speedFactor < 1f -> {
+                    speedFactor = (speedFactor + AUTO_SCROLL_SPEED_FACTOR_DELTA).coerceAtMost(1f)
+                }
+            }
+
             if (showWebView) {
                 val webView = webViewInstance
                 if (webView == null) {
@@ -1677,7 +1710,7 @@ fun NovelReaderScreen(
                 val frameStepPx = autoScrollFrameStepPx(
                     speed = autoScrollSpeed,
                     frameDeltaNanos = frameDeltaNanos,
-                )
+                ) * speedFactor
                 val resolvedStep = resolveAutoScrollStep(frameStepPx, stepRemainderPx)
                 val stepPx = resolvedStep.stepPx
                 stepRemainderPx = resolvedStep.remainderPx
@@ -1718,7 +1751,7 @@ fun NovelReaderScreen(
                 val frameStepPx = autoScrollFrameStepPx(
                     speed = autoScrollSpeed,
                     frameDeltaNanos = frameDeltaNanos,
-                )
+                ) * speedFactor
                 val resolvedStep = resolveAutoScrollStep(frameStepPx, stepRemainderPx)
                 val stepPx = resolvedStep.stepPx
                 stepRemainderPx = resolvedStep.remainderPx
@@ -1739,7 +1772,13 @@ fun NovelReaderScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(textBackground)
-            .onSizeChanged { pageViewportSize = it },
+            .onSizeChanged { pageViewportSize = it }
+            .pointerInput(autoScrollEnabled) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    touchCooldownUntilNanos = System.nanoTime() + AUTO_SCROLL_COOLDOWN_MS * 1_000_000L
+                }
+            },
     ) {
         if (
             shouldShowNovelAtmosphereBackground(
@@ -2595,9 +2634,9 @@ fun NovelReaderScreen(
                                         val gestureDurationMillis = (event.eventTime - touchStartEventTime)
                                             .coerceAtLeast(0L)
                                         val isNearChapterEnd =
-                                            wasNearChapterEndAtDown || !webView.canScrollVertically(1)
+                                            wasNearChapterEndAtDown && !webView.canScrollVertically(1)
                                         val isNearChapterStart =
-                                            wasNearChapterStartAtDown || !webView.canScrollVertically(-1)
+                                            wasNearChapterStartAtDown && !webView.canScrollVertically(-1)
 
                                         when (
                                             resolveWebViewVerticalChapterSwipeAction(
@@ -3206,8 +3245,14 @@ fun NovelReaderScreen(
                                 if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
                                     pageTurnRequestedPage = target
                                 } else {
+                                    val virtualTarget = resolveComposePagerVirtualPageIndex(
+                                        actualPageIndex = target,
+                                        hasPreviousChapter = composePagerHasPreviousChapter,
+                                    )
                                     coroutineScope.launch {
-                                        pagerState.scrollToPage(target)
+                                        pagerState.scrollToPage(
+                                            virtualTarget.coerceIn(0, (pagerState.pageCount - 1).coerceAtLeast(0)),
+                                        )
                                     }
                                 }
                             } else {
@@ -3295,57 +3340,142 @@ fun NovelReaderScreen(
                     },
                 )
 
+                if (autoScrollExpanded) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                    )
+                }
                 AnimatedVisibility(visible = autoScrollExpanded) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = MaterialTheme.padding.medium),
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.medium),
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    val nextState = resolveAutoScrollUiStateOnToggle(
-                                        currentEnabled = autoScrollEnabled,
-                                        showReaderUi = showReaderUi,
-                                        autoScrollExpanded = autoScrollExpanded,
-                                    )
-                                    autoScrollEnabled = nextState.autoScrollEnabled
-                                    onSetShowReaderUi(nextState.showReaderUi)
-                                    autoScrollExpanded = nextState.autoScrollExpanded
-                                },
-                                modifier = Modifier.padding(top = 12.dp),
+                        // Speed section
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                             ) {
-                                Icon(
-                                    imageVector = if (autoScrollEnabled) {
-                                        Icons.Outlined.Pause
-                                    } else {
-                                        Icons.Outlined.PlayArrow
-                                    },
-                                    contentDescription = null,
+                                Text(
+                                    text = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                )
+                                Text(
+                                    text = "$autoScrollSpeed",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
                             }
-                            Column(modifier = Modifier.weight(1f)) {
+                            Slider(
+                                value = autoScrollSpeed.toFloat(),
+                                onValueChange = {
+                                    val newSpeed = it.roundToInt().coerceIn(1, 100)
+                                    autoScrollSpeed = newSpeed
+                                    persistAutoScrollIntervalPreference(
+                                        interval = autoScrollSpeedToInterval(newSpeed),
+                                    )
+                                },
+                                valueRange = 1f..100f,
+                                steps = 98,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                            if (usePageReader) {
                                 Text(
                                     text = stringResource(
-                                        AYMR.strings.novel_reader_auto_scroll_speed,
-                                    ) + ": $autoScrollSpeed",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                        AYMR.strings.reader_auto_scroll_page_time,
+                                        autoScrollPageDelayMs(autoScrollSpeed) / 1000,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally),
                                 )
-                                Slider(
-                                    value = autoScrollSpeed.toFloat(),
-                                    onValueChange = {
-                                        val newSpeed = it.roundToInt().coerceIn(1, 100)
-                                        autoScrollSpeed = newSpeed
-                                        persistAutoScrollIntervalPreference(
-                                            interval = autoScrollSpeedToInterval(newSpeed),
+                            }
+                        }
+
+                        // Play/Pause + FAB toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                        ) {
+                            Surface(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .clickable {
+                                        val nextState = resolveAutoScrollUiStateOnToggle(
+                                            currentEnabled = autoScrollEnabled,
+                                            showReaderUi = showReaderUi,
+                                            autoScrollExpanded = autoScrollExpanded,
+                                        )
+                                        autoScrollEnabled = nextState.autoScrollEnabled
+                                        onSetShowReaderUi(nextState.showReaderUi)
+                                        autoScrollExpanded = nextState.autoScrollExpanded
+                                    },
+                                color = if (autoScrollEnabled) {
+                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                } else {
+                                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                                },
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = if (autoScrollEnabled) {
+                                            Icons.Outlined.Pause
+                                        } else {
+                                            Icons.Outlined.PlayArrow
+                                        },
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = stringResource(
+                                            if (autoScrollEnabled) {
+                                                MR.strings.action_pause
+                                            } else {
+                                                MR.strings.action_start
+                                            },
+                                        ),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = Color.White,
+                                    )
+                                }
+                            }
+                            Row(
+                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .padding(start = 12.dp, end = 4.dp)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        readerPreferences.showAutoScrollFloatingButton().set(
+                                            !state.readerSettings.showAutoScrollFloatingButton,
                                         )
                                     },
-                                    valueRange = 1f..100f,
-                                    steps = 98,
+                            ) {
+                                Text(
+                                    text = stringResource(AYMR.strings.reader_auto_scroll_floating_button),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.widthIn(max = 180.dp),
+                                )
+                                Switch(
+                                    checked = state.readerSettings.showAutoScrollFloatingButton,
+                                    onCheckedChange = {
+                                        readerPreferences.showAutoScrollFloatingButton().set(it)
+                                    },
+                                    modifier = Modifier.padding(start = 8.dp),
                                 )
                             }
                         }
@@ -3538,11 +3668,28 @@ fun NovelReaderScreen(
             modifier = Modifier.align(Alignment.BottomEnd),
         )
 
+        if (autoScrollEnabled) {
+            autoScrollWasUsed = true
+        }
+
         if (flashOnPageChange && eInkProfile.isEnabled) {
             DisplayRefreshHost(
                 hostState = displayRefreshHost,
             )
         }
+
+        AutoScrollActionFab(
+            autoScrollEnabled = autoScrollEnabled,
+            showFab = state.readerSettings.showAutoScrollFloatingButton && !showReaderUi,
+            onClick = {
+                autoScrollEnabled = !autoScrollEnabled
+                if (autoScrollEnabled) onSetShowReaderUi(false)
+            },
+            onLongClick = { autoScrollExpanded = !autoScrollExpanded },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+        )
 
         // Settings dialog
         if (showSettings) {
@@ -3601,7 +3748,7 @@ fun NovelReaderScreen(
                 onToggleVisibility = onToggleGeminiTranslationVisibility,
                 onClear = onClearGeminiTranslation,
                 onClearAllCache = onClearAllGeminiTranslationCache,
-                onAddLog = onAddGeminiLog,
+                onAddLog = onAddAiTranslationLog,
                 onClearLogs = onClearGeminiLogs,
                 onSetGeminiApiKey = onSetGeminiApiKey,
                 onSetGeminiModel = onSetGeminiModel,
@@ -3645,6 +3792,11 @@ fun NovelReaderScreen(
                 onSetNvidiaModel = onSetNvidiaModel,
                 onRefreshNvidiaModels = onRefreshNvidiaModels,
                 onTestNvidiaConnection = onTestNvidiaConnection,
+                onSetOllamaCloudBaseUrl = onSetOllamaCloudBaseUrl,
+                onSetOllamaCloudApiKey = onSetOllamaCloudApiKey,
+                onSetOllamaCloudModel = onSetOllamaCloudModel,
+                onRefreshOllamaCloudModels = onRefreshOllamaCloudModels,
+                onTestOllamaCloudConnection = onTestOllamaCloudConnection,
                 openRouterModels = state.openRouterModelIds,
                 isOpenRouterModelsLoading = state.isOpenRouterModelsLoading,
                 isTestingOpenRouterConnection = state.isTestingOpenRouterConnection,
@@ -3665,6 +3817,11 @@ fun NovelReaderScreen(
                 isTestingNvidiaConnection = state.isTestingNvidiaConnection,
                 nvidiaApiTestStatus = state.nvidiaApiTestStatus,
                 nvidiaApiTestMessage = state.nvidiaApiTestMessage,
+                ollamaCloudModels = state.ollamaCloudModelIds,
+                isOllamaCloudModelsLoading = state.isOllamaCloudModelsLoading,
+                isTestingOllamaCloudConnection = state.isTestingOllamaCloudConnection,
+                ollamaCloudApiTestStatus = state.ollamaCloudApiTestStatus,
+                ollamaCloudApiTestMessage = state.ollamaCloudApiTestMessage,
                 onDismiss = { showGeminiDialog = false },
             )
         }
@@ -3792,6 +3949,11 @@ private fun GeminiTranslationDialog(
     onSetNvidiaModel: (String) -> Unit,
     onRefreshNvidiaModels: () -> Unit,
     onTestNvidiaConnection: () -> Unit,
+    onSetOllamaCloudBaseUrl: (String) -> Unit,
+    onSetOllamaCloudApiKey: (String) -> Unit,
+    onSetOllamaCloudModel: (String) -> Unit,
+    onRefreshOllamaCloudModels: () -> Unit,
+    onTestOllamaCloudConnection: () -> Unit,
     openRouterModels: List<String>,
     isOpenRouterModelsLoading: Boolean,
     isTestingOpenRouterConnection: Boolean,
@@ -3812,6 +3974,11 @@ private fun GeminiTranslationDialog(
     isTestingNvidiaConnection: Boolean,
     nvidiaApiTestStatus: ProviderApiTestStatus,
     nvidiaApiTestMessage: String?,
+    ollamaCloudModels: List<String>,
+    isOllamaCloudModelsLoading: Boolean,
+    isTestingOllamaCloudConnection: Boolean,
+    ollamaCloudApiTestStatus: ProviderApiTestStatus,
+    ollamaCloudApiTestMessage: String?,
     onDismiss: () -> Unit,
 ) {
     val modelEntries = remember {
@@ -3865,6 +4032,17 @@ private fun GeminiTranslationDialog(
             .distinct()
             .sorted()
             .associateWith { it }
+    }
+    val ollamaCloudAllModelEntries = remember(ollamaCloudModels) {
+        ollamaCloudModels
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sorted()
+            .associateWith { name ->
+                if (name in OLLAMA_CLOUD_FREE_MODELS) "$name (Free)" else name
+            }
     }
 
     var tempKey by remember(readerSettings.geminiApiKey) { mutableStateOf(readerSettings.geminiApiKey) }
@@ -3940,6 +4118,7 @@ private fun GeminiTranslationDialog(
     val deepSeekModelLabel = stringResource(AYMR.strings.novel_reader_deepseek_model)
     val mistralModelLabel = stringResource(AYMR.strings.novel_reader_mistral_model)
     val nvidiaModelLabel = stringResource(AYMR.strings.novel_reader_nvidia_model)
+    val ollamaCloudModelLabel = stringResource(AYMR.strings.novel_reader_ollama_cloud_model)
     val promptModeLabel = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode)
     val styleLabel = stringResource(AYMR.strings.novel_reader_ai_translator_style_title)
     val speedLabel = stringResource(AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism)
@@ -4020,6 +4199,12 @@ private fun GeminiTranslationDialog(
     }
     var tempNvidiaModel by remember(readerSettings.nvidiaModel) {
         mutableStateOf(readerSettings.nvidiaModel)
+    }
+    var tempOllamaCloudBaseUrl by remember(readerSettings.ollamaCloudBaseUrl) {
+        mutableStateOf(readerSettings.ollamaCloudBaseUrl)
+    }
+    var tempOllamaCloudModel by remember(readerSettings.ollamaCloudModel) {
+        mutableStateOf(readerSettings.ollamaCloudModel)
     }
     var showGenerationConfig by remember { mutableStateOf(false) }
     var showLogs by remember { mutableStateOf(false) }
@@ -4194,6 +4379,7 @@ private fun GeminiTranslationDialog(
     val isDeepSeekSelected = tempProvider == NovelTranslationProvider.DEEPSEEK
     val isMistralSelected = tempProvider == NovelTranslationProvider.MISTRAL
     val isNvidiaSelected = tempProvider == NovelTranslationProvider.NVIDIA
+    val isOllamaCloudSelected = tempProvider == NovelTranslationProvider.OLLAMA_CLOUD
     val activeReasoningModel = when (tempProvider) {
         NovelTranslationProvider.GEMINI,
         NovelTranslationProvider.GEMINI_PRIVATE,
@@ -4202,6 +4388,7 @@ private fun GeminiTranslationDialog(
         NovelTranslationProvider.MISTRAL -> tempMistralModel
         NovelTranslationProvider.DEEPSEEK -> tempDeepSeekModel
         NovelTranslationProvider.NVIDIA -> tempNvidiaModel
+        NovelTranslationProvider.OLLAMA_CLOUD -> tempOllamaCloudModel
     }
     val reasoningOptions = remember(tempProvider, activeReasoningModel) {
         resolveTranslationReasoningOptions(tempProvider, activeReasoningModel)
@@ -4243,6 +4430,12 @@ private fun GeminiTranslationDialog(
     LaunchedEffect(isNvidiaSelected, nvidiaModels.size) {
         if (isNvidiaSelected && nvidiaModels.isEmpty()) {
             onRefreshNvidiaModels()
+        }
+    }
+
+    LaunchedEffect(isOllamaCloudSelected, ollamaCloudModels.size) {
+        if (isOllamaCloudSelected && ollamaCloudModels.isEmpty()) {
+            onRefreshOllamaCloudModels()
         }
     }
 
@@ -4443,6 +4636,9 @@ private fun GeminiTranslationDialog(
                             NovelTranslationProvider.NVIDIA to stringResource(
                                 AYMR.strings.novel_reader_translation_provider_nvidia,
                             ),
+                            NovelTranslationProvider.OLLAMA_CLOUD to stringResource(
+                                AYMR.strings.novel_reader_translation_provider_ollama_cloud,
+                            ),
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             providerCards.chunked(2).forEach { rowProviders ->
@@ -4472,6 +4668,10 @@ private fun GeminiTranslationDialog(
                                                 tempNvidiaBaseUrl.isNotBlank() &&
                                                     readerSettings.nvidiaApiKey.isNotBlank() &&
                                                     tempNvidiaModel.isNotBlank()
+                                            NovelTranslationProvider.OLLAMA_CLOUD ->
+                                                tempOllamaCloudBaseUrl.isNotBlank() &&
+                                                    readerSettings.ollamaCloudApiKey.isNotBlank() &&
+                                                    tempOllamaCloudModel.isNotBlank()
                                         }
                                         AiTranslatorProviderCard(
                                             title = option.second,
@@ -4489,6 +4689,8 @@ private fun GeminiTranslationDialog(
                                                     NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
                                                     NovelTranslationProvider.MISTRAL -> onRefreshMistralModels()
                                                     NovelTranslationProvider.NVIDIA -> onRefreshNvidiaModels()
+                                                    NovelTranslationProvider.OLLAMA_CLOUD ->
+                                                        onRefreshOllamaCloudModels()
                                                 }
                                             },
                                         )
@@ -4848,6 +5050,69 @@ private fun GeminiTranslationDialog(
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
+                            NovelTranslationProvider.OLLAMA_CLOUD -> {
+                                AiTranslatorMiniSection(
+                                    title = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_ollama_cloud_models_title,
+                                    ),
+                                    subtitle = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_model_summary,
+                                    ),
+                                )
+                                if (ollamaCloudAllModelEntries.isNotEmpty()) {
+                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
+                                        value = tempOllamaCloudModel,
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_models_count,
+                                        ).format(ollamaCloudAllModelEntries.size),
+                                        subtitle = when {
+                                            tempOllamaCloudModel in OLLAMA_CLOUD_FREE_MODELS ->
+                                                "$tempOllamaCloudModel (Free)"
+                                            tempOllamaCloudModel.isNotBlank() -> tempOllamaCloudModel
+                                            else -> stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_choose_model,
+                                            )
+                                        },
+                                        icon = null,
+                                        entries = ollamaCloudAllModelEntries,
+                                        onValueChange = { selected ->
+                                            tempOllamaCloudModel = selected
+                                            onSetOllamaCloudModel(selected)
+                                            logPair(ollamaCloudModelLabel, selected)
+                                        },
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = onRefreshOllamaCloudModels) {
+                                        Text(
+                                            if (isOllamaCloudModelsLoading) {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                )
+                                            } else {
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                                OutlinedTextField(
+                                    value = tempOllamaCloudModel,
+                                    onValueChange = {
+                                        tempOllamaCloudModel = it
+                                        onSetOllamaCloudModel(it)
+                                    },
+                                    label = {
+                                        Text(
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ollama_cloud_model,
+                                            ),
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                         }
                     }
 
@@ -5117,6 +5382,7 @@ private fun GeminiTranslationDialog(
                     NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestStatus
                     NovelTranslationProvider.MISTRAL -> mistralApiTestStatus
                     NovelTranslationProvider.NVIDIA -> nvidiaApiTestStatus
+                    NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudApiTestStatus
                     NovelTranslationProvider.GEMINI,
                     NovelTranslationProvider.GEMINI_PRIVATE,
                     -> ProviderApiTestStatus.Idle
@@ -5126,6 +5392,7 @@ private fun GeminiTranslationDialog(
                     NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestMessage
                     NovelTranslationProvider.MISTRAL -> mistralApiTestMessage
                     NovelTranslationProvider.NVIDIA -> nvidiaApiTestMessage
+                    NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudApiTestMessage
                     NovelTranslationProvider.GEMINI,
                     NovelTranslationProvider.GEMINI_PRIVATE,
                     -> null
@@ -5220,7 +5487,12 @@ private fun GeminiTranslationDialog(
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                         }
-                        if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected || isNvidiaSelected) {
+                        if (isOpenRouterSelected ||
+                            isDeepSeekSelected ||
+                            isMistralSelected ||
+                            isNvidiaSelected ||
+                            isOllamaCloudSelected
+                        ) {
                             AiTranslatorSupportText(
                                 stringResource(AYMR.strings.novel_reader_ai_translator_more_base_url_summary),
                             )
@@ -5229,7 +5501,8 @@ private fun GeminiTranslationDialog(
                                     isOpenRouterSelected -> tempOpenRouterBaseUrl
                                     isDeepSeekSelected -> tempDeepSeekBaseUrl
                                     isMistralSelected -> tempMistralBaseUrl
-                                    else -> tempNvidiaBaseUrl
+                                    isNvidiaSelected -> tempNvidiaBaseUrl
+                                    else -> tempOllamaCloudBaseUrl
                                 },
                                 onValueChange = {
                                     if (isOpenRouterSelected) {
@@ -5241,9 +5514,12 @@ private fun GeminiTranslationDialog(
                                     } else if (isMistralSelected) {
                                         tempMistralBaseUrl = it
                                         onSetMistralBaseUrl(it)
-                                    } else {
+                                    } else if (isNvidiaSelected) {
                                         tempNvidiaBaseUrl = it
                                         onSetNvidiaBaseUrl(it)
+                                    } else {
+                                        tempOllamaCloudBaseUrl = it
+                                        onSetOllamaCloudBaseUrl(it)
                                     }
                                 },
                                 label = {
@@ -5258,8 +5534,11 @@ private fun GeminiTranslationDialog(
                                             isMistralSelected -> stringResource(
                                                 AYMR.strings.novel_reader_mistral_base_url,
                                             )
-                                            else -> stringResource(
+                                            isNvidiaSelected -> stringResource(
                                                 AYMR.strings.novel_reader_nvidia_base_url,
+                                            )
+                                            else -> stringResource(
+                                                AYMR.strings.novel_reader_ollama_cloud_base_url,
                                             )
                                         },
                                     )
@@ -5271,12 +5550,31 @@ private fun GeminiTranslationDialog(
                         AiTranslatorSupportText(
                             stringResource(AYMR.strings.novel_reader_ai_translator_more_api_key_summary),
                         )
+                        val apiKeyUrl = getApiKeyUrl(tempProvider)
+                        if (apiKeyUrl != null) {
+                            val uriHandler = LocalUriHandler.current
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                TextButton(onClick = { uriHandler.openUri(apiKeyUrl) }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                    Spacer(Modifier.size(4.dp))
+                                    Text(stringResource(AYMR.strings.novel_reader_ai_translator_get_api_key))
+                                }
+                            }
+                        }
                         OutlinedTextField(
                             value = when {
                                 isOpenRouterSelected -> readerSettings.openRouterApiKey
                                 isDeepSeekSelected -> readerSettings.deepSeekApiKey
                                 isMistralSelected -> readerSettings.mistralApiKey
                                 isNvidiaSelected -> readerSettings.nvidiaApiKey
+                                isOllamaCloudSelected -> readerSettings.ollamaCloudApiKey
                                 else -> tempKey
                             },
                             onValueChange = {
@@ -5288,6 +5586,8 @@ private fun GeminiTranslationDialog(
                                     onSetMistralApiKey(it)
                                 } else if (isNvidiaSelected) {
                                     onSetNvidiaApiKey(it)
+                                } else if (isOllamaCloudSelected) {
+                                    onSetOllamaCloudApiKey(it)
                                 } else {
                                     tempKey = it
                                     onSetGeminiApiKey(it)
@@ -5302,6 +5602,9 @@ private fun GeminiTranslationDialog(
                                         isDeepSeekSelected -> stringResource(AYMR.strings.novel_reader_deepseek_api_key)
                                         isMistralSelected -> stringResource(AYMR.strings.novel_reader_mistral_api_key)
                                         isNvidiaSelected -> stringResource(AYMR.strings.novel_reader_nvidia_api_key)
+                                        isOllamaCloudSelected -> stringResource(
+                                            AYMR.strings.novel_reader_ollama_cloud_api_key,
+                                        )
                                         else -> stringResource(AYMR.strings.novel_reader_gemini_api_key)
                                     },
                                 )
@@ -5389,6 +5692,40 @@ private fun GeminiTranslationDialog(
                                 ) {
                                     Text(
                                         if (isNvidiaModelsLoading) {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                            )
+                                        } else {
+                                            stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_refresh_models,
+                                            )
+                                        },
+                                    )
+                                }
+                            }
+                            if (!apiTestMessage.isNullOrBlank() &&
+                                apiTestStatus == ProviderApiTestStatus.Error
+                            ) {
+                                AiTranslatorSupportText(apiTestMessage)
+                            }
+                        }
+                        if (isOllamaCloudSelected) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                AiTranslatorApiTestButton(
+                                    status = apiTestStatus,
+                                    onClick = onTestOllamaCloudConnection,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                OutlinedButton(
+                                    onClick = onRefreshOllamaCloudModels,
+                                    enabled = !isOllamaCloudModelsLoading,
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text(
+                                        if (isOllamaCloudModelsLoading) {
                                             stringResource(
                                                 AYMR.strings.novel_reader_ai_translator_loading_models,
                                             )
@@ -5570,6 +5907,14 @@ private fun GeminiTranslationDialog(
                         if (isDeepSeekSelected) {
                             Text(
                                 text = stringResource(AYMR.strings.novel_reader_ai_translator_deepseek_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else if (isMistralSelected || isNvidiaSelected) {
+                            Text(
+                                text = stringResource(
+                                    AYMR.strings.novel_reader_ai_translator_mistral_nvidia_batch_hint,
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -6273,6 +6618,25 @@ private fun AiTranslatorApiTestButton(
 }
 
 @Composable
+private fun getApiKeyUrl(provider: NovelTranslationProvider): String? {
+    return when (provider) {
+        NovelTranslationProvider.GEMINI ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_gemini)
+        NovelTranslationProvider.GEMINI_PRIVATE -> null
+        NovelTranslationProvider.OPENROUTER ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_openrouter)
+        NovelTranslationProvider.DEEPSEEK ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_deepseek)
+        NovelTranslationProvider.MISTRAL ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_mistral)
+        NovelTranslationProvider.NVIDIA ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_nvidia)
+        NovelTranslationProvider.OLLAMA_CLOUD ->
+            stringResource(AYMR.strings.novel_reader_ai_translator_api_url_ollama_cloud)
+    }
+}
+
+@Composable
 private fun getAiTranslatorProviderLabel(provider: NovelTranslationProvider): String {
     return when (provider) {
         NovelTranslationProvider.GEMINI ->
@@ -6291,6 +6655,8 @@ private fun getAiTranslatorProviderLabel(provider: NovelTranslationProvider): St
             stringResource(AYMR.strings.novel_reader_translation_provider_mistral)
         NovelTranslationProvider.NVIDIA ->
             stringResource(AYMR.strings.novel_reader_translation_provider_nvidia)
+        NovelTranslationProvider.OLLAMA_CLOUD ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_ollama_cloud)
     }
 }
 

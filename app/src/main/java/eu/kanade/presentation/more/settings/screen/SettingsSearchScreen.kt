@@ -73,11 +73,14 @@ import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsDecoderS
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsGesturesScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsPlayerScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsSubtitleScreen
+import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutMainScreen
+import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutScreen
 import eu.kanade.presentation.more.settings.settingsCardContainerColor
 import eu.kanade.presentation.more.settings.settingsSubtitleColor
 import eu.kanade.presentation.more.settings.settingsTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutOrientation
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -462,6 +465,9 @@ private fun getLocalizedBreadcrumb(nodes: List<String>, isLtr: Boolean): String 
 
 private val playerSettingScreens = listOf(
     PlayerSettingsPlayerScreen,
+    PlayerSettingsLayoutMainScreen,
+    PlayerSettingsLayoutScreen(PlayerLayoutOrientation.Portrait),
+    PlayerSettingsLayoutScreen(PlayerLayoutOrientation.Landscape),
     PlayerSettingsGesturesScreen,
     PlayerSettingsDecoderScreen,
     PlayerSettingsSubtitleScreen,

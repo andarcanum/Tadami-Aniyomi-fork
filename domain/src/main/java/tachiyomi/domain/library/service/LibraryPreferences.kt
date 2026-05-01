@@ -296,7 +296,7 @@ class LibraryPreferences(
 
     fun sortChapterBySourceOrNumber() = preferenceStore.getLong(
         "default_chapter_sort_by_source_or_number",
-        Manga.CHAPTER_SORTING_NUMBER,
+        Manga.CHAPTER_SORTING_SOURCE,
     )
 
     fun displayEpisodeByNameOrNumber() = preferenceStore.getLong(

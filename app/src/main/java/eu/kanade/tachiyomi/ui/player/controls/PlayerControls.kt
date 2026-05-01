@@ -17,6 +17,7 @@
 
 package eu.kanade.tachiyomi.ui.player.controls
 
+import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
@@ -50,6 +51,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -71,6 +73,9 @@ import eu.kanade.tachiyomi.ui.player.controls.components.SeekbarWithTimers
 import eu.kanade.tachiyomi.ui.player.controls.components.TextPlayerUpdate
 import eu.kanade.tachiyomi.ui.player.controls.components.VolumeSlider
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.toFixed
+import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutOrientation
+import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutRegion
+import eu.kanade.tachiyomi.ui.player.resolveVisibleCustomButton
 import eu.kanade.tachiyomi.ui.player.settings.AudioPreferences
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
@@ -118,11 +123,26 @@ fun PlayerControls(
     val currentBrightness by viewModel.currentBrightness.collectAsState()
 
     val playerTimeToDisappear by playerPreferences.playerTimeToDisappear().collectAsState()
+    val showCustomButtons by playerPreferences.showCustomButtons().collectAsState()
+    val playerLayoutConfig by viewModel.playerLayoutConfig.collectAsState()
     var isSeeking by remember { mutableStateOf(false) }
     var resetControls by remember { mutableStateOf(true) }
 
     val customButtons by viewModel.customButtons.collectAsState()
     val customButton by viewModel.primaryButton.collectAsState()
+    val activeLayoutOrientation = if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+        PlayerLayoutOrientation.Landscape
+    } else {
+        PlayerLayoutOrientation.Portrait
+    }
+    val bottomLeftLayoutSlots = playerLayoutConfig.slotsForRegion(
+        orientation = activeLayoutOrientation,
+        region = PlayerLayoutRegion.BottomLeft,
+    ).toSet()
+    val bottomRightLayoutSlots = playerLayoutConfig.slotsForRegion(
+        orientation = activeLayoutOrientation,
+        region = PlayerLayoutRegion.BottomRight,
+    ).toSet()
 
     LaunchedEffect(
         controlsShown,
@@ -462,6 +482,8 @@ fun PlayerControls(
                 // Bottom right controls
                 val skipIntroButton by viewModel.skipIntroText.collectAsState()
                 val customButtonTitle by viewModel.primaryButtonTitle.collectAsState()
+                val visibleCustomButton = resolveVisibleCustomButton(showCustomButtons, customButton)
+                val visibleSkipIntroButton = skipIntroButton
                 AnimatedVisibility(
                     controlsShown && !areControlsLocked,
                     enter = if (!reduceMotion) {
@@ -483,9 +505,10 @@ fun PlayerControls(
                 ) {
                     val activity = LocalContext.current as PlayerActivity
                     BottomRightPlayerControls(
-                        customButton = customButton,
+                        layoutSlots = bottomRightLayoutSlots,
+                        customButton = visibleCustomButton,
                         customButtonTitle = customButtonTitle,
-                        skipIntroButton = skipIntroButton,
+                        skipIntroButton = visibleSkipIntroButton,
                         onPressSkipIntroButton = viewModel::onSkipIntro,
                         isPipAvailable = activity.isPipSupportedAndEnabled,
                         onPipClick = {
@@ -528,7 +551,8 @@ fun PlayerControls(
                     },
                 ) {
                     BottomLeftPlayerControls(
-                        playbackSpeed,
+                        layoutSlots = bottomLeftLayoutSlots,
+                        playbackSpeed = playbackSpeed,
                         currentChapter = currentChapter?.toSegment(),
                         onLockControls = viewModel::lockControls,
                         onCycleRotation = viewModel::cycleScreenRotations,
@@ -592,7 +616,11 @@ fun PlayerControls(
             onSpeedChange = { MPVLib.setPropertyDouble("speed", it.toFixed(2).toDouble()) },
             sleepTimerTimeRemaining = sleepTimerTimeRemaining,
             onStartSleepTimer = viewModel::startTimer,
-            buttons = customButtons.getButtons().toImmutableList(),
+            buttons = if (showCustomButtons) {
+                customButtons.getButtons().toImmutableList()
+            } else {
+                emptyList<tachiyomi.domain.custombuttons.model.CustomButton>().toImmutableList()
+            },
 
             isLocalSource = currentSource?.id == LocalAnimeSource.ID,
             showSubtitles = showSubtitles,

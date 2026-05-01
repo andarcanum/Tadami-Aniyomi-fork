@@ -45,6 +45,7 @@ import android.view.View
 import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInWindow
@@ -61,7 +62,6 @@ import androidx.media.AudioManagerCompat
 import com.hippo.unifile.UniFile
 import com.tadami.aurora.databinding.PlayerLayoutBinding
 import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.presentation.theme.TachiyomiTheme
 import eu.kanade.tachiyomi.animesource.model.ChapterType
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SerializableHoster.Companion.serialize
@@ -274,37 +274,36 @@ class PlayerActivity : BaseActivity() {
         binding.controls.setContent {
             val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
             val eInkProfile by uiPreferences.eInkProfile().collectAsState()
+            val anime by viewModel.currentAnime.collectAsState()
 
             AppHapticsProvider(
                 hapticFeedbackMode = hapticFeedbackMode,
                 isEInkMode = eInkProfile.isEnabled,
             ) {
-                TachiyomiTheme {
-                    PlayerControls(
-                        viewModel = viewModel,
-                        onBackPress = {
-                            if (isPipSupportedAndEnabled &&
-                                player.paused == false &&
-                                playerPreferences.pipOnExit().get()
-                            ) {
-                                enterPictureInPictureMode(createPipParams())
-                            } else {
-                                finish()
-                            }
-                        },
-                        modifier = Modifier.onGloballyPositioned {
-                            pipRect = run {
-                                val boundsInWindow = it.boundsInWindow()
-                                Rect(
-                                    boundsInWindow.left.toInt(),
-                                    boundsInWindow.top.toInt(),
-                                    boundsInWindow.right.toInt(),
-                                    boundsInWindow.bottom.toInt(),
-                                )
-                            }
-                        },
-                    )
-                }
+                PlayerControls(
+                    viewModel = viewModel,
+                    onBackPress = {
+                        if (isPipSupportedAndEnabled &&
+                            player.paused == false &&
+                            playerPreferences.pipOnExit().get()
+                        ) {
+                            enterPictureInPictureMode(createPipParams())
+                        } else {
+                            finish()
+                        }
+                    },
+                    modifier = Modifier.onGloballyPositioned {
+                        pipRect = run {
+                            val boundsInWindow = it.boundsInWindow()
+                            Rect(
+                                boundsInWindow.left.toInt(),
+                                boundsInWindow.top.toInt(),
+                                boundsInWindow.right.toInt(),
+                                boundsInWindow.bottom.toInt(),
+                            )
+                        }
+                    },
+                )
             }
         }
 
@@ -539,12 +538,16 @@ class PlayerActivity : BaseActivity() {
         }
     }
 
-    fun setupCustomButtons(buttons: List<CustomButton>) {
+    fun setupCustomButtons(
+        buttons: List<CustomButton>,
+        enabled: Boolean = true,
+    ) {
         lifecycleScope.launchIO {
             PlayerCustomButtonBridge.setupCustomButtons(
                 filesDir = applicationContext.filesDir,
                 buttons = buttons,
                 primaryButtonId = viewModel.primaryButton.value?.id ?: 0L,
+                enabled = enabled,
             )
         }
     }
@@ -1170,6 +1173,7 @@ class PlayerActivity : BaseActivity() {
         setMpvMediaTitle()
         setupPlayerOrientation()
         setupChapters()
+        viewModel.resetSubtitleSelection()
         setupTracks()
         playerStartupCoordinator.handleAniSkip(
             playerDuration = player.duration,

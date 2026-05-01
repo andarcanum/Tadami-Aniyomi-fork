@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.viewer.autoscroll
 
 import android.animation.ValueAnimator
+import android.os.SystemClock
 import android.view.animation.LinearInterpolator
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonRecyclerView
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
@@ -9,6 +10,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.system.logcat
+
+private const val SPEED_FACTOR_DELTA = 0.05f
 
 /**
  * Auto-scroll manager for [WebtoonViewer] that uses a [ValueAnimator] to smoothly scroll
@@ -24,6 +27,8 @@ class WebtoonAutoScrollManager(
     override val state: StateFlow<AutoScrollState> = _state.asStateFlow()
 
     private var valueAnimator: ValueAnimator? = null
+    private var cooldownUntilMs: Long = 0L
+    private var currentSpeedFactor: Float = 1f
 
     /**
      * The recycler view from the webtoon viewer that will be scrolled.
@@ -46,6 +51,11 @@ class WebtoonAutoScrollManager(
         return 1.5f + (clampedSpeed - 1) * (8.5f / 99f)
     }
 
+    override fun setCooldown(delayMs: Long) {
+        cooldownUntilMs = SystemClock.elapsedRealtime() + delayMs
+        _state.update { it.copy(cooldownUntilMs = cooldownUntilMs) }
+    }
+
     override fun start(speed: Int?) {
         if (speed != null) {
             _state.update { it.copy(speed = speed.coerceIn(1, 100)) }
@@ -56,14 +66,18 @@ class WebtoonAutoScrollManager(
             stopAnimator()
         }
 
-        _state.update { it.copy(isActive = true, isPaused = false) }
+        cooldownUntilMs = 0L
+        currentSpeedFactor = 1f
+        _state.update { it.copy(isActive = true, isPaused = false, cooldownUntilMs = 0L) }
         startAnimator()
         logcat { "WebtoonAutoScrollManager started with speed ${_state.value.speed}" }
     }
 
     override fun stop() {
         stopAnimator()
-        _state.update { it.copy(isActive = false, isPaused = false) }
+        cooldownUntilMs = 0L
+        currentSpeedFactor = 1f
+        _state.update { it.copy(isActive = false, isPaused = false, cooldownUntilMs = 0L) }
         logcat { "WebtoonAutoScrollManager stopped" }
     }
 
@@ -71,7 +85,8 @@ class WebtoonAutoScrollManager(
         if (!_state.value.isActive || _state.value.isPaused) return
 
         stopAnimator()
-        _state.update { it.copy(isPaused = true) }
+        cooldownUntilMs = 0L
+        _state.update { it.copy(isPaused = true, cooldownUntilMs = 0L) }
         logcat { "WebtoonAutoScrollManager paused" }
     }
 
@@ -121,9 +136,19 @@ class WebtoonAutoScrollManager(
             interpolator = LinearInterpolator()
 
             addUpdateListener { animator ->
-                // Calculate scroll amount based on animation progress
-                // At 60fps, each frame is ~16.67ms
-                val deltaY = scrollSpeed.toInt()
+                val inCooldown = SystemClock.elapsedRealtime() < cooldownUntilMs
+
+                // Smooth acceleration/deceleration during cooldown
+                currentSpeedFactor = when {
+                    inCooldown -> (currentSpeedFactor - SPEED_FACTOR_DELTA).coerceAtLeast(0f)
+                    currentSpeedFactor < 1f -> (currentSpeedFactor + SPEED_FACTOR_DELTA).coerceAtMost(1f)
+                    else -> 1f
+                }
+
+                if (currentSpeedFactor <= 0f) return@addUpdateListener
+
+                val adjustedSpeed = scrollSpeed * currentSpeedFactor
+                val deltaY = adjustedSpeed.toInt()
 
                 if (deltaY > 0) {
                     recyclerView.scrollBy(0, deltaY)

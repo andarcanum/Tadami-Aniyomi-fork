@@ -74,6 +74,7 @@ data class NovelReaderSettings(
     val autoScroll: Boolean,
     val autoScrollInterval: Int,
     val autoScrollOffset: Int,
+    val showAutoScrollFloatingButton: Boolean,
     val prefetchNextChapter: Boolean,
 
     // Accessibility
@@ -131,6 +132,9 @@ data class NovelReaderSettings(
     val nvidiaBaseUrl: String = "https://integrate.api.nvidia.com/v1",
     val nvidiaApiKey: String = "",
     val nvidiaModel: String = "",
+    val ollamaCloudBaseUrl: String = "https://ollama.com/api",
+    val ollamaCloudApiKey: String = "",
+    val ollamaCloudModel: String = "gpt-oss:120b",
 
     // Google Translation
     val googleTranslationEnabled: Boolean = false,
@@ -259,6 +263,7 @@ enum class NovelTranslationProvider {
     DEEPSEEK,
     MISTRAL,
     NVIDIA,
+    OLLAMA_CLOUD,
 }
 
 enum class NovelTtsHighlightMode {
@@ -329,6 +334,7 @@ data class NovelReaderOverride(
     val autoScroll: Boolean? = null,
     val autoScrollInterval: Int? = null,
     val autoScrollOffset: Int? = null,
+    val showAutoScrollFloatingButton: Boolean? = null,
     val prefetchNextChapter: Boolean? = null,
 
     // Accessibility
@@ -382,6 +388,9 @@ data class NovelReaderOverride(
     val nvidiaBaseUrl: String? = null,
     val nvidiaApiKey: String? = null,
     val nvidiaModel: String? = null,
+    val ollamaCloudBaseUrl: String? = null,
+    val ollamaCloudApiKey: String? = null,
+    val ollamaCloudModel: String? = null,
 
     // Google Translation
     val googleTranslationEnabled: Boolean? = null,
@@ -565,6 +574,9 @@ class NovelReaderPreferences(
 
     fun autoScrollOffset() = preferenceStore.getInt("novel_reader_auto_scroll_offset", DEFAULT_AUTO_SCROLL_OFFSET)
 
+    fun showAutoScrollFloatingButton() =
+        preferenceStore.getBoolean("novel_reader_show_auto_scroll_floating_button", true)
+
     fun prefetchNextChapter() = preferenceStore.getBoolean("novel_reader_prefetch_next_chapter", false)
 
     fun cacheReadChapters() = preferenceStore.getBoolean("novel_reader_cache_read_chapters", true)
@@ -747,6 +759,15 @@ class NovelReaderPreferences(
 
     fun nvidiaModel() = preferenceStore.getString("novel_reader_nvidia_model", "")
 
+    fun ollamaCloudBaseUrl() = preferenceStore.getString(
+        "novel_reader_ollama_cloud_base_url",
+        "https://ollama.com/api",
+    )
+
+    fun ollamaCloudApiKey() = preferenceStore.getString("novel_reader_ollama_cloud_api_key", "")
+
+    fun ollamaCloudModel() = preferenceStore.getString("novel_reader_ollama_cloud_model", "gpt-oss:120b")
+
     private fun translatedDownloadFormatKey(novelId: Long): String {
         return "novel_reader_translated_download_format_$novelId"
     }
@@ -879,6 +900,7 @@ class NovelReaderPreferences(
                 autoScroll = autoScroll().get(),
                 autoScrollInterval = autoScrollInterval().get(),
                 autoScrollOffset = autoScrollOffset().get(),
+                showAutoScrollFloatingButton = showAutoScrollFloatingButton().get(),
                 prefetchNextChapter = prefetchNextChapter().get(),
                 fullScreenMode = fullScreenMode().get(),
                 keepScreenOn = keepScreenOn().get(),
@@ -921,8 +943,12 @@ class NovelReaderPreferences(
                 mistralBaseUrl = mistralBaseUrl().get(),
                 mistralApiKey = mistralApiKey().get(),
                 mistralModel = mistralModel().get(),
+                nvidiaBaseUrl = nvidiaBaseUrl().get(),
                 nvidiaApiKey = nvidiaApiKey().get(),
                 nvidiaModel = nvidiaModel().get(),
+                ollamaCloudBaseUrl = ollamaCloudBaseUrl().get(),
+                ollamaCloudApiKey = ollamaCloudApiKey().get(),
+                ollamaCloudModel = ollamaCloudModel().get(),
                 googleTranslationEnabled = googleTranslationEnabled().get(),
                 googleTranslationSourceLang = googleTranslationSourceLang().get(),
                 googleTranslationTargetLang = googleTranslationTargetLang().get(),
@@ -1009,6 +1035,8 @@ class NovelReaderPreferences(
             autoScroll = override?.autoScroll ?: autoScroll().get(),
             autoScrollInterval = override?.autoScrollInterval ?: autoScrollInterval().get(),
             autoScrollOffset = override?.autoScrollOffset ?: autoScrollOffset().get(),
+            showAutoScrollFloatingButton =
+            override?.showAutoScrollFloatingButton ?: showAutoScrollFloatingButton().get(),
             prefetchNextChapter = override?.prefetchNextChapter ?: prefetchNextChapter().get(),
             fullScreenMode = override?.fullScreenMode ?: fullScreenMode().get(),
             keepScreenOn = override?.keepScreenOn ?: keepScreenOn().get(),
@@ -1061,8 +1089,12 @@ class NovelReaderPreferences(
             mistralBaseUrl = override?.mistralBaseUrl ?: mistralBaseUrl().get(),
             mistralApiKey = override?.mistralApiKey ?: mistralApiKey().get(),
             mistralModel = override?.mistralModel ?: mistralModel().get(),
+            nvidiaBaseUrl = override?.nvidiaBaseUrl ?: nvidiaBaseUrl().get(),
             nvidiaApiKey = override?.nvidiaApiKey ?: nvidiaApiKey().get(),
             nvidiaModel = override?.nvidiaModel ?: nvidiaModel().get(),
+            ollamaCloudBaseUrl = override?.ollamaCloudBaseUrl ?: ollamaCloudBaseUrl().get(),
+            ollamaCloudApiKey = override?.ollamaCloudApiKey ?: ollamaCloudApiKey().get(),
+            ollamaCloudModel = override?.ollamaCloudModel ?: ollamaCloudModel().get(),
             googleTranslationEnabled = override?.googleTranslationEnabled ?: googleTranslationEnabled().get(),
             googleTranslationSourceLang = override?.googleTranslationSourceLang ?: googleTranslationSourceLang().get(),
             googleTranslationTargetLang = override?.googleTranslationTargetLang ?: googleTranslationTargetLang().get(),
@@ -1179,6 +1211,7 @@ class NovelReaderPreferences(
             autoScroll().changes(),
             autoScrollInterval().changes(),
             autoScrollOffset().changes(),
+            showAutoScrollFloatingButton().changes(),
             prefetchNextChapter().changes(),
         ) { values: Array<Any?> ->
             NavigationSettings(
@@ -1202,6 +1235,7 @@ class NovelReaderPreferences(
                 values[17] as Int,
                 values[18] as Int,
                 values[19] as Boolean,
+                values[20] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1278,6 +1312,9 @@ class NovelReaderPreferences(
             nvidiaBaseUrl().changes(),
             nvidiaApiKey().changes(),
             nvidiaModel().changes(),
+            ollamaCloudBaseUrl().changes(),
+            ollamaCloudApiKey().changes(),
+            ollamaCloudModel().changes(),
             googleTranslationEnabled().changes(),
             googleTranslationSourceLang().changes(),
             googleTranslationTargetLang().changes(),
@@ -1320,10 +1357,13 @@ class NovelReaderPreferences(
                 nvidiaBaseUrl = values[33] as String,
                 nvidiaApiKey = values[34] as String,
                 nvidiaModel = values[35] as String,
-                googleTranslationEnabled = values[36] as Boolean,
-                googleTranslationSourceLang = values[37] as String,
-                googleTranslationTargetLang = values[38] as String,
-                googleTranslationAutoStart = values[39] as Boolean,
+                ollamaCloudBaseUrl = values[36] as String,
+                ollamaCloudApiKey = values[37] as String,
+                ollamaCloudModel = values[38] as String,
+                googleTranslationEnabled = values[39] as Boolean,
+                googleTranslationSourceLang = values[40] as String,
+                googleTranslationTargetLang = values[41] as String,
+                googleTranslationAutoStart = values[42] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1435,6 +1475,8 @@ class NovelReaderPreferences(
                 autoScroll = override?.autoScroll ?: navigation.autoScroll,
                 autoScrollInterval = override?.autoScrollInterval ?: navigation.autoScrollInterval,
                 autoScrollOffset = override?.autoScrollOffset ?: navigation.autoScrollOffset,
+                showAutoScrollFloatingButton =
+                override?.showAutoScrollFloatingButton ?: navigation.showAutoScrollFloatingButton,
                 prefetchNextChapter = override?.prefetchNextChapter ?: navigation.prefetchNextChapter,
                 fullScreenMode = override?.fullScreenMode ?: accessibility.fullScreenMode,
                 keepScreenOn = override?.keepScreenOn ?: accessibility.keepScreenOn,
@@ -1484,6 +1526,12 @@ class NovelReaderPreferences(
                 mistralBaseUrl = override?.mistralBaseUrl ?: gemini.mistralBaseUrl,
                 mistralApiKey = override?.mistralApiKey ?: gemini.mistralApiKey,
                 mistralModel = override?.mistralModel ?: gemini.mistralModel,
+                nvidiaBaseUrl = override?.nvidiaBaseUrl ?: gemini.nvidiaBaseUrl,
+                nvidiaApiKey = override?.nvidiaApiKey ?: gemini.nvidiaApiKey,
+                nvidiaModel = override?.nvidiaModel ?: gemini.nvidiaModel,
+                ollamaCloudBaseUrl = override?.ollamaCloudBaseUrl ?: gemini.ollamaCloudBaseUrl,
+                ollamaCloudApiKey = override?.ollamaCloudApiKey ?: gemini.ollamaCloudApiKey,
+                ollamaCloudModel = override?.ollamaCloudModel ?: gemini.ollamaCloudModel,
                 googleTranslationEnabled = override?.googleTranslationEnabled ?: gemini.googleTranslationEnabled,
                 googleTranslationSourceLang =
                 override?.googleTranslationSourceLang ?: gemini.googleTranslationSourceLang,
@@ -1567,6 +1615,7 @@ class NovelReaderPreferences(
         val autoScroll: Boolean,
         val autoScrollInterval: Int,
         val autoScrollOffset: Int,
+        val showAutoScrollFloatingButton: Boolean,
         val prefetchNextChapter: Boolean,
     )
 
@@ -1625,6 +1674,9 @@ class NovelReaderPreferences(
         val nvidiaBaseUrl: String,
         val nvidiaApiKey: String,
         val nvidiaModel: String,
+        val ollamaCloudBaseUrl: String,
+        val ollamaCloudApiKey: String,
+        val ollamaCloudModel: String,
         val googleTranslationEnabled: Boolean,
         val googleTranslationSourceLang: String,
         val googleTranslationTargetLang: String,

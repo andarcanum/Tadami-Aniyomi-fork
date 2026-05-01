@@ -346,6 +346,8 @@ private fun getNovelReaderTranslationProviderLabel(provider: NovelTranslationPro
             stringResource(AYMR.strings.novel_reader_translation_provider_mistral)
         NovelTranslationProvider.NVIDIA ->
             stringResource(AYMR.strings.novel_reader_translation_provider_nvidia)
+        NovelTranslationProvider.OLLAMA_CLOUD ->
+            stringResource(AYMR.strings.novel_reader_translation_provider_ollama_cloud)
     }
 }
 

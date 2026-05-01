@@ -10,6 +10,7 @@ import androidx.fragment.app.FragmentActivity
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
@@ -39,6 +40,7 @@ object SettingsBrowseScreen : SearchableSettings {
         val navigator = LocalNavigator.currentOrThrow
 
         val sourcePreferences = remember { Injekt.get<SourcePreferences>() }
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
         val getMangaExtensionRepoCount = remember { Injekt.get<GetMangaExtensionRepoCount>() }
         val getAnimeExtensionRepoCount = remember { Injekt.get<GetAnimeExtensionRepoCount>() }
         val getNovelExtensionRepoCount = remember { Injekt.get<GetNovelExtensionRepoCount>() }
@@ -95,6 +97,23 @@ object SettingsBrowseScreen : SearchableSettings {
                         onClick = {
                             navigator.push(NovelExtensionReposScreen())
                         },
+                    ),
+                ),
+            ),
+            Preference.PreferenceGroup(
+                title = stringResource(AYMR.strings.feed),
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.hideFeedTab(),
+                        title = stringResource(AYMR.strings.pref_feed_hide_tab),
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.feedTabInFront(),
+                        title = stringResource(AYMR.strings.pref_feed_tab_in_front),
+                    ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = sourcePreferences.hideInLibraryFeedItems(),
+                        title = stringResource(AYMR.strings.pref_feed_hide_in_library_items),
                     ),
                 ),
             ),

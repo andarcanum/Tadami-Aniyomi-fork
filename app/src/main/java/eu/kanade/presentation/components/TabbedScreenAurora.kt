@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
@@ -62,10 +63,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -446,7 +450,7 @@ private fun AuroraTabHeader(
                 AuroraTopBarTitleText(title = title)
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (currentTab?.searchEnabled == true) {
                     AuroraTopBarIconButton(
                         onClick = onSearchClick,
@@ -461,6 +465,11 @@ private fun AuroraTabHeader(
                 }
 
                 iconActions.forEachIndexed { index, appBarAction ->
+                    val buttonModifier = if (index > 0) {
+                        Modifier.padding(start = 4.dp)
+                    } else {
+                        Modifier
+                    }
                     AuroraTopBarIconButton(
                         onClick = appBarAction.onClick,
                         icon = appBarAction.icon,
@@ -470,6 +479,8 @@ private fun AuroraTabHeader(
                         } else {
                             colors.textPrimary
                         },
+                        modifier = buttonModifier,
+                        iconRotation = appBarAction.iconRotation,
                     )
 
                     if (
@@ -527,6 +538,7 @@ internal fun AuroraTabRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(28.dp))
             .background(
                 tabContainerColor,
                 RoundedCornerShape(28.dp),
@@ -551,6 +563,7 @@ internal fun AuroraTabRow(
                     isSelected = isSelected,
                     badgeCount = tab.badgeNumber,
                     onClick = { onTabSelected(index) },
+                    fillAvailableWidth = !scrollable,
                     modifier = if (scrollable) Modifier.padding(horizontal = 4.dp) else Modifier.weight(1f),
                 )
             }
@@ -564,11 +577,17 @@ internal fun AuroraTab(
     isSelected: Boolean,
     badgeCount: Int?,
     onClick: () -> Unit,
+    fillAvailableWidth: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val tabShape = RoundedCornerShape(20.dp)
+    val maxTabTextWidth = if (!fillAvailableWidth) {
+        (LocalConfiguration.current.screenWidthDp.dp - 72.dp).coerceAtMost(220.dp)
+    } else {
+        Dp.Unspecified
+    }
     val selectedTabBrush = remember(colors.accent) {
         Brush.linearGradient(
             colors = listOf(
@@ -615,16 +634,26 @@ internal fun AuroraTab(
         contentAlignment = Alignment.Center,
     ) {
         Row(
+            modifier = if (fillAvailableWidth) Modifier.fillMaxWidth() else Modifier,
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
             Text(
                 text = text,
+                modifier = if (fillAvailableWidth) {
+                    Modifier.weight(1f)
+                } else {
+                    Modifier.widthIn(max = maxTabTextWidth)
+                },
                 color = if (isSelected) colors.textPrimary else colors.textSecondary,
                 style = resolveAuroraTabTextStyle(
                     baseStyle = MaterialTheme.typography.bodyLarge,
                     isSelected = isSelected,
                 ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                softWrap = false,
+                textAlign = TextAlign.Center,
             )
 
             if (badgeCount != null && badgeCount > 0) {

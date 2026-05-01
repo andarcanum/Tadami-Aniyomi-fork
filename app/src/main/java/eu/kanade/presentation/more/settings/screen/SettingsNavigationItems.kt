@@ -2,6 +2,7 @@ package eu.kanade.presentation.more.settings.screen
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ChromeReaderMode
+import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material.icons.outlined.Audiotrack
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.CollectionsBookmark
@@ -33,6 +34,7 @@ import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsPlayerSc
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsSubtitleScreen
 import eu.kanade.presentation.more.settings.screen.player.custombutton.PlayerSettingsCustomButtonScreen
 import eu.kanade.presentation.more.settings.screen.player.editor.PlayerSettingsEditorScreen
+import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutMainScreen
 import eu.kanade.tachiyomi.ui.setting.PlayerSettingsScreen
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -164,6 +166,13 @@ internal fun playerSettingsNavigationItems(): List<SettingsNavigationItem> = lis
         subtitleRes = AYMR.strings.pref_player_internal_summary,
         icon = Icons.Outlined.PlayCircleOutline,
         screen = PlayerSettingsPlayerScreen,
+    ),
+    SettingsNavigationItem(
+        key = "player_layout",
+        titleRes = AYMR.strings.pref_player_layout,
+        subtitleRes = AYMR.strings.pref_player_layout_summary,
+        icon = Icons.Filled.ViewModule,
+        screen = PlayerSettingsLayoutMainScreen,
     ),
     SettingsNavigationItem(
         key = "player_gestures",

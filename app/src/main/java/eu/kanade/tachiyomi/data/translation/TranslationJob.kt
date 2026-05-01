@@ -75,6 +75,23 @@ class TranslationJob(
                 } catch (e: Exception) {
                     val chapterName = "Chapter ${item.chapterId}"
                     val message = e.message ?: e::class.java.simpleName
+                    if (shouldRetryTranslationFailure(message) && item.retryCount < MAX_CHAPTER_RETRIES) {
+                        queueManager.incrementRetryAwait(item.chapterId)
+                        queueManager.updateStatusAwait(
+                            chapterId = item.chapterId,
+                            status = TranslationStatus.PENDING,
+                            chapterName = chapterName,
+                        )
+                        queueManager.setActiveTranslation(null)
+                        queueManager.emitLog(
+                            item.chapterId,
+                            "Retry scheduled (${item.retryCount + 1}/$MAX_CHAPTER_RETRIES): $message",
+                        )
+                        logcat(LogPriority.WARN, e) {
+                            "Transient translation failure for chapter ${item.chapterId}; retry scheduled"
+                        }
+                        continue
+                    }
                     queueManager.setErrorAwait(
                         chapterId = item.chapterId,
                         error = message,
@@ -152,6 +169,7 @@ class TranslationJob(
             settings = settings,
             onLog = { message ->
                 logcat(LogPriority.DEBUG) { "TranslationJob[${item.chapterId}]: $message" }
+                queueManager.emitLog(item.chapterId, message)
             },
             onProgress = { progress ->
                 queueManager.updateProgress(
@@ -201,6 +219,31 @@ class TranslationJob(
 
     companion object {
         private const val TAG = "TranslationJob"
+        private const val MAX_CHAPTER_RETRIES = 2
+
+        private fun shouldRetryTranslationFailure(message: String): Boolean {
+            val normalized = message.lowercase()
+            if (normalized.contains("401") ||
+                normalized.contains("403") ||
+                normalized.contains("invalid api") ||
+                normalized.contains("api key") ||
+                normalized.contains("unauthorized")
+            ) {
+                return false
+            }
+            return normalized.contains("429") ||
+                normalized.contains("rate limit") ||
+                normalized.contains("timeout") ||
+                normalized.contains("temporar") ||
+                normalized.contains("network") ||
+                normalized.contains("connection") ||
+                normalized.contains("socket") ||
+                normalized.contains("500") ||
+                normalized.contains("502") ||
+                normalized.contains("503") ||
+                normalized.contains("504") ||
+                normalized.contains("returned no translated blocks")
+        }
 
         fun runImmediately(context: Context) {
             logcat(LogPriority.DEBUG) { "TranslationJob.runImmediately() called" }

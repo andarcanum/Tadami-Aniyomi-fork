@@ -31,6 +31,8 @@ data class LegacyBackup(
     @ProtoNumber(603) var backupStats: BackupStats? = null,
     @ProtoNumber(620) var backupMangaSeries: List<BackupMangaSeries> = emptyList(),
     @ProtoNumber(621) var backupNovelSeries: List<BackupNovelSeries> = emptyList(),
+    // Feed
+    @ProtoNumber(622) var backupFeeds: List<BackupFeed> = emptyList(),
 ) {
     fun toBackup(): Backup {
         return Backup(
@@ -92,4 +94,6 @@ data class Backup(
     @ProtoNumber(603) var backupStats: BackupStats? = null,
     @ProtoNumber(620) var backupMangaSeries: List<BackupMangaSeries> = emptyList(),
     @ProtoNumber(621) var backupNovelSeries: List<BackupNovelSeries> = emptyList(),
+    // Feed
+    @ProtoNumber(622) var backupFeeds: List<BackupFeed> = emptyList(),
 )

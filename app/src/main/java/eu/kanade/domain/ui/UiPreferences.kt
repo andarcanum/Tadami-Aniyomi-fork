@@ -38,10 +38,11 @@ class UiPreferences(
     fun startScreen() = preferenceStore.getEnum("start_screen", StartScreen.HOME)
 
     fun showAnimeSection() = preferenceStore.getBoolean("aurora_show_anime_section", true)
-
     fun showMangaSection() = preferenceStore.getBoolean("aurora_show_manga_section", true)
-
     fun showNovelSection() = preferenceStore.getBoolean("aurora_show_novel_section", true)
+
+    fun hideFeedTab() = preferenceStore.getBoolean("hide_feed_tab", false)
+    fun feedTabInFront() = preferenceStore.getBoolean("feed_tab_position", false)
 
     fun showMangaScanlatorBranches() = preferenceStore.getBoolean("show_manga_scanlator_branches", true)
 

@@ -33,6 +33,7 @@ import dev.vivvvek.seeker.Segment
 import eu.kanade.tachiyomi.ui.player.Sheets
 import eu.kanade.tachiyomi.ui.player.controls.components.ControlsButton
 import eu.kanade.tachiyomi.ui.player.controls.components.CurrentChapter
+import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutSlot
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -41,6 +42,7 @@ import uy.kohesive.injekt.api.get
 
 @Composable
 fun BottomLeftPlayerControls(
+    layoutSlots: Set<PlayerLayoutSlot>,
     playbackSpeed: Float,
     currentChapter: Segment?,
     onLockControls: () -> Unit,
@@ -55,23 +57,29 @@ fun BottomLeftPlayerControls(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ControlsButton(
-            Icons.Default.LockOpen,
-            onClick = onLockControls,
-        )
-        ControlsButton(
-            icon = Icons.Default.ScreenRotation,
-            onClick = onCycleRotation,
-        )
-        ControlsButton(
-            text = stringResource(AYMR.strings.player_speed, playbackSpeed),
-            onClick = {
-                val newSpeed = if (playbackSpeed >= 2) 0.25f else playbackSpeed + 0.25f
-                onPlaybackSpeedChange(newSpeed)
-                playerPreferences.playerSpeed().set(newSpeed)
-            },
-            onLongClick = { onOpenSheet(Sheets.PlaybackSpeed) },
-        )
+        if (PlayerLayoutSlot.LockControls in layoutSlots) {
+            ControlsButton(
+                Icons.Default.LockOpen,
+                onClick = onLockControls,
+            )
+        }
+        if (PlayerLayoutSlot.RotateScreen in layoutSlots) {
+            ControlsButton(
+                icon = Icons.Default.ScreenRotation,
+                onClick = onCycleRotation,
+            )
+        }
+        if (PlayerLayoutSlot.PlaybackSpeed in layoutSlots) {
+            ControlsButton(
+                text = stringResource(AYMR.strings.player_speed, playbackSpeed),
+                onClick = {
+                    val newSpeed = if (playbackSpeed >= 2) 0.25f else playbackSpeed + 0.25f
+                    onPlaybackSpeedChange(newSpeed)
+                    playerPreferences.playerSpeed().set(newSpeed)
+                },
+                onLongClick = { onOpenSheet(Sheets.PlaybackSpeed) },
+            )
+        }
         AnimatedVisibility(
             currentChapter != null && playerPreferences.showCurrentChapter().get(),
             enter = fadeIn(),

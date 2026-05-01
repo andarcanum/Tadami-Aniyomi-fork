@@ -2,9 +2,16 @@ package eu.kanade.tachiyomi.ui.reader.novel.translation
 
 internal object GeminiXmlSegmentParser {
 
-    private val xmlCodeFenceStartRegex = Regex("(?i)^\\s*```[a-z]*\\s*")
+    private val xmlCodeFenceStartRegex = Regex("(?i)^\\s*```[a-z0-9_-]*\\s*")
     private val xmlCodeFenceEndRegex = Regex("\\s*```\\s*$")
-    private val xmlTagRegex = Regex("<([a-z]+)\\s+i=['\"](\\d+)['\"]>([\\s\\S]*?)</\\1>", RegexOption.IGNORE_CASE)
+    private val xmlTagRegex = Regex(
+        """<\s*([a-z][\w:-]*)\b(?=[^>]*\bi\s*=\s*['\"]?(\d+)['\"]?)[^>]*>([\s\S]*?)</\s*\1\s*>""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val xmlSegmentStartRegex = Regex(
+        """<\s*([a-z][\w:-]*)\b(?=[^>]*\bi\s*=\s*['\"]?(\d+)['\"]?)[^>]*>""",
+        RegexOption.IGNORE_CASE,
+    )
     private val paragraphSplitRegex = Regex("""(?:\r?\n\s*){2,}""")
     private val repeatedSpacesRegex = Regex("[ \\t]{2,}")
     private val spacesAroundNewlineRegex = Regex("[ \\t]*\\n[ \\t]*")
@@ -14,10 +21,7 @@ internal object GeminiXmlSegmentParser {
         expectedCount: Int,
     ): List<String?> {
         if (expectedCount <= 0) return emptyList()
-        val sanitized = rawResponse
-            .replace(xmlCodeFenceStartRegex, "")
-            .replace(xmlCodeFenceEndRegex, "")
-            .trim()
+        val sanitized = rawResponse.sanitizeXmlResponseForParsing()
 
         val out = MutableList<String?>(expectedCount) { null }
         xmlTagRegex.findAll(sanitized).forEach { match ->
@@ -25,6 +29,11 @@ internal object GeminiXmlSegmentParser {
             if (index !in 0 until expectedCount) return@forEach
             out[index] = match.groupValues[3].trim()
         }
+
+        recoverStartTagDelimitedSegments(
+            sanitized = sanitized,
+            out = out,
+        )
         return out
     }
 
@@ -64,6 +73,55 @@ internal object GeminiXmlSegmentParser {
             out[index] = text
         }
         return out
+    }
+
+    private fun String.sanitizeXmlResponseForParsing(): String {
+        val trimmed = replace(xmlCodeFenceStartRegex, "")
+            .replace(xmlCodeFenceEndRegex, "")
+            .trim()
+        if (!trimmed.contains("&lt;", ignoreCase = true) || !trimmed.contains("&gt;", ignoreCase = true)) {
+            return trimmed
+        }
+        return trimmed
+            .replace("&lt;", "<", ignoreCase = true)
+            .replace("&gt;", ">", ignoreCase = true)
+            .replace("&quot;", "\"", ignoreCase = true)
+            .replace("&#34;", "\"")
+            .replace("&apos;", "'", ignoreCase = true)
+            .replace("&#39;", "'")
+            .trim()
+    }
+
+    private fun recoverStartTagDelimitedSegments(
+        sanitized: String,
+        out: MutableList<String?>,
+    ) {
+        val starts = xmlSegmentStartRegex.findAll(sanitized).toList()
+        if (starts.isEmpty()) return
+
+        starts.forEachIndexed { startPosition, match ->
+            val index = match.groupValues[2].toIntOrNull() ?: return@forEachIndexed
+            if (index !in out.indices) return@forEachIndexed
+            if (!out[index].isNullOrBlank()) return@forEachIndexed
+
+            val tagName = match.groupValues[1]
+            val contentStart = match.range.last + 1
+            val nextStart = starts.getOrNull(startPosition + 1)?.range?.first ?: sanitized.length
+            val closeRegex = Regex("""</\s*${Regex.escape(tagName)}\s*>""", RegexOption.IGNORE_CASE)
+            val closeBeforeNext = closeRegex.find(sanitized, contentStart)
+                ?.takeIf { it.range.first <= nextStart }
+                ?.range
+                ?.first
+            val contentEnd = closeBeforeNext ?: nextStart
+            if (contentEnd <= contentStart) return@forEachIndexed
+
+            val recovered = sanitized.substring(contentStart, contentEnd)
+                .replace(Regex("""(?i)</?\s*s\s*>\s*$"""), "")
+                .trim()
+            if (recovered.isNotBlank()) {
+                out[index] = recovered
+            }
+        }
     }
 
     private fun String.removeEmojiAndNormalizeSpacing(): String {

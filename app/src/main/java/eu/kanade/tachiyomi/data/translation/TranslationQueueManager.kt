@@ -204,6 +204,29 @@ class TranslationQueueManager(
         }
     }
 
+    fun emitLog(chapterId: Long, message: String) {
+        scope.launch {
+            try {
+                val item = getQueueItemByChapterId(chapterId) ?: return@launch
+                _progressUpdates.emit(
+                    TranslationProgressUpdate(
+                        chapterId = item.chapterId,
+                        novelId = item.novelId,
+                        status = item.status,
+                        progress = item.progress,
+                        currentChunk = 0,
+                        totalChunks = 0,
+                        chapterName = "",
+                        errorMessage = null,
+                        logMessage = message,
+                    ),
+                )
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) { "Failed to emit translation log: ${e.message}" }
+            }
+        }
+    }
+
     suspend fun setErrorAwait(
         chapterId: Long,
         error: String,
@@ -319,17 +342,21 @@ class TranslationQueueManager(
         return true
     }
 
+    suspend fun incrementRetryAwait(chapterId: Long) {
+        handler.await { db ->
+            db.translation_queueQueries.incrementRetry(
+                chapterId = chapterId,
+                updatedAt = System.currentTimeMillis(),
+            )
+        }
+        refreshQueue()
+        logcat(LogPriority.DEBUG) { "Incremented retry count for chapter $chapterId" }
+    }
+
     fun incrementRetry(chapterId: Long) {
         scope.launch {
             try {
-                handler.await { db ->
-                    db.translation_queueQueries.incrementRetry(
-                        chapterId = chapterId,
-                        updatedAt = System.currentTimeMillis(),
-                    )
-                }
-                refreshQueue()
-                logcat(LogPriority.DEBUG) { "Incremented retry count for chapter $chapterId" }
+                incrementRetryAwait(chapterId)
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) { "Failed to increment retry count: ${e.message}" }
             }
@@ -400,14 +427,15 @@ class TranslationQueueManager(
         updatedAt: Long,
         retryCount: Long,
     ): TranslationQueueItem {
+        val safeStatus = TranslationStatus.entries.getOrElse(status.toInt()) { TranslationStatus.PENDING }
         return TranslationQueueItem(
             id = id,
             chapterId = chapterId,
             novelId = novelId,
-            status = TranslationStatus.entries[status.toInt()],
-            progress = progress.toInt(),
+            status = safeStatus,
+            progress = progress.toInt().coerceIn(0, 100),
             errorMessage = errorMessage,
-            retryCount = retryCount.toInt(),
+            retryCount = retryCount.toInt().coerceAtLeast(0),
             createdAt = createdAt,
             updatedAt = updatedAt,
         )

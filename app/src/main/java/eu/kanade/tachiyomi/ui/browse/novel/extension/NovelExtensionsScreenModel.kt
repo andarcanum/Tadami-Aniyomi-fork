@@ -53,7 +53,8 @@ class NovelExtensionsScreenModel(
                 sourcePreferences.enabledLanguages().changes(),
                 listingFlow,
             ) { enabledLanguages, input ->
-                availablePlugins.value = input.available
+                val available = input.available.distinctBy { it.id }
+                availablePlugins.value = available
                 val searchQuery = input.query
 
                 val updateIds = input.updates.map { it.id }.toSet()
@@ -69,7 +70,7 @@ class NovelExtensionsScreenModel(
                     }
                 }
 
-                val availableByLanguage = input.available
+                val availableByLanguage = available
                     .asSequence()
                     .filter { it.id !in installedIds }
                     .filter(matches)

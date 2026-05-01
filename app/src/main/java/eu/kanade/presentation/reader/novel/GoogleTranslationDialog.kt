@@ -148,7 +148,16 @@ fun GoogleTranslationDialog(
                         progress = { translationProgress.coerceIn(0, 100) / 100f },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(stringResource(AYMR.strings.novel_reader_google_translate_progress, translationProgress))
+                    val progressText = when (translationPhase) {
+                        TranslationPhase.IDLE ->
+                            stringResource(AYMR.strings.novel_reader_google_translate_preparing)
+                        TranslationPhase.TRANSLATING ->
+                            stringResource(
+                                AYMR.strings.novel_reader_google_translate_progress,
+                                translationProgress.coerceIn(0, 100),
+                            )
+                    }
+                    Text(progressText)
                 }
 
                 if (hasCache) {

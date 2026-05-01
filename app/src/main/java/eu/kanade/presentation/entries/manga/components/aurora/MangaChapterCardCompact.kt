@@ -26,7 +26,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -34,17 +33,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import coil3.request.crossfade
-import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.relativeDateTimeText
-import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.entries.components.DotSeparatorText
 import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
 import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
@@ -55,12 +48,11 @@ import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import me.saket.swipe.SwipeableActionsBox
 import tachiyomi.domain.entries.manga.model.Manga
-import tachiyomi.domain.entries.manga.model.asMangaCover
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.service.LibraryPreferences
 
 /**
- * Compact chapter card with 40x40 thumbnail and minimal design.
+ * Compact chapter card with a small status marker and minimal design.
  */
 @Composable
 fun MangaChapterCardCompact(
@@ -78,9 +70,7 @@ fun MangaChapterCardCompact(
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    val context = LocalContext.current
     val chapter = item.chapter
-    val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
     val cardAlpha = if (chapter.read) AURORA_DIMMED_ITEM_ALPHA else 1f
     val cardTint = if (isNew && !chapter.read) {
         colors.accent.copy(alpha = AURORA_NEW_ITEM_HIGHLIGHT_ALPHA)
@@ -126,28 +116,26 @@ fun MangaChapterCardCompact(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                // 40x40 thumbnail
+                // Small status marker
                 Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.Black.copy(alpha = 0.3f)),
+                    modifier = Modifier.size(18.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    val coverRequest = remember(manga.id, manga.thumbnailUrl, manga.coverLastModified) {
-                        buildAuroraCoverImageRequest(context, manga.asMangaCover()) {
-                            crossfade(true)
-                            size(40)
-                        }
+                    if (chapter.read) {
+                        Icon(
+                            Icons.Outlined.Done,
+                            contentDescription = null,
+                            tint = colors.accent,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(colors.accent),
+                        )
                     }
-                    AsyncImage(
-                        model = coverRequest,
-                        error = placeholderPainter,
-                        fallback = placeholderPainter,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(40.dp),
-                        alpha = 1f,
-                    )
                 }
 
                 // Chapter info
@@ -243,16 +231,6 @@ fun MangaChapterCardCompact(
                             downloadProgressProvider = { item.downloadProgress },
                             onClick = { onDownloadChapter(listOf(item), it) },
                             modifier = Modifier.size(20.dp),
-                        )
-                    }
-
-                    // Read checkmark
-                    if (chapter.read) {
-                        Icon(
-                            Icons.Outlined.Done,
-                            contentDescription = null,
-                            tint = colors.accent,
-                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }

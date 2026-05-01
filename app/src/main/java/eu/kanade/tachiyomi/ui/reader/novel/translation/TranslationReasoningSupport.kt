@@ -29,8 +29,13 @@ internal fun resolveTranslationReasoningOptions(
             normalizedModel.isNotBlank() -> listOf("none", "high", "max")
             else -> emptyList()
         }
-        NovelTranslationProvider.NVIDIA,
-        -> emptyList()
+        NovelTranslationProvider.NVIDIA -> emptyList()
+        NovelTranslationProvider.OLLAMA_CLOUD -> when {
+            normalizedModel.startsWith("gpt-oss") ||
+                normalizedModel.startsWith("qwen3") ||
+                normalizedModel.startsWith("deepseek-r1") -> listOf("none", "low", "medium", "high")
+            else -> listOf("none")
+        }
     }
 }
 

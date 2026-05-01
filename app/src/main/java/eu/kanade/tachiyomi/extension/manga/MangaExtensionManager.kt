@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
@@ -314,6 +315,29 @@ class MangaExtensionManager(
      */
     private fun registerUpdatedExtension(extension: MangaExtension.Installed) {
         installedExtensionsMapFlow.value += extension
+    }
+
+    /**
+     * Loads an extension by package name and registers it directly, bypassing the broadcast
+     * receiver. Used as a safety net to handle cases where [MangaExtensionInstallReceiver] may
+     * not receive the system broadcast (MIUI, Android 11 quirks, etc.).
+     *
+     * @param pkgName The package name of the extension to reload and register.
+     */
+    fun reloadAndRegisterExtension(pkgName: String) {
+        scope.launch {
+            when (val result = MangaExtensionLoader.loadMangaExtensionFromPkgName(context, pkgName)) {
+                is MangaLoadResult.Success -> {
+                    registerUpdatedExtension(result.extension.withUpdateCheck())
+                }
+                is MangaLoadResult.Untrusted -> {
+                    installedExtensionsMapFlow.value -= result.extension.pkgName
+                    untrustedExtensionsMapFlow.value += result.extension
+                }
+                else -> return@launch
+            }
+            updatePendingUpdatesCount()
+        }
     }
 
     /**

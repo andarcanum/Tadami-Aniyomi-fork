@@ -675,6 +675,11 @@ class AnimeLibraryScreenModel(
                 val lastAnimeIndex = items.indexOf(lastSelected)
                 val curAnimeIndex = items.indexOf(anime)
 
+                if (lastAnimeIndex < 0 || curAnimeIndex < 0) {
+                    list.add(anime)
+                    return@mutate
+                }
+
                 val selectedIds = list.fastMap { it.id }
                 val selectionRange = when {
                     lastAnimeIndex < curAnimeIndex -> IntRange(lastAnimeIndex, curAnimeIndex)

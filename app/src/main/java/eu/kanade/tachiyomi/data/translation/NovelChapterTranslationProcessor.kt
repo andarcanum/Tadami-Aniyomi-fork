@@ -19,8 +19,11 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationPromptFam
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.normalizeTranslationReasoningEffort
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveNovelTranslationPromptFamily
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import kotlinx.coroutines.async
@@ -76,6 +79,7 @@ class NovelChapterTranslationProcessor(
         val json = Injekt.get<Json>()
         MistralTranslationService(
             client = networkHelper.client.newBuilder()
+                .callTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
                 .build(),
             json = json,
@@ -88,7 +92,21 @@ class NovelChapterTranslationProcessor(
         val networkHelper = Injekt.get<NetworkHelper>()
         val json = Injekt.get<Json>()
         NvidiaTranslationService(
-            client = networkHelper.client,
+            client = networkHelper.client.newBuilder()
+                .callTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                .build(),
+            json = json,
+        )
+    },
+    private val ollamaCloudTranslationService: OllamaCloudTranslationService = run {
+        val networkHelper = Injekt.get<NetworkHelper>()
+        val json = Injekt.get<Json>()
+        OllamaCloudTranslationService(
+            client = networkHelper.client.newBuilder()
+                .callTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                .build(),
             json = json,
         )
     },
@@ -132,14 +150,26 @@ class NovelChapterTranslationProcessor(
                     async {
                         semaphore.withPermit {
                             onLog?.invoke("Requesting chunk ${chunkIndex + 1}/${chunks.size}")
-                            val result = requestTranslationBatch(
+                            val primaryResult = requestTranslationBatch(
                                 segments = chunk.map { it.second },
+                                settings = settings,
+                                onLog = onLog,
+                            )
+                            val result = recoverIncompleteChunk(
+                                provider = settings.translationProvider,
+                                chunk = chunk,
+                                result = primaryResult,
                                 settings = settings,
                                 onLog = onLog,
                             )
                             if (result == null && strictOnNull) {
                                 throw IllegalStateException(
                                     "${settings.translationProvider} returned an empty response for chunk ${chunkIndex + 1}",
+                                )
+                            }
+                            if (result == null) {
+                                onLog?.invoke(
+                                    "[${settings.translationProvider}] Chunk ${chunkIndex + 1}/${chunks.size} returned empty response (skipped)",
                                 )
                             }
 
@@ -194,7 +224,7 @@ class NovelChapterTranslationProcessor(
                     )
                 }
             } else {
-                val chunkSize = settings.geminiBatchSize.coerceIn(1, 80)
+                val chunkSize = settings.effectiveTranslationBatchSize()
                 val chunks = indexedBlocks.chunked(chunkSize)
                 runChunkedTranslation(
                     chunks = chunks,
@@ -209,7 +239,10 @@ class NovelChapterTranslationProcessor(
         }
 
         if (translated.isEmpty()) {
-            throw IllegalStateException("Translation service returned no translated blocks")
+            val providerName = settings.translationProvider.name
+            throw IllegalStateException(
+                "$providerName returned no translated blocks. Check model, API key, and quota in logs.",
+            )
         }
 
         return translated.toMap()
@@ -263,8 +296,63 @@ class NovelChapterTranslationProcessor(
                     onLog = onLog,
                 )
             }
+            NovelTranslationProvider.OLLAMA_CLOUD -> {
+                ollamaCloudTranslationService.translateBatch(
+                    segments = segments,
+                    params = settings.toOllamaCloudTranslationParams(),
+                    onLog = onLog,
+                )
+            }
         }
     }
+
+    private suspend fun recoverIncompleteChunk(
+        provider: NovelTranslationProvider,
+        chunk: List<Pair<Int, String>>,
+        result: List<String?>?,
+        settings: NovelReaderSettings,
+        onLog: ((String) -> Unit)?,
+    ): List<String?>? {
+        if (!provider.supportsGranularFallback()) return result
+        if (chunk.isEmpty()) return result
+
+        val recovered = MutableList<String?>(chunk.size) { index ->
+            result?.getOrNull(index)
+        }
+        val missingIndexes = chunk.indices.filter { index ->
+            recovered.getOrNull(index).isNullOrBlank()
+        }
+        if (missingIndexes.isEmpty()) return recovered
+
+        if (result == null || result.all { it.isNullOrBlank() }) {
+            onLog?.invoke("[$provider] Chunk response had no translated blocks, retrying segments individually")
+        } else {
+            onLog?.invoke(
+                "[$provider] Chunk response had missing ${missingIndexes.size}/${chunk.size} translated blocks, " +
+                    "retrying missing segments individually",
+            )
+        }
+
+        missingIndexes.forEach { localIndex ->
+            val text = chunk.getOrNull(localIndex)?.second ?: return@forEach
+            val single = requestTranslationBatch(
+                segments = listOf(text),
+                settings = settings,
+                onLog = onLog,
+            )
+            val translated = single?.firstOrNull()?.takeIf { !it.isNullOrBlank() }
+            if (translated != null) {
+                recovered[localIndex] = translated
+            }
+        }
+        return if (recovered.any { !it.isNullOrBlank() }) recovered else result
+    }
+}
+
+private fun NovelTranslationProvider.supportsGranularFallback(): Boolean {
+    return this == NovelTranslationProvider.MISTRAL ||
+        this == NovelTranslationProvider.NVIDIA ||
+        this == NovelTranslationProvider.OLLAMA_CLOUD
 }
 
 private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromptFamily {
@@ -276,6 +364,7 @@ private fun NovelReaderSettings.translationPromptFamily(): NovelTranslationPromp
         NovelTranslationProvider.DEEPSEEK,
         NovelTranslationProvider.MISTRAL,
         NovelTranslationProvider.NVIDIA,
+        NovelTranslationProvider.OLLAMA_CLOUD,
         -> resolveNovelTranslationPromptFamily(geminiTargetLang)
     }
 }
@@ -330,6 +419,11 @@ private fun NovelReaderSettings.toOpenRouterTranslationParams(): OpenRouterTrans
         promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         temperature = geminiTemperature,
         topP = geminiTopP,
+        reasoningEffort = normalizeTranslationReasoningEffort(
+            provider = NovelTranslationProvider.OPENROUTER,
+            model = openRouterModel,
+            value = geminiReasoningEffort,
+        ),
     )
 }
 
@@ -344,6 +438,11 @@ private fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslati
         promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         temperature = geminiTemperature.coerceIn(DEEPSEEK_TEMPERATURE_MIN, DEEPSEEK_TEMPERATURE_MAX),
         topP = geminiTopP.coerceIn(DEEPSEEK_TOP_P_MIN, DEEPSEEK_TOP_P_MAX),
+        reasoningEffort = normalizeTranslationReasoningEffort(
+            provider = NovelTranslationProvider.DEEPSEEK,
+            model = deepSeekModel,
+            value = geminiReasoningEffort,
+        ) ?: "none",
         presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY,
         frequencyPenalty = DEEPSEEK_DEFAULT_FREQUENCY_PENALTY,
     )
@@ -360,6 +459,11 @@ private fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslation
         promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
         temperature = geminiTemperature,
         topP = geminiTopP,
+        reasoningEffort = normalizeTranslationReasoningEffort(
+            provider = NovelTranslationProvider.MISTRAL,
+            model = mistralModel,
+            value = geminiReasoningEffort,
+        ),
     )
 }
 
@@ -377,6 +481,25 @@ private fun NovelReaderSettings.toNvidiaTranslationParams(): NvidiaTranslationPa
     )
 }
 
+private fun NovelReaderSettings.toOllamaCloudTranslationParams(): OllamaCloudTranslationParams {
+    return OllamaCloudTranslationParams(
+        baseUrl = ollamaCloudBaseUrl,
+        apiKey = ollamaCloudApiKey,
+        model = ollamaCloudModel,
+        sourceLang = geminiSourceLang,
+        targetLang = geminiTargetLang,
+        promptMode = geminiPromptMode,
+        promptModifiers = resolveTranslationPromptModifiers(family = translationPromptFamily()),
+        temperature = geminiTemperature,
+        topP = geminiTopP,
+        reasoningEffort = normalizeTranslationReasoningEffort(
+            provider = NovelTranslationProvider.OLLAMA_CLOUD,
+            model = ollamaCloudModel,
+            value = geminiReasoningEffort,
+        ),
+    )
+}
+
 private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
     if (!geminiEnabled) return false
     return when (translationProvider) {
@@ -387,7 +510,7 @@ private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
         NovelTranslationProvider.OPENROUTER -> {
             openRouterBaseUrl.isNotBlank() &&
                 openRouterApiKey.isNotBlank() &&
-                openRouterModel.trim().endsWith(":free", ignoreCase = true)
+                openRouterModel.isNotBlank()
         }
         NovelTranslationProvider.DEEPSEEK -> {
             deepSeekBaseUrl.isNotBlank() && deepSeekApiKey.isNotBlank() && deepSeekModel.isNotBlank()
@@ -396,9 +519,13 @@ private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
             mistralBaseUrl.isNotBlank() && mistralApiKey.isNotBlank() && mistralModel.isNotBlank()
         }
         NovelTranslationProvider.NVIDIA -> {
-            nvidiaBaseUrl.isNotBlank() &&
-                nvidiaApiKey.isNotBlank() &&
+            nvidiaApiKey.isNotBlank() &&
                 nvidiaModel.isNotBlank()
+        }
+        NovelTranslationProvider.OLLAMA_CLOUD -> {
+            ollamaCloudBaseUrl.isNotBlank() &&
+                ollamaCloudApiKey.isNotBlank() &&
+                ollamaCloudModel.isNotBlank()
         }
     }
 }
@@ -413,6 +540,17 @@ private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
         NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
         NovelTranslationProvider.MISTRAL -> 1
         NovelTranslationProvider.NVIDIA -> 1
+        NovelTranslationProvider.OLLAMA_CLOUD -> geminiConcurrency.coerceIn(1, 8)
+    }
+}
+
+private fun NovelReaderSettings.effectiveTranslationBatchSize(): Int {
+    val requested = geminiBatchSize.coerceIn(1, 80)
+    return when (translationProvider) {
+        NovelTranslationProvider.MISTRAL,
+        NovelTranslationProvider.NVIDIA,
+        -> requested.coerceAtMost(20)
+        else -> requested
     }
 }
 
@@ -443,7 +581,7 @@ private fun NovelReaderSettings.translationRequestConfigLog(): String {
             append(", batch=chapter")
             append(", concurrency=1")
         } else {
-            append(", batch=").append(geminiBatchSize.coerceIn(1, 80))
+            append(", batch=").append(effectiveTranslationBatchSize())
             append(", concurrency=").append(translationConcurrencyLimit())
         }
         append(", relaxed=").append(geminiRelaxedMode)
@@ -462,9 +600,8 @@ private fun NovelReaderSettings.translationRequestConfigLog(): String {
                 "bridgeInstalled=${GeminiPrivateBridge.isInstalled()}, bridgeUnlocked=${isPrivateBridgeUnlocked()}"
         }
         NovelTranslationProvider.OPENROUTER -> {
-            val isFreeModel = openRouterModel.trim().endsWith(":free", ignoreCase = true)
             "baseUrl=${openRouterBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
-                "topP=${geminiTopP.toLogFloat()}, freeModel=$isFreeModel"
+                "topP=${geminiTopP.toLogFloat()}"
         }
         NovelTranslationProvider.DEEPSEEK -> {
             val presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY.toLogFloat()
@@ -481,6 +618,12 @@ private fun NovelReaderSettings.translationRequestConfigLog(): String {
         NovelTranslationProvider.NVIDIA -> {
             "baseUrl=${nvidiaBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +
                 "topP=${geminiTopP.toLogFloat()}, stream=false"
+        }
+        NovelTranslationProvider.OLLAMA_CLOUD -> {
+            val params = toOllamaCloudTranslationParams()
+            val reasoning = params.reasoningEffort ?: "none"
+            "baseUrl=${params.baseUrl.trim()}, temp=${params.temperature.toLogFloat()}, " +
+                "topP=${params.topP.toLogFloat()}, think=$reasoning, stream=false"
         }
     }
     return "$common, $sampling"

@@ -70,6 +70,7 @@ import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeList
 import eu.kanade.tachiyomi.ui.player.controls.components.IndexedSegment
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.HosterState
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.getChangedAt
+import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutConfig
 import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
 import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
@@ -98,7 +99,11 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -203,7 +208,11 @@ class PlayerViewModel @JvmOverloads constructor(
     private val _isLoadingEpisode = MutableStateFlow(false)
     val isLoadingEpisode = _isLoadingEpisode.asStateFlow()
 
-    private val _currentDecoder = MutableStateFlow(getDecoderFromValue(MPVLib.getPropertyString("hwdec")))
+    private val _currentDecoder = MutableStateFlow(
+        runCatching {
+            MPVLib.getPropertyString("hwdec")?.let(::getDecoderFromValue) ?: Decoder.Auto
+        }.getOrElse { Decoder.Auto },
+    )
     val currentDecoder = _currentDecoder.asStateFlow()
 
     val mediaTitle = MutableStateFlow("")
@@ -276,8 +285,10 @@ class PlayerViewModel @JvmOverloads constructor(
         }.getOrElse { 0f },
     )
     val currentVolume = MutableStateFlow(activity.audioManager.getStreamVolume(AudioManager.STREAM_MUSIC))
-    val currentMPVVolume = MutableStateFlow(MPVLib.getPropertyInt("volume"))
-    var volumeBoostCap: Int = MPVLib.getPropertyInt("volume-max")
+    val currentMPVVolume = MutableStateFlow(
+        runCatching { MPVLib.getPropertyInt("volume") }.getOrElse { 0 },
+    )
+    var volumeBoostCap: Int = runCatching { MPVLib.getPropertyInt("volume-max") }.getOrElse { 0 }
 
     // Pair(startingPosition, seekAmount)
     val gestureSeekAmount = MutableStateFlow<Pair<Int, Int>?>(null)
@@ -310,11 +321,22 @@ class PlayerViewModel @JvmOverloads constructor(
 
     private val _primaryButton = MutableStateFlow<CustomButton?>(null)
     val primaryButton = _primaryButton.asStateFlow()
+    private val _playerLayoutConfig = MutableStateFlow(
+        PlayerLayoutConfig.fromPreferenceValue(playerPreferences.playerLayoutConfig().get()),
+    )
+    val playerLayoutConfig = _playerLayoutConfig.asStateFlow()
+
+    @Volatile
+    private var customButtonsCache: List<CustomButton>? = null
+    private var customButtonsScriptLoaded = false
 
     init {
+        observePlayerPreferenceChanges()
+
         viewModelScope.launchIO {
             try {
                 val buttons = getCustomButtons.getAll()
+                customButtonsCache = buttons
                 buttons.firstOrNull { it.isFavorite }?.let {
                     _primaryButton.update { _ -> it }
                     // If the button text is not empty, it has been set buy a lua script in which
@@ -323,13 +345,50 @@ class PlayerViewModel @JvmOverloads constructor(
                         setPrimaryCustomButtonTitle(it)
                     }
                 }
-                activity.setupCustomButtons(buttons)
+                val showCustomButtons = playerPreferences.showCustomButtons().get()
+                customButtonsScriptLoaded = showCustomButtons
+                activity.setupCustomButtons(
+                    buttons = buttons,
+                    enabled = showCustomButtons,
+                )
+                if (!showCustomButtons && playerPreferences.showCustomButtons().get()) {
+                    reloadCustomButtons()
+                }
                 _customButtons.update { _ -> CustomButtonFetchState.Success(buttons.toImmutableList()) }
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e)
                 _customButtons.update { _ -> CustomButtonFetchState.Error(e.message ?: "Unable to fetch buttons") }
             }
         }
+    }
+
+    private fun observePlayerPreferenceChanges() {
+        playerPreferences.playerLayoutConfig()
+            .changes()
+            .drop(1)
+            .onEach { value ->
+                _playerLayoutConfig.value = PlayerLayoutConfig.fromPreferenceValue(value)
+            }
+            .launchIn(viewModelScope)
+
+        playerPreferences.showCustomButtons()
+            .changes()
+            .drop(1)
+            .filter { it }
+            .onEach {
+                reloadCustomButtons()
+            }
+            .launchIn(viewModelScope)
+    }
+
+    private fun reloadCustomButtons() {
+        if (customButtonsScriptLoaded) return
+        val buttons = customButtonsCache ?: return
+        customButtonsScriptLoaded = true
+        activity.setupCustomButtons(
+            buttons = buttons,
+            enabled = true,
+        )
     }
 
     /**
@@ -439,10 +498,13 @@ class PlayerViewModel @JvmOverloads constructor(
      * or select the first one in the list if trackSelect fails.
      */
     fun onFinishLoadingTracks() {
-        val preferredSubtitle = trackSelect.getPreferredTrackIndex(subtitleTracks.value)
-        (preferredSubtitle ?: subtitleTracks.value.firstOrNull())?.let {
-            activity.player.sid = it.id
-            activity.player.secondarySid = -1
+        val selectedSubs = selectedSubtitles.value
+        if (selectedSubs.first == -1 && selectedSubs.second == -1) {
+            val preferredSubtitle = trackSelect.getPreferredTrackIndex(subtitleTracks.value)
+            (preferredSubtitle ?: subtitleTracks.value.firstOrNull())?.let {
+                activity.player.sid = it.id
+                activity.player.secondarySid = -1
+            }
         }
 
         val preferredAudio = trackSelect.getPreferredTrackIndex(audioTracks.value, subtitle = false)
@@ -548,6 +610,10 @@ class PlayerViewModel @JvmOverloads constructor(
 
     fun updateSubtitle(sid: Int, secondarySid: Int) {
         _selectedSubtitles.update { Pair(sid, secondarySid) }
+    }
+
+    internal fun resetSubtitleSelection() {
+        _selectedSubtitles.update { Pair(-1, -1) }
     }
 
     fun updatePlayBackPos(pos: Float) {

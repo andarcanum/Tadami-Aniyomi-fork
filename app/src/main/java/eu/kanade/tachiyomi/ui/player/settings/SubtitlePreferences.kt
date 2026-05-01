@@ -18,6 +18,7 @@ class SubtitlePreferences(
     fun preferredSubLanguages() = preferenceStore.getString("pref_subtitle_lang", "")
     fun subtitleWhitelist() = preferenceStore.getString("pref_subtitle_whitelist", "")
     fun subtitleBlacklist() = preferenceStore.getString("pref_subtitle_blacklist", "")
+    fun preferExactSubtitleMatch() = preferenceStore.getBoolean("pref_subtitle_exact_match", true)
 
     // Non-preferences
 

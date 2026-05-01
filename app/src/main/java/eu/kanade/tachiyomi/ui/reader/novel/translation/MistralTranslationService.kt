@@ -76,7 +76,7 @@ class MistralTranslationService(
             params.reasoningEffort?.let { effort ->
                 put("reasoning_effort", effort)
             }
-            put("max_tokens", 4096)
+            put("max_tokens", computeTranslationMaxTokens(segments))
             put("stream", false)
         }
 
@@ -94,11 +94,16 @@ class MistralTranslationService(
                     return null
                 }
                 is MistralRequestOutcome.RateLimited -> {
+                    if (attempt == MAX_ATTEMPTS) {
+                        onLog?.invoke(
+                            "Mistral rate limited (attempt $attempt/$MAX_ATTEMPTS): ${outcome.details}. No retries left",
+                        )
+                        return null
+                    }
                     onLog?.invoke(
                         "Mistral rate limited (attempt $attempt/$MAX_ATTEMPTS): ${outcome.details}. " +
                             "Retrying in ${"%.1f".format(outcome.waitMs / 1000f)}s",
                     )
-                    if (attempt == MAX_ATTEMPTS) return null
                     retryDelay(outcome.waitMs)
                 }
                 is MistralRequestOutcome.Success -> {
@@ -145,6 +150,14 @@ class MistralTranslationService(
                     }
                     val parsed = GeminiXmlSegmentParser.parse(sanitizedCandidate, expectedCount = segments.size)
                     if (parsed.all { it.isNullOrBlank() }) {
+                        val parsedPlaintext = GeminiXmlSegmentParser.parsePlaintext(
+                            rawResponse = candidateText,
+                            expectedCount = segments.size,
+                        )
+                        if (parsedPlaintext.any { !it.isNullOrBlank() }) {
+                            onLog?.invoke("Mistral parse warning: no XML segments found; used plaintext fallback")
+                            return parsedPlaintext
+                        }
                         onLog?.invoke("Mistral parse warning: no XML segments found in message")
                         onLog?.invoke("Mistral content preview: ${sanitizedCandidate.take(600)}")
                         return null
@@ -223,7 +236,7 @@ class MistralTranslationService(
                 }
             }
         }.getOrElse { error ->
-            MistralRequestOutcome.Failure("Mistral request exception: ${formatGeminiThrowableForLog(error)}")
+            MistralRequestOutcome.Failure("Mistral request exception: ${formatAiTranslationThrowableForLog(error)}")
         }
     }
 }
@@ -247,17 +260,31 @@ private fun JsonObject.extractApiErrorMessage(): String? {
 
 private fun JsonObject.extractAssistantContent(): String {
     val message = this["message"].asObjectOrNull()
-    val sources = listOf(
-        message?.get("content"),
-        message?.get("text"),
-        this["text"],
-        this["output_text"],
-        this["content"],
-    )
-    return sources.firstNotNullOfOrNull { it.extractTextCandidates().firstOrNull() }.orEmpty()
+    message?.get("content")
+        .extractContentArrayTextCandidates()
+        .firstOrNull()
+        ?.let { return it }
+
+    val sources =
+        listOf(message?.get("content"), message?.get("text"), this["text"], this["output_text"], this["content"])
+    return sources.firstNotNullOfOrNull { it.extractTextCandidates(includeThinking = false).firstOrNull() }.orEmpty()
 }
 
-private fun JsonElement?.extractTextCandidates(): List<String> {
+private fun JsonElement?.extractContentArrayTextCandidates(): List<String> {
+    val array = this as? JsonArray ?: return emptyList()
+    return array
+        .flatMap { entry ->
+            val obj = entry as? JsonObject ?: return@flatMap entry.extractTextCandidates(includeThinking = false)
+            if (obj["type"].asStringOrNull()?.equals("thinking", ignoreCase = true) == true) {
+                emptyList()
+            } else {
+                obj["text"].extractTextCandidates(includeThinking = false)
+            }
+        }
+        .distinct()
+}
+
+private fun JsonElement?.extractTextCandidates(includeThinking: Boolean): List<String> {
     return when (this) {
         is JsonPrimitive -> {
             if (isString) {
@@ -266,11 +293,14 @@ private fun JsonElement?.extractTextCandidates(): List<String> {
                 emptyList()
             }
         }
-        is JsonArray -> flatMap { it.extractTextCandidates() }
+        is JsonArray -> flatMap { it.extractTextCandidates(includeThinking = includeThinking) }
         is JsonObject -> {
+            val isThinking = this["type"].asStringOrNull()?.equals("thinking", ignoreCase = true) == true
+            if (isThinking && !includeThinking) return emptyList()
             val direct = listOf("text", "content", "output_text")
-                .flatMap { key -> this[key].extractTextCandidates() }
-            val functionArgs = this["function"].asObjectOrNull()?.get("arguments").extractTextCandidates()
+                .flatMap { key -> this[key].extractTextCandidates(includeThinking = includeThinking) }
+            val functionArgs = this["function"].asObjectOrNull()?.get("arguments")
+                .extractTextCandidates(includeThinking = includeThinking)
             (direct + functionArgs).distinct()
         }
         else -> emptyList()
@@ -333,3 +363,8 @@ private fun String.trimNonXmlTail(): String {
 }
 
 private const val MAX_ATTEMPTS = 3
+
+private fun computeTranslationMaxTokens(segments: List<String>): Int {
+    val estimated = segments.sumOf { (it.length / 2).coerceAtLeast(32) } + segments.size * 24
+    return estimated.coerceIn(4096, 8192)
+}
