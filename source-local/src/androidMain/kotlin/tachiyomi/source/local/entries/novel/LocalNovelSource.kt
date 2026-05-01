@@ -176,6 +176,12 @@ actual class LocalNovelSource(
                             .map { manifestItems[it.attr("idref")]?.attr("href") }
                             .filterNotNull()
 
+                        logcat(LogPriority.DEBUG) {
+                            "ChapterList epub=${chapterFile.name} manifestXhtml=${manifestItems.size} " +
+                                "spineRefs=${packageDoc.select("spine > itemref").size} " +
+                                "spinePages=${spinePages.size}"
+                        }
+
                         if (spinePages.size <= 1) {
                             listOf(
                                 SNovelChapter.create().apply {
