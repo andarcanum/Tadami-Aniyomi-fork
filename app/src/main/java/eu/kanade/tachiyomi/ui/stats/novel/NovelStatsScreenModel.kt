@@ -19,6 +19,7 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_HAS_UNVIEWED
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_COMPLETED
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_VIEWED
+import tachiyomi.source.local.entries.novel.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -45,8 +46,7 @@ class NovelStatsScreenModel(
             val titlesStatData = StatsData.NovelTitles(
                 globalUpdateItemCount = getGlobalUpdateItemCount(libraryNovels),
                 startedNovelCount = distinctLibraryNovels.count { it.hasStarted },
-                // There is no dedicated local-novel source in the current backend.
-                localNovelCount = 0,
+                localNovelCount = distinctLibraryNovels.count { it.novel.isLocal() },
             )
 
             val chaptersStatData = StatsData.Chapters(

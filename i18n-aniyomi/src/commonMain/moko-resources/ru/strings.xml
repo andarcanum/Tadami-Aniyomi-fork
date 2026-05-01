@@ -888,6 +888,7 @@
     <string name="downloaded_episodes">Загруженные эпизоды</string>
     <string name="local_manga_source">Локальный источник манги</string>
     <string name="local_anime_source">Локальный источник аниме</string>
+    <string name="local_novel_source">Локальный источник новелл</string>
     <string name="episode_not_found">Эпизод не найден</string>
     <string name="local_invalid_episode_format">Недопустимый формат эпизода</string>
     <string name="unknown_studio">Неизвестная студия</string>
