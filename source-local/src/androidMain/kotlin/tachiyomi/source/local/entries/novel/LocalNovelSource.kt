@@ -162,29 +162,58 @@ actual class LocalNovelSource(
         val chapters = fileSystem.getFilesInNovelDirectory(novel.url)
             .filterNot { it.name.orEmpty().startsWith('.') }
             .filter { it.extension.equals("epub", true) }
-            .map { chapterFile ->
-                SNovelChapter.create().apply {
-                    url = "${novel.url}/${chapterFile.name}"
-                    name = chapterFile.nameWithoutExtension.orEmpty()
-                    date_upload = chapterFile.lastModified()
+            .flatMap { chapterFile ->
+                try {
+                    chapterFile.epubReader(context).use { epub ->
+                        val packageHref = epub.getPackageHref()
+                        val packageDoc = epub.getPackageDocument(packageHref)
 
-                    val chapterNumber = ChapterRecognition
-                        .parseChapterNumber(novel.title, this.name, this.chapter_number.toDouble())
-                        .toFloat()
-                    chapter_number = chapterNumber
+                        val manifestItems = packageDoc.select("manifest > item")
+                            .filter { it.attr("media-type") == "application/xhtml+xml" }
+                            .associateBy { it.attr("id") }
 
-                    try {
-                        chapterFile.epubReader(context).use { epub ->
-                            val ref = epub.getPackageHref()
-                            val doc = epub.getPackageDocument(ref)
+                        val spinePages = packageDoc.select("spine > itemref")
+                            .map { manifestItems[it.attr("idref")]?.attr("href") }
+                            .filterNotNull()
 
-                            doc.getElementsByTag("dc:title").first()?.text()?.let {
-                                name = it
+                        if (spinePages.size <= 1) {
+                            listOf(
+                                SNovelChapter.create().apply {
+                                    url = "${novel.url}/${chapterFile.name}"
+                                    name = chapterFile.nameWithoutExtension.orEmpty()
+                                    date_upload = chapterFile.lastModified()
+                                    chapter_number = ChapterRecognition
+                                        .parseChapterNumber(novel.title, this.name, this.chapter_number.toDouble())
+                                        .toFloat()
+                                },
+                            )
+                        } else {
+                            spinePages.mapIndexed { index, _ ->
+                                val chapterFileName = chapterFile.nameWithoutExtension.orEmpty()
+                                SNovelChapter.create().apply {
+                                    url = "${novel.url}/${chapterFile.name}|$index"
+                                    name = "$chapterFileName — ${index + 1}"
+                                    date_upload = chapterFile.lastModified()
+                                    chapter_number = (
+                                        ChapterRecognition
+                                            .parseChapterNumber(novel.title, chapterFileName, 0.0)
+                                            .toFloat() + index * 0.001f
+                                        )
+                                }
                             }
                         }
-                    } catch (_: Throwable) {
-                        // Keep filename-based name
                     }
+                } catch (_: Throwable) {
+                    listOf(
+                        SNovelChapter.create().apply {
+                            url = "${novel.url}/${chapterFile.name}"
+                            name = chapterFile.nameWithoutExtension.orEmpty()
+                            date_upload = chapterFile.lastModified()
+                            chapter_number = ChapterRecognition
+                                .parseChapterNumber(novel.title, this.name, this.chapter_number.toDouble())
+                                .toFloat()
+                        },
+                    )
                 }
             }
             .sortedWith { c1, c2 ->
@@ -201,15 +230,17 @@ actual class LocalNovelSource(
         chapters
     }
 
-    // Chapter text
+    // Chapter text — supports multi-chapter epubs via spine index in URL
     override suspend fun getChapterText(chapter: SNovelChapter): String = withIOContext {
         try {
             val parts = chapter.url.split('/', limit = 2)
             val novelDir = parts[0]
-            val chapterName = parts[1]
+            val chapterInfo = parts[1].split('|')
+            val chapterFileName = chapterInfo[0]
+            val spineIndex = chapterInfo.getOrNull(1)?.toIntOrNull() ?: -1
 
             val chapterFile = fileSystem.getNovelDirectory(novelDir)
-                ?.findFile(chapterName)
+                ?.findFile(chapterFileName)
                 ?: return@withIOContext EMPTY_CHAPTER_HTML
 
             chapterFile.epubReader(context).use { epub ->
@@ -225,19 +256,22 @@ actual class LocalNovelSource(
                     .filterNotNull()
 
                 val basePath = packageHref.substringBeforeLast("/")
-                val html = StringBuilder()
 
-                spinePages.forEach { page ->
+                if (spineIndex >= 0 && spineIndex < spinePages.size) {
+                    val page = spinePages[spineIndex]
                     val entryPath = if (basePath.isEmpty()) page else "$basePath/$page"
                     epub.getInputStream(entryPath)?.use { stream ->
-                        html.append(stream.bufferedReader().readText())
-                    }
-                }
-
-                if (html.isEmpty()) {
-                    EMPTY_CHAPTER_HTML
+                        stream.bufferedReader().readText()
+                    } ?: EMPTY_CHAPTER_HTML
                 } else {
-                    html.toString()
+                    val html = StringBuilder()
+                    spinePages.forEach { page ->
+                        val entryPath = if (basePath.isEmpty()) page else "$basePath/$page"
+                        epub.getInputStream(entryPath)?.use { stream ->
+                            html.append(stream.bufferedReader().readText())
+                        }
+                    }
+                    if (html.isEmpty()) EMPTY_CHAPTER_HTML else html.toString()
                 }
             }
         } catch (e: Throwable) {
@@ -276,10 +310,10 @@ actual class LocalNovelSource(
         return try {
             val parts = chapter.url.split('/', limit = 2)
             val novelDir = parts[0]
-            val chapterName = parts[1]
+            val chapterFileName = parts[1].split('|')[0]
 
             val chapterFile = fileSystem.getNovelDirectory(novelDir)
-                ?.findFile(chapterName)
+                ?.findFile(chapterFileName)
                 ?: return null
 
             chapterFile.epubReader(context).use { epub ->
