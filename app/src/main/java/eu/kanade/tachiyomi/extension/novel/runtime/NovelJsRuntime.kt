@@ -1828,6 +1828,24 @@ class NovelJsModuleRegistry(
                 return wrapHandles([]);
               }
             };
+            // Array-like index access (e.g., children()[0], siblings()[1])
+            // Cheerio plugins expect [0] to return a DOM node with .attribs
+            for (var i = 0; i < handles.length; i++) {
+              (function(idx) {
+                Object.defineProperty(api, String(idx), {
+                  get: function() {
+                    if (!handles[idx] && handles[idx] !== 0) return undefined;
+                    return {
+                      tagName: __native.domTagName(handles[idx]),
+                      name: __native.domTagName(handles[idx]),
+                      attribs: JSON.parse(__native.domAttrs(handles[idx]))
+                    };
+                  },
+                  enumerable: true,
+                  configurable: true
+                });
+              })(i);
+            }
             return api;
           }
 
