@@ -575,7 +575,7 @@ class NovelReaderPreferences(
     fun autoScrollOffset() = preferenceStore.getInt("novel_reader_auto_scroll_offset", DEFAULT_AUTO_SCROLL_OFFSET)
 
     fun showAutoScrollFloatingButton() =
-        preferenceStore.getBoolean("novel_reader_show_auto_scroll_floating_button", true)
+        preferenceStore.getBoolean("novel_reader_show_auto_scroll_floating_button", false)
 
     fun prefetchNextChapter() = preferenceStore.getBoolean("novel_reader_prefetch_next_chapter", false)
 
