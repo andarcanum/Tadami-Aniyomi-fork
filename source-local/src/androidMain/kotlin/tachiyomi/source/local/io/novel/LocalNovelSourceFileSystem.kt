@@ -11,7 +11,7 @@ actual class LocalNovelSourceFileSystem(
 
     actual fun getBaseDirectory(): UniFile? {
         val dir = storageManager.getLocalNovelSourceDirectory()
-        logcat(LogPriority.DEBUG) { "LocalNovelFileSystem: getBaseDirectory=$dir" }
+        logcat(LogPriority.DEBUG) { "LocalNovelFileSystem: baseDir=$dir uri=${dir?.uri}" }
         return dir
     }
 
