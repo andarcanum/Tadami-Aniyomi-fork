@@ -14,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
+import mihon.core.archive.archiveReader
 import mihon.core.archive.epubReader
 import rx.Observable
 import tachiyomi.core.common.i18n.stringResource
@@ -28,6 +29,7 @@ import tachiyomi.source.local.filter.novel.NovelOrderBy
 import tachiyomi.source.local.image.novel.LocalNovelCoverManager
 import tachiyomi.source.local.io.novel.LocalNovelSourceFileSystem
 import java.util.concurrent.TimeUnit
+import tachiyomi.source.local.io.ArchiveManga.isSupported as isArchiveSupported
 
 actual class LocalNovelSource(
     private val context: Context,
@@ -157,133 +159,144 @@ actual class LocalNovelSource(
         return@withIOContext novel
     }
 
-    // Chapters
+    // Chapters — TOC-based splitting for multi-chapter epubs
     override suspend fun getChapterList(novel: SNovel): List<SNovelChapter> = withIOContext {
-        val epubFiles = fileSystem.getFilesInNovelDirectory(novel.url)
+        val allChapters = mutableListOf<SNovelChapter>()
+
+        val chapterFiles = fileSystem.getFilesInNovelDirectory(novel.url)
             .filterNot { it.name.orEmpty().startsWith('.') }
-            .filter { it.extension.equals("epub", true) }
-        logcat(LogPriority.WARN) { "ChapterList: novel=${novel.title} epubCount=${epubFiles.size}" }
-        val chapters = epubFiles
-            .flatMap { chapterFile ->
+            .filter { isChapterSupported(it) }
+            .sortedWith { f1, f2 ->
+                f1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(f2.name.orEmpty())
+            }
+
+        val hasMultipleEpubFiles = chapterFiles.count { it.extension.equals("epub", true) } > 1
+        var orderedTocChapterNumber = 0
+
+        chapterFiles.forEach { chapterFile ->
+            if (chapterFile.extension.equals("epub", true)) {
                 try {
                     chapterFile.epubReader(context).use { epub ->
-                        val packageHref = epub.getPackageHref()
-                        val packageDoc = epub.getPackageDocument(packageHref)
-
-                        val manifestItems = packageDoc.select("manifest > item")
-                            .filter { it.attr("media-type") == "application/xhtml+xml" }
-                            .associateBy { it.attr("id") }
-
-                        val spinePages = packageDoc.select("spine > itemref")
-                            .map { manifestItems[it.attr("idref")]?.attr("href") }
-                            .filterNotNull()
-
-                        logcat(LogPriority.WARN) {
-                            "ChapterList epub=${chapterFile.name} manifestXhtml=${manifestItems.size} " +
-                                "spineRefs=${packageDoc.select("spine > itemref").size} " +
-                                "spinePages=${spinePages.size}"
-                        }
-
-                        if (spinePages.size <= 1) {
-                            listOf(
-                                SNovelChapter.create().apply {
-                                    url = "${novel.url}/${chapterFile.name}"
-                                    name = chapterFile.nameWithoutExtension.orEmpty()
-                                    date_upload = chapterFile.lastModified()
-                                    chapter_number = ChapterRecognition
-                                        .parseChapterNumber(novel.title, this.name, this.chapter_number.toDouble())
-                                        .toFloat()
-                                },
-                            )
-                        } else {
-                            spinePages.mapIndexed { index, _ ->
-                                val chapterFileName = chapterFile.nameWithoutExtension.orEmpty()
-                                SNovelChapter.create().apply {
-                                    url = "${novel.url}/${chapterFile.name}|$index"
-                                    name = "$chapterFileName — ${index + 1}"
-                                    date_upload = chapterFile.lastModified()
-                                    chapter_number = (
-                                        ChapterRecognition
-                                            .parseChapterNumber(novel.title, chapterFileName, 0.0)
-                                            .toFloat() + index * 0.001f
-                                        )
+                        // Extract cover from first epub if not set
+                        if (coverManager.find(novel.url) == null) {
+                            try {
+                                val cover = epub.getCoverImage()
+                                if (cover != null) {
+                                    epub.getInputStream(cover)?.use { stream ->
+                                        coverManager.update(novel, stream)
+                                    }
                                 }
+                            } catch (_: Exception) {
+                                // Ignore cover extraction errors
                             }
                         }
-                    }
-                } catch (_: Throwable) {
-                    listOf(
-                        SNovelChapter.create().apply {
-                            url = "${novel.url}/${chapterFile.name}"
-                            name = chapterFile.nameWithoutExtension.orEmpty()
-                            date_upload = chapterFile.lastModified()
-                            chapter_number = ChapterRecognition
-                                .parseChapterNumber(novel.title, this.name, this.chapter_number.toDouble())
-                                .toFloat()
-                        },
-                    )
-                }
-            }
-            .sortedWith { c1, c2 ->
-                val c = c2.chapter_number.compareTo(c1.chapter_number)
-                if (c == 0) c2.name.compareToCaseInsensitiveNaturalOrder(c1.name) else c
-            }
 
-        if (novel.thumbnail_url.isNullOrBlank()) {
-            chapters.lastOrNull()?.let { chapter ->
-                updateCover(chapter, novel)
+                        val tocChapters = epub.getTableOfContents()
+
+                        if (tocChapters.size > 1) {
+                            tocChapters.forEach { tocEntry ->
+                                orderedTocChapterNumber += 1
+                                val displayName = if (hasMultipleEpubFiles) {
+                                    "${chapterFile.nameWithoutExtension.orEmpty()} - ${tocEntry.title}"
+                                } else {
+                                    tocEntry.title
+                                }
+
+                                allChapters.add(
+                                    SNovelChapter.create().apply {
+                                        url = "${novel.url}/${chapterFile.name}#${tocEntry.href}"
+                                        name = displayName
+                                        date_upload = chapterFile.lastModified()
+                                        chapter_number = orderedTocChapterNumber.toFloat()
+                                    },
+                                )
+                            }
+                        } else {
+                            allChapters.add(createSimpleChapter(novel, chapterFile))
+                        }
+                    }
+                } catch (e: Throwable) {
+                    logcat(LogPriority.ERROR, e) { "Error reading epub ${chapterFile.name}" }
+                    allChapters.add(createSimpleChapter(novel, chapterFile))
+                }
+            } else {
+                allChapters.add(createSimpleChapter(novel, chapterFile))
             }
         }
 
-        chapters
+        allChapters.sortedWith { c1, c2 ->
+            when {
+                c1.chapter_number != c2.chapter_number -> c2.chapter_number.compareTo(c1.chapter_number)
+                else -> c2.name.compareToCaseInsensitiveNaturalOrder(c1.name)
+            }
+        }
     }
 
-    // Chapter text — supports multi-chapter epubs via spine index in URL
+    private fun createSimpleChapter(novel: SNovel, chapterFile: UniFile): SNovelChapter {
+        return SNovelChapter.create().apply {
+            url = "${novel.url}/${chapterFile.name}"
+            name = if (chapterFile.isDirectory) {
+                chapterFile.name
+            } else {
+                chapterFile.nameWithoutExtension
+            }.orEmpty()
+            date_upload = chapterFile.lastModified()
+            chapter_number = ChapterRecognition
+                .parseChapterNumber(novel.title, this.name, this.chapter_number.toDouble())
+                .toFloat()
+        }
+    }
+
+    // Chapter text — supports multi-chapter epubs via #href in URL
     override suspend fun getChapterText(chapter: SNovelChapter): String = withIOContext {
         try {
-            val parts = chapter.url.split('/', limit = 2)
+            val urlParts = chapter.url.split("#", limit = 2)
+            val filePath = urlParts[0]
+            val chapterFragment = urlParts.getOrNull(1)
+
+            val parts = filePath.split('/', limit = 2)
             val novelDir = parts[0]
-            val chapterInfo = parts[1].split('|')
-            val chapterFileName = chapterInfo[0]
-            val spineIndex = chapterInfo.getOrNull(1)?.toIntOrNull() ?: -1
+            val chapterName = parts[1]
 
             val chapterFile = fileSystem.getNovelDirectory(novelDir)
-                ?.findFile(chapterFileName)
+                ?.findFile(chapterName)
                 ?: return@withIOContext EMPTY_CHAPTER_HTML
 
-            chapterFile.epubReader(context).use { epub ->
-                val packageHref = epub.getPackageHref()
-                val packageDoc = epub.getPackageDocument(packageHref)
-
-                val manifestItems = packageDoc.select("manifest > item")
-                    .filter { it.attr("media-type") == "application/xhtml+xml" }
-                    .associateBy { it.attr("id") }
-
-                val spinePages = packageDoc.select("spine > itemref")
-                    .map { manifestItems[it.attr("idref")]?.attr("href") }
-                    .filterNotNull()
-
-                val basePath = packageHref.substringBeforeLast("/")
-
-                if (spineIndex >= 0 && spineIndex < spinePages.size) {
-                    val page = spinePages[spineIndex]
-                    val entryPath = if (basePath.isEmpty()) page else "$basePath/$page"
-                    epub.getInputStream(entryPath)?.use { stream ->
-                        stream.bufferedReader().readText()
-                    } ?: EMPTY_CHAPTER_HTML
-                } else {
-                    val html = StringBuilder()
-                    spinePages.forEach { page ->
-                        val entryPath = if (basePath.isEmpty()) page else "$basePath/$page"
-                        epub.getInputStream(entryPath)?.use { stream ->
-                            html.append(stream.bufferedReader().readText())
+            when {
+                chapterFile.isDirectory -> {
+                    chapterFile.listFiles()
+                        ?.filter { isTextFile(it) }
+                        ?.sortedBy { it.name }
+                        ?.joinToString("\n\n") { it.openInputStream().bufferedReader().readText() }
+                        ?: EMPTY_CHAPTER_HTML
+                }
+                chapterFile.extension.equals("epub", true) -> {
+                    chapterFile.epubReader(context).use { epub ->
+                        if (chapterFragment != null) {
+                            epub.getChapterContent(chapterFragment)
+                        } else {
+                            epub.getTextContent()
                         }
                     }
-                    if (html.isEmpty()) EMPTY_CHAPTER_HTML else html.toString()
                 }
+                isArchiveSupported(chapterFile) -> {
+                    chapterFile.archiveReader(context).use { reader ->
+                        reader.useEntries { entries ->
+                            entries.filter { it.isFile && isTextFileName(it.name) }
+                                .sortedBy { it.name }
+                                .toList()
+                        }.joinToString("\n\n") { entry ->
+                            reader.getInputStream(entry.name)?.bufferedReader()?.readText() ?: ""
+                        }
+                    }
+                }
+                isTextFile(chapterFile) -> {
+                    chapterFile.openInputStream().bufferedReader().readText()
+                }
+                else -> EMPTY_CHAPTER_HTML
             }
         } catch (e: Throwable) {
-            logcat(LogPriority.ERROR, e) { "Error reading chapter text for ${chapter.url}" }
+            logcat(LogPriority.ERROR, e) { "Error fetching chapter text for ${chapter.url}" }
             EMPTY_CHAPTER_HTML
         }
     }
@@ -313,29 +326,20 @@ actual class LocalNovelSource(
         }
     }
 
-    // Cover extraction from epub chapter
-    private fun updateCover(chapter: SNovelChapter, novel: SNovel): UniFile? {
-        return try {
-            val parts = chapter.url.split('/', limit = 2)
-            val novelDir = parts[0]
-            val chapterFileName = parts[1].split('|')[0]
+    private fun isChapterSupported(file: UniFile): Boolean {
+        if (file.isDirectory) return true
+        val ext = file.extension?.lowercase() ?: return false
+        return ext in SUPPORTED_EXTENSIONS
+    }
 
-            val chapterFile = fileSystem.getNovelDirectory(novelDir)
-                ?.findFile(chapterFileName)
-                ?: return null
+    private fun isTextFile(file: UniFile): Boolean {
+        val ext = file.extension?.lowercase() ?: return false
+        return ext in TEXT_EXTENSIONS
+    }
 
-            chapterFile.epubReader(context).use { epub ->
-                val entry = epub.getImagesFromPages().firstOrNull()
-                entry?.let {
-                    epub.getInputStream(it)?.use { stream ->
-                        coverManager.update(novel, stream)
-                    }
-                }
-            }
-        } catch (e: Throwable) {
-            logcat(LogPriority.ERROR, e) { "Error updating cover for ${novel.title}" }
-            null
-        }
+    private fun isTextFileName(name: String): Boolean {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return ext in TEXT_EXTENSIONS
     }
 
     companion object {
@@ -344,6 +348,22 @@ actual class LocalNovelSource(
 
         private val LATEST_THRESHOLD = TimeUnit.MILLISECONDS.convert(7, TimeUnit.DAYS)
         private const val EMPTY_CHAPTER_HTML = "<html><body></body></html>"
+
+        private val SUPPORTED_EXTENSIONS = setOf(
+            "txt", "text",
+            "html", "htm", "xhtml",
+            "epub",
+            "zip", "cbz",
+            "rar", "cbr",
+        )
+
+        private val TEXT_EXTENSIONS = setOf(
+            "txt",
+            "text",
+            "html",
+            "htm",
+            "xhtml",
+        )
     }
 }
 

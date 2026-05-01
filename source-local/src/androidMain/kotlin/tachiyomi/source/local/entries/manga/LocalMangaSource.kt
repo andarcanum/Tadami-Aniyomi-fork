@@ -367,6 +367,7 @@ actual class LocalMangaSource(
                         entry?.let { coverManager.update(manga, epub.getInputStream(it)!!) }
                     }
                 }
+                is Format.Text, is Format.Html -> null
             }
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e) { "Error updating cover for ${manga.title}" }
