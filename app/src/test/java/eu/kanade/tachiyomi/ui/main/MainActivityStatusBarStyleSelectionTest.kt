@@ -8,52 +8,19 @@ import org.junit.jupiter.api.Test
 class MainActivityStatusBarStyleSelectionTest {
 
     @Test
-    fun `aurora home screen always uses dark status bar style`() {
+    fun `uses transparent light style on light background`() {
         resolveMainStatusBarStyleMode(
             isHomeScreen = true,
             isAurora = true,
             isLightStatusBarBackground = true,
-        ) shouldBe MainStatusBarStyleMode.DARK
+        ) shouldBe MainStatusBarStyleMode.TRANSPARENT_LIGHT
+    }
 
+    @Test
+    fun `uses dark style on dark background`() {
         resolveMainStatusBarStyleMode(
             isHomeScreen = true,
             isAurora = true,
-            isLightStatusBarBackground = false,
-        ) shouldBe MainStatusBarStyleMode.DARK
-    }
-
-    @Test
-    fun `non aurora home screen keeps dark status bar style on light background`() {
-        resolveMainStatusBarStyleMode(
-            isHomeScreen = true,
-            isAurora = false,
-            isLightStatusBarBackground = true,
-        ) shouldBe MainStatusBarStyleMode.DARK
-    }
-
-    @Test
-    fun `non aurora home screen uses dark style on dark background`() {
-        resolveMainStatusBarStyleMode(
-            isHomeScreen = true,
-            isAurora = false,
-            isLightStatusBarBackground = false,
-        ) shouldBe MainStatusBarStyleMode.DARK
-    }
-
-    @Test
-    fun `non home screen keeps dark status bar style on light background`() {
-        resolveMainStatusBarStyleMode(
-            isHomeScreen = false,
-            isAurora = true,
-            isLightStatusBarBackground = true,
-        ) shouldBe MainStatusBarStyleMode.DARK
-    }
-
-    @Test
-    fun `non home screen uses dark style on dark background`() {
-        resolveMainStatusBarStyleMode(
-            isHomeScreen = false,
-            isAurora = false,
             isLightStatusBarBackground = false,
         ) shouldBe MainStatusBarStyleMode.DARK
     }
@@ -66,41 +33,10 @@ class MainActivityStatusBarStyleSelectionTest {
     }
 
     @Test
-    fun `novel reader still preserves the home shell status bar contract for light and dark themes`() {
+    fun `novel reader still preserves edge-to-edge for proper UI handling`() {
         shouldMainActivityApplyEdgeToEdge(
             eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen(chapterId = 1L),
         ) shouldBe true
-
-        resolveMainStatusBarStyleMode(
-            isHomeScreen = true,
-            isAurora = false,
-            isLightStatusBarBackground = true,
-        ) shouldBe MainStatusBarStyleMode.DARK
-
-        resolveMainStatusBarStyleMode(
-            isHomeScreen = true,
-            isAurora = false,
-            isLightStatusBarBackground = false,
-        ) shouldBe MainStatusBarStyleMode.DARK
-    }
-
-    @Test
-    fun `novel reader maintains edge-to-edge for proper UI handling`() {
-        shouldMainActivityApplyEdgeToEdge(
-            eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen(chapterId = 1L),
-        ) shouldBe true
-
-        resolveMainStatusBarStyleMode(
-            isHomeScreen = true,
-            isAurora = false,
-            isLightStatusBarBackground = true,
-        ) shouldBe MainStatusBarStyleMode.DARK
-
-        resolveMainStatusBarStyleMode(
-            isHomeScreen = true,
-            isAurora = false,
-            isLightStatusBarBackground = false,
-        ) shouldBe MainStatusBarStyleMode.DARK
     }
 
     @Test
