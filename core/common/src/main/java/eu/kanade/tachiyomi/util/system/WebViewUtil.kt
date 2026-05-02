@@ -56,13 +56,12 @@ object WebViewUtil {
     }
 
     fun spoofedPackageName(context: Context): String {
-        return try {
-            context.packageManager.getPackageInfo(CHROME_PACKAGE, PackageManager.GET_META_DATA)
-
-            CHROME_PACKAGE
-        } catch (_: PackageManager.NameNotFoundException) {
-            SYSTEM_SETTINGS_PACKAGE
-        }
+        return runCatching { context.packageManager.getPackageInfo(CHROME_PACKAGE, 0) }
+            .recoverCatching { context.packageManager.getPackageInfo(SYSTEM_SETTINGS_PACKAGE, 0) }
+            .fold(
+                onSuccess = { it.packageName },
+                onFailure = { SYSTEM_SETTINGS_PACKAGE },
+            )
     }
 }
 
@@ -82,6 +81,9 @@ fun WebView.setDefaultSettings() {
         useWideViewPort = true
         loadWithOverviewMode = true
         cacheMode = WebSettings.LOAD_DEFAULT
+
+        // Handle popups properly (needed for Cloudflare Turnstile)
+        setSupportMultipleWindows(true)
 
         // Allow zooming
         setSupportZoom(true)

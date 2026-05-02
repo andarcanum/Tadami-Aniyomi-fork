@@ -2,6 +2,8 @@ package eu.kanade.presentation.webview
 
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
+import android.os.Message
+import android.webkit.JsResult
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import androidx.compose.foundation.clickable
@@ -19,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -29,9 +32,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.core.stack.mutableStateStackOf
+import com.kevinnzou.web.AccompanistWebChromeClient
 import com.kevinnzou.web.AccompanistWebViewClient
 import com.kevinnzou.web.LoadingState
+import com.kevinnzou.web.WebContent
 import com.kevinnzou.web.WebView
+import com.kevinnzou.web.WebViewNavigator
+import com.kevinnzou.web.WebViewState
 import com.kevinnzou.web.rememberWebViewNavigator
 import com.kevinnzou.web.rememberWebViewState
 import com.tadami.aurora.BuildConfig
@@ -59,6 +67,17 @@ import tachiyomi.presentation.core.util.LocalAppHaptics
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
+class WebViewWindow(webContent: WebContent, val navigator: WebViewNavigator) {
+    var state by mutableStateOf(WebViewState(webContent))
+    var popupMessage: Message? = null
+        private set
+    var webView: WebView? = null
+
+    constructor(popupMessage: Message, navigator: WebViewNavigator) : this(WebContent.NavigatorOnly, navigator) {
+        this.popupMessage = popupMessage
+    }
+}
+
 @Composable
 fun WebViewScreenContent(
     onNavigateUp: () -> Unit,
@@ -82,6 +101,29 @@ fun WebViewScreenContent(
     val webViewCoordinator = remember { Injekt.get<NovelPluginWebViewCoordinator>() }
     val novelPluginId = remember(novelSourceId) {
         novelSourceId?.let { novelSourceManager.get(it) as? NovelPluginIdentitySource }?.pluginId
+    }
+
+    val windowStack = remember { mutableStateStackOf<WebViewWindow>() }
+    val webChromeClient = remember {
+        object : AccompanistWebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message,
+            ): Boolean {
+                if (isUserGesture) {
+                    windowStack.push(WebViewWindow(resultMsg, WebViewNavigator(scope)))
+                    return true
+                }
+                return false
+            }
+
+            override fun onJsAlert(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
+                result.confirm()
+                return true
+            }
+        }
     }
 
     var currentUrl by remember { mutableStateOf(url) }
@@ -132,22 +174,20 @@ fun WebViewScreenContent(
                 view: WebView?,
                 request: WebResourceRequest?,
             ): Boolean {
-                request?.let {
-                    if (it.url.toString().startsWith("blob:http")) {
-                        return false
-                    }
+                val url = request?.url?.toString() ?: return false
 
-                    if (it.url.toString().startsWith("intent://")) {
+                // Ignore intents urls
+                if (url.startsWith("intent://")) return true
+
+                // Only open valid web urls, and only when the URL actually changes
+                // (avoid re-loading the same URL which breaks Cloudflare Turnstile navigation)
+                if (url.startsWith("http") || url.startsWith("https")) {
+                    if (url != view?.url) {
+                        view?.loadUrl(url, headers)
                         return true
                     }
-
-                    if (it.method == "POST") {
-                        return false
-                    }
-
-                    view?.loadUrl(it.url.toString(), headers)
-                    return true
                 }
+
                 return false
             }
         }
@@ -264,7 +304,41 @@ fun WebViewScreenContent(
                 }
             },
             client = webClient,
+            chromeClient = webChromeClient,
+            factory = { context ->
+                windowStack.items.firstOrNull { it.webView?.context == context }
+                    ?.webView
+                    ?: WebView(context).also { webView ->
+                        windowStack.items.firstOrNull { it.popupMessage != null }
+                            ?.let { window ->
+                                window.webView = webView
+                                window.popupMessage?.let { msg ->
+                                    val transport = msg.obj as WebView.WebViewTransport
+                                    transport.webView = webView
+                                    msg.sendToTarget()
+                                }
+                            }
+                    }
+            },
         )
+        windowStack.items.forEach { window ->
+            key(window) {
+                WebView(
+                    state = window.state,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding),
+                    navigator = window.navigator,
+                    client = webClient,
+                    chromeClient = webChromeClient,
+                    onDispose = { webView ->
+                        if (windowStack.items.none { it.webView == webView }) {
+                            webView.destroy()
+                        }
+                    },
+                )
+            }
+        }
     }
 }
 

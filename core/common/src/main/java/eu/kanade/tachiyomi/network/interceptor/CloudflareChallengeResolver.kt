@@ -35,10 +35,11 @@ internal class WebViewCloudflareChallengeResolver(
         val latch = CountDownLatch(1)
 
         var webview: WebView? = null
+        var challengeFound = false
         var cloudflareBypassed = false
         var isWebViewOutdatedNow = false
 
-        val challengeUrl = cloudflareChallengeUrlFor(originalRequest)
+        val origRequestUrl = originalRequest.url.toString()
         val headers = parseHeaders(originalRequest.headers)
 
         mainExecutor.execute {
@@ -57,12 +58,16 @@ internal class WebViewCloudflareChallengeResolver(
                         cloudflareBypassed = true
                         latch.countDown()
                     }
+
+                    if (url == origRequestUrl && !challengeFound) {
+                        latch.countDown()
+                    }
                 }
 
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                     if (request.isForMainFrame) {
                         if (error.errorCode in ERROR_CODES) {
-                            Unit
+                            challengeFound = true
                         } else {
                             latch.countDown()
                         }
@@ -76,7 +81,7 @@ internal class WebViewCloudflareChallengeResolver(
                 ) {
                     if (request.isForMainFrame) {
                         if (errorResponse.statusCode in ERROR_CODES) {
-                            Unit
+                            challengeFound = true
                         } else {
                             latch.countDown()
                         }
@@ -84,7 +89,7 @@ internal class WebViewCloudflareChallengeResolver(
                 }
             }
 
-            createdWebView.loadUrl(challengeUrl, headers)
+            createdWebView.loadUrl(origRequestUrl, headers)
         }
 
         latch.awaitFor30Seconds()

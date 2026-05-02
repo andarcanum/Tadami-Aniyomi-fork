@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.util.system.isOutdated
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
+import org.jsoup.Jsoup
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 import java.io.IOException
@@ -30,8 +31,18 @@ class CloudflareInterceptor(
     )
 
     override fun shouldIntercept(response: Response): Boolean {
-        // Check if Cloudflare anti-bot is on
-        return response.code in ERROR_CODES && response.header("Server") in SERVER_CHECK
+        if (response.code !in ERROR_CODES || response.header("Server") !in SERVER_CHECK) {
+            return false
+        }
+        if (response.header("cf-mitigated")?.equals("challenge", ignoreCase = true) == true) {
+            return true
+        }
+        val document = Jsoup.parse(
+            response.peekBody(Long.MAX_VALUE).string(),
+            response.request.url.toString(),
+        )
+        return document.getElementById("challenge-error-title") != null ||
+            document.getElementById("challenge-error-text") != null
     }
 
     override fun intercept(chain: Interceptor.Chain, request: Request, response: Response): Response {
@@ -39,16 +50,9 @@ class CloudflareInterceptor(
             response.close()
             val hostLock = challengeLockByHost.getOrPut(request.url.host) { Any() }
             synchronized(hostLock) {
+                cookieManager.remove(request.url, COOKIE_NAMES, 0)
                 val oldCookie = cookieManager.get(request.url)
                     .firstOrNull { it.name == "cf_clearance" }
-
-                if (oldCookie != null) {
-                    val retryWithExistingCookie = chain.proceed(request)
-                    if (!shouldIntercept(retryWithExistingCookie)) {
-                        return retryWithExistingCookie
-                    }
-                    retryWithExistingCookie.close()
-                }
 
                 webViewChallengeResolver.resolve(request, oldCookie)
                 return chain.proceed(request)
@@ -64,37 +68,6 @@ class CloudflareInterceptor(
     }
 }
 
-internal fun cloudflareChallengeUrlFor(request: Request): String {
-    val url = request.url
-    if (!request.shouldUseDomainRootForChallenge()) {
-        return url.toString()
-    }
-
-    return url.newBuilder()
-        .encodedPath("/")
-        .query(null)
-        .fragment(null)
-        .build()
-        .toString()
-}
-
-private fun Request.shouldUseDomainRootForChallenge(): Boolean {
-    val accept = header("Accept")
-        ?.substringBefore(',')
-        ?.trim()
-        ?.lowercase()
-        .orEmpty()
-    if (accept.startsWith("image/")) {
-        return true
-    }
-
-    val path = url.encodedPath.lowercase()
-    return STATIC_RESOURCE_PATH_REGEX.containsMatchIn(path)
-}
-
 internal val ERROR_CODES = listOf(403, 503)
 private val SERVER_CHECK = arrayOf("cloudflare-nginx", "cloudflare")
-private val STATIC_RESOURCE_PATH_REGEX = Regex(
-    pattern = """\.(?:avif|bmp|css|gif|ico|jpe?g|js|json|m3u8|mp4|otf|png|svg|ts|ttf|webm|webp|woff2?)$""",
-    option = RegexOption.IGNORE_CASE,
-)
+private val COOKIE_NAMES = listOf("cf_clearance")
