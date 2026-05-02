@@ -5910,15 +5910,14 @@ private fun GeminiTranslationDialog(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                        } else if (isMistralSelected || isNvidiaSelected) {
-                            Text(
-                                text = stringResource(
-                                    AYMR.strings.novel_reader_ai_translator_mistral_nvidia_batch_hint,
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
+                        Text(
+                            text = stringResource(
+                                AYMR.strings.novel_reader_ai_translator_max_batch_size_hint,
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

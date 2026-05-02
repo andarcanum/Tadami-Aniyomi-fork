@@ -3742,18 +3742,14 @@ class NovelReaderScreenModel(
             }
             NovelTranslationProvider.OPENROUTER -> 1
             NovelTranslationProvider.DEEPSEEK -> geminiConcurrency.coerceIn(1, MAX_DEEPSEEK_CONCURRENCY)
-            NovelTranslationProvider.MISTRAL -> 1
-            NovelTranslationProvider.NVIDIA -> 1
             NovelTranslationProvider.OLLAMA_CLOUD -> geminiConcurrency.coerceIn(1, 8)
+            else -> geminiConcurrency.coerceIn(1, 8)
         }
     }
 
     private fun NovelReaderSettings.effectiveTranslationBatchSize(): Int {
         val requested = geminiBatchSize.coerceIn(1, 80)
         return when (translationProvider) {
-            NovelTranslationProvider.MISTRAL,
-            NovelTranslationProvider.NVIDIA,
-            -> requested.coerceAtMost(20)
             else -> requested
         }
     }

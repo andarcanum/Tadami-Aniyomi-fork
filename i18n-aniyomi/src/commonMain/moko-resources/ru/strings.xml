@@ -653,7 +653,7 @@
     <string name="novel_reader_ai_translator_generation_advantage_prefix">Преимущество: %s</string>
     <string name="novel_reader_ai_translator_deepseek_reasoning_hint">При включенном thinking mode DeepSeek игнорирует temperature, top_p, presence_penalty и frequency_penalty.</string>
     <string name="novel_reader_ai_translator_deepseek_hint">Для DeepSeek используется диапазон Температура 1.3-1.5 и TopP 0.9-0.95. TopK не применяется.</string>
-    <string name="novel_reader_ai_translator_mistral_nvidia_batch_hint">Для Mistral и NVIDIA рекомендуется размер батча 20. Увеличение может ухудшить качество и стабильность перевода.</string>
+    <string name="novel_reader_ai_translator_max_batch_size_hint">Максимальный размер батча — 80.</string>
     <string name="novel_reader_ai_translator_prompt_mode_summary">Режим промпта определяет, насколько жёстко система ведёт перевод до применения стиля и модификаторов.</string>
     <string name="novel_reader_ai_translator_logs_title">Логи</string>
     <string name="novel_reader_ai_translator_logs_summary">Диагностика запросов и ответа модели</string>
