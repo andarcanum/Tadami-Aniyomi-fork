@@ -20,9 +20,10 @@ class AnimeRatingFetcher {
         forceRefresh: Boolean = false,
     ): Float? {
         val httpSource = source as? AnimeHttpSource ?: return null
-        val request = httpSource.animeDetailsRequest(anime.toSAnime())
 
         return runCatching {
+            val request = httpSource.animeDetailsRequest(anime.toSAnime())
+
             val rating = ratingCache.resolve(
                 contentType = CONTENT_TYPE,
                 sourceName = source.name,
@@ -45,13 +46,9 @@ class AnimeRatingFetcher {
             rating
         }.getOrElse { error ->
             debugLog(
-                "await: failed source=${source.name} animeUrl=${request.url} error=${error.message}",
+                "await: failed source=${source.name} error=${error.message}",
             )
-            ratingCache.peek(
-                contentType = CONTENT_TYPE,
-                sourceName = source.name,
-                url = request.url.toString(),
-            )
+            null
         }
     }
 
