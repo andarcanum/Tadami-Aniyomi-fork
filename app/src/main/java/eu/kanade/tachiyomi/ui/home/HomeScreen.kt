@@ -16,13 +16,12 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -39,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -159,7 +159,7 @@ object HomeScreen : Screen() {
                                     val auroraColors = if (isAurora) AuroraTheme.colors else null
                                     val navContainerColor = if (isAurora) {
                                         if (auroraColors!!.isDark) {
-                                            auroraColors.surface
+                                            auroraColors.background
                                         } else {
                                             auroraColors.accent.copy(alpha = 0.04f)
                                                 .compositeOver(Color(0xFFF0F4F8))
@@ -171,18 +171,21 @@ object HomeScreen : Screen() {
                                         containerColor = navContainerColor,
                                         modifier = if (isAurora) {
                                             Modifier.then(
-                                                    if (!auroraColors!!.isDark) {
-                                                        Modifier.border(
-                                                            BorderStroke(
-                                                                width = 0.75.dp,
-                                                                color = auroraColors.divider.copy(alpha = 0.5f),
-                                                            ),
-                                                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                                                        )
-                                                    } else {
-                                                        Modifier
-                                                    },
-                                                )
+                                                if (!auroraColors!!.isDark) {
+                                                    Modifier.border(
+                                                        BorderStroke(
+                                                            width = 0.75.dp,
+                                                            color = auroraColors.accent.copy(alpha = 0.5f),
+                                                        ),
+                                                        shape = RoundedCornerShape(
+                                                            topStart = 20.dp,
+                                                            topEnd = 20.dp,
+                                                        ),
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                },
+                                            )
                                         } else {
                                             Modifier
                                         },
@@ -201,7 +204,7 @@ object HomeScreen : Screen() {
                                     val auroraColors = if (isAurora) AuroraTheme.colors else null
                                     val navContainerColor = if (isAurora) {
                                         if (auroraColors!!.isDark) {
-                                            auroraColors.surface
+                                            auroraColors.background
                                         } else {
                                             auroraColors.accent.copy(alpha = 0.04f)
                                                 .compositeOver(Color(0xFFF0F4F8))
@@ -213,18 +216,21 @@ object HomeScreen : Screen() {
                                         containerColor = navContainerColor,
                                         modifier = if (isAurora) {
                                             Modifier.then(
-                                                    if (!auroraColors!!.isDark) {
-                                                        Modifier.border(
-                                                            BorderStroke(
-                                                                width = 0.75.dp,
-                                                                color = auroraColors.divider.copy(alpha = 0.5f),
-                                                            ),
-                                                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                                                        )
-                                                    } else {
-                                                        Modifier
-                                                    },
-                                                )
+                                                if (!auroraColors!!.isDark) {
+                                                    Modifier.border(
+                                                        BorderStroke(
+                                                            width = 0.75.dp,
+                                                            color = auroraColors.accent.copy(alpha = 0.5f),
+                                                        ),
+                                                        shape = RoundedCornerShape(
+                                                            topStart = 20.dp,
+                                                            topEnd = 20.dp,
+                                                        ),
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                },
+                                            )
                                         } else {
                                             Modifier
                                         },

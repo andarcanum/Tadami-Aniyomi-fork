@@ -32,7 +32,7 @@ fun NavigationBar(
         shape = shape,
         color = containerColor,
         contentColor = contentColor,
-        tonalElevation = if (containerColor.alpha < 1f) 0.dp else tonalElevation,
+        tonalElevation = 0.dp,
         modifier = modifier,
     ) {
         Row(
