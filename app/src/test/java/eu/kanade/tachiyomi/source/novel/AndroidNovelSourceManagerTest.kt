@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.source.novel
 
+import android.content.Context
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
 import eu.kanade.tachiyomi.novelsource.NovelSource
@@ -10,6 +11,7 @@ import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
+import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -24,13 +26,15 @@ import tachiyomi.domain.source.novel.repository.NovelStubSourceRepository
 
 class AndroidNovelSourceManagerTest {
 
+    private val context: Context = mockk(relaxed = true)
+
     @Test
     fun `catalogueSources emits sources from extension manager`() {
         runTest {
             val dispatcher = StandardTestDispatcher(testScheduler)
             val extensionManager = FakeNovelExtensionManager()
             val repository = FakeNovelStubSourceRepository()
-            val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
+            val manager = AndroidNovelSourceManager(context, extensionManager, repository, dispatcher)
 
             val source = FakeNovelCatalogueSource(id = 10L, name = "Novel", lang = "en")
             extensionManager.emitSources(listOf(source))
@@ -48,7 +52,7 @@ class AndroidNovelSourceManagerTest {
             val dispatcher = StandardTestDispatcher(testScheduler)
             val extensionManager = FakeNovelExtensionManager()
             val repository = FakeNovelStubSourceRepository()
-            val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
+            val manager = AndroidNovelSourceManager(context, extensionManager, repository, dispatcher)
 
             repository.upsertStubNovelSource(1L, "en", "Stub")
             advanceUntilIdle()
@@ -67,7 +71,7 @@ class AndroidNovelSourceManagerTest {
             val dispatcher = StandardTestDispatcher(testScheduler)
             val extensionManager = FakeNovelExtensionManager()
             val repository = FakeNovelStubSourceRepository()
-            val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
+            val manager = AndroidNovelSourceManager(context, extensionManager, repository, dispatcher)
 
             val onlineSource = FakeNovelCatalogueSource(id = 1L, name = "Online", lang = "en")
             extensionManager.emitSources(listOf(onlineSource))
@@ -88,7 +92,7 @@ class AndroidNovelSourceManagerTest {
             val dispatcher = StandardTestDispatcher(testScheduler)
             val extensionManager = FakeNovelExtensionManager()
             val repository = FakeNovelStubSourceRepository()
-            val manager = AndroidNovelSourceManager(extensionManager, repository, dispatcher)
+            val manager = AndroidNovelSourceManager(context, extensionManager, repository, dispatcher)
 
             extensionManager.emitSources(emptyList())
             advanceUntilIdle()
