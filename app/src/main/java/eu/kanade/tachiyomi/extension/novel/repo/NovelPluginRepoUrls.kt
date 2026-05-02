@@ -10,6 +10,7 @@ internal fun resolveNovelPluginRepoIndexUrls(baseUrl: String): List<String> {
         listOf(
             "$normalized/index.min.json",
             "$normalized/plugins.min.json",
+            "$normalized/plugins.json",
         )
     }
 }

@@ -34,6 +34,8 @@ data class NovelPluginRuntimeOverride(
     val domainAliases: Map<String, String> = emptyMap(),
     val scriptPatches: List<NovelScriptPatch> = emptyList(),
     val chapterFallbackPolicy: NovelChapterFallbackPolicy = NovelChapterFallbackPolicy(),
+    val disableFallbacks: Boolean = true,
+    val disableScriptPatches: Boolean = true,
 )
 
 @Serializable

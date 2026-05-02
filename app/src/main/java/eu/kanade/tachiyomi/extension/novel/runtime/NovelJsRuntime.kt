@@ -1270,11 +1270,18 @@ class NovelJsModuleRegistry(
             return out.buffer;
           }
           function makeResponse(response) {
+            var src = response.headers || {};
+            var headers = {};
+            for (var key in src) {
+              if (Object.prototype.hasOwnProperty.call(src, key)) headers[key.toLowerCase()] = src[key];
+            }
+            headers.get = function(name) { return this[name] != null ? this[name] : this[String(name).toLowerCase()] || null; };
+            headers.has = function(name) { return this[name] != null || String(name).toLowerCase() in this; };
             return {
               ok: response.status >= 200 && response.status < 300,
               status: response.status,
               url: response.url || "",
-              headers: response.headers || {},
+              headers: headers,
               text: function() { return Promise.resolve(response.body || ""); },
               json: function() { return Promise.resolve(response.body ? JSON.parse(response.body) : null); },
               arrayBuffer: function() { return Promise.resolve(decodeBase64ToArrayBuffer(response.bodyBase64 || "")); }

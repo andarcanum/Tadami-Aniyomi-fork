@@ -18,6 +18,7 @@ class NetworkNovelPluginIndexFetcher(
             } else {
                 listOf(
                     "$baseUrl/plugins.min.json",
+                    "$baseUrl/plugins.json",
                     "$baseUrl/index.min.json",
                 )
             }
