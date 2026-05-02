@@ -77,6 +77,8 @@ class SourcePreferences(
     fun pinnedMangaSources() = preferenceStore.getStringSet("pinned_catalogues", emptySet())
     fun pinnedNovelSources() = preferenceStore.getStringSet("pinned_novel_catalogues", emptySet())
 
+    fun verticalPinnedLayout() = preferenceStore.getBoolean("vertical_pinned_layout", false)
+
     fun mangaFeedSources() = preferenceStore.getStringSet(
         Preference.appStateKey("manga_feed_sources"),
         emptySet(),

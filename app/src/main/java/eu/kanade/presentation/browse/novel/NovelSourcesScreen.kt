@@ -175,6 +175,7 @@ fun NovelSourcesScreen(
                                         onClickItem = onClickItem,
                                         onLongClickItem = onLongClickItem,
                                         onClickPin = onClickPin,
+                                        showLatest = false,
                                     )
                                 }
                             }
@@ -259,6 +260,7 @@ private fun SourceItem(
     onLongClickItem: (Source) -> Unit,
     onClickPin: (Source) -> Unit,
     modifier: Modifier = Modifier,
+    showLatest: Boolean = true,
 ) {
     BaseNovelSourceItem(
         modifier = modifier,
@@ -266,7 +268,7 @@ private fun SourceItem(
         onClickItem = { onClickItem(source, Listing.Popular) },
         onLongClickItem = { onLongClickItem(source) },
         action = {
-            if (source.supportsLatest) {
+            if (source.supportsLatest && showLatest) {
                 TextButton(onClick = { onClickItem(source, Listing.Latest) }) {
                     Text(
                         text = stringResource(MR.strings.latest),

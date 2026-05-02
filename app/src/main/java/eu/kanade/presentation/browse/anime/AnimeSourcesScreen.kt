@@ -180,6 +180,7 @@ fun AnimeSourcesScreen(
                                         onClickItem = onClickItem,
                                         onLongClickItem = onLongClickItem,
                                         onClickPin = onClickPin,
+                                        showLatest = false,
                                     )
                                 }
                             }
@@ -264,6 +265,7 @@ private fun AnimeSourceItem(
     onLongClickItem: (AnimeSource) -> Unit,
     onClickPin: (AnimeSource) -> Unit,
     modifier: Modifier = Modifier,
+    showLatest: Boolean = true,
 ) {
     BaseAnimeSourceItem(
         modifier = modifier,
@@ -271,7 +273,7 @@ private fun AnimeSourceItem(
         onClickItem = { onClickItem(source, Listing.Popular) },
         onLongClickItem = { onLongClickItem(source) },
         action = {
-            if (source.supportsLatest) {
+            if (source.supportsLatest && showLatest) {
                 TextButton(onClick = { onClickItem(source, Listing.Latest) }) {
                     Text(
                         text = stringResource(MR.strings.latest),

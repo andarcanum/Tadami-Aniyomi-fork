@@ -6,8 +6,10 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.source.novel.interactor.GetEnabledNovelSources
 import eu.kanade.domain.source.novel.interactor.ToggleNovelSource
 import eu.kanade.domain.source.novel.interactor.ToggleNovelSourcePin
+import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.browse.novel.NovelSourceUiModel
 import eu.kanade.tachiyomi.util.system.LAST_USED_KEY
+import eu.kanade.tachiyomi.util.system.PINNED_KEY
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -17,6 +19,8 @@ import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import logcat.LogPriority
@@ -29,6 +33,7 @@ import uy.kohesive.injekt.api.get
 import java.util.TreeMap
 
 class NovelSourcesScreenModel(
+    private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val getEnabledSources: GetEnabledNovelSources = Injekt.get(),
     private val toggleSource: ToggleNovelSource = Injekt.get(),
     private val togglePin: ToggleNovelSourcePin = Injekt.get(),
@@ -51,16 +56,22 @@ class NovelSourcesScreenModel(
                     updateState()
                 }
         }
+        sourcePreferences.verticalPinnedLayout().changes()
+            .onEach {
+                mutableState.update { state -> state.copy(verticalPinnedLayout = it) }
+                updateState()
+            }
+            .launchIn(screenModelScope)
     }
 
     private fun updateState() {
         val query = state.value.searchQuery
         val collapsed = state.value.collapsedLanguages
+        val verticalLayout = state.value.verticalPinnedLayout
 
-        val (pinned, others) = if (query.isBlank()) {
-            rawSources.partition { Pin.Actual in it.pin }
-        } else {
-            Pair(emptyList(), rawSources)
+        val (pinned, others) = when {
+            query.isBlank() && !verticalLayout -> rawSources.partition { Pin.Actual in it.pin }
+            else -> Pair(emptyList(), rawSources)
         }
 
         val filtered = others.filter {
@@ -69,6 +80,8 @@ class NovelSourcesScreenModel(
 
         val map = TreeMap<String, MutableList<Source>> { d1, d2 ->
             when {
+                d1 == PINNED_KEY && d2 != PINNED_KEY -> -1
+                d2 == PINNED_KEY && d1 != PINNED_KEY -> 1
                 d1 == LAST_USED_KEY && d2 != LAST_USED_KEY -> -1
                 d2 == LAST_USED_KEY && d1 != LAST_USED_KEY -> 1
                 d1 == "" && d2 != "" -> 1
@@ -78,13 +91,14 @@ class NovelSourcesScreenModel(
         }
         val byLang = filtered.groupByTo(map) {
             when {
+                verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
                 it.isUsedLast -> LAST_USED_KEY
                 else -> it.lang
             }
         }
 
         val uiItems = byLang.flatMap { (lang, sources) ->
-            if (lang in collapsed && query.isBlank()) {
+            if (lang in collapsed && query.isBlank() && lang != PINNED_KEY) {
                 listOf(NovelSourceUiModel.Header(lang, isCollapsed = true))
             } else {
                 listOf(NovelSourceUiModel.Header(lang, isCollapsed = false)) +
@@ -148,6 +162,7 @@ class NovelSourcesScreenModel(
         val pinnedItems: ImmutableList<Source> = persistentListOf(),
         val searchQuery: String = "",
         val collapsedLanguages: ImmutableSet<String> = persistentSetOf(),
+        val verticalPinnedLayout: Boolean = false,
     ) {
         val isEmpty = items.isEmpty() && pinnedItems.isEmpty()
     }

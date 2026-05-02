@@ -2015,4 +2015,5 @@
     <!-- Player advanced -->
     <string name="pref_mpv_user_files">Использовать пользовательские MPV-файлы</string>
     <string name="pref_mpv_user_files_summary">Использовать файлы из директории mpv-config</string>
+    <string name="pref_vertical_pinned_layout">Вертикальное расположение закрепленных плагинов</string>
 </resources>
