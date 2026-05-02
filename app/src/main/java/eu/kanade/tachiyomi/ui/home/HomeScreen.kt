@@ -16,6 +16,8 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
@@ -40,7 +42,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -158,7 +159,7 @@ object HomeScreen : Screen() {
                                     val auroraColors = if (isAurora) AuroraTheme.colors else null
                                     val navContainerColor = if (isAurora) {
                                         if (auroraColors!!.isDark) {
-                                            auroraColors.surface.copy(alpha = 0.2f)
+                                            auroraColors.surface
                                         } else {
                                             auroraColors.accent.copy(alpha = 0.04f)
                                                 .compositeOver(Color(0xFFF0F4F8))
@@ -169,15 +170,14 @@ object HomeScreen : Screen() {
                                     NavigationBar(
                                         containerColor = navContainerColor,
                                         modifier = if (isAurora) {
-                                            Modifier
-                                                .graphicsLayer { alpha = 0.95f }
-                                                .then(
+                                            Modifier.then(
                                                     if (!auroraColors!!.isDark) {
                                                         Modifier.border(
                                                             BorderStroke(
                                                                 width = 0.75.dp,
                                                                 color = auroraColors.divider.copy(alpha = 0.5f),
                                                             ),
+                                                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                                                         )
                                                     } else {
                                                         Modifier
@@ -195,13 +195,13 @@ object HomeScreen : Screen() {
                             } else {
                                 AnimatedVisibility(
                                     visible = showBottomNav,
-                                    enter = expandVertically(),
-                                    exit = shrinkVertically(),
+                                    enter = expandVertically(expandFrom = Alignment.Bottom),
+                                    exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
                                 ) {
                                     val auroraColors = if (isAurora) AuroraTheme.colors else null
                                     val navContainerColor = if (isAurora) {
                                         if (auroraColors!!.isDark) {
-                                            auroraColors.surface.copy(alpha = 0.2f)
+                                            auroraColors.surface
                                         } else {
                                             auroraColors.accent.copy(alpha = 0.04f)
                                                 .compositeOver(Color(0xFFF0F4F8))
@@ -212,15 +212,14 @@ object HomeScreen : Screen() {
                                     NavigationBar(
                                         containerColor = navContainerColor,
                                         modifier = if (isAurora) {
-                                            Modifier
-                                                .graphicsLayer { alpha = 0.95f }
-                                                .then(
+                                            Modifier.then(
                                                     if (!auroraColors!!.isDark) {
                                                         Modifier.border(
                                                             BorderStroke(
                                                                 width = 0.75.dp,
                                                                 color = auroraColors.divider.copy(alpha = 0.5f),
                                                             ),
+                                                            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                                                         )
                                                     } else {
                                                         Modifier
@@ -242,7 +241,7 @@ object HomeScreen : Screen() {
                 ) { contentPadding ->
                     Box(
                         modifier = Modifier
-                            .padding(contentPadding)
+                            .padding(top = contentPadding.calculateTopPadding())
                             .consumeWindowInsets(contentPadding),
                     ) {
                         if (resolvedTransitionMode == ResolvedNavigationTransitionMode.NONE) {
