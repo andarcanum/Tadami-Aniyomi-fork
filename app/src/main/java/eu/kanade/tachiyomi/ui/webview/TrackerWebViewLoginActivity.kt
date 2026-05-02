@@ -96,7 +96,11 @@ class TrackerWebViewLoginActivity : BaseActivity() {
                             toast("Unknown tracker")
                         } else {
                             CookieManager.getInstance().flush()
-                            val cookies = CookieManager.getInstance().getCookie(loginUrl)
+                            val cookieUrl = when (trackerId) {
+                                11L -> "https://www.novellist.co"
+                                else -> loginUrl
+                            }
+                            val cookies = CookieManager.getInstance().getCookie(cookieUrl)
                             val token = when (trackerId) {
                                 10L -> extractNovelUpdatesCookie(cookies)
                                 11L -> extractNovelListToken(cookies)
