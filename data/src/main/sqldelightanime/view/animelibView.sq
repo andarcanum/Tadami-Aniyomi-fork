@@ -44,5 +44,5 @@ FROM animelibView;
 getRecentLibraryAnime:
 SELECT *
 FROM animelibView
-ORDER BY last_update DESC
+ORDER BY date_added DESC
 LIMIT :limit;

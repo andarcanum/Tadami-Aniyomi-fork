@@ -177,7 +177,9 @@ class HomeHubScreenModel(
 
                 val previousHeroId = mutableState.value.hero?.animeId
 
-                val animeRecommendations = filteredAnime.take(10)
+                val animeRecommendations = filteredAnime
+                    .sortedByDescending { it.anime.dateAdded }
+                    .take(10)
 
                 mutableState.update {
                     it.copy(
