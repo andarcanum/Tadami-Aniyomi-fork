@@ -51,6 +51,11 @@ class UiPreferences(
         false,
     )
 
+    fun auroraLibrarySwipeSwitchesCategories() = preferenceStore.getBoolean(
+        "aurora_library_swipe_switches_categories",
+        false,
+    )
+
     fun libraryUpdatePacingTimeoutSeconds() = preferenceStore.getInt(
         "library_update_pacing_timeout_seconds",
         0,

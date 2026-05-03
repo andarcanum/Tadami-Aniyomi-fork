@@ -507,6 +507,13 @@ object SettingsLibraryScreen : SearchableSettings {
                     title = stringResource(AYMR.strings.pref_aurora_library_immersive_mode),
                     subtitle = stringResource(AYMR.strings.pref_aurora_library_immersive_mode_summary),
                 ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = uiPreferences.auroraLibrarySwipeSwitchesCategories(),
+                    title = stringResource(AYMR.strings.pref_aurora_library_swipe_switches_categories),
+                    subtitle = stringResource(
+                        AYMR.strings.pref_aurora_library_swipe_switches_categories_summary,
+                    ),
+                ),
             ),
         )
     }
