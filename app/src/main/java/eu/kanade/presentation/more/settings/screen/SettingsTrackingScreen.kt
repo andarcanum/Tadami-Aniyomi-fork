@@ -64,6 +64,7 @@ import eu.kanade.tachiyomi.data.track.novellist.NovelList
 import eu.kanade.tachiyomi.data.track.novelupdates.NovelUpdates
 import eu.kanade.tachiyomi.data.track.shikimori.ShikimoriApi
 import eu.kanade.tachiyomi.data.track.simkl.SimklApi
+import eu.kanade.tachiyomi.data.track.trakt.TraktApi
 import eu.kanade.tachiyomi.ui.webview.TrackerWebViewLoginActivity
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toast
@@ -112,6 +113,7 @@ object SettingsTrackingScreen : SearchableSettings {
     @Composable
     override fun getPreferences(): List<Preference> {
         val context = LocalContext.current
+        val scope = rememberCoroutineScope()
         val trackPreferences = remember { Injekt.get<TrackPreferences>() }
         val trackerManager = remember { Injekt.get<TrackerManager>() }
         val mangaSourceManager = remember { Injekt.get<MangaSourceManager>() }
@@ -297,6 +299,34 @@ object SettingsTrackingScreen : SearchableSettings {
                             )
                         },
                         logout = { dialog = LogoutDialog(trackerManager.bangumi) },
+                    ),
+                    Preference.PreferenceItem.TrackerPreference(
+                        tracker = trackerManager.trakt,
+                        login = {
+                            context.openInBrowser(
+                                TraktApi.authUrl(),
+                                forceDefaultBrowser = true,
+                            )
+                        },
+                        logout = { dialog = LogoutDialog(trackerManager.trakt) },
+                    ),
+                    Preference.PreferenceItem.TrackerPreference(
+                        tracker = trackerManager.tmdb,
+                        login = {
+                            scope.launchIO {
+                                try {
+                                    val authUrl = trackerManager.tmdb.getAuthUrl()
+                                    withUIContext {
+                                        context.openInBrowser(authUrl, forceDefaultBrowser = true)
+                                    }
+                                } catch (e: Exception) {
+                                    withUIContext {
+                                        context.toast(e.message ?: "TMDB auth failed")
+                                    }
+                                }
+                            }
+                        },
+                        logout = { dialog = LogoutDialog(trackerManager.tmdb) },
                     ),
                     Preference.PreferenceItem.InfoPreference(stringResource(MR.strings.tracking_info)),
                 ),
