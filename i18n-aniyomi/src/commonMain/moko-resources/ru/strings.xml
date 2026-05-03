@@ -50,6 +50,8 @@
     <string name="pref_library_update_show_tab_badge">Показывать количество непросмотренных/непрочитанных на значке обновлений</string>
     <string name="pref_aurora_library_immersive_mode">Режим погружения</string>
     <string name="pref_aurora_library_immersive_mode_summary">Скрывать верхнюю панель и нижнюю навигацию при прокрутке, но оставлять категории видимыми.</string>
+    <string name="pref_aurora_library_swipe_switches_categories">Свайп переключает категории</string>
+    <string name="pref_aurora_library_swipe_switches_categories_summary">Горизонтальные свайпы в библиотеке переключают категории вместо разделов (аниме/манга/ранобэ).</string>
     <string name="label_player_settings">Настройки проигрывателя</string>
     <string name="action_search_player_settings">Поиск по настройкам проигрывателя</string>
     <string name="pref_player_internal">Внутренний проигрыватель</string>

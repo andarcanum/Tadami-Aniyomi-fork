@@ -53,6 +53,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -87,6 +88,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 data class TabState(
@@ -121,6 +123,7 @@ fun TabbedScreenAurora(
     extraSearchToActionsGap: Dp = 0.dp,
     extraActionGapAfterTitle: String? = null,
     extraHeaderContent: @Composable () -> Unit = {},
+    onPagerSwipeOverride: ((forward: Boolean) -> Boolean)? = null,
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
@@ -324,26 +327,76 @@ fun TabbedScreenAurora(
                     }
                 }
             } else {
-                HorizontalPager(
-                    modifier = Modifier.fillMaxSize(),
-                    state = state,
-                    verticalAlignment = Alignment.Top,
-                ) { page ->
-                    val tabState = TabState(
-                        tabs = tabs,
-                        selectedIndex = state.currentPage,
-                        onTabSelected = onTabSelected,
-                    )
-                    CompositionLocalProvider(LocalTabState provides tabState) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp),
-                        ) {
-                            tabs[page].content(
-                                PaddingValues(bottom = 16.dp),
-                                snackbarHostState,
+                val pagerOverrideActive = onPagerSwipeOverride != null
+                val latestPagerSwipeOverride = rememberUpdatedState(onPagerSwipeOverride)
+                val pagerContainerModifier = if (pagerOverrideActive) {
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(switchThresholdPx, maxBouncePx) {
+                            var totalDragPx = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = {
+                                    totalDragPx = 0f
+                                    edgeBounceTargetPx = 0f
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    totalDragPx += dragAmount
+                                },
+                                onDragCancel = {
+                                    totalDragPx = 0f
+                                    edgeBounceTargetPx = 0f
+                                },
+                                onDragEnd = {
+                                    val dragMagnitude = abs(totalDragPx)
+                                    if (dragMagnitude >= switchThresholdPx) {
+                                        // Swipe-left (negative) means "forward" (next item).
+                                        val forward = totalDragPx < 0f
+                                        val consumed = latestPagerSwipeOverride.value
+                                            ?.invoke(forward) == true
+                                        if (!consumed) {
+                                            val direction = if (totalDragPx > 0f) 1f else -1f
+                                            scope.launch {
+                                                edgeBounceTargetPx = direction * maxBouncePx
+                                                delay(90)
+                                                edgeBounceTargetPx = 0f
+                                            }
+                                        } else {
+                                            edgeBounceTargetPx = 0f
+                                        }
+                                    } else {
+                                        edgeBounceTargetPx = 0f
+                                    }
+                                    totalDragPx = 0f
+                                },
                             )
+                        }
+                        .offset { IntOffset(edgeBounceOffsetPx.roundToInt(), 0) }
+                } else {
+                    Modifier.fillMaxSize()
+                }
+                Box(modifier = pagerContainerModifier) {
+                    HorizontalPager(
+                        modifier = Modifier.fillMaxSize(),
+                        state = state,
+                        verticalAlignment = Alignment.Top,
+                        userScrollEnabled = !pagerOverrideActive,
+                    ) { page ->
+                        val tabState = TabState(
+                            tabs = tabs,
+                            selectedIndex = state.currentPage,
+                            onTabSelected = onTabSelected,
+                        )
+                        CompositionLocalProvider(LocalTabState provides tabState) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp),
+                            ) {
+                                tabs[page].content(
+                                    PaddingValues(bottom = 16.dp),
+                                    snackbarHostState,
+                                )
+                            }
                         }
                     }
                 }
