@@ -79,9 +79,10 @@ fun AnimeSourcesScreen(
     } else {
         colors.cardBackground
     }
+    val hasSearchQuery = !searchQuery.isNullOrBlank()
     when {
         state.isLoading -> LoadingScreen(Modifier.padding(contentPadding))
-        state.isEmpty -> EmptyScreen(
+        state.isEmpty && !hasSearchQuery -> EmptyScreen(
             stringRes = MR.strings.source_empty_screen,
             modifier = Modifier.padding(contentPadding),
         )
@@ -156,6 +157,17 @@ fun AnimeSourcesScreen(
                                     singleLine = true,
                                 )
                             }
+                        }
+                    }
+                }
+
+                if (state.isEmpty) {
+                    item(key = "no-results") {
+                        Box(
+                            modifier = Modifier.fillParentMaxHeight(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            EmptyScreen(stringRes = MR.strings.no_results_found)
                         }
                     }
                 }
