@@ -65,7 +65,6 @@ import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.history.HistoriesTab
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab
-import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryTab
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.aniyomi.AYMR
@@ -142,6 +141,7 @@ internal fun MangaHomeHub(
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
     val tabNavigator = LocalTabNavigator.current
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(screenModel) {
         MangaHomeHubScreenModel.setInstance(screenModel)
@@ -177,7 +177,10 @@ internal fun MangaHomeHub(
             BrowseTab.showExtension()
         },
         onHistoryClick = { tabNavigator.current = HistoriesTab },
-        onLibraryClick = { tabNavigator.current = MangaLibraryTab },
+        onLibraryClick = {
+            scope.launch { AnimeLibraryTab.showMangaSection() }
+            tabNavigator.current = AnimeLibraryTab
+        },
     )
 }
 

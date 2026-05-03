@@ -1521,6 +1521,7 @@ data object AnimeLibraryTab : Tab {
     private val requestSectionEvent = Channel<Section>(capacity = Channel.BUFFERED)
     suspend fun requestSection(section: Section) = requestSectionEvent.send(section)
     suspend fun showNovelSection() = requestSection(Section.Novel)
+    suspend fun showMangaSection() = requestSection(Section.Manga)
 
     // For opening settings sheet in LibraryController
     private val requestSettingsSheetEvent = Channel<Unit>()
