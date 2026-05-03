@@ -58,7 +58,7 @@ class NovelExtensionReposScreen(
             is RepoDialog.Create -> {
                 ExtensionRepoCreateDialog(
                     onDismissRequest = screenModel::dismissDialog,
-                    onCreate = { screenModel.createRepo(it) },
+                    onCreate = { url, name -> screenModel.createRepo(url, name) },
                     repoUrls = successState.repos.map { it.baseUrl }.toImmutableSet(),
                 )
             }

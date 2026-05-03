@@ -32,8 +32,19 @@ class NovelExtensionReposScreenModel(
     private val _events: Channel<RepoEvent> = Channel(Int.MAX_VALUE)
     val events = _events.receiveAsFlow()
 
+    private val migrationPrefs = Injekt.get<android.app.Application>()
+        .getSharedPreferences("novel_extension_repo_prefs", 0)
+
     init {
         screenModelScope.launchIO {
+            // One-time migration: fix repo names that show raw URLs
+            if (!migrationPrefs.getBoolean(CreateNovelExtensionRepo.MIGRATION_DONE_KEY, false)) {
+                createExtensionRepo.migrateRepoNames()
+                migrationPrefs.edit()
+                    .putBoolean(CreateNovelExtensionRepo.MIGRATION_DONE_KEY, true)
+                    .apply()
+            }
+
             getExtensionRepo.subscribeAll()
                 .collectLatest { repos ->
                     mutableState.update {
@@ -50,9 +61,9 @@ class NovelExtensionReposScreenModel(
      *
      * @param baseUrl The baseUrl of the repo to create.
      */
-    fun createRepo(baseUrl: String) {
+    fun createRepo(baseUrl: String, displayName: String? = null) {
         screenModelScope.launchIO {
-            when (val result = createExtensionRepo.await(baseUrl)) {
+            when (val result = createExtensionRepo.await(baseUrl, displayName)) {
                 CreateNovelExtensionRepo.Result.InvalidUrl -> _events.send(RepoEvent.InvalidUrl)
                 CreateNovelExtensionRepo.Result.RepoAlreadyExists -> _events.send(RepoEvent.RepoAlreadyExists)
                 is CreateNovelExtensionRepo.Result.DuplicateFingerprint -> {
