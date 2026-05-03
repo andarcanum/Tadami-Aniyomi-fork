@@ -259,6 +259,35 @@ class NovelJsDomStore {
         }
     }
 
+    fun before(handle: Int, html: String) {
+        val el = elementOrNull(handle) ?: return
+        if (html.isBlank()) return
+        el.before(html)
+    }
+
+    fun after(handle: Int, html: String) {
+        val el = elementOrNull(handle) ?: return
+        if (html.isBlank()) return
+        el.after(html)
+    }
+
+    fun append(handle: Int, html: String) {
+        val el = elementOrNull(handle) ?: return
+        if (html.isBlank()) return
+        el.append(html)
+    }
+
+    fun prepend(handle: Int, html: String) {
+        val el = elementOrNull(handle) ?: return
+        if (html.isBlank()) return
+        el.prepend(html)
+    }
+
+    fun empty(handle: Int) {
+        val el = elementOrNull(handle) ?: return
+        el.empty()
+    }
+
     fun remove(handle: Int) {
         val node = nodes[handle] ?: return
         node.remove()

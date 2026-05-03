@@ -121,6 +121,7 @@ class NovelJsRuntime(
         fun resolveUrl(url: String, base: String?): String
         fun getPathname(url: String): String
         fun select(html: String, selector: String): String
+        fun aesGcmDecrypt(keyB64: String, ivB64: String, cipherB64: String): String
 
         // DOM Store methods
         fun domLoad(html: String): Int
@@ -148,6 +149,11 @@ class NovelJsRuntime(
         fun domTagName(handle: Int): String
         fun domIsTextNode(handle: Int): Boolean
         fun domReplaceWith(handle: Int, html: String)
+        fun domBefore(handle: Int, html: String)
+        fun domAfter(handle: Int, html: String)
+        fun domAppend(handle: Int, html: String)
+        fun domPrepend(handle: Int, html: String)
+        fun domEmpty(handle: Int)
         fun domRemove(handle: Int)
         fun domAddClass(handle: Int, className: String)
         fun domRemoveClass(handle: Int, className: String)
@@ -534,6 +540,46 @@ class NovelJsRuntime(
 
         nativeObject.registerJavaMethod(
             JavaCallback { _, parameters ->
+                nativeApi.domBefore(parameters.intArg(0), parameters.stringArg(1))
+                null
+            },
+            "domBefore",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.domAfter(parameters.intArg(0), parameters.stringArg(1))
+                null
+            },
+            "domAfter",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.domAppend(parameters.intArg(0), parameters.stringArg(1))
+                null
+            },
+            "domAppend",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.domPrepend(parameters.intArg(0), parameters.stringArg(1))
+                null
+            },
+            "domPrepend",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.domEmpty(parameters.intArg(0))
+                null
+            },
+            "domEmpty",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
                 nativeApi.domRemove(parameters.intArg(0))
                 null
             },
@@ -570,6 +616,18 @@ class NovelJsRuntime(
                 null
             },
             "domReleaseAll",
+        )
+
+        // Crypto
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.aesGcmDecrypt(
+                    parameters.stringArg(0),
+                    parameters.stringArg(1),
+                    parameters.stringArg(2),
+                )
+            },
+            "__aesGcmDecrypt",
         )
 
         // Console methods
@@ -990,6 +1048,7 @@ class NovelJsModuleRegistry(
             NovelJsModule("fetch.js", fetchModule),
             NovelJsModule("isAbsoluteUrl.js", isAbsoluteUrlModule),
             NovelJsModule("typesConstants.js", typesConstantsModule),
+            NovelJsModule("aes.js", aesModule),
             NovelJsModule("urlencode.js", urlEncodeModule),
             NovelJsModule("cheerio.js", cheerioModule),
             NovelJsModule("htmlparser2.js", htmlParserModule()),
@@ -1412,6 +1471,36 @@ class NovelJsModuleRegistry(
         });
     """.trimIndent()
 
+    private val aesModule = """
+        __defineModule("@libs/aes", function(module, exports) {
+          function toB64(u8) {
+            var binary = "";
+            for (var i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
+            return btoa(binary);
+          }
+          function fromB64(b64) {
+            var binary = atob(b64);
+            var u8 = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) u8[i] = binary.charCodeAt(i);
+            return u8;
+          }
+          module.exports = {
+            gcm: function(keyBytes, ivBytes) {
+              return {
+                decrypt: function(cipherBytes) {
+                  var keyB64 = toB64(keyBytes);
+                  var ivB64 = toB64(ivBytes);
+                  var cipherB64 = toB64(cipherBytes);
+                  var plainB64 = __native.__aesGcmDecrypt(keyB64, ivB64, cipherB64);
+                  if (!plainB64) throw new Error("AES-GCM decrypt failed");
+                  return fromB64(plainB64);
+                }
+              };
+            }
+          };
+        });
+    """.trimIndent()
+
     private val urlEncodeModule = """
         __defineModule("urlencode", function(module, exports) {
           module.exports = {
@@ -1785,6 +1874,40 @@ class NovelJsModuleRegistry(
                 var newHtml = typeof content === "string" ? content : "";
                 for (var i = 0; i < handles.length; i++) {
                   __native.domReplaceWith(handles[i], newHtml);
+                }
+                return api;
+              },
+              before: function(content) {
+                var newHtml = typeof content === "string" ? content : "";
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domBefore(handles[i], newHtml);
+                }
+                return api;
+              },
+              after: function(content) {
+                var newHtml = typeof content === "string" ? content : "";
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domAfter(handles[i], newHtml);
+                }
+                return api;
+              },
+              append: function(content) {
+                var newHtml = typeof content === "string" ? content : "";
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domAppend(handles[i], newHtml);
+                }
+                return api;
+              },
+              prepend: function(content) {
+                var newHtml = typeof content === "string" ? content : "";
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domPrepend(handles[i], newHtml);
+                }
+                return api;
+              },
+              empty: function() {
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domEmpty(handles[i]);
                 }
                 return api;
               },
