@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.suspendCancellableCoroutine
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -89,6 +91,12 @@ fun WebView.setDefaultSettings() {
         setSupportZoom(true)
         builtInZoomControls = true
         displayZoomControls = false
+
+        // Don't expose the host package in X-Requested-With on subresource requests;
+        // anti-bot services (notably Cloudflare) use it as an Android WebView fingerprint.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(this, emptySet())
+        }
     }
 
     CookieManager.getInstance().acceptThirdPartyCookies(this)
