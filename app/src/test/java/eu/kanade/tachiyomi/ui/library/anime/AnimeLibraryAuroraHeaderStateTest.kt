@@ -47,6 +47,39 @@ class AnimeLibraryAuroraHeaderStateTest {
     }
 
     @Test
+    fun `shouldSyncAuroraLibraryCategoryIndex skips sync while categories are not loaded`() {
+        shouldSyncAuroraLibraryCategoryIndex(
+            categoryCount = 0,
+            currentIndex = 2,
+            targetIndex = 0,
+        ) shouldBe false
+
+        shouldSyncAuroraLibraryCategoryIndex(
+            categoryCount = -1,
+            currentIndex = 0,
+            targetIndex = 0,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `shouldSyncAuroraLibraryCategoryIndex syncs when current and target diverge`() {
+        shouldSyncAuroraLibraryCategoryIndex(
+            categoryCount = 3,
+            currentIndex = 5,
+            targetIndex = 2,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `shouldSyncAuroraLibraryCategoryIndex skips sync when already aligned`() {
+        shouldSyncAuroraLibraryCategoryIndex(
+            categoryCount = 3,
+            currentIndex = 1,
+            targetIndex = 1,
+        ) shouldBe false
+    }
+
+    @Test
     fun `shouldShowAuroraLibraryCategoryTabsRow matches legacy tab visibility rules`() {
         shouldShowAuroraLibraryCategoryTabsRow(
             section = AnimeLibraryTab.Section.Anime,
