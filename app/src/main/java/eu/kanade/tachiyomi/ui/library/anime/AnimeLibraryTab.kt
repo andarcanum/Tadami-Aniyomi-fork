@@ -457,18 +457,34 @@ data object AnimeLibraryTab : Tab {
         }
 
         LaunchedEffect(state.categories.size, animeCategoryIndex) {
-            if (screenModel.activeCategoryIndex != animeCategoryIndex) {
+            if (shouldSyncAuroraLibraryCategoryIndex(
+                    categoryCount = state.categories.size,
+                    currentIndex = screenModel.activeCategoryIndex,
+                    targetIndex = animeCategoryIndex,
+                )
+            ) {
                 screenModel.activeCategoryIndex = animeCategoryIndex
             }
         }
         LaunchedEffect(mangaState.categories.size, mangaCategoryIndex) {
-            if (mangaScreenModel.activeCategoryIndex != mangaCategoryIndex) {
+            if (shouldSyncAuroraLibraryCategoryIndex(
+                    categoryCount = mangaState.categories.size,
+                    currentIndex = mangaScreenModel.activeCategoryIndex,
+                    targetIndex = mangaCategoryIndex,
+                )
+            ) {
                 mangaScreenModel.activeCategoryIndex = mangaCategoryIndex
             }
         }
         LaunchedEffect(novelCategories.size, novelCategoryIndex) {
-            if (novelScreenModel?.activeCategoryIndex != novelCategoryIndex) {
-                novelScreenModel?.activeCategoryIndex = novelCategoryIndex
+            val activeNovelScreenModel = novelScreenModel ?: return@LaunchedEffect
+            if (shouldSyncAuroraLibraryCategoryIndex(
+                    categoryCount = novelCategories.size,
+                    currentIndex = activeNovelScreenModel.activeCategoryIndex,
+                    targetIndex = novelCategoryIndex,
+                )
+            ) {
+                activeNovelScreenModel.activeCategoryIndex = novelCategoryIndex
             }
         }
 
@@ -1904,6 +1920,21 @@ internal fun shouldShowAuroraSearchField(
 internal fun coerceAuroraLibraryCategoryIndex(requestedIndex: Int, categoryCount: Int): Int {
     if (categoryCount <= 0) return 0
     return requestedIndex.coerceIn(0, categoryCount - 1)
+}
+
+/**
+ * Decides whether the Aurora library should propagate a category index back to the section's
+ * screen model. We must skip the sync while the category list has not been loaded yet (e.g. right
+ * after returning from a pushed entry screen, when category flows briefly emit an empty initial
+ * value), otherwise the screen model would be permanently reset to the first category.
+ */
+internal fun shouldSyncAuroraLibraryCategoryIndex(
+    categoryCount: Int,
+    currentIndex: Int,
+    targetIndex: Int,
+): Boolean {
+    if (categoryCount <= 0) return false
+    return currentIndex != targetIndex
 }
 
 private fun NovelCategory.toCategory(): Category {
