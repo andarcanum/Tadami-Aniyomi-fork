@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -66,6 +68,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
@@ -73,6 +76,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.icerock.moko.resources.StringResource
@@ -97,6 +101,33 @@ data class TabState(
     val onTabSelected: (Int) -> Unit,
 )
 val LocalTabState = compositionLocalOf<TabState?> { null }
+
+/**
+ * Surface to propagate the host Scaffold's [PaddingValues] (most importantly its bottom inset that
+ * accounts for the in-app NavigationBar height) down to every tab content rendered through
+ * [TabbedScreenAurora]. The host (e.g. `HomeScreen`) intentionally extends the body under the
+ * bottomBar for an edge-to-edge look, so without this hook every tab's LazyColumn would scroll
+ * its last items behind the bar.
+ *
+ * `null` means there is no host padding (e.g. preview/test) and consumers should fall back to a
+ * sensible default.
+ */
+val LocalHostScaffoldContentPadding = compositionLocalOf<PaddingValues?> { null }
+
+internal fun resolveTabbedScreenAuroraContentPadding(
+    hostContentPadding: PaddingValues?,
+    layoutDirection: LayoutDirection,
+    extraBottom: Dp = 16.dp,
+): PaddingValues {
+    val hostBottom = hostContentPadding?.calculateBottomPadding() ?: 0.dp
+    val hostStart = hostContentPadding?.calculateStartPadding(layoutDirection) ?: 0.dp
+    val hostEnd = hostContentPadding?.calculateEndPadding(layoutDirection) ?: 0.dp
+    return PaddingValues(
+        start = hostStart,
+        end = hostEnd,
+        bottom = hostBottom + extraBottom,
+    )
+}
 
 @Composable
 fun TabbedScreenAurora(
@@ -203,6 +234,12 @@ fun TabbedScreenAurora(
 
         previousInstantTabSwitching = instantTabSwitching
     }
+
+    val hostScaffoldContentPadding = LocalHostScaffoldContentPadding.current
+    val tabContentPadding = resolveTabbedScreenAuroraContentPadding(
+        hostContentPadding = hostScaffoldContentPadding,
+        layoutDirection = LocalLayoutDirection.current,
+    )
 
     AuroraBackground(
         modifier = modifier,
@@ -319,7 +356,7 @@ fun TabbedScreenAurora(
                         key(page) {
                             CompositionLocalProvider(LocalTabState provides tabState) {
                                 tabs[page].content(
-                                    PaddingValues(bottom = 16.dp),
+                                    tabContentPadding,
                                     snackbarHostState,
                                 )
                             }
@@ -393,7 +430,7 @@ fun TabbedScreenAurora(
                                     .auroraCenteredMaxWidth(contentMaxWidthDp),
                             ) {
                                 tabs[page].content(
-                                    PaddingValues(bottom = 16.dp),
+                                    tabContentPadding,
                                     snackbarHostState,
                                 )
                             }

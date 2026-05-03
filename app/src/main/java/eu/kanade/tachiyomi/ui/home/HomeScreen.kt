@@ -56,6 +56,7 @@ import cafe.adriel.voyager.navigator.tab.TabNavigator
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.StartScreen
+import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.presentation.util.BottomNavVisibilityController
@@ -250,67 +251,71 @@ object HomeScreen : Screen() {
                             .padding(top = contentPadding.calculateTopPadding())
                             .consumeWindowInsets(contentPadding),
                     ) {
-                        if (resolvedTransitionMode == ResolvedNavigationTransitionMode.NONE) {
-                            val currentTab = tabNavigator.current
-                            tabNavigator.saveableState(key = "currentTab", currentTab) {
-                                currentTab.Content()
-                            }
-                        } else {
-                            AnimatedContent(
-                                targetState = tabNavigator.current,
-                                transitionSpec = {
-                                    when (resolvedTransitionMode) {
-                                        ResolvedNavigationTransitionMode.NONE -> {
-                                            EnterTransition.None togetherWith ExitTransition.None
-                                        }
-                                        ResolvedNavigationTransitionMode.LEGACY -> {
-                                            materialFadeThroughIn(
-                                                initialScale = 1f,
-                                                durationMillis = TAB_FADE_DURATION,
-                                            ) togetherWith
-                                                materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
-                                        }
-                                        ResolvedNavigationTransitionMode.MODERN -> {
-                                            val direction = tabDirection(
-                                                initialTab = initialState,
-                                                targetTab = targetState,
-                                                currentMoreTab = currentMoreTab,
-                                                navStyle = navStyle,
-                                            )
-                                            val enter = slideInHorizontally(
-                                                animationSpec = tween(
-                                                    durationMillis = TAB_MODERN_ENTER_DURATION,
-                                                    easing = AURORA_EASING,
-                                                ),
-                                                initialOffsetX = { width -> direction * (width / 4) },
-                                            ) + fadeIn(
-                                                animationSpec = tween(
-                                                    durationMillis = TAB_MODERN_ENTER_DURATION,
-                                                    easing = AURORA_EASING,
-                                                ),
-                                            )
-                                            val exit = slideOutHorizontally(
-                                                animationSpec = tween(
-                                                    durationMillis = TAB_MODERN_EXIT_DURATION,
-                                                    easing = AURORA_EASING,
-                                                ),
-                                                targetOffsetX = { width -> -direction * (width / 5) },
-                                            ) + fadeOut(
-                                                animationSpec = tween(
-                                                    durationMillis = TAB_MODERN_EXIT_DURATION,
-                                                    easing = AURORA_EASING,
-                                                ),
-                                            )
-                                            (enter togetherWith exit).apply {
-                                                targetContentZIndex = 1f
-                                            }
-                                        }
-                                    }
-                                },
-                                label = "tabContent",
-                            ) { currentTab ->
+                        CompositionLocalProvider(
+                            LocalHostScaffoldContentPadding provides contentPadding,
+                        ) {
+                            if (resolvedTransitionMode == ResolvedNavigationTransitionMode.NONE) {
+                                val currentTab = tabNavigator.current
                                 tabNavigator.saveableState(key = "currentTab", currentTab) {
                                     currentTab.Content()
+                                }
+                            } else {
+                                AnimatedContent(
+                                    targetState = tabNavigator.current,
+                                    transitionSpec = {
+                                        when (resolvedTransitionMode) {
+                                            ResolvedNavigationTransitionMode.NONE -> {
+                                                EnterTransition.None togetherWith ExitTransition.None
+                                            }
+                                            ResolvedNavigationTransitionMode.LEGACY -> {
+                                                materialFadeThroughIn(
+                                                    initialScale = 1f,
+                                                    durationMillis = TAB_FADE_DURATION,
+                                                ) togetherWith
+                                                    materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
+                                            }
+                                            ResolvedNavigationTransitionMode.MODERN -> {
+                                                val direction = tabDirection(
+                                                    initialTab = initialState,
+                                                    targetTab = targetState,
+                                                    currentMoreTab = currentMoreTab,
+                                                    navStyle = navStyle,
+                                                )
+                                                val enter = slideInHorizontally(
+                                                    animationSpec = tween(
+                                                        durationMillis = TAB_MODERN_ENTER_DURATION,
+                                                        easing = AURORA_EASING,
+                                                    ),
+                                                    initialOffsetX = { width -> direction * (width / 4) },
+                                                ) + fadeIn(
+                                                    animationSpec = tween(
+                                                        durationMillis = TAB_MODERN_ENTER_DURATION,
+                                                        easing = AURORA_EASING,
+                                                    ),
+                                                )
+                                                val exit = slideOutHorizontally(
+                                                    animationSpec = tween(
+                                                        durationMillis = TAB_MODERN_EXIT_DURATION,
+                                                        easing = AURORA_EASING,
+                                                    ),
+                                                    targetOffsetX = { width -> -direction * (width / 5) },
+                                                ) + fadeOut(
+                                                    animationSpec = tween(
+                                                        durationMillis = TAB_MODERN_EXIT_DURATION,
+                                                        easing = AURORA_EASING,
+                                                    ),
+                                                )
+                                                (enter togetherWith exit).apply {
+                                                    targetContentZIndex = 1f
+                                                }
+                                            }
+                                        }
+                                    },
+                                    label = "tabContent",
+                                ) { currentTab ->
+                                    tabNavigator.saveableState(key = "currentTab", currentTab) {
+                                        currentTab.Content()
+                                    }
                                 }
                             }
                         }
