@@ -4,6 +4,7 @@ import tachiyomi.domain.library.model.LibraryDisplayMode
 
 data class GlowContourLibraryTextSpec(
     val showTextBlock: Boolean,
+    val showTextOverlay: Boolean,
     val titleMaxLines: Int,
     val subtitleMaxLines: Int,
     val useUnifiedContainer: Boolean,
@@ -15,12 +16,14 @@ fun resolveGlowContourLibraryTextSpec(
     return when (displayMode) {
         LibraryDisplayMode.ComfortableGrid -> GlowContourLibraryTextSpec(
             showTextBlock = true,
+            showTextOverlay = false,
             titleMaxLines = 2,
             subtitleMaxLines = 1,
             useUnifiedContainer = false,
         )
         LibraryDisplayMode.CompactGrid -> GlowContourLibraryTextSpec(
-            showTextBlock = true,
+            showTextBlock = false,
+            showTextOverlay = true,
             titleMaxLines = 2,
             subtitleMaxLines = 1,
             useUnifiedContainer = false,
@@ -29,6 +32,7 @@ fun resolveGlowContourLibraryTextSpec(
         LibraryDisplayMode.List,
         -> GlowContourLibraryTextSpec(
             showTextBlock = false,
+            showTextOverlay = false,
             titleMaxLines = 0,
             subtitleMaxLines = 0,
             useUnifiedContainer = false,
