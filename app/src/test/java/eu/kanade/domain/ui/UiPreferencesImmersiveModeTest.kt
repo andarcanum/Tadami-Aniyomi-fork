@@ -12,4 +12,11 @@ class UiPreferencesImmersiveModeTest {
 
         prefs.auroraLibraryImmersiveMode().get() shouldBe false
     }
+
+    @Test
+    fun `aurora library swipe-switches-categories is disabled by default`() {
+        val prefs = UiPreferences(InMemoryPreferenceStore())
+
+        prefs.auroraLibrarySwipeSwitchesCategories().get() shouldBe false
+    }
 }

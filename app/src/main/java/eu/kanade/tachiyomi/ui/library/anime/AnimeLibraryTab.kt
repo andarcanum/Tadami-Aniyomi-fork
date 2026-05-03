@@ -229,6 +229,9 @@ data object AnimeLibraryTab : Tab {
         val showMangaSection by uiPreferences.showMangaSection().collectAsState()
         val showNovelSection by uiPreferences.showNovelSection().collectAsState()
         val immersiveModeEnabled by uiPreferences.auroraLibraryImmersiveMode().collectAsState()
+        val swipeSwitchesCategories by uiPreferences
+            .auroraLibrarySwipeSwitchesCategories()
+            .collectAsState()
         val bottomNavVisibilityController = LocalBottomNavVisibilityController.current
         val useSeparateDisplayModePerMedia by settingsScreenModel
             .libraryPreferences
@@ -778,6 +781,24 @@ data object AnimeLibraryTab : Tab {
                 null -> Unit
             }
         }
+        val onAuroraCategorySwipe: ((Boolean) -> Boolean)? = if (
+            swipeSwitchesCategories &&
+            auroraCurrentSection != null &&
+            auroraCategories.size > 1
+        ) {
+            { forward ->
+                val current = auroraCategoryIndex
+                val target = if (forward) current + 1 else current - 1
+                if (target in auroraCategories.indices && target != current) {
+                    onAuroraCategorySelected(target)
+                    true
+                } else {
+                    false
+                }
+            }
+        } else {
+            null
+        }
         val onAuroraRefreshCurrent: () -> Unit = {
             when (auroraCurrentSection) {
                 Section.Anime -> onClickRefresh(state.categories.getOrNull(animeCategoryIndex))
@@ -1054,6 +1075,7 @@ data object AnimeLibraryTab : Tab {
                                     },
                                 )
                             },
+                            onPagerSwipeOverride = onAuroraCategorySwipe,
                         )
                     } else {
                         AnimeLibraryContent(
