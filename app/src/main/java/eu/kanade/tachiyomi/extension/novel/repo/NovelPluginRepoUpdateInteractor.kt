@@ -17,10 +17,10 @@ class NovelPluginRepoUpdateInteractor(
                 .flatMap { groupedUrls ->
                     groupedUrls
                         .flatMap { repoService.fetch(it) }
-                        .groupBy { it.id }
-                        .mapNotNull { (_, entries) ->
-                            entries.maxByOrNull { it.version }
-                        }
+                }
+                .groupBy { it.id }
+                .mapNotNull { (_, entries) ->
+                    entries.maxByOrNull { it.version }
                 }
             val installed = storage.getAll().map { it.entry }
             updateChecker.findUpdates(installed, available)

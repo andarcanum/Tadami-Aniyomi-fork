@@ -92,10 +92,12 @@ class DefaultNovelExtensionManager(
     }
 
     private fun updatePendingUpdates() {
-        val availableMap = availablePlugins.value.associateBy { it.id }
+        val bestAvailableByIdVersion = availablePlugins.value
+            .groupBy { it.id }
+            .mapValues { (_, plugins) -> plugins.maxByOrNull { it.version } }
         updates.value = installedPlugins.value.filter { installed ->
-            val available = availableMap[installed.id] ?: return@filter false
-            available.version > installed.version
+            val best = bestAvailableByIdVersion[installed.id] ?: return@filter false
+            best.version > installed.version
         }
     }
 }

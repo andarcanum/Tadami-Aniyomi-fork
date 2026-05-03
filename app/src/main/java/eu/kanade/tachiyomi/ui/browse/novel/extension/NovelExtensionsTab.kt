@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.novel.NovelExtensionScreen
+import eu.kanade.presentation.browse.novel.NovelRepoPickerDialog
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.more.settings.screen.browse.NovelExtensionReposScreen
@@ -79,6 +80,15 @@ fun novelExtensionsTab(
                         }
                     },
                     onDismissRequest = { pluginToUninstall = null },
+                )
+            }
+
+            if (state.repoPickerOptions.isNotEmpty()) {
+                NovelRepoPickerDialog(
+                    pluginName = state.repoPickerOptions.first().name,
+                    options = state.repoPickerOptions,
+                    onSelectPlugin = extensionsScreenModel::installFromRepo,
+                    onDismiss = extensionsScreenModel::dismissRepoPicker,
                 )
             }
         },

@@ -13,8 +13,13 @@ class NovelPluginApi(
     override suspend fun fetchAvailablePlugins(): List<NovelPlugin.Available> {
         return withContext(Dispatchers.IO) {
             val repos = repoProvider.getAll()
-            repos.flatMap { fetchPluginsFromRepo(it) }
-                .distinctBy { it.id }
+            repos.flatMap { repo ->
+                fetchPluginsFromRepo(repo).map { plugin ->
+                    plugin.copy(
+                        repoName = repo.name.ifBlank { repo.shortName ?: repo.baseUrl },
+                    )
+                }
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="confirm_exit">Нажмите кнопку назад ещё раз, чтобы выйти</string>
     <string name="action_filter_started">Начато</string>
@@ -944,6 +944,8 @@
     <string name="label_manga_extensions">Установить расширение</string>
     <string name="label_anime_extensions">Установить расширение</string>
     <string name="label_novel_extensions">Установить расширение</string>
+    <string name="novel_repo_picker_title">Выберите источник установки</string>
+    <string name="novel_repo_picker_newest">Новейшая</string>
     <string name="label_migration_manga">Перенос</string>
     <string name="label_migration_anime">Перенос</string>
     <string name="settings">Настройки</string>
