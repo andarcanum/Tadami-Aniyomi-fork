@@ -81,6 +81,7 @@ import eu.kanade.tachiyomi.ui.player.utils.ChapterUtils.Companion.getStringRes
 import eu.kanade.tachiyomi.util.system.powerManager
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
+import eu.kanade.tachiyomi.util.view.setComposeContent
 import `is`.xyz.mpv.MPVLib
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -271,7 +272,7 @@ class PlayerActivity : BaseActivity() {
             }
             .launchIn(lifecycleScope)
 
-        binding.controls.setContent {
+        binding.controls.setComposeContent {
             val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
             val eInkProfile by uiPreferences.eInkProfile().collectAsState()
             val anime by viewModel.currentAnime.collectAsState()
