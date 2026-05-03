@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.AlertDialog
@@ -58,7 +59,7 @@ import eu.kanade.tachiyomi.ui.browse.manga.extension.MangaExtensionUiModel
 import eu.kanade.tachiyomi.ui.browse.manga.extension.MangaExtensionsScreenModel
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.launchRequestPackageInstallsPermission
-import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.components.material.PullRefresh
@@ -88,6 +89,7 @@ fun MangaExtensionScreen(
     onClickUpdateAll: () -> Unit,
     onRefresh: () -> Unit,
     onToggleSection: (MangaExtensionUiModel.Header.Text) -> Unit,
+    onClearSearch: () -> Unit = {},
 ) {
     val navigator = LocalNavigator.currentOrThrow
 
@@ -107,13 +109,24 @@ fun MangaExtensionScreen(
                 EmptyScreen(
                     stringRes = msg,
                     modifier = Modifier.padding(contentPadding),
-                    actions = persistentListOf(
-                        EmptyScreenAction(
-                            stringRes = MR.strings.label_extension_repos,
-                            icon = Icons.Outlined.Settings,
-                            onClick = { navigator.push(MangaExtensionReposScreen()) },
-                        ),
-                    ),
+                    actions = buildList {
+                        if (!searchQuery.isNullOrEmpty()) {
+                            add(
+                                EmptyScreenAction(
+                                    stringRes = MR.strings.action_search,
+                                    icon = Icons.Outlined.Search,
+                                    onClick = onClearSearch,
+                                ),
+                            )
+                        }
+                        add(
+                            EmptyScreenAction(
+                                stringRes = MR.strings.label_extension_repos,
+                                icon = Icons.Outlined.Settings,
+                                onClick = { navigator.push(MangaExtensionReposScreen()) },
+                            ),
+                        )
+                    }.toPersistentList(),
                 )
             }
             else -> {

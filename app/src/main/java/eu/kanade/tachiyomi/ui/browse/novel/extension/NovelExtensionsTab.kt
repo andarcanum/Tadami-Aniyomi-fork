@@ -57,6 +57,7 @@ fun novelExtensionsTab(
                 onUpdateAll = extensionsScreenModel::updateAllExtensions,
                 onRefresh = extensionsScreenModel::refresh,
                 onToggleSection = extensionsScreenModel::toggleSection,
+                onClearSearch = { extensionsScreenModel.search("") },
             )
 
             pluginToUninstall?.let { plugin ->

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -42,6 +43,7 @@ import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionItem
 import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionsScreenModel
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.collections.immutable.toPersistentList
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
@@ -71,6 +73,7 @@ fun NovelExtensionScreen(
     onUpdateAll: () -> Unit,
     onRefresh: () -> Unit,
     onToggleSection: (String) -> Unit,
+    onClearSearch: () -> Unit = {},
 ) {
     val navigator = LocalNavigator.currentOrThrow
 
@@ -90,13 +93,24 @@ fun NovelExtensionScreen(
                 EmptyScreen(
                     stringRes = msg,
                     modifier = Modifier.padding(contentPadding),
-                    actions = kotlinx.collections.immutable.persistentListOf(
-                        EmptyScreenAction(
-                            stringRes = MR.strings.label_extension_repos,
-                            icon = Icons.Outlined.Public,
-                            onClick = { navigator.push(NovelExtensionReposScreen()) },
-                        ),
-                    ),
+                    actions = buildList {
+                        if (!searchQuery.isNullOrEmpty()) {
+                            add(
+                                EmptyScreenAction(
+                                    stringRes = MR.strings.action_search,
+                                    icon = Icons.Outlined.Search,
+                                    onClick = onClearSearch,
+                                ),
+                            )
+                        }
+                        add(
+                            EmptyScreenAction(
+                                stringRes = MR.strings.label_extension_repos,
+                                icon = Icons.Outlined.Public,
+                                onClick = { navigator.push(NovelExtensionReposScreen()) },
+                            ),
+                        )
+                    }.toPersistentList(),
                 )
             }
             else -> {

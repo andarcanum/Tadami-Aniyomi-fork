@@ -88,6 +88,7 @@ fun mangaExtensionsTab(
                 onUpdateExtension = extensionsScreenModel::updateExtension,
                 onRefresh = extensionsScreenModel::findAvailableExtensions,
                 onToggleSection = extensionsScreenModel::toggleSection,
+                onClearSearch = { extensionsScreenModel.search("") },
             )
 
             privateExtensionToUninstall?.let { extension ->

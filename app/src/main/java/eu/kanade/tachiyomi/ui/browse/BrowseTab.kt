@@ -16,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -285,6 +286,25 @@ data object BrowseTab : Tab {
             val lastIndex = currentTabs.lastIndex
             if (lastIndex >= 0 && state.currentPage > lastIndex) {
                 state.scrollToPage(lastIndex)
+            }
+        }
+
+        // Close the extension search bar when the user navigates away from the
+        // Extensions sub-tab.  This prevents the search from being "orphaned"
+        // on a tab that doesn't support it, which makes the search icon
+        // invisible and the bar unreachable (see issue #88).
+        val extensionIdx = extensionTabIndex(hideFeedTab)
+        LaunchedEffect(extensionIdx, effectiveSection) {
+            snapshotFlow {
+                state.currentPage to state.isScrollInProgress
+            }.collect { (page, scrolling) ->
+                if (!scrolling && page != extensionIdx) {
+                    when (effectiveSection) {
+                        BrowseSection.Anime -> animeExtensionsScreenModel.search(null)
+                        BrowseSection.Manga -> mangaExtensionsScreenModel.search(null)
+                        BrowseSection.Novel -> novelExtensionsScreenModel.search(null)
+                    }
+                }
             }
         }
 
