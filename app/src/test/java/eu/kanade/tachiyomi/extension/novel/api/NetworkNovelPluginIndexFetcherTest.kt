@@ -48,7 +48,7 @@ class NetworkNovelPluginIndexFetcherTest {
     }
 
     @Test
-    fun `falls back to index min when plugins min fails`() = runTest {
+    fun `falls back to plugins json when plugins min fails`() = runTest {
         server.enqueue(MockResponse().setResponseCode(404))
         server.enqueue(MockResponse().setBody("[]"))
         val baseUrl = server.url("/").toString().trimEnd('/')
@@ -58,6 +58,6 @@ class NetworkNovelPluginIndexFetcherTest {
 
         payload shouldBe "[]"
         server.takeRequest().path shouldBe "/plugins.min.json"
-        server.takeRequest().path shouldBe "/index.min.json"
+        server.takeRequest().path shouldBe "/plugins.json"
     }
 }

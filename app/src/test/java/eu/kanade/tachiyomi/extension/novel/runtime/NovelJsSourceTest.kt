@@ -9,8 +9,8 @@ import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 import tachiyomi.domain.extension.novel.model.NovelPlugin
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicInteger
 
 class NovelJsSourceTest {
 

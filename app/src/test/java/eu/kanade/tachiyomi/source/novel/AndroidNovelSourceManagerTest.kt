@@ -18,15 +18,33 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import rx.Observable
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.repository.NovelStubSourceRepository
+import tachiyomi.source.local.image.novel.LocalNovelCoverManager
+import tachiyomi.source.local.io.novel.LocalNovelSourceFileSystem
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.fullType
+import uy.kohesive.injekt.api.get
 
 class AndroidNovelSourceManagerTest {
 
     private val context: Context = mockk(relaxed = true)
+
+    @BeforeEach
+    fun setupInjektBindings() {
+        runCatching { Injekt.get<LocalNovelSourceFileSystem>() }
+            .getOrElse {
+                Injekt.addSingleton(fullType<LocalNovelSourceFileSystem>(), mockk(relaxed = true))
+            }
+        runCatching { Injekt.get<LocalNovelCoverManager>() }
+            .getOrElse {
+                Injekt.addSingleton(fullType<LocalNovelCoverManager>(), mockk(relaxed = true))
+            }
+    }
 
     @Test
     fun `catalogueSources emits sources from extension manager`() {
@@ -42,7 +60,7 @@ class AndroidNovelSourceManagerTest {
 
             val sources = manager.catalogueSources.first()
 
-            sources.first() shouldBe source
+            sources.any { it == source } shouldBe true
         }
     }
 

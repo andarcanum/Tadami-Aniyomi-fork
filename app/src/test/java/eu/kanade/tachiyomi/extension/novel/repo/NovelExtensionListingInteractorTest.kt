@@ -57,6 +57,7 @@ class NovelExtensionListingInteractorTest {
             )
             coEvery { repoService.fetch("https://example.org/index.min.json") } returns listOf(availableUpdate)
             coEvery { repoService.fetch("https://example.org/plugins.min.json") } returns listOf(availableNew)
+            coEvery { repoService.fetch("https://example.org/plugins.json") } returns emptyList()
 
             val installed = NovelPluginRepoEntry(
                 id = "source-1",
@@ -94,6 +95,7 @@ class NovelExtensionListingInteractorTest {
             listing.available.shouldContainExactly(availableNew)
             coVerify(exactly = 1) { repoService.fetch("https://example.org/index.min.json") }
             coVerify(exactly = 1) { repoService.fetch("https://example.org/plugins.min.json") }
+            coVerify(exactly = 1) { repoService.fetch("https://example.org/plugins.json") }
         }
     }
 
@@ -156,6 +158,7 @@ class NovelExtensionListingInteractorTest {
             coEvery { repoService.fetch("https://example.org/index.min.json") } returns
                 listOf(duplicateFromIndex, unique)
             coEvery { repoService.fetch("https://example.org/plugins.min.json") } returns listOf(duplicateFromPlugins)
+            coEvery { repoService.fetch("https://example.org/plugins.json") } returns emptyList()
             coEvery { storage.getAll() } returns emptyList()
 
             val interactor = NovelExtensionListingInteractor(
@@ -225,8 +228,10 @@ class NovelExtensionListingInteractorTest {
 
             coEvery { repoService.fetch("https://repo-one.example/index.min.json") } returns listOf(fromFirstRepo)
             coEvery { repoService.fetch("https://repo-one.example/plugins.min.json") } returns emptyList()
+            coEvery { repoService.fetch("https://repo-one.example/plugins.json") } returns emptyList()
             coEvery { repoService.fetch("https://repo-two.example/index.min.json") } returns listOf(fromSecondRepo)
             coEvery { repoService.fetch("https://repo-two.example/plugins.min.json") } returns emptyList()
+            coEvery { repoService.fetch("https://repo-two.example/plugins.json") } returns emptyList()
             coEvery { storage.getAll() } returns emptyList()
 
             val interactor = NovelExtensionListingInteractor(

@@ -105,6 +105,7 @@ class NovelExtensionApiTest {
                     listOf(
                         "https://example.org/index.min.json",
                         "https://example.org/plugins.min.json",
+                        "https://example.org/plugins.json",
                     ),
                 )
             } returns listOf(entry)
@@ -119,6 +120,7 @@ class NovelExtensionApiTest {
                     listOf(
                         "https://example.org/index.min.json",
                         "https://example.org/plugins.min.json",
+                        "https://example.org/plugins.json",
                     ),
                 )
             }
