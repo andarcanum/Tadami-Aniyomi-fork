@@ -383,6 +383,33 @@ class NovelJsDomStoreTest {
             val span = store.select(root, "span")[0]
             store.getTagName(span) shouldBe "span"
         }
+
+        @Test
+        fun `getHtml on script returns raw data content`() {
+            val root = store.loadDocument(
+                """<html><head><script id="__NEXT_DATA__" type="application/json">{"key":"value"}</script></head></html>""",
+            )
+            val script = store.select(root, "#__NEXT_DATA__")[0]
+            store.getHtml(script) shouldBe """{"key":"value"}"""
+        }
+
+        @Test
+        fun `getHtml on style returns raw data content`() {
+            val root = store.loadDocument(
+                """<html><head><style>.cls { color: red; }</style></head></html>""",
+            )
+            val style = store.select(root, "style")[0]
+            store.getHtml(style) shouldBe ".cls { color: red; }"
+        }
+
+        @Test
+        fun `getText on script returns raw data content`() {
+            val root = store.loadDocument(
+                """<html><head><script id="__NEXT_DATA__" type="application/json">{"key":"value"}</script></head></html>""",
+            )
+            val script = store.select(root, "#__NEXT_DATA__")[0]
+            store.getText(script) shouldBe """{"key":"value"}"""
+        }
     }
 
     @Nested

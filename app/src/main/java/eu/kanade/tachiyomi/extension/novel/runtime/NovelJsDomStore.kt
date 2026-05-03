@@ -179,7 +179,10 @@ class NovelJsDomStore {
     fun getHtml(handle: Int): String {
         val node = nodes[handle] ?: return ""
         return when (node) {
-            is Element -> node.html()
+            is Element -> {
+                val tagName = node.tagName().lowercase()
+                if (tagName == "script" || tagName == "style") node.data() else node.html()
+            }
             is TextNode -> node.wholeText
             else -> ""
         }
@@ -197,7 +200,10 @@ class NovelJsDomStore {
     fun getText(handle: Int): String {
         val node = nodes[handle] ?: return ""
         return when (node) {
-            is Element -> node.text()
+            is Element -> {
+                val tagName = node.tagName().lowercase()
+                if (tagName == "script" || tagName == "style") node.data() else node.text()
+            }
             is TextNode -> node.wholeText
             else -> ""
         }

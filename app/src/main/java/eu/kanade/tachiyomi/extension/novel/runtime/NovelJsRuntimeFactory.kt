@@ -267,8 +267,13 @@ class NovelJsRuntimeFactory(
         // DOM Store methods
         override fun domLoad(html: String): Int = domStore.loadDocument(html)
 
-        override fun domSelect(handle: Int, selector: String): String =
-            json.encodeToString(domStore.select(handle, selector).toList())
+        override fun domSelect(handle: Int, selector: String): String {
+            // Jsoup does not support double quotes inside :contains("..."), strip them
+            val cleaned = selector.replace(Regex(""":contains\(["']([^"']+)["']\)""")) { match ->
+                ":contains(${match.groupValues[1]})"
+            }
+            return json.encodeToString(domStore.select(handle, cleaned).toList())
+        }
 
         override fun domParent(handle: Int): Int = domStore.parent(handle)
 
