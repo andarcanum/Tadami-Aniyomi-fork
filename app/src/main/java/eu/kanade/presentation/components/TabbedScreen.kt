@@ -69,6 +69,13 @@ fun TabbedScreen(
                     else -> onChangeAnimeSearchQuery
                 }
 
+                val searchQuery = if (tab.onChangeSearchQuery != null) {
+                    tab.searchQuery
+                } else {
+                    actualQuery
+                }
+                val onChangeSearchQuery = tab.onChangeSearchQuery ?: actualOnChange
+
                 SearchToolbar(
                     titleContent = {
                         AppBarTitle(
@@ -80,8 +87,8 @@ fun TabbedScreen(
                     },
                     searchEnabled = searchEnabled,
                     searchActionIconTint = searchActionIconTint,
-                    searchQuery = if (searchEnabled) actualQuery else null,
-                    onChangeSearchQuery = actualOnChange,
+                    searchQuery = if (searchEnabled) searchQuery else null,
+                    onChangeSearchQuery = onChangeSearchQuery,
                     actions = {
                         if (tab.actions.isNotEmpty()) {
                             Spacer(modifier = Modifier.width(4.dp + extraSearchToActionsGap))
@@ -138,6 +145,8 @@ data class TabContent(
     val titleRes: StringResource,
     val badgeNumber: Int? = null,
     val searchEnabled: Boolean = false,
+    val searchQuery: String? = null,
+    val onChangeSearchQuery: ((String?) -> Unit)? = null,
     val actions: ImmutableList<AppBar.AppBarAction> = persistentListOf(),
     val content: @Composable (contentPadding: PaddingValues, snackbarHostState: SnackbarHostState) -> Unit,
     val numberTitle: Int = 0,

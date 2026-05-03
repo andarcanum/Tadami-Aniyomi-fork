@@ -39,6 +39,8 @@ fun animeExtensionsTab(
         titleRes = AYMR.strings.label_anime_extensions,
         badgeNumber = state.updates.takeIf { it > 0 },
         searchEnabled = true,
+        searchQuery = state.searchQuery,
+        onChangeSearchQuery = extensionsScreenModel::search,
         actions = persistentListOf(
             AppBar.OverflowAction(
                 title = stringResource(MR.strings.action_filter),

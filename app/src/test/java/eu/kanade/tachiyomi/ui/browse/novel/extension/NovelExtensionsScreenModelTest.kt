@@ -168,6 +168,32 @@ class NovelExtensionsScreenModelTest {
     }
 
     @Test
+    fun `empty search results keep query so toolbar stays active`() {
+        runBlocking {
+            val screenModel = NovelExtensionsScreenModel(
+                extensionManager = FakeNovelExtensionManager(
+                    installed = emptyList(),
+                    available = listOf(pluginAvailable("id-1", 1)),
+                    updates = emptyList(),
+                ),
+                sourcePreferences = sourcePreferences,
+            ).also(activeScreenModels::add)
+
+            withTimeout(1_000) {
+                while (screenModel.state.value.isLoading) {
+                    yield()
+                }
+            }
+
+            screenModel.search("missing")
+            delay(SEARCH_DEBOUNCE_MILLIS + 50)
+
+            screenModel.state.value.items shouldBe emptyList()
+            screenModel.state.value.searchQuery shouldBe "missing"
+        }
+    }
+
+    @Test
     fun `available plugins are filtered by enabled language`() {
         runBlocking {
             val english = pluginAvailable("id-en", 1).copy(lang = "en")
