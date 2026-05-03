@@ -1,9 +1,23 @@
 package eu.kanade.tachiyomi.ui.library.anime
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.junit.jupiter.api.Test
 
 class AnimeLibraryAuroraHeaderStateTest {
+
+    private val testAccent = Color(0xFF3366FF)
+    private val testAccentVariant = Color(0xFFD0D9FF)
+    private val testGlassDark = Color.White.copy(alpha = 0.22f)
+    private val testGlassLight = Color(0xE6FFFFFF)
+    private val testCardBackgroundDark = Color.White.copy(alpha = 0.12f)
+    private val testCardBackgroundLight = Color(0xFFF0F4F8)
+    private val testTextPrimaryDark = Color.White
+    private val testTextPrimaryLight = Color(0xFF0F172A)
+    private val testTextSecondaryDark = Color.White.copy(alpha = 0.7f)
+    private val testTextSecondaryLight = Color(0xFF475569)
 
     @Test
     fun `resolveAuroraLibrarySection returns matching section for page`() {
@@ -77,6 +91,103 @@ class AnimeLibraryAuroraHeaderStateTest {
             currentIndex = 1,
             targetIndex = 1,
         ) shouldBe false
+    }
+
+    @Test
+    fun `auroraLibraryCategoryTabColors selected dark tab carries accent tint over glass`() {
+        val colors = auroraLibraryCategoryTabColors(
+            isSelected = true,
+            isDark = true,
+            accent = testAccent,
+            accentVariant = testAccentVariant,
+            glass = testGlassDark,
+            cardBackground = testCardBackgroundDark,
+            textPrimary = testTextPrimaryDark,
+            textSecondary = testTextSecondaryDark,
+        )
+
+        colors.tabBackground shouldBe testAccent.copy(alpha = 0.22f).compositeOver(testGlassDark)
+        colors.badgeBackground shouldBe Color.White.copy(alpha = 0.20f)
+        colors.tabTextColor shouldBe testTextPrimaryDark
+        colors.badgeTextColor shouldBe testTextPrimaryDark
+    }
+
+    @Test
+    fun `auroraLibraryCategoryTabColors selected light tab uses accent variant with neutral badge`() {
+        val colors = auroraLibraryCategoryTabColors(
+            isSelected = true,
+            isDark = false,
+            accent = testAccent,
+            accentVariant = testAccentVariant,
+            glass = testGlassLight,
+            cardBackground = testCardBackgroundLight,
+            textPrimary = testTextPrimaryLight,
+            textSecondary = testTextSecondaryLight,
+        )
+
+        colors.tabBackground shouldBe testAccentVariant
+        colors.badgeBackground shouldBe Color.White
+        colors.tabTextColor shouldBe testTextPrimaryLight
+        colors.badgeTextColor shouldBe testTextPrimaryLight
+    }
+
+    @Test
+    fun `auroraLibraryCategoryTabColors unselected dark tab is transparent with subtle badge`() {
+        val colors = auroraLibraryCategoryTabColors(
+            isSelected = false,
+            isDark = true,
+            accent = testAccent,
+            accentVariant = testAccentVariant,
+            glass = testGlassDark,
+            cardBackground = testCardBackgroundDark,
+            textPrimary = testTextPrimaryDark,
+            textSecondary = testTextSecondaryDark,
+        )
+
+        colors.tabBackground shouldBe Color.Transparent
+        colors.badgeBackground shouldBe testCardBackgroundDark
+        colors.tabTextColor shouldBe testTextSecondaryDark
+        colors.badgeTextColor shouldBe testTextSecondaryDark
+    }
+
+    @Test
+    fun `auroraLibraryCategoryTabColors unselected light tab uses neutral surface but white badge`() {
+        val colors = auroraLibraryCategoryTabColors(
+            isSelected = false,
+            isDark = false,
+            accent = testAccent,
+            accentVariant = testAccentVariant,
+            glass = testGlassLight,
+            cardBackground = testCardBackgroundLight,
+            textPrimary = testTextPrimaryLight,
+            textSecondary = testTextSecondaryLight,
+        )
+
+        colors.tabBackground shouldBe testCardBackgroundLight
+        // White chip on the very-light cardBackground keeps the badge readable.
+        colors.badgeBackground shouldBe Color.White
+        colors.badgeBackground shouldNotBe colors.tabBackground
+        colors.tabTextColor shouldBe testTextSecondaryLight
+        colors.badgeTextColor shouldBe testTextSecondaryLight
+    }
+
+    @Test
+    fun `auroraLibraryCategoryTabColors selected light badge no longer stacks accent on accent`() {
+        val colors = auroraLibraryCategoryTabColors(
+            isSelected = true,
+            isDark = false,
+            accent = testAccent,
+            accentVariant = testAccentVariant,
+            glass = testGlassLight,
+            cardBackground = testCardBackgroundLight,
+            textPrimary = testTextPrimaryLight,
+            textSecondary = testTextSecondaryLight,
+        )
+
+        // Regression guard for issue: selected light badge must NOT be the accent itself,
+        // otherwise it visually merges with the accentVariant tab background.
+        colors.badgeBackground shouldNotBe testAccent
+        colors.badgeBackground shouldNotBe testAccentVariant
     }
 
     @Test

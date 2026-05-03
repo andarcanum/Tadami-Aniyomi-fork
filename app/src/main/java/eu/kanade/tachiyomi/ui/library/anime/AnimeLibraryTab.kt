@@ -65,6 +65,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -1814,17 +1815,21 @@ private fun AuroraLibraryCategoryTabs(
             ) { index, category ->
                 val isSelected = index == coercedSelected
                 val badgeCount = getCountForCategory(category)
-                val tabBackground = when {
-                    isSelected && colors.isDark -> Color.White.copy(alpha = 0.16f)
-                    isSelected -> colors.accentVariant
-                    colors.isDark -> Color.Transparent
-                    else -> colors.cardBackground
-                }
+                val tabColors = auroraLibraryCategoryTabColors(
+                    isSelected = isSelected,
+                    isDark = colors.isDark,
+                    accent = colors.accent,
+                    accentVariant = colors.accentVariant,
+                    glass = colors.glass,
+                    cardBackground = colors.cardBackground,
+                    textPrimary = colors.textPrimary,
+                    textSecondary = colors.textSecondary,
+                )
 
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(18.dp))
-                        .background(tabBackground)
+                        .background(tabColors.tabBackground)
                         .clickable {
                             appHaptics.tap()
                             onCategorySelected(index)
@@ -1835,7 +1840,7 @@ private fun AuroraLibraryCategoryTabs(
                 ) {
                     Text(
                         text = category.visualName,
-                        color = if (isSelected) colors.textPrimary else colors.textSecondary,
+                        color = tabColors.tabTextColor,
                         fontSize = 13.sp,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
@@ -1846,18 +1851,14 @@ private fun AuroraLibraryCategoryTabs(
                         Box(
                             modifier = Modifier
                                 .background(
-                                    color = if (isSelected) {
-                                        colors.accent
-                                    } else {
-                                        colors.cardBackground
-                                    },
+                                    color = tabColors.badgeBackground,
                                     shape = RoundedCornerShape(10.dp),
                                 )
                                 .padding(horizontal = 6.dp, vertical = 2.dp),
                         ) {
                             Text(
                                 text = badgeCount.toString(),
-                                color = if (isSelected) colors.textOnAccent else colors.textSecondary,
+                                color = tabColors.badgeTextColor,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
@@ -1920,6 +1921,56 @@ internal fun shouldShowAuroraSearchField(
 internal fun coerceAuroraLibraryCategoryIndex(requestedIndex: Int, categoryCount: Int): Int {
     if (categoryCount <= 0) return 0
     return requestedIndex.coerceIn(0, categoryCount - 1)
+}
+
+/**
+ * Pure colour computation for a single Aurora library category tab + its count badge.
+ *
+ * Goals:
+ *  - Selected tab carries a clear accent presence in BOTH themes (so the selection is obvious in
+ *    dark mode, where it used to fall back to a flat translucent-white pill with no accent).
+ *  - The badge inside a selected tab is a neutral chip that contrasts with the accent-tinted tab,
+ *    instead of stacking another accent fill on top of an accent surface.
+ *  - The badge inside an unselected tab is also distinguishable from the tab background, so the
+ *    count chip is readable even when the tab itself is inactive.
+ */
+internal data class AuroraLibraryCategoryTabColors(
+    val tabBackground: Color,
+    val badgeBackground: Color,
+    val tabTextColor: Color,
+    val badgeTextColor: Color,
+)
+
+internal fun auroraLibraryCategoryTabColors(
+    isSelected: Boolean,
+    isDark: Boolean,
+    accent: Color,
+    accentVariant: Color,
+    glass: Color,
+    cardBackground: Color,
+    textPrimary: Color,
+    textSecondary: Color,
+): AuroraLibraryCategoryTabColors {
+    val tabBackground = when {
+        isSelected && isDark -> accent.copy(alpha = 0.22f).compositeOver(glass)
+        isSelected -> accentVariant
+        isDark -> Color.Transparent
+        else -> cardBackground
+    }
+    val badgeBackground = when {
+        isSelected && isDark -> Color.White.copy(alpha = 0.20f)
+        isSelected -> Color.White
+        isDark -> cardBackground
+        else -> Color.White
+    }
+    val tabTextColor = if (isSelected) textPrimary else textSecondary
+    val badgeTextColor = if (isSelected) textPrimary else textSecondary
+    return AuroraLibraryCategoryTabColors(
+        tabBackground = tabBackground,
+        badgeBackground = badgeBackground,
+        tabTextColor = tabTextColor,
+        badgeTextColor = badgeTextColor,
+    )
 }
 
 /**
