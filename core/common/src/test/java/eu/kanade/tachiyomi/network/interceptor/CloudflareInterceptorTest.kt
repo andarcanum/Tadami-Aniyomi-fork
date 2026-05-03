@@ -6,7 +6,6 @@ import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.verify
-import okhttp3.Cookie
 import okhttp3.Interceptor
 import okhttp3.Protocol
 import okhttp3.Request

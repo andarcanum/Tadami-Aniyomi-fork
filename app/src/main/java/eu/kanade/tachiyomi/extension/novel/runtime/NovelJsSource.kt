@@ -391,7 +391,9 @@ class NovelJsSource internal constructor(
                             "Novel chapterList fallback=novelUpdates plugin=${plugin.id} " +
                                 "url=${novel.url} count=${novelUpdatesChapters.size}"
                         }
-                        return@runPluginSafe normalizeChapters(novelUpdatesChapters).mapNotNull { it.toSChapterOrNull() }
+                        return@runPluginSafe normalizeChapters(novelUpdatesChapters).mapNotNull {
+                            it.toSChapterOrNull()
+                        }
                     }
 
                     val endpointChapters = fetchRulateFamilyChapterEndpointFallback(runtime, novel.url)
@@ -409,7 +411,9 @@ class NovelJsSource internal constructor(
                             "count=${htmlFallbackChapters.size}"
                     }
                     if (htmlFallbackChapters.isNotEmpty()) {
-                        return@runPluginSafe normalizeChapters(htmlFallbackChapters).mapNotNull { it.toSChapterOrNull() }
+                        return@runPluginSafe normalizeChapters(htmlFallbackChapters).mapNotNull {
+                            it.toSChapterOrNull()
+                        }
                     }
 
                     if (capabilities?.hasParsePage == true) {
@@ -419,7 +423,9 @@ class NovelJsSource internal constructor(
                                 "Novel chapterList fallback=parsePage plugin=${plugin.id} url=${novel.url} " +
                                     "count=${parsePageChapters.size}"
                             }
-                            return@runPluginSafe normalizeChapters(parsePageChapters).mapNotNull { it.toSChapterOrNull() }
+                            return@runPluginSafe normalizeChapters(parsePageChapters).mapNotNull {
+                                it.toSChapterOrNull()
+                            }
                         }
                     }
                 } else {
@@ -809,7 +815,7 @@ class NovelJsSource internal constructor(
                 }
             })();
             """.trimIndent(),
-            "novel-plugin-call-${functionName}.js",
+            "novel-plugin-call-$functionName.js",
         )
 
         var cycles = 0
@@ -850,9 +856,13 @@ class NovelJsSource internal constructor(
             }
             is JsonObject -> {
                 val novelsElement = element["novels"] ?: return emptyList()
-                if (novelsElement is JsonArray) novelsElement.filterNot { it is JsonNull }.mapNotNull { item ->
-                    runCatching { json.decodeFromJsonElement<PluginNovelItem>(item) }.getOrNull()
-                } else emptyList()
+                if (novelsElement is JsonArray) {
+                    novelsElement.filterNot { it is JsonNull }.mapNotNull { item ->
+                        runCatching { json.decodeFromJsonElement<PluginNovelItem>(item) }.getOrNull()
+                    }
+                } else {
+                    emptyList()
+                }
             }
             else -> emptyList()
         }
