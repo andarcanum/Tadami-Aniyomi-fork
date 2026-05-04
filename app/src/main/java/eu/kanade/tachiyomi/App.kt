@@ -52,6 +52,9 @@ import eu.kanade.tachiyomi.data.coil.NovelPluginImageFetcher
 import eu.kanade.tachiyomi.data.coil.NovelPluginImageKeyer
 import eu.kanade.tachiyomi.data.coil.StringCoverUriMapper
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
+import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
+import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
+import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.updater.AppUpdateFileManager
 import eu.kanade.tachiyomi.di.AppModule
@@ -84,6 +87,7 @@ import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.system.ImageUtil
 import tachiyomi.data.achievement.loader.AchievementLoader
+import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.widget.entries.anime.AnimeWidgetManager
 import tachiyomi.presentation.widget.entries.manga.MangaWidgetManager
@@ -332,6 +336,13 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     override fun onStart(owner: LifecycleOwner) {
         SecureActivityDelegate.onApplicationStart()
         sessionManager.onSessionStart()
+        val libraryPreferences = Injekt.get<tachiyomi.domain.library.service.LibraryPreferences>()
+        val autoUpdateInterval = libraryPreferences.autoUpdateInterval().get()
+        if (autoUpdateInterval == -1) {
+            MangaLibraryUpdateJob.startNow(this)
+            AnimeLibraryUpdateJob.startNow(this)
+            NovelLibraryUpdateJob.startNow(this)
+        }
     }
 
     override fun onStop(owner: LifecycleOwner) {

@@ -187,6 +187,7 @@
     <string name="update_check_notification_download_error">Ошибка загрузки</string>
     <string name="update_check_notification_download_in_progress">Загрузка…</string>
     <string name="update_check_notification_update_available">Доступно обновление!</string>
+    <string name="update_on_app_start">При запуске приложения</string>
     <string name="update_never">Выключено</string>
     <string name="pref_app_update_interval">Проверка обновлений приложения</string>
     <string name="app_update_on_start">При старте приложения</string>
@@ -332,7 +333,7 @@
     <string name="secure_screen">Защита экрана приложения</string>
     <string name="ext_updates_pending">Доступны обновления</string>
     <string name="ext_reinstall_required">Требуется переустановка</string>
-    <string name="ext_reinstall_required_hint">Найден новый плагин в другом репозитории. Для него требуется переустановка.</string>
+    <string name="ext_reinstall_required_hint">Обновление из другого репозитория, нужна переустановка.</string>
     <string name="pref_cutout_short">Показывать содержимое в вырезанной области</string>
     <string name="information_cloudflare_bypass_failure">Не удалось обойти Cloudflare</string>
     <string name="information_webview_outdated">Пожалуйста, обновите WebView для лучшей совместимости</string>

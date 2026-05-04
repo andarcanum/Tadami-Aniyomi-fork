@@ -292,6 +292,7 @@
 
     <string name="pref_category_library_update">Global update</string>
     <string name="pref_library_update_interval">Automatic updates</string>
+    <string name="update_on_app_start">On app start</string>
     <string name="update_never">Off</string>
     <string name="pref_app_update_interval">App update check</string>
     <string name="app_update_on_start">On app start</string>
