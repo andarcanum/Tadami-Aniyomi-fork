@@ -1308,6 +1308,7 @@
     <string name="aurora_details">Details</string>
     <string name="aurora_view_all">View All</string>
     <string name="aurora_episode_number">Episode %s</string>
+    <string name="aurora_chapter_number">Chapter %s</string>
     <string name="aurora_recently_added">Recently Added</string>
     <string name="aurora_more">More</string>
     <string name="aurora_change_nickname">Change Nickname</string>

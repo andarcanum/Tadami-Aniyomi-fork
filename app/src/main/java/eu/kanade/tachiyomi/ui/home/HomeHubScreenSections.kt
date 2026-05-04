@@ -353,6 +353,7 @@ private fun HomeHubScreen(
                     HistoryRow(
                         history = history,
                         recentCardMode = recentCardMode,
+                        section = section,
                         onEntryClick = onEntryClick,
                         onViewAllClick = onHistoryClick,
                     )

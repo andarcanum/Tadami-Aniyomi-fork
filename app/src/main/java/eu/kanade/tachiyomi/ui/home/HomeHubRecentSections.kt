@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.ui.model.HomeHubRecentCardMode
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.ui.home.HomeHubSection
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
@@ -32,6 +33,7 @@ import tachiyomi.presentation.core.util.LocalAppHaptics
 internal fun HistoryRow(
     history: List<HomeHubHistory>,
     recentCardMode: HomeHubRecentCardMode,
+    section: HomeHubSection,
     onEntryClick: (Long) -> Unit,
     onViewAllClick: () -> Unit,
 ) {
@@ -57,6 +59,12 @@ internal fun HistoryRow(
     val useWrappedSections = shouldUseHomeHubWrappedSections(auroraAdaptiveSpec.deviceClass)
     val cardRenderMode = remember(recentCardMode) {
         resolveHomeHubRecentCardRenderMode(recentCardMode)
+    }
+    val progressLabelRes = remember(section) {
+        when (section) {
+            HomeHubSection.Anime -> AYMR.strings.aurora_episode_number
+            HomeHubSection.Manga, HomeHubSection.Novel -> AYMR.strings.aurora_chapter_number
+        }
     }
 
     Column(modifier = Modifier.padding(top = 24.dp)) {
@@ -102,7 +110,7 @@ internal fun HistoryRow(
                         title = item.title,
                         coverData = item.coverData,
                         subtitle = stringResource(
-                            AYMR.strings.aurora_episode_number,
+                            progressLabelRes,
                             (item.progressNumber % 1000).toInt().toString(),
                         ),
                         onClick = { onEntryClick(item.entryId) },
@@ -125,7 +133,7 @@ internal fun HistoryRow(
                         title = item.title,
                         coverData = item.coverData,
                         subtitle = stringResource(
-                            AYMR.strings.aurora_episode_number,
+                            progressLabelRes,
                             (item.progressNumber % 1000).toInt().toString(),
                         ),
                         onClick = { onEntryClick(item.entryId) },
