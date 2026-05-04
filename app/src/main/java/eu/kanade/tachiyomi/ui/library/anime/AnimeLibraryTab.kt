@@ -116,6 +116,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
+import eu.kanade.tachiyomi.ui.browse.anime.migration.search.MigrateAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.migration.config.MigrationConfigScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
@@ -941,6 +942,13 @@ data object AnimeLibraryTab : Tab {
                             onMarkAsUnviewedClicked = { screenModel.markSeenSelection(false) },
                             onDownloadClicked = screenModel::runDownloadActionSelection
                                 .takeIf { state.selection.fastAll { !it.anime.isLocal() } },
+                            onMigrateClicked = {
+                                val animeId = state.selection.single().anime.id
+                                screenModel.clearSelection()
+                                navigator.push(MigrateAnimeSearchScreen(animeId))
+                            }.takeIf {
+                                state.selection.size == 1 && state.selection.single().anime.id > 0L
+                            },
                             onDeleteClicked = screenModel::openDeleteAnimeDialog,
                             isManga = false,
                         )

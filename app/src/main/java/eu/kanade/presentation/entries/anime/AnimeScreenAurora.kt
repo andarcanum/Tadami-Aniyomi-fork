@@ -1013,6 +1013,15 @@ fun AnimeScreenAuroraImpl(
                                 },
                             )
                         }
+                        if (onMigrateClicked != null) {
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(MR.strings.action_migrate),
+                                onClick = {
+                                    onMigrateClicked()
+                                    showMenu = false
+                                },
+                            )
+                        }
                         if (onShareClicked != null) {
                             AuroraEntryDropdownMenuItem(
                                 text = stringResource(MR.strings.action_share),
