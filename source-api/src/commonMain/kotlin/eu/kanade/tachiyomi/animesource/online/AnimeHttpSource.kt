@@ -423,7 +423,25 @@ abstract class AnimeHttpSource : AnimeCatalogueSource {
             .takeUnless { it.isBlank() || it == "null" }
             ?: return null
 
-        return video.copy(videoUrl = resolvedUrl)
+        return Video(
+            videoUrl = resolvedUrl,
+            videoTitle = video.videoTitle,
+            resolution = video.resolution,
+            bitrate = video.bitrate,
+            headers = video.headers,
+            preferred = video.preferred,
+            subtitleTracks = video.subtitleTracks,
+            audioTracks = video.audioTracks,
+            timestamps = video.timestamps,
+            mpvArgs = video.mpvArgs,
+            ffmpegStreamArgs = video.ffmpegStreamArgs,
+            ffmpegVideoArgs = video.ffmpegVideoArgs,
+            internalData = video.internalData,
+            initialized = video.initialized,
+        ).also {
+            it.pageUrl = video.url
+            it.status = video.status
+        }
     }
 
     /**

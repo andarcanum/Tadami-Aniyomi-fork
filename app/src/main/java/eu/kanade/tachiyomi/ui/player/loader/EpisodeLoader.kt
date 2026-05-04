@@ -204,7 +204,25 @@ class EpisodeLoader {
                 if (video.videoUrl != "null") return@map video
 
                 val newVideoUrl = source.getVideoUrl(video)
-                video.copy(videoUrl = newVideoUrl)
+                Video(
+                    videoUrl = newVideoUrl,
+                    videoTitle = video.videoTitle,
+                    resolution = video.resolution,
+                    bitrate = video.bitrate,
+                    headers = video.headers,
+                    preferred = video.preferred,
+                    subtitleTracks = video.subtitleTracks,
+                    audioTracks = video.audioTracks,
+                    timestamps = video.timestamps,
+                    mpvArgs = video.mpvArgs,
+                    ffmpegStreamArgs = video.ffmpegStreamArgs,
+                    ffmpegVideoArgs = video.ffmpegVideoArgs,
+                    internalData = video.internalData,
+                    initialized = video.initialized,
+                ).also {
+                    it.pageUrl = video.url
+                    it.status = video.status
+                }
             }
         }
 

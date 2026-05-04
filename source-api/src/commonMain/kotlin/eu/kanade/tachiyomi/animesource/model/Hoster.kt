@@ -14,21 +14,47 @@ open class Hoster(
     val videoList: List<Video>? = null,
     val internalData: String = "",
     val lazy: Boolean = false,
-    val playerId: String? = null,
-    val playerLabel: String? = null,
-    val dubbingId: String? = null,
-    val dubbingLabel: String? = null,
-    val sortOrder: Int? = null,
 ) {
     @Transient
     @Volatile
     var status: State = State.IDLE
+
+    var playerId: String? = null
+    var playerLabel: String? = null
+    var dubbingId: String? = null
+    var dubbingLabel: String? = null
+    var sortOrder: Int? = null
 
     enum class State {
         IDLE,
         LOADING,
         READY,
         ERROR,
+    }
+
+    constructor(
+        hosterUrl: String = "",
+        hosterName: String = "",
+        videoList: List<Video>? = null,
+        internalData: String = "",
+        lazy: Boolean = false,
+        playerId: String? = null,
+        playerLabel: String? = null,
+        dubbingId: String? = null,
+        dubbingLabel: String? = null,
+        sortOrder: Int? = null,
+    ) : this(
+        hosterUrl = hosterUrl,
+        hosterName = hosterName,
+        videoList = videoList,
+        internalData = internalData,
+        lazy = lazy,
+    ) {
+        this.playerId = playerId
+        this.playerLabel = playerLabel
+        this.dubbingId = dubbingId
+        this.dubbingLabel = dubbingLabel
+        this.sortOrder = sortOrder
     }
 
     fun copy(
@@ -124,7 +150,27 @@ open class Hoster(
                         Hoster(
                             hosterUrl = "",
                             hosterName = parsed.dubbingLabel,
-                            videoList = items.map { (video, title) -> video.copy(videoTitle = title.qualityLabel) },
+                            videoList = items.map { (video, title) ->
+                                Video(
+                                    videoUrl = video.videoUrl,
+                                    videoTitle = title.qualityLabel,
+                                    resolution = video.resolution,
+                                    bitrate = video.bitrate,
+                                    headers = video.headers,
+                                    preferred = video.preferred,
+                                    subtitleTracks = video.subtitleTracks,
+                                    audioTracks = video.audioTracks,
+                                    timestamps = video.timestamps,
+                                    mpvArgs = video.mpvArgs,
+                                    ffmpegStreamArgs = video.ffmpegStreamArgs,
+                                    ffmpegVideoArgs = video.ffmpegVideoArgs,
+                                    internalData = video.internalData,
+                                    initialized = video.initialized,
+                                ).also {
+                                    it.pageUrl = video.url
+                                    it.status = video.status
+                                }
+                            },
                             playerId = parsed.playerId,
                             playerLabel = parsed.playerLabel,
                             dubbingId = parsed.dubbingId,
@@ -151,7 +197,25 @@ open class Hoster(
             return grouped.map { (translationName, videos) ->
                 val cleanedVideos = videos.map { video ->
                     val cleanTitle = video.videoTitle.replace(TRANSLATION_PATTERN, "").trim()
-                    video.copy(videoTitle = cleanTitle)
+                    Video(
+                        videoUrl = video.videoUrl,
+                        videoTitle = cleanTitle,
+                        resolution = video.resolution,
+                        bitrate = video.bitrate,
+                        headers = video.headers,
+                        preferred = video.preferred,
+                        subtitleTracks = video.subtitleTracks,
+                        audioTracks = video.audioTracks,
+                        timestamps = video.timestamps,
+                        mpvArgs = video.mpvArgs,
+                        ffmpegStreamArgs = video.ffmpegStreamArgs,
+                        ffmpegVideoArgs = video.ffmpegVideoArgs,
+                        internalData = video.internalData,
+                        initialized = video.initialized,
+                    ).also {
+                        it.pageUrl = video.url
+                        it.status = video.status
+                    }
                 }
                 Hoster(
                     hosterUrl = "",

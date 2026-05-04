@@ -41,8 +41,8 @@ data class Video(
     val ffmpegVideoArgs: List<Pair<String, String>> = emptyList(),
     val internalData: String = "",
     val initialized: Boolean = false,
-    val pageUrl: String = "",
 ) {
+    var pageUrl: String = ""
 
     // TODO(1.6): Remove after ext lib bump
     @Deprecated("Use videoTitle instead", ReplaceWith("videoTitle"))
@@ -67,8 +67,9 @@ data class Video(
         headers = headers,
         subtitleTracks = subtitleTracks,
         audioTracks = audioTracks,
-        pageUrl = url,
-    )
+    ) {
+        pageUrl = url
+    }
 
     // TODO(1.6): Remove after ext lib bump
     @Suppress("UNUSED_PARAMETER")
@@ -78,7 +79,9 @@ data class Video(
         videoUrl: String?,
         uri: Uri? = null,
         headers: Headers? = null,
-    ) : this(url, quality, videoUrl, headers)
+    ) : this(url, quality, videoUrl, headers) {
+        pageUrl = url
+    }
 
     @Transient
     @Volatile
@@ -162,8 +165,9 @@ data class SerializableVideo(
                         sVid.ffmpegVideoArgs,
                         sVid.internalData,
                         sVid.initialized,
-                        sVid.pageUrl,
-                    )
+                    ).apply {
+                        pageUrl = sVid.pageUrl
+                    }
                 }
     }
 }

@@ -90,4 +90,21 @@ class HosterTest {
         hosters[1].dubbingLabel shouldBe "AnimeVost"
         hosters[1].videoList?.map { it.videoTitle } shouldBe listOf("1080p")
     }
+
+    @Test
+    fun `legacy default constructor signature stays available`() {
+        val expectedParameterTypes = listOf(
+            "java.lang.String",
+            "java.lang.String",
+            "java.util.List",
+            "java.lang.String",
+            "boolean",
+            "int",
+            "kotlin.jvm.internal.DefaultConstructorMarker",
+        )
+
+        Hoster::class.java.declaredConstructors.any { constructor ->
+            constructor.parameterTypes.map { it.name } == expectedParameterTypes
+        } shouldBe true
+    }
 }
