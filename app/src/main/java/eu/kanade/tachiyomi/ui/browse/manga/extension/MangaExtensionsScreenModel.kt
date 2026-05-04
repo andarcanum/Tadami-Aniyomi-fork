@@ -12,6 +12,7 @@ import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
+import eu.kanade.tachiyomi.extension.manga.model.newestByVersion
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.coroutines.delay
@@ -43,6 +44,8 @@ class MangaExtensionsScreenModel(
 
     private val currentDownloads = MutableStateFlow<Map<String, InstallStep>>(hashMapOf())
     private val collapsedLanguages = MutableStateFlow<Set<String>>(emptySet())
+    private val availableExtensionVariants = MutableStateFlow<Map<String, List<MangaExtension.Available>>>(emptyMap())
+    private val updateExtensionVariants = MutableStateFlow<Map<String, List<MangaExtension.Available>>>(emptyMap())
 
     init {
         val context = Injekt.get<Application>()
@@ -95,11 +98,19 @@ class MangaExtensionsScreenModel(
                 state.map { it.searchQuery }.distinctUntilChanged().debounce(SEARCH_DEBOUNCE_MILLIS),
                 currentDownloads,
                 getExtensions.subscribe(),
+                extensionManager.availableExtensionsFlow,
                 collapsedLanguages,
-            ) { query, downloads, (_updates, _installed, _available, _untrusted), _collapsedLanguages ->
+            ) { query, downloads, (_updates, _installed, _available, _untrusted), rawAvailable, _collapsedLanguages ->
                 val searchQuery = query ?: ""
 
                 val itemsGroups: ItemGroups = mutableMapOf()
+                availableExtensionVariants.value = _available.groupBy { it.pkgName }
+                updateExtensionVariants.value = rawAvailable.groupBy { it.pkgName }
+                val displayAvailable = _available
+                    .filter(queryFilter(searchQuery))
+                    .groupBy { it.pkgName }
+                    .mapNotNull { (_, variants) -> variants.newestByVersion() }
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 
                 val updates = _updates.filter(queryFilter(searchQuery)).map(
                     extensionMapper(downloads),
@@ -118,8 +129,7 @@ class MangaExtensionsScreenModel(
                     itemsGroups[MangaExtensionUiModel.Header.Resource(MR.strings.ext_installed)] = installed + untrusted
                 }
 
-                val languagesWithExtensions = _available
-                    .filter(queryFilter(searchQuery))
+                val languagesWithExtensions = displayAvailable
                     .filter { it.lang.isNotBlank() }
                     .groupBy { it.lang }
                     .toSortedMap(LocaleHelper.comparator)
@@ -184,20 +194,47 @@ class MangaExtensionsScreenModel(
             state.value.items.values.flatten()
                 .map { it.extension }
                 .filterIsInstance<MangaExtension.Installed>()
-                .filter { it.hasUpdate }
+                .filter { it.hasUpdate && !it.needsReinstall }
                 .forEach { updateExtensionNow(it) }
         }
     }
 
     fun installExtension(extension: MangaExtension.Available) {
         screenModelScope.launchIO {
-            installExtensionNow(extension)
+            val variants = availableExtensionVariants.value[extension.pkgName].orEmpty()
+            if (variants.size > 1) {
+                showRepoPicker(extension.pkgName, variants)
+            } else {
+                installExtensionNow(extension)
+            }
         }
     }
 
     fun updateExtension(extension: MangaExtension.Installed) {
         screenModelScope.launchIO {
-            updateExtensionNow(extension)
+            if (extension.needsReinstall) {
+                return@launchIO
+            }
+            val variants = updateExtensionVariants.value[extension.pkgName].orEmpty()
+            if (variants.size > 1) {
+                showRepoPicker(extension.pkgName, variants)
+            } else {
+                updateExtensionNow(extension)
+            }
+        }
+    }
+
+    fun installFromRepo(extension: MangaExtension.Available) {
+        dismissRepoPicker()
+        screenModelScope.launchIO { installExtensionNow(extension) }
+    }
+
+    fun dismissRepoPicker() {
+        mutableState.update {
+            it.copy(
+                repoPickerPluginId = null,
+                repoPickerOptions = emptyList(),
+            )
         }
     }
 
@@ -226,6 +263,21 @@ class MangaExtensionsScreenModel(
             .onEach { installStep -> addDownloadState(extension, installStep) }
             .onCompletion { removeDownloadState(extension) }
             .collect()
+
+    private fun showRepoPicker(
+        pkgName: String,
+        options: List<MangaExtension.Available>,
+    ) {
+        mutableState.update {
+            it.copy(
+                repoPickerPluginId = pkgName,
+                repoPickerOptions = options.sortedWith(
+                    compareByDescending<MangaExtension.Available> { it.versionCode }
+                        .thenByDescending { it.libVersion },
+                ),
+            )
+        }
+    }
 
     fun uninstallExtension(extension: MangaExtension) {
         extensionManager.uninstallExtension(extension)
@@ -259,6 +311,8 @@ class MangaExtensionsScreenModel(
         val installer: BasePreferences.ExtensionInstaller? = null,
         val searchQuery: String? = null,
         val collapsedLanguages: Set<String> = emptySet(),
+        val repoPickerPluginId: String? = null,
+        val repoPickerOptions: List<MangaExtension.Available> = emptyList(),
     ) {
         val isEmpty = items.isEmpty()
     }

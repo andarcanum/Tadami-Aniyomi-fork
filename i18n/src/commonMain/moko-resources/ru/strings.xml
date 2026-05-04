@@ -331,6 +331,8 @@
     <string name="lock_never">Никогда</string>
     <string name="secure_screen">Защита экрана приложения</string>
     <string name="ext_updates_pending">Доступны обновления</string>
+    <string name="ext_reinstall_required">Требуется переустановка</string>
+    <string name="ext_reinstall_required_hint">Найден новый плагин в другом репозитории. Для него требуется переустановка.</string>
     <string name="pref_cutout_short">Показывать содержимое в вырезанной области</string>
     <string name="information_cloudflare_bypass_failure">Не удалось обойти Cloudflare</string>
     <string name="information_webview_outdated">Пожалуйста, обновите WebView для лучшей совместимости</string>

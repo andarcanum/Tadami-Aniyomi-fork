@@ -110,6 +110,10 @@ class SourcePreferences(
     fun animeExtensionUpdatesCount() = preferenceStore.getInt("animeext_updates_count", 0)
     fun mangaExtensionUpdatesCount() = preferenceStore.getInt("ext_updates_count", 0)
     fun novelExtensionUpdatesCount() = preferenceStore.getInt("novelext_updates_count", 0)
+    fun browseExtensionUpdatesSeenCount() = preferenceStore.getInt(
+        Preference.appStateKey("browse_extension_updates_seen_count"),
+        0,
+    )
 
     fun hideInAnimeLibraryItems() = preferenceStore.getBoolean(
         "browse_hide_in_anime_library_items",

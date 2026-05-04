@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.browse.RepoPickerDialog
 import eu.kanade.presentation.browse.anime.AnimeExtensionScreen
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
@@ -103,6 +104,21 @@ fun animeExtensionsTab(
                     onDismissRequest = {
                         privateExtensionToUninstall = null
                     },
+                )
+            }
+
+            if (state.repoPickerOptions.isNotEmpty()) {
+                RepoPickerDialog(
+                    titleRes = AYMR.strings.novel_repo_picker_title,
+                    newestContentDescriptionRes = AYMR.strings.novel_repo_picker_newest,
+                    itemName = state.repoPickerOptions.first().name,
+                    options = state.repoPickerOptions,
+                    onSelectOption = extensionsScreenModel::installFromRepo,
+                    onDismiss = extensionsScreenModel::dismissRepoPicker,
+                    optionLabel = { it.repoName.ifBlank { it.repoUrl } },
+                    optionVersionText = { "v${it.versionName}" },
+                    comparator = compareBy<AnimeExtension.Available> { it.versionCode }
+                        .thenBy { it.libVersion },
                 )
             }
         },

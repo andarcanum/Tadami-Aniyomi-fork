@@ -431,7 +431,7 @@ object HomeScreen : Screen() {
                     scope.launch { tab.onReselect(navigator) }
                 }
             },
-            icon = { NavigationIconItem(tab) },
+            icon = { NavigationIconItem(tab, selected) },
             label = {
                 Text(
                     text = tab.options.title,
@@ -479,7 +479,7 @@ object HomeScreen : Screen() {
                     scope.launch { tab.onReselect(navigator) }
                 }
             },
-            icon = { NavigationIconItem(tab) },
+            icon = { NavigationIconItem(tab, selected) },
             label = {
                 Text(
                     text = tab.options.title,
@@ -494,7 +494,7 @@ object HomeScreen : Screen() {
     }
 
     @Composable
-    private fun NavigationIconItem(tab: eu.kanade.presentation.util.Tab) {
+    private fun NavigationIconItem(tab: eu.kanade.presentation.util.Tab, selected: Boolean) {
         BadgedBox(
             badge = {
                 when {
@@ -525,8 +525,14 @@ object HomeScreen : Screen() {
                         }
                     }
                     BrowseTab::class.isInstance(tab) -> {
+                        val pref = Injekt.get<SourcePreferences>()
+                        val seenCount by produceState(
+                            initialValue = pref.browseExtensionUpdatesSeenCount().get(),
+                        ) {
+                            pref.browseExtensionUpdatesSeenCount().changes()
+                                .collectLatest { value = it }
+                        }
                         val count by produceState(initialValue = 0) {
-                            val pref = Injekt.get<SourcePreferences>()
                             combine(
                                 pref.mangaExtensionUpdatesCount().changes(),
                                 pref.animeExtensionUpdatesCount().changes(),
@@ -536,7 +542,12 @@ object HomeScreen : Screen() {
                             }
                                 .collectLatest { value = it }
                         }
-                        if (count > 0) {
+                        LaunchedEffect(selected, count) {
+                            if (selected) {
+                                pref.browseExtensionUpdatesSeenCount().set(count)
+                            }
+                        }
+                        if (shouldShowBrowseExtensionBadge(selected, count, seenCount)) {
                             Badge {
                                 val desc = pluralStringResource(
                                     MR.plurals.update_check_notification_ext_updates,
@@ -584,6 +595,14 @@ object HomeScreen : Screen() {
         data class More(val toDownloads: Boolean) : Tab
         data object HomeHub : Tab
     }
+}
+
+internal fun shouldShowBrowseExtensionBadge(
+    selected: Boolean,
+    currentCount: Int,
+    seenCount: Int,
+): Boolean {
+    return !selected && currentCount > 0 && currentCount != seenCount
 }
 
 internal fun resolveHomeStartTab(

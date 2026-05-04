@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
+import eu.kanade.tachiyomi.extension.anime.model.newestByVersion
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -43,6 +44,8 @@ class AnimeExtensionsScreenModel(
 
     private val currentDownloads = MutableStateFlow<Map<String, InstallStep>>(hashMapOf())
     private val collapsedLanguages = MutableStateFlow<Set<String>>(emptySet())
+    private val availableExtensionVariants = MutableStateFlow<Map<String, List<AnimeExtension.Available>>>(emptyMap())
+    private val updateExtensionVariants = MutableStateFlow<Map<String, List<AnimeExtension.Available>>>(emptyMap())
 
     init {
         val context = Injekt.get<Application>()
@@ -95,11 +98,19 @@ class AnimeExtensionsScreenModel(
                 state.map { it.searchQuery }.distinctUntilChanged().debounce(SEARCH_DEBOUNCE_MILLIS),
                 currentDownloads,
                 getExtensions.subscribe(),
+                extensionManager.availableExtensionsFlow,
                 collapsedLanguages,
-            ) { query, downloads, (_updates, _installed, _available, _untrusted), _collapsedLanguages ->
+            ) { query, downloads, (_updates, _installed, _available, _untrusted), rawAvailable, _collapsedLanguages ->
                 val searchQuery = query ?: ""
 
                 val itemsGroups: ItemGroups = mutableMapOf()
+                availableExtensionVariants.value = _available.groupBy { it.pkgName }
+                updateExtensionVariants.value = rawAvailable.groupBy { it.pkgName }
+                val displayAvailable = _available
+                    .filter(queryFilter(searchQuery))
+                    .groupBy { it.pkgName }
+                    .mapNotNull { (_, variants) -> variants.newestByVersion() }
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 
                 val updates = _updates.filter(queryFilter(searchQuery)).map(
                     extensionMapper(downloads),
@@ -118,8 +129,7 @@ class AnimeExtensionsScreenModel(
                     itemsGroups[AnimeExtensionUiModel.Header.Resource(MR.strings.ext_installed)] = installed + untrusted
                 }
 
-                val languagesWithExtensions = _available
-                    .filter(queryFilter(searchQuery))
+                val languagesWithExtensions = displayAvailable
                     .filter { it.lang.isNotBlank() }
                     .groupBy { it.lang }
                     .toSortedMap(LocaleHelper.comparator)
@@ -185,20 +195,47 @@ class AnimeExtensionsScreenModel(
             state.value.items.values.flatten()
                 .map { it.extension }
                 .filterIsInstance<AnimeExtension.Installed>()
-                .filter { it.hasUpdate }
+                .filter { it.hasUpdate && !it.needsReinstall }
                 .forEach { updateExtensionNow(it) }
         }
     }
 
     fun installExtension(extension: AnimeExtension.Available) {
         screenModelScope.launchIO {
-            installExtensionNow(extension)
+            val variants = availableExtensionVariants.value[extension.pkgName].orEmpty()
+            if (variants.size > 1) {
+                showRepoPicker(extension.pkgName, variants)
+            } else {
+                installExtensionNow(extension)
+            }
         }
     }
 
     fun updateExtension(extension: AnimeExtension.Installed) {
         screenModelScope.launchIO {
-            updateExtensionNow(extension)
+            if (extension.needsReinstall) {
+                return@launchIO
+            }
+            val variants = updateExtensionVariants.value[extension.pkgName].orEmpty()
+            if (variants.size > 1) {
+                showRepoPicker(extension.pkgName, variants)
+            } else {
+                updateExtensionNow(extension)
+            }
+        }
+    }
+
+    fun installFromRepo(extension: AnimeExtension.Available) {
+        dismissRepoPicker()
+        screenModelScope.launchIO { installExtensionNow(extension) }
+    }
+
+    fun dismissRepoPicker() {
+        mutableState.update {
+            it.copy(
+                repoPickerPluginId = null,
+                repoPickerOptions = emptyList(),
+            )
         }
     }
 
@@ -227,6 +264,21 @@ class AnimeExtensionsScreenModel(
             .onEach { installStep -> addDownloadState(extension, installStep) }
             .onCompletion { removeDownloadState(extension) }
             .collect()
+
+    private fun showRepoPicker(
+        pkgName: String,
+        options: List<AnimeExtension.Available>,
+    ) {
+        mutableState.update {
+            it.copy(
+                repoPickerPluginId = pkgName,
+                repoPickerOptions = options.sortedWith(
+                    compareByDescending<AnimeExtension.Available> { it.versionCode }
+                        .thenByDescending { it.libVersion },
+                ),
+            )
+        }
+    }
 
     fun uninstallExtension(extension: AnimeExtension) {
         extensionManager.uninstallExtension(extension)
@@ -259,6 +311,8 @@ class AnimeExtensionsScreenModel(
         val installer: BasePreferences.ExtensionInstaller? = null,
         val searchQuery: String? = null,
         val collapsedLanguages: Set<String> = emptySet(),
+        val repoPickerPluginId: String? = null,
+        val repoPickerOptions: List<AnimeExtension.Available> = emptyList(),
     ) {
         val isEmpty = items.isEmpty()
     }

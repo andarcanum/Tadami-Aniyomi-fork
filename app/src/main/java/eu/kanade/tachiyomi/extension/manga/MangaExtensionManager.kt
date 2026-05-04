@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.manga.api.MangaExtensionApi
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
 import eu.kanade.tachiyomi.extension.manga.model.MangaLoadResult
+import eu.kanade.tachiyomi.extension.manga.model.newestByVersion
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstallReceiver
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstaller
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionLoader
@@ -68,8 +69,10 @@ class MangaExtensionManager(
     private val installedExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Installed>())
     val installedExtensionsFlow = installedExtensionsMapFlow.mapExtensions(scope)
 
+    private val availableExtensionsStateFlow = MutableStateFlow(emptyList<MangaExtension.Available>())
+    val availableExtensionsFlow: StateFlow<List<MangaExtension.Available>> = availableExtensionsStateFlow.asStateFlow()
+
     private val availableExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Available>())
-    val availableExtensionsFlow = availableExtensionsMapFlow.mapExtensions(scope)
 
     private val untrustedExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Untrusted>())
     val untrustedExtensionsFlow = untrustedExtensionsMapFlow.mapExtensions(scope)
@@ -153,7 +156,10 @@ class MangaExtensionManager(
 
         enableAdditionalSubLanguages(extensions)
 
-        availableExtensionsMapFlow.value = extensions.associateBy { it.pkgName }
+        availableExtensionsStateFlow.value = extensions
+        availableExtensionsMapFlow.value = extensions
+            .groupBy { it.pkgName }
+            .mapValues { (_, variants) -> variants.newestByVersion()!! }
         updatedInstalledExtensionsStatuses(extensions)
         setupAvailableExtensionsSourcesDataMap(extensions)
     }
@@ -201,27 +207,27 @@ class MangaExtensionManager(
             return
         }
 
+        val availableExtensionsByPkgName = availableExtensions.groupBy { it.pkgName }
         val installedExtensionsMap = installedExtensionsMapFlow.value.toMutableMap()
         var changed = false
 
         for ((pkgName, extension) in installedExtensionsMap) {
-            val availableExt = availableExtensions.find { it.pkgName == pkgName }
+            val variants = availableExtensionsByPkgName[pkgName].orEmpty()
+            val availableExt = variants.newestByVersion()
 
             if (availableExt == null && !extension.isObsolete) {
                 installedExtensionsMap[pkgName] = extension.copy(isObsolete = true)
                 changed = true
             } else if (availableExt != null) {
                 val hasUpdate = extension.updateExists(availableExt)
-                if (extension.hasUpdate != hasUpdate) {
-                    installedExtensionsMap[pkgName] = extension.copy(
-                        hasUpdate = hasUpdate,
-                        repoUrl = availableExt.repoUrl,
-                    )
-                } else {
-                    installedExtensionsMap[pkgName] = extension.copy(
-                        repoUrl = availableExt.repoUrl,
-                    )
-                }
+                val needsReinstall = hasUpdate &&
+                    variants.size > 1 &&
+                    (extension.repoUrl == null || extension.repoUrl != availableExt.repoUrl)
+                installedExtensionsMap[pkgName] = extension.copy(
+                    hasUpdate = hasUpdate,
+                    needsReinstall = needsReinstall,
+                    repoUrl = extension.repoUrl,
+                )
                 changed = true
             }
         }

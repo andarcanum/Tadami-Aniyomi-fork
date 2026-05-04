@@ -1,5 +1,6 @@
 ﻿package eu.kanade.presentation.browse.manga
 
+import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.GetApp
@@ -152,6 +154,7 @@ private fun ExtensionContent(
     onToggleSection: (MangaExtensionUiModel.Header.Text) -> Unit,
 ) {
     val context = LocalContext.current
+    val reinstallRequiredHint = stringResource(MR.strings.ext_reinstall_required_hint)
     var trustState by remember { mutableStateOf<MangaExtension.Untrusted?>(null) }
     val installGranted = rememberRequestPackageInstallsPermissionState(initialValue = true)
 
@@ -251,7 +254,13 @@ private fun ExtensionContent(
                         when (it) {
                             is MangaExtension.Available -> onInstallExtension(it)
                             is MangaExtension.Installed -> {
-                                if (it.hasUpdate) {
+                                if (it.needsReinstall) {
+                                    Toast.makeText(
+                                        context,
+                                        reinstallRequiredHint,
+                                        Toast.LENGTH_LONG,
+                                    ).show()
+                                } else if (it.hasUpdate) {
                                     onUpdateExtension(it)
                                 } else {
                                     onOpenExtension(it)
@@ -458,10 +467,18 @@ private fun ExtensionItemActions(
 
                         if (extension.hasUpdate) {
                             IconButton(onClick = { onClickItemAction(extension) }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.GetApp,
-                                    contentDescription = stringResource(MR.strings.ext_update),
-                                )
+                                if (extension.needsReinstall) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.ErrorOutline,
+                                        contentDescription = stringResource(MR.strings.ext_reinstall_required),
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Outlined.GetApp,
+                                        contentDescription = stringResource(MR.strings.ext_update),
+                                    )
+                                }
                             }
                         }
                     }
