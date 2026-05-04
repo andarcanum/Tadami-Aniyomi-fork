@@ -7,6 +7,7 @@ import io.kotest.matchers.nulls.shouldBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import io.kotest.matchers.string.shouldNotContain
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -166,6 +167,9 @@ class NovelJsRuntimeFactoryTest {
 
     @Test
     fun `buildRequest adds browser headers when absent`() {
+        val networkHelper = mockk<NetworkHelper>(relaxed = true)
+        every { networkHelper.defaultUserAgentProvider() } returns "Tadami-Test-Agent/1.0"
+
         val nativeApiClass = Class.forName(
             "eu.kanade.tachiyomi.extension.novel.runtime.NovelJsRuntimeFactory\$NativeApiImpl",
         )
@@ -180,7 +184,7 @@ class NovelJsRuntimeFactoryTest {
         }
         val nativeApi = constructor.newInstance(
             "scribblehub",
-            mockk<NetworkHelper>(relaxed = true),
+            networkHelper,
             InMemoryStore(),
             Json { ignoreUnknownKeys = true },
             NovelDomainAliasResolver(NovelPluginRuntimeOverrides()),
@@ -200,7 +204,7 @@ class NovelJsRuntimeFactoryTest {
             """{"method":"POST"}""",
         ) as okhttp3.Request
 
-        assertTrue((request.header("User-Agent") ?: "").contains("Mozilla/5.0"))
+        assertEquals("Tadami-Test-Agent/1.0", request.header("User-Agent"))
         assertEquals("https://www.scribblehub.com/", request.header("Referer"))
         assertEquals("https://www.scribblehub.com", request.header("Origin"))
         assertNotNull(request.header("Accept-Language"))

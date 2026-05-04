@@ -71,6 +71,10 @@ class NovelJsRuntimeFactory(
             val request = buildRequest(resolvedUrl, optionsJson)
             return runCatching {
                 networkHelper.client.newCall(request).execute().use { response ->
+                    syncAndroidWebViewResponseCookies(
+                        url = response.request.url.toString(),
+                        setCookieHeaders = response.headers.values("Set-Cookie"),
+                    )
                     val headers = response.headers.toMultimap()
                         .mapValues { (_, values) -> values.joinToString(",") }
                     val responseBody = response.body
@@ -493,11 +497,13 @@ class NovelJsRuntimeFactory(
                 .url(url)
                 .method("POST", requestBody)
 
-            headers.forEach { (name, value) ->
+            val requestHeaders = headers.toMutableMap()
+            applyAndroidWebViewCookies(requestHeaders, url)
+            requestHeaders.forEach { (name, value) ->
                 builder.addHeader(name, value)
             }
 
-            val headerNames = headers.keys.map { it.lowercase() }.toSet()
+            val headerNames = requestHeaders.keys.map { it.lowercase() }.toSet()
             if ("content-type" !in headerNames) {
                 builder.addHeader("Content-Type", "application/grpc-web+proto")
             }
@@ -517,6 +523,10 @@ class NovelJsRuntimeFactory(
                     if (!response.isSuccessful) {
                         error("gRPC-web request failed: HTTP ${response.code}")
                     }
+                    syncAndroidWebViewResponseCookies(
+                        url = response.request.url.toString(),
+                        setCookieHeaders = response.headers.values("Set-Cookie"),
+                    )
                     response.body.bytes()
                 }
 
@@ -570,7 +580,9 @@ class NovelJsRuntimeFactory(
                 ?: JsFetchRequest()
             val builder = Request.Builder().url(url)
             val presentHeaders = mutableSetOf<String>()
-            options.headers.forEach { (name, value) ->
+            val requestHeaders = options.headers.toMutableMap()
+            applyAndroidWebViewCookies(requestHeaders, url)
+            requestHeaders.forEach { (name, value) ->
                 presentHeaders += name.lowercase()
                 val resolvedValue = when {
                     name.equals("referer", ignoreCase = true) -> resolveAlias(value)
@@ -635,7 +647,10 @@ class NovelJsRuntimeFactory(
             }
 
             if ("user-agent" !in presentHeaders) {
-                builder.addHeader("User-Agent", DEFAULT_USER_AGENT)
+                builder.addHeader(
+                    "User-Agent",
+                    networkHelper.defaultUserAgentProvider().ifBlank { DEFAULT_USER_AGENT },
+                )
             }
             if ("accept" !in presentHeaders) {
                 builder.addHeader("Accept", DEFAULT_ACCEPT)

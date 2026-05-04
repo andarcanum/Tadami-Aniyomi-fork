@@ -3,9 +3,11 @@ package eu.kanade.presentation.webview
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.Message
+import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -29,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.stack.mutableStateStackOf
@@ -40,8 +42,6 @@ import com.kevinnzou.web.WebContent
 import com.kevinnzou.web.WebView
 import com.kevinnzou.web.WebViewNavigator
 import com.kevinnzou.web.WebViewState
-import com.kevinnzou.web.rememberWebViewNavigator
-import com.kevinnzou.web.rememberWebViewState
 import com.tadami.aurora.BuildConfig
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
@@ -49,7 +49,6 @@ import eu.kanade.presentation.components.WarningBanner
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginWebViewCoordinator
-import eu.kanade.tachiyomi.util.system.getHtml
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CoroutineScope
@@ -90,9 +89,17 @@ fun WebViewScreenContent(
     onUrlChange: (String) -> Unit = {},
     novelSourceId: Long? = null,
 ) {
-    val state = rememberWebViewState(url = url, additionalHttpHeaders = headers)
-    val navigator = rememberWebViewNavigator()
-    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val windowStack = remember {
+        mutableStateStackOf(
+            WebViewWindow(
+                WebContent.Url(url = url, additionalHttpHeaders = headers),
+                WebViewNavigator(coroutineScope),
+            ),
+        )
+    }
+    val currentWindow = windowStack.lastItemOrNull!!
+    val navigator = currentWindow.navigator
     val uriHandler = LocalUriHandler.current
     val appHaptics = LocalAppHaptics.current
     val scope = rememberCoroutineScope()
@@ -103,31 +110,13 @@ fun WebViewScreenContent(
         novelSourceId?.let { novelSourceManager.get(it) as? NovelPluginIdentitySource }?.pluginId
     }
 
-    val windowStack = remember { mutableStateStackOf<WebViewWindow>() }
-    val webChromeClient = remember {
-        object : AccompanistWebChromeClient() {
-            override fun onCreateWindow(
-                view: WebView,
-                isDialog: Boolean,
-                isUserGesture: Boolean,
-                resultMsg: Message,
-            ): Boolean {
-                if (isUserGesture) {
-                    windowStack.push(WebViewWindow(resultMsg, WebViewNavigator(scope)))
-                    return true
-                }
-                return false
-            }
-
-            override fun onJsAlert(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
-                result.confirm()
-                return true
-            }
-        }
-    }
-
     var currentUrl by remember { mutableStateOf(url) }
     var showCloudflareHelp by remember { mutableStateOf(false) }
+    var isActive by remember { mutableStateOf(true) }
+
+    DisposableEffect(Unit) {
+        onDispose { isActive = false }
+    }
 
     val webClient = remember {
         object : AccompanistWebViewClient() {
@@ -141,19 +130,21 @@ fun WebViewScreenContent(
 
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
-                scope.launch {
-                    val html = view.getHtml()
-                    showCloudflareHelp = "window._cf_chl_opt" in html || "Ray ID is" in html
-                }
-                novelPluginId?.let { pluginId ->
-                    scope.launch {
-                        applyNovelPluginWebViewBindings(
-                            view = view,
-                            pluginId = pluginId,
-                            scope = scope,
-                            assetBindings = pluginAssetBindings,
-                            webViewCoordinator = webViewCoordinator,
-                        )
+                showCloudflareHelp = isCloudflareChallengePage(
+                    url = url,
+                    title = view.title,
+                )
+                if (!showCloudflareHelp) {
+                    novelPluginId?.let { pluginId ->
+                        scope.launch {
+                            applyNovelPluginWebViewBindings(
+                                view = view,
+                                pluginId = pluginId,
+                                scope = scope,
+                                assetBindings = pluginAssetBindings,
+                                webViewCoordinator = webViewCoordinator,
+                            )
+                        }
                     }
                 }
             }
@@ -179,13 +170,17 @@ fun WebViewScreenContent(
                 // Ignore intents urls
                 if (url.startsWith("intent://")) return true
 
-                // Only open valid web urls, and only when the URL actually changes
-                // (avoid re-loading the same URL which breaks Cloudflare Turnstile navigation)
-                if (url.startsWith("http") || url.startsWith("https")) {
-                    if (url != view?.url) {
-                        view?.loadUrl(url, headers)
-                        return true
-                    }
+                // Only manually reload changed main-frame GET navigations so we preserve
+                // source headers without hijacking iframe/subframe challenge requests.
+                if (shouldReloadMainFrameNavigation(
+                        requestUrl = url,
+                        currentUrl = view?.url,
+                        isForMainFrame = request.isForMainFrame,
+                        method = request.method,
+                    )
+                ) {
+                    view?.loadUrl(url, headers)
+                    return true
                 }
 
                 return false
@@ -193,12 +188,78 @@ fun WebViewScreenContent(
         }
     }
 
+    val webChromeClient = remember {
+        object : AccompanistWebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView,
+                isDialog: Boolean,
+                isUserGesture: Boolean,
+                resultMsg: Message,
+            ): Boolean {
+                if (isUserGesture) {
+                    windowStack.push(WebViewWindow(resultMsg, WebViewNavigator(coroutineScope)))
+                    return true
+                }
+                return false
+            }
+
+            override fun onJsAlert(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
+                if (!isActive) {
+                    result.confirm()
+                    return true
+                }
+                return super.onJsAlert(view, url, message, result)
+            }
+
+            override fun onJsConfirm(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
+                if (!isActive) {
+                    result.cancel()
+                    return true
+                }
+                return super.onJsConfirm(view, url, message, result)
+            }
+
+            override fun onJsPrompt(
+                view: WebView,
+                url: String?,
+                message: String?,
+                defaultValue: String?,
+                result: JsPromptResult,
+            ): Boolean {
+                if (!isActive) {
+                    result.cancel()
+                    return true
+                }
+                return super.onJsPrompt(view, url, message, defaultValue, result)
+            }
+        }
+    }
+
+    fun initializePopup(webView: WebView, message: Message): WebView {
+        val transport = message.obj as WebView.WebViewTransport
+        transport.webView = webView
+        message.sendToTarget()
+        return webView
+    }
+
+    val popState = remember<() -> Unit> {
+        {
+            if (windowStack.size == 1) {
+                onNavigateUp()
+            } else {
+                windowStack.pop()
+            }
+        }
+    }
+
+    BackHandler(windowStack.size > 1, popState)
+
     Scaffold(
         topBar = {
             Box {
                 Column {
                     AppBar(
-                        title = state.pageTitle ?: initialTitle,
+                        title = currentWindow.state.pageTitle ?: initialTitle,
                         subtitle = currentUrl,
                         navigateUp = onNavigateUp,
                         navigationIcon = Icons.Outlined.Close,
@@ -241,7 +302,18 @@ fun WebViewScreenContent(
                                         title = stringResource(MR.strings.pref_clear_cookies),
                                         onClick = { onClearCookies(currentUrl) },
                                     ),
-                                ),
+                                ).builder().apply {
+                                    if (windowStack.size > 1) {
+                                        add(
+                                            0,
+                                            AppBar.Action(
+                                                title = stringResource(MR.strings.action_close),
+                                                icon = Icons.Outlined.Close,
+                                                onClick = popState,
+                                            ),
+                                        )
+                                    }
+                                }.build(),
                             )
                         },
                     )
@@ -264,7 +336,7 @@ fun WebViewScreenContent(
                         }
                     }
                 }
-                when (val loadingState = state.loadingState) {
+                when (val loadingState = currentWindow.state.loadingState) {
                     is LoadingState.Initializing -> LinearProgressIndicator(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -281,63 +353,47 @@ fun WebViewScreenContent(
             }
         },
     ) { contentPadding ->
-        WebView(
-            state = state,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding),
-            navigator = navigator,
-            onCreated = { webView ->
-                webView.setDefaultSettings()
+        key(currentWindow) {
+            WebView(
+                state = currentWindow.state,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(contentPadding),
+                navigator = navigator,
+                onCreated = { webView ->
+                    webView.setDefaultSettings()
 
-                // Debug mode (chrome://inspect/#devices)
-                if (BuildConfig.DEBUG &&
-                    0 != webView.context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE
-                ) {
-                    WebView.setWebContentsDebuggingEnabled(true)
-                }
-
-                headers.entries.firstOrNull { (name, _) ->
-                    name.equals("User-Agent", ignoreCase = true)
-                }?.value?.let {
-                    webView.settings.userAgentString = it
-                }
-            },
-            client = webClient,
-            chromeClient = webChromeClient,
-            factory = { context ->
-                windowStack.items.firstOrNull { it.webView?.context == context }
-                    ?.webView
-                    ?: WebView(context).also { webView ->
-                        windowStack.items.firstOrNull { it.popupMessage != null }
-                            ?.let { window ->
-                                window.webView = webView
-                                window.popupMessage?.let { msg ->
-                                    val transport = msg.obj as WebView.WebViewTransport
-                                    transport.webView = webView
-                                    msg.sendToTarget()
-                                }
-                            }
+                    // Debug mode (chrome://inspect/#devices)
+                    if (BuildConfig.DEBUG &&
+                        0 != webView.context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE
+                    ) {
+                        WebView.setWebContentsDebuggingEnabled(true)
                     }
-            },
-        )
-        windowStack.items.forEach { window ->
-            key(window) {
-                WebView(
-                    state = window.state,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(contentPadding),
-                    navigator = window.navigator,
-                    client = webClient,
-                    chromeClient = webChromeClient,
-                    onDispose = { webView ->
-                        if (windowStack.items.none { it.webView == webView }) {
-                            webView.destroy()
+
+                    headers["user-agent"]?.let {
+                        webView.settings.userAgentString = it
+                    }
+                },
+                onDispose = { webView ->
+                    val window = windowStack.items.find { it.webView == webView }
+                    if (window == null) {
+                        webView.destroy()
+                    } else {
+                        window.state.content = WebContent.NavigatorOnly
+                    }
+                },
+                client = webClient,
+                chromeClient = webChromeClient,
+                factory = { context ->
+                    currentWindow.webView
+                        ?: WebView(context).also { webView ->
+                            currentWindow.webView = webView
+                            currentWindow.popupMessage?.let {
+                                initializePopup(webView, it)
+                            }
                         }
-                    },
-                )
-            }
+                },
+            )
         }
     }
 }

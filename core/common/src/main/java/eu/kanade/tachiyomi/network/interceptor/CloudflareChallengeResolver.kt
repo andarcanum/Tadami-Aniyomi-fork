@@ -9,6 +9,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import eu.kanade.tachiyomi.network.AndroidCookieJar
+import eu.kanade.tachiyomi.util.system.WebViewUtil
+import eu.kanade.tachiyomi.util.system.sanitizeCloudflareRequestHeaders
 import eu.kanade.tachiyomi.util.system.toast
 import okhttp3.Cookie
 import okhttp3.Headers
@@ -60,7 +62,13 @@ internal class WebViewCloudflareChallengeResolver(
                     request: WebResourceRequest,
                 ): WebResourceResponse? {
                     val client = nonCloudflareClientProvider() ?: return null
-                    return interceptMainFrameForCspStripping(client, request, targetHost)
+                    return interceptMainFrameForCspStripping(
+                        client = client,
+                        request = request,
+                        targetHost = targetHost,
+                        contextPackageName = context.packageName,
+                        spoofedPackageName = WebViewUtil.spoofedPackageName(context),
+                    )
                 }
 
                 override fun onPageFinished(view: WebView, url: String) {
@@ -167,6 +175,8 @@ private fun interceptMainFrameForCspStripping(
     client: OkHttpClient,
     request: WebResourceRequest,
     targetHost: String,
+    contextPackageName: String,
+    spoofedPackageName: String,
 ): WebResourceResponse? {
     if (!request.isForMainFrame) return null
     if (!request.method.equals("GET", ignoreCase = true)) return null
@@ -174,10 +184,15 @@ private fun interceptMainFrameForCspStripping(
     if (!requestHost.equals(targetHost, ignoreCase = true)) return null
 
     return try {
+        val safeHeaders = sanitizeCloudflareReplayHeaders(
+            requestHeaders = request.requestHeaders.orEmpty(),
+            contextPackageName = contextPackageName,
+            spoofedPackageName = spoofedPackageName,
+        )
         val okHttpRequest = Request.Builder()
             .url(request.url.toString())
             .apply {
-                request.requestHeaders?.forEach { (name, value) ->
+                safeHeaders.forEach { (name, value) ->
                     if (value != null) addHeader(name, value)
                 }
             }
@@ -212,6 +227,33 @@ private fun interceptMainFrameForCspStripping(
 private val CSP_HEADER_NAMES = setOf(
     "content-security-policy",
     "content-security-policy-report-only",
+)
+
+internal fun sanitizeCloudflareReplayHeaders(
+    requestHeaders: Map<String, String>,
+    contextPackageName: String,
+    spoofedPackageName: String,
+): Map<String, String> {
+    val safeHeaders = requestHeaders.filterNot { (name, _) ->
+        name.lowercase(Locale.ENGLISH) in unsafeReplayHeaderNames
+    }
+    return sanitizeCloudflareRequestHeaders(
+        requestHeaders = safeHeaders,
+        contextPackageName = contextPackageName,
+        spoofedPackageName = spoofedPackageName,
+    )
+}
+
+private val unsafeReplayHeaderNames = setOf(
+    "connection",
+    "content-length",
+    "host",
+    "keep-alive",
+    "set-cookie",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
 )
 
 private val INTERACTIVE_WIDGET_PROBE = """

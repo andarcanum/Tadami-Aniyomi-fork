@@ -55,6 +55,15 @@ class CloudflareInterceptor(
             val hostLock = challengeLockByHost.getOrPut(host) { Any() }
             try {
                 synchronized(hostLock) {
+                    // Try the request as-is first — the user may have already solved
+                    // Cloudflare manually via WebView and cookies are waiting in CookieManager.
+                    val immediateRetry = chain.proceed(request)
+                    if (!shouldIntercept(immediateRetry)) {
+                        return immediateRetry
+                    }
+                    immediateRetry.close()
+
+                    // Still blocked — clear stale clearance and run the bypass.
                     cookieManager.remove(request.url, COOKIE_NAMES, 0)
                     val oldCookie = cookieManager.get(request.url)
                         .firstOrNull { it.name == "cf_clearance" }
