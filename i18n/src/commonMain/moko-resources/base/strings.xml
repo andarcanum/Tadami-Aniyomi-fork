@@ -90,6 +90,8 @@
     <string name="action_disable_all">Disable all</string>
     <string name="action_edit">Edit</string>
     <string name="action_add">Add</string>
+    <string name="label_display_name">Display name</string>
+    <string name="display_name_auto_detected">Auto-detected</string>
     <string name="action_update_category">Update category</string>
     <string name="action_open_random_manga">Open random entry</string>
     <string name="action_add_category">Add category</string>
@@ -385,6 +387,7 @@
     <string name="label_extension_repos">Extension repos</string>
     <string name="information_empty_repos">You have no repos set.</string>
     <string name="action_add_repo">Add repo</string>
+    <string name="action_rename_repo">Rename repo</string>
     <string name="label_add_repo_input">Repo URL</string>
     <string name="action_add_repo_message">Add additional repos to Mihon. This should be a URL that ends with \"index.min.json\".</string>
     <string name="error_repo_exists">This repo already exists!</string>

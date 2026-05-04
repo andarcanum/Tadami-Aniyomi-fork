@@ -33,7 +33,7 @@ class UpdateNovelExtensionRepoTest {
 
         interactor.awaitAll()
 
-        repository.upserted shouldBe fetched
+        repository.upserted shouldBe fetched.copy(name = existing.name)
     }
 
     @Test

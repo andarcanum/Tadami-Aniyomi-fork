@@ -1,5 +1,6 @@
 package eu.kanade.presentation.more.settings.screen.browse
 
+import android.app.Application
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
@@ -27,13 +28,13 @@ class NovelExtensionReposScreenModel(
     private val replaceExtensionRepo: ReplaceNovelExtensionRepo = Injekt.get(),
     private val updateExtensionRepo: UpdateNovelExtensionRepo = Injekt.get(),
     private val extensionManager: NovelExtensionManager = Injekt.get(),
+    private val application: Application = Injekt.get(),
 ) : StateScreenModel<RepoScreenState>(RepoScreenState.Loading) {
 
     private val _events: Channel<RepoEvent> = Channel(Int.MAX_VALUE)
     val events = _events.receiveAsFlow()
 
-    private val migrationPrefs = Injekt.get<android.app.Application>()
-        .getSharedPreferences("novel_extension_repo_prefs", 0)
+    private val migrationPrefs = application.getSharedPreferences("novel_extension_repo_prefs", 0)
 
     init {
         screenModelScope.launchIO {
@@ -83,6 +84,16 @@ class NovelExtensionReposScreenModel(
     fun replaceRepo(newRepo: ExtensionRepo) {
         screenModelScope.launchIO {
             replaceExtensionRepo.await(newRepo)
+            refreshAvailablePlugins()
+        }
+    }
+
+    /**
+     * Updates the stored display name for an existing repo.
+     */
+    fun renameRepo(repo: ExtensionRepo, displayName: String) {
+        screenModelScope.launchIO {
+            replaceExtensionRepo.await(repo.copy(name = displayName))
             refreshAvailablePlugins()
         }
     }

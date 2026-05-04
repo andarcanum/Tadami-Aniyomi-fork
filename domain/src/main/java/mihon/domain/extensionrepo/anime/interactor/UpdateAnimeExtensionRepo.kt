@@ -33,7 +33,7 @@ class UpdateAnimeExtensionRepo(
             repo.signingKeyFingerprint.startsWith("NOFINGERPRINT") ||
             repo.signingKeyFingerprint == newRepo.signingKeyFingerprint
         ) {
-            repository.upsertRepo(newRepo)
+            repository.upsertRepo(newRepo.copy(name = repo.name))
         }
     }
 }

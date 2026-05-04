@@ -12,6 +12,7 @@ import eu.kanade.presentation.more.settings.screen.browse.components.ExtensionRe
 import eu.kanade.presentation.more.settings.screen.browse.components.ExtensionRepoConflictDialog
 import eu.kanade.presentation.more.settings.screen.browse.components.ExtensionRepoCreateDialog
 import eu.kanade.presentation.more.settings.screen.browse.components.ExtensionRepoDeleteDialog
+import eu.kanade.presentation.more.settings.screen.browse.components.ExtensionRepoRenameDialog
 import eu.kanade.presentation.more.settings.screen.browse.components.ExtensionReposScreen
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.util.system.openInBrowser
@@ -51,6 +52,7 @@ class AnimeExtensionReposScreen(
             onAddRepo = { screenModel.createRepo(it) },
             onOpenWebsite = { context.openInBrowser(it.website) },
             onClickDelete = { screenModel.showDialog(RepoDialog.Delete(it)) },
+            onClickRename = { screenModel.showDialog(RepoDialog.Rename(it)) },
             onClickRefresh = { screenModel.refreshRepos() },
             navigateUp = navigator::pop,
             officialRepos = OFFICIAL_ANIME_REPOS,
@@ -61,7 +63,7 @@ class AnimeExtensionReposScreen(
             is RepoDialog.Create -> {
                 ExtensionRepoCreateDialog(
                     onDismissRequest = screenModel::dismissDialog,
-                    onCreate = { url, _ -> screenModel.createRepo(url) },
+                    onCreate = { url, name -> screenModel.createRepo(url, name) },
                     repoUrls = successState.repos.map { it.baseUrl }.toImmutableSet(),
                 )
             }
@@ -70,6 +72,13 @@ class AnimeExtensionReposScreen(
                     onDismissRequest = screenModel::dismissDialog,
                     onDelete = { screenModel.deleteRepo(dialog.repo) },
                     repo = dialog.repo,
+                )
+            }
+            is RepoDialog.Rename -> {
+                ExtensionRepoRenameDialog(
+                    repo = dialog.repo,
+                    onDismissRequest = screenModel::dismissDialog,
+                    onRename = { screenModel.renameRepo(dialog.repo, it) },
                 )
             }
             is RepoDialog.Conflict -> {

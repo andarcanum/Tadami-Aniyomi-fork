@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.channels.Channel
@@ -27,6 +28,7 @@ class MangaExtensionReposScreenModel(
     private val deleteExtensionRepo: DeleteMangaExtensionRepo = Injekt.get(),
     private val replaceExtensionRepo: ReplaceMangaExtensionRepo = Injekt.get(),
     private val updateExtensionRepo: UpdateMangaExtensionRepo = Injekt.get(),
+    private val extensionManager: MangaExtensionManager = Injekt.get(),
 ) : StateScreenModel<RepoScreenState>(RepoScreenState.Loading) {
 
     private val _events: Channel<RepoEvent> = Channel(Int.MAX_VALUE)
@@ -50,14 +52,15 @@ class MangaExtensionReposScreenModel(
      *
      * @param baseUrl The baseUrl of the repo to create.
      */
-    fun createRepo(baseUrl: String) {
+    fun createRepo(baseUrl: String, displayName: String? = null) {
         screenModelScope.launchIO {
-            when (val result = createExtensionRepo.await(baseUrl)) {
+            when (val result = createExtensionRepo.await(baseUrl, displayName)) {
                 CreateMangaExtensionRepo.Result.InvalidUrl -> _events.send(RepoEvent.InvalidUrl)
                 CreateMangaExtensionRepo.Result.RepoAlreadyExists -> _events.send(RepoEvent.RepoAlreadyExists)
                 is CreateMangaExtensionRepo.Result.DuplicateFingerprint -> {
                     showDialog(RepoDialog.Conflict(result.oldRepo, result.newRepo))
                 }
+                CreateMangaExtensionRepo.Result.Success -> refreshAvailablePlugins()
                 else -> {}
             }
         }
@@ -71,6 +74,17 @@ class MangaExtensionReposScreenModel(
     fun replaceRepo(newRepo: ExtensionRepo) {
         screenModelScope.launchIO {
             replaceExtensionRepo.await(newRepo)
+            refreshAvailablePlugins()
+        }
+    }
+
+    /**
+     * Updates the stored display name for an existing repo.
+     */
+    fun renameRepo(repo: ExtensionRepo, displayName: String) {
+        screenModelScope.launchIO {
+            replaceExtensionRepo.await(repo.copy(name = displayName))
+            refreshAvailablePlugins()
         }
     }
 
@@ -83,6 +97,7 @@ class MangaExtensionReposScreenModel(
         if (status is RepoScreenState.Success) {
             screenModelScope.launchIO {
                 updateExtensionRepo.awaitAll()
+                refreshAvailablePlugins()
             }
         }
     }
@@ -93,7 +108,12 @@ class MangaExtensionReposScreenModel(
     fun deleteRepo(baseUrl: String) {
         screenModelScope.launchIO {
             deleteExtensionRepo.await(baseUrl)
+            refreshAvailablePlugins()
         }
+    }
+
+    private suspend fun refreshAvailablePlugins() {
+        extensionManager.findAvailableExtensions()
     }
 
     fun showDialog(dialog: RepoDialog) {
@@ -124,6 +144,7 @@ sealed class RepoEvent {
 sealed class RepoDialog {
     data object Create : RepoDialog()
     data class Delete(val repo: String) : RepoDialog()
+    data class Rename(val repo: ExtensionRepo) : RepoDialog()
     data class Conflict(val oldRepo: ExtensionRepo, val newRepo: ExtensionRepo) : RepoDialog()
     data class Confirm(val url: String) : RepoDialog()
 }

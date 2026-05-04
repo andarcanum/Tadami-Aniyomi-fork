@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name" translatable="false">Tadami</string>
     <string name="action_add">Добавить</string>
+    <string name="label_display_name">Отображаемое имя</string>
     <string name="action_add_category">Добавить категорию</string>
     <string name="action_bookmark">Добавить закладку</string>
     <string name="action_cancel">Отмена</string>
@@ -807,6 +808,7 @@
     <string name="delete_repo_confirmation">Хотите ли вы удалить репозиторий \"%s\"?</string>
     <string name="action_delete_repo">Удалить репозиторий</string>
     <string name="action_add_repo">Добавить репозиторий</string>
+    <string name="action_rename_repo">Переименовать репозиторий</string>
     <string name="information_empty_repos">У вас нет репозиториев.</string>
     <string name="label_extension_repos">Репозитории расширений</string>
     <string name="label_add_repo_input">URL-адрес репозитория</string>
@@ -819,6 +821,7 @@
     <string name="pref_webtoon_disable_zoom_out">Отключить уменьшение масштаба</string>
     <string name="pref_save_long_page_position">Сохранять позицию внутри длинных страниц</string>
     <string name="action_add_anyway">Добавить в любом случае</string>
+    <string name="display_name_auto_detected">Определяется автоматически</string>
     <string name="pref_display_profile">Пользовательский профиль отображения</string>
     <string name="action_migrate_duplicate">Перенести существующую серию</string>
     <string name="action_replace_repo">Заменить</string>

@@ -39,13 +39,13 @@ class CreateNovelExtensionRepoTest {
         )
         coEvery { service.fetchRepoDetails("https://example.org") } returns repo
 
-        val result = interactor.await("https://example.org/index.min.json")
+        val result = interactor.await("https://example.org/index.min.json", "Custom repo")
 
         result shouldBe CreateNovelExtensionRepo.Result.Success
         coVerify {
             repository.insertRepo(
                 repo.baseUrl,
-                repo.name,
+                "Custom repo",
                 repo.shortName,
                 repo.website,
                 repo.signingKeyFingerprint,

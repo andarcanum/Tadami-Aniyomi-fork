@@ -105,8 +105,10 @@ fun ExtensionRepoCreateDialog(
                         displayName = it
                         nameManuallyEdited = it.isNotEmpty()
                     },
-                    label = { Text(text = "Display name (optional)") },
-                    placeholder = { Text(text = suggestName(url).ifEmpty { "Auto-detected" }) },
+                    label = { Text(text = stringResource(MR.strings.label_display_name)) },
+                    placeholder = {
+                        Text(text = suggestName(url).ifEmpty { stringResource(MR.strings.display_name_auto_detected) })
+                    },
                     singleLine = true,
                 )
             }
@@ -147,6 +149,53 @@ fun ExtensionRepoDeleteDialog(
             Text(text = stringResource(MR.strings.delete_repo_confirmation, repo))
         },
     )
+}
+
+@Composable
+fun ExtensionRepoRenameDialog(
+    repo: ExtensionRepo,
+    onDismissRequest: () -> Unit,
+    onRename: (String) -> Unit,
+) {
+    var name by remember(repo.name) { mutableStateOf(repo.name) }
+    val focusRequester = remember { FocusRequester() }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank(),
+                onClick = {
+                    onRename(name.trim())
+                    onDismissRequest()
+                },
+            ) {
+                Text(text = stringResource(MR.strings.action_rename_repo))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        title = {
+            Text(text = stringResource(MR.strings.action_rename_repo))
+        },
+        text = {
+            OutlinedTextField(
+                modifier = Modifier.focusRequester(focusRequester),
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(text = stringResource(MR.strings.name)) },
+                singleLine = true,
+            )
+        },
+    )
+
+    LaunchedEffect(focusRequester) {
+        delay(0.1.seconds)
+        focusRequester.requestFocus()
+    }
 }
 
 @Composable

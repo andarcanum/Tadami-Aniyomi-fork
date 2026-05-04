@@ -23,7 +23,15 @@ class CreateNovelExtensionRepo(
             normalizedUrl.endsWith(indexSuffix) -> {
                 // Mihon-style extension repo (expects repo.json at baseUrl)
                 val baseUrl = normalizedUrl.removeSuffix(indexSuffix)
-                service.fetchRepoDetails(baseUrl)?.let { insert(it) } ?: Result.InvalidUrl
+                service.fetchRepoDetails(baseUrl)
+                    ?.let { repo ->
+                        insert(
+                            repo.copy(
+                                name = displayName.takeIf { !it.isNullOrBlank() } ?: repo.name,
+                            ),
+                        )
+                    }
+                    ?: Result.InvalidUrl
             }
             pluginsSuffixes.any { normalizedUrl.endsWith(it) } -> {
                 // LNReader-style novel plugin index repo

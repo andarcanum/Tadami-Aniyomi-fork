@@ -2,6 +2,7 @@ package eu.kanade.presentation.more.settings.screen.browse
 
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
@@ -23,6 +24,7 @@ class AnimeExtensionReposScreenModel(
     private val deleteExtensionRepo: DeleteAnimeExtensionRepo = Injekt.get(),
     private val replaceExtensionRepo: ReplaceAnimeExtensionRepo = Injekt.get(),
     private val updateExtensionRepo: UpdateAnimeExtensionRepo = Injekt.get(),
+    private val extensionManager: AnimeExtensionManager = Injekt.get(),
 ) : StateScreenModel<RepoScreenState>(RepoScreenState.Loading) {
 
     private val _events: Channel<RepoEvent> = Channel(Int.MAX_VALUE)
@@ -46,14 +48,15 @@ class AnimeExtensionReposScreenModel(
      *
      * @param baseUrl The baseUrl of the repo to create.
      */
-    fun createRepo(baseUrl: String) {
+    fun createRepo(baseUrl: String, displayName: String? = null) {
         screenModelScope.launchIO {
-            when (val result = createExtensionRepo.await(baseUrl)) {
+            when (val result = createExtensionRepo.await(baseUrl, displayName)) {
                 CreateAnimeExtensionRepo.Result.InvalidUrl -> _events.send(RepoEvent.InvalidUrl)
                 CreateAnimeExtensionRepo.Result.RepoAlreadyExists -> _events.send(RepoEvent.RepoAlreadyExists)
                 is CreateAnimeExtensionRepo.Result.DuplicateFingerprint -> {
                     showDialog(RepoDialog.Conflict(result.oldRepo, result.newRepo))
                 }
+                CreateAnimeExtensionRepo.Result.Success -> refreshAvailablePlugins()
                 else -> {}
             }
         }
@@ -67,6 +70,17 @@ class AnimeExtensionReposScreenModel(
     fun replaceRepo(newRepo: ExtensionRepo) {
         screenModelScope.launchIO {
             replaceExtensionRepo.await(newRepo)
+            refreshAvailablePlugins()
+        }
+    }
+
+    /**
+     * Updates the stored display name for an existing repo.
+     */
+    fun renameRepo(repo: ExtensionRepo, displayName: String) {
+        screenModelScope.launchIO {
+            replaceExtensionRepo.await(repo.copy(name = displayName))
+            refreshAvailablePlugins()
         }
     }
 
@@ -79,6 +93,7 @@ class AnimeExtensionReposScreenModel(
         if (status is RepoScreenState.Success) {
             screenModelScope.launchIO {
                 updateExtensionRepo.awaitAll()
+                refreshAvailablePlugins()
             }
         }
     }
@@ -89,7 +104,12 @@ class AnimeExtensionReposScreenModel(
     fun deleteRepo(baseUrl: String) {
         screenModelScope.launchIO {
             deleteExtensionRepo.await(baseUrl)
+            refreshAvailablePlugins()
         }
+    }
+
+    private suspend fun refreshAvailablePlugins() {
+        extensionManager.findAvailableExtensions()
     }
 
     fun showDialog(dialog: RepoDialog) {
