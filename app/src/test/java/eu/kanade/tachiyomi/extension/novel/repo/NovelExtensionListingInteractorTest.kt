@@ -177,7 +177,7 @@ class NovelExtensionListingInteractorTest {
     }
 
     @Test
-    fun `fetch keeps same plugin id from different repos`() {
+    fun `fetch dedupes same plugin id across different repos to highest version`() {
         runTest {
             val getRepos = mockk<GetNovelExtensionRepo>()
             val repoService = mockk<NovelPluginRepoServiceContract>()
@@ -245,7 +245,7 @@ class NovelExtensionListingInteractorTest {
 
             listing.updates shouldBe emptyList()
             listing.installed shouldBe emptyList()
-            listing.available.shouldContainExactly(fromFirstRepo, fromSecondRepo)
+            listing.available.shouldContainExactly(fromSecondRepo)
         }
     }
 

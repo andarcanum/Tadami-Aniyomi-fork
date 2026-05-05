@@ -2,6 +2,10 @@ package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.domain.track.model.AutoTrackState
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
+import eu.kanade.domain.track.service.TrackPreferences
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
@@ -116,6 +120,36 @@ class NovelSelectedTextTranslationScreenModelTest {
         val networkHelper = mockk<NetworkHelper>()
         every { networkHelper.client } returns OkHttpClient()
         Injekt.addSingleton(fullType<NetworkHelper>(), networkHelper)
+
+        runCatching { Injekt.get<TrackPreferences>() }
+            .getOrElse {
+                val trackPreferences = mockk<TrackPreferences>(relaxed = true)
+                every { trackPreferences.autoUpdateTrackOnMarkRead() } returns object : Preference<AutoTrackState> {
+                    override fun get() = AutoTrackState.ALWAYS
+                    override fun set(value: AutoTrackState) {}
+                    override fun isSet() = true
+                    override fun defaultValue() = AutoTrackState.ALWAYS
+                    override fun key() = "pref_auto_update_novel_on_mark_read"
+                    override fun changes() = MutableStateFlow(get())
+                    override fun stateIn(scope: CoroutineScope) = MutableStateFlow(get())
+                    override fun delete() {}
+                }
+                every { trackPreferences.autoUpdateTrack() } returns object : Preference<Boolean> {
+                    override fun get() = true
+                    override fun set(value: Boolean) {}
+                    override fun isSet() = true
+                    override fun defaultValue() = true
+                    override fun key() = "pref_auto_update_novel_sync_key"
+                    override fun changes() = MutableStateFlow(get())
+                    override fun stateIn(scope: CoroutineScope) = MutableStateFlow(get())
+                    override fun delete() {}
+                }
+                Injekt.addSingleton(fullType<TrackPreferences>(), trackPreferences)
+            }
+        runCatching { Injekt.get<TrackNovelChapter>() }
+            .getOrElse {
+                Injekt.addSingleton(fullType<TrackNovelChapter>(), mockk<TrackNovelChapter>(relaxed = true))
+            }
 
         Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
         every { getNovelSeriesWithEntries.subscribe(any()) } returns MutableStateFlow(null)
@@ -447,6 +481,12 @@ class NovelSelectedTextTranslationScreenModelTest {
             syncNovelChaptersWithSource = syncNovelChaptersWithSource,
             getNovel = GetNovel(FakeNovelRepository(novel)),
             sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+            novelDownloadManager = NovelDownloadManager(
+                application = null,
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                storageManager = null,
+                downloadCache = null,
+            ),
             pluginStorage = FakeNovelPluginStorage(emptyList()),
             historyRepository = null,
             novelReaderPreferences = createNovelReaderPreferences(

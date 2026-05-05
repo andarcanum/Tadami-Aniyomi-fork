@@ -81,6 +81,7 @@ class NovelPluginApiTest {
                 hasSettings = false,
                 sha256 = "aaa",
                 repoUrl = "https://repo.one",
+                repoName = "Repo One",
             ),
             NovelPlugin.Available(
                 id = "two.plugin",
@@ -95,6 +96,7 @@ class NovelPluginApiTest {
                 hasSettings = true,
                 sha256 = "bbb",
                 repoUrl = "https://repo.two",
+                repoName = "Repo Two",
             ),
         )
     }
