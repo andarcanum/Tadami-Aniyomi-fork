@@ -1119,6 +1119,13 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page reader reserves bottom glyph overflow scaled for large text sizes`() {
+        assertTrue(resolvePageReaderGlyphOverflowPaddingPx(textSizePx = 20f) >= 5)
+        assertTrue(resolvePageReaderGlyphOverflowPaddingPx(textSizePx = 32f) >= 8)
+        assertTrue(resolvePageReaderGlyphOverflowPaddingPx(textSizePx = 48f) >= 12)
+    }
+
+    @Test
     fun `long paragraph continuation does not get paragraph spacing`() {
         val pages = resolvePageReaderBlocks(
             shouldPaginate = true,

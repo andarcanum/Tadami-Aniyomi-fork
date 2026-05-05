@@ -643,8 +643,10 @@ internal data class NovelPageContentPage(
     val pageIndex: Int = -1,
 )
 
-private fun resolvePageReaderGlyphPaddingPx(textSizePx: Float): Int {
-    return (textSizePx * 0.1f).roundToInt()
+internal fun resolvePageReaderGlyphOverflowPaddingPx(textSizePx: Float): Int {
+    return (textSizePx.coerceAtLeast(1f) * 0.25f)
+        .roundToInt()
+        .coerceAtLeast(4)
 }
 
 internal fun paginatePlainPageBlocks(
@@ -684,7 +686,7 @@ internal fun paginatePlainPageBlocks(
             textSizePx = textSizePx,
             lineHeightMultiplier = lineHeightMultiplier,
         )
-        val glyphPadPx = resolvePageReaderGlyphPaddingPx(blockMetrics.textSizePx)
+        val glyphPadPx = resolvePageReaderGlyphOverflowPaddingPx(blockMetrics.textSizePx)
         val firstLineIndentPx = if (forceParagraphIndent && !isChapterTitle) {
             resolvePageReaderFirstLineIndentPx(
                 firstLineIndentEm = FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM,
@@ -928,7 +930,7 @@ internal fun paginateRichPageBlocks(
             textSizePx = textSizePx,
             lineHeightMultiplier = lineHeightMultiplier,
         )
-        val glyphPadPx = resolvePageReaderGlyphPaddingPx(blockMetrics.textSizePx)
+        val glyphPadPx = resolvePageReaderGlyphOverflowPaddingPx(blockMetrics.textSizePx)
         val firstLineIndentPx = resolvePageReaderFirstLineIndentPx(
             firstLineIndentEm = firstLineIndentEm,
             textSizePx = blockMetrics.textSizePx,
