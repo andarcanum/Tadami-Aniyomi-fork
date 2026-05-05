@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import eu.kanade.tachiyomi.data.coil.NovelReaderRefererImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichTextSegment
@@ -354,8 +355,15 @@ internal fun NovelRichNativeScrollItem(
             )
         }
         is NovelRichContentBlock.Image -> {
+            val referer = LocalNovelReaderReferer.current
+            val context = LocalContext.current
             val imageModel = if (NovelPluginImage.isSupported(block.url)) {
                 NovelPluginImage(block.url)
+            } else if (referer != null) {
+                NovelReaderRefererImage(
+                    url = block.url,
+                    referer = referer,
+                )
             } else {
                 block.url
             }

@@ -104,6 +104,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -156,6 +157,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import coil3.compose.AsyncImage
+import eu.kanade.tachiyomi.data.coil.NovelReaderRefererImage
 import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
@@ -168,6 +170,8 @@ import eu.kanade.presentation.reader.components.AutoScrollActionFab
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
+import eu.kanade.tachiyomi.source.novel.NovelSiteSource
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
@@ -1768,18 +1772,24 @@ fun NovelReaderScreen(
         }
     }
 
-    androidx.compose.foundation.layout.Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(textBackground)
-            .onSizeChanged { pageViewportSize = it }
-            .pointerInput(autoScrollEnabled) {
-                awaitEachGesture {
-                    awaitFirstDown(requireUnconsumed = false)
-                    touchCooldownUntilNanos = System.nanoTime() + AUTO_SCROLL_COOLDOWN_MS * 1_000_000L
-                }
-            },
-    ) {
+    val sourceManager = remember { Injekt.get<NovelSourceManager>() }
+    val refererUrl = remember(sourceId) {
+        (sourceManager.get(sourceId) as? NovelSiteSource)?.siteUrl
+    }
+
+    CompositionLocalProvider(LocalNovelReaderReferer provides refererUrl) {
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(textBackground)
+                .onSizeChanged { pageViewportSize = it }
+                .pointerInput(autoScrollEnabled) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false)
+                        touchCooldownUntilNanos = System.nanoTime() + AUTO_SCROLL_COOLDOWN_MS * 1_000_000L
+                    }
+                },
+        ) {
         if (
             shouldShowNovelAtmosphereBackground(
                 usePageReader = usePageReader,
@@ -2251,8 +2261,14 @@ fun NovelReaderScreen(
                                         }
                                     }
                                     is NovelReaderScreenModel.ContentBlock.Image -> {
+                                        val referer = LocalNovelReaderReferer.current
                                         val imageModel = if (NovelPluginImage.isSupported(block.url)) {
                                             NovelPluginImage(block.url)
+                                        } else if (referer != null) {
+                                            NovelReaderRefererImage(
+                                                url = block.url,
+                                                referer = referer,
+                                            )
                                         } else {
                                             block.url
                                         }
@@ -3889,6 +3905,7 @@ fun NovelReaderScreen(
                 },
             )
         }
+    }
     }
 }
 

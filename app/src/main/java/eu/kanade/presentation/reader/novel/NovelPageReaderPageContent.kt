@@ -36,6 +36,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import androidx.compose.ui.platform.LocalContext
+import eu.kanade.tachiyomi.data.coil.NovelReaderRefererImage
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -852,6 +854,8 @@ private fun NovelPageReaderImageBlock(
     contentLayout: NovelPageReaderContentLayout,
     bookBottomInset: Dp,
 ) {
+    val referer = LocalNovelReaderReferer.current
+    val context = LocalContext.current
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -862,6 +866,11 @@ private fun NovelPageReaderImageBlock(
         AsyncImage(
             model = if (NovelPluginImage.isSupported(imageUrl)) {
                 NovelPluginImage(imageUrl)
+            } else if (referer != null) {
+                NovelReaderRefererImage(
+                    url = imageUrl,
+                    referer = referer,
+                )
             } else {
                 imageUrl
             },
