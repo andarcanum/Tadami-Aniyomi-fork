@@ -1023,6 +1023,33 @@ class NovelJsRuntime(
                       return typeof value === 'number' && value !== value;
                     };
                   }
+                  if (typeof global.Intl === 'undefined') {
+                    global.Intl = {};
+                    global.Intl.DateTimeFormat = function(locale, options) {
+                      return {
+                        format: function(date) {
+                          try { date = new Date(date); return date.toISOString().split('T')[0]; }
+                          catch(e) { return String(date); }
+                        },
+                        resolvedOptions: function() { return {}; }
+                      };
+                    };
+                    global.Intl.NumberFormat = function(locale, options) {
+                      return {
+                        format: function(n) { return String(n); },
+                        resolvedOptions: function() { return {}; }
+                      };
+                    };
+                    global.Intl.Collator = function(locale, options) {
+                      return {
+                        compare: function(a, b) {
+                          a = String(a || ''); b = String(b || '');
+                          return a < b ? -1 : a > b ? 1 : 0;
+                        },
+                        resolvedOptions: function() { return {}; }
+                      };
+                    };
+                  }
                 })(this);
             """.trimIndent(),
         ).joinToString("\n")
@@ -1612,11 +1639,12 @@ class NovelJsModuleRegistry(
 
     private val cheerioModule = """
         __defineModule("cheerio", function(module, exports) {
-          function wrapHandles(handles) {
+          function wrapHandles(handles, _prev) {
             if (!handles || !handles.length) handles = [];
             var api = {
               length: handles.length,
               _handles: handles,
+              _prev: _prev || [],
               get attribs() {
                 return handles.length ? JSON.parse(__native.domAttrs(handles[0])) : {};
               },
@@ -1695,7 +1723,7 @@ class NovelJsModuleRegistry(
                   var found = JSON.parse(__native.domSelect(handles[i], String(selector)));
                   for (var j = 0; j < found.length; j++) result.push(found[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               parent: function(selector) {
                 var result = [];
@@ -1709,7 +1737,7 @@ class NovelJsModuleRegistry(
                     }
                   }
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               parents: function(selector) {
                 var result = [];
@@ -1726,7 +1754,7 @@ class NovelJsModuleRegistry(
                     p = __native.domParent(p);
                   }
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               children: function(selector) {
                 var result = [];
@@ -1734,7 +1762,7 @@ class NovelJsModuleRegistry(
                   var kids = JSON.parse(__native.domChildren(handles[i], selector || null));
                   for (var j = 0; j < kids.length; j++) result.push(kids[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               contents: function() {
                 var result = [];
@@ -1742,7 +1770,7 @@ class NovelJsModuleRegistry(
                   var c = JSON.parse(__native.domContents(handles[i]));
                   for (var j = 0; j < c.length; j++) result.push(c[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               next: function(selector) {
                 var result = [];
@@ -1750,7 +1778,7 @@ class NovelJsModuleRegistry(
                   var n = __native.domNext(handles[i], selector || null);
                   if (n >= 0) result.push(n);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               nextAll: function(selector) {
                 var result = [];
@@ -1758,7 +1786,7 @@ class NovelJsModuleRegistry(
                   var arr = JSON.parse(__native.domNextAll(handles[i], selector || null));
                   for (var j = 0; j < arr.length; j++) result.push(arr[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               prev: function(selector) {
                 var result = [];
@@ -1766,7 +1794,7 @@ class NovelJsModuleRegistry(
                   var p = __native.domPrev(handles[i], selector || null);
                   if (p >= 0) result.push(p);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               prevAll: function(selector) {
                 var result = [];
@@ -1774,7 +1802,7 @@ class NovelJsModuleRegistry(
                   var arr = JSON.parse(__native.domPrevAll(handles[i], selector || null));
                   for (var j = 0; j < arr.length; j++) result.push(arr[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               siblings: function(selector) {
                 var result = [];
@@ -1782,7 +1810,7 @@ class NovelJsModuleRegistry(
                   var arr = JSON.parse(__native.domSiblings(handles[i], selector || null));
                   for (var j = 0; j < arr.length; j++) result.push(arr[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               closest: function(selector) {
                 var result = [];
@@ -1794,14 +1822,14 @@ class NovelJsModuleRegistry(
                     seen[c] = true;
                   }
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               has: function(selector) {
                 var filtered = [];
                 for (var i = 0; i < handles.length; i++) {
                   if (__native.domHas(handles[i], String(selector))) filtered.push(handles[i]);
                 }
-                return wrapHandles(filtered);
+                return wrapHandles(filtered, handles.slice());
               },
               not: function(selector) {
                 if (typeof selector === "function") {
@@ -1812,13 +1840,13 @@ class NovelJsModuleRegistry(
                       filtered.push(handles[i]);
                     }
                   }
-                  return wrapHandles(filtered);
+                  return wrapHandles(filtered, handles.slice());
                 }
                 var filtered2 = [];
                 for (var i = 0; i < handles.length; i++) {
                   if (!__native.domIs(handles[i], String(selector))) filtered2.push(handles[i]);
                 }
-                return wrapHandles(filtered2);
+                return wrapHandles(filtered2, handles.slice());
               },
               filter: function(predicate) {
                 if (typeof predicate === "function") {
@@ -1829,14 +1857,14 @@ class NovelJsModuleRegistry(
                       filtered.push(handles[i]);
                     }
                   }
-                  return wrapHandles(filtered);
+                  return wrapHandles(filtered, handles.slice());
                 }
                 if (typeof predicate === "string") {
                   var filtered2 = [];
                   for (var i = 0; i < handles.length; i++) {
                     if (__native.domIs(handles[i], predicate)) filtered2.push(handles[i]);
                   }
-                  return wrapHandles(filtered2);
+                  return wrapHandles(filtered2, handles.slice());
                 }
                 return api;
               },
@@ -1955,7 +1983,13 @@ class NovelJsModuleRegistry(
                 return wrapHandles(handles.concat(otherHandles));
               },
               end: function() {
-                return wrapHandles([]);
+                return _prev && _prev.length ? wrapHandles(_prev) : wrapHandles([]);
+              },
+              addBack: function() {
+                return wrapHandles(handles.concat(_prev || []));
+              },
+              andSelf: function() {
+                return wrapHandles(handles.concat(_prev || []));
               }
             };
             // Array-like index access (e.g., children()[0], siblings()[1])

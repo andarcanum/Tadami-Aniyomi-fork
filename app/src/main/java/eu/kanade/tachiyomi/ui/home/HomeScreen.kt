@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +58,7 @@ import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
+import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.presentation.util.BottomNavVisibilityController
@@ -175,8 +177,8 @@ object HomeScreen : Screen() {
                                                 if (!auroraColors!!.isDark) {
                                                     Modifier.border(
                                                         BorderStroke(
-                                                            width = 0.75.dp,
-                                                            color = auroraColors.accent.copy(alpha = 0.5f),
+                                                            width = 1.dp,
+                                                            brush = auroraMenuRimLightBrush(auroraColors),
                                                         ),
                                                         shape = RoundedCornerShape(
                                                             topStart = 20.dp,
@@ -220,8 +222,8 @@ object HomeScreen : Screen() {
                                                 if (!auroraColors!!.isDark) {
                                                     Modifier.border(
                                                         BorderStroke(
-                                                            width = 0.75.dp,
-                                                            color = auroraColors.accent.copy(alpha = 0.5f),
+                                                            width = 1.dp,
+                                                            brush = auroraMenuRimLightBrush(auroraColors),
                                                         ),
                                                         shape = RoundedCornerShape(
                                                             topStart = 20.dp,
