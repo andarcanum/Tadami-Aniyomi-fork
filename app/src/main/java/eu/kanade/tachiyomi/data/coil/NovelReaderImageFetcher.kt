@@ -8,7 +8,6 @@ import coil3.fetch.Fetcher
 import coil3.fetch.SourceFetchResult
 import coil3.key.Keyer
 import coil3.request.Options
-import coil3.size.SizeResolver
 import okhttp3.Call
 import okhttp3.Request
 import java.io.IOException

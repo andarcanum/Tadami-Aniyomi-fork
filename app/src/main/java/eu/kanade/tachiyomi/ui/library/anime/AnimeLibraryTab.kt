@@ -14,8 +14,8 @@ import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1985,7 +1985,9 @@ internal data class AuroraLibraryCategoryTabColors(
     val badgeTextColor: Color,
 )
 
-internal fun resolveAuroraLibraryCategoryTabRowContainerColor(colors: eu.kanade.presentation.theme.AuroraColors): Color {
+internal fun resolveAuroraLibraryCategoryTabRowContainerColor(
+    colors: eu.kanade.presentation.theme.AuroraColors,
+): Color {
     val baseColor = resolveAuroraTabContainerColor(colors)
     if (colors.eInkProfile == EInkProfile.MONOCHROME) {
         return baseColor
