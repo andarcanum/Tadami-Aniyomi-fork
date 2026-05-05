@@ -40,6 +40,11 @@ object SettingsReaderScreen : SearchableSettings {
                     .toImmutableMap(),
                 title = stringResource(MR.strings.pref_viewer_type),
             ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = readerPref.useAutoWebtoon(),
+                title = stringResource(MR.strings.pref_auto_webtoon_mode),
+                subtitle = stringResource(MR.strings.pref_auto_webtoon_mode_summary),
+            ),
             Preference.PreferenceItem.ListPreference(
                 preference = readerPref.doubleTapAnimSpeed(),
                 entries = persistentMapOf(

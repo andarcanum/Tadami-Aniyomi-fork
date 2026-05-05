@@ -408,6 +408,12 @@
     <string name="action_disable_all">Отключить всё</string>
     <string name="pref_show_reading_mode_summary">Ненадолго показать режим чтения при открытии читалки</string>
     <string name="pref_show_reading_mode">Показать режим чтения</string>
+    <string name="pref_auto_webtoon_mode">Авто-режим Webtoon</string>
+    <string name="pref_auto_webtoon_mode_summary">Автоматически использовать Webtoon для тайтлов в режиме по умолчанию, похожих на вебтуны</string>
+    <string name="reader_auto_webtoon_mode_enabled">Для этого тайтла включён авто-режим Webtoon</string>
+    <string name="reader_auto_webtoon_detected_title">Обнаружен формат Webtoon</string>
+    <string name="reader_auto_webtoon_detected_message">Страницы похожи на длинный вебтун. Переключить этот тайтл в режим Webtoon?</string>
+    <string name="reader_auto_webtoon_detected_confirm">Переключить</string>
     <string name="action_start">Начать</string>
     <string name="loader_not_implemented_error">Источник не найден</string>
     <string name="action_disable">Отключить</string>

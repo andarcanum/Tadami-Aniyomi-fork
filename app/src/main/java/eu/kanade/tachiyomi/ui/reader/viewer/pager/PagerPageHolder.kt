@@ -147,7 +147,7 @@ class PagerPageHolder(
         val streamFn = page.stream ?: return
 
         try {
-            val (source, isAnimated, background) = withIOContext {
+            val (source, isAnimated, background, dimensions) = withIOContext {
                 val source = streamFn().use { process(item, Buffer().readFrom(it)) }
                 val isAnimated = ImageUtil.isAnimatedAndSupported(source)
                 val background = if (!isAnimated && viewer.config.automaticBackground) {
@@ -155,9 +155,21 @@ class PagerPageHolder(
                 } else {
                     null
                 }
-                Triple(source, isAnimated, background)
+                PageImageResult(
+                    source = source,
+                    isAnimated = isAnimated,
+                    background = background,
+                    dimensions = ImageUtil.getImageDimensions(source),
+                )
             }
             withUIContext {
+                dimensions?.let {
+                    viewer.activity.viewModel.onReaderPageImageDimensionsAvailable(
+                        page = page,
+                        width = it.width,
+                        height = it.height,
+                    )
+                }
                 setImage(
                     source,
                     isAnimated,
@@ -181,6 +193,13 @@ class PagerPageHolder(
             }
         }
     }
+
+    private data class PageImageResult(
+        val source: BufferedSource,
+        val isAnimated: Boolean,
+        val background: android.graphics.drawable.Drawable?,
+        val dimensions: ImageUtil.ImageDimensions?,
+    )
 
     private fun process(page: ReaderPage, imageSource: BufferedSource): BufferedSource {
         if (viewer.config.dualPageRotateToFit) {

@@ -82,6 +82,11 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         pref = screenModel.preferences.showPageNumber(),
     )
 
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_auto_webtoon_mode),
+        pref = screenModel.preferences.useAutoWebtoon(),
+    )
+
     // Navigator settings button
     Row(
         modifier = Modifier

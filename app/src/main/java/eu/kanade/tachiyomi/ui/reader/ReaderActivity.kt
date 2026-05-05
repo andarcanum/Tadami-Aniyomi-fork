@@ -646,6 +646,31 @@ class ReaderActivity : BaseActivity() {
                                 },
                             )
                         }
+                        is ReaderViewModel.Dialog.AutoWebtoonModeSuggestion -> {
+                            AlertDialog(
+                                onDismissRequest = viewModel::dismissAutoWebtoonModeSuggestion,
+                                title = {
+                                    Text(stringResource(MR.strings.reader_auto_webtoon_detected_title))
+                                },
+                                text = {
+                                    Text(stringResource(MR.strings.reader_auto_webtoon_detected_message))
+                                },
+                                confirmButton = {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = viewModel::acceptAutoWebtoonModeSuggestion,
+                                    ) {
+                                        Text(stringResource(MR.strings.reader_auto_webtoon_detected_confirm))
+                                    }
+                                },
+                                dismissButton = {
+                                    androidx.compose.material3.TextButton(
+                                        onClick = viewModel::dismissAutoWebtoonModeSuggestion,
+                                    ) {
+                                        Text(stringResource(MR.strings.action_cancel))
+                                    }
+                                },
+                            )
+                        }
                         null -> {}
                     }
 
@@ -754,7 +779,11 @@ class ReaderActivity : BaseActivity() {
         binding.viewerContainer.addView(newViewer.getView())
 
         if (readerPreferences.showReadingMode().get()) {
-            showReadingModeToast(viewModel.getMangaReadingMode())
+            if (viewModel.isMangaReadingModeAutoWebtoon()) {
+                toast(MR.strings.reader_auto_webtoon_mode_enabled)
+            } else {
+                showReadingModeToast(viewModel.getMangaReadingMode())
+            }
         }
 
         loadingIndicator = ReaderProgressIndicator(this)

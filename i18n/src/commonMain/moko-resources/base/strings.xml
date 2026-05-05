@@ -425,6 +425,12 @@
     <string name="pref_show_page_number">Show page number</string>
     <string name="pref_show_reading_mode">Show reading mode</string>
     <string name="pref_show_reading_mode_summary">Briefly show current mode when reader is opened</string>
+    <string name="pref_auto_webtoon_mode">Auto Webtoon Mode</string>
+    <string name="pref_auto_webtoon_mode_summary">Use Webtoon mode automatically for default-mode titles that look like webtoons</string>
+    <string name="reader_auto_webtoon_mode_enabled">Auto Webtoon Mode enabled for this title</string>
+    <string name="reader_auto_webtoon_detected_title">Webtoon format detected</string>
+    <string name="reader_auto_webtoon_detected_message">These pages look like a long-strip webtoon. Switch this title to Webtoon mode?</string>
+    <string name="reader_auto_webtoon_detected_confirm">Switch</string>
     <string name="pref_hardware_bitmap_threshold">Custom hardware bitmap threshold</string>
     <string name="pref_hardware_bitmap_threshold_default">Default (%d)</string>
     <string name="pref_hardware_bitmap_threshold_summary">If reader loads a blank image incrementally reduce the threshold.\nSelected: %s</string>
