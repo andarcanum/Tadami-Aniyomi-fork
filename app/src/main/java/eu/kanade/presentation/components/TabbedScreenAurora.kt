@@ -474,7 +474,7 @@ private fun AuroraTabHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = if (isSearchActive) 8.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (navigateUp != null) {
@@ -490,9 +490,7 @@ private fun AuroraTabHeader(
             TextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(52.dp),
+                modifier = Modifier.weight(1f),
                 placeholder = {
                     Text(
                         text = stringResource(MR.strings.action_search),
@@ -500,15 +498,15 @@ private fun AuroraTabHeader(
                     )
                 },
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.glass,
-                    unfocusedContainerColor = colors.glass,
+                    focusedContainerColor = colors.cardBackground,
+                    unfocusedContainerColor = colors.cardBackground,
                     focusedTextColor = colors.textPrimary,
                     unfocusedTextColor = colors.textPrimary,
                     cursorColor = colors.accent,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(22.dp),
                 singleLine = true,
                 leadingIcon = {
                     Icon(
