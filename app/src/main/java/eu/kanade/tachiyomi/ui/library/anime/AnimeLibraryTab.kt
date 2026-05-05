@@ -14,6 +14,7 @@ import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -64,8 +65,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -89,11 +92,15 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
+import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.resolveAuroraTabContainerColor
+import eu.kanade.presentation.components.resolveAuroraTabSelectionBorderColor
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.LibraryBottomActionMenu
@@ -1804,13 +1811,25 @@ private fun AuroraLibraryCategoryTabs(
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val coercedSelected = coerceAuroraLibraryCategoryIndex(selectedIndex, categories.size)
+    val rowShape = RoundedCornerShape(22.dp)
+    val tabShape = RoundedCornerShape(18.dp)
+    val menuBorderBrush = remember(colors) { auroraMenuRimLightBrush(colors) }
+    val rowContainerColor = remember(colors) { resolveAuroraLibraryCategoryTabRowContainerColor(colors) }
+    val selectedTabBrush = remember(colors) { resolveAuroraLibraryCategorySelectedTabBrush(colors) }
+    val selectedTabBorderColor = remember(colors) { resolveAuroraTabSelectionBorderColor(colors) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(rowShape)
             .background(
-                color = colors.glass,
-                shape = RoundedCornerShape(22.dp),
+                color = rowContainerColor,
+                shape = rowShape,
+            )
+            .border(
+                width = 0.75.dp,
+                brush = menuBorderBrush,
+                shape = rowShape,
             )
             .padding(horizontal = 6.dp, vertical = 6.dp),
     ) {
@@ -1826,19 +1845,35 @@ private fun AuroraLibraryCategoryTabs(
                 val badgeCount = getCountForCategory(category)
                 val tabColors = auroraLibraryCategoryTabColors(
                     isSelected = isSelected,
-                    isDark = colors.isDark,
+                    eInkProfile = colors.eInkProfile,
                     accent = colors.accent,
                     accentVariant = colors.accentVariant,
-                    glass = colors.glass,
-                    cardBackground = colors.cardBackground,
                     textPrimary = colors.textPrimary,
                     textSecondary = colors.textSecondary,
+                    textOnAccent = colors.textOnAccent,
+                    background = colors.background,
                 )
 
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(tabColors.tabBackground)
+                        .clip(tabShape)
+                        .background(
+                            brush = if (isSelected && colors.eInkProfile != EInkProfile.MONOCHROME) {
+                                selectedTabBrush
+                            } else {
+                                Brush.linearGradient(
+                                    colors = listOf(tabColors.tabBackground, tabColors.tabBackground),
+                                )
+                            },
+                            shape = tabShape,
+                        )
+                        .then(
+                            if (isSelected) {
+                                Modifier.border(1.dp, selectedTabBorderColor, tabShape)
+                            } else {
+                                Modifier
+                            },
+                        )
                         .clickable {
                             appHaptics.tap()
                             onCategorySelected(index)
@@ -1859,14 +1894,15 @@ private fun AuroraLibraryCategoryTabs(
                     if (badgeCount != null) {
                         Box(
                             modifier = Modifier
+                                .size(18.dp)
                                 .background(
                                     color = tabColors.badgeBackground,
-                                    shape = RoundedCornerShape(10.dp),
-                                )
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    shape = CircleShape,
+                                ),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = badgeCount.toString(),
+                                text = formatAuroraLibraryCategoryBadgeCount(badgeCount),
                                 color = tabColors.badgeTextColor,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -1938,10 +1974,9 @@ internal fun coerceAuroraLibraryCategoryIndex(requestedIndex: Int, categoryCount
  * Goals:
  *  - Selected tab carries a clear accent presence in BOTH themes (so the selection is obvious in
  *    dark mode, where it used to fall back to a flat translucent-white pill with no accent).
- *  - The badge inside a selected tab is a neutral chip that contrasts with the accent-tinted tab,
- *    instead of stacking another accent fill on top of an accent surface.
- *  - The badge inside an unselected tab is also distinguishable from the tab background, so the
- *    count chip is readable even when the tab itself is inactive.
+ *  - Unselected badges stay available as category counts, but use a quieter accent surface so they
+ *    do not compete with the selected category.
+ *  - Monochrome e-ink avoids translucent accent blends and relies on flat, high-contrast fills.
  */
 internal data class AuroraLibraryCategoryTabColors(
     val tabBackground: Color,
@@ -1950,36 +1985,89 @@ internal data class AuroraLibraryCategoryTabColors(
     val badgeTextColor: Color,
 )
 
+internal fun resolveAuroraLibraryCategoryTabRowContainerColor(colors: eu.kanade.presentation.theme.AuroraColors): Color {
+    val baseColor = resolveAuroraTabContainerColor(colors)
+    if (colors.eInkProfile == EInkProfile.MONOCHROME) {
+        return baseColor
+    }
+
+    val glassOverlay = if (colors.isDark) {
+        colors.glass.copy(alpha = 0.20f)
+    } else {
+        colors.glass.copy(alpha = 0.45f)
+    }
+    return glassOverlay.compositeOver(baseColor)
+}
+
+internal fun resolveAuroraLibraryCategorySelectedTabBrush(colors: eu.kanade.presentation.theme.AuroraColors): Brush {
+    return Brush.linearGradient(
+        colors = when (colors.eInkProfile) {
+            EInkProfile.MONOCHROME -> listOf(colors.accentVariant, colors.accentVariant)
+            EInkProfile.COLOR,
+            EInkProfile.OFF,
+            -> listOf(
+                if (colors.isDark) {
+                    lerp(colors.accent, Color.White, 0.18f).copy(alpha = 0.32f)
+                } else {
+                    colors.accent.copy(alpha = 0.20f)
+                },
+                if (colors.isDark) {
+                    colors.accent.copy(alpha = 0.18f)
+                } else {
+                    Color.White.copy(alpha = 0.85f)
+                },
+            )
+        },
+        start = Offset.Zero,
+        end = Offset(0f, 240f),
+    )
+}
+
 internal fun auroraLibraryCategoryTabColors(
     isSelected: Boolean,
-    isDark: Boolean,
+    eInkProfile: EInkProfile,
     accent: Color,
     accentVariant: Color,
-    glass: Color,
-    cardBackground: Color,
     textPrimary: Color,
     textSecondary: Color,
+    textOnAccent: Color,
+    background: Color,
 ): AuroraLibraryCategoryTabColors {
     val tabBackground = when {
-        isSelected && isDark -> accent.copy(alpha = 0.22f).compositeOver(glass)
-        isSelected -> accentVariant
-        isDark -> Color.Transparent
-        else -> cardBackground
+        eInkProfile == EInkProfile.MONOCHROME && isSelected -> accentVariant
+        eInkProfile == EInkProfile.MONOCHROME -> Color.White
+        else -> Color.Transparent
     }
     val badgeBackground = when {
-        isSelected && isDark -> Color.White.copy(alpha = 0.20f)
-        isSelected -> Color.White
-        isDark -> cardBackground
-        else -> Color.White
+        eInkProfile == EInkProfile.MONOCHROME && isSelected -> background
+        eInkProfile == EInkProfile.MONOCHROME -> accentVariant
+        isSelected -> accent
+        else -> accent.copy(alpha = 0.56f)
     }
-    val tabTextColor = if (isSelected) textPrimary else textSecondary
-    val badgeTextColor = if (isSelected) textPrimary else textSecondary
+    val tabTextColor = when {
+        eInkProfile == EInkProfile.MONOCHROME && isSelected -> textOnAccent
+        eInkProfile == EInkProfile.MONOCHROME -> textPrimary
+        isSelected -> textPrimary
+        else -> textSecondary
+    }
+    val badgeTextColor = when {
+        eInkProfile == EInkProfile.MONOCHROME -> resolveAuroraMonochromeBadgeTextColor(badgeBackground)
+        else -> textOnAccent
+    }
     return AuroraLibraryCategoryTabColors(
         tabBackground = tabBackground,
         badgeBackground = badgeBackground,
         tabTextColor = tabTextColor,
         badgeTextColor = badgeTextColor,
     )
+}
+
+internal fun resolveAuroraMonochromeBadgeTextColor(background: Color): Color {
+    return if (background.luminance() < 0.5f) Color.White else Color.Black
+}
+
+internal fun formatAuroraLibraryCategoryBadgeCount(count: Int): String {
+    return if (count > 99) "99+" else count.toString()
 }
 
 /**
