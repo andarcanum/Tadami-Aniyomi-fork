@@ -735,17 +735,12 @@ class NovelJsSource internal constructor(
         val instance = runtimeFactory.create(plugin.id)
         val wrappedScript = scriptBuilder.wrap(script, plugin.id)
         instance.evaluate(wrappedScript, "${plugin.id}.js")
-        val hasSettings = (instance.evaluate("Array.isArray(__plugin && __plugin.settings)") as? Boolean) == true
-        if (hasSettings) {
-            val settingsPayload = instance.evaluate(
-                "JSON.stringify(__plugin.settings || [])",
-                "novel-plugin-settings.js",
-            ) as? String
-            if (!settingsPayload.isNullOrBlank() && settingsPayload != "null") {
-                settingsSchema = settingsBridge.parseSettingsSchema(settingsPayload)
-                settingsBridge.loadSettingsSchema(settingsPayload)
-            }
+        val settingsPayload = resolveSettingsPayload(instance)
+        if (!settingsPayload.isNullOrBlank()) {
+            settingsSchema = settingsBridge.parseSettingsSchema(settingsPayload)
+            settingsBridge.loadSettingsSchema(settingsPayload)
         }
+        val hasSettings = settingsSchema.isNotEmpty()
         capabilities = NovelPluginCapabilities(
             hasParsePage = (instance.evaluate("typeof __plugin.parsePage === \"function\"") as? Boolean) == true,
             hasResolveUrl = (instance.evaluate("typeof __plugin.resolveUrl === \"function\"") as? Boolean) == true,
@@ -754,6 +749,37 @@ class NovelJsSource internal constructor(
         )
         runtime = instance
         return instance
+    }
+
+    private fun resolveSettingsPayload(instance: NovelJsRuntime): String? {
+        settingsBridge.clearSettingsSchema()
+        settingsSchema = emptyList()
+
+        val hasPluginSettingsObject =
+            (
+                instance.evaluate(
+                    "typeof __plugin.pluginSettings === \"object\" && __plugin.pluginSettings != null",
+                ) as? Boolean
+                ) ==
+                true
+        if (hasPluginSettingsObject) {
+            val objectPayload = instance.evaluate(
+                "JSON.stringify(__plugin.pluginSettings || {})",
+                "novel-plugin-settings-object.js",
+            ) as? String
+            if (!objectPayload.isNullOrBlank() && objectPayload != "null" && objectPayload != "{}") {
+                return objectPayload
+            }
+        }
+
+        val hasLegacySettings = (instance.evaluate("Array.isArray(__plugin && __plugin.settings)") as? Boolean) == true
+        if (!hasLegacySettings) return null
+
+        val arrayPayload = instance.evaluate(
+            "JSON.stringify(__plugin.settings || [])",
+            "novel-plugin-settings.js",
+        ) as? String
+        return arrayPayload.takeUnless { it.isNullOrBlank() || it == "null" || it == "[]" }
     }
 
     private fun callPlugin(runtime: NovelJsRuntime, functionName: String, vararg args: String): String {

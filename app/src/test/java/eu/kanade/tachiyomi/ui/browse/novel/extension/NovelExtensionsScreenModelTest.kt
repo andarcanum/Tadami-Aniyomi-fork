@@ -5,6 +5,8 @@ import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginCapabilities
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginSettingsSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
@@ -232,6 +234,37 @@ class NovelExtensionsScreenModelTest {
     }
 
     @Test
+    fun `installed plugin row gets settings from installed source discovery`() {
+        runBlocking {
+            val installed = pluginInstalled("komga", 1)
+
+            val screenModel = NovelExtensionsScreenModel(
+                extensionManager = FakeNovelExtensionManager(
+                    installed = listOf(installed),
+                    installedSources = listOf(
+                        FakeNovelPluginSource(
+                            pluginId = "komga",
+                            hasSettings = true,
+                        ),
+                    ),
+                    available = emptyList(),
+                    updates = emptyList(),
+                ),
+                sourcePreferences = sourcePreferences,
+            ).also(activeScreenModels::add)
+
+            withTimeout(1_000) {
+                while (screenModel.state.value.isLoading) {
+                    yield()
+                }
+            }
+
+            val item = screenModel.state.value.items.first { it.plugin.id == "komga" }
+            item.hasSettings shouldBe true
+        }
+    }
+
+    @Test
     fun `update all extensions waits for each install to finish`() {
         runBlocking {
             val installed = listOf(
@@ -332,12 +365,13 @@ class NovelExtensionsScreenModelTest {
 
     private class FakeNovelExtensionManager(
         installed: List<NovelPlugin.Installed>,
+        installedSources: List<NovelSource> = emptyList(),
         available: List<NovelPlugin.Available>,
         updates: List<NovelPlugin.Installed>,
         private val installFailure: Throwable? = null,
     ) : NovelExtensionManager {
         override val installedSourcesFlow: Flow<List<NovelSource>> =
-            MutableStateFlow(emptyList())
+            MutableStateFlow(installedSources)
         override val installedPluginsFlow: Flow<List<NovelPlugin.Installed>> =
             MutableStateFlow(installed)
         override val availablePluginsFlow: Flow<List<NovelPlugin.Available>> =
@@ -359,5 +393,15 @@ class NovelExtensionsScreenModelTest {
         override fun getPluginIconUrlForSource(sourceId: Long): String? = null
 
         override fun getCapabilitiesForSource(sourceId: Long): NovelPluginCapabilities? = null
+    }
+
+    private class FakeNovelPluginSource(
+        override val id: Long = 1L,
+        override val name: String = "Plugin source",
+        override val lang: String = "en",
+        override val pluginId: String,
+        private val hasSettings: Boolean,
+    ) : NovelSource, NovelPluginIdentitySource, NovelPluginSettingsSource {
+        override fun hasPluginSettings(discoverRuntime: Boolean): Boolean = hasSettings
     }
 }

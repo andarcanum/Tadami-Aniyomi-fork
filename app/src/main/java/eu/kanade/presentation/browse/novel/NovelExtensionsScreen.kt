@@ -67,6 +67,7 @@ fun NovelExtensionScreen(
     onCancelInstall: (NovelPlugin.Available) -> Unit,
     onUpdateExtension: (NovelPlugin.Installed) -> Unit,
     onOpenExtension: (NovelPlugin.Installed) -> Unit,
+    onOpenExtensionSettings: (NovelPlugin.Installed) -> Unit,
     onUninstallExtension: (NovelPlugin.Installed) -> Unit,
     onUpdateAll: () -> Unit,
     onRefresh: () -> Unit,
@@ -107,6 +108,7 @@ fun NovelExtensionScreen(
                     onCancelInstall = onCancelInstall,
                     onUpdateExtension = onUpdateExtension,
                     onOpenExtension = onOpenExtension,
+                    onOpenExtensionSettings = onOpenExtensionSettings,
                     onUninstallExtension = onUninstallExtension,
                     onUpdateAll = onUpdateAll,
                     onToggleSection = onToggleSection,
@@ -124,6 +126,7 @@ private fun NovelExtensionContent(
     onCancelInstall: (NovelPlugin.Available) -> Unit,
     onUpdateExtension: (NovelPlugin.Installed) -> Unit,
     onOpenExtension: (NovelPlugin.Installed) -> Unit,
+    onOpenExtensionSettings: (NovelPlugin.Installed) -> Unit,
     onUninstallExtension: (NovelPlugin.Installed) -> Unit,
     onUpdateAll: () -> Unit,
     onToggleSection: (String) -> Unit,
@@ -158,6 +161,7 @@ private fun NovelExtensionContent(
                     onCancelInstall = onCancelInstall,
                     onUpdateExtension = onUpdateExtension,
                     onOpenExtension = onOpenExtension,
+                    onOpenExtensionSettings = onOpenExtensionSettings,
                     onUninstallExtension = onUninstallExtension,
                 )
             }
@@ -176,6 +180,7 @@ private fun NovelExtensionContent(
                     item = item,
                     onCancelInstall = onCancelInstall,
                     onOpenExtension = onOpenExtension,
+                    onOpenExtensionSettings = onOpenExtensionSettings,
                     onUninstallExtension = onUninstallExtension,
                 )
             }
@@ -235,6 +240,7 @@ private fun NovelExtensionItemRow(
     onCancelInstall: ((NovelPlugin.Available) -> Unit)? = null,
     onUpdateExtension: ((NovelPlugin.Installed) -> Unit)? = null,
     onOpenExtension: ((NovelPlugin.Installed) -> Unit)? = null,
+    onOpenExtensionSettings: ((NovelPlugin.Installed) -> Unit)? = null,
     onUninstallExtension: ((NovelPlugin.Installed) -> Unit)? = null,
 ) {
     val plugin = item.plugin
@@ -333,8 +339,8 @@ private fun NovelExtensionItemRow(
                     }
                     plugin is NovelPlugin.Installed -> {
                         Row {
-                            if (onOpenExtension != null && plugin.hasSettings) {
-                                IconButton(onClick = { onOpenExtension(plugin) }) {
+                            if (onOpenExtensionSettings != null && item.hasSettings) {
+                                IconButton(onClick = { onOpenExtensionSettings(plugin) }) {
                                     Icon(
                                         imageVector = Icons.Outlined.Settings,
                                         contentDescription = stringResource(MR.strings.action_settings),

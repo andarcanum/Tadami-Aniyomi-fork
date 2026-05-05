@@ -14,3 +14,11 @@ internal fun NovelSource.hasVisiblePluginSettings(): Boolean {
         else -> false
     }
 }
+
+internal fun NovelSource.hasVisiblePluginSettingsByDiscovery(): Boolean {
+    return when (this) {
+        is NovelPluginSettingsSource -> hasPluginSettings(discoverRuntime = true)
+        is ConfigurableNovelSource -> true
+        else -> false
+    }
+}

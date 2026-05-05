@@ -57,12 +57,7 @@ class NovelJsSourceFactory(
             runtimeOverride = runtimeOverride,
             settingsBridge = settingsBridge,
         )
-        val hasSettings = plugin.hasSettings
-        val exposedSource: NovelSource = if (hasSettings) {
-            NovelConfigurableJsSource(source)
-        } else {
-            source
-        }
+        val exposedSource: NovelSource = NovelConfigurableJsSource(source)
         synchronized(sources) {
             sources.removeAll { it.get() == null }
             sources.add(WeakReference(source))

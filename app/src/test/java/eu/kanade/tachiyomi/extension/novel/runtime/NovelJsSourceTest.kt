@@ -54,6 +54,36 @@ class NovelJsSourceTest {
     }
 
     @Test
+    fun `hasPluginSettings discoverRuntime supports lnreader pluginSettings`() {
+        val runtimeFactory = mockk<NovelJsRuntimeFactory>()
+        val runtime = mockk<NovelJsRuntime>(relaxed = true)
+        every { runtimeFactory.create(any()) } returns runtime
+        every { runtime.evaluate(any(), any(), any()) } answers { evaluateLnReaderSettingsScript(firstArg()) }
+
+        val source = createSource(
+            hasSettings = false,
+            runtimeFactory = runtimeFactory,
+        )
+
+        source.hasPluginSettings(discoverRuntime = true) shouldBe true
+    }
+
+    @Test
+    fun `hasPluginSettings discoverRuntime keeps legacy settings array support`() {
+        val runtimeFactory = mockk<NovelJsRuntimeFactory>()
+        val runtime = mockk<NovelJsRuntime>(relaxed = true)
+        every { runtimeFactory.create(any()) } returns runtime
+        every { runtime.evaluate(any(), any(), any()) } answers { evaluateSettingsScript(firstArg()) }
+
+        val source = createSource(
+            hasSettings = false,
+            runtimeFactory = runtimeFactory,
+        )
+
+        source.hasPluginSettings(discoverRuntime = true) shouldBe true
+    }
+
+    @Test
     fun `getChapterList falls back to parsePage when parseNovel fails`() {
         val runtimeFactory = mockk<NovelJsRuntimeFactory>()
         val runtime = mockk<NovelJsRuntime>()
@@ -189,6 +219,8 @@ class NovelJsSourceTest {
 
     private fun evaluateSettingsScript(script: String): Any? {
         return when {
+            script.contains("typeof __plugin.pluginSettings === \"object\"") -> false
+            script.contains("JSON.stringify(__plugin.pluginSettings || {})") -> "{}"
             script.contains("Array.isArray(__plugin && __plugin.settings)") -> true
             script.contains("JSON.stringify(__plugin.settings || [])") -> """
                 [
@@ -200,6 +232,27 @@ class NovelJsSourceTest {
                     }
                 ]
             """.trimIndent()
+            script.contains("typeof __plugin.parsePage") -> false
+            script.contains("typeof __plugin.resolveUrl") -> false
+            script.contains("typeof __plugin.fetchImage") -> false
+            else -> null
+        }
+    }
+
+    private fun evaluateLnReaderSettingsScript(script: String): Any? {
+        return when {
+            script.contains("typeof __plugin.pluginSettings === \"object\"") -> true
+            script.contains("JSON.stringify(__plugin.pluginSettings || {})") -> """
+                {
+                    "email": {
+                        "value": "",
+                        "label": "Email",
+                        "type": "Text"
+                    }
+                }
+            """.trimIndent()
+            script.contains("Array.isArray(__plugin && __plugin.settings)") -> false
+            script.contains("JSON.stringify(__plugin.settings || [])") -> "[]"
             script.contains("typeof __plugin.parsePage") -> false
             script.contains("typeof __plugin.resolveUrl") -> false
             script.contains("typeof __plugin.fetchImage") -> false

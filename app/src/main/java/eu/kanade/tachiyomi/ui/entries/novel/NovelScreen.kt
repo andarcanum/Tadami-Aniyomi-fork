@@ -95,7 +95,7 @@ import eu.kanade.presentation.entries.novel.components.NovelCoverDialog
 import eu.kanade.presentation.entries.novel.components.NovelTranslatedDownloadFormatSelector
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportProgress
-import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
+import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
@@ -176,7 +176,7 @@ class NovelScreen(
         val rawNovelUrl = successState.novel.url
         val canOpenNovelWebView = rawNovelUrl.isNotBlank()
         val isReading = screenModel.isReadingStarted()
-        val isSourceConfigurable = successState.source.hasVisiblePluginSettings()
+        val isSourceConfigurable = successState.source.hasVisiblePluginSettingsByDiscovery()
         val actionAvailability = resolveNovelEntryActionAvailability(
             isFavorite = successState.novel.favorite,
             isSourceConfigurable = isSourceConfigurable,
