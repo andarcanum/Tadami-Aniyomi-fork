@@ -34,10 +34,10 @@ import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.setting.MangaReaderPageDimensions
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
-import eu.kanade.tachiyomi.ui.reader.setting.MangaReaderPageDimensions
 import eu.kanade.tachiyomi.ui.reader.setting.isLikelyWebtoonFromPageDimensions
 import eu.kanade.tachiyomi.ui.reader.setting.recommendReadingModeForMangaFormat
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
