@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.tadami.aurora.BuildConfig
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.components.AuroraBackground
+import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
 import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
@@ -75,12 +77,15 @@ fun MoreScreenAurora(
     onHelpClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val hostScaffoldContentPadding = LocalHostScaffoldContentPadding.current
+    val bottomContentPadding = (hostScaffoldContentPadding?.calculateBottomPadding() ?: 0.dp) + 24.dp
 
     AuroraBackground {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(bottom = bottomContentPadding),
         ) {
             item {
                 Row(
