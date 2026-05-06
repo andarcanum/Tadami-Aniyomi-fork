@@ -38,17 +38,19 @@ fun TrackingPreferenceWidget(
 ) {
     val highlighted = LocalPreferenceHighlighted.current
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
-    Box(modifier = modifier.then(
-        if (isAurora) {
-            Modifier
-                .padding(vertical = 4.dp)
-                .clip(AURORA_SETTINGS_CARD_SHAPE)
-                .background(settingsCardContainerColor())
-                .highlightBackground(highlighted)
-        } else {
-            Modifier.highlightBackground(highlighted)
-        },
-    )) {
+    Box(
+        modifier = modifier.then(
+            if (isAurora) {
+                Modifier
+                    .padding(vertical = 4.dp)
+                    .clip(AURORA_SETTINGS_CARD_SHAPE)
+                    .background(settingsCardContainerColor())
+                    .highlightBackground(highlighted)
+            } else {
+                Modifier.highlightBackground(highlighted)
+            },
+        ),
+    ) {
         Row(
             modifier = Modifier
                 .clickable(enabled = onClick != null, onClick = { onClick?.invoke() })
