@@ -97,7 +97,6 @@ import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
-import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.components.resolveAuroraTabContainerColor
 import eu.kanade.presentation.components.resolveAuroraTabSelectionBorderColor
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
@@ -1812,7 +1811,6 @@ private fun AuroraLibraryCategoryTabs(
     val coercedSelected = coerceAuroraLibraryCategoryIndex(selectedIndex, categories.size)
     val rowShape = RoundedCornerShape(22.dp)
     val tabShape = RoundedCornerShape(18.dp)
-    val menuBorderBrush = remember(colors) { auroraMenuRimLightBrush(colors) }
     val rowContainerColor = remember(colors) { resolveAuroraLibraryCategoryTabRowContainerColor(colors) }
     val selectedTabBrush = remember(colors) { resolveAuroraLibraryCategorySelectedTabBrush(colors) }
     val selectedTabBorderColor = remember(colors) { resolveAuroraTabSelectionBorderColor(colors) }
@@ -1823,11 +1821,6 @@ private fun AuroraLibraryCategoryTabs(
             .clip(rowShape)
             .background(
                 color = rowContainerColor,
-                shape = rowShape,
-            )
-            .border(
-                width = 0.75.dp,
-                brush = menuBorderBrush,
                 shape = rowShape,
             )
             .padding(horizontal = 6.dp, vertical = 6.dp),

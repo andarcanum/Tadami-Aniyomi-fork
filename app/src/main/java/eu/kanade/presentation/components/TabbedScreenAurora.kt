@@ -148,6 +148,7 @@ fun TabbedScreenAurora(
     onNameClick: (() -> Unit)? = null,
     applyStatusBarsPadding: Boolean = true,
     showTabs: Boolean = true,
+    showTabRowBorder: Boolean = true,
     instantTabSwitching: Boolean = false,
     highlightSearchAction: Boolean = false,
     highlightedActionTitle: String? = null,
@@ -294,6 +295,7 @@ fun TabbedScreenAurora(
                         selectedIndex = currentPage,
                         onTabSelected = onTabSelected,
                         scrollable = scrollable,
+                        showBorder = showTabRowBorder,
                     )
                 }
             }
@@ -616,6 +618,7 @@ internal fun AuroraTabRow(
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
     scrollable: Boolean,
+    showBorder: Boolean = true,
 ) {
     val colors = AuroraTheme.colors
     val scrollState = rememberScrollState()
@@ -631,10 +634,16 @@ internal fun AuroraTabRow(
                 tabContainerColor,
                 RoundedCornerShape(28.dp),
             )
-            .border(
-                width = 0.75.dp,
-                brush = menuBorderBrush,
-                shape = RoundedCornerShape(28.dp),
+            .then(
+                if (showBorder) {
+                    Modifier.border(
+                        width = 0.75.dp,
+                        brush = menuBorderBrush,
+                        shape = RoundedCornerShape(28.dp),
+                    )
+                } else {
+                    Modifier
+                },
             ),
     ) {
         Row(
