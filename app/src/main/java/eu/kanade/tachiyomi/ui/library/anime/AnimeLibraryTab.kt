@@ -67,7 +67,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -1988,17 +1987,7 @@ internal data class AuroraLibraryCategoryTabColors(
 internal fun resolveAuroraLibraryCategoryTabRowContainerColor(
     colors: eu.kanade.presentation.theme.AuroraColors,
 ): Color {
-    val baseColor = resolveAuroraTabContainerColor(colors)
-    if (colors.eInkProfile == EInkProfile.MONOCHROME) {
-        return baseColor
-    }
-
-    val glassOverlay = if (colors.isDark) {
-        colors.glass.copy(alpha = 0.20f)
-    } else {
-        colors.glass.copy(alpha = 0.45f)
-    }
-    return glassOverlay.compositeOver(baseColor)
+    return resolveAuroraTabContainerColor(colors)
 }
 
 internal fun resolveAuroraLibraryCategorySelectedTabBrush(colors: eu.kanade.presentation.theme.AuroraColors): Brush {
