@@ -30,29 +30,12 @@ class WebViewScreenModel(
     var headers = emptyMap<String, String>()
 
     init {
-        sourceId?.let { mangaSourceManager.get(it) as? HttpSource }?.let { mangaSource ->
-            try {
-                headers = mangaSource.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to build headers" }
-            }
-        }
-        sourceId?.let { animeSourceManager.get(it) as? AnimeHttpSource }?.let { animeSource ->
-            try {
-                headers = animeSource.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to build headers" }
-            }
-        }
-
-        if (headers.isEmpty()) {
-            sourceId?.let { novelSourceManager.get(it) }?.let { novelSource ->
-                headers = extractHeadersViaReflection(novelSource)
-            }
-        }
-
-        if (headers.none { (name, _) -> name.equals("User-Agent", ignoreCase = true) }) {
-            headers = headers + ("User-Agent" to network.defaultUserAgentProvider())
+        val sourceHeaders = sourceId?.let { resolveSourceHeaders(it) }.orEmpty()
+        val userAgent = network.defaultUserAgentProvider().takeIf { it.isNotBlank() }
+        headers = if (userAgent != null && "user-agent" !in sourceHeaders.map { it.key.lowercase() }) {
+            sourceHeaders + ("user-agent" to userAgent)
+        } else {
+            sourceHeaders
         }
     }
 
@@ -75,25 +58,18 @@ class WebViewScreenModel(
         }
     }
 
-    private fun extractHeadersViaReflection(source: Any): Map<String, String> {
+    private fun resolveSourceHeaders(sourceId: Long): Map<String, String> {
+        val source = mangaSourceManager.get(sourceId) as? HttpSource
+            ?: animeSourceManager.get(sourceId) as? AnimeHttpSource
+            ?: novelSourceManager.get(sourceId)
+
         return runCatching {
-            source.javaClass.methods
-                .firstOrNull { it.name == "getHeaders" && it.parameterCount == 0 }
-                ?.invoke(source)
-        }.getOrNull()
-            ?.let { raw ->
-                when (raw) {
-                    is okhttp3.Headers -> raw.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
-                    is Map<*, *> ->
-                        raw.entries
-                            .mapNotNull { (name, value) ->
-                                val key = name?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                                key to (value?.toString() ?: "")
-                            }
-                            .toMap()
-                    else -> emptyMap()
-                }
-            }
-            .orEmpty()
+            resolveWebViewHeaders(
+                source = source,
+            )
+        }.getOrElse { error ->
+            logcat(LogPriority.ERROR, error) { "Failed to build headers" }
+            emptyMap()
+        }
     }
 }

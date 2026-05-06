@@ -27,6 +27,7 @@ sealed class NovelPlugin {
         override val hasSettings: Boolean,
         override val sha256: String,
         override val repoUrl: String,
+        val repoName: String = "",
     ) : NovelPlugin()
 
     data class Installed(

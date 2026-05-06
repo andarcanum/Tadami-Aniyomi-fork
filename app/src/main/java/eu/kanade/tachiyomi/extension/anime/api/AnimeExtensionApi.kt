@@ -4,6 +4,7 @@ import android.content.Context
 import eu.kanade.tachiyomi.extension.ExtensionUpdateNotifier
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
+import eu.kanade.tachiyomi.extension.anime.model.newestByVersion
 import eu.kanade.tachiyomi.extension.anime.util.AnimeExtensionLoader
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.NetworkHelper
@@ -49,7 +50,6 @@ internal class AnimeExtensionApi(
                 .map { async { getExtensions(it) } }
                 .awaitAll()
                 .flatten()
-                .distinctBy { it.pkgName }
         }
     }
 
@@ -64,6 +64,11 @@ internal class AnimeExtensionApi(
                 response
                     .parseAs<List<AnimeExtensionJsonObject>>()
                     .toExtensions(repoBaseUrl)
+                    .map { extension ->
+                        extension.copy(
+                            repoName = extRepo.name.ifBlank { extRepo.shortName ?: extRepo.baseUrl },
+                        )
+                    }
             }
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e) { "Failed to get extensions from $repoBaseUrl" }
@@ -93,12 +98,16 @@ internal class AnimeExtensionApi(
         }
         lastExtCheck.set(nowMs)
 
+        val extensionsByPkgName = extensions
+            .groupBy { it.pkgName }
+            .mapValues { (_, variants) -> variants.newestByVersion()!! }
+
         val installedExtensions = animeExtensionManager.installedExtensionsFlow.value
 
         val extensionsWithUpdate = mutableListOf<AnimeExtension.Installed>()
         for (installedExt in installedExtensions) {
             val pkgName = installedExt.pkgName
-            val availableExt = extensions.find { it.pkgName == pkgName } ?: continue
+            val availableExt = extensionsByPkgName[pkgName] ?: continue
 
             val hasUpdatedVer = availableExt.versionCode > installedExt.versionCode
             val hasUpdatedLib = availableExt.libVersion > installedExt.libVersion

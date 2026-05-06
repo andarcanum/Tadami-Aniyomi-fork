@@ -383,6 +383,33 @@ class NovelJsDomStoreTest {
             val span = store.select(root, "span")[0]
             store.getTagName(span) shouldBe "span"
         }
+
+        @Test
+        fun `getHtml on script returns raw data content`() {
+            val root = store.loadDocument(
+                """<html><head><script id="__NEXT_DATA__" type="application/json">{"key":"value"}</script></head></html>""",
+            )
+            val script = store.select(root, "#__NEXT_DATA__")[0]
+            store.getHtml(script) shouldBe """{"key":"value"}"""
+        }
+
+        @Test
+        fun `getHtml on style returns raw data content`() {
+            val root = store.loadDocument(
+                """<html><head><style>.cls { color: red; }</style></head></html>""",
+            )
+            val style = store.select(root, "style")[0]
+            store.getHtml(style) shouldBe ".cls { color: red; }"
+        }
+
+        @Test
+        fun `getText on script returns raw data content`() {
+            val root = store.loadDocument(
+                """<html><head><script id="__NEXT_DATA__" type="application/json">{"key":"value"}</script></head></html>""",
+            )
+            val script = store.select(root, "#__NEXT_DATA__")[0]
+            store.getText(script) shouldBe """{"key":"value"}"""
+        }
     }
 
     @Nested
@@ -411,6 +438,66 @@ class NovelJsDomStoreTest {
             store.removeClass(div, "a")
             store.hasClass(div, "a") shouldBe false
             store.hasClass(div, "b") shouldBe true
+        }
+
+        @Test
+        fun `before inserts html before element`() {
+            val root = store.loadDocument("<ul><li id='me'>me</li></ul>")
+            val me = store.select(root, "#me")[0]
+            store.before(me, "<li>before</li>")
+            val lis = store.select(root, "li")
+            lis.size shouldBe 2
+            store.getText(lis[0]) shouldBe "before"
+            store.getText(lis[1]) shouldBe "me"
+        }
+
+        @Test
+        fun `after inserts html after element`() {
+            val root = store.loadDocument("<ul><li id='me'>me</li></ul>")
+            val me = store.select(root, "#me")[0]
+            store.after(me, "<li>after</li>")
+            val lis = store.select(root, "li")
+            lis.size shouldBe 2
+            store.getText(lis[0]) shouldBe "me"
+            store.getText(lis[1]) shouldBe "after"
+        }
+
+        @Test
+        fun `append adds html as last child`() {
+            val root = store.loadDocument("<ul><li>existing</li></ul>")
+            val ul = store.select(root, "ul")[0]
+            store.append(ul, "<li>appended</li>")
+            val lis = store.select(root, "li")
+            lis.size shouldBe 2
+            store.getText(lis[0]) shouldBe "existing"
+            store.getText(lis[1]) shouldBe "appended"
+        }
+
+        @Test
+        fun `prepend adds html as first child`() {
+            val root = store.loadDocument("<ul><li>existing</li></ul>")
+            val ul = store.select(root, "ul")[0]
+            store.prepend(ul, "<li>prepended</li>")
+            val lis = store.select(root, "li")
+            lis.size shouldBe 2
+            store.getText(lis[0]) shouldBe "prepended"
+            store.getText(lis[1]) shouldBe "existing"
+        }
+
+        @Test
+        fun `empty removes all children`() {
+            val root = store.loadDocument("<ul><li>one</li><li>two</li></ul>")
+            val ul = store.select(root, "ul")[0]
+            store.empty(ul)
+            store.children(ul, null).size shouldBe 0
+        }
+
+        @Test
+        fun `before with blank string does nothing`() {
+            val root = store.loadDocument("<ul><li id='me'>me</li></ul>")
+            val me = store.select(root, "#me")[0]
+            store.before(me, "")
+            store.select(root, "li").size shouldBe 1
         }
     }
 

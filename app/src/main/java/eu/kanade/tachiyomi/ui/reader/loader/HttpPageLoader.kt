@@ -72,7 +72,18 @@ internal class HttpPageLoader(
     override suspend fun getPages(): List<ReaderPage> {
         val domainChapter = chapter.chapter.toDomainChapter()!!
         val cachedPages = chapterCache.getPageListFromCache(domainChapter)
-        val pages = if (cachedPages.isNotEmpty()) cachedPages else source.getPageList(chapter.chapter)
+        // SY -->
+        val pages = if (cachedPages.isNotEmpty()) {
+            if (cachedPages.any { it.imageUrl?.contains("?t=") == true }) {
+                // Signed URLs may have stale HMAC tokens; re-fetch from server
+                source.getPageList(chapter.chapter)
+            } else {
+                cachedPages
+            }
+        } else {
+            source.getPageList(chapter.chapter)
+        }
+        // SY <--
         return pages.mapIndexed { index, page ->
             // Don't trust sources and use our own indexing
             ReaderPage(index, page.url, page.imageUrl)

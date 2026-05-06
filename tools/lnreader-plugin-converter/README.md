@@ -20,7 +20,7 @@ Optional fields:
 - `iconUrl`
 - `customJS`
 - `customCSS`
-- `hasSettings` (boolean)
+- `hasSettings` (boolean metadata hint)
 
 Example:
 ```json
@@ -39,6 +39,12 @@ Example:
   }
 ]
 ```
+
+Notes:
+
+- `hasSettings` is a repository metadata hint used for faster UI decisions.
+- Installed novel plugins can still expose settings at runtime through LNReader-style `pluginSettings` even when `hasSettings` is missing or `false`.
+- Tadami's novel runtime keeps backward compatibility with legacy array-style `settings` definitions as well.
 
 ## Usage
 

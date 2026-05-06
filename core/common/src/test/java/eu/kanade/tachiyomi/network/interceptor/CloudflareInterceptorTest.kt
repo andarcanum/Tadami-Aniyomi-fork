@@ -6,7 +6,6 @@ import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.verify
-import okhttp3.Cookie
 import okhttp3.Interceptor
 import okhttp3.Protocol
 import okhttp3.Request
@@ -14,59 +13,12 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import java.io.IOException
 
 class CloudflareInterceptorTest {
 
     @Test
-    fun `cloudflareChallengeUrlFor keeps original url for api calls`() {
-        val request = Request.Builder()
-            .url("https://novel.tl/api/site/v2/graphql")
-            .addHeader("Accept", "application/json")
-            .build()
-
-        val challengeUrl = cloudflareChallengeUrlFor(request)
-
-        assertEquals("https://novel.tl/api/site/v2/graphql", challengeUrl)
-    }
-
-    @Test
-    fun `cloudflareChallengeUrlFor switches image urls to domain root`() {
-        val request = Request.Builder()
-            .url("https://novel.tl/images/5/5e/cover.jpg")
-            .addHeader("Accept", "image/webp,image/apng,*/*;q=0.8")
-            .build()
-
-        val challengeUrl = cloudflareChallengeUrlFor(request)
-
-        assertEquals("https://novel.tl/", challengeUrl)
-    }
-
-    @Test
-    fun `cloudflareChallengeUrlFor switches image accept requests to domain root`() {
-        val request = Request.Builder()
-            .url("https://novel.tl/api/site/v2/graphql")
-            .addHeader("Accept", "image/avif,image/webp,image/*,*/*;q=0.8")
-            .build()
-
-        val challengeUrl = cloudflareChallengeUrlFor(request)
-
-        assertEquals("https://novel.tl/", challengeUrl)
-    }
-
-    @Test
-    fun `cloudflareChallengeUrlFor switches static files to domain root`() {
-        val request = Request.Builder()
-            .url("https://example.com/assets/app.css?v=42")
-            .addHeader("Accept", "text/css,*/*;q=0.1")
-            .build()
-
-        val challengeUrl = cloudflareChallengeUrlFor(request)
-
-        assertEquals("https://example.com/", challengeUrl)
-    }
-
-    @Test
-    fun `intercept retries once with existing cf cookie before launching WebView`() {
+    fun `intercept removes stale cookies and delegates resolution`() {
         val request = Request.Builder()
             .url("https://novel.tl/images/4/4c/cover.jpg")
             .build()
@@ -77,7 +29,7 @@ class CloudflareInterceptorTest {
             message = "Forbidden",
             server = "cloudflare",
         )
-        val retriedResponse = response(
+        val finalResponse = response(
             request = request,
             code = 200,
             message = "OK",
@@ -85,23 +37,26 @@ class CloudflareInterceptorTest {
         )
 
         val cookieJar = mockk<AndroidCookieJar>()
-        every { cookieJar.get(request.url) } returns listOf(
-            Cookie.parse(request.url, "cf_clearance=ok; Path=/; Secure; HttpOnly")!!,
-        )
+        every { cookieJar.get(request.url) } returns emptyList()
+        every { cookieJar.remove(request.url, listOf("cf_clearance"), 0) } returns 1
+
+        val challengeResolver = mockk<CloudflareChallengeResolver>()
+        justRun { challengeResolver.resolve(request, null) }
 
         val chain = mockk<Interceptor.Chain>()
-        every { chain.proceed(request) } returns retriedResponse
+        every { chain.proceed(request) } returns finalResponse
 
         val interceptor = CloudflareInterceptor(
             context = mockk<Context>(relaxed = true),
             cookieManager = cookieJar,
             defaultUserAgentProvider = { "test-agent" },
+            challengeResolver = challengeResolver,
         )
 
         val result = interceptor.intercept(chain, request, initialResponse)
 
         assertEquals(200, result.code)
-        verify(exactly = 1) { cookieJar.get(request.url) }
+        verify(exactly = 1) { cookieJar.remove(request.url, listOf("cf_clearance"), 0) }
         verify(exactly = 1) { chain.proceed(request) }
     }
 
@@ -126,6 +81,7 @@ class CloudflareInterceptorTest {
 
         val cookieJar = mockk<AndroidCookieJar>()
         every { cookieJar.get(request.url) } returns emptyList()
+        every { cookieJar.remove(request.url, listOf("cf_clearance"), 0) } returns 0
 
         val challengeResolver = mockk<CloudflareChallengeResolver>()
         justRun { challengeResolver.resolve(request, null) }
@@ -143,9 +99,98 @@ class CloudflareInterceptorTest {
         val result = interceptor.intercept(chain, request, initialResponse)
 
         assertEquals(200, result.code)
+        verify(exactly = 1) { cookieJar.remove(request.url, listOf("cf_clearance"), 0) }
         verify(exactly = 1) { cookieJar.get(request.url) }
         verify(exactly = 1) { challengeResolver.resolve(request, null) }
         verify(exactly = 1) { chain.proceed(request) }
+    }
+
+    @Test
+    fun `intercept retries once when first proceed still hits cloudflare challenge`() {
+        val request = Request.Builder()
+            .url("https://novel.tl/page/1")
+            .build()
+
+        val initialResponse = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+        )
+        val challengeStillUp = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+            cfMitigated = true,
+        )
+        val finalResponse = response(
+            request = request,
+            code = 200,
+            message = "OK",
+            server = null,
+        )
+
+        val cookieJar = mockk<AndroidCookieJar>()
+        every { cookieJar.get(request.url) } returns emptyList()
+        every { cookieJar.remove(request.url, listOf("cf_clearance"), 0) } returns 0
+
+        val challengeResolver = mockk<CloudflareChallengeResolver>()
+        justRun { challengeResolver.resolve(request, null) }
+
+        val chain = mockk<Interceptor.Chain>()
+        every { chain.proceed(request) } returnsMany listOf(challengeStillUp, finalResponse)
+
+        val interceptor = CloudflareInterceptor(
+            context = mockk<Context>(relaxed = true),
+            cookieManager = cookieJar,
+            defaultUserAgentProvider = { "test-agent" },
+            challengeResolver = challengeResolver,
+        )
+
+        val result = interceptor.intercept(chain, request, initialResponse)
+
+        assertEquals(200, result.code)
+        verify(exactly = 1) { challengeResolver.resolve(request, null) }
+        verify(exactly = 2) { chain.proceed(request) }
+    }
+
+    @Test
+    fun `intercept surfaces interactive challenge as IOException`() {
+        val request = Request.Builder()
+            .url("https://novel.tl/page/1")
+            .build()
+
+        val initialResponse = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+        )
+
+        val cookieJar = mockk<AndroidCookieJar>()
+        every { cookieJar.get(request.url) } returns emptyList()
+        every { cookieJar.remove(request.url, listOf("cf_clearance"), 0) } returns 0
+
+        val challengeResolver = mockk<CloudflareChallengeResolver>()
+        every { challengeResolver.resolve(request, null) } throws CloudflareInteractiveChallengeException()
+
+        val chain = mockk<Interceptor.Chain>()
+
+        val interceptor = CloudflareInterceptor(
+            context = mockk<Context>(relaxed = true),
+            cookieManager = cookieJar,
+            defaultUserAgentProvider = { "test-agent" },
+            challengeResolver = challengeResolver,
+        )
+
+        try {
+            interceptor.intercept(chain, request, initialResponse)
+            assert(false) { "expected IOException" }
+        } catch (e: IOException) {
+            assert(e.cause is CloudflareInteractiveChallengeException)
+        }
+        verify(exactly = 0) { chain.proceed(request) }
     }
 
     private fun response(
@@ -153,6 +198,7 @@ class CloudflareInterceptorTest {
         code: Int,
         message: String,
         server: String?,
+        cfMitigated: Boolean = false,
     ): Response {
         return Response.Builder()
             .request(request)
@@ -162,6 +208,9 @@ class CloudflareInterceptorTest {
             .apply {
                 if (server != null) {
                     addHeader("Server", server)
+                }
+                if (cfMitigated) {
+                    addHeader("cf-mitigated", "challenge")
                 }
             }
             .body("".toResponseBody())

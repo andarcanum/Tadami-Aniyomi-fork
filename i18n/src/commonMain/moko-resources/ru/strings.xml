@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name" translatable="false">Tadami</string>
     <string name="action_add">Добавить</string>
+    <string name="label_display_name">Отображаемое имя</string>
     <string name="action_add_category">Добавить категорию</string>
     <string name="action_bookmark">Добавить закладку</string>
     <string name="action_cancel">Отмена</string>
@@ -187,6 +188,7 @@
     <string name="update_check_notification_download_error">Ошибка загрузки</string>
     <string name="update_check_notification_download_in_progress">Загрузка…</string>
     <string name="update_check_notification_update_available">Доступно обновление!</string>
+    <string name="update_on_app_start">При запуске приложения</string>
     <string name="update_never">Выключено</string>
     <string name="pref_app_update_interval">Проверка обновлений приложения</string>
     <string name="app_update_on_start">При старте приложения</string>
@@ -331,6 +333,8 @@
     <string name="lock_never">Никогда</string>
     <string name="secure_screen">Защита экрана приложения</string>
     <string name="ext_updates_pending">Доступны обновления</string>
+    <string name="ext_reinstall_required">Требуется переустановка</string>
+    <string name="ext_reinstall_required_hint">Обновление из другого репозитория, нужна переустановка.</string>
     <string name="pref_cutout_short">Показывать содержимое в вырезанной области</string>
     <string name="information_cloudflare_bypass_failure">Не удалось обойти Cloudflare</string>
     <string name="information_webview_outdated">Пожалуйста, обновите WebView для лучшей совместимости</string>
@@ -404,6 +408,12 @@
     <string name="action_disable_all">Отключить всё</string>
     <string name="pref_show_reading_mode_summary">Ненадолго показать режим чтения при открытии читалки</string>
     <string name="pref_show_reading_mode">Показать режим чтения</string>
+    <string name="pref_auto_webtoon_mode">Авто-режим Webtoon</string>
+    <string name="pref_auto_webtoon_mode_summary">Автоматически использовать Webtoon для тайтлов в режиме по умолчанию, похожих на вебтуны</string>
+    <string name="reader_auto_webtoon_mode_enabled">Для этого тайтла включён авто-режим Webtoon</string>
+    <string name="reader_auto_webtoon_detected_title">Обнаружен формат Webtoon</string>
+    <string name="reader_auto_webtoon_detected_message">Страницы похожи на длинный вебтун. Переключить этот тайтл в режим Webtoon?</string>
+    <string name="reader_auto_webtoon_detected_confirm">Переключить</string>
     <string name="action_start">Начать</string>
     <string name="loader_not_implemented_error">Источник не найден</string>
     <string name="action_disable">Отключить</string>
@@ -804,6 +814,7 @@
     <string name="delete_repo_confirmation">Хотите ли вы удалить репозиторий \"%s\"?</string>
     <string name="action_delete_repo">Удалить репозиторий</string>
     <string name="action_add_repo">Добавить репозиторий</string>
+    <string name="action_rename_repo">Переименовать репозиторий</string>
     <string name="information_empty_repos">У вас нет репозиториев.</string>
     <string name="label_extension_repos">Репозитории расширений</string>
     <string name="label_add_repo_input">URL-адрес репозитория</string>
@@ -816,6 +827,7 @@
     <string name="pref_webtoon_disable_zoom_out">Отключить уменьшение масштаба</string>
     <string name="pref_save_long_page_position">Сохранять позицию внутри длинных страниц</string>
     <string name="action_add_anyway">Добавить в любом случае</string>
+    <string name="display_name_auto_detected">Определяется автоматически</string>
     <string name="pref_display_profile">Пользовательский профиль отображения</string>
     <string name="action_migrate_duplicate">Перенести существующую серию</string>
     <string name="action_replace_repo">Заменить</string>

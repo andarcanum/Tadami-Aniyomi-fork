@@ -169,7 +169,27 @@ class HosterLoader {
                 video
             }
 
-            return resolvedVideo?.copy(initialized = true)
+            return resolvedVideo?.let { v ->
+                Video(
+                    videoUrl = v.videoUrl,
+                    videoTitle = v.videoTitle,
+                    resolution = v.resolution,
+                    bitrate = v.bitrate,
+                    headers = v.headers,
+                    preferred = v.preferred,
+                    subtitleTracks = v.subtitleTracks,
+                    audioTracks = v.audioTracks,
+                    timestamps = v.timestamps,
+                    mpvArgs = v.mpvArgs,
+                    ffmpegStreamArgs = v.ffmpegStreamArgs,
+                    ffmpegVideoArgs = v.ffmpegVideoArgs,
+                    internalData = v.internalData,
+                    initialized = true,
+                ).also {
+                    it.pageUrl = v.url
+                    it.status = v.status
+                }
+            }
         }
     }
 }

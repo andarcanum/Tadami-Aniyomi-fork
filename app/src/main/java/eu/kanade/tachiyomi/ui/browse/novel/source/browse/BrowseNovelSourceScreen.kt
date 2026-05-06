@@ -43,7 +43,7 @@ import eu.kanade.presentation.browse.novel.components.BrowseNovelSourceToolbar
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.entries.novel.DuplicateNovelDialog
 import eu.kanade.presentation.util.Screen
-import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
+import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilter
@@ -65,8 +65,6 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
-import java.util.Locale
-
 data class BrowseNovelSourceScreen(
     val sourceId: Long,
     private val listingQuery: String?,
@@ -373,7 +371,6 @@ internal fun visibleNovelFiltersForListing(
 private fun NovelFilter<*>.withoutSortFiltersForLatest(): NovelFilter<*>? {
     return when (this) {
         is NovelFilter.Sort -> null
-        is NovelFilter.Select<*> -> this.takeUnless { it.isSortLikeSelect() }
         is NovelFilter.Group<*> -> {
             val visibleChildren = state
                 .filterIsInstance<NovelFilter<*>>()
@@ -384,80 +381,10 @@ private fun NovelFilter<*>.withoutSortFiltersForLatest(): NovelFilter<*>? {
     }
 }
 
-private fun NovelFilter.Select<*>.isSortLikeSelect(): Boolean {
-    val normalizedName = name.normalizedForSortChecks()
-    if (sortNameTokens.any(normalizedName::contains)) return true
-
-    val normalizedKey = pluginFilterKeyOrNull()?.normalizedForSortChecks().orEmpty()
-    if (normalizedKey.isNotBlank() && sortKeyTokens.any(normalizedKey::contains)) return true
-
-    val optionMatches = values.count { option ->
-        val normalizedOption = option.toString().normalizedForSortChecks()
-        sortOptionTokens.any(normalizedOption::contains)
-    }
-    return optionMatches >= 2
-}
-
-private fun NovelFilter.Select<*>.pluginFilterKeyOrNull(): String? {
-    var currentClass: Class<*>? = javaClass
-    while (currentClass != null) {
-        val keyField = currentClass.declaredFields.firstOrNull {
-            it.name == "key" && it.type == String::class.java
-        }
-        if (keyField != null) {
-            return runCatching {
-                keyField.isAccessible = true
-                keyField.get(this) as? String
-            }.getOrNull()
-        }
-        currentClass = currentClass.superclass
-    }
-    return null
-}
-
-private fun String.normalizedForSortChecks(): String {
-    return lowercase(Locale.ROOT).trim()
-}
-
 private class LatestVisibleGroupFilter(
     name: String,
     state: List<NovelFilter<*>>,
 ) : NovelFilter.Group<NovelFilter<*>>(name, state)
-
-private val sortNameTokens = listOf(
-    "sort",
-    "order",
-    "сорт",
-    "поряд",
-)
-
-private val sortKeyTokens = listOf(
-    "sort",
-    "order",
-)
-
-private val sortOptionTokens = listOf(
-    "popular",
-    "popularity",
-    "latest",
-    "newest",
-    "updated",
-    "update",
-    "rating",
-    "rank",
-    "name",
-    "title",
-    "relevance",
-    "asc",
-    "desc",
-    "a-z",
-    "z-a",
-    "популяр",
-    "нов",
-    "обнов",
-    "рейтинг",
-    "алф",
-)
 
 internal fun resolveNovelSourceWebUrl(source: NovelSource?): String? {
     val siteUrl = (source as? NovelSiteSource)?.siteUrl?.trim().orEmpty()
@@ -479,6 +406,6 @@ internal fun novelSourcePreferencesScreenOrNull(
     sourceId: Long,
     source: NovelSource,
 ): NovelSourcePreferencesScreen? {
-    if (!source.hasVisiblePluginSettings()) return null
+    if (!source.hasVisiblePluginSettingsByDiscovery()) return null
     return NovelSourcePreferencesScreen(sourceId)
 }

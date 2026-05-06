@@ -32,10 +32,15 @@ class NovelJsSourceFactory(
             return null
         }
         val runtimeOverride = runtimeOverrides.forPlugin(plugin.id)
-        val script = scriptOverridesApplier.apply(
-            pluginId = plugin.id,
-            script = scriptBytes.toString(Charsets.UTF_8),
-        )
+        val rawScript = NovelPluginScriptSanitizer.sanitize(scriptBytes.toString(Charsets.UTF_8))
+        val script = if (runtimeOverride.disableScriptPatches) {
+            rawScript
+        } else {
+            scriptOverridesApplier.apply(
+                pluginId = plugin.id,
+                script = rawScript,
+            )
+        }
         val settingsBridge = NovelPluginSettingsBridge(
             pluginId = plugin.id,
             keyValueStore = keyValueStore,
@@ -52,12 +57,7 @@ class NovelJsSourceFactory(
             runtimeOverride = runtimeOverride,
             settingsBridge = settingsBridge,
         )
-        val hasSettings = plugin.hasSettings
-        val exposedSource: NovelSource = if (hasSettings) {
-            NovelConfigurableJsSource(source)
-        } else {
-            source
-        }
+        val exposedSource: NovelSource = NovelConfigurableJsSource(source)
         synchronized(sources) {
             sources.removeAll { it.get() == null }
             sources.add(WeakReference(source))

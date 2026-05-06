@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +41,7 @@ fun ExtensionReposContent(
     paddingValues: PaddingValues,
     onOpenWebsite: (ExtensionRepo) -> Unit,
     onClickDelete: (String) -> Unit,
+    onClickRename: (ExtensionRepo) -> Unit,
     onAddRepo: (String) -> Unit,
     officialRepos: Map<String, String>,
     modifier: Modifier = Modifier,
@@ -103,6 +105,7 @@ fun ExtensionReposContent(
                         modifier = Modifier.animateItem(),
                         repo = it,
                         onOpenWebsite = { onOpenWebsite(it) },
+                        onRename = { onClickRename(it) },
                         onDelete = { onClickDelete(it.baseUrl) },
                     )
                 }
@@ -156,6 +159,7 @@ private fun OfficialRepoListItem(
 private fun ExtensionRepoListItem(
     repo: ExtensionRepo,
     onOpenWebsite: () -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -202,6 +206,13 @@ private fun ExtensionRepoListItem(
                 Icon(
                     imageVector = Icons.Outlined.ContentCopy,
                     contentDescription = stringResource(MR.strings.action_copy_to_clipboard),
+                )
+            }
+
+            IconButton(onClick = onRename) {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = stringResource(MR.strings.action_rename_repo),
                 )
             }
 

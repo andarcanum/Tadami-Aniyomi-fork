@@ -56,6 +56,8 @@
     <string name="pref_library_update_show_tab_badge">Show unseen/unread count on Updates icon</string>
     <string name="pref_aurora_library_immersive_mode">Immersive mode</string>
     <string name="pref_aurora_library_immersive_mode_summary">Hide the top chrome and bottom navigation while scrolling, but keep categories visible.</string>
+    <string name="pref_aurora_library_swipe_switches_categories">Swipe switches categories</string>
+    <string name="pref_aurora_library_swipe_switches_categories_summary">Use horizontal swipes on the library to switch between categories instead of sections (anime/manga/novels).</string>
     <string name="pref_category_delete_chapters">Delete chapters/episodes</string>
     <string name="pref_remove_after_marked_as_read">After manually marked as read/watched</string>
     <string name="pref_remove_after_read">After reading/watching automatically delete</string>
@@ -904,7 +906,7 @@
     <string name="novel_reader_ai_translator_generation_advantage_prefix">Advantage: %s</string>
     <string name="novel_reader_ai_translator_deepseek_reasoning_hint">When thinking mode is enabled, DeepSeek ignores temperature, top_p, presence_penalty, and frequency_penalty.</string>
     <string name="novel_reader_ai_translator_deepseek_hint">For DeepSeek, Temperature should stay in 1.3-1.5 and TopP in 0.9-0.95. TopK is not used.</string>
-    <string name="novel_reader_ai_translator_mistral_nvidia_batch_hint">For Mistral and NVIDIA, Batch size 20 is recommended. Increasing it can reduce translation quality and stability.</string>
+    <string name="novel_reader_ai_translator_max_batch_size_hint">Maximum batch size is 80.</string>
     <string name="novel_reader_ai_translator_prompt_mode_summary">Prompt mode changes how strict the system prompt is before your style and modifiers are applied.</string>
     <string name="novel_reader_ai_translator_logs_title">Logs</string>
     <string name="novel_reader_ai_translator_logs_summary">Request and model response diagnostics</string>
@@ -1144,6 +1146,7 @@
     <string name="downloaded_episodes">Downloaded episodes</string>
     <string name="local_manga_source">Local manga source</string>
     <string name="local_anime_source">Local anime source</string>
+    <string name="local_novel_source">Local novel source</string>
     <string name="episode_not_found">Episode not found</string>
     <string name="local_invalid_episode_format">Invalid episode format</string>
     <string name="unknown_studio">Unknown studio</string>
@@ -1228,6 +1231,8 @@
     <string name="label_manga_extensions">Manga Extensions</string>
     <string name="label_anime_extensions">Anime Extensions</string>
     <string name="label_novel_extensions">Novel Extensions</string>
+    <string name="novel_repo_picker_title">Choose installation source</string>
+    <string name="novel_repo_picker_newest">Newest</string>
     <string name="label_migration_manga">Migrate Manga</string>
     <string name="label_migration_anime">Migrate Anime</string>
     <string name="settings">Settings</string>
@@ -1303,6 +1308,7 @@
     <string name="aurora_details">Details</string>
     <string name="aurora_view_all">View All</string>
     <string name="aurora_episode_number">Episode %s</string>
+    <string name="aurora_chapter_number">Chapter %s</string>
     <string name="aurora_recently_added">Recently Added</string>
     <string name="aurora_more">More</string>
     <string name="aurora_change_nickname">Change Nickname</string>
@@ -2036,4 +2042,5 @@
     <string name="feed_add_search_title">Select feed type</string>
     <string name="feed_latest">Latest</string>
     <string name="feed_popular">Popular</string>
+    <string name="pref_vertical_pinned_layout">Vertical pinned sources layout</string>
 </resources>

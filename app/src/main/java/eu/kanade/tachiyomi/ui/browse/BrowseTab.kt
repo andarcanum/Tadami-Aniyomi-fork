@@ -240,6 +240,7 @@ data object BrowseTab : Tab {
                 isMangaTab = { isMangaSection },
                 // Keep browse sub-tabs content-sized to avoid the full-width stretched segmented bar.
                 scrollable = true,
+                showTabRowBorder = false,
                 applyStatusBarsPadding = true,
                 highlightSearchAction = false,
                 highlightedActionTitle = null,

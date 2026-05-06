@@ -83,6 +83,65 @@ class NovelPluginSettingsBridgeTest {
     }
 
     @Test
+    fun `parseSettingsSchema parses lnreader object settings`() {
+        val schema = """
+            {
+                "email": {
+                    "value": "",
+                    "label": "Email",
+                    "type": "Text"
+                },
+                "password": {
+                    "value": "",
+                    "label": "Password"
+                },
+                "autoLogin": {
+                    "value": true,
+                    "label": "Auto Login",
+                    "type": "Switch"
+                }
+            }
+        """.trimIndent()
+
+        val result = bridge.parseSettingsSchema(schema)
+
+        result.size shouldBe 3
+        result[0].key shouldBe "email"
+        result[0].title shouldBe "Email"
+        result[0].type shouldBe "Text"
+        result[0].default shouldBe JsonPrimitive("")
+
+        result[1].key shouldBe "password"
+        result[1].title shouldBe "Password"
+        result[1].type shouldBe "Text"
+        result[1].default shouldBe JsonPrimitive("")
+
+        result[2].key shouldBe "autoLogin"
+        result[2].title shouldBe "Auto Login"
+        result[2].type shouldBe "Switch"
+        result[2].default shouldBe JsonPrimitive(true)
+    }
+
+    @Test
+    fun `parseSettingsSchema uses key when lnreader label missing`() {
+        val schema = """
+            {
+                "url": {
+                    "value": "https://example.com"
+                }
+            }
+        """.trimIndent()
+
+        val result = bridge.parseSettingsSchema(schema)
+
+        result.size shouldBe 1
+        result[0].key shouldBe "url"
+        result[0].title shouldBe "url"
+        result[0].type shouldBe "Text"
+        result[0].default shouldBe JsonPrimitive("https://example.com")
+    }
+
+    @Test
     fun `setSetting stores value with namespaced key`() {
         bridge.setSetting("apiKey", "my-secret-key")
 

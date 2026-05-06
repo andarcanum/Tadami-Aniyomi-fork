@@ -24,6 +24,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.source.manga.service.MangaSourceManager
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.injectLazy
 
@@ -31,6 +32,7 @@ class WebViewActivity : BaseActivity() {
 
     private val sourceManager: MangaSourceManager by injectLazy()
     private val animeSourceManager: AnimeSourceManager by injectLazy()
+    private val novelSourceManager: NovelSourceManager by injectLazy()
     private val network: NetworkHelper by injectLazy()
 
     private var assistUrl: String? = null
@@ -60,21 +62,8 @@ class WebViewActivity : BaseActivity() {
 
         val url = intent.extras?.getString(URL_KEY) ?: return
         assistUrl = url
-        var headers = emptyMap<String, String>()
-        (sourceManager.get(intent.extras!!.getLong(SOURCE_KEY)) as? HttpSource)?.let { source ->
-            try {
-                headers = source.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to build headers" }
-            }
-        }
-        (animeSourceManager.get(intent.extras!!.getLong(SOURCE_KEY)) as? AnimeHttpSource)?.let { animeSource ->
-            try {
-                headers = animeSource.headers.toMultimap().mapValues { it.value.getOrNull(0) ?: "" }
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to build headers" }
-            }
-        }
+        val sourceId = intent.extras!!.getLong(SOURCE_KEY)
+        val headers = resolveSourceHeaders(sourceId)
 
         setComposeContent {
             WebViewScreenContent(
@@ -86,6 +75,7 @@ class WebViewActivity : BaseActivity() {
                 onShare = this::shareWebpage,
                 onOpenInBrowser = this::openInBrowser,
                 onClearCookies = this::clearCookies,
+                novelSourceId = sourceId,
             )
         }
     }
@@ -124,6 +114,21 @@ class WebViewActivity : BaseActivity() {
     private fun clearCookies(url: String) {
         val cleared = network.cookieJar.remove(url.toHttpUrl())
         logcat { "Cleared $cleared cookies for: $url" }
+    }
+
+    private fun resolveSourceHeaders(sourceId: Long): Map<String, String> {
+        val source = sourceManager.get(sourceId) as? HttpSource
+            ?: animeSourceManager.get(sourceId) as? AnimeHttpSource
+            ?: novelSourceManager.get(sourceId)
+
+        return runCatching {
+            resolveWebViewHeaders(
+                source = source,
+            )
+        }.getOrElse { error ->
+            logcat(LogPriority.ERROR, error) { "Failed to build headers" }
+            emptyMap()
+        }
     }
 
     companion object {

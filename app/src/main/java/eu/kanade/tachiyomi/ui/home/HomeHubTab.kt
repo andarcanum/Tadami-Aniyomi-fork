@@ -636,6 +636,7 @@ internal data class HomeHubHistory(
     val title: String,
     val progressNumber: Double,
     val coverData: Any?,
+    val section: HomeHubSection,
 )
 
 internal data class HomeHubRecommendation(
@@ -1043,6 +1044,7 @@ internal fun HomeHubScreenModel.State.toUiState(): HomeHubUiState {
                 title = it.title,
                 progressNumber = it.episodeNumber,
                 coverData = it.coverData,
+                section = HomeHubSection.Anime,
             )
         },
         recommendations = recommendations.map {
@@ -1079,6 +1081,7 @@ internal fun MangaHomeHubScreenModel.State.toUiState(): HomeHubUiState {
                 title = it.title,
                 progressNumber = it.chapterNumber,
                 coverData = it.coverData,
+                section = HomeHubSection.Manga,
             )
         },
         recommendations = recommendations.map {
@@ -1116,6 +1119,7 @@ internal fun NovelHomeHubScreenModel.State.toUiState(): HomeHubUiState {
                 title = it.title,
                 progressNumber = it.chapterNumber,
                 coverData = mapNovelHomeHubCoverData(it.coverData),
+                section = HomeHubSection.Novel,
             )
         },
         recommendations = recommendations.map {

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="confirm_exit">Нажмите кнопку назад ещё раз, чтобы выйти</string>
     <string name="action_filter_started">Начато</string>
@@ -50,6 +50,8 @@
     <string name="pref_library_update_show_tab_badge">Показывать количество непросмотренных/непрочитанных на значке обновлений</string>
     <string name="pref_aurora_library_immersive_mode">Режим погружения</string>
     <string name="pref_aurora_library_immersive_mode_summary">Скрывать верхнюю панель и нижнюю навигацию при прокрутке, но оставлять категории видимыми.</string>
+    <string name="pref_aurora_library_swipe_switches_categories">Свайп переключает категории</string>
+    <string name="pref_aurora_library_swipe_switches_categories_summary">Горизонтальные свайпы в библиотеке переключают категории вместо разделов (аниме/манга/ранобэ).</string>
     <string name="label_player_settings">Настройки проигрывателя</string>
     <string name="action_search_player_settings">Поиск по настройкам проигрывателя</string>
     <string name="pref_player_internal">Внутренний проигрыватель</string>
@@ -653,7 +655,7 @@
     <string name="novel_reader_ai_translator_generation_advantage_prefix">Преимущество: %s</string>
     <string name="novel_reader_ai_translator_deepseek_reasoning_hint">При включенном thinking mode DeepSeek игнорирует temperature, top_p, presence_penalty и frequency_penalty.</string>
     <string name="novel_reader_ai_translator_deepseek_hint">Для DeepSeek используется диапазон Температура 1.3-1.5 и TopP 0.9-0.95. TopK не применяется.</string>
-    <string name="novel_reader_ai_translator_mistral_nvidia_batch_hint">Для Mistral и NVIDIA рекомендуется размер батча 20. Увеличение может ухудшить качество и стабильность перевода.</string>
+    <string name="novel_reader_ai_translator_max_batch_size_hint">Максимальный размер батча — 80.</string>
     <string name="novel_reader_ai_translator_prompt_mode_summary">Режим промпта определяет, насколько жёстко система ведёт перевод до применения стиля и модификаторов.</string>
     <string name="novel_reader_ai_translator_logs_title">Логи</string>
     <string name="novel_reader_ai_translator_logs_summary">Диагностика запросов и ответа модели</string>
@@ -888,6 +890,7 @@
     <string name="downloaded_episodes">Загруженные эпизоды</string>
     <string name="local_manga_source">Локальный источник манги</string>
     <string name="local_anime_source">Локальный источник аниме</string>
+    <string name="local_novel_source">Локальный источник новелл</string>
     <string name="episode_not_found">Эпизод не найден</string>
     <string name="local_invalid_episode_format">Недопустимый формат эпизода</string>
     <string name="unknown_studio">Неизвестная студия</string>
@@ -941,6 +944,8 @@
     <string name="label_manga_extensions">Установить расширение</string>
     <string name="label_anime_extensions">Установить расширение</string>
     <string name="label_novel_extensions">Установить расширение</string>
+    <string name="novel_repo_picker_title">Выберите источник установки</string>
+    <string name="novel_repo_picker_newest">Новейшая</string>
     <string name="label_migration_manga">Перенос</string>
     <string name="label_migration_anime">Перенос</string>
     <string name="settings">Настройки</string>
@@ -1104,6 +1109,7 @@
     <string name="aurora_details">Подробнее</string>
     <string name="aurora_view_all">Показать все</string>
     <string name="aurora_episode_number">Эпизод %s</string>
+    <string name="aurora_chapter_number">Глава %s</string>
     <string name="aurora_recently_added">Недавно добавленные</string>
     <string name="aurora_more">Ещё</string>
     <string name="aurora_change_nickname">Изменить имя</string>
@@ -2014,4 +2020,5 @@
     <!-- Player advanced -->
     <string name="pref_mpv_user_files">Использовать пользовательские MPV-файлы</string>
     <string name="pref_mpv_user_files_summary">Использовать файлы из директории mpv-config</string>
+    <string name="pref_vertical_pinned_layout">Вертикальное расположение закрепленных плагинов</string>
 </resources>

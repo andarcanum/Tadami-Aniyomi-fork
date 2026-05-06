@@ -27,21 +27,37 @@ import kotlin.time.Duration.Companion.seconds
 @Composable
 fun ExtensionRepoCreateDialog(
     onDismissRequest: () -> Unit,
-    onCreate: (String) -> Unit,
+    onCreate: (url: String, displayName: String) -> Unit,
     repoUrls: ImmutableSet<String>,
 ) {
-    var name by remember { mutableStateOf("") }
+    var url by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
+    var nameManuallyEdited by remember { mutableStateOf(false) }
 
     val focusRequester = remember { FocusRequester() }
-    val nameAlreadyExists = remember(name) { repoUrls.contains(name) }
+    val urlAlreadyExists = remember(url) { repoUrls.contains(url) }
+
+    fun suggestName(rawUrl: String): String {
+        val clean = rawUrl
+            .removePrefix("https://").removePrefix("http://")
+            .trim('/')
+        val segments = clean.split("/")
+        return when {
+            segments.size >= 4 && segments[0] == "raw.githubusercontent.com" ->
+                "${segments[1]}/${segments[2]}"
+            segments.size >= 2 -> segments.take(2).joinToString("/")
+            else -> clean
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(
-                enabled = name.isNotEmpty() && !nameAlreadyExists,
+                enabled = url.isNotEmpty() && !urlAlreadyExists,
                 onClick = {
-                    onCreate(name)
+                    val name = displayName.ifBlank { suggestName(url) }
+                    onCreate(url, name)
                     onDismissRequest()
                 },
             ) {
@@ -61,23 +77,38 @@ fun ExtensionRepoCreateDialog(
                 Text(text = stringResource(AYMR.strings.action_add_repo_message))
 
                 OutlinedTextField(
-                    modifier = Modifier
-                        .focusRequester(focusRequester),
-                    value = name,
-                    onValueChange = { name = it },
-                    label = {
-                        Text(text = stringResource(MR.strings.label_add_repo_input))
+                    modifier = Modifier.focusRequester(focusRequester),
+                    value = url,
+                    onValueChange = { newUrl ->
+                        url = newUrl
+                        if (!nameManuallyEdited) {
+                            displayName = suggestName(newUrl)
+                        }
                     },
+                    label = { Text(text = stringResource(MR.strings.label_add_repo_input)) },
                     supportingText = {
-                        val msgRes = if (name.isNotEmpty() && nameAlreadyExists) {
+                        val msgRes = if (url.isNotEmpty() && urlAlreadyExists) {
                             MR.strings.error_repo_exists
                         } else {
                             MR.strings.information_required_plain
                         }
                         Text(text = stringResource(msgRes))
                     },
-                    isError = name.isNotEmpty() && nameAlreadyExists,
+                    isError = url.isNotEmpty() && urlAlreadyExists,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    singleLine = true,
+                )
+
+                OutlinedTextField(
+                    value = displayName,
+                    onValueChange = {
+                        displayName = it
+                        nameManuallyEdited = it.isNotEmpty()
+                    },
+                    label = { Text(text = stringResource(MR.strings.label_display_name)) },
+                    placeholder = {
+                        Text(text = suggestName(url).ifEmpty { stringResource(MR.strings.display_name_auto_detected) })
+                    },
                     singleLine = true,
                 )
             }
@@ -85,7 +116,6 @@ fun ExtensionRepoCreateDialog(
     )
 
     LaunchedEffect(focusRequester) {
-        // TODO: https://issuetracker.google.com/issues/204502668
         delay(0.1.seconds)
         focusRequester.requestFocus()
     }
@@ -119,6 +149,53 @@ fun ExtensionRepoDeleteDialog(
             Text(text = stringResource(MR.strings.delete_repo_confirmation, repo))
         },
     )
+}
+
+@Composable
+fun ExtensionRepoRenameDialog(
+    repo: ExtensionRepo,
+    onDismissRequest: () -> Unit,
+    onRename: (String) -> Unit,
+) {
+    var name by remember(repo.name) { mutableStateOf(repo.name) }
+    val focusRequester = remember { FocusRequester() }
+
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(
+                enabled = name.isNotBlank(),
+                onClick = {
+                    onRename(name.trim())
+                    onDismissRequest()
+                },
+            ) {
+                Text(text = stringResource(MR.strings.action_rename_repo))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        title = {
+            Text(text = stringResource(MR.strings.action_rename_repo))
+        },
+        text = {
+            OutlinedTextField(
+                modifier = Modifier.focusRequester(focusRequester),
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(text = stringResource(MR.strings.name)) },
+                singleLine = true,
+            )
+        },
+    )
+
+    LaunchedEffect(focusRequester) {
+        delay(0.1.seconds)
+        focusRequester.requestFocus()
+    }
 }
 
 @Composable

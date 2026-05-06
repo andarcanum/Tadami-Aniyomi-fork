@@ -78,9 +78,10 @@ fun NovelSourcesScreen(
     } else {
         colors.cardBackground
     }
+    val hasSearchQuery = !searchQuery.isNullOrBlank()
     when {
         state.isLoading -> LoadingScreen(Modifier.padding(contentPadding))
-        state.isEmpty -> EmptyScreen(
+        state.isEmpty && !hasSearchQuery -> EmptyScreen(
             stringRes = MR.strings.source_empty_screen,
             modifier = Modifier.padding(contentPadding),
         )
@@ -156,6 +157,17 @@ fun NovelSourcesScreen(
                     }
                 }
 
+                if (state.isEmpty) {
+                    item(key = "no-results") {
+                        Box(
+                            modifier = Modifier.fillParentMaxHeight(),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            EmptyScreen(stringRes = MR.strings.no_results_found)
+                        }
+                    }
+                }
+
                 if (state.pinnedItems.isNotEmpty()) {
                     item(key = "pinned-carousel") {
                         Column {
@@ -175,6 +187,7 @@ fun NovelSourcesScreen(
                                         onClickItem = onClickItem,
                                         onLongClickItem = onLongClickItem,
                                         onClickPin = onClickPin,
+                                        showLatest = false,
                                     )
                                 }
                             }
@@ -259,6 +272,7 @@ private fun SourceItem(
     onLongClickItem: (Source) -> Unit,
     onClickPin: (Source) -> Unit,
     modifier: Modifier = Modifier,
+    showLatest: Boolean = true,
 ) {
     BaseNovelSourceItem(
         modifier = modifier,
@@ -266,7 +280,7 @@ private fun SourceItem(
         onClickItem = { onClickItem(source, Listing.Popular) },
         onLongClickItem = { onLongClickItem(source) },
         action = {
-            if (source.supportsLatest) {
+            if (source.supportsLatest && showLatest) {
                 TextButton(onClick = { onClickItem(source, Listing.Latest) }) {
                     Text(
                         text = stringResource(MR.strings.latest),

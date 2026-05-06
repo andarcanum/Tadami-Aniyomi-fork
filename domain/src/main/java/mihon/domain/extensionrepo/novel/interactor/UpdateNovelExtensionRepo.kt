@@ -41,7 +41,7 @@ class UpdateNovelExtensionRepo(
             repo.signingKeyFingerprint == refreshedRepo.signingKeyFingerprint
         ) {
             try {
-                repository.upsertRepo(refreshedRepo)
+                repository.upsertRepo(refreshedRepo.copy(name = repo.name))
             } catch (e: SaveExtensionRepoException) {
                 logcat(LogPriority.WARN, e) {
                     "SQL Conflict attempting to update novel repository ${refreshedRepo.baseUrl}"

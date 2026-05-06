@@ -19,7 +19,7 @@ class NovelJsSourceFactoryTest {
     private val runtimeOverrides = NovelPluginRuntimeOverrides()
 
     @Test
-    fun `create returns configurable wrapper only for plugins with settings`() {
+    fun `create returns configurable wrapper for installed plugins regardless of metadata hint`() {
         val storageDir = Files.createTempDirectory("novel-js-source-factory-test").toFile()
         val pluginStorage = NovelPluginStorage(storageDir)
         val runtimeFactory = mockk<NovelJsRuntimeFactory>(relaxed = true)
@@ -51,7 +51,7 @@ class NovelJsSourceFactoryTest {
 
         withSettings.shouldBeInstanceOf<NovelCatalogueSource>()
         (withSettings is ConfigurableNovelSource) shouldBe true
-        (withoutSettings is ConfigurableNovelSource) shouldBe false
+        (withoutSettings is ConfigurableNovelSource) shouldBe true
         withoutSettings.shouldBeInstanceOf<NovelCatalogueSource>()
     }
 
@@ -81,7 +81,7 @@ class NovelJsSourceFactoryTest {
         val source = factory.create(createPlugin("runtime-settings", hasSettings = false))
 
         source.shouldBeInstanceOf<NovelCatalogueSource>()
-        (source is ConfigurableNovelSource) shouldBe false
+        (source is ConfigurableNovelSource) shouldBe true
     }
 
     private fun createPlugin(

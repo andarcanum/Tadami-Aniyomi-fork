@@ -71,6 +71,10 @@ class NovelJsRuntimeFactory(
             val request = buildRequest(resolvedUrl, optionsJson)
             return runCatching {
                 networkHelper.client.newCall(request).execute().use { response ->
+                    syncAndroidWebViewResponseCookies(
+                        url = response.request.url.toString(),
+                        setCookieHeaders = response.headers.values("Set-Cookie"),
+                    )
                     val headers = response.headers.toMultimap()
                         .mapValues { (_, values) -> values.joinToString(",") }
                     val responseBody = response.body
@@ -267,8 +271,13 @@ class NovelJsRuntimeFactory(
         // DOM Store methods
         override fun domLoad(html: String): Int = domStore.loadDocument(html)
 
-        override fun domSelect(handle: Int, selector: String): String =
-            json.encodeToString(domStore.select(handle, selector).toList())
+        override fun domSelect(handle: Int, selector: String): String {
+            // Jsoup does not support double quotes inside :contains("..."), strip them
+            val cleaned = selector.replace(Regex(""":contains\(["']([^"']+)["']\)""")) { match ->
+                ":contains(${match.groupValues[1]})"
+            }
+            return json.encodeToString(domStore.select(handle, cleaned).toList())
+        }
 
         override fun domParent(handle: Int): Int = domStore.parent(handle)
 
@@ -324,6 +333,16 @@ class NovelJsRuntimeFactory(
 
         override fun domReplaceWith(handle: Int, html: String) = domStore.replaceWith(handle, html)
 
+        override fun domBefore(handle: Int, html: String) = domStore.before(handle, html)
+
+        override fun domAfter(handle: Int, html: String) = domStore.after(handle, html)
+
+        override fun domAppend(handle: Int, html: String) = domStore.append(handle, html)
+
+        override fun domPrepend(handle: Int, html: String) = domStore.prepend(handle, html)
+
+        override fun domEmpty(handle: Int) = domStore.empty(handle)
+
         override fun domRemove(handle: Int) = domStore.remove(handle)
 
         override fun domAddClass(handle: Int, className: String) = domStore.addClass(handle, className)
@@ -333,6 +352,32 @@ class NovelJsRuntimeFactory(
         override fun domRelease(handle: Int) = domStore.release(handle)
 
         override fun domReleaseAll() = domStore.releaseAll()
+
+        // Crypto
+        override fun aesGcmDecrypt(keyB64: String, ivB64: String, cipherB64: String): String {
+            if (keyB64.isBlank() || ivB64.isBlank() || cipherB64.isBlank()) return ""
+
+            return try {
+                val keyRaw = java.util.Base64.getDecoder().decode(keyB64)
+                val iv = java.util.Base64.getDecoder().decode(ivB64)
+                val cipherBytes = java.util.Base64.getDecoder().decode(cipherB64)
+
+                val keyBytes = ByteArray(32)
+                val copyLength = minOf(keyRaw.size, keyBytes.size)
+                System.arraycopy(keyRaw, 0, keyBytes, 0, copyLength)
+
+                val keySpec = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
+                val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+                val gcmSpec = javax.crypto.spec.GCMParameterSpec(128, iv)
+                cipher.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec, gcmSpec)
+
+                val plainBytes = cipher.doFinal(cipherBytes)
+                java.util.Base64.getEncoder().encodeToString(plainBytes)
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "[$pluginId] AES-GCM decrypt failed" }
+                ""
+            }
+        }
 
         // Console methods
         override fun consoleLog(message: String) {
@@ -452,11 +497,13 @@ class NovelJsRuntimeFactory(
                 .url(url)
                 .method("POST", requestBody)
 
-            headers.forEach { (name, value) ->
+            val requestHeaders = headers.toMutableMap()
+            applyAndroidWebViewCookies(requestHeaders, url)
+            requestHeaders.forEach { (name, value) ->
                 builder.addHeader(name, value)
             }
 
-            val headerNames = headers.keys.map { it.lowercase() }.toSet()
+            val headerNames = requestHeaders.keys.map { it.lowercase() }.toSet()
             if ("content-type" !in headerNames) {
                 builder.addHeader("Content-Type", "application/grpc-web+proto")
             }
@@ -476,6 +523,10 @@ class NovelJsRuntimeFactory(
                     if (!response.isSuccessful) {
                         error("gRPC-web request failed: HTTP ${response.code}")
                     }
+                    syncAndroidWebViewResponseCookies(
+                        url = response.request.url.toString(),
+                        setCookieHeaders = response.headers.values("Set-Cookie"),
+                    )
                     response.body.bytes()
                 }
 
@@ -529,7 +580,9 @@ class NovelJsRuntimeFactory(
                 ?: JsFetchRequest()
             val builder = Request.Builder().url(url)
             val presentHeaders = mutableSetOf<String>()
-            options.headers.forEach { (name, value) ->
+            val requestHeaders = options.headers.toMutableMap()
+            applyAndroidWebViewCookies(requestHeaders, url)
+            requestHeaders.forEach { (name, value) ->
                 presentHeaders += name.lowercase()
                 val resolvedValue = when {
                     name.equals("referer", ignoreCase = true) -> resolveAlias(value)
@@ -594,7 +647,10 @@ class NovelJsRuntimeFactory(
             }
 
             if ("user-agent" !in presentHeaders) {
-                builder.addHeader("User-Agent", DEFAULT_USER_AGENT)
+                builder.addHeader(
+                    "User-Agent",
+                    networkHelper.defaultUserAgentProvider().ifBlank { DEFAULT_USER_AGENT },
+                )
             }
             if ("accept" !in presentHeaders) {
                 builder.addHeader("Accept", DEFAULT_ACCEPT)

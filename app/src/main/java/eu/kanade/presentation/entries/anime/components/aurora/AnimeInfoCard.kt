@@ -94,6 +94,7 @@ fun AnimeInfoCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top,
             ) {
+                val descriptionToggleEnabled = (filteredDescription?.length ?: 0) > 200
                 Text(
                     text = filteredDescription ?: stringResource(AYMR.strings.aurora_no_description),
                     color = colors.textPrimary.copy(alpha = 0.9f),
@@ -101,10 +102,18 @@ fun AnimeInfoCard(
                     lineHeight = 22.sp,
                     maxLines = if (descriptionExpanded) Int.MAX_VALUE else 5,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .then(
+                            if (descriptionToggleEnabled) {
+                                Modifier.clickable { onToggleDescription() }
+                            } else {
+                                Modifier
+                            },
+                        ),
                 )
 
-                if ((filteredDescription?.length ?: 0) > 200) {
+                if (descriptionToggleEnabled) {
                     Icon(
                         imageVector = if (descriptionExpanded) {
                             Icons.Filled.KeyboardArrowUp

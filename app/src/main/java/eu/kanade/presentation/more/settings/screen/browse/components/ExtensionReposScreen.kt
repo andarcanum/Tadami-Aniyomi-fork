@@ -30,6 +30,7 @@ fun ExtensionReposScreen(
     onAddRepo: (String) -> Unit,
     onOpenWebsite: (ExtensionRepo) -> Unit,
     onClickDelete: (String) -> Unit,
+    onClickRename: (ExtensionRepo) -> Unit,
     onClickRefresh: () -> Unit,
     navigateUp: () -> Unit,
     officialRepos: Map<String, String> = emptyMap(),
@@ -63,6 +64,7 @@ fun ExtensionReposScreen(
                 PaddingValues(horizontal = MaterialTheme.padding.medium),
             onOpenWebsite = onOpenWebsite,
             onClickDelete = onClickDelete,
+            onClickRename = onClickRename,
             onAddRepo = onAddRepo,
             officialRepos = officialRepos,
         )

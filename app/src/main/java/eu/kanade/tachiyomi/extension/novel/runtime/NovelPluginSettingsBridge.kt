@@ -23,26 +23,19 @@ class NovelPluginSettingsBridge(
     fun parseSettingsSchema(schemaJson: String): List<PluginSettingDefinition> {
         if (schemaJson.isBlank()) return emptyList()
 
-        val element = json.parseToJsonElement(schemaJson)
-        if (element !is JsonArray) return emptyList()
+        val element = runCatching { json.parseToJsonElement(schemaJson) }.getOrNull() ?: return emptyList()
 
-        return element.mapNotNull { item ->
-            if (item !is JsonObject) return@mapNotNull null
-            val key = item.stringValue("key") ?: return@mapNotNull null
-            val type = item.stringValue("type") ?: return@mapNotNull null
-            val title = item.stringValue("title") ?: ""
-            val default = item["default"]
-            val options = item.jsonArrayValue("options")
-            val values = item.jsonArrayValue("values")
-
-            PluginSettingDefinition(
-                key = key,
-                type = type,
-                title = title,
-                default = default,
-                options = options,
-                values = values,
-            )
+        return when (element) {
+            is JsonArray -> element.mapNotNull { item ->
+                parseLegacySettingDefinition(item as? JsonObject)
+            }
+            is JsonObject -> element.mapNotNull { (key, value) ->
+                parseLnReaderSettingDefinition(
+                    key = key,
+                    item = value as? JsonObject,
+                )
+            }
+            else -> emptyList()
         }
     }
 
@@ -212,6 +205,36 @@ class NovelPluginSettingsBridge(
                 else -> item.toString()
             }
         }
+    }
+
+    private fun parseLegacySettingDefinition(item: JsonObject?): PluginSettingDefinition? {
+        if (item == null) return null
+        val key = item.stringValue("key") ?: return null
+        val type = item.stringValue("type") ?: return null
+        return PluginSettingDefinition(
+            key = key,
+            type = type,
+            title = item.stringValue("title") ?: "",
+            default = item["default"],
+            options = item.jsonArrayValue("options"),
+            values = item.jsonArrayValue("values"),
+        )
+    }
+
+    private fun parseLnReaderSettingDefinition(
+        key: String,
+        item: JsonObject?,
+    ): PluginSettingDefinition? {
+        if (item == null) return null
+
+        return PluginSettingDefinition(
+            key = key,
+            type = item.stringValue("type") ?: "Text",
+            title = item.stringValue("label") ?: key,
+            default = item["value"],
+            options = item.jsonArrayValue("options"),
+            values = item.jsonArrayValue("values"),
+        )
     }
 
     companion object {

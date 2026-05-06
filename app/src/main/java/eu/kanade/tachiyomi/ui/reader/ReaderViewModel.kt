@@ -34,9 +34,12 @@ import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.setting.MangaReaderPageDimensions
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
+import eu.kanade.tachiyomi.ui.reader.setting.isLikelyWebtoonFromPageDimensions
+import eu.kanade.tachiyomi.ui.reader.setting.recommendReadingModeForMangaFormat
 import eu.kanade.tachiyomi.ui.reader.viewer.Viewer
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonViewer
 import eu.kanade.tachiyomi.util.chapter.filterDownloadedChapters
@@ -124,6 +127,10 @@ class ReaderViewModel @JvmOverloads constructor(
 
     private val eventChannel = Channel<Event>()
     val eventFlow = eventChannel.receiveAsFlow()
+
+    private val autoWebtoonPageIndexes = mutableSetOf<Int>()
+    private val autoWebtoonPageDimensions = mutableListOf<MangaReaderPageDimensions>()
+    private var autoWebtoonPromptedMangaId: Long? = null
 
     /**
      * The manga loaded in the reader. It can be null when instantiated for a short time.
@@ -535,6 +542,7 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     fun onViewerLoaded(viewer: Viewer?) {
+        resetAutoWebtoonPageDetection()
         mutableState.update {
             it.copy(viewer = viewer)
         }
@@ -880,11 +888,77 @@ class ReaderViewModel @JvmOverloads constructor(
      */
     fun getMangaReadingMode(resolveDefault: Boolean = true): Int {
         val default = readerPreferences.defaultReadingMode().get()
+        val manga = manga
         val readingMode = ReadingMode.fromPreference(manga?.readingMode?.toInt())
         return when {
-            resolveDefault && readingMode == ReadingMode.DEFAULT -> default
+            resolveDefault && readingMode == ReadingMode.DEFAULT ->
+                getAutoWebtoonReadingMode(manga) ?: default
             else -> manga?.readingMode?.toInt() ?: default
         }
+    }
+
+    fun isMangaReadingModeAutoWebtoon(): Boolean {
+        val manga = manga ?: return false
+        return getMangaReadingMode() == ReadingMode.WEBTOON.flagValue &&
+            getAutoWebtoonReadingMode(manga) == ReadingMode.WEBTOON.flagValue
+    }
+
+    private fun getAutoWebtoonReadingMode(manga: Manga?): Int? {
+        manga ?: return null
+        if (!readerPreferences.useAutoWebtoon().get()) return null
+        if (ReadingMode.fromPreference(manga.readingMode.toInt()) != ReadingMode.DEFAULT) return null
+
+        val sourceName = sourceManager.getOrStub(manga.source).name
+        return recommendReadingModeForMangaFormat(
+            manga = manga,
+            sourceName = sourceName,
+        )
+    }
+
+    fun onReaderPageImageDimensionsAvailable(
+        page: ReaderPage,
+        width: Int,
+        height: Int,
+    ) {
+        if (!shouldDetectAutoWebtoonFromPageDimensions()) return
+        if (!autoWebtoonPageIndexes.add(page.index)) return
+
+        autoWebtoonPageDimensions += MangaReaderPageDimensions(width = width, height = height)
+        val mangaId = manga?.id ?: return
+        if (
+            isLikelyWebtoonFromPageDimensions(autoWebtoonPageDimensions) &&
+            autoWebtoonPromptedMangaId != mangaId &&
+            state.value.dialog == null
+        ) {
+            autoWebtoonPromptedMangaId = mangaId
+            mutableState.update { it.copy(dialog = Dialog.AutoWebtoonModeSuggestion) }
+        }
+    }
+
+    fun acceptAutoWebtoonModeSuggestion() {
+        closeDialog()
+        setMangaReadingMode(ReadingMode.WEBTOON)
+    }
+
+    fun dismissAutoWebtoonModeSuggestion() {
+        val mangaId = manga?.id?.toString() ?: return closeDialog()
+        val preference = readerPreferences.autoWebtoonPromptDismissedMangaIds()
+        preference.set(preference.get() + mangaId)
+        closeDialog()
+    }
+
+    private fun shouldDetectAutoWebtoonFromPageDimensions(): Boolean {
+        val manga = manga ?: return false
+        if (!readerPreferences.useAutoWebtoon().get()) return false
+        if (ReadingMode.fromPreference(manga.readingMode.toInt()) != ReadingMode.DEFAULT) return false
+        if (getAutoWebtoonReadingMode(manga) == ReadingMode.WEBTOON.flagValue) return false
+        if (readerPreferences.autoWebtoonPromptDismissedMangaIds().get().contains(manga.id.toString())) return false
+        return true
+    }
+
+    private fun resetAutoWebtoonPageDetection() {
+        autoWebtoonPageIndexes.clear()
+        autoWebtoonPageDimensions.clear()
     }
 
     /**
@@ -1297,6 +1371,7 @@ class ReaderViewModel @JvmOverloads constructor(
         data object ReadingModeSelect : Dialog
         data object OrientationModeSelect : Dialog
         data class PageActions(val page: ReaderPage) : Dialog
+        data object AutoWebtoonModeSuggestion : Dialog
     }
 
     sealed interface Event {

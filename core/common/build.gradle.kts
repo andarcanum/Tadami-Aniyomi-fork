@@ -34,6 +34,8 @@ dependencies {
     implementation(libs.unifile)
     implementation(libs.libarchive)
 
+    implementation(androidx.webkit)
+
     api(kotlinx.coroutines.core)
     api(kotlinx.serialization.json)
     api(kotlinx.serialization.json.okio)

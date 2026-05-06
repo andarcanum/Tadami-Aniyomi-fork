@@ -1254,7 +1254,7 @@ class NovelScreenModelTest {
             try {
                 awaitResumeScreenModel(screenModel)
                 withTimeout(1_000) { yield() }
-                coVerify(exactly = 1) { refreshNovelTracks.await(novel.id) }
+                coVerify(timeout = 1_000, exactly = 1) { refreshNovelTracks.await(novel.id) }
             } finally {
                 screenModel.onDispose()
             }

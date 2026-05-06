@@ -160,7 +160,9 @@ class MangaHomeHubScreenModel(
 
                 val previousHero = mutableState.value.hero
 
-                val mangaRecommendations = filteredManga.take(10)
+                val mangaRecommendations = filteredManga
+                    .sortedByDescending { it.manga.dateAdded }
+                    .take(10)
 
                 mutableState.update {
                     it.copy(

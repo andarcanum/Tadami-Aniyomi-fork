@@ -15,6 +15,7 @@ import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,7 +65,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -88,11 +91,14 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.category.visualName
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
+import eu.kanade.presentation.components.resolveAuroraTabContainerColor
+import eu.kanade.presentation.components.resolveAuroraTabSelectionBorderColor
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.LibraryBottomActionMenu
@@ -115,6 +121,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
+import eu.kanade.tachiyomi.ui.browse.anime.migration.search.MigrateAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.migration.config.MigrationConfigScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
@@ -229,6 +236,9 @@ data object AnimeLibraryTab : Tab {
         val showMangaSection by uiPreferences.showMangaSection().collectAsState()
         val showNovelSection by uiPreferences.showNovelSection().collectAsState()
         val immersiveModeEnabled by uiPreferences.auroraLibraryImmersiveMode().collectAsState()
+        val swipeSwitchesCategories by uiPreferences
+            .auroraLibrarySwipeSwitchesCategories()
+            .collectAsState()
         val bottomNavVisibilityController = LocalBottomNavVisibilityController.current
         val useSeparateDisplayModePerMedia by settingsScreenModel
             .libraryPreferences
@@ -454,18 +464,34 @@ data object AnimeLibraryTab : Tab {
         }
 
         LaunchedEffect(state.categories.size, animeCategoryIndex) {
-            if (screenModel.activeCategoryIndex != animeCategoryIndex) {
+            if (shouldSyncAuroraLibraryCategoryIndex(
+                    categoryCount = state.categories.size,
+                    currentIndex = screenModel.activeCategoryIndex,
+                    targetIndex = animeCategoryIndex,
+                )
+            ) {
                 screenModel.activeCategoryIndex = animeCategoryIndex
             }
         }
         LaunchedEffect(mangaState.categories.size, mangaCategoryIndex) {
-            if (mangaScreenModel.activeCategoryIndex != mangaCategoryIndex) {
+            if (shouldSyncAuroraLibraryCategoryIndex(
+                    categoryCount = mangaState.categories.size,
+                    currentIndex = mangaScreenModel.activeCategoryIndex,
+                    targetIndex = mangaCategoryIndex,
+                )
+            ) {
                 mangaScreenModel.activeCategoryIndex = mangaCategoryIndex
             }
         }
         LaunchedEffect(novelCategories.size, novelCategoryIndex) {
-            if (novelScreenModel?.activeCategoryIndex != novelCategoryIndex) {
-                novelScreenModel?.activeCategoryIndex = novelCategoryIndex
+            val activeNovelScreenModel = novelScreenModel ?: return@LaunchedEffect
+            if (shouldSyncAuroraLibraryCategoryIndex(
+                    categoryCount = novelCategories.size,
+                    currentIndex = activeNovelScreenModel.activeCategoryIndex,
+                    targetIndex = novelCategoryIndex,
+                )
+            ) {
+                activeNovelScreenModel.activeCategoryIndex = novelCategoryIndex
             }
         }
 
@@ -778,6 +804,24 @@ data object AnimeLibraryTab : Tab {
                 null -> Unit
             }
         }
+        val onAuroraCategorySwipe: ((Boolean) -> Boolean)? = if (
+            swipeSwitchesCategories &&
+            auroraCurrentSection != null &&
+            auroraCategories.size > 1
+        ) {
+            { forward ->
+                val current = auroraCategoryIndex
+                val target = if (forward) current + 1 else current - 1
+                if (target in auroraCategories.indices && target != current) {
+                    onAuroraCategorySelected(target)
+                    true
+                } else {
+                    false
+                }
+            }
+        } else {
+            null
+        }
         val onAuroraRefreshCurrent: () -> Unit = {
             when (auroraCurrentSection) {
                 Section.Anime -> onClickRefresh(state.categories.getOrNull(animeCategoryIndex))
@@ -903,6 +947,13 @@ data object AnimeLibraryTab : Tab {
                             onMarkAsUnviewedClicked = { screenModel.markSeenSelection(false) },
                             onDownloadClicked = screenModel::runDownloadActionSelection
                                 .takeIf { state.selection.fastAll { !it.anime.isLocal() } },
+                            onMigrateClicked = {
+                                val animeId = state.selection.single().anime.id
+                                screenModel.clearSelection()
+                                navigator.push(MigrateAnimeSearchScreen(animeId))
+                            }.takeIf {
+                                state.selection.size == 1 && state.selection.single().anime.id > 0L
+                            },
                             onDeleteClicked = screenModel::openDeleteAnimeDialog,
                             isManga = false,
                         )
@@ -1054,6 +1105,7 @@ data object AnimeLibraryTab : Tab {
                                     },
                                 )
                             },
+                            onPagerSwipeOverride = onAuroraCategorySwipe,
                         )
                     } else {
                         AnimeLibraryContent(
@@ -1482,6 +1534,7 @@ data object AnimeLibraryTab : Tab {
     private val requestSectionEvent = Channel<Section>(capacity = Channel.BUFFERED)
     suspend fun requestSection(section: Section) = requestSectionEvent.send(section)
     suspend fun showNovelSection() = requestSection(Section.Novel)
+    suspend fun showMangaSection() = requestSection(Section.Manga)
 
     // For opening settings sheet in LibraryController
     private val requestSettingsSheetEvent = Channel<Unit>()
@@ -1756,13 +1809,19 @@ private fun AuroraLibraryCategoryTabs(
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val coercedSelected = coerceAuroraLibraryCategoryIndex(selectedIndex, categories.size)
+    val rowShape = RoundedCornerShape(22.dp)
+    val tabShape = RoundedCornerShape(18.dp)
+    val rowContainerColor = remember(colors) { resolveAuroraLibraryCategoryTabRowContainerColor(colors) }
+    val selectedTabBrush = remember(colors) { resolveAuroraLibraryCategorySelectedTabBrush(colors) }
+    val selectedTabBorderColor = remember(colors) { resolveAuroraTabSelectionBorderColor(colors) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(rowShape)
             .background(
-                color = colors.glass,
-                shape = RoundedCornerShape(22.dp),
+                color = rowContainerColor,
+                shape = rowShape,
             )
             .padding(horizontal = 6.dp, vertical = 6.dp),
     ) {
@@ -1776,17 +1835,37 @@ private fun AuroraLibraryCategoryTabs(
             ) { index, category ->
                 val isSelected = index == coercedSelected
                 val badgeCount = getCountForCategory(category)
-                val tabBackground = when {
-                    isSelected && colors.isDark -> Color.White.copy(alpha = 0.16f)
-                    isSelected -> colors.accentVariant
-                    colors.isDark -> Color.Transparent
-                    else -> colors.cardBackground
-                }
+                val tabColors = auroraLibraryCategoryTabColors(
+                    isSelected = isSelected,
+                    eInkProfile = colors.eInkProfile,
+                    accent = colors.accent,
+                    accentVariant = colors.accentVariant,
+                    textPrimary = colors.textPrimary,
+                    textSecondary = colors.textSecondary,
+                    textOnAccent = colors.textOnAccent,
+                    background = colors.background,
+                )
 
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(tabBackground)
+                        .clip(tabShape)
+                        .background(
+                            brush = if (isSelected && colors.eInkProfile != EInkProfile.MONOCHROME) {
+                                selectedTabBrush
+                            } else {
+                                Brush.linearGradient(
+                                    colors = listOf(tabColors.tabBackground, tabColors.tabBackground),
+                                )
+                            },
+                            shape = tabShape,
+                        )
+                        .then(
+                            if (isSelected) {
+                                Modifier.border(1.dp, selectedTabBorderColor, tabShape)
+                            } else {
+                                Modifier
+                            },
+                        )
                         .clickable {
                             appHaptics.tap()
                             onCategorySelected(index)
@@ -1797,7 +1876,7 @@ private fun AuroraLibraryCategoryTabs(
                 ) {
                     Text(
                         text = category.visualName,
-                        color = if (isSelected) colors.textPrimary else colors.textSecondary,
+                        color = tabColors.tabTextColor,
                         fontSize = 13.sp,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
                         maxLines = 1,
@@ -1807,19 +1886,16 @@ private fun AuroraLibraryCategoryTabs(
                     if (badgeCount != null) {
                         Box(
                             modifier = Modifier
+                                .size(18.dp)
                                 .background(
-                                    color = if (isSelected) {
-                                        colors.accent
-                                    } else {
-                                        colors.cardBackground
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                )
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    color = tabColors.badgeBackground,
+                                    shape = CircleShape,
+                                ),
+                            contentAlignment = Alignment.Center,
                         ) {
                             Text(
-                                text = badgeCount.toString(),
-                                color = if (isSelected) colors.textOnAccent else colors.textSecondary,
+                                text = formatAuroraLibraryCategoryBadgeCount(badgeCount),
+                                color = tabColors.badgeTextColor,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
@@ -1882,6 +1958,115 @@ internal fun shouldShowAuroraSearchField(
 internal fun coerceAuroraLibraryCategoryIndex(requestedIndex: Int, categoryCount: Int): Int {
     if (categoryCount <= 0) return 0
     return requestedIndex.coerceIn(0, categoryCount - 1)
+}
+
+/**
+ * Pure colour computation for a single Aurora library category tab + its count badge.
+ *
+ * Goals:
+ *  - Selected tab carries a clear accent presence in BOTH themes (so the selection is obvious in
+ *    dark mode, where it used to fall back to a flat translucent-white pill with no accent).
+ *  - Unselected badges stay available as category counts, but use a quieter accent surface so they
+ *    do not compete with the selected category.
+ *  - Monochrome e-ink avoids translucent accent blends and relies on flat, high-contrast fills.
+ */
+internal data class AuroraLibraryCategoryTabColors(
+    val tabBackground: Color,
+    val badgeBackground: Color,
+    val tabTextColor: Color,
+    val badgeTextColor: Color,
+)
+
+internal fun resolveAuroraLibraryCategoryTabRowContainerColor(
+    colors: eu.kanade.presentation.theme.AuroraColors,
+): Color {
+    return resolveAuroraTabContainerColor(colors)
+}
+
+internal fun resolveAuroraLibraryCategorySelectedTabBrush(colors: eu.kanade.presentation.theme.AuroraColors): Brush {
+    return Brush.linearGradient(
+        colors = when (colors.eInkProfile) {
+            EInkProfile.MONOCHROME -> listOf(colors.accentVariant, colors.accentVariant)
+            EInkProfile.COLOR,
+            EInkProfile.OFF,
+            -> listOf(
+                if (colors.isDark) {
+                    lerp(colors.accent, Color.White, 0.18f).copy(alpha = 0.32f)
+                } else {
+                    colors.accent.copy(alpha = 0.20f)
+                },
+                if (colors.isDark) {
+                    colors.accent.copy(alpha = 0.18f)
+                } else {
+                    Color.White.copy(alpha = 0.85f)
+                },
+            )
+        },
+        start = Offset.Zero,
+        end = Offset(0f, 240f),
+    )
+}
+
+internal fun auroraLibraryCategoryTabColors(
+    isSelected: Boolean,
+    eInkProfile: EInkProfile,
+    accent: Color,
+    accentVariant: Color,
+    textPrimary: Color,
+    textSecondary: Color,
+    textOnAccent: Color,
+    background: Color,
+): AuroraLibraryCategoryTabColors {
+    val tabBackground = when {
+        eInkProfile == EInkProfile.MONOCHROME && isSelected -> accentVariant
+        eInkProfile == EInkProfile.MONOCHROME -> Color.White
+        else -> Color.Transparent
+    }
+    val badgeBackground = when {
+        eInkProfile == EInkProfile.MONOCHROME && isSelected -> background
+        eInkProfile == EInkProfile.MONOCHROME -> accentVariant
+        isSelected -> accent
+        else -> accent.copy(alpha = 0.56f)
+    }
+    val tabTextColor = when {
+        eInkProfile == EInkProfile.MONOCHROME && isSelected -> textOnAccent
+        eInkProfile == EInkProfile.MONOCHROME -> textPrimary
+        isSelected -> textPrimary
+        else -> textSecondary
+    }
+    val badgeTextColor = when {
+        eInkProfile == EInkProfile.MONOCHROME -> resolveAuroraMonochromeBadgeTextColor(badgeBackground)
+        else -> textOnAccent
+    }
+    return AuroraLibraryCategoryTabColors(
+        tabBackground = tabBackground,
+        badgeBackground = badgeBackground,
+        tabTextColor = tabTextColor,
+        badgeTextColor = badgeTextColor,
+    )
+}
+
+internal fun resolveAuroraMonochromeBadgeTextColor(background: Color): Color {
+    return if (background.luminance() < 0.5f) Color.White else Color.Black
+}
+
+internal fun formatAuroraLibraryCategoryBadgeCount(count: Int): String {
+    return if (count > 99) "99+" else count.toString()
+}
+
+/**
+ * Decides whether the Aurora library should propagate a category index back to the section's
+ * screen model. We must skip the sync while the category list has not been loaded yet (e.g. right
+ * after returning from a pushed entry screen, when category flows briefly emit an empty initial
+ * value), otherwise the screen model would be permanently reset to the first category.
+ */
+internal fun shouldSyncAuroraLibraryCategoryIndex(
+    categoryCount: Int,
+    currentIndex: Int,
+    targetIndex: Int,
+): Boolean {
+    if (categoryCount <= 0) return false
+    return currentIndex != targetIndex
 }
 
 private fun NovelCategory.toCategory(): Category {

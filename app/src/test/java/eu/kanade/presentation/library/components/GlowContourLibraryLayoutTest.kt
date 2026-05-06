@@ -14,6 +14,7 @@ class GlowContourLibraryLayoutTest {
         resolveGlowContourLibraryTextSpec(LibraryDisplayMode.ComfortableGrid) shouldBe
             GlowContourLibraryTextSpec(
                 showTextBlock = true,
+                showTextOverlay = false,
                 titleMaxLines = 2,
                 subtitleMaxLines = 1,
                 useUnifiedContainer = false,
@@ -24,7 +25,8 @@ class GlowContourLibraryLayoutTest {
     fun `compact grid shows compact text block below card`() {
         resolveGlowContourLibraryTextSpec(LibraryDisplayMode.CompactGrid) shouldBe
             GlowContourLibraryTextSpec(
-                showTextBlock = true,
+                showTextBlock = false,
+                showTextOverlay = true,
                 titleMaxLines = 2,
                 subtitleMaxLines = 1,
                 useUnifiedContainer = false,
@@ -36,6 +38,7 @@ class GlowContourLibraryLayoutTest {
         resolveGlowContourLibraryTextSpec(LibraryDisplayMode.CoverOnlyGrid) shouldBe
             GlowContourLibraryTextSpec(
                 showTextBlock = false,
+                showTextOverlay = false,
                 titleMaxLines = 0,
                 subtitleMaxLines = 0,
                 useUnifiedContainer = false,
@@ -47,6 +50,7 @@ class GlowContourLibraryLayoutTest {
         resolveGlowContourLibraryTextSpec(LibraryDisplayMode.List) shouldBe
             GlowContourLibraryTextSpec(
                 showTextBlock = false,
+                showTextOverlay = false,
                 titleMaxLines = 0,
                 subtitleMaxLines = 0,
                 useUnifiedContainer = false,

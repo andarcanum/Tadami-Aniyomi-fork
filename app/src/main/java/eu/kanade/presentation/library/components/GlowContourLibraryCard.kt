@@ -525,6 +525,8 @@ internal fun GlowContourLibraryGridItem(
                 .fillMaxWidth()
                 .aspectRatio(cardAspectRatio),
             coverData = coverData,
+            title = title,
+            textSpec = textSpec,
             progressPercent = progressPercent,
             badge = badge,
             topEndBadge = topEndBadge,
@@ -655,6 +657,8 @@ private fun GlowContourLibraryTextBlock(
 @Composable
 private fun GlowContourLibraryCard(
     coverData: Any?,
+    title: String?,
+    textSpec: GlowContourLibraryTextSpec?,
     progressPercent: Int?,
     cornerIndicatorState: GlowContourCornerIndicatorState,
     badge: @Composable (() -> Unit)?,
@@ -679,6 +683,7 @@ private fun GlowContourLibraryCard(
         onClickContinueViewing = onClickContinueViewing,
     )
     val progressState = resolveGlowContourProgressRenderState(progressPercent)
+    val coverTitleFontFamily = LocalCoverTitleFontFamily.current
 
     BoxWithConstraints(
         modifier = modifier
@@ -750,6 +755,62 @@ private fun GlowContourLibraryCard(
                     modifier = Modifier.fillMaxSize(),
                     error = placeholderPainter,
                     fallback = placeholderPainter,
+                )
+            }
+        }
+
+        if (textSpec?.showTextOverlay == true && title != null) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .drawWithCache {
+                        val zones = createGlowContourZonedPaths(size)
+                        val posterClipPath = zones.posterPath
+                        onDrawWithContent {
+                            clipPath(posterClipPath) {
+                                this@onDrawWithContent.drawContent()
+                            }
+                        }
+                    },
+            ) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0f to Color.Transparent,
+                                    1f to Color.Black.copy(alpha = 0.8f),
+                                ),
+                            ),
+                        ),
+                )
+
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    minLines = 1,
+                    maxLines = textSpec.titleMaxLines.takeIf { it > 0 } ?: 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = TextStyle(
+                        fontFamily = coverTitleFontFamily,
+                        lineBreak = LineBreak.Heading,
+                        hyphens = Hyphens.None,
+                        shadow = androidx.compose.ui.graphics.Shadow(
+                            color = Color.Black,
+                            blurRadius = 4f,
+                        ),
+                    ),
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        // Make sure it doesn't overlap with the jewel / action button
+                        .fillMaxWidth(if (footerContent == GlowContourFooterContent.ContinueAction) 0.5f else 0.55f)
+                        .padding(start = 8.dp, bottom = 12.dp),
                 )
             }
         }

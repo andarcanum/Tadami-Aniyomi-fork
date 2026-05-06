@@ -34,64 +34,69 @@ class SourceMangaRatingFetcher {
             return null
         }
 
-        val request = httpSource.mangaDetailsRequest(manga.toSManga())
-        val requestToUse = if (family == eu.kanade.domain.entries.manga.model.SourceMangaRatingFamily.INK_STORY) {
-            request.newBuilder()
-                .url(normalizeInkStoryUrl(request.url.toString()).toHttpUrlOrNull() ?: request.url)
-                .build()
-        } else {
-            request
-        }
+        return runCatching {
+            val request = httpSource.mangaDetailsRequest(manga.toSManga())
+            val requestToUse = if (family == eu.kanade.domain.entries.manga.model.SourceMangaRatingFamily.INK_STORY) {
+                request.newBuilder()
+                    .url(normalizeInkStoryUrl(request.url.toString()).toHttpUrlOrNull() ?: request.url)
+                    .build()
+            } else {
+                request
+            }
 
-        val cachedRating = ratingCache.peek(
-            contentType = CONTENT_TYPE,
-            sourceName = source.name,
-            url = requestToUse.url.toString(),
-        )
-        if (cachedRating != null && !forceRefresh) {
-            debugLog(
-                "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${cachedRating.previewFloat()} cacheHit=true",
-            )
-            return cachedRating
-        }
-
-        if (sourceRating != null) {
-            ratingCache.put(
+            val cachedRating = ratingCache.peek(
                 contentType = CONTENT_TYPE,
                 sourceName = source.name,
                 url = requestToUse.url.toString(),
-                rating = sourceRating,
             )
-            debugLog(
-                "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${sourceRating.previewFloat()} sourceRating=true forceRefresh=$forceRefresh",
-            )
-            return sourceRating
-        }
-
-        val rating = ratingCache.resolve(
-            contentType = CONTENT_TYPE,
-            sourceName = source.name,
-            url = requestToUse.url.toString(),
-            forceRefresh = forceRefresh,
-        ) {
-            val html = httpSource.client.newCall(requestToUse).awaitSuccess().use { response ->
-                response.body.string()
+            if (cachedRating != null && !forceRefresh) {
+                debugLog(
+                    "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${cachedRating.previewFloat()} cacheHit=true",
+                )
+                return@runCatching cachedRating
             }
-            val parsedRating = SourceMangaHtmlRatingParser.parse(
+
+            if (sourceRating != null) {
+                ratingCache.put(
+                    contentType = CONTENT_TYPE,
+                    sourceName = source.name,
+                    url = requestToUse.url.toString(),
+                    rating = sourceRating,
+                )
+                debugLog(
+                    "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${sourceRating.previewFloat()} sourceRating=true forceRefresh=$forceRefresh",
+                )
+                return@runCatching sourceRating
+            }
+
+            val rating = ratingCache.resolve(
+                contentType = CONTENT_TYPE,
                 sourceName = source.name,
-                sourceBaseUrl = httpSource.baseUrl,
-                sourceClassName = sourceClassName,
-                html = html,
-            )
+                url = requestToUse.url.toString(),
+                forceRefresh = forceRefresh,
+            ) {
+                val html = httpSource.client.newCall(requestToUse).awaitSuccess().use { response ->
+                    response.body.string()
+                }
+                val parsedRating = SourceMangaHtmlRatingParser.parse(
+                    sourceName = source.name,
+                    sourceBaseUrl = httpSource.baseUrl,
+                    sourceClassName = sourceClassName,
+                    html = html,
+                )
+                debugLog(
+                    "fetchHtml: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${parsedRating.previewFloat()} htmlPreview=${html.previewForLog()}",
+                )
+                parsedRating
+            }
             debugLog(
-                "fetchHtml: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${parsedRating.previewFloat()} htmlPreview=${html.previewForLog()}",
+                "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${rating.previewFloat()}",
             )
-            parsedRating
+            rating
+        }.getOrElse { error ->
+            debugLog("await: failed source=${source.name} error=${error.message}")
+            null
         }
-        debugLog(
-            "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${rating.previewFloat()}",
-        )
-        return rating
     }
 
     private fun normalizeInkStoryUrl(url: String): String {

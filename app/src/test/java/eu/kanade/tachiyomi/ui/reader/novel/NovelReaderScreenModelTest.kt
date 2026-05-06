@@ -2,6 +2,10 @@ package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.domain.track.model.AutoTrackState
+import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
+import eu.kanade.domain.track.service.TrackPreferences
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationProgressUpdate
 import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
@@ -2664,6 +2668,7 @@ class NovelReaderScreenModelTest {
         historyRepository: NovelHistoryRepository = FakeNovelHistoryRepository(),
         googleTranslationService: GoogleTranslationService = this.googleTranslationService,
         translationQueueManager: TranslationQueueManager = this.translationQueueManager,
+        novelDownloadManager: NovelDownloadManager? = null,
     ): NovelReaderScreenModel {
         ensureReaderScreenModelDependencies()
         return NovelReaderScreenModel(
@@ -2672,6 +2677,12 @@ class NovelReaderScreenModelTest {
             syncNovelChaptersWithSource = syncNovelChaptersWithSource,
             getNovel = getNovel,
             sourceManager = sourceManager,
+            novelDownloadManager = novelDownloadManager ?: NovelDownloadManager(
+                application = null,
+                sourceManager = sourceManager,
+                storageManager = null,
+                downloadCache = null,
+            ),
             pluginStorage = pluginStorage,
             historyRepository = historyRepository,
             novelReaderPreferences = novelReaderPreferences,
@@ -2707,6 +2718,36 @@ class NovelReaderScreenModelTest {
             testTranslationQueueManager.activeTranslation
         } returns MutableStateFlow<TranslationQueueItem?>(null)
         Injekt.addSingleton(fullType<TranslationQueueManager>(), testTranslationQueueManager)
+
+        runCatching { Injekt.get<TrackPreferences>() }
+            .getOrElse {
+                val trackPreferences = mockk<TrackPreferences>(relaxed = true)
+                every { trackPreferences.autoUpdateTrackOnMarkRead() } returns object : Preference<AutoTrackState> {
+                    override fun get() = AutoTrackState.ALWAYS
+                    override fun set(value: AutoTrackState) {}
+                    override fun isSet() = true
+                    override fun defaultValue() = AutoTrackState.ALWAYS
+                    override fun key() = "pref_auto_update_novel_on_mark_read"
+                    override fun changes() = MutableStateFlow(get())
+                    override fun stateIn(scope: CoroutineScope) = MutableStateFlow(get())
+                    override fun delete() {}
+                }
+                every { trackPreferences.autoUpdateTrack() } returns object : Preference<Boolean> {
+                    override fun get() = true
+                    override fun set(value: Boolean) {}
+                    override fun isSet() = true
+                    override fun defaultValue() = true
+                    override fun key() = "pref_auto_update_novel_sync_key"
+                    override fun changes() = MutableStateFlow(get())
+                    override fun stateIn(scope: CoroutineScope) = MutableStateFlow(get())
+                    override fun delete() {}
+                }
+                Injekt.addSingleton(fullType<TrackPreferences>(), trackPreferences)
+            }
+        runCatching { Injekt.get<TrackNovelChapter>() }
+            .getOrElse {
+                Injekt.addSingleton(fullType<TrackNovelChapter>(), mockk<TrackNovelChapter>(relaxed = true))
+            }
 
         every { getNovelSeriesWithEntries.subscribe(any()) } returns MutableStateFlow(null)
         Injekt.addSingleton(fullType<GetNovelSeriesWithEntries>(), getNovelSeriesWithEntries)

@@ -92,7 +92,11 @@ fun AuroraCard(
             ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass),
+            containerColor = if (colors.isDark) {
+                colors.glass.copy(alpha = 0.06f)
+            } else {
+                resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass)
+            },
         ),
         border = BorderStroke(
             width = if (isSelected) 2.dp else 1.dp,

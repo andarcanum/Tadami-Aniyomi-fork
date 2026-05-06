@@ -12,10 +12,13 @@ import androidx.compose.runtime.setValue
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.novel.NovelExtensionScreen
+import eu.kanade.presentation.browse.novel.NovelRepoPickerDialog
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.more.settings.screen.browse.NovelExtensionReposScreen
+import eu.kanade.tachiyomi.extension.novel.NovelPluginId
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelExtensionDetailsScreen
+import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelSourcePreferencesScreen
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.i18n.MR
@@ -53,6 +56,7 @@ fun novelExtensionsTab(
                 onCancelInstall = extensionsScreenModel::cancelInstall,
                 onUpdateExtension = extensionsScreenModel::updateExtension,
                 onOpenExtension = { navigator.push(novelExtensionDetailsScreen(it.id)) },
+                onOpenExtensionSettings = { navigator.push(novelExtensionSettingsScreen(it.id)) },
                 onUninstallExtension = { pluginToUninstall = it },
                 onUpdateAll = extensionsScreenModel::updateAllExtensions,
                 onRefresh = extensionsScreenModel::refresh,
@@ -81,10 +85,23 @@ fun novelExtensionsTab(
                     onDismissRequest = { pluginToUninstall = null },
                 )
             }
+
+            if (state.repoPickerOptions.isNotEmpty()) {
+                NovelRepoPickerDialog(
+                    pluginName = state.repoPickerOptions.first().name,
+                    options = state.repoPickerOptions,
+                    onSelectPlugin = extensionsScreenModel::installFromRepo,
+                    onDismiss = extensionsScreenModel::dismissRepoPicker,
+                )
+            }
         },
     )
 }
 
 internal fun novelExtensionDetailsScreen(pluginId: String): NovelExtensionDetailsScreen {
     return NovelExtensionDetailsScreen(pluginId)
+}
+
+internal fun novelExtensionSettingsScreen(pluginId: String): NovelSourcePreferencesScreen {
+    return NovelSourcePreferencesScreen(NovelPluginId.toSourceId(pluginId))
 }

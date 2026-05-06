@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -53,6 +55,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,6 +68,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.Hyphens
@@ -72,6 +76,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.icerock.moko.resources.StringResource
@@ -87,6 +92,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 data class TabState(
@@ -95,6 +101,33 @@ data class TabState(
     val onTabSelected: (Int) -> Unit,
 )
 val LocalTabState = compositionLocalOf<TabState?> { null }
+
+/**
+ * Surface to propagate the host Scaffold's [PaddingValues] (most importantly its bottom inset that
+ * accounts for the in-app NavigationBar height) down to every tab content rendered through
+ * [TabbedScreenAurora]. The host (e.g. `HomeScreen`) intentionally extends the body under the
+ * bottomBar for an edge-to-edge look, so without this hook every tab's LazyColumn would scroll
+ * its last items behind the bar.
+ *
+ * `null` means there is no host padding (e.g. preview/test) and consumers should fall back to a
+ * sensible default.
+ */
+val LocalHostScaffoldContentPadding = compositionLocalOf<PaddingValues?> { null }
+
+internal fun resolveTabbedScreenAuroraContentPadding(
+    hostContentPadding: PaddingValues?,
+    layoutDirection: LayoutDirection,
+    extraBottom: Dp = 16.dp,
+): PaddingValues {
+    val hostBottom = hostContentPadding?.calculateBottomPadding() ?: 0.dp
+    val hostStart = hostContentPadding?.calculateStartPadding(layoutDirection) ?: 0.dp
+    val hostEnd = hostContentPadding?.calculateEndPadding(layoutDirection) ?: 0.dp
+    return PaddingValues(
+        start = hostStart,
+        end = hostEnd,
+        bottom = hostBottom + extraBottom,
+    )
+}
 
 @Composable
 fun TabbedScreenAurora(
@@ -115,12 +148,14 @@ fun TabbedScreenAurora(
     onNameClick: (() -> Unit)? = null,
     applyStatusBarsPadding: Boolean = true,
     showTabs: Boolean = true,
+    showTabRowBorder: Boolean = true,
     instantTabSwitching: Boolean = false,
     highlightSearchAction: Boolean = false,
     highlightedActionTitle: String? = null,
     extraSearchToActionsGap: Dp = 0.dp,
     extraActionGapAfterTitle: String? = null,
     extraHeaderContent: @Composable () -> Unit = {},
+    onPagerSwipeOverride: ((forward: Boolean) -> Boolean)? = null,
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
@@ -201,6 +236,12 @@ fun TabbedScreenAurora(
         previousInstantTabSwitching = instantTabSwitching
     }
 
+    val hostScaffoldContentPadding = LocalHostScaffoldContentPadding.current
+    val tabContentPadding = resolveTabbedScreenAuroraContentPadding(
+        hostContentPadding = hostScaffoldContentPadding,
+        layoutDirection = LocalLayoutDirection.current,
+    )
+
     AuroraBackground(
         modifier = modifier,
     ) {
@@ -254,6 +295,7 @@ fun TabbedScreenAurora(
                         selectedIndex = currentPage,
                         onTabSelected = onTabSelected,
                         scrollable = scrollable,
+                        showBorder = showTabRowBorder,
                     )
                 }
             }
@@ -316,7 +358,7 @@ fun TabbedScreenAurora(
                         key(page) {
                             CompositionLocalProvider(LocalTabState provides tabState) {
                                 tabs[page].content(
-                                    PaddingValues(bottom = 16.dp),
+                                    tabContentPadding,
                                     snackbarHostState,
                                 )
                             }
@@ -324,26 +366,76 @@ fun TabbedScreenAurora(
                     }
                 }
             } else {
-                HorizontalPager(
-                    modifier = Modifier.fillMaxSize(),
-                    state = state,
-                    verticalAlignment = Alignment.Top,
-                ) { page ->
-                    val tabState = TabState(
-                        tabs = tabs,
-                        selectedIndex = state.currentPage,
-                        onTabSelected = onTabSelected,
-                    )
-                    CompositionLocalProvider(LocalTabState provides tabState) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp),
-                        ) {
-                            tabs[page].content(
-                                PaddingValues(bottom = 16.dp),
-                                snackbarHostState,
+                val pagerOverrideActive = onPagerSwipeOverride != null
+                val latestPagerSwipeOverride = rememberUpdatedState(onPagerSwipeOverride)
+                val pagerContainerModifier = if (pagerOverrideActive) {
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(switchThresholdPx, maxBouncePx) {
+                            var totalDragPx = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = {
+                                    totalDragPx = 0f
+                                    edgeBounceTargetPx = 0f
+                                },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    totalDragPx += dragAmount
+                                },
+                                onDragCancel = {
+                                    totalDragPx = 0f
+                                    edgeBounceTargetPx = 0f
+                                },
+                                onDragEnd = {
+                                    val dragMagnitude = abs(totalDragPx)
+                                    if (dragMagnitude >= switchThresholdPx) {
+                                        // Swipe-left (negative) means "forward" (next item).
+                                        val forward = totalDragPx < 0f
+                                        val consumed = latestPagerSwipeOverride.value
+                                            ?.invoke(forward) == true
+                                        if (!consumed) {
+                                            val direction = if (totalDragPx > 0f) 1f else -1f
+                                            scope.launch {
+                                                edgeBounceTargetPx = direction * maxBouncePx
+                                                delay(90)
+                                                edgeBounceTargetPx = 0f
+                                            }
+                                        } else {
+                                            edgeBounceTargetPx = 0f
+                                        }
+                                    } else {
+                                        edgeBounceTargetPx = 0f
+                                    }
+                                    totalDragPx = 0f
+                                },
                             )
+                        }
+                        .offset { IntOffset(edgeBounceOffsetPx.roundToInt(), 0) }
+                } else {
+                    Modifier.fillMaxSize()
+                }
+                Box(modifier = pagerContainerModifier) {
+                    HorizontalPager(
+                        modifier = Modifier.fillMaxSize(),
+                        state = state,
+                        verticalAlignment = Alignment.Top,
+                        userScrollEnabled = !pagerOverrideActive,
+                    ) { page ->
+                        val tabState = TabState(
+                            tabs = tabs,
+                            selectedIndex = state.currentPage,
+                            onTabSelected = onTabSelected,
+                        )
+                        CompositionLocalProvider(LocalTabState provides tabState) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp),
+                            ) {
+                                tabs[page].content(
+                                    tabContentPadding,
+                                    snackbarHostState,
+                                )
+                            }
                         }
                     }
                 }
@@ -384,7 +476,7 @@ private fun AuroraTabHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = if (isSearchActive) 8.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (navigateUp != null) {
@@ -400,9 +492,7 @@ private fun AuroraTabHeader(
             TextField(
                 value = searchQuery,
                 onValueChange = onSearchQueryChange,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(52.dp),
+                modifier = Modifier.weight(1f),
                 placeholder = {
                     Text(
                         text = stringResource(MR.strings.action_search),
@@ -410,15 +500,15 @@ private fun AuroraTabHeader(
                     )
                 },
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.glass,
-                    unfocusedContainerColor = colors.glass,
+                    focusedContainerColor = colors.cardBackground,
+                    unfocusedContainerColor = colors.cardBackground,
                     focusedTextColor = colors.textPrimary,
                     unfocusedTextColor = colors.textPrimary,
                     cursorColor = colors.accent,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(22.dp),
                 singleLine = true,
                 leadingIcon = {
                     Icon(
@@ -528,6 +618,7 @@ internal fun AuroraTabRow(
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit,
     scrollable: Boolean,
+    showBorder: Boolean = true,
 ) {
     val colors = AuroraTheme.colors
     val scrollState = rememberScrollState()
@@ -543,10 +634,16 @@ internal fun AuroraTabRow(
                 tabContainerColor,
                 RoundedCornerShape(28.dp),
             )
-            .border(
-                width = 0.75.dp,
-                brush = menuBorderBrush,
-                shape = RoundedCornerShape(28.dp),
+            .then(
+                if (showBorder) {
+                    Modifier.border(
+                        width = 0.75.dp,
+                        brush = menuBorderBrush,
+                        shape = RoundedCornerShape(28.dp),
+                    )
+                } else {
+                    Modifier
+                },
             ),
     ) {
         Row(

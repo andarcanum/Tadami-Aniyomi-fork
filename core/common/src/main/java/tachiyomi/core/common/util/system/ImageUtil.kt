@@ -123,6 +123,15 @@ object ImageUtil {
         return options.outWidth > options.outHeight
     }
 
+    fun getImageDimensions(imageSource: BufferedSource): ImageDimensions? {
+        val options = extractImageOptions(imageSource)
+        return if (options.outWidth > 0 && options.outHeight > 0) {
+            ImageDimensions(width = options.outWidth, height = options.outHeight)
+        } else {
+            null
+        }
+    }
+
     /**
      * Extract the 'side' part from [BufferedSource] and return it as [BufferedSource].
      */
@@ -197,6 +206,11 @@ object ImageUtil {
         RIGHT,
         LEFT,
     }
+
+    data class ImageDimensions(
+        val width: Int,
+        val height: Int,
+    )
 
     /**
      * Check whether the image is considered a tall image.

@@ -1,6 +1,7 @@
 package mihon.domain.extensionrepo.anime.interactor
 
 import io.kotest.matchers.nulls.shouldBeNull
+import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.flow.Flow
@@ -29,13 +30,36 @@ class UpdateAnimeExtensionRepoTest {
         repository.upserted.shouldBeNull()
     }
 
+    @Test
+    fun `preserves existing repo name during metadata refresh`() = runTest {
+        val existing = repo(
+            baseUrl = "https://repo.example",
+            name = "Custom repo",
+            signingKeyFingerprint = "fingerprint-1",
+        )
+        val fetched = repo(
+            baseUrl = "https://repo.example",
+            name = "Remote repo",
+            signingKeyFingerprint = "fingerprint-1",
+        )
+        val repository = FakeAnimeExtensionRepoRepository(listOf(existing))
+        val service = mockk<ExtensionRepoService>()
+        coEvery { service.fetchRepoDetails("https://repo.example") } returns fetched
+        val interactor = UpdateAnimeExtensionRepo(repository, service)
+
+        interactor.awaitAll()
+
+        repository.upserted shouldBe fetched.copy(name = "Custom repo")
+    }
+
     private fun repo(
         baseUrl: String,
+        name: String = "Repo",
         signingKeyFingerprint: String,
     ): ExtensionRepo {
         return ExtensionRepo(
             baseUrl = baseUrl,
-            name = "Repo",
+            name = name,
             shortName = null,
             website = "https://repo.example/",
             signingKeyFingerprint = signingKeyFingerprint,

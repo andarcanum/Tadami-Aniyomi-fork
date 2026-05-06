@@ -643,6 +643,12 @@ internal data class NovelPageContentPage(
     val pageIndex: Int = -1,
 )
 
+internal fun resolvePageReaderGlyphOverflowPaddingPx(textSizePx: Float): Int {
+    return (textSizePx.coerceAtLeast(1f) * 0.25f)
+        .roundToInt()
+        .coerceAtLeast(4)
+}
+
 internal fun paginatePlainPageBlocks(
     textBlocks: List<PlainPageReaderTextBlock>,
     paragraphSpacingPx: Int,
@@ -680,6 +686,7 @@ internal fun paginatePlainPageBlocks(
             textSizePx = textSizePx,
             lineHeightMultiplier = lineHeightMultiplier,
         )
+        val glyphPadPx = resolvePageReaderGlyphOverflowPaddingPx(blockMetrics.textSizePx)
         val firstLineIndentPx = if (forceParagraphIndent && !isChapterTitle) {
             resolvePageReaderFirstLineIndentPx(
                 firstLineIndentEm = FORCED_PARAGRAPH_FIRST_LINE_INDENT_EM,
@@ -731,7 +738,7 @@ internal fun paginatePlainPageBlocks(
                 val range = resolveApproximateTextRangeForHeight(
                     text = text,
                     start = start,
-                    availableHeight = remainingHeight - spacingBefore,
+                    availableHeight = (remainingHeight - spacingBefore - glyphPadPx).coerceAtLeast(0),
                     metrics = approximateMetrics,
                     allowOversizedFirstLine = currentPage.isEmpty(),
                 ) ?: run {
@@ -747,7 +754,7 @@ internal fun paginatePlainPageBlocks(
                     range = range,
                     spacingBeforePx = spacingBefore,
                 )
-                remainingHeight -= spacingBefore + sliceHeight
+                remainingHeight -= spacingBefore + sliceHeight + glyphPadPx
                 start = range.endExclusive
                 isFirstSliceOfBlock = false
                 if (remainingHeight <= 0) {
@@ -780,7 +787,7 @@ internal fun paginatePlainPageBlocks(
                 text = text,
                 layout = layout,
                 startLine = startLine,
-                availableHeight = remainingHeight - spacingBefore,
+                availableHeight = (remainingHeight - spacingBefore - glyphPadPx).coerceAtLeast(0),
                 allowOversizedFirstLine = currentPage.isEmpty(),
             )
 
@@ -794,7 +801,7 @@ internal fun paginatePlainPageBlocks(
                 range = slice.range,
                 spacingBeforePx = spacingBefore,
             )
-            remainingHeight -= spacingBefore + slice.heightPx
+            remainingHeight -= spacingBefore + slice.heightPx + glyphPadPx
             startLine = slice.nextStartLine
             isFirstSliceOfBlock = false
 
@@ -923,6 +930,7 @@ internal fun paginateRichPageBlocks(
             textSizePx = textSizePx,
             lineHeightMultiplier = lineHeightMultiplier,
         )
+        val glyphPadPx = resolvePageReaderGlyphOverflowPaddingPx(blockMetrics.textSizePx)
         val firstLineIndentPx = resolvePageReaderFirstLineIndentPx(
             firstLineIndentEm = firstLineIndentEm,
             textSizePx = blockMetrics.textSizePx,
@@ -970,7 +978,7 @@ internal fun paginateRichPageBlocks(
                 val range = resolveApproximateTextRangeForHeight(
                     text = blockText.text.text,
                     start = start,
-                    availableHeight = remainingHeight - spacingBefore,
+                    availableHeight = (remainingHeight - spacingBefore - glyphPadPx).coerceAtLeast(0),
                     metrics = approximateMetrics,
                     allowOversizedFirstLine = currentPage.isEmpty(),
                 ) ?: run {
@@ -986,7 +994,7 @@ internal fun paginateRichPageBlocks(
                     range = range,
                     spacingBeforePx = spacingBefore,
                 )
-                remainingHeight -= spacingBefore + sliceHeight
+                remainingHeight -= spacingBefore + sliceHeight + glyphPadPx
                 start = range.endExclusive
                 isFirstSliceOfBlock = false
                 if (remainingHeight <= 0) {
@@ -1019,7 +1027,7 @@ internal fun paginateRichPageBlocks(
                 text = blockText.text.text,
                 layout = layout,
                 startLine = startLine,
-                availableHeight = remainingHeight - spacingBefore,
+                availableHeight = (remainingHeight - spacingBefore - glyphPadPx).coerceAtLeast(0),
                 allowOversizedFirstLine = currentPage.isEmpty(),
             )
 
@@ -1033,7 +1041,7 @@ internal fun paginateRichPageBlocks(
                 range = slice.range,
                 spacingBeforePx = spacingBefore,
             )
-            remainingHeight -= spacingBefore + slice.heightPx
+            remainingHeight -= spacingBefore + slice.heightPx + glyphPadPx
             startLine = slice.nextStartLine
             isFirstSliceOfBlock = false
 

@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.suspendCancellableCoroutine
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
@@ -56,13 +58,12 @@ object WebViewUtil {
     }
 
     fun spoofedPackageName(context: Context): String {
-        return try {
-            context.packageManager.getPackageInfo(CHROME_PACKAGE, PackageManager.GET_META_DATA)
-
-            CHROME_PACKAGE
-        } catch (_: PackageManager.NameNotFoundException) {
-            SYSTEM_SETTINGS_PACKAGE
-        }
+        return runCatching { context.packageManager.getPackageInfo(CHROME_PACKAGE, 0) }
+            .recoverCatching { context.packageManager.getPackageInfo(SYSTEM_SETTINGS_PACKAGE, 0) }
+            .fold(
+                onSuccess = { it.packageName },
+                onFailure = { SYSTEM_SETTINGS_PACKAGE },
+            )
     }
 }
 
@@ -83,10 +84,19 @@ fun WebView.setDefaultSettings() {
         loadWithOverviewMode = true
         cacheMode = WebSettings.LOAD_DEFAULT
 
+        // Handle popups properly (needed for Cloudflare Turnstile)
+        setSupportMultipleWindows(true)
+
         // Allow zooming
         setSupportZoom(true)
         builtInZoomControls = true
         displayZoomControls = false
+
+        // Don't expose the host package in X-Requested-With on subresource requests;
+        // anti-bot services (notably Cloudflare) use it as an Android WebView fingerprint.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(this, emptySet())
+        }
     }
 
     CookieManager.getInstance().acceptThirdPartyCookies(this)

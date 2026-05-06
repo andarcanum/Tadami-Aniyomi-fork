@@ -121,6 +121,7 @@ class NovelJsRuntime(
         fun resolveUrl(url: String, base: String?): String
         fun getPathname(url: String): String
         fun select(html: String, selector: String): String
+        fun aesGcmDecrypt(keyB64: String, ivB64: String, cipherB64: String): String
 
         // DOM Store methods
         fun domLoad(html: String): Int
@@ -148,6 +149,11 @@ class NovelJsRuntime(
         fun domTagName(handle: Int): String
         fun domIsTextNode(handle: Int): Boolean
         fun domReplaceWith(handle: Int, html: String)
+        fun domBefore(handle: Int, html: String)
+        fun domAfter(handle: Int, html: String)
+        fun domAppend(handle: Int, html: String)
+        fun domPrepend(handle: Int, html: String)
+        fun domEmpty(handle: Int)
         fun domRemove(handle: Int)
         fun domAddClass(handle: Int, className: String)
         fun domRemoveClass(handle: Int, className: String)
@@ -534,6 +540,46 @@ class NovelJsRuntime(
 
         nativeObject.registerJavaMethod(
             JavaCallback { _, parameters ->
+                nativeApi.domBefore(parameters.intArg(0), parameters.stringArg(1))
+                null
+            },
+            "domBefore",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.domAfter(parameters.intArg(0), parameters.stringArg(1))
+                null
+            },
+            "domAfter",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.domAppend(parameters.intArg(0), parameters.stringArg(1))
+                null
+            },
+            "domAppend",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.domPrepend(parameters.intArg(0), parameters.stringArg(1))
+                null
+            },
+            "domPrepend",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.domEmpty(parameters.intArg(0))
+                null
+            },
+            "domEmpty",
+        )
+
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
                 nativeApi.domRemove(parameters.intArg(0))
                 null
             },
@@ -570,6 +616,18 @@ class NovelJsRuntime(
                 null
             },
             "domReleaseAll",
+        )
+
+        // Crypto
+        nativeObject.registerJavaMethod(
+            JavaCallback { _, parameters ->
+                nativeApi.aesGcmDecrypt(
+                    parameters.stringArg(0),
+                    parameters.stringArg(1),
+                    parameters.stringArg(2),
+                )
+            },
+            "__aesGcmDecrypt",
         )
 
         // Console methods
@@ -965,6 +1023,33 @@ class NovelJsRuntime(
                       return typeof value === 'number' && value !== value;
                     };
                   }
+                  if (typeof global.Intl === 'undefined') {
+                    global.Intl = {};
+                    global.Intl.DateTimeFormat = function(locale, options) {
+                      return {
+                        format: function(date) {
+                          try { date = new Date(date); return date.toISOString().split('T')[0]; }
+                          catch(e) { return String(date); }
+                        },
+                        resolvedOptions: function() { return {}; }
+                      };
+                    };
+                    global.Intl.NumberFormat = function(locale, options) {
+                      return {
+                        format: function(n) { return String(n); },
+                        resolvedOptions: function() { return {}; }
+                      };
+                    };
+                    global.Intl.Collator = function(locale, options) {
+                      return {
+                        compare: function(a, b) {
+                          a = String(a || ''); b = String(b || '');
+                          return a < b ? -1 : a > b ? 1 : 0;
+                        },
+                        resolvedOptions: function() { return {}; }
+                      };
+                    };
+                  }
                 })(this);
             """.trimIndent(),
         ).joinToString("\n")
@@ -990,6 +1075,7 @@ class NovelJsModuleRegistry(
             NovelJsModule("fetch.js", fetchModule),
             NovelJsModule("isAbsoluteUrl.js", isAbsoluteUrlModule),
             NovelJsModule("typesConstants.js", typesConstantsModule),
+            NovelJsModule("aes.js", aesModule),
             NovelJsModule("urlencode.js", urlEncodeModule),
             NovelJsModule("cheerio.js", cheerioModule),
             NovelJsModule("htmlparser2.js", htmlParserModule()),
@@ -1270,11 +1356,18 @@ class NovelJsModuleRegistry(
             return out.buffer;
           }
           function makeResponse(response) {
+            var src = response.headers || {};
+            var headers = {};
+            for (var key in src) {
+              if (Object.prototype.hasOwnProperty.call(src, key)) headers[key.toLowerCase()] = src[key];
+            }
+            headers.get = function(name) { return this[name] != null ? this[name] : this[String(name).toLowerCase()] || null; };
+            headers.has = function(name) { return this[name] != null || String(name).toLowerCase() in this; };
             return {
               ok: response.status >= 200 && response.status < 300,
               status: response.status,
               url: response.url || "",
-              headers: response.headers || {},
+              headers: headers,
               text: function() { return Promise.resolve(response.body || ""); },
               json: function() { return Promise.resolve(response.body ? JSON.parse(response.body) : null); },
               arrayBuffer: function() { return Promise.resolve(decodeBase64ToArrayBuffer(response.bodyBase64 || "")); }
@@ -1405,6 +1498,36 @@ class NovelJsModuleRegistry(
         });
     """.trimIndent()
 
+    private val aesModule = """
+        __defineModule("@libs/aes", function(module, exports) {
+          function toB64(u8) {
+            var binary = "";
+            for (var i = 0; i < u8.length; i++) binary += String.fromCharCode(u8[i]);
+            return btoa(binary);
+          }
+          function fromB64(b64) {
+            var binary = atob(b64);
+            var u8 = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i++) u8[i] = binary.charCodeAt(i);
+            return u8;
+          }
+          module.exports = {
+            gcm: function(keyBytes, ivBytes) {
+              return {
+                decrypt: function(cipherBytes) {
+                  var keyB64 = toB64(keyBytes);
+                  var ivB64 = toB64(ivBytes);
+                  var cipherB64 = toB64(cipherBytes);
+                  var plainB64 = __native.__aesGcmDecrypt(keyB64, ivB64, cipherB64);
+                  if (!plainB64) throw new Error("AES-GCM decrypt failed");
+                  return fromB64(plainB64);
+                }
+              };
+            }
+          };
+        });
+    """.trimIndent()
+
     private val urlEncodeModule = """
         __defineModule("urlencode", function(module, exports) {
           module.exports = {
@@ -1516,11 +1639,12 @@ class NovelJsModuleRegistry(
 
     private val cheerioModule = """
         __defineModule("cheerio", function(module, exports) {
-          function wrapHandles(handles) {
+          function wrapHandles(handles, _prev) {
             if (!handles || !handles.length) handles = [];
             var api = {
               length: handles.length,
               _handles: handles,
+              _prev: _prev || [],
               get attribs() {
                 return handles.length ? JSON.parse(__native.domAttrs(handles[0])) : {};
               },
@@ -1599,7 +1723,7 @@ class NovelJsModuleRegistry(
                   var found = JSON.parse(__native.domSelect(handles[i], String(selector)));
                   for (var j = 0; j < found.length; j++) result.push(found[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               parent: function(selector) {
                 var result = [];
@@ -1613,7 +1737,7 @@ class NovelJsModuleRegistry(
                     }
                   }
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               parents: function(selector) {
                 var result = [];
@@ -1630,7 +1754,7 @@ class NovelJsModuleRegistry(
                     p = __native.domParent(p);
                   }
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               children: function(selector) {
                 var result = [];
@@ -1638,7 +1762,7 @@ class NovelJsModuleRegistry(
                   var kids = JSON.parse(__native.domChildren(handles[i], selector || null));
                   for (var j = 0; j < kids.length; j++) result.push(kids[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               contents: function() {
                 var result = [];
@@ -1646,7 +1770,7 @@ class NovelJsModuleRegistry(
                   var c = JSON.parse(__native.domContents(handles[i]));
                   for (var j = 0; j < c.length; j++) result.push(c[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               next: function(selector) {
                 var result = [];
@@ -1654,7 +1778,7 @@ class NovelJsModuleRegistry(
                   var n = __native.domNext(handles[i], selector || null);
                   if (n >= 0) result.push(n);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               nextAll: function(selector) {
                 var result = [];
@@ -1662,7 +1786,7 @@ class NovelJsModuleRegistry(
                   var arr = JSON.parse(__native.domNextAll(handles[i], selector || null));
                   for (var j = 0; j < arr.length; j++) result.push(arr[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               prev: function(selector) {
                 var result = [];
@@ -1670,7 +1794,7 @@ class NovelJsModuleRegistry(
                   var p = __native.domPrev(handles[i], selector || null);
                   if (p >= 0) result.push(p);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               prevAll: function(selector) {
                 var result = [];
@@ -1678,7 +1802,7 @@ class NovelJsModuleRegistry(
                   var arr = JSON.parse(__native.domPrevAll(handles[i], selector || null));
                   for (var j = 0; j < arr.length; j++) result.push(arr[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               siblings: function(selector) {
                 var result = [];
@@ -1686,7 +1810,7 @@ class NovelJsModuleRegistry(
                   var arr = JSON.parse(__native.domSiblings(handles[i], selector || null));
                   for (var j = 0; j < arr.length; j++) result.push(arr[j]);
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               closest: function(selector) {
                 var result = [];
@@ -1698,14 +1822,14 @@ class NovelJsModuleRegistry(
                     seen[c] = true;
                   }
                 }
-                return wrapHandles(result);
+                return wrapHandles(result, handles.slice());
               },
               has: function(selector) {
                 var filtered = [];
                 for (var i = 0; i < handles.length; i++) {
                   if (__native.domHas(handles[i], String(selector))) filtered.push(handles[i]);
                 }
-                return wrapHandles(filtered);
+                return wrapHandles(filtered, handles.slice());
               },
               not: function(selector) {
                 if (typeof selector === "function") {
@@ -1716,13 +1840,13 @@ class NovelJsModuleRegistry(
                       filtered.push(handles[i]);
                     }
                   }
-                  return wrapHandles(filtered);
+                  return wrapHandles(filtered, handles.slice());
                 }
                 var filtered2 = [];
                 for (var i = 0; i < handles.length; i++) {
                   if (!__native.domIs(handles[i], String(selector))) filtered2.push(handles[i]);
                 }
-                return wrapHandles(filtered2);
+                return wrapHandles(filtered2, handles.slice());
               },
               filter: function(predicate) {
                 if (typeof predicate === "function") {
@@ -1733,14 +1857,14 @@ class NovelJsModuleRegistry(
                       filtered.push(handles[i]);
                     }
                   }
-                  return wrapHandles(filtered);
+                  return wrapHandles(filtered, handles.slice());
                 }
                 if (typeof predicate === "string") {
                   var filtered2 = [];
                   for (var i = 0; i < handles.length; i++) {
                     if (__native.domIs(handles[i], predicate)) filtered2.push(handles[i]);
                   }
-                  return wrapHandles(filtered2);
+                  return wrapHandles(filtered2, handles.slice());
                 }
                 return api;
               },
@@ -1778,6 +1902,40 @@ class NovelJsModuleRegistry(
                 var newHtml = typeof content === "string" ? content : "";
                 for (var i = 0; i < handles.length; i++) {
                   __native.domReplaceWith(handles[i], newHtml);
+                }
+                return api;
+              },
+              before: function(content) {
+                var newHtml = typeof content === "string" ? content : "";
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domBefore(handles[i], newHtml);
+                }
+                return api;
+              },
+              after: function(content) {
+                var newHtml = typeof content === "string" ? content : "";
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domAfter(handles[i], newHtml);
+                }
+                return api;
+              },
+              append: function(content) {
+                var newHtml = typeof content === "string" ? content : "";
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domAppend(handles[i], newHtml);
+                }
+                return api;
+              },
+              prepend: function(content) {
+                var newHtml = typeof content === "string" ? content : "";
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domPrepend(handles[i], newHtml);
+                }
+                return api;
+              },
+              empty: function() {
+                for (var i = 0; i < handles.length; i++) {
+                  __native.domEmpty(handles[i]);
                 }
                 return api;
               },
@@ -1825,7 +1983,13 @@ class NovelJsModuleRegistry(
                 return wrapHandles(handles.concat(otherHandles));
               },
               end: function() {
-                return wrapHandles([]);
+                return _prev && _prev.length ? wrapHandles(_prev) : wrapHandles([]);
+              },
+              addBack: function() {
+                return wrapHandles(handles.concat(_prev || []));
+              },
+              andSelf: function() {
+                return wrapHandles(handles.concat(_prev || []));
               }
             };
             // Array-like index access (e.g., children()[0], siblings()[1])

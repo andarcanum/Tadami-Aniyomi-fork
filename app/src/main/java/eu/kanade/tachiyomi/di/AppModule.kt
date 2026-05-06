@@ -105,8 +105,10 @@ import tachiyomi.source.local.image.anime.LocalAnimeBackgroundManager
 import tachiyomi.source.local.image.anime.LocalAnimeCoverManager
 import tachiyomi.source.local.image.anime.LocalEpisodeThumbnailManager
 import tachiyomi.source.local.image.manga.LocalMangaCoverManager
+import tachiyomi.source.local.image.novel.LocalNovelCoverManager
 import tachiyomi.source.local.io.anime.LocalAnimeSourceFileSystem
 import tachiyomi.source.local.io.manga.LocalMangaSourceFileSystem
+import tachiyomi.source.local.io.novel.LocalNovelSourceFileSystem
 import uy.kohesive.injekt.api.InjektModule
 import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addSingleton
@@ -418,7 +420,7 @@ class AppModule(val app: Application) : InjektModule {
 
         addSingletonFactory<MangaSourceManager> { AndroidMangaSourceManager(app, get(), get()) }
         addSingletonFactory<AnimeSourceManager> { AndroidAnimeSourceManager(app, get(), get()) }
-        addSingletonFactory<NovelSourceManager> { AndroidNovelSourceManager(get(), get()) }
+        addSingletonFactory<NovelSourceManager> { AndroidNovelSourceManager(app, get(), get()) }
 
         addSingletonFactory { MangaExtensionManager(app) }
         addSingletonFactory { AnimeExtensionManager(app) }
@@ -492,6 +494,9 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { LocalAnimeCoverManager(app, get()) }
         addSingletonFactory { LocalAnimeFetchTypeManager(app, get()) }
         addSingletonFactory { LocalEpisodeThumbnailManager(app, get()) }
+
+        addSingletonFactory { LocalNovelSourceFileSystem(get()) }
+        addSingletonFactory { LocalNovelCoverManager(app, get()) }
 
         addSingletonFactory { StorageManager(app, get()) }
 

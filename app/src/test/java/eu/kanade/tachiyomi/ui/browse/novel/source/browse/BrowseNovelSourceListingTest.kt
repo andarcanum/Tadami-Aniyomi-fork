@@ -51,25 +51,6 @@ class BrowseNovelSourceListingTest {
     }
 
     @Test
-    fun `visible filters hide sort-like select in latest listing`() {
-        val sortLikeSelect = object : NovelFilter.Select<String>(
-            name = "Sort by",
-            values = arrayOf("Popular", "Latest"),
-            state = 0,
-        ) {}
-        val text = object : NovelFilter.Text("Keyword", "") {}
-        val filters = NovelFilterList(sortLikeSelect, text)
-
-        val visible = visibleNovelFiltersForListing(
-            listing = BrowseNovelSourceScreenModel.Listing.Latest,
-            filters = filters,
-        )
-
-        visible.any { it is NovelFilter.Select<*> } shouldBe false
-        visible.any { it is NovelFilter.Text } shouldBe true
-    }
-
-    @Test
     fun `visible filters hide nested sort in latest listing`() {
         val nestedSort = object : NovelFilter.Sort(
             name = "Sort",

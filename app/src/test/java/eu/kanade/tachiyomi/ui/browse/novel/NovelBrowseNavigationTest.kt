@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.PreferenceScreen
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.novelSourcePreferencesScreen
 import eu.kanade.tachiyomi.ui.browse.novel.extension.novelExtensionDetailsScreen
+import eu.kanade.tachiyomi.ui.browse.novel.extension.novelExtensionSettingsScreen
 import eu.kanade.tachiyomi.ui.browse.novel.migration.sources.migrateNovelScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.novelSourcePreferencesScreenOrNull
 import io.kotest.matchers.nulls.shouldBeNull
@@ -25,6 +26,13 @@ class NovelBrowseNavigationTest {
         val screen = novelSourcePreferencesScreen(123L)
 
         screen.sourceId shouldBe 123L
+    }
+
+    @Test
+    fun `extension list settings navigation converts plugin id to source id`() {
+        val screen = novelExtensionSettingsScreen("komga")
+
+        screen.sourceId shouldBe eu.kanade.tachiyomi.extension.novel.NovelPluginId.toSourceId("komga")
     }
 
     @Test

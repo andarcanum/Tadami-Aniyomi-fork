@@ -32,7 +32,6 @@ class SyncEpisodeProgressWithTrack(
         val localLastSeen = sortedEpisodes.takeWhile { it.seen }
             .lastOrNull()
             ?.episodeNumber
-            ?.toDouble()
             ?: 0.0
         val action = resolveTrackProgressSync.resolve(
             local = localLastSeen,

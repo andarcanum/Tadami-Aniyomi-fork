@@ -139,7 +139,7 @@ class NovelPluginRepoUpdateInteractorTest {
     }
 
     @Test
-    fun `findUpdates keeps same plugin id across different repo roots`() {
+    fun `findUpdates dedupes same plugin id across different repo roots to highest version`() {
         runTest {
             val installedEntry = NovelPluginRepoEntry(
                 id = "novel",
@@ -196,7 +196,7 @@ class NovelPluginRepoUpdateInteractorTest {
                 ),
             )
 
-            updates shouldBe listOf(repoOneUpdate, repoTwoUpdate)
+            updates shouldBe listOf(repoTwoUpdate)
         }
     }
 }

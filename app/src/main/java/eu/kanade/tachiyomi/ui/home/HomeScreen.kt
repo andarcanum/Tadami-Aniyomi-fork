@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -37,10 +38,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -55,6 +56,8 @@ import cafe.adriel.voyager.navigator.tab.TabNavigator
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.StartScreen
+import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
+import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.presentation.util.BottomNavVisibilityController
@@ -158,7 +161,7 @@ object HomeScreen : Screen() {
                                     val auroraColors = if (isAurora) AuroraTheme.colors else null
                                     val navContainerColor = if (isAurora) {
                                         if (auroraColors!!.isDark) {
-                                            auroraColors.surface.copy(alpha = 0.2f)
+                                            auroraColors.background
                                         } else {
                                             auroraColors.accent.copy(alpha = 0.04f)
                                                 .compositeOver(Color(0xFFF0F4F8))
@@ -169,20 +172,22 @@ object HomeScreen : Screen() {
                                     NavigationBar(
                                         containerColor = navContainerColor,
                                         modifier = if (isAurora) {
-                                            Modifier
-                                                .graphicsLayer { alpha = 0.95f }
-                                                .then(
-                                                    if (!auroraColors!!.isDark) {
-                                                        Modifier.border(
-                                                            BorderStroke(
-                                                                width = 0.75.dp,
-                                                                color = auroraColors.divider.copy(alpha = 0.5f),
-                                                            ),
-                                                        )
-                                                    } else {
-                                                        Modifier
-                                                    },
-                                                )
+                                            Modifier.then(
+                                                if (!auroraColors!!.isDark) {
+                                                    Modifier.border(
+                                                        BorderStroke(
+                                                            width = 1.dp,
+                                                            brush = auroraMenuRimLightBrush(auroraColors),
+                                                        ),
+                                                        shape = RoundedCornerShape(
+                                                            topStart = 20.dp,
+                                                            topEnd = 20.dp,
+                                                        ),
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                },
+                                            )
                                         } else {
                                             Modifier
                                         },
@@ -195,13 +200,13 @@ object HomeScreen : Screen() {
                             } else {
                                 AnimatedVisibility(
                                     visible = showBottomNav,
-                                    enter = expandVertically(),
-                                    exit = shrinkVertically(),
+                                    enter = expandVertically(expandFrom = Alignment.Bottom),
+                                    exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
                                 ) {
                                     val auroraColors = if (isAurora) AuroraTheme.colors else null
                                     val navContainerColor = if (isAurora) {
                                         if (auroraColors!!.isDark) {
-                                            auroraColors.surface.copy(alpha = 0.2f)
+                                            auroraColors.background
                                         } else {
                                             auroraColors.accent.copy(alpha = 0.04f)
                                                 .compositeOver(Color(0xFFF0F4F8))
@@ -212,20 +217,22 @@ object HomeScreen : Screen() {
                                     NavigationBar(
                                         containerColor = navContainerColor,
                                         modifier = if (isAurora) {
-                                            Modifier
-                                                .graphicsLayer { alpha = 0.95f }
-                                                .then(
-                                                    if (!auroraColors!!.isDark) {
-                                                        Modifier.border(
-                                                            BorderStroke(
-                                                                width = 0.75.dp,
-                                                                color = auroraColors.divider.copy(alpha = 0.5f),
-                                                            ),
-                                                        )
-                                                    } else {
-                                                        Modifier
-                                                    },
-                                                )
+                                            Modifier.then(
+                                                if (!auroraColors!!.isDark) {
+                                                    Modifier.border(
+                                                        BorderStroke(
+                                                            width = 1.dp,
+                                                            brush = auroraMenuRimLightBrush(auroraColors),
+                                                        ),
+                                                        shape = RoundedCornerShape(
+                                                            topStart = 20.dp,
+                                                            topEnd = 20.dp,
+                                                        ),
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                },
+                                            )
                                         } else {
                                             Modifier
                                         },
@@ -242,70 +249,74 @@ object HomeScreen : Screen() {
                 ) { contentPadding ->
                     Box(
                         modifier = Modifier
-                            .padding(contentPadding)
+                            .padding(top = contentPadding.calculateTopPadding())
                             .consumeWindowInsets(contentPadding),
                     ) {
-                        if (resolvedTransitionMode == ResolvedNavigationTransitionMode.NONE) {
-                            val currentTab = tabNavigator.current
-                            tabNavigator.saveableState(key = "currentTab", currentTab) {
-                                currentTab.Content()
-                            }
-                        } else {
-                            AnimatedContent(
-                                targetState = tabNavigator.current,
-                                transitionSpec = {
-                                    when (resolvedTransitionMode) {
-                                        ResolvedNavigationTransitionMode.NONE -> {
-                                            EnterTransition.None togetherWith ExitTransition.None
-                                        }
-                                        ResolvedNavigationTransitionMode.LEGACY -> {
-                                            materialFadeThroughIn(
-                                                initialScale = 1f,
-                                                durationMillis = TAB_FADE_DURATION,
-                                            ) togetherWith
-                                                materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
-                                        }
-                                        ResolvedNavigationTransitionMode.MODERN -> {
-                                            val direction = tabDirection(
-                                                initialTab = initialState,
-                                                targetTab = targetState,
-                                                currentMoreTab = currentMoreTab,
-                                                navStyle = navStyle,
-                                            )
-                                            val enter = slideInHorizontally(
-                                                animationSpec = tween(
-                                                    durationMillis = TAB_MODERN_ENTER_DURATION,
-                                                    easing = AURORA_EASING,
-                                                ),
-                                                initialOffsetX = { width -> direction * (width / 4) },
-                                            ) + fadeIn(
-                                                animationSpec = tween(
-                                                    durationMillis = TAB_MODERN_ENTER_DURATION,
-                                                    easing = AURORA_EASING,
-                                                ),
-                                            )
-                                            val exit = slideOutHorizontally(
-                                                animationSpec = tween(
-                                                    durationMillis = TAB_MODERN_EXIT_DURATION,
-                                                    easing = AURORA_EASING,
-                                                ),
-                                                targetOffsetX = { width -> -direction * (width / 5) },
-                                            ) + fadeOut(
-                                                animationSpec = tween(
-                                                    durationMillis = TAB_MODERN_EXIT_DURATION,
-                                                    easing = AURORA_EASING,
-                                                ),
-                                            )
-                                            (enter togetherWith exit).apply {
-                                                targetContentZIndex = 1f
-                                            }
-                                        }
-                                    }
-                                },
-                                label = "tabContent",
-                            ) { currentTab ->
+                        CompositionLocalProvider(
+                            LocalHostScaffoldContentPadding provides contentPadding,
+                        ) {
+                            if (resolvedTransitionMode == ResolvedNavigationTransitionMode.NONE) {
+                                val currentTab = tabNavigator.current
                                 tabNavigator.saveableState(key = "currentTab", currentTab) {
                                     currentTab.Content()
+                                }
+                            } else {
+                                AnimatedContent(
+                                    targetState = tabNavigator.current,
+                                    transitionSpec = {
+                                        when (resolvedTransitionMode) {
+                                            ResolvedNavigationTransitionMode.NONE -> {
+                                                EnterTransition.None togetherWith ExitTransition.None
+                                            }
+                                            ResolvedNavigationTransitionMode.LEGACY -> {
+                                                materialFadeThroughIn(
+                                                    initialScale = 1f,
+                                                    durationMillis = TAB_FADE_DURATION,
+                                                ) togetherWith
+                                                    materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
+                                            }
+                                            ResolvedNavigationTransitionMode.MODERN -> {
+                                                val direction = tabDirection(
+                                                    initialTab = initialState,
+                                                    targetTab = targetState,
+                                                    currentMoreTab = currentMoreTab,
+                                                    navStyle = navStyle,
+                                                )
+                                                val enter = slideInHorizontally(
+                                                    animationSpec = tween(
+                                                        durationMillis = TAB_MODERN_ENTER_DURATION,
+                                                        easing = AURORA_EASING,
+                                                    ),
+                                                    initialOffsetX = { width -> direction * (width / 4) },
+                                                ) + fadeIn(
+                                                    animationSpec = tween(
+                                                        durationMillis = TAB_MODERN_ENTER_DURATION,
+                                                        easing = AURORA_EASING,
+                                                    ),
+                                                )
+                                                val exit = slideOutHorizontally(
+                                                    animationSpec = tween(
+                                                        durationMillis = TAB_MODERN_EXIT_DURATION,
+                                                        easing = AURORA_EASING,
+                                                    ),
+                                                    targetOffsetX = { width -> -direction * (width / 5) },
+                                                ) + fadeOut(
+                                                    animationSpec = tween(
+                                                        durationMillis = TAB_MODERN_EXIT_DURATION,
+                                                        easing = AURORA_EASING,
+                                                    ),
+                                                )
+                                                (enter togetherWith exit).apply {
+                                                    targetContentZIndex = 1f
+                                                }
+                                            }
+                                        }
+                                    },
+                                    label = "tabContent",
+                                ) { currentTab ->
+                                    tabNavigator.saveableState(key = "currentTab", currentTab) {
+                                        currentTab.Content()
+                                    }
                                 }
                             }
                         }
@@ -421,7 +432,7 @@ object HomeScreen : Screen() {
                     scope.launch { tab.onReselect(navigator) }
                 }
             },
-            icon = { NavigationIconItem(tab) },
+            icon = { NavigationIconItem(tab, selected) },
             label = {
                 Text(
                     text = tab.options.title,
@@ -469,7 +480,7 @@ object HomeScreen : Screen() {
                     scope.launch { tab.onReselect(navigator) }
                 }
             },
-            icon = { NavigationIconItem(tab) },
+            icon = { NavigationIconItem(tab, selected) },
             label = {
                 Text(
                     text = tab.options.title,
@@ -484,7 +495,7 @@ object HomeScreen : Screen() {
     }
 
     @Composable
-    private fun NavigationIconItem(tab: eu.kanade.presentation.util.Tab) {
+    private fun NavigationIconItem(tab: eu.kanade.presentation.util.Tab, selected: Boolean) {
         BadgedBox(
             badge = {
                 when {
@@ -515,8 +526,14 @@ object HomeScreen : Screen() {
                         }
                     }
                     BrowseTab::class.isInstance(tab) -> {
+                        val pref = Injekt.get<SourcePreferences>()
+                        val seenCount by produceState(
+                            initialValue = pref.browseExtensionUpdatesSeenCount().get(),
+                        ) {
+                            pref.browseExtensionUpdatesSeenCount().changes()
+                                .collectLatest { value = it }
+                        }
                         val count by produceState(initialValue = 0) {
-                            val pref = Injekt.get<SourcePreferences>()
                             combine(
                                 pref.mangaExtensionUpdatesCount().changes(),
                                 pref.animeExtensionUpdatesCount().changes(),
@@ -526,7 +543,12 @@ object HomeScreen : Screen() {
                             }
                                 .collectLatest { value = it }
                         }
-                        if (count > 0) {
+                        LaunchedEffect(selected, count) {
+                            if (selected) {
+                                pref.browseExtensionUpdatesSeenCount().set(count)
+                            }
+                        }
+                        if (shouldShowBrowseExtensionBadge(selected, count, seenCount)) {
                             Badge {
                                 val desc = pluralStringResource(
                                     MR.plurals.update_check_notification_ext_updates,
@@ -574,6 +596,14 @@ object HomeScreen : Screen() {
         data class More(val toDownloads: Boolean) : Tab
         data object HomeHub : Tab
     }
+}
+
+internal fun shouldShowBrowseExtensionBadge(
+    selected: Boolean,
+    currentCount: Int,
+    seenCount: Int,
+): Boolean {
+    return !selected && currentCount > 0 && currentCount != seenCount
 }
 
 internal fun resolveHomeStartTab(

@@ -56,6 +56,7 @@ import androidx.core.net.toUri
 import androidx.core.splashscreen.SplashScreen
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.util.Consumer
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.interpolator.view.animation.FastOutSlowInInterpolator
 import androidx.interpolator.view.animation.LinearOutSlowInInterpolator
 import androidx.lifecycle.lifecycleScope
@@ -249,6 +250,11 @@ class MainActivity : BaseActivity() {
                             },
                             navigationBarStyle = if (isSystemInDarkTheme) darkStyle else lightStyle,
                         )
+                        // Safety net: ensure status bar appearance via direct API,
+                        // guarding against enableEdgeToEdge not re-applying on repeated calls
+                        // on some platform versions (e.g. Android 15 / API 35).
+                        WindowInsetsControllerCompat(window, window.decorView)
+                            .isAppearanceLightStatusBars = statusBarStyleMode != MainStatusBarStyleMode.DARK
                     }
 
                     LaunchedEffect(navigator) {
@@ -849,7 +855,11 @@ internal fun resolveMainStatusBarStyleMode(
     isAurora: Boolean,
     isLightStatusBarBackground: Boolean,
 ): MainStatusBarStyleMode {
-    return MainStatusBarStyleMode.DARK
+    return if (isLightStatusBarBackground) {
+        MainStatusBarStyleMode.TRANSPARENT_LIGHT
+    } else {
+        MainStatusBarStyleMode.DARK
+    }
 }
 
 internal fun shouldMainActivityApplyEdgeToEdge(screen: Any?): Boolean {

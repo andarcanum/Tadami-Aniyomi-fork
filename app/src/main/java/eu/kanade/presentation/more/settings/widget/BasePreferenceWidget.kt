@@ -62,15 +62,15 @@ internal fun BasePreferenceWidget(
     val rowShape = if (isAurora) AURORA_SETTINGS_CARD_SHAPE else MaterialTheme.shapes.medium
     Row(
         modifier = modifier
-            .highlightBackground(highlighted)
             .then(
                 if (isAurora) {
                     Modifier
                         .padding(vertical = 4.dp)
                         .clip(rowShape)
                         .background(settingsCardContainerColor())
+                        .highlightBackground(highlighted)
                 } else {
-                    Modifier
+                    Modifier.highlightBackground(highlighted)
                 },
             )
             .sizeIn(minHeight = minHeight)

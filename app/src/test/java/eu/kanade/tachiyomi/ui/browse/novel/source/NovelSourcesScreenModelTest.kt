@@ -3,7 +3,10 @@ package eu.kanade.tachiyomi.ui.browse.novel.source
 import eu.kanade.domain.source.novel.interactor.GetEnabledNovelSources
 import eu.kanade.domain.source.novel.interactor.ToggleNovelSource
 import eu.kanade.domain.source.novel.interactor.ToggleNovelSourcePin
+import eu.kanade.domain.source.service.SourcePreferences
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -15,6 +18,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
+import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.source.novel.model.Source
 import tachiyomi.domain.source.novel.repository.NovelSourceRepository
 
@@ -43,6 +47,11 @@ class NovelSourcesScreenModelTest {
             val disabledSources = FakePreference<Set<String>>(emptySet())
             val pinnedSources = FakePreference(setOf("1"))
             val lastUsedSource = FakePreference(2L)
+            val verticalPinnedLayout = FakePreference(false)
+            val preferenceStore = mockk<PreferenceStore>().also {
+                every { it.getBoolean("vertical_pinned_layout", false) } returns verticalPinnedLayout
+            }
+            val sourcePreferences = SourcePreferences(preferenceStore)
 
             val sourcesFlow = MutableStateFlow(
                 listOf(
@@ -63,13 +72,14 @@ class NovelSourcesScreenModelTest {
             val togglePin = ToggleNovelSourcePin(pinnedSources)
 
             val screenModel = NovelSourcesScreenModel(
+                sourcePreferences = sourcePreferences,
                 getEnabledSources = getEnabledSources,
                 toggleSource = toggleSource,
                 togglePin = togglePin,
             ).also(activeScreenModels::add)
 
             withTimeout(1_000) {
-                while (screenModel.state.value.isLoading) {
+                while (screenModel.state.value.pinnedItems.size != 1) {
                     yield()
                 }
             }

@@ -13,6 +13,8 @@ class TrackLoginActivity : BaseOAuthLoginActivity() {
             "myanimelist-auth" -> handleMyAnimeList(uri)
             "shikimori-auth" -> handleShikimori(uri)
             "simkl-auth" -> handleSimkl(uri)
+            "trakt-auth" -> handleTrakt(uri)
+            "tmdb-auth" -> handleTmdb(uri)
         }
     }
 
@@ -78,6 +80,35 @@ class TrackLoginActivity : BaseOAuthLoginActivity() {
             }
         } else {
             trackerManager.simkl.logout()
+            returnToSettings()
+        }
+    }
+
+    private fun handleTrakt(data: Uri) {
+        val code = data.getQueryParameter("code")
+        if (code != null) {
+            lifecycleScope.launchIO {
+                trackerManager.trakt.login(code)
+                returnToSettings()
+            }
+        } else {
+            trackerManager.trakt.logout()
+            returnToSettings()
+        }
+    }
+
+    private fun handleTmdb(data: Uri) {
+        // TMDB redirects with the request token as the `request_token` query parameter once the
+        // user authorizes our app. We exchange it for a session id inside Tmdb.login.
+        val requestToken = data.getQueryParameter("request_token")
+        val approved = data.getQueryParameter("approved")?.equals("true", ignoreCase = true) ?: true
+        if (!approved || requestToken.isNullOrBlank()) {
+            trackerManager.tmdb.logout()
+            returnToSettings()
+            return
+        }
+        lifecycleScope.launchIO {
+            trackerManager.tmdb.login(requestToken)
             returnToSettings()
         }
     }

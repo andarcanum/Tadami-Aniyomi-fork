@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.source.novel
 
+import android.content.Context
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
@@ -19,9 +20,13 @@ import kotlinx.coroutines.runBlocking
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.repository.NovelStubSourceRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import tachiyomi.source.local.entries.novel.LocalNovelSource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.util.concurrent.ConcurrentHashMap
 
 class AndroidNovelSourceManager(
+    private val context: Context,
     private val extensionManager: NovelExtensionManager,
     private val sourceRepository: NovelStubSourceRepository,
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -49,6 +54,13 @@ class AndroidNovelSourceManager(
                         mutableMap[it.id] = it
                         registerStubSource(StubNovelSource.from(it))
                     }
+                    // Add built-in local source
+                    val localNovelSource = LocalNovelSource(
+                        context,
+                        Injekt.get(),
+                        Injekt.get(),
+                    )
+                    mutableMap[localNovelSource.id] = localNovelSource
                     // Add built-in imported EPUB source
                     val importedEpubSource = ImportedEpubNovelSource()
                     mutableMap[importedEpubSource.id] = importedEpubSource
@@ -85,7 +97,9 @@ class AndroidNovelSourceManager(
     override fun getStubSources(): List<StubNovelSource> {
         val onlineSourceIds = getOnlineSources().map { it.id }
         return stubSourcesMap.values.filterNot {
-            it.id in onlineSourceIds || it.id == IMPORTED_EPUB_NOVEL_SOURCE_ID
+            it.id in onlineSourceIds ||
+                it.id == IMPORTED_EPUB_NOVEL_SOURCE_ID ||
+                it.id == LocalNovelSource.ID
         }
     }
 

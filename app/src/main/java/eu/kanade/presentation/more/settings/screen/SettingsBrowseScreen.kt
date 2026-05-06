@@ -65,6 +65,10 @@ object SettingsBrowseScreen : SearchableSettings {
                         preference = sourcePreferences.hideInNovelLibraryItems(),
                         title = stringResource(AYMR.strings.pref_hide_in_novel_library_items),
                     ),
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = sourcePreferences.verticalPinnedLayout(),
+                        title = stringResource(AYMR.strings.pref_vertical_pinned_layout),
+                    ),
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(AYMR.strings.label_anime_extension_repos),
                         subtitle = pluralStringResource(

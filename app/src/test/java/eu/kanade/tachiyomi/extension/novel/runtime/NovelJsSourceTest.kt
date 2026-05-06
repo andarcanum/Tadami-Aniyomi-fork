@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.extension.novel.runtime
 
+import eu.kanade.tachiyomi.novelsource.model.SNovel
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -53,6 +54,36 @@ class NovelJsSourceTest {
     }
 
     @Test
+    fun `hasPluginSettings discoverRuntime supports lnreader pluginSettings`() {
+        val runtimeFactory = mockk<NovelJsRuntimeFactory>()
+        val runtime = mockk<NovelJsRuntime>(relaxed = true)
+        every { runtimeFactory.create(any()) } returns runtime
+        every { runtime.evaluate(any(), any(), any()) } answers { evaluateLnReaderSettingsScript(firstArg()) }
+
+        val source = createSource(
+            hasSettings = false,
+            runtimeFactory = runtimeFactory,
+        )
+
+        source.hasPluginSettings(discoverRuntime = true) shouldBe true
+    }
+
+    @Test
+    fun `hasPluginSettings discoverRuntime keeps legacy settings array support`() {
+        val runtimeFactory = mockk<NovelJsRuntimeFactory>()
+        val runtime = mockk<NovelJsRuntime>(relaxed = true)
+        every { runtimeFactory.create(any()) } returns runtime
+        every { runtime.evaluate(any(), any(), any()) } answers { evaluateSettingsScript(firstArg()) }
+
+        val source = createSource(
+            hasSettings = false,
+            runtimeFactory = runtimeFactory,
+        )
+
+        source.hasPluginSettings(discoverRuntime = true) shouldBe true
+    }
+
+    @Test
     fun `getChapterList falls back to parsePage when parseNovel fails`() {
         val runtimeFactory = mockk<NovelJsRuntimeFactory>()
         val runtime = mockk<NovelJsRuntime>()
@@ -66,6 +97,10 @@ class NovelJsSourceTest {
         val source = createSource(
             hasSettings = false,
             runtimeFactory = runtimeFactory,
+            runtimeOverride = NovelPluginRuntimeOverride(
+                pluginId = "test-plugin",
+                disableFallbacks = false,
+            ),
         )
         val novel = eu.kanade.tachiyomi.novelsource.model.SNovel.create().apply {
             url = "261335--pyeonjibjaui-saengjonsuchig"
@@ -95,6 +130,10 @@ class NovelJsSourceTest {
         val source = createSource(
             hasSettings = false,
             runtimeFactory = runtimeFactory,
+            runtimeOverride = NovelPluginRuntimeOverride(
+                pluginId = "test-plugin",
+                disableFallbacks = false,
+            ),
         )
         val novel = eu.kanade.tachiyomi.novelsource.model.SNovel.create().apply {
             url = "261335--pyeonjibjaui-saengjonsuchig"
@@ -112,12 +151,42 @@ class NovelJsSourceTest {
         chapterPage.chapters[0].name shouldBe "Ch 2"
     }
 
+    @Test
+    fun `getChapterList skips fallbacks when disableFallbacks is true`() {
+        val runtimeFactory = mockk<NovelJsRuntimeFactory>()
+        val runtime = mockk<NovelJsRuntime>()
+        val parsePageCalls = AtomicInteger(0)
+
+        every { runtimeFactory.create(any()) } returns runtime
+        every { runtime.evaluate(any(), any(), any()) } answers {
+            evaluateChapterFallbackScript(firstArg(), parsePageCalls)
+        }
+
+        val source = createSource(
+            hasSettings = false,
+            runtimeFactory = runtimeFactory,
+            runtimeOverride = NovelPluginRuntimeOverride(
+                pluginId = "test-plugin",
+                disableFallbacks = true,
+            ),
+        )
+        val novel = SNovel.create().apply {
+            url = "/test-novel"
+            title = "Test Novel"
+        }
+
+        val chapters = kotlinx.coroutines.runBlocking { source.getChapterList(novel) }
+
+        chapters.size shouldBe 0
+    }
+
     private fun createSource(
         hasSettings: Boolean,
         runtimeFactory: NovelJsRuntimeFactory = mockk(relaxed = true),
+        runtimeOverride: NovelPluginRuntimeOverride = NovelPluginRuntimeOverride(pluginId = "test-plugin"),
     ): NovelJsSource {
         val plugin = NovelPlugin.Installed(
-            id = "test-plugin",
+            id = runtimeOverride.pluginId,
             name = "Test Plugin",
             site = "https://example.com",
             lang = "en",
@@ -139,7 +208,7 @@ class NovelJsSourceTest {
             scriptBuilder = NovelPluginScriptBuilder(),
             filterMapper = NovelPluginFilterMapper(json),
             resultNormalizer = NovelPluginResultNormalizer(),
-            runtimeOverride = NovelPluginRuntimeOverride(pluginId = plugin.id),
+            runtimeOverride = runtimeOverride,
             settingsBridge = NovelPluginSettingsBridge(
                 pluginId = plugin.id,
                 keyValueStore = keyValueStore,
@@ -150,6 +219,8 @@ class NovelJsSourceTest {
 
     private fun evaluateSettingsScript(script: String): Any? {
         return when {
+            script.contains("typeof __plugin.pluginSettings === \"object\"") -> false
+            script.contains("JSON.stringify(__plugin.pluginSettings || {})") -> "{}"
             script.contains("Array.isArray(__plugin && __plugin.settings)") -> true
             script.contains("JSON.stringify(__plugin.settings || [])") -> """
                 [
@@ -168,6 +239,27 @@ class NovelJsSourceTest {
         }
     }
 
+    private fun evaluateLnReaderSettingsScript(script: String): Any? {
+        return when {
+            script.contains("typeof __plugin.pluginSettings === \"object\"") -> true
+            script.contains("JSON.stringify(__plugin.pluginSettings || {})") -> """
+                {
+                    "email": {
+                        "value": "",
+                        "label": "Email",
+                        "type": "Text"
+                    }
+                }
+            """.trimIndent()
+            script.contains("Array.isArray(__plugin && __plugin.settings)") -> false
+            script.contains("JSON.stringify(__plugin.settings || [])") -> "[]"
+            script.contains("typeof __plugin.parsePage") -> false
+            script.contains("typeof __plugin.resolveUrl") -> false
+            script.contains("typeof __plugin.fetchImage") -> false
+            else -> null
+        }
+    }
+
     private fun evaluateChapterFallbackScript(
         script: String,
         parsePageCalls: AtomicInteger,
@@ -178,10 +270,25 @@ class NovelJsSourceTest {
             script.contains("typeof __plugin.parsePage") -> true
             script.contains("typeof __plugin.resolveUrl") -> false
             script.contains("typeof __plugin.fetchImage") -> false
-            script.contains("__plugin.parseNovel") -> throw RuntimeException("parseNovel boom")
-            script.contains("__plugin.parsePage") -> {
-                val nextCall = parsePageCalls.incrementAndGet()
-                if (nextCall == 1) {
+
+            // Polling: drain job queue
+            script.contains("__drainJobs") -> null
+
+            // Polling: cleanup
+            script.contains("delete globalThis") -> null
+
+            // Polling: done check
+            script.startsWith("globalThis.__d_") -> true
+
+            // Polling: error read — simulate parseNovel failure
+            script.startsWith("globalThis.__e_") -> null
+
+            // Polling: result read
+            script.startsWith("globalThis.__r_") -> {
+                val page = parsePageCalls.get()
+                if (page == 0) {
+                    """{}"""
+                } else if (page == 1) {
                     """
                         {
                             "totalPages": 2,
@@ -199,15 +306,27 @@ class NovelJsSourceTest {
                         {
                             "chapters": [
                                 {
-                                    "name": "Ch 2",
-                                    "path": "/c2",
-                                    "chapterNumber": 2
+                                    "name": "Ch $page",
+                                    "path": "/c$page",
+                                    "chapterNumber": $page
                                 }
                             ]
                         }
                     """.trimIndent()
                 }
             }
+
+            // Polling: setup script with wrapped plugin method call
+            script.contains("(function()") && script.contains("__plugin.parseNovel") -> {
+                // parseNovel call: return null (success) but empty result
+                null
+            }
+            script.contains("(function()") && script.contains("__plugin.parsePage") -> {
+                parsePageCalls.incrementAndGet()
+                null
+            }
+            script.contains("(function()") -> null
+
             else -> null
         }
     }

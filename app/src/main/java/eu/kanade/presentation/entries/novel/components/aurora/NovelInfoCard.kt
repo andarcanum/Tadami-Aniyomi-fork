@@ -100,8 +100,20 @@ fun NovelInfoCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.Top,
                 ) {
+                    val descriptionToggleEnabled = shouldShowNovelDescriptionToggle(
+                        hasDescriptionOverflow = hasDescriptionOverflow,
+                        descriptionExpanded = descriptionExpanded,
+                    )
                     SelectionContainer(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .then(
+                                if (descriptionToggleEnabled) {
+                                    Modifier.clickable(onClick = onToggleDescription)
+                                } else {
+                                    Modifier
+                                },
+                            ),
                     ) {
                         Text(
                             text = normalizedDescription ?: stringResource(AYMR.strings.aurora_no_description),
@@ -118,7 +130,7 @@ fun NovelInfoCard(
                         )
                     }
 
-                    if (shouldShowNovelDescriptionToggle(hasDescriptionOverflow, descriptionExpanded)) {
+                    if (descriptionToggleEnabled) {
                         Icon(
                             imageVector = if (descriptionExpanded) {
                                 Icons.Filled.KeyboardArrowUp

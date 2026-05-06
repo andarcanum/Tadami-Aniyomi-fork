@@ -7,6 +7,7 @@ import android.webkit.WebView
 import android.widget.Toast
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.WebViewUtil
+import eu.kanade.tachiyomi.util.system.sanitizeCloudflareRequestHeaders
 import eu.kanade.tachiyomi.util.system.setDefaultSettings
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -69,13 +70,20 @@ abstract class WebViewInterceptor(
     }
 
     fun parseHeaders(headers: Headers): Map<String, String> {
-        return headers
+        val safeHeaders = headers
             // Keeping unsafe header makes webview throw [net::ERR_INVALID_ARGUMENT]
             .filter { (name, value) ->
                 isRequestHeaderSafe(name, value)
             }
             .groupBy(keySelector = { (name, _) -> name }) { (_, value) -> value }
             .mapValues { it.value.getOrNull(0).orEmpty() }
+        // Strip headers that fingerprint Android WebView for anti-bot services like
+        // Cloudflare (sec-ch-ua client hints + the X-Requested-With package name).
+        return sanitizeCloudflareRequestHeaders(
+            requestHeaders = safeHeaders,
+            contextPackageName = context.packageName,
+            spoofedPackageName = WebViewUtil.spoofedPackageName(context),
+        )
     }
 
     fun CountDownLatch.awaitFor30Seconds() {

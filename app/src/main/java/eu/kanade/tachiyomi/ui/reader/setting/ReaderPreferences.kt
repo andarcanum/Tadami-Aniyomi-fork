@@ -30,6 +30,11 @@ class ReaderPreferences(
 
     fun showReadingMode() = preferenceStore.getBoolean("pref_show_reading_mode", true)
 
+    fun useAutoWebtoon() = preferenceStore.getBoolean("reader_use_auto_webtoon", true)
+
+    fun autoWebtoonPromptDismissedMangaIds() =
+        preferenceStore.getStringSet("reader_auto_webtoon_prompt_dismissed_manga_ids", emptySet())
+
     fun fullscreen() = preferenceStore.getBoolean("fullscreen", true)
 
     fun cutoutShort() = preferenceStore.getBoolean("cutout_short", true)
@@ -94,7 +99,7 @@ class ReaderPreferences(
     fun autoScrollSpeed() = preferenceStore.getInt("pref_auto_scroll_speed", 50)
 
     fun showAutoScrollFloatingButton() =
-        preferenceStore.getBoolean("pref_show_auto_scroll_floating_button", true)
+        preferenceStore.getBoolean("pref_show_auto_scroll_floating_button", false)
 
     fun saveLongPagePosition() = preferenceStore.getBoolean("pref_save_long_page_position", true)
 

@@ -6,12 +6,13 @@ import org.junit.jupiter.api.Test
 class NovelPluginRepoUrlsTest {
 
     @Test
-    fun `base url resolves to both candidates`() {
+    fun `base url resolves to all three candidates`() {
         resolveNovelPluginRepoIndexUrls(" https://example.org/repo/ ")
             .shouldBe(
                 listOf(
                     "https://example.org/repo/index.min.json",
                     "https://example.org/repo/plugins.min.json",
+                    "https://example.org/repo/plugins.json",
                 ),
             )
     }

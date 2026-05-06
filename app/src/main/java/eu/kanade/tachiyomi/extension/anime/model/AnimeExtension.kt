@@ -26,6 +26,7 @@ sealed class AnimeExtension {
         val sources: List<AnimeSource>,
         val icon: Drawable?,
         val hasUpdate: Boolean = false,
+        val needsReinstall: Boolean = false,
         val isObsolete: Boolean = false,
         val isShared: Boolean,
         val repoUrl: String? = null,
@@ -43,6 +44,7 @@ sealed class AnimeExtension {
         val apkName: String,
         val iconUrl: String,
         val repoUrl: String,
+        val repoName: String = "",
     ) : AnimeExtension() {
 
         data class AnimeSource(
@@ -71,4 +73,11 @@ sealed class AnimeExtension {
         override val lang: String? = null,
         override val isNsfw: Boolean = false,
     ) : AnimeExtension()
+}
+
+internal fun List<AnimeExtension.Available>.newestByVersion(): AnimeExtension.Available? {
+    return maxWithOrNull(
+        compareBy<AnimeExtension.Available> { it.versionCode }
+            .thenBy { it.libVersion },
+    )
 }

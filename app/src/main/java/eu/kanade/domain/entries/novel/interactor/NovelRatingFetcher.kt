@@ -27,15 +27,19 @@ class NovelRatingFetcher {
         novel: Novel,
         forceRefresh: Boolean = false,
     ): Float? {
-        val webUrl = resolveWebUrl(source, novel) ?: run {
-            debugLog("await: skip source=${source.name} novelUrl=${novel.url} reason=no-web-url")
-            return null
-        }
+        val webUrl = runCatching { resolveWebUrl(source, novel) }
+            .getOrElse { null }
+            ?: run {
+                debugLog("await: skip source=${source.name} novelUrl=${novel.url} reason=no-web-url")
+                return null
+            }
 
-        val requestUrl = webUrl.toHttpUrlOrNull() ?: run {
-            debugLog("await: skip source=${source.name} novelUrl=${novel.url} reason=invalid-url url=$webUrl")
-            return null
-        }
+        val requestUrl = runCatching { webUrl.toHttpUrlOrNull() }
+            .getOrElse { null }
+            ?: run {
+                debugLog("await: skip source=${source.name} novelUrl=${novel.url} reason=invalid-url url=$webUrl")
+                return null
+            }
 
         return try {
             val rating = ratingCache.resolve(

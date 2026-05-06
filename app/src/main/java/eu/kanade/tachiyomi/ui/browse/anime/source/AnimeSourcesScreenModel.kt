@@ -10,6 +10,7 @@ import eu.kanade.domain.source.anime.interactor.ToggleAnimeSourcePin
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.browse.anime.AnimeSourceUiModel
 import eu.kanade.tachiyomi.util.system.LAST_USED_KEY
+import eu.kanade.tachiyomi.util.system.PINNED_KEY
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -19,6 +20,8 @@ import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import logcat.LogPriority
@@ -56,18 +59,23 @@ class AnimeSourcesScreenModel(
                     updateState()
                 }
         }
+        sourcePreferences.verticalPinnedLayout().changes()
+            .onEach {
+                mutableState.update { state -> state.copy(verticalPinnedLayout = it) }
+                updateState()
+            }
+            .launchIn(screenModelScope)
     }
 
     private fun updateState() {
         val query = state.value.searchQuery
         val collapsed = state.value.collapsedLanguages
+        val verticalLayout = state.value.verticalPinnedLayout
 
-        // 1. Separate Pinned (only if no search query)
-        val (pinned, others) = if (query.isBlank()) {
-            rawSources.partition { Pin.Actual in it.pin }
-        } else {
-            // When searching, show everything in the list, nothing in pinned carousel
-            Pair(emptyList(), rawSources)
+        // 1. Separate Pinned (only if no search query AND not vertical layout)
+        val (pinned, others) = when {
+            query.isBlank() && !verticalLayout -> rawSources.partition { Pin.Actual in it.pin }
+            else -> Pair(emptyList(), rawSources)
         }
 
         // 2. Filter by query
@@ -78,6 +86,8 @@ class AnimeSourcesScreenModel(
         // 3. Group by Lang
         val map = TreeMap<String, MutableList<AnimeSource>> { d1, d2 ->
             when {
+                d1 == PINNED_KEY && d2 != PINNED_KEY -> -1
+                d2 == PINNED_KEY && d1 != PINNED_KEY -> 1
                 d1 == LAST_USED_KEY && d2 != LAST_USED_KEY -> -1
                 d2 == LAST_USED_KEY && d1 != LAST_USED_KEY -> 1
                 d1 == "" && d2 != "" -> 1
@@ -87,6 +97,7 @@ class AnimeSourcesScreenModel(
         }
         val byLang = filtered.groupByTo(map) {
             when {
+                verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
                 it.isUsedLast -> LAST_USED_KEY
                 else -> it.lang
             }
@@ -94,7 +105,7 @@ class AnimeSourcesScreenModel(
 
         // 4. Flatten to UI Models, respecting collapsed state
         val uiItems = byLang.flatMap { (lang, sources) ->
-            if (lang in collapsed && query.isBlank()) {
+            if (lang in collapsed && query.isBlank() && lang != PINNED_KEY) {
                 listOf(AnimeSourceUiModel.Header(lang, isCollapsed = true))
             } else {
                 listOf(AnimeSourceUiModel.Header(lang, isCollapsed = false)) +
@@ -158,6 +169,7 @@ class AnimeSourcesScreenModel(
         val pinnedItems: ImmutableList<AnimeSource> = persistentListOf(),
         val searchQuery: String = "",
         val collapsedLanguages: ImmutableSet<String> = persistentSetOf(),
+        val verticalPinnedLayout: Boolean = false,
     ) {
         val isEmpty = items.isEmpty() && pinnedItems.isEmpty()
     }

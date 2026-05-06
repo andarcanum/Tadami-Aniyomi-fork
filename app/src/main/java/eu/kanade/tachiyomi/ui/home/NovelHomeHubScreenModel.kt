@@ -165,7 +165,9 @@ class NovelHomeHubScreenModel(
                 }
                 val previousHero = mutableState.value.hero
 
-                val novelRecommendations = filteredNovel.take(10)
+                val novelRecommendations = filteredNovel
+                    .sortedByDescending { it.novel.dateAdded }
+                    .take(10)
 
                 mutableState.update {
                     it.copy(

@@ -26,6 +26,7 @@ sealed class MangaExtension {
         val sources: List<MangaSource>,
         val icon: Drawable?,
         val hasUpdate: Boolean = false,
+        val needsReinstall: Boolean = false,
         val isObsolete: Boolean = false,
         val isShared: Boolean,
         val repoUrl: String? = null,
@@ -43,6 +44,7 @@ sealed class MangaExtension {
         val apkName: String,
         val iconUrl: String,
         val repoUrl: String,
+        val repoName: String = "",
     ) : MangaExtension() {
 
         data class MangaSource(
@@ -71,4 +73,11 @@ sealed class MangaExtension {
         override val lang: String? = null,
         override val isNsfw: Boolean = false,
     ) : MangaExtension()
+}
+
+internal fun List<MangaExtension.Available>.newestByVersion(): MangaExtension.Available? {
+    return maxWithOrNull(
+        compareBy<MangaExtension.Available> { it.versionCode }
+            .thenBy { it.libVersion },
+    )
 }

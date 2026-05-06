@@ -308,7 +308,7 @@ internal fun HeroSection(
     Box(
         modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp).height(
             440.dp,
-        ).padding(16.dp)
+        ).padding(horizontal = 16.dp, vertical = 14.dp)
             .clip(heroCardShape)
             .border(width = 1.dp, brush = rimLightBrush, shape = heroCardShape)
             .clickable {
@@ -565,7 +565,7 @@ internal fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .auroraCenteredMaxWidth(contentMaxWidthDp)
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 24.dp, vertical = 14.dp),
     ) {
         Button(
             onClick = {

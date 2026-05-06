@@ -51,4 +51,58 @@ class NovelPluginRuntimeOverridesTest {
 
         parsed.forPlugin("rulate").version shouldBe 1
     }
+
+    @Test
+    fun `disableFallbacks defaults to true`() {
+        val override = NovelPluginRuntimeOverride(pluginId = "test")
+        override.disableFallbacks shouldBe true
+    }
+
+    @Test
+    fun `disableScriptPatches defaults to true`() {
+        val override = NovelPluginRuntimeOverride(pluginId = "test")
+        override.disableScriptPatches shouldBe true
+    }
+
+    @Test
+    fun `fromJson populates disableFallbacks when present`() {
+        val payload = """
+            {
+                "entries": [
+                    {
+                        "pluginId": "wuxiaworld",
+                        "disableFallbacks": false
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val parsed = NovelPluginRuntimeOverrides.fromJson(
+            json = Json { ignoreUnknownKeys = true },
+            payload = payload,
+        )
+
+        parsed.forPlugin("wuxiaworld").disableFallbacks shouldBe false
+    }
+
+    @Test
+    fun `fromJson populates disableScriptPatches when present`() {
+        val payload = """
+            {
+                "entries": [
+                    {
+                        "pluginId": "royalroad",
+                        "disableScriptPatches": false
+                    }
+                ]
+            }
+        """.trimIndent()
+
+        val parsed = NovelPluginRuntimeOverrides.fromJson(
+            json = Json { ignoreUnknownKeys = true },
+            payload = payload,
+        )
+
+        parsed.forPlugin("royalroad").disableScriptPatches shouldBe false
+    }
 }

@@ -283,6 +283,6 @@ class NovelList(id: Long) : BaseTracker(id, "NovelList"), MangaTracker {
         const val DROPPED = 4L
         const val PLAN_TO_READ = 5L
 
-        const val LOGIN_URL = "https://www.novellist.co/login"
+        const val LOGIN_URL = "https://www.novellist.co/sign-in"
     }
 }
