@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
+import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.track.model.AutoTrackState
 import eu.kanade.domain.track.novel.interactor.TrackNovelChapter
@@ -154,6 +155,14 @@ class NovelSelectedTextTranslationScreenModelTest {
         Injekt.addSingleton(fullType<Json>(), Json { encodeDefaults = true })
         every { getNovelSeriesWithEntries.subscribe(any()) } returns MutableStateFlow(null)
         Injekt.addSingleton(fullType<GetNovelSeriesWithEntries>(), getNovelSeriesWithEntries)
+
+        runCatching { Injekt.get<BasePreferences>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<BasePreferences>(),
+                    BasePreferences(Injekt.get<Application>(), ReactivePreferenceStore()),
+                )
+            }
     }
 
     @Test
