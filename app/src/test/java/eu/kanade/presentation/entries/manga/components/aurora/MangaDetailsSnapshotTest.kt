@@ -32,6 +32,100 @@ class MangaDetailsSnapshotTest {
     }
 
     @Test
+    fun `progress shows zero percent when no chapters are read`() {
+        val chapters = listOf(
+            Chapter.create().copy(id = 1L, mangaId = 1L, name = "Chapter 1"),
+            Chapter.create().copy(id = 2L, mangaId = 1L, name = "Chapter 2"),
+        )
+
+        val snapshot = resolveMangaProgressSnapshot(chapters)
+
+        snapshot.shouldNotBeNull()
+        snapshot.currentChapterIndex shouldBe null
+        snapshot.totalChapters shouldBe 2
+        snapshot.hasProgress shouldBe false
+        snapshot.progressText shouldBe "0 / 2"
+    }
+
+    @Test
+    fun `progress is order-independent when chapters are sorted differently`() {
+        val chapters = listOf(
+            Chapter.create().copy(
+                id = 1L,
+                mangaId = 1L,
+                name = "Chapter 1",
+                chapterNumber = 1.0,
+                read = true,
+                lastPageRead = 0,
+            ),
+            Chapter.create().copy(
+                id = 2L,
+                mangaId = 1L,
+                name = "Chapter 2",
+                chapterNumber = 2.0,
+                read = true,
+                lastPageRead = 0,
+            ),
+            Chapter.create().copy(
+                id = 3L,
+                mangaId = 1L,
+                name = "Chapter 3",
+                chapterNumber = 3.0,
+                read = false,
+                lastPageRead = 0,
+            ),
+            Chapter.create().copy(
+                id = 4L,
+                mangaId = 1L,
+                name = "Chapter 4",
+                chapterNumber = 4.0,
+                read = false,
+                lastPageRead = 0,
+            ),
+        )
+
+        // Same chapters, ascending order (1,2,3,4)
+        val ascending = resolveMangaProgressSnapshot(chapters)
+        ascending?.progressText shouldBe "2 / 4 (50%)"
+        ascending?.percent shouldBe 0.5f
+
+        // Same chapters, descending order (4,3,2,1)
+        val descending = resolveMangaProgressSnapshot(chapters.reversed())
+        descending?.progressText shouldBe "2 / 4 (50%)"
+        descending?.percent shouldBe 0.5f
+
+        // Both should be identical regardless of order
+        ascending?.progressText shouldBe descending?.progressText
+        ascending?.percent shouldBe descending?.percent
+    }
+
+    @Test
+    fun `progress respects partial read chapters via lastPageRead`() {
+        val chapters = listOf(
+            Chapter.create().copy(
+                id = 1L,
+                mangaId = 1L,
+                name = "Chapter 1",
+                chapterNumber = 1.0,
+                read = false,
+                lastPageRead = 5,
+            ),
+            Chapter.create().copy(
+                id = 2L,
+                mangaId = 1L,
+                name = "Chapter 2",
+                chapterNumber = 2.0,
+                read = false,
+                lastPageRead = 0,
+            ),
+        )
+
+        val snapshot = resolveMangaProgressSnapshot(chapters)
+        snapshot?.progressText shouldBe "1 / 2 (50%)"
+        snapshot?.percent shouldBe 0.5f
+    }
+
+    @Test
     fun `translation text ignores scanlator names without locale`() {
         resolveMangaTranslationText(
             selectedScanlator = "Dynasty Scans",
@@ -95,9 +189,9 @@ class MangaDetailsSnapshotTest {
         snapshot.ratingText shouldBe "8.6"
         snapshot.formatText shouldBe "..."
         snapshot.statusText shouldBe "..."
-        snapshot.progress.shouldNotBeNull().progressText shouldBe "2 / 2 (100%)"
+        snapshot.progress.shouldNotBeNull().progressText shouldBe "1 / 2 (50%)"
         snapshot.progress?.chaptersText shouldBe "2"
-        snapshot.isCompleted shouldBe true
+        snapshot.isCompleted shouldBe false
     }
 
     @Test

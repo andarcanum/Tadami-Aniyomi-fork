@@ -165,20 +165,24 @@ fun resolveMangaRatingValue(
 }
 
 fun resolveMangaProgressSnapshot(chapters: List<Chapter>): MangaProgressSnapshot? {
-    val chapterItems = chapters
-    if (chapterItems.isEmpty()) return null
+    if (chapters.isEmpty()) return null
 
-    val currentChapterIndex = chapterItems.indexOfLast { chapter ->
+    val totalChapters = chapters.size
+    val readCount = chapters.count { chapter ->
         chapter.read || chapter.lastPageRead > 0L
-    }.takeIf { it >= 0 }
+    }
 
-    val percent = currentChapterIndex?.let { index ->
-        (index + 1).toFloat() / chapterItems.size.toFloat()
+    val currentChapterIndex = (readCount - 1).takeIf { it >= 0 }
+
+    val percent = if (readCount > 0 && totalChapters > 0) {
+        readCount.toFloat() / totalChapters.toFloat()
+    } else {
+        null
     }
 
     return MangaProgressSnapshot(
         currentChapterIndex = currentChapterIndex,
-        totalChapters = chapterItems.size,
+        totalChapters = totalChapters,
         percent = percent,
     )
 }
