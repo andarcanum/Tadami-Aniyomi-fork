@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.extension.manga.installer
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -62,6 +63,7 @@ class PackageInstallerInstallerManga(private val service: Service) : InstallerMa
     // Always ready
     override var ready = true
 
+    @SuppressLint("RequestInstallPackagesPolicy")
     override fun processEntry(entry: Entry) {
         super.processEntry(entry)
         activeSession = null
@@ -124,7 +126,7 @@ class PackageInstallerInstallerManga(private val service: Service) : InstallerMa
             service,
             packageActionReceiver,
             IntentFilter(INSTALL_ACTION),
-            ContextCompat.RECEIVER_EXPORTED,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
     }
 }
