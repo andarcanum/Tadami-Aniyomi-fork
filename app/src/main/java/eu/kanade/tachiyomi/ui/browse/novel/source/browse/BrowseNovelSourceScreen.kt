@@ -125,6 +125,7 @@ data class BrowseNovelSourceScreen(
                             { navigator.push(screen) }
                         },
                         onSearch = screenModel::search,
+                        useAuroraAppBarActions = false,
                     )
 
                     Row(

@@ -39,6 +39,7 @@ fun BrowseMangaSourceToolbar(
     onHelpClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onSearch: (String) -> Unit,
+    useAuroraAppBarActions: Boolean = true,
     scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
     // Avoid capturing unstable source in actions lambda
@@ -98,7 +99,7 @@ fun BrowseMangaSourceToolbar(
                 }
                 .build()
 
-            if (isAurora) {
+            if (isAurora && useAuroraAppBarActions) {
                 AuroraAppBarActions(actions = toolbarActions)
             } else {
                 AppBarActions(actions = toolbarActions)

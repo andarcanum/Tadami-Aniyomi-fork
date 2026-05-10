@@ -156,6 +156,7 @@ data class BrowseMangaSourceScreen(
                             navigator.push(MangaSourcePreferencesScreen(sourceId))
                         },
                         onSearch = { filterQuery -> scope.launch { queryEvent.send(SearchType.Text(filterQuery)) } },
+                        useAuroraAppBarActions = false,
                     )
 
                     Row(

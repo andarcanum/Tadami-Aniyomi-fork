@@ -38,6 +38,7 @@ fun BrowseNovelSourceToolbar(
     onWebViewClick: (() -> Unit)?,
     onSettingsClick: (() -> Unit)?,
     onSearch: (String) -> Unit,
+    useAuroraAppBarActions: Boolean = true,
     scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
     val title = source?.name
@@ -87,7 +88,7 @@ fun BrowseNovelSourceToolbar(
                 }
                 .build()
 
-            if (isAurora) {
+            if (isAurora && useAuroraAppBarActions) {
                 AuroraAppBarActions(actions = toolbarActions)
             } else {
                 AppBarActions(actions = toolbarActions)

@@ -154,6 +154,7 @@ data class BrowseAnimeSourceScreen(
                         onHelpClick = onHelpClick,
                         onSettingsClick = { navigator.push(AnimeSourcePreferencesScreen(sourceId)) },
                         onSearch = screenModel::search,
+                        useAuroraAppBarActions = false,
                     )
 
                     Row(
