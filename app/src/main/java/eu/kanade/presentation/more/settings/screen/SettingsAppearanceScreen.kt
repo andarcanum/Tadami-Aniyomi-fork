@@ -28,6 +28,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.AnimeMetadataSource
 import eu.kanade.domain.ui.model.AuroraTitleHeroCtaMode
+import eu.kanade.domain.ui.model.BottomNavAppearance
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.domain.ui.model.HomeHubRecentCardMode
@@ -373,6 +374,16 @@ object SettingsAppearanceScreen : SearchableSettings {
                         preference = showMangaScanlatorBranchesPref,
                         title = stringResource(AYMR.strings.pref_show_manga_scanlator_branches),
                         subtitle = stringResource(AYMR.strings.pref_show_manga_scanlator_branches_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.bottomNavAppearance(),
+                        entries = BottomNavAppearance.entries
+                            .associateWith { stringResource(it.titleRes) }
+                            .toImmutableMap(),
+                        title = stringResource(AYMR.strings.pref_bottom_nav_appearance),
+                        onValueChanged = { true },
                     ),
                 )
                 add(
