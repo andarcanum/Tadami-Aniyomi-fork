@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.justRun
 import io.mockk.mockk
 import io.mockk.verify
+import okhttp3.Cookie
 import okhttp3.Interceptor
 import okhttp3.Protocol
 import okhttp3.Request
@@ -22,12 +23,25 @@ class CloudflareInterceptorTest {
         val request = Request.Builder()
             .url("https://novel.tl/images/4/4c/cover.jpg")
             .build()
+        val staleCookie = Cookie.Builder()
+            .name("cf_clearance")
+            .value("stale")
+            .domain(request.url.host)
+            .path("/")
+            .build()
 
         val initialResponse = response(
             request = request,
             code = 403,
             message = "Forbidden",
             server = "cloudflare",
+        )
+        val challengeStillUp = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+            cfMitigated = true,
         )
         val finalResponse = response(
             request = request,
@@ -37,14 +51,14 @@ class CloudflareInterceptorTest {
         )
 
         val cookieJar = mockk<AndroidCookieJar>()
-        every { cookieJar.get(request.url) } returns emptyList()
+        every { cookieJar.get(request.url) } returns listOf(staleCookie)
         every { cookieJar.remove(request.url, listOf("cf_clearance"), 0) } returns 1
 
         val challengeResolver = mockk<CloudflareChallengeResolver>()
-        justRun { challengeResolver.resolve(request, null) }
+        justRun { challengeResolver.resolve(request, staleCookie) }
 
         val chain = mockk<Interceptor.Chain>()
-        every { chain.proceed(request) } returns finalResponse
+        every { chain.proceed(request) } returnsMany listOf(challengeStillUp, finalResponse)
 
         val interceptor = CloudflareInterceptor(
             context = mockk<Context>(relaxed = true),
@@ -57,7 +71,9 @@ class CloudflareInterceptorTest {
 
         assertEquals(200, result.code)
         verify(exactly = 1) { cookieJar.remove(request.url, listOf("cf_clearance"), 0) }
-        verify(exactly = 1) { chain.proceed(request) }
+        verify(exactly = 1) { cookieJar.get(request.url) }
+        verify(exactly = 1) { challengeResolver.resolve(request, staleCookie) }
+        verify(exactly = 2) { chain.proceed(request) }
     }
 
     @Test
@@ -71,6 +87,13 @@ class CloudflareInterceptorTest {
             code = 403,
             message = "Forbidden",
             server = "cloudflare",
+        )
+        val challengeStillUp = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+            cfMitigated = true,
         )
         val finalResponse = response(
             request = request,
@@ -87,7 +110,7 @@ class CloudflareInterceptorTest {
         justRun { challengeResolver.resolve(request, null) }
 
         val chain = mockk<Interceptor.Chain>()
-        every { chain.proceed(request) } returns finalResponse
+        every { chain.proceed(request) } returnsMany listOf(challengeStillUp, finalResponse)
 
         val interceptor = CloudflareInterceptor(
             context = mockk<Context>(relaxed = true),
@@ -102,7 +125,7 @@ class CloudflareInterceptorTest {
         verify(exactly = 1) { cookieJar.remove(request.url, listOf("cf_clearance"), 0) }
         verify(exactly = 1) { cookieJar.get(request.url) }
         verify(exactly = 1) { challengeResolver.resolve(request, null) }
-        verify(exactly = 1) { chain.proceed(request) }
+        verify(exactly = 2) { chain.proceed(request) }
     }
 
     @Test
@@ -167,6 +190,13 @@ class CloudflareInterceptorTest {
             message = "Forbidden",
             server = "cloudflare",
         )
+        val challengeStillUp = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+            cfMitigated = true,
+        )
 
         val cookieJar = mockk<AndroidCookieJar>()
         every { cookieJar.get(request.url) } returns emptyList()
@@ -176,6 +206,7 @@ class CloudflareInterceptorTest {
         every { challengeResolver.resolve(request, null) } throws CloudflareInteractiveChallengeException()
 
         val chain = mockk<Interceptor.Chain>()
+        every { chain.proceed(request) } returns challengeStillUp
 
         val interceptor = CloudflareInterceptor(
             context = mockk<Context>(relaxed = true),
@@ -190,7 +221,9 @@ class CloudflareInterceptorTest {
         } catch (e: IOException) {
             assert(e.cause is CloudflareInteractiveChallengeException)
         }
-        verify(exactly = 0) { chain.proceed(request) }
+        verify(exactly = 1) { cookieJar.remove(request.url, listOf("cf_clearance"), 0) }
+        verify(exactly = 1) { cookieJar.get(request.url) }
+        verify(exactly = 1) { chain.proceed(request) }
     }
 
     private fun response(

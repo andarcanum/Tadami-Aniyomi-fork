@@ -25,7 +25,7 @@ class AuroraTabRowStyleTest {
 
     @Test
     fun `light aurora tab container and selection tokens use light surfaces`() {
-        resolveAuroraTabContainerColor(AuroraColors.Light) shouldBe Color.White
+        resolveAuroraTabContainerColor(AuroraColors.Light) shouldBe Color.Transparent
         resolveAuroraTabSelectionBorderColor(AuroraColors.Light) shouldBe AuroraColors.Light.accent.copy(alpha = 0.28f)
     }
 
