@@ -1907,7 +1907,7 @@ private fun AuroraLibraryCategoryTabs(
 
         if (coercedSelected <= 1) {
             if (scrollState.value != 0) {
-                scrollState.animateScrollTo(0)
+                scrollState.animateScrollTo(0, animationSpec = tween(durationMillis = 350))
             }
             return@LaunchedEffect
         }
@@ -1932,7 +1932,7 @@ private fun AuroraLibraryCategoryTabs(
             (tabCenter - containerWidthPx / 2f).coerceAtLeast(0f).toInt()
 
         if (scrollState.value != targetScroll) {
-            scrollState.animateScrollTo(targetScroll)
+            scrollState.animateScrollTo(targetScroll, animationSpec = tween(durationMillis = 350))
         }
     }
 
