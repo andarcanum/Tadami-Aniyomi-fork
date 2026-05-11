@@ -515,12 +515,19 @@ data object AnimeLibraryTab : Tab {
                     initialPage = animeCategoryIndex,
                     pageCount = { state.categories.size },
                 )
+                val isProgrammaticScroll = remember { mutableStateOf(false) }
+                // When pager changes from user swipe → sync to model
                 LaunchedEffect(pagerState.currentPage) {
-                    screenModel.activeCategoryIndex = pagerState.currentPage
+                    if (!isProgrammaticScroll.value) {
+                        screenModel.activeCategoryIndex = pagerState.currentPage
+                    }
                 }
+                // When model changes from tap → animate pager
                 LaunchedEffect(animeCategoryIndex) {
-                    if (!pagerState.isScrollInProgress && animeCategoryIndex != pagerState.currentPage) {
+                    if (animeCategoryIndex != pagerState.currentPage) {
+                        isProgrammaticScroll.value = true
                         pagerState.animateScrollToPage(animeCategoryIndex)
+                        isProgrammaticScroll.value = false
                     }
                 }
                 HorizontalPager(
@@ -567,12 +574,17 @@ data object AnimeLibraryTab : Tab {
                     initialPage = mangaCategoryIndex,
                     pageCount = { mangaState.categories.size },
                 )
+                val isProgrammaticScroll = remember { mutableStateOf(false) }
                 LaunchedEffect(pagerState.currentPage) {
-                    mangaScreenModel.activeCategoryIndex = pagerState.currentPage
+                    if (!isProgrammaticScroll.value) {
+                        mangaScreenModel.activeCategoryIndex = pagerState.currentPage
+                    }
                 }
                 LaunchedEffect(mangaCategoryIndex) {
-                    if (!pagerState.isScrollInProgress && mangaCategoryIndex != pagerState.currentPage) {
+                    if (mangaCategoryIndex != pagerState.currentPage) {
+                        isProgrammaticScroll.value = true
                         pagerState.animateScrollToPage(mangaCategoryIndex)
+                        isProgrammaticScroll.value = false
                     }
                 }
                 HorizontalPager(
@@ -653,12 +665,17 @@ data object AnimeLibraryTab : Tab {
                     initialPage = novelCategoryIndex,
                     pageCount = { novelCategories.size },
                 )
+                val isProgrammaticScroll = remember { mutableStateOf(false) }
                 LaunchedEffect(pagerState.currentPage) {
-                    novelScreenModel.activeCategoryIndex = pagerState.currentPage
+                    if (!isProgrammaticScroll.value) {
+                        novelScreenModel.activeCategoryIndex = pagerState.currentPage
+                    }
                 }
                 LaunchedEffect(novelCategoryIndex) {
-                    if (!pagerState.isScrollInProgress && novelCategoryIndex != pagerState.currentPage) {
+                    if (novelCategoryIndex != pagerState.currentPage) {
+                        isProgrammaticScroll.value = true
                         pagerState.animateScrollToPage(novelCategoryIndex)
+                        isProgrammaticScroll.value = false
                     }
                 }
                 HorizontalPager(
