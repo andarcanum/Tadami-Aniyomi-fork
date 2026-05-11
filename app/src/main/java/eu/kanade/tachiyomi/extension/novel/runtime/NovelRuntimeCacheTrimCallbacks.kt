@@ -23,6 +23,7 @@ class NovelRuntimeCacheTrimCallbacks(
     private val sourceFactory: NovelPluginSourceFactory,
 ) : ComponentCallbacks2 {
 
+    @Suppress("DEPRECATION")
     override fun onTrimMemory(level: Int) {
         if (level < ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) return
         logcat(LogPriority.DEBUG) {
@@ -31,6 +32,7 @@ class NovelRuntimeCacheTrimCallbacks(
         sourceFactory.clearRuntimeCaches()
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onLowMemory() {
         logcat(LogPriority.DEBUG) {
             "NovelRuntimeCacheTrimCallbacks.onLowMemory(): clearing plugin runtime caches"

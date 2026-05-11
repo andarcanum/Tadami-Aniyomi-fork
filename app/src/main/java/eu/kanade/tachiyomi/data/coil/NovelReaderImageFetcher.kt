@@ -36,7 +36,7 @@ class NovelReaderRefererImageFetcher(
             .build()
 
         val response = callFactory.value.newCall(request).execute()
-        val body = response.body ?: throw IOException("Empty body")
+        val body = response.body
         if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
 
         return SourceFetchResult(

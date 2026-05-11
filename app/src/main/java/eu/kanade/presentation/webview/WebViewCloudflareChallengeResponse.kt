@@ -39,7 +39,7 @@ internal fun interceptCloudflareChallengeMainFrame(
             .url(request.url.toString())
             .apply {
                 safeHeaders.forEach { (name, value) ->
-                    if (value != null) addHeader(name, value)
+                    addHeader(name, value)
                 }
             }
             .get()

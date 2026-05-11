@@ -652,7 +652,7 @@ data object AnimeLibraryTab : Tab {
                     pageCount = { novelCategories.size },
                 )
                 LaunchedEffect(pagerState.currentPage) {
-                    novelScreenModel?.activeCategoryIndex = pagerState.currentPage
+                    novelScreenModel.activeCategoryIndex = pagerState.currentPage
                 }
                 LaunchedEffect(novelCategoryIndex) {
                     if (!pagerState.isScrollInProgress && novelCategoryIndex != pagerState.currentPage) {

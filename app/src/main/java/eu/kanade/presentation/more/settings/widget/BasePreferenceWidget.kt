@@ -126,7 +126,6 @@ internal fun BasePreferenceWidget(
                 .then(
                     if (isAurora && onLongClick != null) {
                         Modifier.combinedClickable(
-                            enabled = onClick != null || onLongClick != null,
                             onClick = {
                                 appHaptics.tap()
                                 onClick?.invoke()
