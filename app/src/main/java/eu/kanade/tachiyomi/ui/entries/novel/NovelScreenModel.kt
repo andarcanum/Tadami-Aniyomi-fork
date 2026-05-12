@@ -423,7 +423,7 @@ class NovelScreenModel(
             readerSettingsCache = readerSettings
             val translatedDownloadFormat = novelReaderPreferences.translatedDownloadFormat(novel.id)
             val isJaomixPagedSource = source.isJaomixPagedSource()
-            val shouldAutoRefreshNovel = !novel.initialized
+            val shouldAutoRefreshNovel = !novel.initialized || chapters.isEmpty()
             val shouldAutoRefreshChapters = chapters.isEmpty() || isJaomixPagedSource
             val currentDownloadedIds = (state.value as? State.Success)
                 ?.downloadedChapterIds
@@ -2292,7 +2292,9 @@ internal fun resolveNovelRefreshErrorMessage(
     likelyWebViewLoginRequired: Boolean,
 ): String? {
     val isConnectivityLikeError = error.message?.contains("Could not reach", ignoreCase = true) == true
-    if (likelyWebViewLoginRequired && (error is NoChaptersException || isConnectivityLikeError)) {
+    // Always surface NoChaptersException so the user knows chapters weren't found,
+    // even for WebView-based sources — silent suppression leaves the UI stuck at 0 chapters.
+    if (likelyWebViewLoginRequired && (isConnectivityLikeError)) {
         return null
     }
     return when (error) {

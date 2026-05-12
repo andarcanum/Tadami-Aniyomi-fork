@@ -83,6 +83,8 @@ class NovelJsSource internal constructor(
     private var settingsSchema: List<PluginSettingDefinition> = emptyList()
     private var cachedParseNovelUrl: String? = null
     private var cachedParseNovelResult: ParsedPluginNovel? = null
+    private var settingsDiscoveryAttempted = false
+    private var cachedHasSettings = false
 
     override val pluginCapabilities: NovelPluginCapabilities?
         get() = capabilities
@@ -210,12 +212,19 @@ class NovelJsSource internal constructor(
             return false
         }
 
-        return runCatching {
+        if (settingsDiscoveryAttempted) {
+            return cachedHasSettings
+        }
+
+        settingsDiscoveryAttempted = true
+        cachedHasSettings = runCatching {
             runBlocking {
                 mutex.withLock { ensureRuntimeLocked() }
             }
             settingsSchema.isNotEmpty()
         }.getOrDefault(false)
+
+        return cachedHasSettings
     }
 
     @Deprecated("Use the non-RxJava API instead.")
@@ -725,7 +734,11 @@ class NovelJsSource internal constructor(
     }
 
     private fun ensureRuntimeLocked(): NovelJsRuntime {
-        runtime?.let { return it }
+        runtime?.let {
+            if (!it.released) return it
+            // Runtime was disposed (e.g. by clearInMemoryCaches), create a fresh one
+            runtime = null
+        }
         val instance = runtimeFactory.create(plugin.id)
         val wrappedScript = scriptBuilder.wrap(script, plugin.id)
         instance.evaluate(wrappedScript, "${plugin.id}.js")

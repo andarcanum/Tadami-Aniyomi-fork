@@ -111,7 +111,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -1889,7 +1888,7 @@ class NovelReaderScreenModel(
         val chapterId = currentChapter?.id
         if (chapterId != null) {
             val finalReadDurationMs = (System.currentTimeMillis() - chapterReadStartTimeMs).coerceAtLeast(0L)
-            runBlocking(NonCancellable) {
+            screenModelScope.launch(NonCancellable + Dispatchers.IO) {
                 awaitPendingProgressPersistence()
                 flushPendingHistorySnapshot(
                     chapterId = chapterId,
@@ -1898,7 +1897,7 @@ class NovelReaderScreenModel(
             }
         }
         clearChapterTransientState()
-        runBlocking(NonCancellable) {
+        screenModelScope.launch(NonCancellable + Dispatchers.IO) {
             settingsJob?.cancelAndJoin()
             nextChapterPrefetchJob?.cancelAndJoin()
             nextChapterGeminiPrefetchJob?.cancelAndJoin()

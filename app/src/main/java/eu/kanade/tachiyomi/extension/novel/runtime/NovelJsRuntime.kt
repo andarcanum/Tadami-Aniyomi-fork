@@ -65,6 +65,9 @@ class NovelJsRuntime(
 
     private val compatibilityLogger = CompatibilityLogger(pluginId)
 
+    @Volatile
+    var released = false
+
     private val runtimeExecutor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "NovelJsRuntime-$pluginId").apply { isDaemon = true }
     }
@@ -92,6 +95,7 @@ class NovelJsRuntime(
     }
 
     override fun close() {
+        released = true
         runOnRuntimeThread {
             nativeApi.domReleaseAll()
             v8.release(true)
@@ -1250,7 +1254,7 @@ class NovelJsModuleRegistry(
     private val defaultCoverModule = """
         __defineModule("@libs/defaultCover", function(module, exports) {
           module.exports = {
-            defaultCover: ""
+            defaultCover: "https://github.com/LNReader/lnreader-plugins/blob/main/icons/src/coverNotAvailable.jpg?raw=true"
           };
         });
     """.trimIndent()
