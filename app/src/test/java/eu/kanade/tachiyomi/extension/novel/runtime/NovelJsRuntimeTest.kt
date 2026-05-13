@@ -63,6 +63,11 @@ class NovelJsRuntimeTest {
         script.shouldContain("filter: function(predicate)")
         script.shouldContain("map: function(fn)")
         script.shouldContain("toArray: function() { return mapped.slice(); }")
+        // text node detection in toArray()
+        script.shouldContain("__native.domIsTextNode")
+        script.shouldContain("obj.data = __native.domText")
+        // $.html(el) with raw node object should use outerHtml, not rootHandle
+        script.shouldContain("__native.domOuterHtml(selector.handle)")
         script.shouldContain("parent: function(selector)")
         script.shouldContain("children: function(selector)")
         script.shouldContain("siblings: function(selector)")
@@ -420,7 +425,8 @@ class NovelJsRuntimeTest {
     fun `cheerio module defines element name property in wrapHandles`() {
         val script = NovelJsModuleRegistry().modules().first { it.name == "cheerio.js" }.script
 
-        script.shouldContain("name: __native.domTagName(handles[i])")
+        // toArray() now uses a tagName variable to avoid duplicate native calls
+        script.shouldContain("name: tagName")
         script.shouldContain("name: __native.domTagName(handles[index])")
     }
 

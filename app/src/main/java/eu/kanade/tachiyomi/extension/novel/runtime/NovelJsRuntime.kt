@@ -1762,12 +1762,21 @@ class NovelJsModuleRegistry(
               toArray: function() {
                 var arr = [];
                 for (var i = 0; i < handles.length; i++) {
-                  arr.push({
-                    handle: handles[i],
-                    tagName: __native.domTagName(handles[i]),
-                    name: __native.domTagName(handles[i]),
-                    attribs: JSON.parse(__native.domAttrs(handles[i]))
-                  });
+                  var h = handles[i];
+                  var isText = __native.domIsTextNode(h);
+                  var tagName = isText ? '' : __native.domTagName(h);
+                  // 'tag' for real elements, 'text' for text nodes,
+                  // 'comment' for comment/other nodes (empty tagName, not text)
+                  var type = isText ? 'text' : (tagName !== '' ? 'tag' : 'comment');
+                  var obj = {
+                    handle: h,
+                    type: type,
+                    tagName: tagName,
+                    name: tagName,
+                    attribs: isText ? {} : JSON.parse(__native.domAttrs(h))
+                  };
+                  if (isText) obj.data = __native.domText(h);
+                  arr.push(obj);
                 }
                 return arr;
               },
@@ -2163,7 +2172,15 @@ class NovelJsModuleRegistry(
               return __native.domText(rootHandle);
             };
             $.html = function(selector) {
+              if (selector == null) return __native.domHtml(rootHandle);
               if (typeof selector === "string") return $(selector).html();
+              // If given a wrapped cheerio object, return the outerHtml of its first element.
+              // If given a raw node object (from toArray()), return its outerHtml.
+              // This matches real cheerio's $.html(element) behaviour.
+              if (selector && typeof selector === "object") {
+                if (selector._handles && selector._handles.length) return __native.domOuterHtml(selector._handles[0]);
+                if (typeof selector.handle === "number") return __native.domOuterHtml(selector.handle);
+              }
               return __native.domHtml(rootHandle);
             };
             $.find = function(selector) { return $(selector); };
