@@ -84,7 +84,13 @@ sealed class Preference {
             override val title: String,
             override val subtitle: String? = "%s",
             val subtitleProvider: @Composable (value: T, entries: ImmutableMap<T, String>) -> String? =
-                { v, e -> subtitle?.format(e[v]) },
+                { v, entries ->
+                    try {
+                        subtitle?.format(entries[v])
+                    } catch (ex: IllegalArgumentException) {
+                        entries[v]
+                    }
+                },
             override val icon: ImageVector? = null,
             override val enabled: Boolean = true,
             override val visible: Boolean = true,
@@ -107,7 +113,13 @@ sealed class Preference {
             override val title: String,
             override val subtitle: String? = "%s",
             val subtitleProvider: @Composable (value: String, entries: ImmutableMap<String, String>) -> String? =
-                { v, e -> subtitle?.format(e[v]) },
+                { v, entries ->
+                    try {
+                        subtitle?.format(entries[v])
+                    } catch (ex: IllegalArgumentException) {
+                        entries[v]
+                    }
+                },
             override val icon: ImageVector? = null,
             override val enabled: Boolean = true,
             override val onValueChanged: suspend (value: String) -> Boolean = { true },
@@ -131,7 +143,11 @@ sealed class Preference {
                             .takeUnless { it.isBlank() }
                     }
                         ?: stringResource(MR.strings.none)
-                    subtitle?.format(combined)
+                    try {
+                        subtitle?.format(combined)
+                    } catch (ex: IllegalArgumentException) {
+                        combined
+                    }
                 },
             override val icon: ImageVector? = null,
             override val enabled: Boolean = true,

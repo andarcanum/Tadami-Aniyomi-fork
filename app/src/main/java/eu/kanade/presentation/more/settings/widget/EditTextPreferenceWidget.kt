@@ -51,7 +51,13 @@ fun EditTextPreferenceWidget(
 
     TextPreferenceWidget(
         title = title,
-        subtitle = if (formatSubtitle) subtitle?.format(value) else subtitle,
+        subtitle = if (formatSubtitle) {
+            try {
+                subtitle?.format(value)
+            } catch (ex: IllegalArgumentException) {
+                value
+            }
+        } else subtitle,
         icon = icon,
         enabled = enabled,
         onPreferenceClick = { isDialogShown = true },
