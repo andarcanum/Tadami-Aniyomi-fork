@@ -122,7 +122,11 @@ class ReaderViewModel @JvmOverloads constructor(
     private val activityDataRepository: ActivityDataRepository = Injekt.get(),
 ) : ViewModel() {
 
-    private val mutableState = MutableStateFlow(State())
+    private val mutableState = MutableStateFlow(
+        State(
+            autoScrollSpeed = resolveInitialAutoScrollSpeed(readerPreferences),
+        ),
+    )
     val state = mutableState.asStateFlow()
 
     private val eventChannel = Channel<Event>()
@@ -1097,7 +1101,9 @@ class ReaderViewModel @JvmOverloads constructor(
      * Sets the auto-scroll speed (1-100).
      */
     fun setAutoScrollSpeed(speed: Int) {
-        mutableState.update { it.copy(autoScrollSpeed = speed.coerceIn(1, 100)) }
+        mutableState.update {
+            it.copy(autoScrollSpeed = persistAutoScrollSpeed(readerPreferences, speed))
+        }
     }
 
     /**
@@ -1410,3 +1416,16 @@ internal fun prepareAdjacentChapterSwitch(
 }
 
 private const val WEBTOON_PROGRESS_SAVE_DEBOUNCE_MILLIS = 350L
+
+internal fun resolveInitialAutoScrollSpeed(readerPreferences: ReaderPreferences): Int {
+    return readerPreferences.autoScrollSpeed().get().coerceIn(1, 100)
+}
+
+internal fun persistAutoScrollSpeed(
+    readerPreferences: ReaderPreferences,
+    speed: Int,
+): Int {
+    val clampedSpeed = speed.coerceIn(1, 100)
+    readerPreferences.autoScrollSpeed().set(clampedSpeed)
+    return clampedSpeed
+}
