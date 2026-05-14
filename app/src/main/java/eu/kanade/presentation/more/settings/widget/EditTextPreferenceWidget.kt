@@ -57,7 +57,9 @@ fun EditTextPreferenceWidget(
             } catch (ex: IllegalArgumentException) {
                 value
             }
-        } else subtitle,
+        } else {
+            subtitle
+        },
         icon = icon,
         enabled = enabled,
         onPreferenceClick = { isDialogShown = true },

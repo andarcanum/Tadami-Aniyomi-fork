@@ -18,6 +18,21 @@
 -keep,allowoptimization class rx.** { public protected *; }
 -keep,allowoptimization class app.cash.quickjs.** { public protected *; }
 -keep class com.eclipsesource.v8.** { *; }
+
+# J2V8 native bridge — the broad `allowoptimization` on eu.kanade.** (line 3)
+# allows R8 to apply lambda-class merging to the 50+ JavaCallback lambdas in
+# NovelJsRuntime.bindNativeApi(). R8 merges structurally-similar lambdas into
+# one class with a discriminator field; if the discriminator is set incorrectly
+# (known R8 regression), the wrong native method gets dispatched
+# (e.g. domSelect → domParent, domText → domIsTextNode).
+# Symptom: JavaScript TypeError / wrong return values only in release builds.
+#
+# Fix: prevent ALL R8 optimisation on the entire novel runtime package.
+# Using $** (double star) to capture deeply nested anonymous lambdas and
+# companion objects, not just direct inner classes ($*).
+# The -keep without allowoptimization overrides the broader allowoptimization
+# rule on line 3 for these specific classes.
+-keep class eu.kanade.tachiyomi.extension.novel.runtime.** { *; }
 -keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
 -keep,allowoptimization class is.xyz.mpv.** { public protected *; }
 -keep,allowoptimization class com.arthenica.** { public protected *; }

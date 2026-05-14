@@ -56,6 +56,7 @@ icon-ai-social-1-*.png
 .kilo/
 nul
 .superpowers/
+.zed/
 
 # Ignored by Agent
 .gradle-user/
