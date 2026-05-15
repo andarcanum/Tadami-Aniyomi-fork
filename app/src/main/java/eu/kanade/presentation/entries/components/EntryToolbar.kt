@@ -39,6 +39,7 @@ fun EntryToolbar(
     onClickRefresh: () -> Unit,
     onClickMigrate: (() -> Unit)?,
     onClickSettings: (() -> Unit)?,
+    onClickOmniBuilder: (() -> Unit)? = null,
     onToggleAutoJumpToNext: (() -> Unit)?,
     autoJumpToNextLabel: String?,
     // Anime only
@@ -168,6 +169,14 @@ fun EntryToolbar(
                             AppBar.OverflowAction(
                                 title = stringResource(AYMR.strings.settings),
                                 onClick = onClickSettings,
+                            ),
+                        )
+                    }
+                    if (onClickOmniBuilder != null) {
+                        add(
+                            AppBar.OverflowAction(
+                                title = stringResource(MR.strings.action_train_parser),
+                                onClick = onClickOmniBuilder,
                             ),
                         )
                     }

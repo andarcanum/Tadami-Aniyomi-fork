@@ -1210,4 +1210,24 @@
     <string name="snackbar_translation_queued">Translation queued</string>
     <string name="snackbar_translation_start_error">Failed to start translation:</string>
     <string name="notification_action_open">Open</string>
+
+    <!-- OmniBuilder -->
+    <string name="action_train_parser">⚙️ Train Parser (Builder)</string>
+    <string name="omnibuilder_title">Tadami Builder</string>
+    <string name="omnibuilder_loading">Loading page...</string>
+    <string name="omnibuilder_step_1_title">Step 1: Tap the Novel Title</string>
+    <string name="omnibuilder_step_2_title">Step 2: Tap the Cover Image</string>
+    <string name="omnibuilder_step_3_title">Step 3: Tap any Chapter Link</string>
+    <string name="omnibuilder_step_3_desc">This is mandatory to find the chapter list.</string>
+    <string name="omnibuilder_step_4_title">Step 4: Tap Pagination</string>
+    <string name="omnibuilder_step_4_desc">(e.g. 'Next' button or a Dropdown)</string>
+    <string name="omnibuilder_step_pagination_type">What kind of pagination is this?</string>
+    <string name="omnibuilder_pagination_dropdown">Dropdown</string>
+    <string name="omnibuilder_pagination_next">Next Link</string>
+    <string name="omnibuilder_review_title">Ready to save rules!</string>
+    <string name="omnibuilder_action_save">Save &amp; Finish</string>
+    <string name="omnibuilder_action_skip">Skip</string>
+    <string name="omnibuilder_action_back">Back</string>
+    <string name="omnibuilder_mode_select">Selection Mode</string>
+    <string name="omnibuilder_mode_interact">Interaction Mode</string>
 </resources>

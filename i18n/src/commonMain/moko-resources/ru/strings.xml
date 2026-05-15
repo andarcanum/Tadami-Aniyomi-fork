@@ -1077,4 +1077,24 @@
     <string name="snackbar_translation_queued">Перевод добавлен в очередь</string>
     <string name="snackbar_translation_start_error">Ошибка запуска переводчика:</string>
     <string name="notification_action_open">Открыть</string>
+
+    <!-- OmniBuilder -->
+    <string name="action_train_parser">⚙️ Обучить парсер (Builder)</string>
+    <string name="omnibuilder_title">Конструктор Tadami</string>
+    <string name="omnibuilder_loading">Загрузка страницы...</string>
+    <string name="omnibuilder_step_1_title">Шаг 1: Нажмите на название новеллы</string>
+    <string name="omnibuilder_step_2_title">Шаг 2: Нажмите на обложку</string>
+    <string name="omnibuilder_step_3_title">Шаг 3: Нажмите на любую главу</string>
+    <string name="omnibuilder_step_3_desc">Это обязательно для поиска списка глав.</string>
+    <string name="omnibuilder_step_4_title">Шаг 4: Нажмите на элемент пагинации</string>
+    <string name="omnibuilder_step_4_desc">(Например, кнопка «Следующая» или выпадающий список)</string>
+    <string name="omnibuilder_step_pagination_type">Какой это тип пагинации?</string>
+    <string name="omnibuilder_pagination_dropdown">Выпадающий список</string>
+    <string name="omnibuilder_pagination_next">Кнопка «Следующая»</string>
+    <string name="omnibuilder_review_title">Правила готовы к сохранению!</string>
+    <string name="omnibuilder_action_save">Сохранить и завершить</string>
+    <string name="omnibuilder_action_skip">Пропустить</string>
+    <string name="omnibuilder_action_back">Назад</string>
+    <string name="omnibuilder_mode_select">Режим выбора</string>
+    <string name="omnibuilder_mode_interact">Режим сайта</string>
 </resources>

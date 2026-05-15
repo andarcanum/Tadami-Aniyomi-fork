@@ -9,6 +9,7 @@ import eu.kanade.domain.entries.novel.model.toDomainNovel
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.util.ioCoroutineScope
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
+import eu.kanade.tachiyomi.source.novel.OmniSource
 import kotlinx.collections.immutable.PersistentMap
 import kotlinx.collections.immutable.mutate
 import kotlinx.collections.immutable.persistentMapOf
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.preference.toggle
 import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.data.achievement.model.AchievementEvent
@@ -83,7 +85,7 @@ abstract class NovelSearchScreenModel(
 
     open fun getEnabledSources(): List<NovelCatalogueSource> {
         return sourceManager.getCatalogueSources()
-            .filter { it.lang in enabledLanguages && "${it.id}" !in disabledSources }
+            .filter { it.lang in enabledLanguages && "${it.id}" !in disabledSources && it.id != OmniSource.OMNI_SOURCE_ID }
             .sortedWith(
                 compareBy(
                     { "${it.id}" !in pinnedSources },
@@ -118,8 +120,15 @@ abstract class NovelSearchScreenModel(
         achievementHandler.trackFeatureUsed(AchievementEvent.Feature.SEARCH)
 
         searchJob?.cancel()
-        val sources = getEnabledSources()
-            .filter { sourceFilter != NovelSourceFilter.PinnedOnly || "${it.id}" in pinnedSources }
+        
+        val isUrl = query.trim().toHttpUrlOrNull() != null
+        val sources = if (isUrl) {
+            val omni = sourceManager.get(OmniSource.OMNI_SOURCE_ID) as? NovelCatalogueSource
+            if (omni != null) listOf(omni) else emptyList()
+        } else {
+            getEnabledSources()
+                .filter { sourceFilter != NovelSourceFilter.PinnedOnly || "${it.id}" in pinnedSources }
+        }
 
         if (sameQuery) {
             val existingResults = state.value.items

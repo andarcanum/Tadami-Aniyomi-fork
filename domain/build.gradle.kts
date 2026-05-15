@@ -22,7 +22,7 @@ dependencies {
     implementation(projects.sourceApi)
     implementation(projects.core.common)
 
-    implementation(platform(kotlinx.coroutines.bom))
+    implementation(libs.jsoup)
     implementation(kotlinx.bundles.coroutines)
     implementation(kotlinx.bundles.serialization)
 

@@ -320,6 +320,9 @@ import uy.kohesive.injekt.api.addSingletonFactory
 import uy.kohesive.injekt.api.get
 import tachiyomi.domain.series.manga.interactor.ReorderSeriesEntries as ReorderMangaSeriesEntries
 
+import tachiyomi.data.source.novel.OmniRuleRepositoryImpl
+import tachiyomi.domain.source.novel.resolver.repository.OmniRuleRepository
+
 class DomainModule : InjektModule {
 
     override fun InjektRegistrar.registerInjectables() {
@@ -582,6 +585,7 @@ class DomainModule : InjektModule {
 
         addSingletonFactory<NovelSourceRepository> { NovelSourceRepositoryImpl(get(), get()) }
         addSingletonFactory<NovelStubSourceRepository> { NovelStubSourceRepositoryImpl(get()) }
+        addSingletonFactory<OmniRuleRepository> { OmniRuleRepositoryImpl(get()) }
         addFactory {
             val preferences = get<SourcePreferences>()
             GetEnabledNovelSources(

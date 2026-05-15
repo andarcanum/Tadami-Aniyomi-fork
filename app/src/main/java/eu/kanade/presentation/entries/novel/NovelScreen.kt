@@ -88,6 +88,7 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionIconState
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
+import eu.kanade.tachiyomi.ui.entries.novel.OmniBuilderScreen
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
@@ -177,6 +178,8 @@ fun NovelScreen(
     val onToggleAutoJumpToNext = {
         uiPreferences.entryAutoJumpToNextNovel().set(!autoJumpToNextEnabled)
     }
+    
+    val navigator = cafe.adriel.voyager.navigator.LocalNavigator.current
 
     // Route to Aurora implementation if Aurora theme is active
     if (theme.isAuroraStyle) {
@@ -196,6 +199,9 @@ fun NovelScreen(
             onPosterLongClicked = onPosterLongClicked,
             onShare = onShare,
             onWebView = onWebView,
+            onClickOmniBuilder = if (state.novel.source == eu.kanade.tachiyomi.source.novel.OmniSource.OMNI_SOURCE_ID) {
+                { navigator?.push(eu.kanade.tachiyomi.ui.entries.novel.OmniBuilderScreen(state.novel.url)) }
+            } else null,
             onMigrateClicked = onMigrateClicked,
             onTrackingClicked = onTrackingClicked,
             trackingCount = trackingCount,
@@ -368,6 +374,9 @@ fun NovelScreen(
                 onClickRefresh = onRefresh,
                 onClickMigrate = onMigrateClicked,
                 onClickSettings = onSourceSettings,
+                onClickOmniBuilder = if (state.novel.source == eu.kanade.tachiyomi.source.novel.OmniSource.OMNI_SOURCE_ID) {
+                { navigator?.push(eu.kanade.tachiyomi.ui.entries.novel.OmniBuilderScreen(state.novel.url)) }
+            } else null,
                 onToggleAutoJumpToNext = onToggleAutoJumpToNext,
                 autoJumpToNextLabel = autoJumpToNextLabel,
                 changeAnimeSkipIntro = null,

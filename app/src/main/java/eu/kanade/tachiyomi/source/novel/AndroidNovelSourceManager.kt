@@ -64,6 +64,9 @@ class AndroidNovelSourceManager(
                     // Add built-in imported EPUB source
                     val importedEpubSource = ImportedEpubNovelSource()
                     mutableMap[importedEpubSource.id] = importedEpubSource
+                    // Add built-in OmniResolver source
+                    val omniSource = OmniSource()
+                    mutableMap[omniSource.id] = omniSource
                     sourcesMapFlow.value = mutableMap
                     _isInitialized.value = true
                 }

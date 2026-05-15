@@ -1,0 +1,14 @@
+CREATE TABLE omni_rules (
+    domain TEXT NOT NULL PRIMARY KEY,
+    title_selector TEXT,
+    author_selector TEXT,
+    cover_selector TEXT,
+    description_selector TEXT,
+    chapter_list_selector TEXT NOT NULL,
+    chapter_name_selector TEXT,
+    chapter_url_selector TEXT,
+    pagination_selector TEXT,
+    pagination_type TEXT NOT NULL,
+    content_selector TEXT NOT NULL,
+    remove_selectors TEXT
+);

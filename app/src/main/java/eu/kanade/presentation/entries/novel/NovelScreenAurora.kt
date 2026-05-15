@@ -137,6 +137,7 @@ fun NovelScreenAuroraImpl(
     onPosterLongClicked: (() -> Unit)? = null,
     onShare: (() -> Unit)?,
     onWebView: (() -> Unit)?,
+    onClickOmniBuilder: (() -> Unit)?,
     onMigrateClicked: (() -> Unit)?,
     onTrackingClicked: () -> Unit,
     trackingCount: Int,
@@ -750,6 +751,15 @@ fun NovelScreenAuroraImpl(
                                         showMenu = false
                                     },
                                 )
+                                if (onClickOmniBuilder != null) {
+                                    AuroraEntryDropdownMenuItem(
+                                        text = stringResource(MR.strings.action_train_parser),
+                                        onClick = {
+                                            onClickOmniBuilder()
+                                            showMenu = false
+                                        },
+                                    )
+                                }
                                 if (isFromSource) {
                                     AuroraEntryDropdownMenuItem(
                                         text = stringResource(MR.strings.action_webview_refresh),
@@ -1316,7 +1326,17 @@ fun NovelScreenAuroraImpl(
                                     showMenu = false
                                 },
                             )
+                            if (onClickOmniBuilder != null) {
+                                AuroraEntryDropdownMenuItem(
+                                    text = stringResource(MR.strings.action_train_parser),
+                                    onClick = {
+                                        onClickOmniBuilder()
+                                        showMenu = false
+                                    },
+                                )
+                            }
                             if (isFromSource) {
+
                                 AuroraEntryDropdownMenuItem(
                                     text = stringResource(MR.strings.action_webview_refresh),
                                     onClick = {
