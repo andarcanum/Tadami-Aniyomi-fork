@@ -52,15 +52,30 @@ class SourcePreferences(
         MigrationStrategy.FIRST_SOURCE
     }
 
-    fun migrationSearchKeywords() = preferenceStore.getBoolean("migration_search_keywords", true)
+    fun migrationSearchKeywords() = migrationBooleanPreference(
+        key = "migration_search_keywords",
+        defaultValue = true,
+        legacyKey = "migration_deep_search_mode",
+        legacyDefaultValue = false,
+    )
 
     fun migrationExtraSearchParam() = preferenceStore.getBoolean("migration_extra_search_param", true)
 
     fun migrationSkipNextTime() = preferenceStore.getBoolean("migration_skip_next_time", false)
 
-    fun migrationHideNotFound() = preferenceStore.getBoolean("migration_hide_not_found", false)
+    fun migrationHideNotFound() = migrationBooleanPreference(
+        key = "migration_hide_not_found",
+        defaultValue = false,
+        legacyKey = "migration_hide_unmatched",
+        legacyDefaultValue = false,
+    )
 
-    fun migrationOnlyNewChapters() = preferenceStore.getBoolean("migration_only_new_chapters", false)
+    fun migrationOnlyNewChapters() = migrationBooleanPreference(
+        key = "migration_only_new_chapters",
+        defaultValue = false,
+        legacyKey = "migration_hide_without_updates",
+        legacyDefaultValue = false,
+    )
 
     fun migrationHideUnmatched() = migrationHideNotFound()
 
@@ -191,4 +206,20 @@ class SourcePreferences(
         RESMUSH_IT,
     }
     // SY <--
+
+    private fun migrationBooleanPreference(
+        key: String,
+        defaultValue: Boolean,
+        legacyKey: String,
+        legacyDefaultValue: Boolean,
+    ): Preference<Boolean> {
+        val preference = preferenceStore.getBoolean(key, defaultValue)
+        if (preference.isSet()) return preference
+
+        val legacyPreference = preferenceStore.getBoolean(legacyKey, legacyDefaultValue)
+        if (legacyPreference.isSet()) {
+            preference.set(legacyPreference.get())
+        }
+        return preference
+    }
 }
