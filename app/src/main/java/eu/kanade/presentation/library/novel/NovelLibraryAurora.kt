@@ -123,11 +123,11 @@ fun NovelLibraryAuroraContent(
     onLongClickNovel: ((NovelLibraryItem) -> Unit)? = null,
     onContinueReadingClicked: ((NovelLibraryItem) -> Unit)? = null,
     showInlineHeader: Boolean = true,
+    libraryPreferences: LibraryPreferences,
+    sourceManager: NovelSourceManager,
+    downloadCache: NovelDownloadCache,
 ) {
     val configuration = LocalConfiguration.current
-    val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
-    val sourceManager = remember { Injekt.get<NovelSourceManager>() }
-    val downloadCache = remember { Injekt.get<NovelDownloadCache>() }
     val useSeparateDisplayModePerMedia by libraryPreferences
         .separateDisplayModePerMedia()
         .collectAsState()

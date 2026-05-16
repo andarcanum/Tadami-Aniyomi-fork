@@ -60,6 +60,7 @@ import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
 import tachiyomi.domain.series.novel.interactor.CreateNovelSeries
 import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
@@ -85,14 +86,16 @@ class NovelLibraryScreenModel(
     private val updateNovel: UpdateNovel = Injekt.get(),
     private val chapterRepository: NovelChapterRepository = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
-    private val libraryPreferences: LibraryPreferences = Injekt.get(),
+    val libraryPreferences: LibraryPreferences = Injekt.get(),
+    val sourceManager: NovelSourceManager = Injekt.get(),
+    val downloadCache: NovelDownloadCache = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
-    private val downloadCacheChanges: Flow<Unit> = Injekt.get<NovelDownloadCache>()
+    private val downloadCacheChanges: Flow<Unit> = downloadCache
         .changes
         .map { _: NovelDownloadCacheEvent -> Unit },
     private val hasDownloadedChapters: (tachiyomi.domain.entries.novel.model.Novel) -> Boolean = {
-        Injekt.get<NovelDownloadCache>().hasAnyDownloadedChapter(it)
+        downloadCache.hasAnyDownloadedChapter(it)
     },
     private val downloadedIdsDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val searchDebounceMillis: Long = SEARCH_DEBOUNCE_MILLIS,

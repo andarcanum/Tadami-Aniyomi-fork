@@ -70,9 +70,9 @@ fun MangaLibraryAuroraContent(
     onContinueReadingClicked: ((LibraryManga) -> Unit)?,
     onGlobalSearchClicked: () -> Unit,
     contentPadding: PaddingValues,
+    libraryPreferences: LibraryPreferences,
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
-    val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
     val auroraCardStyle by libraryPreferences.auroraLibraryCardStyle().collectAsState()
     val useGlowContourCards = auroraCardStyle == AuroraLibraryCardStyle.GlowContour
 

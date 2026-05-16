@@ -102,7 +102,7 @@ class MangaLibraryScreenModel(
     private val addMangasToSeries: AddMangasToSeries = Injekt.get(),
     private val updateMangaSeries: UpdateMangaSeries = Injekt.get(),
     private val preferences: BasePreferences = Injekt.get(),
-    private val libraryPreferences: LibraryPreferences = Injekt.get(),
+    val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val coverCache: MangaCoverCache = Injekt.get(),
     private val sourceManager: MangaSourceManager = Injekt.get(),
     private val downloadManager: MangaDownloadManager = Injekt.get(),

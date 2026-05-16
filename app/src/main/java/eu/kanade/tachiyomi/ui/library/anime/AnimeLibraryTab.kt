@@ -562,6 +562,7 @@ data object AnimeLibraryTab : Tab {
                             navigator.push(GlobalAnimeSearchScreen(state.searchQuery ?: ""))
                         },
                         contentPadding = contentPadding,
+                        libraryPreferences = screenModel.libraryPreferences,
                     )
                 }
             },
@@ -628,6 +629,7 @@ data object AnimeLibraryTab : Tab {
                             navigator.push(GlobalMangaSearchScreen(mangaState.searchQuery ?: ""))
                         },
                         contentPadding = contentPadding,
+                        libraryPreferences = mangaScreenModel.libraryPreferences,
                     )
                 }
             },
@@ -748,6 +750,9 @@ data object AnimeLibraryTab : Tab {
                         }.takeIf { showContinueViewingButton },
                         onImportEpub = { epubImportLauncher.launch(arrayOf("application/epub+zip")) },
                         showInlineHeader = false,
+                        libraryPreferences = activeNovelScreenModel.libraryPreferences,
+                        sourceManager = activeNovelScreenModel.sourceManager,
+                        downloadCache = activeNovelScreenModel.downloadCache,
                     )
                 }
             },
