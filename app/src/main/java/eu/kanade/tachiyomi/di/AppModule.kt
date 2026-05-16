@@ -168,28 +168,48 @@ class AppModule(val app: Application) : InjektModule {
         addColumnSql: String,
         triggerStatements: List<Pair<String, String>>,
     ) {
-        var hasNotesColumn = false
-        val cursor = db.query("PRAGMA table_info($tableName)")
-        try {
-            val nameIndex = cursor.getColumnIndexOrThrow("name")
-            while (cursor.moveToNext()) {
-                if (cursor.getString(nameIndex) == "notes") {
-                    hasNotesColumn = true
-                    break
+        val hasNotesColumn = runCatching {
+            var found = false
+            val cursor = db.query("PRAGMA table_info($tableName)")
+            try {
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex) == "notes") {
+                        found = true
+                        break
+                    }
                 }
+            } finally {
+                cursor.close()
             }
-        } finally {
-            cursor.close()
+            found
+        }.getOrElse { error ->
+            Log.e(LOG_TAG, "Failed to inspect '$tableName' schema for notes column, skip notes migration", error)
+            return
         }
 
         if (!hasNotesColumn) {
-            db.execSQL(addColumnSql)
+            val addColumnResult = runCatching {
+                db.execSQL(addColumnSql)
+            }
+            if (addColumnResult.isFailure) {
+                Log.e(
+                    LOG_TAG,
+                    "Failed to add notes column for '$tableName', skip trigger recreation",
+                    addColumnResult.exceptionOrNull(),
+                )
+                return
+            }
         }
 
         // Recreate the triggers on every open so upgrades and fresh installs stay aligned.
         triggerStatements.forEach { (dropSql, createSql) ->
-            db.execSQL(dropSql)
-            db.execSQL(createSql)
+            runCatching {
+                db.execSQL(dropSql)
+                db.execSQL(createSql)
+            }.onFailure { error ->
+                Log.e(LOG_TAG, "Failed to recreate notes-related trigger for '$tableName'", error)
+            }
         }
     }
 
