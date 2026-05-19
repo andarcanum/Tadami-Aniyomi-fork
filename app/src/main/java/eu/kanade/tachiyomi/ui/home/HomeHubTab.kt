@@ -1305,8 +1305,16 @@ internal fun StyledNicknameText(
     )
     val shadow = if (nicknameStyle.glow) {
         Shadow(
-            color = textColor.copy(alpha = 0.85f),
-            blurRadius = 20f,
+            color = if (colors.isDark) {
+                textColor.copy(alpha = 0.85f)
+            } else {
+                if (textColor.luminance() > 0.6f) {
+                    colors.accent.copy(alpha = 0.45f)
+                } else {
+                    textColor.copy(alpha = 0.55f)
+                }
+            },
+            blurRadius = if (colors.isDark) 20f else 12f,
         )
     } else {
         null
@@ -1439,6 +1447,7 @@ private fun NameDialog(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(AuroraTheme.colors.glass)
+                        .border(1.dp, AuroraTheme.colors.divider, RoundedCornerShape(12.dp))
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
                     StyledNicknameText(
@@ -1686,6 +1695,7 @@ private fun GreetingStyleDialog(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(AuroraTheme.colors.glass)
+                        .border(1.dp, AuroraTheme.colors.divider, RoundedCornerShape(12.dp))
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
                     val greetingFontFamily = previewStyle.font.fontRes?.let { FontFamily(Font(it)) }

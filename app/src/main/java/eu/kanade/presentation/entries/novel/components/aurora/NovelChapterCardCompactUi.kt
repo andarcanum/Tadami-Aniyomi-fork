@@ -179,7 +179,9 @@ object NovelChapterCardCompactUi {
                                         },
                                         onClick = onTranslateClick,
                                         onLongClick = onTranslateLongClick,
-                                        backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                        backgroundColor = colors.surface.copy(
+                                            alpha = if (colors.isDark) 0.24f else 0.48f,
+                                        ),
                                         showProgress = translateState == NovelChapterActionIconState.InProgress,
                                         progressColor = colors.accent,
                                         size = 36.dp,
@@ -204,7 +206,9 @@ object NovelChapterCardCompactUi {
                                             }
                                         },
                                         onLongClick = onTranslatedDownloadLongClick,
-                                        backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                        backgroundColor = colors.surface.copy(
+                                            alpha = if (colors.isDark) 0.24f else 0.48f,
+                                        ),
                                         showProgress = translatedDownloadState ==
                                             NovelChapterActionIconState.InProgress,
                                         progressColor = colors.accent,
@@ -229,7 +233,7 @@ object NovelChapterCardCompactUi {
                                         else -> colors.textSecondary
                                     },
                                     onClick = onToggleDownload,
-                                    backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                    backgroundColor = colors.surface.copy(alpha = if (colors.isDark) 0.24f else 0.48f),
                                     showProgress = downloading,
                                     progressColor = colors.accent,
                                     size = 32.dp,
@@ -239,7 +243,7 @@ object NovelChapterCardCompactUi {
                                     icon = Icons.Outlined.Bookmark,
                                     iconTint = if (chapter.bookmark) colors.accent else colors.textSecondary,
                                     onClick = onToggleBookmark,
-                                    backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                    backgroundColor = colors.surface.copy(alpha = if (colors.isDark) 0.24f else 0.48f),
                                     size = 32.dp,
                                     iconSize = 18.dp,
                                 )
@@ -247,7 +251,7 @@ object NovelChapterCardCompactUi {
                                     icon = Icons.Outlined.CheckCircle,
                                     iconTint = if (chapter.read) colors.accent else colors.textSecondary,
                                     onClick = onToggleRead,
-                                    backgroundColor = colors.surface.copy(alpha = 0.24f),
+                                    backgroundColor = colors.surface.copy(alpha = if (colors.isDark) 0.24f else 0.48f),
                                     size = 32.dp,
                                     iconSize = 18.dp,
                                 )

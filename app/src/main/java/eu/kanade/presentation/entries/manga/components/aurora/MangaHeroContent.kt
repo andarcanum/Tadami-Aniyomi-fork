@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.entries.manga.components.aurora
+package eu.kanade.presentation.entries.manga.components.aurora
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -72,7 +72,7 @@ fun MangaHeroContent(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 40.dp)
+                .padding(horizontal = 20.dp, vertical = 24.dp)
                 .then(
                     if (colors.isDark) {
                         Modifier
@@ -81,7 +81,7 @@ fun MangaHeroContent(
                             .clip(heroPanelShape)
                             .background(resolveAuroraHeroPanelContainerColor(colors))
                             .border(1.dp, resolveAuroraHeroPanelBorderColor(colors), heroPanelShape)
-                            .padding(18.dp)
+                            .padding(horizontal = 12.dp, vertical = 14.dp)
                     },
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp),

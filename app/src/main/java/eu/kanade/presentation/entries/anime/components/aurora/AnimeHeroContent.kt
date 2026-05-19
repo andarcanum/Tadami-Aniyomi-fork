@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.entries.anime.components.aurora
+package eu.kanade.presentation.entries.anime.components.aurora
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -133,7 +133,7 @@ fun AnimeHeroContent(
                                 color = resolveAuroraHeroPanelBorderColor(colors),
                                 shape = heroPanelShape,
                             )
-                            .padding(18.dp)
+                            .padding(horizontal = 12.dp, vertical = 14.dp)
                     },
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp),

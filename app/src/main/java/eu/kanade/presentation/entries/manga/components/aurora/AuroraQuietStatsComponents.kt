@@ -154,7 +154,11 @@ internal fun QuietSectionDivider() {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp),
-        color = colors.textPrimary.copy(alpha = 0.05f),
+        color = if (colors.isDark) {
+            colors.textPrimary.copy(alpha = 0.08f)
+        } else {
+            colors.textPrimary.copy(alpha = 0.18f)
+        },
         thickness = 1.dp,
     )
 }

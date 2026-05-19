@@ -213,7 +213,7 @@ fun FullscreenPosterBackground(
                     if (colors.isDark) {
                         Color.Black.copy(alpha = dimAlpha)
                     } else {
-                        Color.Black.copy(alpha = dimAlpha * 0.08f)
+                        colors.background.copy(alpha = dimAlpha * 0.35f)
                     },
                 ),
         )
