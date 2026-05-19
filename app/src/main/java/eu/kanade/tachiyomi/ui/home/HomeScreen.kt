@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Badge
@@ -34,6 +35,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRailItem
@@ -198,7 +200,9 @@ object HomeScreen : Screen() {
                                 0.dp
                             }
                             val navModifier = if (useAuroraBottomNav) {
-                                val baseModifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                val baseModifier = Modifier
+                                    .windowInsetsPadding(NavigationBarDefaults.windowInsets)
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
                                 if (auroraColors!!.isDark) {
                                     baseModifier
                                         .shadow(
@@ -257,6 +261,13 @@ object HomeScreen : Screen() {
                                         },
                                         shadowElevation = navShadowElevation,
                                         tonalElevation = navTonalElevation,
+                                        windowInsets = if (useAuroraBottomNav) {
+                                            WindowInsets(
+                                                0,
+                                            )
+                                        } else {
+                                            NavigationBarDefaults.windowInsets
+                                        },
                                         modifier = navModifier,
                                         shape = navBarShape,
                                     ) {
@@ -280,6 +291,13 @@ object HomeScreen : Screen() {
                                         },
                                         shadowElevation = navShadowElevation,
                                         tonalElevation = navTonalElevation,
+                                        windowInsets = if (useAuroraBottomNav) {
+                                            WindowInsets(
+                                                0,
+                                            )
+                                        } else {
+                                            NavigationBarDefaults.windowInsets
+                                        },
                                         modifier = navModifier,
                                         shape = navBarShape,
                                     ) {
