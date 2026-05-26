@@ -367,7 +367,7 @@ class NovelReaderScreenModel(
     private var rawHtml: String? = null
     private var currentNovel: Novel? = null
     private var currentChapter: NovelChapter? = null
-    private var chapterOrderList: List<NovelChapter> = emptyList()
+    private var chapterOrderList: MutableList<NovelChapter> = mutableListOf()
     private var customCss: String? = null
     private var customJs: String? = null
     private var pluginSite: String? = null
@@ -390,7 +390,7 @@ class NovelReaderScreenModel(
     private var pendingAutoStartGeminiTranslation: Boolean = autoStartGeminiTranslation
     private var geminiTranslationJob: Job? = null
     private var queueProgressJob: Job? = null
-    private var geminiTranslatedByIndex: Map<Int, String> = emptyMap()
+    private val translationHolder = NovelReaderTranslationHolder { currentParsedTextBlocks() }
     private var isGeminiTranslating: Boolean = false
     private var geminiTranslationProgress: Int = 0
     private var isGeminiTranslationVisible: Boolean = false
@@ -399,7 +399,6 @@ class NovelReaderScreenModel(
 
     // Google Translation
     private var googleTranslationJob: Job? = null
-    private var googleTranslatedByIndex: Map<Int, String> = emptyMap()
     private var isGoogleTranslating: Boolean = false
     private var googleTranslationProgress: Int = 0
     private var isGoogleTranslationVisible: Boolean = false
@@ -447,8 +446,6 @@ class NovelReaderScreenModel(
     private val progressPersistenceMutex = Mutex()
     private var pendingProgressPersistence: PendingProgressPersistence? = null
     private var progressPersistenceJob: Job? = null
-    private val disposalCleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var disposalCleanupJob: Job? = null
 
     @Volatile
     private var progressPersistenceScheduled = false
@@ -510,7 +507,7 @@ class NovelReaderScreenModel(
         clearChapterTransientState()
         currentNovel = novel
         currentChapter = chapter
-        chapterOrderList = snapshot.chapterOrderList
+        chapterOrderList = snapshot.chapterOrderList.toMutableList()
         rawHtml = withContext(Dispatchers.Default) {
             val normalizedChapterHtml = prependChapterHeadingIfMissing(
                 rawHtml = snapshot.rawHtml.normalizeStructuredChapterPayload(),
@@ -663,7 +660,7 @@ class NovelReaderScreenModel(
         if (!settings.geminiEnabled || !(requestedAutoStart || englishSourceAutoStart)) return
         if (!settings.hasConfiguredTranslationProvider()) return
         if (currentParsedTextBlocks().isEmpty()) return
-        if (isGeminiTranslating || hasGeminiTranslationCache || geminiTranslatedByIndex.isNotEmpty()) return
+        if (isGeminiTranslating || hasGeminiTranslationCache || !translationHolder.isEmpty("gemini")) return
         hasTriggeredGeminiAutoStart = true
         pendingAutoStartGeminiTranslation = false
         addAiTranslationLog("?? Auto-start translation for English source")
@@ -782,7 +779,7 @@ class NovelReaderScreenModel(
                 retainMissingChapters = true,
                 sourceOrderOffset = (pageResult.page - 1L) * JAOMIX_PAGE_SOURCE_ORDER_STRIDE,
             )
-            chapterOrderList = loadChapterOrderList(novel.id)
+            chapterOrderList = loadChapterOrderList(novel.id).toMutableList()
             withContext(Dispatchers.Main.immediate) {
                 updateContent(settings)
             }
@@ -885,7 +882,7 @@ class NovelReaderScreenModel(
         }
         if (googleVisibleInUi) {
             addGoogleLog(
-                "Apply UI: baseBlocks=${baseContentBlocks.size}, textBlocks=${baseTextBlocks.size}, translatedSegments=${googleTranslatedByIndex.size}, visible=$googleVisibleInUi",
+                "Apply UI: baseBlocks=${baseContentBlocks.size}, textBlocks=${baseTextBlocks.size}, translatedSegments=${translationHolder.map("google").size}, visible=$googleVisibleInUi",
             )
         }
         val displayRichBlocks = if (geminiVisibleInUi) {
@@ -896,21 +893,21 @@ class NovelReaderScreenModel(
             richContentResult.blocks
         }
         val displayContent = when {
-            geminiVisibleInUi && geminiTranslatedByIndex.isNotEmpty() -> normalizeHtml(
+            geminiVisibleInUi && !translationHolder.isEmpty("gemini") -> normalizeHtml(
                 rawHtml = buildTranslatedRawHtmlForDisplay(
                     templateHtml = html,
                     fallbackBlocks = displayContentBlocks,
-                    translatedByIndex = geminiTranslatedByIndex,
+                    translatedByIndex = translationHolder.map("gemini"),
                 ),
                 settings = settings,
                 customCss = pluginCss,
                 customJs = pluginJs,
             )
-            googleVisibleInUi && googleTranslatedByIndex.isNotEmpty() -> normalizeHtml(
+            googleVisibleInUi && !translationHolder.isEmpty("google") -> normalizeHtml(
                 rawHtml = buildTranslatedRawHtmlForDisplay(
                     templateHtml = html,
                     fallbackBlocks = displayContentBlocks,
-                    translatedByIndex = googleTranslatedByIndex,
+                    translatedByIndex = translationHolder.map("google"),
                 ),
                 settings = settings,
                 customCss = pluginCss,
@@ -1215,10 +1212,10 @@ class NovelReaderScreenModel(
         if (!shouldPreferTranslatedTts(settings)) return null
         if (chapterId != currentChapter?.id) return null
         val translatedBlocks = when {
-            settings.geminiEnabled && geminiTranslatedByIndex.isNotEmpty() -> {
+            settings.geminiEnabled && !translationHolder.isEmpty("gemini") -> {
                 applyGeminiTranslationToContentBlocks(originalContentBlocks, forceTranslation = true)
             }
-            settings.googleTranslationEnabled && googleTranslatedByIndex.isNotEmpty() -> {
+            settings.googleTranslationEnabled && !translationHolder.isEmpty("google") -> {
                 applyGoogleTranslationToContentBlocks(originalContentBlocks)
             }
             else -> return null
@@ -1650,7 +1647,7 @@ class NovelReaderScreenModel(
         )
     }
     suspend fun awaitDisposalCleanup() {
-        disposalCleanupJob?.join()
+        // No-op: cleanup is now synchronous in onDispose()
     }
     private suspend fun flushPendingProgressPersistence() {
         while (true) {
@@ -1850,12 +1847,16 @@ class NovelReaderScreenModel(
             bookmark = bookmark,
         )
         currentChapter = updatedChapter
-        chapterOrderList = updateNovelReaderChapterProgressList(
-            chapters = chapterOrderList,
-            chapterId = chapter.id,
-            read = read,
-            progress = progress,
-        )
+        val chapterIndex = chapterOrderList.indexOfFirst { it.id == chapter.id }
+        if (chapterIndex >= 0) {
+            val existingChapter = chapterOrderList[chapterIndex]
+            if (existingChapter.read != read || existingChapter.lastPageRead != progress) {
+                chapterOrderList[chapterIndex] = existingChapter.copy(
+                    read = read,
+                    lastPageRead = progress,
+                )
+            }
+        }
         val currentState = mutableState.value
         if (currentState is State.Success) {
             val decodedNativeProgress = decodeNativeScrollProgress(progress)
@@ -1903,6 +1904,8 @@ class NovelReaderScreenModel(
         }
     }
     override fun onDispose() {
+        // Fire-and-forget cancellation — no blocking cancelAndJoin calls.
+        // Each job is independently cancelled; cleanup happens in clearChapterTransientState().
         settingsJob?.cancel()
         nextChapterPrefetchJob?.cancel()
         nextChapterGeminiPrefetchJob?.cancel()
@@ -1913,30 +1916,16 @@ class NovelReaderScreenModel(
         selectedTextTranslationJob?.cancel()
         progressPersistenceJob?.cancel()
         ttsWordProgressJob?.cancel()
-        if (disposalCleanupJob == null) {
-            disposalCleanupJob = disposalCleanupScope.launch(NonCancellable) {
-                settingsJob?.cancelAndJoin()
-                nextChapterPrefetchJob?.cancelAndJoin()
-                nextChapterGeminiPrefetchJob?.cancelAndJoin()
-                adjacentJaomixPageJob?.cancelAndJoin()
-                geminiTranslationJob?.cancelAndJoin()
-                queueProgressJob?.cancelAndJoin()
-                googleTranslationJob?.cancelAndJoin()
-                selectedTextTranslationJob?.cancelAndJoin()
-                progressPersistenceJob?.cancelAndJoin()
-                ttsWordProgressJob?.cancelAndJoin()
-                clearChapterTransientState()
-                ttsAudioFocusManager.abandonPlaybackFocus()
-                ttsEngine.shutdown()
-            }
-        }
+        clearChapterTransientState()
+        ttsAudioFocusManager.abandonPlaybackFocus()
+        ttsEngine.shutdown()
         super.onDispose()
     }
 
     private fun clearChapterTransientState() {
         currentNovel = null
         currentChapter = null
-        chapterOrderList = emptyList()
+        chapterOrderList = mutableListOf()
         rawHtml = null
         customCss = null
         customJs = null
@@ -1966,8 +1955,8 @@ class NovelReaderScreenModel(
         clearSelectedTextTranslationSelection(refreshUi = false)
         selectedTextTranslationSessionCache.clear()
         attemptedJaomixPages.clear()
-        geminiTranslatedByIndex = emptyMap()
-        googleTranslatedByIndex = emptyMap()
+        translationHolder.clear("gemini")
+        translationHolder.clear("google")
         isGeminiTranslating = false
         isGoogleTranslating = false
         geminiTranslationProgress = 0
@@ -2748,7 +2737,7 @@ class NovelReaderScreenModel(
             addAiTranslationLog("? Translation provider is not configured")
             return
         }
-        geminiTranslatedByIndex = emptyMap()
+        translationHolder.clear("gemini")
         isGeminiTranslationVisible = false
         hasGeminiTranslationCache = false
         isGeminiTranslating = true
@@ -2799,7 +2788,7 @@ class NovelReaderScreenModel(
         updateContent(settings)
     }
     fun toggleGeminiTranslationVisibility() {
-        if (geminiTranslatedByIndex.isEmpty()) return
+        if (translationHolder.isEmpty("gemini")) return
         isGeminiTranslationVisible = !isGeminiTranslationVisible
         addAiTranslationLog("??? Visibility: ${if (isGeminiTranslationVisible) "ON" else "OFF"}")
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
@@ -2812,7 +2801,7 @@ class NovelReaderScreenModel(
         }
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
-        geminiTranslatedByIndex = emptyMap()
+        translationHolder.clear("gemini")
         isGeminiTranslating = false
         isGeminiTranslationVisible = false
         geminiTranslationProgress = 0
@@ -2856,7 +2845,7 @@ class NovelReaderScreenModel(
             targetLang = settings.googleTranslationTargetLang,
         )
 
-        googleTranslatedByIndex = emptyMap()
+        translationHolder.clear("google")
         isGoogleTranslationVisible = false
         hasGoogleTranslationCache = false
         isGoogleTranslating = true
@@ -2892,7 +2881,7 @@ class NovelReaderScreenModel(
                         it.isNotBlank()
                     }}/$baseTextBlocks.size, rateLimited=false",
                 )
-                googleTranslatedByIndex = results
+                translationHolder.put("google", results)
                 val chapter = currentChapter
                 if (chapter != null) {
                     googleSessionCache.put(
@@ -2939,7 +2928,7 @@ class NovelReaderScreenModel(
     }
 
     fun toggleGoogleTranslationVisibility() {
-        if (googleTranslatedByIndex.isEmpty()) return
+        if (translationHolder.isEmpty("google")) return
         isGoogleTranslationVisible = !isGoogleTranslationVisible
         val settings = (mutableState.value as? State.Success)?.readerSettings ?: return
         updateContent(settings)
@@ -2949,7 +2938,7 @@ class NovelReaderScreenModel(
         val chapter = currentChapter ?: return
         googleTranslationJob?.cancel()
         googleTranslationJob = null
-        googleTranslatedByIndex = emptyMap()
+        translationHolder.clear("google")
         isGoogleTranslating = false
         isGoogleTranslationVisible = false
         googleTranslationProgress = 0
@@ -2976,7 +2965,7 @@ class NovelReaderScreenModel(
             targetLang = settings.googleTranslationTargetLang,
         )
         if (cached != null && cached.isNotEmpty()) {
-            googleTranslatedByIndex = cached
+            translationHolder.put("google", cached)
             hasGoogleTranslationCache = true
             isGoogleTranslationVisible = true
             addGoogleLog(
@@ -2997,14 +2986,14 @@ class NovelReaderScreenModel(
     }
 
     private fun applyGoogleTranslationToContentBlocks(blocks: List<ContentBlock>): List<ContentBlock> {
-        if (googleTranslatedByIndex.isEmpty()) return blocks
+        if (translationHolder.isEmpty("google")) return blocks
         var textIndex = 0
         var replacedCount = 0
         val updated = blocks.map { block ->
             when (block) {
                 is ContentBlock.Image -> block
                 is ContentBlock.Text -> {
-                    val translated = googleTranslatedByIndex[textIndex]
+                    val translated = translationHolder.map("google")[textIndex]
                     textIndex += 1
                     if (translated.isNullOrBlank()) {
                         block
@@ -3053,7 +3042,7 @@ class NovelReaderScreenModel(
             hasGeminiTranslationCache = false
             return
         }
-        geminiTranslatedByIndex = cached.translatedByIndex
+        translationHolder.put("gemini", cached.translatedByIndex)
         hasGeminiTranslationCache = true
         geminiTranslationProgress = 100
         isGeminiTranslationVisible = true
@@ -3063,13 +3052,13 @@ class NovelReaderScreenModel(
         blocks: List<ContentBlock>,
         forceTranslation: Boolean = false,
     ): List<ContentBlock> {
-        if ((!forceTranslation && !isGeminiTranslationVisible) || geminiTranslatedByIndex.isEmpty()) return blocks
+        if ((!forceTranslation && !isGeminiTranslationVisible) || translationHolder.isEmpty("gemini")) return blocks
         var textIndex = 0
         return blocks.map { block ->
             when (block) {
                 is ContentBlock.Image -> block
                 is ContentBlock.Text -> {
-                    val translated = geminiTranslatedByIndex[textIndex]
+                    val translated = translationHolder.map("gemini")[textIndex]
                     textIndex += 1
                     if (translated.isNullOrBlank()) {
                         block
@@ -3084,12 +3073,12 @@ class NovelReaderScreenModel(
         blocks: List<NovelRichContentBlock>,
         forceTranslation: Boolean = false,
     ): List<NovelRichContentBlock> {
-        if ((!forceTranslation && !isGeminiTranslationVisible) || geminiTranslatedByIndex.isEmpty()) return blocks
+        if ((!forceTranslation && !isGeminiTranslationVisible) || translationHolder.isEmpty("gemini")) return blocks
         var textIndex = 0
         return blocks.map { block ->
             when (block) {
                 is NovelRichContentBlock.BlockQuote -> {
-                    val replacement = geminiTranslatedByIndex[textIndex]
+                    val replacement = translationHolder.map("gemini")[textIndex]
                     textIndex += 1
                     if (replacement.isNullOrBlank()) {
                         block
@@ -3103,7 +3092,7 @@ class NovelReaderScreenModel(
                     }
                 }
                 is NovelRichContentBlock.Heading -> {
-                    val replacement = geminiTranslatedByIndex[textIndex]
+                    val replacement = translationHolder.map("gemini")[textIndex]
                     textIndex += 1
                     if (replacement.isNullOrBlank()) {
                         block
@@ -3119,7 +3108,7 @@ class NovelReaderScreenModel(
                 is NovelRichContentBlock.Image -> block
                 is NovelRichContentBlock.HorizontalRule -> block
                 is NovelRichContentBlock.Paragraph -> {
-                    val replacement = geminiTranslatedByIndex[textIndex]
+                    val replacement = translationHolder.map("gemini")[textIndex]
                     textIndex += 1
                     if (replacement.isNullOrBlank()) {
                         block
@@ -3140,13 +3129,13 @@ class NovelReaderScreenModel(
         blocks: List<NovelRichContentBlock>,
         forceTranslation: Boolean = false,
     ): List<NovelRichContentBlock> {
-        if ((!forceTranslation && !isGoogleTranslationVisible) || googleTranslatedByIndex.isEmpty()) return blocks
+        if ((!forceTranslation && !isGoogleTranslationVisible) || translationHolder.isEmpty("google")) return blocks
         var textIndex = 0
         var replacedCount = 0
         val updated = blocks.map { block ->
             when (block) {
                 is NovelRichContentBlock.BlockQuote -> {
-                    val replacement = googleTranslatedByIndex[textIndex]
+                    val replacement = translationHolder.map("google")[textIndex]
                     textIndex += 1
                     if (replacement.isNullOrBlank()) {
                         block
@@ -3161,7 +3150,7 @@ class NovelReaderScreenModel(
                     }
                 }
                 is NovelRichContentBlock.Heading -> {
-                    val replacement = googleTranslatedByIndex[textIndex]
+                    val replacement = translationHolder.map("google")[textIndex]
                     textIndex += 1
                     if (replacement.isNullOrBlank()) {
                         block
@@ -3178,7 +3167,7 @@ class NovelReaderScreenModel(
                 is NovelRichContentBlock.Image -> block
                 is NovelRichContentBlock.HorizontalRule -> block
                 is NovelRichContentBlock.Paragraph -> {
-                    val replacement = googleTranslatedByIndex[textIndex]
+                    val replacement = translationHolder.map("google")[textIndex]
                     textIndex += 1
                     if (replacement.isNullOrBlank()) {
                         block

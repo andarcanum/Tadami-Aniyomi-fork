@@ -238,8 +238,10 @@ class NovelReaderScreenModelTest {
                     unsupportedFeaturesDetected = false,
                 ),
             )
-            setPrivateField(screenModel, "geminiTranslatedByIndex", mapOf(0 to "g"))
-            setPrivateField(screenModel, "googleTranslatedByIndex", mapOf(0 to "g"))
+            val holder = NovelReaderTranslationHolder { emptyList() }
+            holder.put("gemini", mapOf(0 to "g"))
+            holder.put("google", mapOf(0 to "g"))
+            setPrivateField(screenModel, "translationHolder", holder)
             setPrivateField(screenModel, "geminiLogs", listOf("gemini"))
             setPrivateField(screenModel, "googleLogs", listOf("google"))
             setPrivateField(screenModel, "isGeminiTranslating", true)
@@ -261,8 +263,8 @@ class NovelReaderScreenModelTest {
             getPrivateFieldOrNull<String>(screenModel, "rawHtml") shouldBe null
             getPrivateFieldOrNull<List<Any?>>(screenModel, "parsedContentBlocks") shouldBe null
             getPrivateFieldOrNull<NovelRichContentParseResult>(screenModel, "parsedRichContentResult") shouldBe null
-            getPrivateField<Map<Any?, Any?>>(screenModel, "geminiTranslatedByIndex") shouldBe emptyMap<Any?, Any?>()
-            getPrivateField<Map<Any?, Any?>>(screenModel, "googleTranslatedByIndex") shouldBe emptyMap<Any?, Any?>()
+            getPrivateField<NovelReaderTranslationHolder>(screenModel, "translationHolder").isEmpty("gemini") shouldBe true
+            getPrivateField<NovelReaderTranslationHolder>(screenModel, "translationHolder").isEmpty("google") shouldBe true
             getPrivateField<List<Any?>>(screenModel, "geminiLogs") shouldBe emptyList<Any?>()
             getPrivateField<List<Any?>>(screenModel, "googleLogs") shouldBe emptyList<Any?>()
             getPrivateField<Boolean>(screenModel, "isGeminiTranslating") shouldBe false
@@ -361,7 +363,9 @@ class NovelReaderScreenModelTest {
                 geminiApiKey = "test-key",
             )
 
-            setPrivateField(screenModel, "geminiTranslatedByIndex", translatedByIndex)
+            val holder = NovelReaderTranslationHolder { successState.textBlocks }
+            holder.put("gemini", translatedByIndex)
+            setPrivateField(screenModel, "translationHolder", holder)
             setPrivateField(screenModel, "isGeminiTranslationVisible", true)
             setPrivateField(screenModel, "hasGeminiTranslationCache", true)
             setPrivateField(screenModel, "isGeminiTranslating", false)
@@ -742,7 +746,9 @@ class NovelReaderScreenModelTest {
             )
 
             setPrivateField(screenModel, "currentChapter", chapter)
-            setPrivateField(screenModel, "geminiTranslatedByIndex", mapOf(0 to "Переведенный абзац"))
+            val holder = NovelReaderTranslationHolder { emptyList() }
+            holder.put("gemini", mapOf(0 to "Переведенный абзац"))
+            setPrivateField(screenModel, "translationHolder", holder)
             setPrivateField(screenModel, "isGeminiTranslationVisible", false)
 
             val translatedModel = invokePrivateResolveTranslatedTtsChapterModel(
@@ -809,7 +815,9 @@ class NovelReaderScreenModelTest {
             )
 
             setPrivateField(screenModel, "currentChapter", chapter)
-            setPrivateField(screenModel, "googleTranslatedByIndex", mapOf(0 to "Переведенный абзац"))
+            val holder = NovelReaderTranslationHolder { emptyList() }
+            holder.put("google", mapOf(0 to "Переведенный абзац"))
+            setPrivateField(screenModel, "translationHolder", holder)
             setPrivateField(screenModel, "isGoogleTranslationVisible", true)
 
             val translatedModel = invokePrivateResolveTranslatedTtsChapterModel(
@@ -857,7 +865,10 @@ class NovelReaderScreenModelTest {
             }
 
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            setPrivateField(screenModel, "googleTranslatedByIndex", mapOf(0 to "Переведённый абзац"))
+            val holder = NovelReaderTranslationHolder { emptyList() }
+            holder.put("google", mapOf(0 to "Переведённый абзац"))
+            setPrivateField(screenModel, "translationHolder", holder)
+            setPrivateField(screenModel, "isGoogleTranslationVisible", true)
             setPrivateField(screenModel, "isGoogleTranslationVisible", true)
 
             invokePrivateUpdateContent(
