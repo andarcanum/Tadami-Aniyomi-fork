@@ -108,5 +108,14 @@ class UpdateNovelTest {
         }
 
         override suspend fun resetNovelViewerFlags(): Boolean = true
+
+        override suspend fun updateNovelMetadata(
+            novelId: Long,
+            customTitle: String?,
+            customAuthor: String?,
+            customDescription: String?,
+            customGenre: List<String>?,
+            customStatus: Long?,
+        ): Boolean = true
     }
 }

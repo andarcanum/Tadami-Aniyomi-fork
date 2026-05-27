@@ -35,6 +35,7 @@ class NovelUpdatesRepositoryImplTest {
             novelsAdapter = Novels.Adapter(
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
+                custom_genreAdapter = StringListColumnAdapter,
             ),
         )
         val handler = AndroidNovelDatabaseHandler(

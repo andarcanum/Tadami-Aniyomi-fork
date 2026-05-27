@@ -6,6 +6,7 @@ import mihon.core.migration.MigrationContext
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.source.interactor.InsertFeedSavedSearch
 import tachiyomi.domain.source.manga.service.MangaSourceManager
+import tachiyomi.domain.source.model.FeedListingType
 import tachiyomi.domain.source.model.FeedSavedSearch
 import tachiyomi.domain.source.model.SourceType
 import tachiyomi.domain.source.novel.service.NovelSourceManager
@@ -66,6 +67,7 @@ internal fun mapLegacyFeedEntries(
                 id = -1,
                 source = id,
                 sourceType = sourceType,
+                listingType = FeedListingType.LATEST,
                 savedSearch = null,
                 global = true,
                 feedOrder = 0,

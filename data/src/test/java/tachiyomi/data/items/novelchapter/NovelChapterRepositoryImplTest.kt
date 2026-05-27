@@ -36,6 +36,7 @@ class NovelChapterRepositoryImplTest {
             novelsAdapter = Novels.Adapter(
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
+                custom_genreAdapter = StringListColumnAdapter,
             ),
         )
         handler = AndroidNovelDatabaseHandler(

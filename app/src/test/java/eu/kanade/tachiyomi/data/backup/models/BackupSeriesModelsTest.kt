@@ -61,6 +61,7 @@ class BackupSeriesModelsTest {
         val mapped = backupFeedMapper(
             123L,
             2L,
+            1L,
             true,
             7L,
             10L,
@@ -71,6 +72,7 @@ class BackupSeriesModelsTest {
 
         mapped.source shouldBe 123L
         mapped.sourceType shouldBe 2L
+        mapped.listingType shouldBe 1L
         mapped.savedSearchName shouldBe "name"
         mapped.savedSearchQuery shouldBe "query"
         mapped.savedSearchFiltersJson shouldBe """{"k":"v"}"""
@@ -81,6 +83,7 @@ class BackupSeriesModelsTest {
         val mapped = backupFeedMapper(
             123L,
             1L,
+            0L,
             true,
             3L,
             null,

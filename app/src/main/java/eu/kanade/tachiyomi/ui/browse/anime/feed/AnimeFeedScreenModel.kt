@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.browse.anime.feed
 
+import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.produceState
@@ -35,9 +36,12 @@ import tachiyomi.domain.source.interactor.GetSavedSearchById
 import tachiyomi.domain.source.interactor.GetSavedSearchBySourceId
 import tachiyomi.domain.source.interactor.InsertFeedSavedSearch
 import tachiyomi.domain.source.interactor.ReorderFeed
+import tachiyomi.domain.source.model.FeedListingType
 import tachiyomi.domain.source.model.FeedSavedSearch
 import tachiyomi.domain.source.model.SavedSearch
 import tachiyomi.domain.source.model.SourceType
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -61,6 +65,7 @@ data class AnimeFeedScreenState(
 }
 
 class AnimeFeedScreenModel(
+    private val context: Context = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val networkToLocalAnime: NetworkToLocalAnime = Injekt.get(),
@@ -100,15 +105,29 @@ class AnimeFeedScreenModel(
             .launchIn(screenModelScope)
     }
 
-    private fun resolveFeedItems(feedEntries: List<FeedSavedSearch>): List<AnimeFeedItemUI> {
+    private suspend fun resolveFeedItems(feedEntries: List<FeedSavedSearch>): List<AnimeFeedItemUI> {
+        val latestLabel = context.stringResource(AYMR.strings.feed_latest)
+        val popularLabel = context.stringResource(AYMR.strings.feed_popular)
         return feedEntries.mapNotNull { feed ->
             val source = sourceManager.get(feed.source) as? AnimeCatalogueSource ?: return@mapNotNull null
+            val savedSearchId = feed.savedSearch
+            val savedSearch = if (feed.listingType == FeedListingType.SAVED_SEARCH && savedSearchId != null) {
+                getSavedSearchById.await(savedSearchId)
+            } else {
+                null
+            }
             AnimeFeedItemUI(
                 feed = feed,
-                savedSearch = null,
+                savedSearch = savedSearch,
                 source = source,
                 title = source.name,
-                subtitle = LocaleHelper.getLocalizedDisplayName(source.lang),
+                subtitle = buildAnimeFeedSubtitle(
+                    language = LocaleHelper.getLocalizedDisplayName(source.lang),
+                    listingType = feed.listingType,
+                    savedSearchName = savedSearch?.name,
+                    latestLabel = latestLabel,
+                    popularLabel = popularLabel,
+                ),
                 results = null,
             )
         }
@@ -120,24 +139,24 @@ class AnimeFeedScreenModel(
             val results = items.map { itemUI ->
                 async {
                     try {
-                        val animes = if (itemUI.feed.savedSearch != null) {
-                            val feed = itemUI.feed
-                            val savedSearchId = feed.savedSearch
-                            val ss = if (savedSearchId != null) getSavedSearchById.await(savedSearchId) else null
-                            if (ss != null) {
-                                val filtersJson = ss.filtersJson
-                                val baseFilters = itemUI.source.getFilterList()
-                                if (filtersJson != null) {
-                                    SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
+                        val animes = when (itemUI.feed.listingType) {
+                            FeedListingType.SAVED_SEARCH -> {
+                                val feed = itemUI.feed
+                                val ss = itemUI.savedSearch
+                                    ?: feed.savedSearch?.let { getSavedSearchById.await(it) }
+                                if (ss != null) {
+                                    val filtersJson = ss.filtersJson
+                                    val baseFilters = itemUI.source.getFilterList()
+                                    if (filtersJson != null) {
+                                        SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
+                                    }
+                                    itemUI.source.getSearchAnime(1, ss.query ?: "", baseFilters).animes
+                                } else {
+                                    itemUI.source.getLatestUpdates(1).animes
                                 }
-                                itemUI.source.getSearchAnime(1, ss.query ?: "", baseFilters).animes
-                            } else {
-                                itemUI.source.getLatestUpdates(1).animes
                             }
-                        } else if (itemUI.source.supportsLatest) {
-                            itemUI.source.getLatestUpdates(1).animes
-                        } else {
-                            itemUI.source.getPopularAnime(1).animes
+                            FeedListingType.LATEST -> itemUI.source.getLatestUpdates(1).animes
+                            FeedListingType.POPULAR -> itemUI.source.getPopularAnime(1).animes
                         }
                         val converted = animes.map { sanime ->
                             networkToLocalAnime.await(sanime.toDomainAnime(itemUI.source.id))
@@ -187,11 +206,12 @@ class AnimeFeedScreenModel(
         }
     }
 
-    fun addFeed(source: AnimeCatalogueSource, savedSearch: SavedSearch?) {
+    fun addFeed(source: AnimeCatalogueSource, listingType: FeedListingType, savedSearch: SavedSearch?) {
         val feed = FeedSavedSearch(
             id = -1,
             source = source.id,
             sourceType = SourceType.ANIME,
+            listingType = listingType,
             savedSearch = savedSearch?.id,
             global = true,
             feedOrder = 0,

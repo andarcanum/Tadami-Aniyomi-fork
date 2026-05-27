@@ -12,11 +12,13 @@ data class BackupFeed(
     @ProtoNumber(5) val savedSearchName: String? = null,
     @ProtoNumber(6) val savedSearchQuery: String? = null,
     @ProtoNumber(7) val savedSearchFiltersJson: String? = null,
+    @ProtoNumber(8) val listingType: Long = 0,
 )
 
 val backupFeedMapper = {
         source: Long,
         sourceType: Long,
+        listingType: Long,
         global: Boolean,
         feedOrder: Long,
         savedSearch: Long?,
@@ -27,6 +29,7 @@ val backupFeedMapper = {
     BackupFeed(
         source = source,
         sourceType = sourceType,
+        listingType = listingType,
         global = global,
         feedOrder = feedOrder,
         savedSearchName = if (savedSearch != null) name else null,

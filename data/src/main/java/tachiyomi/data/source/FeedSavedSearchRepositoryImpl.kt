@@ -43,6 +43,7 @@ class FeedSavedSearchRepositoryImpl(
             val duplicate = existing.find { current ->
                 current.source == feedSavedSearch.source &&
                     current.sourceType == feedSavedSearch.sourceType &&
+                    current.listingType == feedSavedSearch.listingType &&
                     current.savedSearch == feedSavedSearch.savedSearch &&
                     current.global == feedSavedSearch.global
             }
@@ -50,6 +51,7 @@ class FeedSavedSearchRepositoryImpl(
                 db.feed_saved_searchQueries.insert(
                     feedSavedSearch.source,
                     feedSavedSearch.sourceType.id,
+                    feedSavedSearch.listingType.id,
                     feedSavedSearch.savedSearch,
                     feedSavedSearch.global,
                 )
@@ -61,7 +63,13 @@ class FeedSavedSearchRepositoryImpl(
     override suspend fun insertAll(feedSavedSearch: List<FeedSavedSearch>) {
         handler.await(inTransaction = true) { db ->
             feedSavedSearch.forEach {
-                db.feed_saved_searchQueries.insert(it.source, it.sourceType.id, it.savedSearch, it.global)
+                db.feed_saved_searchQueries.insert(
+                    it.source,
+                    it.sourceType.id,
+                    it.listingType.id,
+                    it.savedSearch,
+                    it.global,
+                )
             }
         }
     }
@@ -71,6 +79,7 @@ class FeedSavedSearchRepositoryImpl(
             db.feed_saved_searchQueries.update(
                 source = update.source,
                 media_type = update.sourceType?.id,
+                listing_type = update.listingType?.id,
                 saved_search = update.savedSearch,
                 global = update.global,
                 feed_order = update.feedOrder,
@@ -85,6 +94,7 @@ class FeedSavedSearchRepositoryImpl(
                 db.feed_saved_searchQueries.update(
                     source = update.source,
                     media_type = update.sourceType?.id,
+                    listing_type = update.listingType?.id,
                     saved_search = update.savedSearch,
                     global = update.global,
                     feed_order = update.feedOrder,

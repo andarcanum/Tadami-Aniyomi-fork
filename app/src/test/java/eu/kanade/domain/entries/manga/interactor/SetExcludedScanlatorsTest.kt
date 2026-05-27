@@ -50,6 +50,7 @@ class SetExcludedScanlatorsTest {
             mangasAdapter = Mangas.Adapter(
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
+                custom_genreAdapter = StringListColumnAdapter,
             ),
         )
         val mangaId = insertTestManga(database)

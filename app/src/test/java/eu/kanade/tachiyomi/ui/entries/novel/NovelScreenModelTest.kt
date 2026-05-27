@@ -308,6 +308,14 @@ class NovelScreenModelTest {
                         override suspend fun updateNovel(update: NovelUpdate): Boolean = true
                         override suspend fun updateAllNovel(novelUpdates: List<NovelUpdate>): Boolean = true
                         override suspend fun resetNovelViewerFlags(): Boolean = true
+                        override suspend fun updateNovelMetadata(
+                            novelId: Long,
+                            customTitle: String?,
+                            customAuthor: String?,
+                            customDescription: String?,
+                            customGenre: List<String>?,
+                            customStatus: Long?,
+                        ): Boolean = true
                     },
                 ),
                 libraryPreferences = tachiyomi.domain.library.service.LibraryPreferences(
@@ -1719,6 +1727,15 @@ class NovelScreenModelTest {
         }
         override suspend fun updateAllNovel(novelUpdates: List<NovelUpdate>): Boolean = true
         override suspend fun resetNovelViewerFlags(): Boolean = true
+
+        override suspend fun updateNovelMetadata(
+            novelId: Long,
+            customTitle: String?,
+            customAuthor: String?,
+            customDescription: String?,
+            customGenre: List<String>?,
+            customStatus: Long?,
+        ): Boolean = true
     }
 
     private class FakeNovelHistoryRepository(

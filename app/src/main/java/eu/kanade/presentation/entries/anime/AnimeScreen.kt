@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -69,6 +70,8 @@ import eu.kanade.presentation.entries.anime.components.AnimeActionRow
 import eu.kanade.presentation.entries.anime.components.AnimeEpisodeListItem
 import eu.kanade.presentation.entries.anime.components.AnimeInfoBox
 import eu.kanade.presentation.entries.anime.components.AnimeSeasonListItem
+import eu.kanade.presentation.entries.anime.components.AnimeSeasonSwitcher
+import eu.kanade.presentation.entries.anime.components.resolveAnimeSeasonSwitcherItems
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.entries.anime.components.ExpandableAnimeDescription
 import eu.kanade.presentation.entries.anime.components.NextEpisodeAiringListItem
@@ -105,6 +108,7 @@ import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.material.ExtendedFloatingActionButton
 import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsState
 import tachiyomi.presentation.core.util.shouldExpandFAB
@@ -506,6 +510,12 @@ private fun AnimeScreenSmallImpl(
     }
 
     val seasons = remember(state) { state.processedSeasons }
+                                            val seasonSwitcherItems = remember(seasons) {
+                                                resolveAnimeSeasonSwitcherItems(
+                                                    currentAnimeId = state.anime.id,
+                                                    seasons = seasons.map { it.seasonAnime },
+                                                )
+                                            }
     val episodes = remember(state) { state.processedEpisodes }
     val listItem = remember(state) { state.episodeListItems }
     val hasFilters = remember(state) {
@@ -752,6 +762,21 @@ private fun AnimeScreenSmallImpl(
 
                     when (state.anime.fetchType) {
                         FetchType.Seasons -> {
+                            if (seasonSwitcherItems.size > 1) {
+                                item(
+                                    key = "season_switcher",
+                                    contentType = "season_switcher",
+                                    span = { GridItemSpan(maxLineSpan) },
+                                ) {
+                                    AnimeSeasonSwitcher(
+                                        items = seasonSwitcherItems,
+                                        onSeasonClicked = onSeasonClicked,
+                                        modifier = Modifier
+                                            .ignorePadding(offsetGridPaddingPx)
+                                            .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp),
+                                    )
+                                }
+                            }
                             sharedSeasons(
                                 anime = state.anime,
                                 seasons = seasons,
@@ -920,6 +945,12 @@ fun AnimeScreenLargeImpl(
     val density = LocalDensity.current
 
     val seasons = remember(state) { state.processedSeasons }
+                                            val seasonSwitcherItems = remember(seasons) {
+                                                resolveAnimeSeasonSwitcherItems(
+                                                    currentAnimeId = state.anime.id,
+                                                    seasons = seasons.map { it.seasonAnime },
+                                                )
+                                            }
     val episodes = remember(state) { state.processedEpisodes }
     val listItem = remember(state) { state.episodeListItems }
 
@@ -1145,6 +1176,21 @@ fun AnimeScreenLargeImpl(
 
                             when (state.anime.fetchType) {
                                 FetchType.Seasons -> {
+                                    if (seasonSwitcherItems.size > 1) {
+                                        item(
+                                            key = "season_switcher",
+                                            contentType = "season_switcher",
+                                            span = { GridItemSpan(maxLineSpan) },
+                                        ) {
+                                            AnimeSeasonSwitcher(
+                                                items = seasonSwitcherItems,
+                                                onSeasonClicked = onSeasonClicked,
+                                                modifier = Modifier
+                                                    .ignorePadding(offsetGridPaddingPx)
+                                                    .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp),
+                                            )
+                                        }
+                                    }
                                     sharedSeasons(
                                         anime = state.anime,
                                         seasons = seasons,
