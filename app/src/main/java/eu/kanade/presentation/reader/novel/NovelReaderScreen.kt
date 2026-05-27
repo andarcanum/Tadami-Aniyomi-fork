@@ -281,6 +281,13 @@ private fun buildSourceIndexedPageReaderTextList(
     }
 }
 
+fun createNovelReaderWebView(context: Context): WebView {
+    return WebView(context).apply {
+        isFocusable = false
+        isFocusableInTouchMode = false
+    }
+}
+
 @Suppress("ktlint:standard:max-line-length")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -2564,7 +2571,7 @@ fun NovelReaderScreen(
                                 }
                             }
 
-                            WebView(context).apply {
+                            createNovelReaderWebView(context).apply {
                                 webViewInstance = this
                                 setBackgroundColor(backgroundColor)
                                 alpha = if (shouldHideWebViewUntilReveal) 0f else 1f
