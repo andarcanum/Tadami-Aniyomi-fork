@@ -150,9 +150,7 @@ class MangaHomeHubScreenModel(
                     hiddenCategoryIds = hiddenCategoryIds,
                 ).distinctBy { it.manga.id }
 
-                val libraryMangaIds = filteredManga.map { it.manga.id }.toSet()
-
-                val hero = filteredHistory.firstOrNull { it.mangaId in libraryMangaIds }
+                val hero = filteredHistory.firstOrNull()
                 val history = filteredHistory
                     .filter { hero == null || it.mangaId != hero.mangaId }
                     .take(6)

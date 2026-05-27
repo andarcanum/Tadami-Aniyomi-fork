@@ -167,9 +167,7 @@ class HomeHubScreenModel(
                     hiddenCategoryIds = hiddenCategoryIds,
                 ).distinctBy { it.anime.id }
 
-                val libraryAnimeIds = filteredAnime.map { it.anime.id }.toSet()
-
-                val hero = filteredHistory.firstOrNull { it.animeId in libraryAnimeIds }
+                val hero = filteredHistory.firstOrNull()
                 val history = filteredHistory
                     .filter { hero == null || it.animeId != hero.animeId }
                     .take(6)
