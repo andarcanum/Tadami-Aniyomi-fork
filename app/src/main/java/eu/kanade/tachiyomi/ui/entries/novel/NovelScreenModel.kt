@@ -46,6 +46,7 @@ import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.data.translation.toTranslationQueueProfileSnapshot
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
+import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
@@ -421,9 +422,11 @@ class NovelScreenModel(
                 ?.downloadedChapterIds
                 ?.intersect(chapters.mapTo(mutableSetOf()) { it.id })
                 .orEmpty()
+            val isSourceConfigurable = source.hasVisiblePluginSettingsByDiscovery()
             val initialState = State.Success(
                 novel = novel,
                 source = source,
+                isSourceConfigurable = isSourceConfigurable,
                 rating = null,
                 chapters = chapters,
                 availableScanlators = availableScanlators,
@@ -2117,6 +2120,7 @@ class NovelScreenModel(
         data class Success(
             val novel: Novel,
             val source: NovelSource,
+            val isSourceConfigurable: Boolean = false,
             val rating: Float? = null,
             val chapters: List<NovelChapter>,
             val availableScanlators: Set<String>,
