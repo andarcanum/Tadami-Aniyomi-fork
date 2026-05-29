@@ -353,14 +353,6 @@ class GeminiTranslationService(
     }
 }
 
-private fun kotlinx.serialization.json.JsonElement?.asObjectOrNull(): JsonObject? {
-    return this as? JsonObject
-}
-
-private fun kotlinx.serialization.json.JsonElement?.asArrayOrNull(): JsonArray? {
-    return this as? JsonArray
-}
-
 private fun JsonArray?.extractTextParts(): List<String> {
     return this.orEmpty().mapNotNull { part ->
         part.asObjectOrNull()
@@ -369,12 +361,6 @@ private fun JsonArray?.extractTextParts(): List<String> {
             ?.trim()
             ?.takeIf { it.isNotBlank() }
     }
-}
-
-private fun kotlinx.serialization.json.JsonElement?.asStringOrNull(): String? {
-    val primitive = this as? JsonPrimitive ?: return null
-    if (primitive is JsonNull) return null
-    return primitive.content
 }
 
 private fun logLargeTextToGeminiLog(

@@ -98,15 +98,4 @@ internal fun ollamaCloudHeaders(
     return headersOf(*pairs.toTypedArray())
 }
 
-private fun kotlinx.serialization.json.JsonElement?.asObjectOrNull(): JsonObject? {
-    return this as? JsonObject
-}
 
-private fun kotlinx.serialization.json.JsonElement?.asArrayOrNull(): JsonArray? {
-    return this as? JsonArray
-}
-
-private fun kotlinx.serialization.json.JsonElement?.asStringOrNull(): String? {
-    val primitive = this as? JsonPrimitive ?: return null
-    return if (primitive.isString) primitive.content else null
-}

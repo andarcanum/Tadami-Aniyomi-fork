@@ -348,35 +348,6 @@ private fun isOllamaCloudSubscriptionRequired(details: String): Boolean {
         normalized.contains("ollama.com/upgrade")
 }
 
-private fun kotlinx.serialization.json.JsonElement?.asObjectOrNull(): JsonObject? {
-    return this as? JsonObject
-}
 
-private fun kotlinx.serialization.json.JsonElement?.asArrayOrNull(): JsonArray? {
-    return this as? JsonArray
-}
-
-private fun kotlinx.serialization.json.JsonElement?.asStringOrNull(): String? {
-    val primitive = this as? JsonPrimitive ?: return null
-    return if (primitive.isString) primitive.content else null
-}
-
-private fun kotlinx.serialization.json.JsonElement?.asLooseStringOrNull(): String? {
-    val primitive = this as? JsonPrimitive ?: return null
-    return primitive.contentOrNull
-}
-
-private val xmlSegmentStartRegex =
-    Regex("(?i)<s\\s+i=['\"]\\d+['\"]>")
-private val xmlSegmentEndRegex =
-    Regex("(?i)</s>")
-
-private fun String.trimNonXmlTail(): String {
-    val source = trim()
-    val start = xmlSegmentStartRegex.find(source)?.range?.first ?: return source
-    val end = xmlSegmentEndRegex.findAll(source).lastOrNull()?.range?.last ?: return source
-    if (end < start) return source
-    return source.substring(start, end + 1).trim()
-}
 
 private const val MAX_ATTEMPTS = 3

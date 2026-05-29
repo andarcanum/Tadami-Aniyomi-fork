@@ -47,15 +47,4 @@ internal object GoogleSelectedTextTranslationParser {
     }
 }
 
-private fun JsonElement?.asArrayOrNull(): JsonArray? {
-    return this as? JsonArray
-}
 
-private fun JsonElement?.asObjectOrNull(): JsonObject? {
-    return this as? JsonObject
-}
-
-private fun JsonElement?.asStringOrNull(): String? {
-    val primitive = this as? JsonPrimitive ?: return null
-    return if (primitive.isString) primitive.content else null
-}

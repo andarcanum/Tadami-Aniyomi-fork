@@ -219,26 +219,7 @@ private sealed interface BaseOpenAiRequestOutcome {
     data class Failure(val message: String) : BaseOpenAiRequestOutcome
 }
 
-private fun kotlinx.serialization.json.JsonElement?.asObjectOrNull(): JsonObject? {
-    return this as? JsonObject
-}
 
-private fun kotlinx.serialization.json.JsonElement?.asArrayOrNull(): JsonArray? {
-    return this as? JsonArray
-}
-
-private fun kotlinx.serialization.json.JsonElement?.asStringOrNull(): String? {
-    val primitive = this as? JsonPrimitive ?: return null
-    return if (primitive.isString) primitive.content else null
-}
-
-private val retryAfterSecondsRegex =
-    Regex("(?i)try\\s+again\\s+in\\s+([0-9]+(?:\\.[0-9]+)?)\\s*seconds?")
-
-private fun extractRetryAfterSeconds(raw: String): Double? {
-    val match = retryAfterSecondsRegex.find(raw) ?: return null
-    return match.groupValues.getOrNull(1)?.toDoubleOrNull()
-}
 
 private fun computeOpenAiLikeRetryDelayMs(
     attempt: Int,
