@@ -2145,6 +2145,7 @@
     <string name="pref_cloud_sync_options_summary">Выбрать, какие данные синхронизировать</string>
     <string name="pref_sign_out_confirmation_title">Выход из аккаунта</string>
     <string name="pref_sign_out_confirmation_message">Вы уверены, что хотите выйти из аккаунта Google Drive?</string>
+    <string name="pref_sync_started">Синхронизация запущена...</string>
     <string name="action_ok">ОК</string>
     <string name="cloud_sync_successful">Синхронизация успешно завершена</string>
     <string name="cloud_sync_error">Ошибка синхронизации: %s</string>

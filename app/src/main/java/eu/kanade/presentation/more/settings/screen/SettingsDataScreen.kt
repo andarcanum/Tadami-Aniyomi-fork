@@ -632,10 +632,14 @@ object SettingsDataScreen : SearchableSettings {
                     icon = Icons.Outlined.Sync,
                     enabled = isSignedIn && syncService == SyncPreferences.SYNC_SERVICE_GOOGLE_DRIVE,
                     onClick = {
+                        context.toast(AYMR.strings.pref_sync_started)
                         scope.launchNonCancellable {
                             try {
                                 val syncManager = SyncManager(context)
                                 syncManager.syncData()
+                                withUIContext {
+                                    context.toast(AYMR.strings.cloud_sync_successful)
+                                }
                             } catch (e: Exception) {
                                 logcat { "Sync error: ${e.message}" }
                                 withUIContext {

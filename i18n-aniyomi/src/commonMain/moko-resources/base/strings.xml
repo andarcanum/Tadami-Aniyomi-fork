@@ -1262,6 +1262,7 @@
     <string name="pref_cloud_sync_options_summary">Choose what data to sync</string>
     <string name="pref_sign_out_confirmation_title">Sign out</string>
     <string name="pref_sign_out_confirmation_message">Are you sure you want to sign out from Google Drive?</string>
+    <string name="pref_sync_started">Sync started...</string>
     <string name="action_ok">OK</string>
     <string name="cloud_sync_successful">Sync completed successfully</string>
     <string name="cloud_sync_error">Sync error: %s</string>
