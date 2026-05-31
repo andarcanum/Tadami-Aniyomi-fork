@@ -80,7 +80,11 @@ internal class NovelReaderTranslationDiskCache(
         }
 
         // Fallback: read main JSON disk model
-        val diskModel = readEntryDiskModel(chapterId) ?: return null
+        val diskModel = readEntryDiskModel(chapterId)
+        if (diskModel == null) {
+            index.remove(chapterId)
+            return null
+        }
         val loaded = IndexEntry(
             targetLang = diskModel.targetLang,
             provider = diskModel.provider,
@@ -217,7 +221,7 @@ internal class NovelReaderTranslationDiskCache(
     fun has(chapterId: Long): Boolean {
         ensureIndex()
         if (!indexReady()) return hasFallback(chapterId)
-        return index[chapterId]?.hasTranslatedContent == true
+        return getOrLoadEntry(chapterId)?.hasTranslatedContent == true
     }
 
     fun has(
@@ -323,10 +327,7 @@ internal class NovelReaderTranslationDiskCache(
     fun chapterIds(): Set<Long> {
         ensureIndex()
         if (!indexReady()) return chapterIdsFallback()
-        return index.entries
-            .filter { it.value.hasTranslatedContent }
-            .map { it.key }
-            .toSet()
+        return index.keys.filter { getOrLoadEntry(it)?.hasTranslatedContent == true }.toSet()
     }
 
     fun chapterIds(targetLang: String): Set<Long> {

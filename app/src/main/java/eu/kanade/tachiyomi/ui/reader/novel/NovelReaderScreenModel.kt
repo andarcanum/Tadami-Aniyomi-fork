@@ -115,6 +115,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -1678,7 +1679,11 @@ class NovelReaderScreenModel(
         )
     }
     suspend fun awaitDisposalCleanup() {
-        // No-op: cleanup is now synchronous in onDispose()
+        withTimeoutOrNull(2_000) {
+            screenModelScope.coroutineContext[kotlinx.coroutines.Job]?.children?.forEach {
+                it.join()
+            }
+        }
     }
     private suspend fun flushPendingProgressPersistence() {
         while (true) {
