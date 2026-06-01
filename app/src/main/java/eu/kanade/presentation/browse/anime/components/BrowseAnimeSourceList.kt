@@ -5,10 +5,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import eu.kanade.presentation.browse.BrowseSourceLoadingItem
@@ -53,7 +53,7 @@ fun BrowseAnimeSourceList(
                 count = animeList.itemCount,
                 key = { index -> animeBrowseItemKey(animeList[index]?.value?.url, index) },
             ) { index ->
-                val anime by animeList[index]?.collectAsState() ?: return@items
+                val anime by animeList[index]?.collectAsStateWithLifecycle() ?: return@items
                 BrowseAnimeSourceListItem(
                     anime = anime,
                     onClick = { onAnimeClick(anime) },

@@ -2,10 +2,10 @@ package eu.kanade.tachiyomi.ui.deeplink.anime
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -31,7 +31,7 @@ class DeepLinkAnimeScreen(
         val screenModel = rememberScreenModel {
             DeepLinkAnimeScreenModel(query = query)
         }
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
         Scaffold(
             topBar = { scrollBehavior ->
                 AppBar(

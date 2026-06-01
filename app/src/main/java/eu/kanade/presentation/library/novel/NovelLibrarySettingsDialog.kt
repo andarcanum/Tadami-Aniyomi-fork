@@ -13,12 +13,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
@@ -39,7 +39,7 @@ import tachiyomi.presentation.core.components.SliderItem
 import tachiyomi.presentation.core.components.SortItem
 import tachiyomi.presentation.core.components.TriStateItem
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -80,8 +80,8 @@ private fun ColumnScope.FilterPage(
     screenModel: NovelLibraryScreenModel,
     libraryPreferences: LibraryPreferences,
 ) {
-    val state by screenModel.state.collectAsState()
-    val autoUpdateRestrictions by libraryPreferences.autoUpdateItemRestrictions().collectAsState()
+    val state by screenModel.state.collectAsStateWithLifecycle()
+    val autoUpdateRestrictions by libraryPreferences.autoUpdateItemRestrictions().collectAsStateWithLifecycle()
 
     TriStateItem(
         label = stringResource(MR.strings.label_downloaded),
@@ -123,7 +123,7 @@ private fun ColumnScope.FilterPage(
 private fun ColumnScope.SortPage(
     screenModel: NovelLibraryScreenModel,
 ) {
-    val state by screenModel.state.collectAsState()
+    val state by screenModel.state.collectAsStateWithLifecycle()
     val sortingMode = state.sort.type
     val sortDescending = !state.sort.isAscending
 
@@ -170,7 +170,7 @@ private fun ColumnScope.DisplayPage(
 ) {
     val useSeparateDisplayModePerMedia by libraryPreferences
         .separateDisplayModePerMedia()
-        .collectAsState()
+        .collectAsStateWithLifecycle()
     CheckboxItem(
         label = stringResource(MR.strings.pref_library_display_mode_per_media),
         pref = libraryPreferences.separateDisplayModePerMedia(),
@@ -183,7 +183,7 @@ private fun ColumnScope.DisplayPage(
             libraryPreferences.displayMode()
         }
     }
-    val displayMode by displayModePref.collectAsState()
+    val displayMode by displayModePref.collectAsStateWithLifecycle()
     SettingsChipRow(MR.strings.action_display_mode) {
         novelLibraryDisplayModes().map { (titleRes, mode) ->
             FilterChip(
@@ -195,7 +195,7 @@ private fun ColumnScope.DisplayPage(
     }
 
     val auroraCardStylePref = libraryPreferences.auroraLibraryCardStyle()
-    val auroraCardStyle by auroraCardStylePref.collectAsState()
+    val auroraCardStyle by auroraCardStylePref.collectAsStateWithLifecycle()
     SettingsChipRow(MR.strings.pref_aurora_library_card_style) {
         auroraLibraryCardStyleOptions().map { (titleRes, style) ->
             FilterChip(
@@ -215,7 +215,7 @@ private fun ColumnScope.DisplayPage(
         }
     }
 
-    val columns by columnPreference.collectAsState()
+    val columns by columnPreference.collectAsStateWithLifecycle()
     if (displayMode == LibraryDisplayMode.List) {
         SliderItem(
             value = columns,

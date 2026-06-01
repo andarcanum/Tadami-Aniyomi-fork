@@ -52,7 +52,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +69,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
 import androidx.constraintlayout.compose.Dimension
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.kanade.presentation.more.settings.screen.player.custombutton.getButtons
 import eu.kanade.presentation.theme.playerRippleConfiguration
 import eu.kanade.tachiyomi.ui.player.Dialogs
@@ -100,7 +100,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import tachiyomi.source.local.entries.anime.LocalAnimeSource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -121,32 +121,32 @@ fun PlayerControls(
     val subtitlePreferences = remember { Injekt.get<SubtitlePreferences>() }
     val interactionSource = remember { MutableInteractionSource() }
 
-    val controlsShown by viewModel.controlsShown.collectAsState()
-    val areControlsLocked by viewModel.areControlsLocked.collectAsState()
-    val seekBarShown by viewModel.seekBarShown.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val isLoadingEpisode by viewModel.isLoadingEpisode.collectAsState()
-    val duration by viewModel.duration.collectAsState()
-    val position by viewModel.pos.collectAsState()
-    val paused by viewModel.paused.collectAsState()
-    val gestureSeekAmount by viewModel.gestureSeekAmount.collectAsState()
-    val doubleTapSeekAmount by viewModel.doubleTapSeekAmount.collectAsState()
-    val seekText by viewModel.seekText.collectAsState()
-    val currentChapter by viewModel.currentChapter.collectAsState()
-    val chapters by viewModel.chapters.collectAsState()
-    val currentBrightness by viewModel.currentBrightness.collectAsState()
-    val isDynamicSpeedActive by viewModel.isDynamicSpeedActive.collectAsState()
-    val gesturePlaybackSpeed by viewModel.gesturePlaybackSpeed.collectAsState()
-    val longPressAction by gesturePreferences.longPressGesture().collectAsState()
+    val controlsShown by viewModel.controlsShown.collectAsStateWithLifecycle()
+    val areControlsLocked by viewModel.areControlsLocked.collectAsStateWithLifecycle()
+    val seekBarShown by viewModel.seekBarShown.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val isLoadingEpisode by viewModel.isLoadingEpisode.collectAsStateWithLifecycle()
+    val duration by viewModel.duration.collectAsStateWithLifecycle()
+    val position by viewModel.pos.collectAsStateWithLifecycle()
+    val paused by viewModel.paused.collectAsStateWithLifecycle()
+    val gestureSeekAmount by viewModel.gestureSeekAmount.collectAsStateWithLifecycle()
+    val doubleTapSeekAmount by viewModel.doubleTapSeekAmount.collectAsStateWithLifecycle()
+    val seekText by viewModel.seekText.collectAsStateWithLifecycle()
+    val currentChapter by viewModel.currentChapter.collectAsStateWithLifecycle()
+    val chapters by viewModel.chapters.collectAsStateWithLifecycle()
+    val currentBrightness by viewModel.currentBrightness.collectAsStateWithLifecycle()
+    val isDynamicSpeedActive by viewModel.isDynamicSpeedActive.collectAsStateWithLifecycle()
+    val gesturePlaybackSpeed by viewModel.gesturePlaybackSpeed.collectAsStateWithLifecycle()
+    val longPressAction by gesturePreferences.longPressGesture().collectAsStateWithLifecycle()
 
-    val playerTimeToDisappear by playerPreferences.playerTimeToDisappear().collectAsState()
-    val showCustomButtons by playerPreferences.showCustomButtons().collectAsState()
-    val playerLayoutConfig by viewModel.playerLayoutConfig.collectAsState()
+    val playerTimeToDisappear by playerPreferences.playerTimeToDisappear().collectAsStateWithLifecycle()
+    val showCustomButtons by playerPreferences.showCustomButtons().collectAsStateWithLifecycle()
+    val playerLayoutConfig by viewModel.playerLayoutConfig.collectAsStateWithLifecycle()
     var isSeeking by remember { mutableStateOf(false) }
     var resetControls by remember { mutableStateOf(true) }
 
-    val customButtons by viewModel.customButtons.collectAsState()
-    val customButton by viewModel.primaryButton.collectAsState()
+    val customButtons by viewModel.customButtons.collectAsStateWithLifecycle()
+    val customButton by viewModel.primaryButton.collectAsStateWithLifecycle()
     val activeLayoutOrientation = if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) {
         PlayerLayoutOrientation.Landscape
     } else {
@@ -214,15 +214,15 @@ fun PlayerControls(
                 val (playerUpdates) = createRefs()
                 val speedPill = createRef()
 
-                val hasPreviousEpisode by viewModel.hasPreviousEpisode.collectAsState()
-                val hasNextEpisode by viewModel.hasNextEpisode.collectAsState()
-                val isBrightnessSliderShown by viewModel.isBrightnessSliderShown.collectAsState()
-                val isVolumeSliderShown by viewModel.isVolumeSliderShown.collectAsState()
-                val brightness by viewModel.currentBrightness.collectAsState()
-                val volume by viewModel.currentVolume.collectAsState()
-                val mpvVolume by viewModel.currentMPVVolume.collectAsState()
-                val swapVolumeAndBrightness by gesturePreferences.swapVolumeBrightness().collectAsState()
-                val reduceMotion by playerPreferences.reduceMotion().collectAsState()
+                val hasPreviousEpisode by viewModel.hasPreviousEpisode.collectAsStateWithLifecycle()
+                val hasNextEpisode by viewModel.hasNextEpisode.collectAsStateWithLifecycle()
+                val isBrightnessSliderShown by viewModel.isBrightnessSliderShown.collectAsStateWithLifecycle()
+                val isVolumeSliderShown by viewModel.isVolumeSliderShown.collectAsStateWithLifecycle()
+                val brightness by viewModel.currentBrightness.collectAsStateWithLifecycle()
+                val volume by viewModel.currentVolume.collectAsStateWithLifecycle()
+                val mpvVolume by viewModel.currentMPVVolume.collectAsStateWithLifecycle()
+                val swapVolumeAndBrightness by gesturePreferences.swapVolumeBrightness().collectAsStateWithLifecycle()
+                val reduceMotion by playerPreferences.reduceMotion().collectAsStateWithLifecycle()
 
                 LaunchedEffect(volume, mpvVolume, isVolumeSliderShown) {
                     delay(2000)
@@ -307,8 +307,8 @@ fun PlayerControls(
                         bottom.linkTo(parent.bottom)
                     },
                 ) {
-                    val boostCap by audioPreferences.volumeBoostCap().collectAsState()
-                    val displayVolumeAsPercentage by playerPreferences.displayVolPer().collectAsState()
+                    val boostCap by audioPreferences.volumeBoostCap().collectAsStateWithLifecycle()
+                    val displayVolumeAsPercentage by playerPreferences.displayVolPer().collectAsStateWithLifecycle()
                     VolumeSlider(
                         volume = volume,
                         mpvVolume = mpvVolume,
@@ -318,8 +318,8 @@ fun PlayerControls(
                     )
                 }
 
-                val currentPlayerUpdate by viewModel.playerUpdate.collectAsState()
-                val aspectRatio by playerPreferences.aspectState().collectAsState()
+                val currentPlayerUpdate by viewModel.playerUpdate.collectAsStateWithLifecycle()
+                val aspectRatio by playerPreferences.aspectState().collectAsStateWithLifecycle()
                 LaunchedEffect(currentPlayerUpdate, aspectRatio) {
                     if (currentPlayerUpdate is PlayerUpdates.DoubleSpeed || currentPlayerUpdate is PlayerUpdates.None) {
                         return@LaunchedEffect
@@ -377,7 +377,7 @@ fun PlayerControls(
                         bottom.linkTo(parent.bottom)
                     },
                 ) {
-                    val showLoadingCircle by playerPreferences.showLoadingCircle().collectAsState()
+                    val showLoadingCircle by playerPreferences.showLoadingCircle().collectAsStateWithLifecycle()
                     MiddlePlayerControls(
                         hasPrevious = hasPreviousEpisode,
                         onSkipPrevious = { viewModel.changeEpisode(true) },
@@ -413,9 +413,9 @@ fun PlayerControls(
                         bottom.linkTo(parent.bottom, spacing.medium)
                     },
                 ) {
-                    val invertDuration by playerPreferences.invertDuration().collectAsState()
-                    val readAhead by viewModel.readAhead.collectAsState()
-                    val preciseSeeking by gesturePreferences.playerSmoothSeek().collectAsState()
+                    val invertDuration by playerPreferences.invertDuration().collectAsStateWithLifecycle()
+                    val readAhead by viewModel.readAhead.collectAsStateWithLifecycle()
+                    val preciseSeeking by gesturePreferences.playerSmoothSeek().collectAsStateWithLifecycle()
                     SeekbarWithTimers(
                         position = position,
                         duration = duration,
@@ -432,8 +432,8 @@ fun PlayerControls(
                         chapters = chapters.map { it.toSegment() }.toImmutableList(),
                     )
                 }
-                val mediaTitle by viewModel.mediaTitle.collectAsState()
-                val animeTitle by viewModel.animeTitle.collectAsState()
+                val mediaTitle by viewModel.mediaTitle.collectAsStateWithLifecycle()
+                val animeTitle by viewModel.animeTitle.collectAsStateWithLifecycle()
                 AnimatedVisibility(
                     controlsShown && !areControlsLocked && !isDynamicSpeedActive,
                     enter = if (!reduceMotion) {
@@ -463,8 +463,8 @@ fun PlayerControls(
                     )
                 }
                 // Top right controls
-                val autoPlayEnabled by playerPreferences.autoplayEnabled().collectAsState()
-                val isEpisodeOnline by viewModel.isEpisodeOnline.collectAsState()
+                val autoPlayEnabled by playerPreferences.autoplayEnabled().collectAsStateWithLifecycle()
+                val isEpisodeOnline by viewModel.isEpisodeOnline.collectAsStateWithLifecycle()
                 AnimatedVisibility(
                     controlsShown && !areControlsLocked && !isDynamicSpeedActive,
                     enter = if (!reduceMotion) {
@@ -500,8 +500,8 @@ fun PlayerControls(
                     )
                 }
                 // Bottom right controls
-                val skipIntroButton by viewModel.skipIntroText.collectAsState()
-                val customButtonTitle by viewModel.primaryButtonTitle.collectAsState()
+                val skipIntroButton by viewModel.skipIntroText.collectAsStateWithLifecycle()
+                val customButtonTitle by viewModel.primaryButtonTitle.collectAsStateWithLifecycle()
                 val visibleCustomButton = resolveVisibleCustomButton(showCustomButtons, customButton)
                 val visibleSkipIntroButton = skipIntroButton
                 AnimatedVisibility(
@@ -548,7 +548,7 @@ fun PlayerControls(
                     )
                 }
                 // Bottom left controls
-                val playbackSpeed by viewModel.playbackSpeed.collectAsState()
+                val playbackSpeed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
                 AnimatedVisibility(
                     controlsShown && !areControlsLocked && !isDynamicSpeedActive,
                     enter = if (!reduceMotion) {
@@ -601,23 +601,23 @@ fun PlayerControls(
             }
         }
 
-        val sheetShown by viewModel.sheetShown.collectAsState()
-        val dismissSheet by viewModel.dismissSheet.collectAsState()
-        val subtitles by viewModel.subtitleTracks.collectAsState()
-        val selectedSubtitles by viewModel.selectedSubtitles.collectAsState()
-        val audioTracks by viewModel.audioTracks.collectAsState()
-        val selectedAudio by viewModel.selectedAudio.collectAsState()
-        val isLoadingHosters by viewModel.isLoadingHosters.collectAsState()
-        val hosterState by viewModel.hosterState.collectAsState()
-        val expandedState by viewModel.hosterExpandedList.collectAsState()
-        val selectedHosterVideoIndex by viewModel.selectedHosterVideoIndex.collectAsState()
-        val decoder by viewModel.currentDecoder.collectAsState()
-        val speed by viewModel.playbackSpeed.collectAsState()
-        val sleepTimerTimeRemaining by viewModel.remainingTime.collectAsState()
-        val showSubtitles by subtitlePreferences.screenshotSubtitles().collectAsState()
-        val currentSource by viewModel.currentSource.collectAsState()
-        val showFailedHosters by playerPreferences.showFailedHosters().collectAsState()
-        val emptyHosters by playerPreferences.showEmptyHosters().collectAsState()
+        val sheetShown by viewModel.sheetShown.collectAsStateWithLifecycle()
+        val dismissSheet by viewModel.dismissSheet.collectAsStateWithLifecycle()
+        val subtitles by viewModel.subtitleTracks.collectAsStateWithLifecycle()
+        val selectedSubtitles by viewModel.selectedSubtitles.collectAsStateWithLifecycle()
+        val audioTracks by viewModel.audioTracks.collectAsStateWithLifecycle()
+        val selectedAudio by viewModel.selectedAudio.collectAsStateWithLifecycle()
+        val isLoadingHosters by viewModel.isLoadingHosters.collectAsStateWithLifecycle()
+        val hosterState by viewModel.hosterState.collectAsStateWithLifecycle()
+        val expandedState by viewModel.hosterExpandedList.collectAsStateWithLifecycle()
+        val selectedHosterVideoIndex by viewModel.selectedHosterVideoIndex.collectAsStateWithLifecycle()
+        val decoder by viewModel.currentDecoder.collectAsStateWithLifecycle()
+        val speed by viewModel.playbackSpeed.collectAsStateWithLifecycle()
+        val sleepTimerTimeRemaining by viewModel.remainingTime.collectAsStateWithLifecycle()
+        val showSubtitles by subtitlePreferences.screenshotSubtitles().collectAsStateWithLifecycle()
+        val currentSource by viewModel.currentSource.collectAsStateWithLifecycle()
+        val showFailedHosters by playerPreferences.showFailedHosters().collectAsStateWithLifecycle()
+        val emptyHosters by playerPreferences.showEmptyHosters().collectAsStateWithLifecycle()
 
         PlayerSheets(
             sheetShown = sheetShown,
@@ -674,16 +674,16 @@ fun PlayerControls(
             onDismissRequest = { viewModel.showSheet(Sheets.None) },
             dismissSheet = dismissSheet,
         )
-        val panel by viewModel.panelShown.collectAsState()
+        val panel by viewModel.panelShown.collectAsStateWithLifecycle()
         PlayerPanels(
             panelShown = panel,
             onDismissRequest = { viewModel.showPanel(Panels.None) },
         )
 
         val activity = LocalContext.current as PlayerActivity
-        val dialog by viewModel.dialogShown.collectAsState()
-        val anime by viewModel.currentAnime.collectAsState()
-        val playlist by viewModel.currentPlaylist.collectAsState()
+        val dialog by viewModel.dialogShown.collectAsStateWithLifecycle()
+        val anime by viewModel.currentAnime.collectAsStateWithLifecycle()
+        val playlist by viewModel.currentPlaylist.collectAsStateWithLifecycle()
 
         PlayerDialogs(
             dialogShown = dialog,

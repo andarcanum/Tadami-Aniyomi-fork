@@ -5,8 +5,8 @@ import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
@@ -47,7 +47,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import tachiyomi.presentation.core.util.collectAsState as preferenceCollectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle as preferenceCollectAsState
 
 data object MoreTab : Tab {
 
@@ -72,15 +72,15 @@ data object MoreTab : Tab {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val screenModel = rememberScreenModel { MoreScreenModel() }
-        val downloadQueueState by screenModel.downloadQueueState.collectAsState(DownloadQueueState.Stopped)
+        val downloadQueueState by screenModel.downloadQueueState.collectAsStateWithLifecycle(DownloadQueueState.Stopped)
 
         val uiPreferences = Injekt.get<UiPreferences>()
         val theme by uiPreferences.appTheme().preferenceCollectAsState()
         val navStyle = currentNavigationStyle()
 
         if (theme.isAuroraStyle) {
-            val downloadedOnly by screenModel.downloadedOnlyFlow.collectAsState()
-            val incognitoMode by screenModel.incognitoModeFlow.collectAsState()
+            val downloadedOnly by screenModel.downloadedOnlyFlow.collectAsStateWithLifecycle()
+            val incognitoMode by screenModel.incognitoModeFlow.collectAsStateWithLifecycle()
 
             MoreScreenAurora(
                 navStyle = navStyle,

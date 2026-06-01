@@ -2,9 +2,9 @@ package eu.kanade.tachiyomi.ui.browse.novel.migration.novel
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -27,7 +27,7 @@ data class MigrateNovelScreen(
         val navigator = LocalNavigator.currentOrThrow
         val screenModel = rememberScreenModel { MigrateNovelScreenModel(sourceId) }
 
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
 
         if (state.isLoading) {
             LoadingScreen()

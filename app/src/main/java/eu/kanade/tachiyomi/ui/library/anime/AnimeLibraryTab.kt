@@ -60,7 +60,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -93,6 +92,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastAll
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
@@ -185,7 +185,7 @@ import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
 import tachiyomi.presentation.core.util.LocalAppHaptics
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import tachiyomi.presentation.core.util.showSoftKeyboard
 import tachiyomi.source.local.entries.anime.isLocal
 import tachiyomi.source.local.entries.manga.isLocal
@@ -237,39 +237,41 @@ data object AnimeLibraryTab : Tab {
         val mangaScreenModel = rememberScreenModel { MangaLibraryScreenModel() }
         val settingsScreenModel = rememberScreenModel { AnimeLibrarySettingsScreenModel() }
         val mangaSettingsScreenModel = rememberScreenModel { MangaLibrarySettingsScreenModel() }
-        val state by screenModel.state.collectAsState()
-        val mangaState by mangaScreenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
+        val mangaState by mangaScreenModel.state.collectAsStateWithLifecycle()
         val novelReaderPreferences = remember { Injekt.get<NovelReaderPreferences>() }
-        val isNovelTranslatorEnabled by novelReaderPreferences.geminiEnabled().collectAsState()
+        val isNovelTranslatorEnabled by novelReaderPreferences.geminiEnabled().collectAsStateWithLifecycle()
 
         val uiPreferences = Injekt.get<UiPreferences>()
-        val theme by uiPreferences.appTheme().collectAsState()
-        val showAnimeSection by uiPreferences.showAnimeSection().collectAsState()
-        val showMangaSection by uiPreferences.showMangaSection().collectAsState()
-        val showNovelSection by uiPreferences.showNovelSection().collectAsState()
-        val immersiveModeEnabled by uiPreferences.auroraLibraryImmersiveMode().collectAsState()
+        val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
+        val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
+        val showMangaSection by uiPreferences.showMangaSection().collectAsStateWithLifecycle()
+        val showNovelSection by uiPreferences.showNovelSection().collectAsStateWithLifecycle()
+        val immersiveModeEnabled by uiPreferences.auroraLibraryImmersiveMode().collectAsStateWithLifecycle()
         val swipeSwitchesCategories by uiPreferences
             .auroraLibrarySwipeSwitchesCategories()
-            .collectAsState()
+            .collectAsStateWithLifecycle()
         val bottomNavVisibilityController = LocalBottomNavVisibilityController.current
         val useSeparateDisplayModePerMedia by settingsScreenModel
             .libraryPreferences
             .separateDisplayModePerMedia()
-            .collectAsState()
+            .collectAsStateWithLifecycle()
         val showContinueViewingButton by settingsScreenModel
             .libraryPreferences
             .showContinueViewingButton()
-            .collectAsState()
+            .collectAsStateWithLifecycle()
         val showCategoryTabs by settingsScreenModel
             .libraryPreferences
             .categoryTabs()
-            .collectAsState()
+            .collectAsStateWithLifecycle()
         val showCategoryNumberOfItems by settingsScreenModel
             .libraryPreferences
             .categoryNumberOfItems()
-            .collectAsState()
+            .collectAsStateWithLifecycle()
         val getVisibleNovelCategories = remember { Injekt.get<GetVisibleNovelCategories>() }
-        val visibleNovelCategories by getVisibleNovelCategories.subscribe().collectAsState(initial = emptyList())
+        val visibleNovelCategories by getVisibleNovelCategories.subscribe().collectAsStateWithLifecycle(
+            initialValue = emptyList(),
+        )
         val isAurora = theme.isAuroraStyle
         val configuration = LocalConfiguration.current
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -295,7 +297,7 @@ data object AnimeLibraryTab : Tab {
         val shouldActivateNovelLibrary = showNovelSection && auroraCurrentSection == Section.Novel
         val inactiveNovelRawItems = if (showNovelSection && !shouldActivateNovelLibrary) {
             val getLibraryNovel = remember { Injekt.get<GetLibraryNovel>() }
-            val items by getLibraryNovel.subscribe().collectAsState(initial = emptyList())
+            val items by getLibraryNovel.subscribe().collectAsStateWithLifecycle(initialValue = emptyList())
             items
         } else {
             emptyList()
@@ -305,7 +307,7 @@ data object AnimeLibraryTab : Tab {
         } else {
             null
         }
-        val novelState = novelScreenModel?.state?.collectAsState()?.value ?: NovelLibraryScreenModel.State(
+        val novelState = novelScreenModel?.state?.collectAsStateWithLifecycle()?.value ?: NovelLibraryScreenModel.State(
             isLoading = false,
             rawItems = inactiveNovelRawItems.map { eu.kanade.presentation.library.novel.NovelLibraryItem.Single(it) },
             items = inactiveNovelRawItems.map { eu.kanade.presentation.library.novel.NovelLibraryItem.Single(it) },

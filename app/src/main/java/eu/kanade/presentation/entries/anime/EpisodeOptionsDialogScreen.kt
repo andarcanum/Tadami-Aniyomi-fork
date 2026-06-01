@@ -32,7 +32,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -45,6 +44,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
@@ -113,13 +113,13 @@ class EpisodeOptionsDialogScreen(
             )
         }
 
-        val episode by sm.episode.collectAsState()
-        val anime by sm.anime.collectAsState()
-        val hosterState by sm.hosterState.collectAsState()
-        val hosterExpandedList by sm.hosterExpandedList.collectAsState()
-        val selectedHosterVideoIndex by sm.selectedHosterVideoIndex.collectAsState()
-        val currentVideo by sm.currentVideo.collectAsState()
-        val showAllQualities by sm.showAllQualities.collectAsState()
+        val episode by sm.episode.collectAsStateWithLifecycle()
+        val anime by sm.anime.collectAsStateWithLifecycle()
+        val hosterState by sm.hosterState.collectAsStateWithLifecycle()
+        val hosterExpandedList by sm.hosterExpandedList.collectAsStateWithLifecycle()
+        val selectedHosterVideoIndex by sm.selectedHosterVideoIndex.collectAsStateWithLifecycle()
+        val currentVideo by sm.currentVideo.collectAsStateWithLifecycle()
+        val showAllQualities by sm.showAllQualities.collectAsStateWithLifecycle()
 
         EpisodeOptionsDialog(
             useExternalDownloader = useExternalDownloader,

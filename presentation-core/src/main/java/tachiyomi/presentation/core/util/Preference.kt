@@ -11,3 +11,6 @@ fun <T> Preference<T>.collectAsState(): State<T> {
     val flow = remember(this) { changes() }
     return flow.collectAsStateWithLifecycle(initialValue = get())
 }
+
+@Composable
+fun <T> Preference<T>.collectAsStateWithLifecycle(): State<T> = collectAsState()

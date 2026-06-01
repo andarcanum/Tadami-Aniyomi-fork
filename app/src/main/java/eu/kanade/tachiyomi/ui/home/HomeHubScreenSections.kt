@@ -24,7 +24,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -70,7 +70,7 @@ import kotlinx.coroutines.launch
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 
 @Composable
 internal fun AnimeHomeHub(
@@ -83,7 +83,7 @@ internal fun AnimeHomeHub(
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
 ) {
     val screenModel = HomeHubTab.rememberScreenModel { HomeHubScreenModel() }
-    val state by screenModel.state.collectAsState()
+    val state by screenModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
     val tabNavigator = LocalTabNavigator.current
@@ -137,7 +137,7 @@ internal fun MangaHomeHub(
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
 ) {
     val screenModel = HomeHubTab.rememberScreenModel { MangaHomeHubScreenModel() }
-    val state by screenModel.state.collectAsState()
+    val state by screenModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
     val tabNavigator = LocalTabNavigator.current
@@ -195,7 +195,7 @@ internal fun NovelHomeHub(
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
 ) {
     val screenModel = HomeHubTab.rememberScreenModel { NovelHomeHubScreenModel() }
-    val state by screenModel.state.collectAsState()
+    val state by screenModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.currentOrThrow
     val tabNavigator = LocalTabNavigator.current
     val scope = rememberCoroutineScope()

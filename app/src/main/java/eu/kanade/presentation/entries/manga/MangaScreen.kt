@@ -32,7 +32,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAll
 import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastMap
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.relativeDateTimeText
@@ -89,7 +89,7 @@ import tachiyomi.presentation.core.components.material.ExtendedFloatingActionBut
 import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import tachiyomi.presentation.core.util.shouldExpandFAB
 import tachiyomi.source.local.entries.manga.isLocal
 import uy.kohesive.injekt.Injekt
@@ -158,8 +158,8 @@ fun MangaScreen(
     }.takeIf { state.source is ConfigurableSource }
 
     val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
-    val theme by uiPreferences.appTheme().collectAsState()
-    val autoJumpToNextEnabled by uiPreferences.entryAutoJumpToNextManga().collectAsState()
+    val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
+    val autoJumpToNextEnabled by uiPreferences.entryAutoJumpToNextManga().collectAsStateWithLifecycle()
     val autoJumpToNextLabel = stringResource(
         if (autoJumpToNextEnabled) {
             AYMR.strings.action_disable_auto_jump_next_chapter

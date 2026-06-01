@@ -1,12 +1,12 @@
 package eu.kanade.tachiyomi.ui.download.anime
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -21,7 +21,7 @@ fun Screen.animeDownloadTab(
     val navigator = LocalNavigator.currentOrThrow
     val scope = rememberCoroutineScope()
     val screenModel = rememberScreenModel { AnimeDownloadQueueScreenModel() }
-    val downloadList by screenModel.state.collectAsState()
+    val downloadList by screenModel.state.collectAsStateWithLifecycle()
     val downloadCount by remember {
         derivedStateOf { downloadList.sumOf { it.subItems.size } }
     }

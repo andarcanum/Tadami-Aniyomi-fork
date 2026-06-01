@@ -21,7 +21,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
@@ -107,7 +107,7 @@ data class MangaTrackInfoDialogHomeScreen(
                 Injekt.get<UiPreferences>().dateFormat().get(),
             )
         }
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
 
         MangaTrackInfoDialogHome(
             header = header,
@@ -313,7 +313,7 @@ private data class TrackStatusSelectorScreen(
                 tracker = Injekt.get<TrackerManager>().get(serviceId)!!,
             )
         }
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
         TrackStatusSelector(
             selection = state.selection,
             onSelectionChange = screenModel::setSelection,
@@ -368,7 +368,7 @@ private data class TrackChapterSelectorScreen(
                 tracker = Injekt.get<TrackerManager>().get(serviceId)!!,
             )
         }
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
 
         TrackItemSelector(
             selection = state.selection,
@@ -431,7 +431,7 @@ private data class TrackScoreSelectorScreen(
                 tracker = Injekt.get<TrackerManager>().get(serviceId)!!,
             )
         }
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
 
         TrackScoreSelector(
             selection = state.selection,
@@ -710,7 +710,7 @@ data class TrackServiceSearchScreen(
             )
         }
 
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
 
         val textFieldState = rememberTextFieldState(initialQuery)
         MangaTrackerSearch(

@@ -33,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +49,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -95,7 +95,7 @@ import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.i18n.stringResource as stringResourceCtx
-import tachiyomi.presentation.core.util.collectAsState as preferenceCollectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle as preferenceCollectAsState
 
 private fun openDownloadFolder(context: android.content.Context, subdirectory: String? = null) {
     val storageManager: StorageManager = Injekt.get()
@@ -173,10 +173,10 @@ data object DownloadsTab : Tab {
             )
         }
         val engineScreenModel = rememberScreenModel { DownloadEngineScreenModel(engineFacade) }
-        val engineSnapshot by engineScreenModel.state.collectAsState()
-        val animeDownloadList by animeScreenModel.state.collectAsState()
-        val mangaDownloadList by mangaScreenModel.state.collectAsState()
-        val novelDownloadsState by novelScreenModel.state.collectAsState()
+        val engineSnapshot by engineScreenModel.state.collectAsStateWithLifecycle()
+        val animeDownloadList by animeScreenModel.state.collectAsStateWithLifecycle()
+        val mangaDownloadList by mangaScreenModel.state.collectAsStateWithLifecycle()
+        val novelDownloadsState by novelScreenModel.state.collectAsStateWithLifecycle()
         val animeDownloadCount by remember {
             derivedStateOf {
                 animeDownloadList.sumOf { header ->

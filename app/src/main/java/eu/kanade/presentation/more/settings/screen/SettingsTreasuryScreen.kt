@@ -30,7 +30,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -44,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tadami.aurora.BuildConfig
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
@@ -60,7 +60,7 @@ import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -77,12 +77,12 @@ object SettingsTreasuryScreen : SearchableSettings {
         val userProfilePreferences = remember { Injekt.get<UserProfilePreferences>() }
 
         val debugBypassLocksPref = uiPreferences.debugBypassTreasuryLocks()
-        val debugBypassLocks by debugBypassLocksPref.collectAsState()
+        val debugBypassLocks by debugBypassLocksPref.collectAsStateWithLifecycle()
 
-        val nicknameEffectKey by userProfilePreferences.nicknameEffect().collectAsState()
-        val avatarFrameStyleKey by userProfilePreferences.avatarFrameStyle().collectAsState()
-        val homeBadgeStyleKey by userProfilePreferences.homeBadgeStyle().collectAsState()
-        val specialBackgroundStyleKey by uiPreferences.specialBackgroundStyle().collectAsState()
+        val nicknameEffectKey by userProfilePreferences.nicknameEffect().collectAsStateWithLifecycle()
+        val avatarFrameStyleKey by userProfilePreferences.avatarFrameStyle().collectAsStateWithLifecycle()
+        val homeBadgeStyleKey by userProfilePreferences.homeBadgeStyle().collectAsStateWithLifecycle()
+        val specialBackgroundStyleKey by uiPreferences.specialBackgroundStyle().collectAsStateWithLifecycle()
 
         val unlockedUnlockables = visibleUnlockablesForTreasuryPreview(
             debugBypassLocks = debugBypassLocks,
@@ -92,7 +92,7 @@ object SettingsTreasuryScreen : SearchableSettings {
         val achievementRepository = remember {
             Injekt.get<tachiyomi.domain.achievement.repository.AchievementRepository>()
         }
-        val achievements by achievementRepository.getAll().collectAsState(initial = emptyList())
+        val achievements by achievementRepository.getAll().collectAsStateWithLifecycle(initialValue = emptyList())
 
         val rewardToAchievementMap = remember(achievements) {
             val achievementsById = achievements.associateBy { it.id }
@@ -416,8 +416,8 @@ private fun TreasuryThemeSelector(
     rewardToAchievementMap: Map<String, Achievement>,
 ) {
     val context = LocalContext.current
-    val appTheme by uiPreferences.appTheme().collectAsState()
-    val amoled by uiPreferences.themeDarkAmoled().collectAsState()
+    val appTheme by uiPreferences.appTheme().collectAsStateWithLifecycle()
+    val amoled by uiPreferences.themeDarkAmoled().collectAsStateWithLifecycle()
 
     val treasuryThemes = listOf(
         AppTheme.ONYX_GOLD,
@@ -519,7 +519,7 @@ private fun TreasuryAuraSelector(
     unlockedUnlockables: Set<String>,
     rewardToAchievementMap: Map<String, Achievement>,
 ) {
-    val enabledAuras by uiPreferences.enabledAuras().collectAsState()
+    val enabledAuras by uiPreferences.enabledAuras().collectAsStateWithLifecycle()
     val auraPalettes = remember { allAuraPalettes() }
 
     Column(

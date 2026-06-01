@@ -21,6 +21,7 @@ webkit = "androidx.webkit:webkit:1.13.0"
 lifecycle-common = { module = "androidx.lifecycle:lifecycle-common", version.ref = "lifecycle_version" }
 lifecycle-process = { module = "androidx.lifecycle:lifecycle-process", version.ref = "lifecycle_version" }
 lifecycle-runtimektx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle_version" }
+lifecycle-runtime-compose = { module = "androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle_version" }
 
 workmanager = "androidx.work:work-runtime:2.11.2"
 
@@ -35,7 +36,7 @@ test-espresso-core = "androidx.test.espresso:espresso-core:3.6.1"
 test-uiautomator = "androidx.test.uiautomator:uiautomator:2.3.0"
 
 [bundles]
-lifecycle = ["lifecycle-common", "lifecycle-process", "lifecycle-runtimektx"]
+lifecycle = ["lifecycle-common", "lifecycle-process", "lifecycle-runtimektx", "lifecycle-runtime-compose"]
 
 [plugins]
 application = { id = "com.android.application", version.ref = "agp_version" }

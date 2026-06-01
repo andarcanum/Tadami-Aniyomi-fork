@@ -29,7 +29,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
@@ -79,7 +79,7 @@ import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.LoadingScreen
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -107,13 +107,13 @@ data object NovelLibraryTab : Tab {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val screenModel = rememberScreenModel { NovelLibraryScreenModel() }
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
         val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
         val sourceManager = remember { Injekt.get<NovelSourceManager>() }
         val downloadCache = remember { Injekt.get<NovelDownloadCache>() }
         val useSeparateDisplayModePerMedia by libraryPreferences
             .separateDisplayModePerMedia()
-            .collectAsState()
+            .collectAsStateWithLifecycle()
         val displayModePreference = remember(useSeparateDisplayModePerMedia) {
             if (useSeparateDisplayModePerMedia) {
                 libraryPreferences.novelDisplayMode()
@@ -121,10 +121,10 @@ data object NovelLibraryTab : Tab {
                 libraryPreferences.displayMode()
             }
         }
-        val displayMode by displayModePreference.collectAsState()
-        val showDownloadBadge by libraryPreferences.downloadBadge().collectAsState()
-        val showUnreadBadge by libraryPreferences.unreadBadge().collectAsState()
-        val showLanguageBadge by libraryPreferences.languageBadge().collectAsState()
+        val displayMode by displayModePreference.collectAsStateWithLifecycle()
+        val showDownloadBadge by libraryPreferences.downloadBadge().collectAsStateWithLifecycle()
+        val showUnreadBadge by libraryPreferences.unreadBadge().collectAsStateWithLifecycle()
+        val showLanguageBadge by libraryPreferences.languageBadge().collectAsStateWithLifecycle()
         val configuration = LocalConfiguration.current
         val columnPreference = remember(configuration.orientation) {
             if (configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
@@ -133,8 +133,8 @@ data object NovelLibraryTab : Tab {
                 libraryPreferences.novelPortraitColumns()
             }
         }
-        val columns by columnPreference.collectAsState()
-        val downloadCacheSignal by downloadCache.changes.collectAsState(initial = Unit)
+        val columns by columnPreference.collectAsStateWithLifecycle()
+        val downloadCacheSignal by downloadCache.changes.collectAsStateWithLifecycle(initialValue = Unit)
         val downloadedNovelIds = remember(state.items, showDownloadBadge, downloadCacheSignal) {
             if (!showDownloadBadge) return@remember emptySet()
 

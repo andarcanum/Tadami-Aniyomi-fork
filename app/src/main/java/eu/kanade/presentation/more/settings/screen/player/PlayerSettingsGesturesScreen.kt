@@ -7,7 +7,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -16,6 +15,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.SearchableSettings
 import eu.kanade.tachiyomi.ui.player.LongPressGesture
@@ -29,7 +29,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.WheelTextPicker
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -77,7 +77,9 @@ object PlayerSettingsGesturesScreen : SearchableSettings {
         val scope = rememberCoroutineScope()
         val enableHorizontalSeekGesture = gesturePreferences.gestureHorizontalSeek()
         val showSeekbar = gesturePreferences.showSeekBar()
-        val defaultSkipIntroLength by gesturePreferences.defaultIntroLength().stateIn(scope).collectAsState()
+        val defaultSkipIntroLength by gesturePreferences.defaultIntroLength().stateIn(
+            scope,
+        ).collectAsStateWithLifecycle()
         val skipLengthPreference = gesturePreferences.skipLengthPreference()
         val playerSmoothSeek = gesturePreferences.playerSmoothSeek()
 

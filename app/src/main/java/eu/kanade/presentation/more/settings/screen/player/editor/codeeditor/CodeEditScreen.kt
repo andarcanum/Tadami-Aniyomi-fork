@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +35,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -61,9 +61,9 @@ class CodeEditScreen(private val filePath: String) : Screen() {
         val context = LocalContext.current
         val screenModel = rememberScreenModel { CodeEditScreenModel(context, filePath) }
 
-        val state by screenModel.state.collectAsState()
-        val dialogShown by screenModel.dialogShown.collectAsState()
-        val hasModified by screenModel.hasModified.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
+        val dialogShown by screenModel.dialogShown.collectAsStateWithLifecycle()
+        val hasModified by screenModel.hasModified.collectAsStateWithLifecycle()
         val uiStyle = rememberResolvedSettingsUiStyle()
         val verticalScrollState = rememberScrollState()
         val horizontalScrollState = rememberScrollState()

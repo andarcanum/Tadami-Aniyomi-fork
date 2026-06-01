@@ -12,13 +12,13 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.work.WorkInfo
 import androidx.work.WorkQuery
 import cafe.adriel.voyager.core.model.ScreenModel
@@ -63,9 +63,9 @@ class WorkerInfoScreen : Screen() {
         val lazyListState = rememberLazyListState()
 
         val screenModel = rememberScreenModel { Model(context) }
-        val enqueued by screenModel.enqueued.collectAsState()
-        val finished by screenModel.finished.collectAsState()
-        val running by screenModel.running.collectAsState()
+        val enqueued by screenModel.enqueued.collectAsStateWithLifecycle()
+        val finished by screenModel.finished.collectAsStateWithLifecycle()
+        val running by screenModel.running.collectAsStateWithLifecycle()
 
         SettingsScaffold(
             title = TITLE,

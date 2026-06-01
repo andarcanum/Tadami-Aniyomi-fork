@@ -8,12 +8,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.download.DownloadQueueItem
 import eu.kanade.presentation.download.DownloadQueueSectionHeader
@@ -24,7 +24,7 @@ import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.screens.EmptyScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import tachiyomi.presentation.core.util.collectAsState as preferenceCollectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle as preferenceCollectAsState
 
 @Composable
 fun AnimeDownloadQueueScreen(
@@ -66,13 +66,17 @@ fun AnimeDownloadQueueScreen(
                         val download = item.download
 
                         // Collect progress and status changes as Compose state to drive recomposition
-                        val progressState by download.progressFlow.collectAsState(initial = download.progress)
-                        val statusState by download.statusFlow.collectAsState(initial = download.status)
-                        val downloadedBytesState by download.downloadedBytesFlow.collectAsState(
-                            initial = download.downloadedBytes,
+                        val progressState by download.progressFlow.collectAsStateWithLifecycle(
+                            initialValue = download.progress,
                         )
-                        val currentSpeedState by download.currentSpeedBytesFlow.collectAsState(
-                            initial = download.currentSpeedBytesPerSecond,
+                        val statusState by download.statusFlow.collectAsStateWithLifecycle(
+                            initialValue = download.status,
+                        )
+                        val downloadedBytesState by download.downloadedBytesFlow.collectAsStateWithLifecycle(
+                            initialValue = download.downloadedBytes,
+                        )
+                        val currentSpeedState by download.currentSpeedBytesFlow.collectAsStateWithLifecycle(
+                            initialValue = download.currentSpeedBytesPerSecond,
                         )
 
                         val uiItem = DownloadQueueUiMapper.toUiItem(

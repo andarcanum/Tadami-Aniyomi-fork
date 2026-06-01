@@ -4,7 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.collectAsState // Glance: no LocalLifecycleOwner, collectAsStateWithLifecycle N/A
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
@@ -98,6 +98,7 @@ abstract class BaseMangaUpdatesGridGlanceWidget(
                         rawData.prepareData(rowCount, columnCount)
                     }
             }
+            // Glance: collectAsStateWithLifecycle is not available in GlanceApplier composition context
             val data by flow.collectAsState(initial = null)
             UpdatesMangaWidget(
                 data = data,

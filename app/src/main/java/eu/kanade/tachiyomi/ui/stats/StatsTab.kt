@@ -6,10 +6,10 @@ import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
@@ -28,7 +28,7 @@ import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.data.achievement.model.AchievementEvent
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -51,7 +51,7 @@ data object StatsTab : Tab {
         val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
         val uiPreferences = Injekt.get<UiPreferences>()
-        val theme by uiPreferences.appTheme().collectAsState()
+        val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
         val canNavigateUp = remember { navigator.canPop }
         val navigateUp = if (canNavigateUp) {
             {

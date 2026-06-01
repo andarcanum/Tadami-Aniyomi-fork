@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.ui.browse.anime.migration.search
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -19,14 +19,14 @@ class MigrateAnimeSearchScreen(private val animeId: Long) : Screen() {
         val navigator = LocalNavigator.currentOrThrow
 
         val screenModel = rememberScreenModel { MigrateAnimeSearchScreenModel(animeId = animeId) }
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
 
         val dialogScreenModel = rememberScreenModel {
             AnimeMigrateSearchScreenDialogScreenModel(
                 animeId = animeId,
             )
         }
-        val dialogState by dialogScreenModel.state.collectAsState()
+        val dialogState by dialogScreenModel.state.collectAsStateWithLifecycle()
 
         MigrateAnimeSearchScreen(
             state = state,

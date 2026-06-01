@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
@@ -57,7 +57,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.injectLazy
 
 data object BrowseTab : Tab {
@@ -123,22 +123,22 @@ data object BrowseTab : Tab {
     @Composable
     override fun Content() {
         val context = LocalContext.current
-        val showAnimeSection by uiPreferences.showAnimeSection().collectAsState()
-        val showMangaSection by uiPreferences.showMangaSection().collectAsState()
-        val showNovelSection by uiPreferences.showNovelSection().collectAsState()
+        val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
+        val showMangaSection by uiPreferences.showMangaSection().collectAsStateWithLifecycle()
+        val showNovelSection by uiPreferences.showNovelSection().collectAsStateWithLifecycle()
         val colors = AuroraTheme.colors
 
         val animeExtensionsScreenModel = rememberScreenModel { AnimeExtensionsScreenModel() }
-        val animeExtensionsState by animeExtensionsScreenModel.state.collectAsState()
+        val animeExtensionsState by animeExtensionsScreenModel.state.collectAsStateWithLifecycle()
 
         val mangaExtensionsScreenModel = rememberScreenModel { MangaExtensionsScreenModel() }
-        val mangaExtensionsState by mangaExtensionsScreenModel.state.collectAsState()
+        val mangaExtensionsState by mangaExtensionsScreenModel.state.collectAsStateWithLifecycle()
 
         val novelExtensionsScreenModel = rememberScreenModel { NovelExtensionsScreenModel() }
-        val novelExtensionsState by novelExtensionsScreenModel.state.collectAsState()
+        val novelExtensionsState by novelExtensionsScreenModel.state.collectAsStateWithLifecycle()
 
-        val hideFeedTab by uiPreferences.hideFeedTab().collectAsState()
-        val feedTabInFront by uiPreferences.feedTabInFront().collectAsState()
+        val hideFeedTab by uiPreferences.hideFeedTab().collectAsStateWithLifecycle()
+        val feedTabInFront by uiPreferences.feedTabInFront().collectAsStateWithLifecycle()
 
         val animeTabs = buildList {
             val showFeed = !hideFeedTab

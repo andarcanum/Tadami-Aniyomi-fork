@@ -55,7 +55,7 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import tachiyomi.presentation.core.util.collectAsState as preferenceCollectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle as preferenceCollectAsState
 
 @Composable
 fun DownloadQueueItem(

@@ -34,7 +34,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
@@ -97,7 +97,7 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -128,10 +128,10 @@ data object UpdatesTab : Tab {
     override fun Content() {
         val context = LocalContext.current
         val uiPreferences = Injekt.get<UiPreferences>()
-        val theme by uiPreferences.appTheme().collectAsState()
-        val showAnimeSection by uiPreferences.showAnimeSection().collectAsState()
-        val showMangaSection by uiPreferences.showMangaSection().collectAsState()
-        val showNovelSection by uiPreferences.showNovelSection().collectAsState()
+        val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
+        val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
+        val showMangaSection by uiPreferences.showMangaSection().collectAsStateWithLifecycle()
+        val showNovelSection by uiPreferences.showNovelSection().collectAsStateWithLifecycle()
         val fromMore = currentNavigationStyle() == NavStyle.MOVE_UPDATES_TO_MORE
         val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
 
@@ -152,20 +152,20 @@ data object UpdatesTab : Tab {
 
             val isAnimeUpdating by remember(context) {
                 context.workManager.isRunningFlow("AnimeLibraryUpdate")
-            }.collectAsState(initial = false)
+            }.collectAsStateWithLifecycle(initialValue = false)
             val isMangaUpdating by remember(context) {
                 context.workManager.isRunningFlow("LibraryUpdate")
-            }.collectAsState(initial = false)
+            }.collectAsStateWithLifecycle(initialValue = false)
             val isNovelUpdating by remember(context) {
                 context.workManager.isRunningFlow("NovelLibraryUpdate")
-            }.collectAsState(initial = false)
+            }.collectAsStateWithLifecycle(initialValue = false)
 
             val animeScreenModel = rememberScreenModel { AnimeUpdatesScreenModel() }
-            val animeState by animeScreenModel.state.collectAsState()
+            val animeState by animeScreenModel.state.collectAsStateWithLifecycle()
             val mangaScreenModel = rememberScreenModel { MangaUpdatesScreenModel() }
-            val mangaState by mangaScreenModel.state.collectAsState()
+            val mangaState by mangaScreenModel.state.collectAsStateWithLifecycle()
             val novelScreenModel = rememberScreenModel { NovelUpdatesScreenModel() }
-            val novelState by novelScreenModel.state.collectAsState()
+            val novelState by novelScreenModel.state.collectAsStateWithLifecycle()
 
             var selectedTab by rememberSaveable { mutableIntStateOf(TAB_ANIME) }
             var refreshingTabId by rememberSaveable { mutableStateOf<Int?>(null) }

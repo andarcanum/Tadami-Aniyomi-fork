@@ -1,9 +1,9 @@
 package eu.kanade.presentation.more.settings.screen.player.editor
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -20,9 +20,9 @@ object PlayerSettingsEditorScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val screenModel = rememberScreenModel { PlayerSettingsEditorScreenModel(context) }
 
-        val state by screenModel.state.collectAsState()
-        val dialog by screenModel.dialogShown.collectAsState()
-        val selectedType by screenModel.selectedType.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
+        val dialog by screenModel.dialogShown.collectAsStateWithLifecycle()
+        val selectedType by screenModel.selectedType.collectAsStateWithLifecycle()
 
         when (dialog) {
             null -> {}

@@ -14,13 +14,13 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import eu.kanade.domain.ui.UiPreferences
@@ -54,7 +54,7 @@ import tachiyomi.presentation.core.screens.LoadingScreen
 import tachiyomi.presentation.core.util.plus
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import tachiyomi.presentation.core.util.collectAsState as collectPreferenceAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle as collectPreferenceAsState
 
 internal fun novelBrowseItemKey(url: String?, index: Int): String {
     return "novel/${url.orEmpty()}#$index"
@@ -209,7 +209,7 @@ private fun NovelListContent(
             count = novels.itemCount,
             key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
         ) { index ->
-            val novel by novels[index]?.collectAsState() ?: return@items
+            val novel by novels[index]?.collectAsStateWithLifecycle() ?: return@items
             val cover = novel.asBrowseNovelCover()
             val translatedTitle = rememberBrowseNovelTitleTranslation(
                 title = novel.title,
@@ -272,7 +272,7 @@ private fun NovelComfortableGridContent(
             count = novels.itemCount,
             key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
         ) { index ->
-            val novel by novels[index]?.collectAsState() ?: return@items
+            val novel by novels[index]?.collectAsStateWithLifecycle() ?: return@items
             val cover = novel.asBrowseNovelCover()
             val translatedTitle = rememberBrowseNovelTitleTranslation(
                 title = novel.title,
@@ -342,7 +342,7 @@ private fun NovelCompactGridContent(
             count = novels.itemCount,
             key = { index -> novelBrowseItemKey(novels[index]?.value?.url, index) },
         ) { index ->
-            val novel by novels[index]?.collectAsState() ?: return@items
+            val novel by novels[index]?.collectAsStateWithLifecycle() ?: return@items
             val cover = novel.asBrowseNovelCover()
             val translatedTitle = rememberBrowseNovelTitleTranslation(
                 title = novel.title,

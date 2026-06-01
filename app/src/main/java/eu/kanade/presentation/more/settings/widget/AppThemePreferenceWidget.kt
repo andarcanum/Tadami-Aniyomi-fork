@@ -32,7 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.presentation.entries.components.ItemCover
@@ -63,7 +63,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import tachiyomi.presentation.core.util.secondaryItemAlpha
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.fullType
@@ -106,10 +106,10 @@ private fun AppThemesList(
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
 
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
-    val debugBypassLocks by uiPreferences.debugBypassTreasuryLocks().collectAsState()
+    val debugBypassLocks by uiPreferences.debugBypassTreasuryLocks().collectAsStateWithLifecycle()
 
     val userProfileManager = remember { Injekt.get<tachiyomi.data.achievement.UserProfileManager>() }
-    val userProfile by userProfileManager.profile.collectAsState(initial = null)
+    val userProfile by userProfileManager.profile.collectAsStateWithLifecycle(initialValue = null)
 
     val unlockableManager = remember { Injekt.get<tachiyomi.data.achievement.UnlockableManager>() }
 

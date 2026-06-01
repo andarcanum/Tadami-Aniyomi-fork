@@ -31,7 +31,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,6 +64,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.PathParser
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.UiPreferences
@@ -80,7 +80,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import android.graphics.Matrix as AndroidMatrix
@@ -695,7 +695,7 @@ private fun GlowContourLibraryCard(
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
 
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
-    val enabledAuras by uiPreferences.enabledAuras().collectAsState()
+    val enabledAuras by uiPreferences.enabledAuras().collectAsStateWithLifecycle()
     val auraColors = remember(enabledAuras) {
         resolveActiveAuraPalette(enabledAuras)?.gradientColors
     }

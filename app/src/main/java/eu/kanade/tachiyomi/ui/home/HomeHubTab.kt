@@ -35,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
@@ -83,7 +83,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.injectLazy
 import java.time.LocalDate
 import kotlin.math.roundToInt
@@ -682,9 +682,9 @@ object HomeHubTab : Tab {
             userProfilePreferences.migrateGreetingDefaultsV026IfNeeded()
         }
 
-        val showAnimeSection by uiPreferences.showAnimeSection().collectAsState()
-        val showMangaSection by uiPreferences.showMangaSection().collectAsState()
-        val showNovelSection by uiPreferences.showNovelSection().collectAsState()
+        val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
+        val showMangaSection by uiPreferences.showMangaSection().collectAsStateWithLifecycle()
+        val showNovelSection by uiPreferences.showNovelSection().collectAsStateWithLifecycle()
 
         val sections = remember(showAnimeSection, showMangaSection, showNovelSection) {
             buildList {
@@ -720,39 +720,43 @@ object HomeHubTab : Tab {
         var novelSearchQuery by rememberSaveable { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
         val activityDataFlow = remember(activityDataRepository) { activityDataRepository.getActivityData(days = 365) }
-        val activityData by activityDataFlow.collectAsState(initial = emptyList())
+        val activityData by activityDataFlow.collectAsStateWithLifecycle(initialValue = emptyList())
         val currentStreak = calculateHomeOpenStreak(activityData)
-        val isNameEdited by userProfilePreferences.nameEdited().collectAsState()
-        val showHomeGreeting by userProfilePreferences.showHomeGreeting().collectAsState()
-        val showHomeStreak by userProfilePreferences.showHomeStreak().collectAsState()
-        val homeStreakCounterStyleKey by userProfilePreferences.homeStreakCounterStyle().collectAsState()
+        val isNameEdited by userProfilePreferences.nameEdited().collectAsStateWithLifecycle()
+        val showHomeGreeting by userProfilePreferences.showHomeGreeting().collectAsStateWithLifecycle()
+        val showHomeStreak by userProfilePreferences.showHomeStreak().collectAsStateWithLifecycle()
+        val homeStreakCounterStyleKey by userProfilePreferences.homeStreakCounterStyle().collectAsStateWithLifecycle()
         val homeStreakCounterStyle = remember(homeStreakCounterStyleKey) {
             HomeStreakCounterStyle.fromKey(homeStreakCounterStyleKey)
         }
-        val homeHeroCtaModeKey by userProfilePreferences.homeHeroCtaMode().collectAsState()
+        val homeHeroCtaModeKey by userProfilePreferences.homeHeroCtaMode().collectAsStateWithLifecycle()
         val homeHeroCtaMode = remember(homeHeroCtaModeKey) {
             HomeHeroCtaMode.fromKey(homeHeroCtaModeKey)
         }
-        val homeHubRecentCardModeKey by userProfilePreferences.homeHubRecentCardMode().collectAsState()
+        val homeHubRecentCardModeKey by userProfilePreferences.homeHubRecentCardMode().collectAsStateWithLifecycle()
         val homeHubRecentCardMode = remember(homeHubRecentCardModeKey) {
             HomeHubRecentCardMode.fromKey(homeHubRecentCardModeKey)
         }
-        val homeHeaderGreetingAlignRight by userProfilePreferences.homeHeaderGreetingAlignRight().collectAsState()
-        val homeHeaderNicknameAlignRight by userProfilePreferences.homeHeaderNicknameAlignRight().collectAsState()
-        val homeHeaderLayoutJson by userProfilePreferences.homeHeaderLayoutJson().collectAsState()
+        val homeHeaderGreetingAlignRight by userProfilePreferences
+            .homeHeaderGreetingAlignRight()
+            .collectAsStateWithLifecycle()
+        val homeHeaderNicknameAlignRight by userProfilePreferences
+            .homeHeaderNicknameAlignRight()
+            .collectAsStateWithLifecycle()
+        val homeHeaderLayoutJson by userProfilePreferences.homeHeaderLayoutJson().collectAsStateWithLifecycle()
         val homeHeaderLayout = remember(homeHeaderLayoutJson) {
             userProfilePreferences.getHomeHeaderLayoutOrDefault()
         }
-        val nicknameFontKey by userProfilePreferences.nicknameFont().collectAsState()
-        val nicknameFontSize by userProfilePreferences.nicknameFontSize().collectAsState()
-        val nicknameColorKey by userProfilePreferences.nicknameColor().collectAsState()
-        val nicknameCustomColorHex by userProfilePreferences.nicknameCustomColorHex().collectAsState()
-        val nicknameOutline by userProfilePreferences.nicknameOutline().collectAsState()
-        val nicknameOutlineWidth by userProfilePreferences.nicknameOutlineWidth().collectAsState()
-        val nicknameGlow by userProfilePreferences.nicknameGlow().collectAsState()
-        val nicknameEffectKey by userProfilePreferences.nicknameEffect().collectAsState()
-        val avatarFrameStyleKey by userProfilePreferences.avatarFrameStyle().collectAsState()
-        val homeBadgeStyleKey by userProfilePreferences.homeBadgeStyle().collectAsState()
+        val nicknameFontKey by userProfilePreferences.nicknameFont().collectAsStateWithLifecycle()
+        val nicknameFontSize by userProfilePreferences.nicknameFontSize().collectAsStateWithLifecycle()
+        val nicknameColorKey by userProfilePreferences.nicknameColor().collectAsStateWithLifecycle()
+        val nicknameCustomColorHex by userProfilePreferences.nicknameCustomColorHex().collectAsStateWithLifecycle()
+        val nicknameOutline by userProfilePreferences.nicknameOutline().collectAsStateWithLifecycle()
+        val nicknameOutlineWidth by userProfilePreferences.nicknameOutlineWidth().collectAsStateWithLifecycle()
+        val nicknameGlow by userProfilePreferences.nicknameGlow().collectAsStateWithLifecycle()
+        val nicknameEffectKey by userProfilePreferences.nicknameEffect().collectAsStateWithLifecycle()
+        val avatarFrameStyleKey by userProfilePreferences.avatarFrameStyle().collectAsStateWithLifecycle()
+        val homeBadgeStyleKey by userProfilePreferences.homeBadgeStyle().collectAsStateWithLifecycle()
         val nicknameStyle = NicknameStyle(
             font = NicknameFontPreset.fromKey(nicknameFontKey),
             fontSize = nicknameFontSize.coerceIn(14, 36),
@@ -763,13 +767,13 @@ object HomeHubTab : Tab {
             effect = NicknameEffectPreset.fromKey(nicknameEffectKey),
             customColorHex = nicknameCustomColorHex,
         )
-        val greetingFontKey by userProfilePreferences.greetingFont().collectAsState()
-        val greetingColorKey by userProfilePreferences.greetingColor().collectAsState()
-        val greetingCustomColorHex by userProfilePreferences.greetingCustomColorHex().collectAsState()
-        val greetingFontSize by userProfilePreferences.greetingFontSize().collectAsState()
-        val greetingAlpha by userProfilePreferences.greetingAlpha().collectAsState()
-        val greetingDecorationKey by userProfilePreferences.greetingDecoration().collectAsState()
-        val greetingItalic by userProfilePreferences.greetingItalic().collectAsState()
+        val greetingFontKey by userProfilePreferences.greetingFont().collectAsStateWithLifecycle()
+        val greetingColorKey by userProfilePreferences.greetingColor().collectAsStateWithLifecycle()
+        val greetingCustomColorHex by userProfilePreferences.greetingCustomColorHex().collectAsStateWithLifecycle()
+        val greetingFontSize by userProfilePreferences.greetingFontSize().collectAsStateWithLifecycle()
+        val greetingAlpha by userProfilePreferences.greetingAlpha().collectAsStateWithLifecycle()
+        val greetingDecorationKey by userProfilePreferences.greetingDecoration().collectAsStateWithLifecycle()
+        val greetingItalic by userProfilePreferences.greetingItalic().collectAsStateWithLifecycle()
         val greetingStyle = GreetingStyle(
             font = NicknameFontPreset.fromKey(greetingFontKey),
             color = NicknameColorPreset.fromKey(greetingColorKey),
@@ -783,9 +787,9 @@ object HomeHubTab : Tab {
         val animeScreenModel = HomeHubTab.rememberScreenModel { HomeHubScreenModel() }
         val mangaScreenModel = HomeHubTab.rememberScreenModel { MangaHomeHubScreenModel() }
         val novelScreenModel = HomeHubTab.rememberScreenModel { NovelHomeHubScreenModel() }
-        val animeState by animeScreenModel.state.collectAsState()
-        val mangaState by mangaScreenModel.state.collectAsState()
-        val novelState by novelScreenModel.state.collectAsState()
+        val animeState by animeScreenModel.state.collectAsStateWithLifecycle()
+        val mangaState by mangaScreenModel.state.collectAsStateWithLifecycle()
+        val novelState by novelScreenModel.state.collectAsStateWithLifecycle()
 
         val profileSection = resolveHomeHubProfileSection(sections, selectedSection)
         val (headerUserName, headerUserAvatar, headerGreeting) = when (profileSection) {

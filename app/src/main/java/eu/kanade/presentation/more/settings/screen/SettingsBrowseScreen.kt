@@ -2,11 +2,11 @@ package eu.kanade.presentation.more.settings.screen
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.source.service.SourcePreferences
@@ -25,7 +25,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -44,19 +44,19 @@ object SettingsBrowseScreen : SearchableSettings {
         val uiPreferences = remember { Injekt.get<UiPreferences>() }
 
         val suggestionsEnabledPref = sourcePreferences.entrySuggestionsEnabled()
-        val suggestionsEnabled by suggestionsEnabledPref.collectAsState()
+        val suggestionsEnabled by suggestionsEnabledPref.collectAsStateWithLifecycle()
 
         val suggestionsInlinePref = uiPreferences.entrySuggestionsExpandInline()
-        val suggestionsInline by suggestionsInlinePref.collectAsState()
+        val suggestionsInline by suggestionsInlinePref.collectAsStateWithLifecycle()
 
         val epubImportPref = sourcePreferences.importEpubAddToLibrary()
         val getMangaExtensionRepoCount = remember { Injekt.get<GetMangaExtensionRepoCount>() }
         val getAnimeExtensionRepoCount = remember { Injekt.get<GetAnimeExtensionRepoCount>() }
         val getNovelExtensionRepoCount = remember { Injekt.get<GetNovelExtensionRepoCount>() }
 
-        val mangaReposCount by getMangaExtensionRepoCount.subscribe().collectAsState(0)
-        val animeReposCount by getAnimeExtensionRepoCount.subscribe().collectAsState(0)
-        val novelReposCount by getNovelExtensionRepoCount.subscribe().collectAsState(0)
+        val mangaReposCount by getMangaExtensionRepoCount.subscribe().collectAsStateWithLifecycle(0)
+        val animeReposCount by getAnimeExtensionRepoCount.subscribe().collectAsStateWithLifecycle(0)
+        val novelReposCount by getNovelExtensionRepoCount.subscribe().collectAsStateWithLifecycle(0)
 
         return listOf(
             Preference.PreferenceGroup(

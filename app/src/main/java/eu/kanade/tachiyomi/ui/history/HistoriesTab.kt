@@ -8,10 +8,10 @@ import androidx.compose.animation.graphics.vector.AnimatedImageVector
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
@@ -40,7 +40,7 @@ import tachiyomi.domain.items.chapter.repository.ChapterRepository
 import tachiyomi.domain.items.episode.repository.EpisodeRepository
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Date
@@ -73,18 +73,18 @@ data object HistoriesTab : Tab {
         val context = LocalContext.current
         val fromMore = currentNavigationStyle() == NavStyle.MOVE_HISTORY_TO_MORE
         val uiPreferences = Injekt.get<UiPreferences>()
-        val theme by uiPreferences.appTheme().collectAsState()
+        val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
 
-        val showAnimeSection by uiPreferences.showAnimeSection().collectAsState()
-        val showMangaSection by uiPreferences.showMangaSection().collectAsState()
-        val showNovelSection by uiPreferences.showNovelSection().collectAsState()
+        val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
+        val showMangaSection by uiPreferences.showMangaSection().collectAsStateWithLifecycle()
+        val showNovelSection by uiPreferences.showNovelSection().collectAsStateWithLifecycle()
 
         // Hoisted for history tab's search bar
         val mangaHistoryScreenModel = rememberScreenModel { MangaHistoryScreenModel() }
-        val mangaSearchQuery by mangaHistoryScreenModel.query.collectAsState()
+        val mangaSearchQuery by mangaHistoryScreenModel.query.collectAsStateWithLifecycle()
 
         val animeHistoryScreenModel = rememberScreenModel { AnimeHistoryScreenModel() }
-        val animeSearchQuery by animeHistoryScreenModel.query.collectAsState()
+        val animeSearchQuery by animeHistoryScreenModel.query.collectAsStateWithLifecycle()
 
         val tabs = historyContentTabs(showAnimeSection, showMangaSection, showNovelSection)
             .map { tab ->

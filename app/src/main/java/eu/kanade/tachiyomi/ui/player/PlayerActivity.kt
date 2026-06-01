@@ -45,7 +45,6 @@ import android.view.View
 import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.boundsInWindow
@@ -54,6 +53,7 @@ import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import androidx.media.AudioAttributesCompat
@@ -101,7 +101,7 @@ import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.util.AppHapticsProvider
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.IOException
@@ -275,9 +275,9 @@ class PlayerActivity : BaseActivity() {
             .launchIn(lifecycleScope)
 
         binding.controls.setComposeContent {
-            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
-            val eInkProfile by uiPreferences.eInkProfile().collectAsState()
-            val anime by viewModel.currentAnime.collectAsState()
+            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsStateWithLifecycle()
+            val eInkProfile by uiPreferences.eInkProfile().collectAsStateWithLifecycle()
+            val anime by viewModel.currentAnime.collectAsStateWithLifecycle()
 
             AppHapticsProvider(
                 hapticFeedbackMode = hapticFeedbackMode,

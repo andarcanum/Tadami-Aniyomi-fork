@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.ui.stats.anime
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -14,7 +14,7 @@ import eu.kanade.presentation.more.stats.AnimeStatsScreenContent
 import eu.kanade.presentation.more.stats.StatsScreenState
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.screens.LoadingScreen
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -22,10 +22,10 @@ import uy.kohesive.injekt.api.get
 fun Screen.animeStatsTab(): TabContent {
     val navigator = LocalNavigator.currentOrThrow
     val uiPreferences = Injekt.get<UiPreferences>()
-    val theme by uiPreferences.appTheme().collectAsState()
+    val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
 
     val screenModel = rememberScreenModel { AnimeStatsScreenModel() }
-    val state by screenModel.state.collectAsState()
+    val state by screenModel.state.collectAsStateWithLifecycle()
 
     if (state is StatsScreenState.Loading) {
         LoadingScreen()

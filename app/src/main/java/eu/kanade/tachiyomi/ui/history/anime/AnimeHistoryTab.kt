@@ -6,9 +6,9 @@ import androidx.compose.material.icons.outlined.DeleteSweep
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -51,8 +51,8 @@ fun Screen.animeHistoryTab(
 
     val navigator = LocalNavigator.currentOrThrow
     val screenModel = rememberScreenModel { AnimeHistoryScreenModel() }
-    val state by screenModel.state.collectAsState()
-    val searchQuery by screenModel.query.collectAsState()
+    val state by screenModel.state.collectAsStateWithLifecycle()
+    val searchQuery by screenModel.query.collectAsStateWithLifecycle()
 
     suspend fun openEpisode(context: Context, episode: Episode?) {
         val playerPreferences: PlayerPreferences by injectLazy()

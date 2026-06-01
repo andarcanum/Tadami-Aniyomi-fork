@@ -41,7 +41,6 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -96,7 +95,7 @@ import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import tachiyomi.presentation.core.util.plus
 import uy.kohesive.injekt.api.get
 import androidx.compose.foundation.lazy.grid.items as gridItems
@@ -129,7 +128,7 @@ fun NovelLibraryAuroraContent(
     val configuration = LocalConfiguration.current
     val useSeparateDisplayModePerMedia by libraryPreferences
         .separateDisplayModePerMedia()
-        .collectAsState()
+        .collectAsStateWithLifecycle()
     val displayModePreference = remember(useSeparateDisplayModePerMedia) {
         if (useSeparateDisplayModePerMedia) {
             libraryPreferences.novelDisplayMode()
@@ -137,7 +136,7 @@ fun NovelLibraryAuroraContent(
             libraryPreferences.displayMode()
         }
     }
-    val displayMode by displayModePreference.collectAsState()
+    val displayMode by displayModePreference.collectAsStateWithLifecycle()
     val columnPreference = remember(configuration.orientation) {
         if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             libraryPreferences.novelLandscapeColumns()
@@ -145,8 +144,8 @@ fun NovelLibraryAuroraContent(
             libraryPreferences.novelPortraitColumns()
         }
     }
-    val columns by columnPreference.collectAsState()
-    val auroraCardStyle by libraryPreferences.auroraLibraryCardStyle().collectAsState()
+    val columns by columnPreference.collectAsStateWithLifecycle()
+    val auroraCardStyle by libraryPreferences.auroraLibraryCardStyle().collectAsStateWithLifecycle()
     val useGlowContourCards = auroraCardStyle == AuroraLibraryCardStyle.GlowContour
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val displaySpec = remember(displayMode, columns, auroraAdaptiveSpec) {
@@ -156,9 +155,9 @@ fun NovelLibraryAuroraContent(
             auroraAdaptiveSpec = auroraAdaptiveSpec,
         )
     }
-    val showDownloadBadge by libraryPreferences.downloadBadge().collectAsState()
-    val showUnreadBadge by libraryPreferences.unreadBadge().collectAsState()
-    val showLanguageBadge by libraryPreferences.languageBadge().collectAsState()
+    val showDownloadBadge by libraryPreferences.downloadBadge().collectAsStateWithLifecycle()
+    val showUnreadBadge by libraryPreferences.unreadBadge().collectAsStateWithLifecycle()
+    val showLanguageBadge by libraryPreferences.languageBadge().collectAsStateWithLifecycle()
     val downloadCacheSignal by downloadCache.changes.collectAsStateWithLifecycle(initialValue = Unit)
     val downloadedNovelIds = remember(items, showDownloadBadge, downloadCacheSignal) {
         if (!showDownloadBadge) return@remember emptySet()

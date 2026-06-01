@@ -29,7 +29,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -41,6 +40,7 @@ import androidx.core.transition.doOnEnd
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import com.davemorrissey.labs.subscaleview.SubsamplingScaleImageView
 import com.google.android.material.transition.platform.MaterialContainerTransform
@@ -109,7 +109,7 @@ import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.util.AppHapticsProvider
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.ByteArrayOutputStream
@@ -388,15 +388,15 @@ class ReaderActivity : BaseActivity() {
      */
     private fun initializeMenu() {
         binding.pageNumber.setComposeContent {
-            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
-            val eInkProfile by uiPreferences.eInkProfile().collectAsState()
+            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsStateWithLifecycle()
+            val eInkProfile by uiPreferences.eInkProfile().collectAsStateWithLifecycle()
 
             AppHapticsProvider(
                 hapticFeedbackMode = hapticFeedbackMode,
                 isEInkMode = eInkProfile.isEnabled,
             ) {
-                val state by viewModel.state.collectAsState()
-                val showPageNumber by viewModel.readerPreferences.showPageNumber().collectAsState()
+                val state by viewModel.state.collectAsStateWithLifecycle()
+                val showPageNumber by viewModel.readerPreferences.showPageNumber().collectAsStateWithLifecycle()
 
                 if (!state.menuVisible && showPageNumber) {
                     PageIndicatorText(
@@ -408,14 +408,14 @@ class ReaderActivity : BaseActivity() {
         }
 
         binding.dialogRoot.setComposeContent {
-            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsState()
-            val eInkProfile by uiPreferences.eInkProfile().collectAsState()
+            val hapticFeedbackMode by uiPreferences.hapticFeedbackMode().collectAsStateWithLifecycle()
+            val eInkProfile by uiPreferences.eInkProfile().collectAsStateWithLifecycle()
 
             AppHapticsProvider(
                 hapticFeedbackMode = hapticFeedbackMode,
                 isEInkMode = eInkProfile.isEnabled,
             ) {
-                val state by viewModel.state.collectAsState()
+                val state by viewModel.state.collectAsStateWithLifecycle()
                 val settingsScreenModel = remember {
                     ReaderSettingsScreenModel(
                         readerState = viewModel.state,
@@ -431,45 +431,65 @@ class ReaderActivity : BaseActivity() {
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     val isHttpSource = viewModel.getSource() is HttpSource
-                    val isFullscreen by readerPreferences.fullscreen().collectAsState()
-                    val flashOnPageChange by readerPreferences.flashOnPageChange().collectAsState()
+                    val isFullscreen by readerPreferences.fullscreen().collectAsStateWithLifecycle()
+                    val flashOnPageChange by readerPreferences.flashOnPageChange().collectAsStateWithLifecycle()
 
-                    val colorOverlayEnabled by readerPreferences.colorFilter().collectAsState()
-                    val colorOverlay by readerPreferences.colorFilterValue().collectAsState()
-                    val colorOverlayMode by readerPreferences.colorFilterMode().collectAsState()
+                    val colorOverlayEnabled by readerPreferences.colorFilter().collectAsStateWithLifecycle()
+                    val colorOverlay by readerPreferences.colorFilterValue().collectAsStateWithLifecycle()
+                    val colorOverlayMode by readerPreferences.colorFilterMode().collectAsStateWithLifecycle()
                     val colorOverlayBlendMode = remember(colorOverlayMode) {
                         ReaderPreferences.ColorFilterMode.getOrNull(colorOverlayMode)?.second
                     }
 
-                    val cropBorderPaged by readerPreferences.cropBorders().collectAsState()
-                    val cropBorderWebtoon by readerPreferences.cropBordersWebtoon().collectAsState()
+                    val cropBorderPaged by readerPreferences.cropBorders().collectAsStateWithLifecycle()
+                    val cropBorderWebtoon by readerPreferences.cropBordersWebtoon().collectAsStateWithLifecycle()
                     val isPagerType = ReadingMode.isPagerType(viewModel.getMangaReadingMode())
                     val cropEnabled = if (isPagerType) cropBorderPaged else cropBorderWebtoon
 
                     // Navigator customization preferences
-                    val showNavigator by readerPreferences.showNavigator().collectAsState()
-                    val navigatorShowPageNumbers by readerPreferences.navigatorShowPageNumbers().collectAsState()
-                    val navigatorShowChapterButtons by readerPreferences.navigatorShowChapterButtons().collectAsState()
-                    val navigatorSliderColor by readerPreferences.navigatorSliderColor().collectAsState()
-                    val navigatorBackgroundAlpha by readerPreferences.navigatorBackgroundAlpha().collectAsState()
-                    val navigatorHeight by readerPreferences.navigatorHeight().collectAsState()
-                    val navigatorCornerRadius by readerPreferences.navigatorCornerRadius().collectAsState()
-                    val navigatorShowTickMarks by readerPreferences.navigatorShowTickMarks().collectAsState()
+                    val showNavigator by readerPreferences.showNavigator().collectAsStateWithLifecycle()
+                    val navigatorShowPageNumbers by readerPreferences
+                        .navigatorShowPageNumbers()
+                        .collectAsStateWithLifecycle()
+                    val navigatorShowChapterButtons by readerPreferences
+                        .navigatorShowChapterButtons()
+                        .collectAsStateWithLifecycle()
+                    val navigatorSliderColor by readerPreferences.navigatorSliderColor().collectAsStateWithLifecycle()
+                    val navigatorBackgroundAlpha by readerPreferences
+                        .navigatorBackgroundAlpha()
+                        .collectAsStateWithLifecycle()
+                    val navigatorHeight by readerPreferences.navigatorHeight().collectAsStateWithLifecycle()
+                    val navigatorCornerRadius by readerPreferences
+                        .navigatorCornerRadius()
+                        .collectAsStateWithLifecycle()
+                    val navigatorShowTickMarks by readerPreferences
+                        .navigatorShowTickMarks()
+                        .collectAsStateWithLifecycle()
 
                     // Bottom bar button visibility preferences
-                    val showBottomBarReadingMode by readerPreferences.showBottomBarReadingMode().collectAsState()
-                    val showBottomBarOrientation by readerPreferences.showBottomBarOrientation().collectAsState()
-                    val showBottomBarCropBorders by readerPreferences.showBottomBarCropBorders().collectAsState()
-                    val showBottomBarChapterList by readerPreferences.showBottomBarChapterList().collectAsState()
-                    val showBottomBarSettings by readerPreferences.showBottomBarSettings().collectAsState()
+                    val showBottomBarReadingMode by readerPreferences
+                        .showBottomBarReadingMode()
+                        .collectAsStateWithLifecycle()
+                    val showBottomBarOrientation by readerPreferences
+                        .showBottomBarOrientation()
+                        .collectAsStateWithLifecycle()
+                    val showBottomBarCropBorders by readerPreferences
+                        .showBottomBarCropBorders()
+                        .collectAsStateWithLifecycle()
+                    val showBottomBarChapterList by readerPreferences
+                        .showBottomBarChapterList()
+                        .collectAsStateWithLifecycle()
+                    val showBottomBarSettings by readerPreferences
+                        .showBottomBarSettings()
+                        .collectAsStateWithLifecycle()
 
                     val showAutoScrollFloatingButton by
-                        readerPreferences.showAutoScrollFloatingButton().collectAsState()
+                        readerPreferences.showAutoScrollFloatingButton().collectAsStateWithLifecycle()
                     val pageActionButtonColorPref = remember { readerPreferences.pageActionButtonColor() }
-                    val pageActionButtonColor by pageActionButtonColorPref.collectAsState()
+                    val pageActionButtonColor by pageActionButtonColorPref.collectAsStateWithLifecycle()
                     val pageActionLabelColorPref = remember { readerPreferences.pageActionLabelColor() }
-                    val pageActionLabelColor by pageActionLabelColorPref.collectAsState()
-                    val bottomBarPosition by readerPreferences.bottomBarPosition().collectAsState()
+                    val pageActionLabelColor by pageActionLabelColorPref.collectAsStateWithLifecycle()
+                    val bottomBarPosition by readerPreferences.bottomBarPosition().collectAsStateWithLifecycle()
 
                     // Auto-scroll effect - start/stop based on state
                     LaunchedEffect(state.autoScrollEnabled, state.autoScrollSpeed, state.viewer) {

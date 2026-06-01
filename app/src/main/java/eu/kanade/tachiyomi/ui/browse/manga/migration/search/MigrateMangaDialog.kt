@@ -13,12 +13,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.StateScreenModel
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.manga.model.hasCustomCover
@@ -66,7 +66,7 @@ internal fun MigrateMangaDialog(
     onPopScreen: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val state by screenModel.state.collectAsState()
+    val state by screenModel.state.collectAsStateWithLifecycle()
 
     val flags = remember { MangaMigrationFlags.getFlags(oldManga, screenModel.migrateFlags.get()) }
     val selectedFlags = remember { flags.map { it.isDefaultSelected }.toMutableStateList() }

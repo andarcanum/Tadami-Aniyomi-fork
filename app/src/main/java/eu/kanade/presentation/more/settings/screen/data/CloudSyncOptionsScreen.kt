@@ -2,8 +2,8 @@ package eu.kanade.presentation.more.settings.screen.data
 
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -34,7 +34,7 @@ class CloudSyncOptionsScreen : Screen() {
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val model = rememberScreenModel { CloudSyncOptionsScreenModel() }
-        val state by model.state.collectAsState()
+        val state by model.state.collectAsStateWithLifecycle()
         val uiStyle = rememberResolvedSettingsUiStyle()
         val listState = rememberLazyListState()
 

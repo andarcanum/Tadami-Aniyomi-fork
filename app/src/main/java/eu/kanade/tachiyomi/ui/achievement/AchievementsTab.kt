@@ -3,10 +3,10 @@ package eu.kanade.tachiyomi.ui.achievement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
@@ -16,7 +16,7 @@ import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.util.collectAsState
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 
 data object AchievementsTab : Tab {
 
@@ -35,7 +35,7 @@ data object AchievementsTab : Tab {
         val context = LocalContext.current
 
         val screenModel = rememberScreenModel { AchievementScreenModel() }
-        val state by screenModel.state.collectAsState()
+        val state by screenModel.state.collectAsStateWithLifecycle()
 
         AchievementScreen(
             state = state,
