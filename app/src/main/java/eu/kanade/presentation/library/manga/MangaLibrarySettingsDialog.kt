@@ -81,6 +81,8 @@ fun MangaLibrarySettingsDialog(
                 )
                 3 -> GroupPage(
                     groupPreference = screenModel.libraryPreferences.mangaGroupLibraryBy(),
+                    globalGroupPreference = screenModel.libraryPreferences.globalGroupLibrary(),
+                    globalGroupByPreference = screenModel.libraryPreferences.globalGroupLibraryBy(),
                 )
             }
         }
