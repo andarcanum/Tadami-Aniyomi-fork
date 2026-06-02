@@ -309,8 +309,16 @@ data object AnimeLibraryTab : Tab {
         }
         val novelState = novelScreenModel?.state?.collectAsStateWithLifecycle()?.value ?: NovelLibraryScreenModel.State(
             isLoading = false,
-            rawItems = inactiveNovelRawItems.map { eu.kanade.presentation.library.novel.NovelLibraryItem.Single(it) },
-            items = inactiveNovelRawItems.map { eu.kanade.presentation.library.novel.NovelLibraryItem.Single(it) },
+            library = mapOf(
+                Category(
+                    id = Category.UNCATEGORIZED_ID,
+                    name = "",
+                    order = 0,
+                    flags = 0,
+                    hidden = false,
+                    hiddenFromHomeHub = false,
+                ) to inactiveNovelRawItems.map { eu.kanade.presentation.library.novel.NovelLibraryItem.Single(it) },
+            ),
         )
         val animeDisplayMode by remember(useSeparateDisplayModePerMedia) {
             screenModel.getDisplayMode(useSeparateDisplayModePerMedia)

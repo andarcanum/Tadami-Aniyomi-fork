@@ -17,6 +17,7 @@ import eu.kanade.core.util.fastPartition
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.items.episode.interactor.SetSeenStatus
+import eu.kanade.domain.track.anime.MapAnimeTrackStatusToLibrary
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.library.components.LibraryToolbarTitle
@@ -68,6 +69,8 @@ import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.anime.model.sort
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.domain.library.model.LibraryGroup
+import tachiyomi.domain.library.model.LibraryTrackStatus
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.track.anime.interactor.GetTracksPerAnime
@@ -99,7 +102,11 @@ class AnimeLibraryScreenModel(
     private val downloadManager: AnimeDownloadManager = Injekt.get(),
     private val downloadCache: AnimeDownloadCache = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
-) : StateScreenModel<AnimeLibraryScreenModel.State>(State()) {
+) : StateScreenModel<AnimeLibraryScreenModel.State>(
+    State(
+        groupType = libraryPreferences.animeGroupLibraryBy().get(),
+    ),
+) {
 
     var activeCategoryIndex: Int by libraryPreferences.lastUsedAnimeCategory().asState(
         screenModelScope,
@@ -112,11 +119,19 @@ class AnimeLibraryScreenModel(
                 getLibraryFlow(),
                 getTracksPerAnime.subscribe(),
                 getTrackingFilterFlow(),
+                state.map { it.groupType }.distinctUntilChanged(),
                 downloadCache.changes,
-            ) { searchQuery, library, tracks, trackingFilter, _ ->
+            ) { flowsArray ->
+                val searchQuery = flowsArray[0] as String?
+                val library = flowsArray[1] as AnimeLibraryMap
+                val tracks = flowsArray[2] as Map<Long, List<AnimeTrack>>
+                val trackingFilter = flowsArray[3] as Map<Long, TriState>
+                val groupType = flowsArray[4] as Int
+
                 library
                     .applyFilters(tracks, trackingFilter)
                     .applySort(tracks, trackingFilter.keys)
+                    .applyGrouping(groupType, tracks)
                     .mapValues { (_, value) ->
                         if (searchQuery != null) {
                             value.filter { it.matches(searchQuery) }
@@ -124,6 +139,7 @@ class AnimeLibraryScreenModel(
                             value
                         }
                     }
+                    .filterValues { it.isNotEmpty() }
             }
                 .collectLatest {
                     mutableState.update { state ->
@@ -171,6 +187,13 @@ class AnimeLibraryScreenModel(
                 mutableState.update { state ->
                     state.copy(hasActiveFilters = it)
                 }
+            }
+            .launchIn(screenModelScope)
+
+        libraryPreferences.animeGroupLibraryBy().changes()
+            .onEach { groupType ->
+                mutableState.update { it.copy(groupType = groupType) }
+                activeCategoryIndex = 0
             }
             .launchIn(screenModelScope)
     }
@@ -345,6 +368,124 @@ class AnimeLibraryScreenModel(
                 comparator = comparator,
             )
         }
+    }
+
+    private fun AnimeLibraryMap.applyGrouping(
+        groupType: Int,
+        tracks: Map<Long, List<AnimeTrack>>,
+    ): AnimeLibraryMap {
+        if (groupType == LibraryGroup.BY_DEFAULT) return this
+
+        val items = this.values.flatten().distinctBy { it.libraryAnime.anime.id }
+        val sortFlags = libraryPreferences.animeSortingMode().get().flag
+
+        val grouped = when (groupType) {
+            LibraryGroup.UNGROUPED -> {
+                val ungroupedCategory = Category(
+                    id = -1L,
+                    name = "Ungrouped",
+                    order = 0,
+                    flags = sortFlags,
+                    hidden = false,
+                    hiddenFromHomeHub = false,
+                )
+                mapOf(ungroupedCategory to items)
+            }
+            LibraryGroup.BY_STATUS -> {
+                val statusCategories = mutableMapOf<Category, MutableList<AnimeLibraryItem>>()
+                items.forEach { item ->
+                    val status = item.libraryAnime.anime.status
+                    val statusInt = status.toInt()
+                    val (statusName, statusId) = when (statusInt) {
+                        SAnime.ONGOING -> "Ongoing" to -21L
+                        SAnime.COMPLETED -> "Completed" to -22L
+                        SAnime.LICENSED -> "Licensed" to -23L
+                        SAnime.PUBLISHING_FINISHED -> "Publishing Finished" to -24L
+                        SAnime.CANCELLED -> "Cancelled" to -25L
+                        SAnime.ON_HIATUS -> "On Hiatus" to -26L
+                        else -> "Unknown" to -20L
+                    }
+                    val category = statusCategories.keys.find { it.id == statusId } ?: Category(
+                        id = statusId,
+                        name = statusName,
+                        order = statusId,
+                        flags = sortFlags,
+                        hidden = false,
+                        hiddenFromHomeHub = false,
+                    )
+                    statusCategories.getOrPut(category) { mutableListOf() }.add(item)
+                }
+                statusCategories
+            }
+            LibraryGroup.BY_SOURCE -> {
+                val sourceCategories = mutableMapOf<Category, MutableList<AnimeLibraryItem>>()
+                items.forEach { item ->
+                    val sourceId = item.libraryAnime.anime.source
+                    val sourceName = sourceManager.getOrStub(sourceId).name
+                    val categoryId = -sourceId - 1000L
+                    val category = sourceCategories.keys.find { it.id == categoryId } ?: Category(
+                        id = categoryId,
+                        name = sourceName,
+                        order = categoryId,
+                        flags = sortFlags,
+                        hidden = false,
+                        hiddenFromHomeHub = false,
+                    )
+                    sourceCategories.getOrPut(category) { mutableListOf() }.add(item)
+                }
+                sourceCategories
+            }
+            LibraryGroup.BY_TRACK_STATUS -> {
+                val trackMapper = MapAnimeTrackStatusToLibrary(trackerManager)
+                val trackCategories = mutableMapOf<Category, MutableList<AnimeLibraryItem>>()
+                items.forEach { item ->
+                    val itemTracks = tracks[item.libraryAnime.anime.id].orEmpty()
+                    if (itemTracks.isEmpty()) {
+                        val categoryId = -2L
+                        val category = trackCategories.keys.find { it.id == categoryId } ?: Category(
+                            id = categoryId,
+                            name = "Untracked",
+                            order = categoryId,
+                            flags = sortFlags,
+                            hidden = false,
+                            hiddenFromHomeHub = false,
+                        )
+                        trackCategories.getOrPut(category) { mutableListOf() }.add(item)
+                    } else {
+                        val statuses = itemTracks.map { track ->
+                            trackMapper.map(track.trackerId, track.status)
+                        }.distinct()
+                        statuses.forEach { status ->
+                            val statusName = when (status) {
+                                LibraryTrackStatus.READING -> "Watching"
+                                LibraryTrackStatus.REPEATING -> "Rewatching"
+                                LibraryTrackStatus.COMPLETED -> "Completed"
+                                LibraryTrackStatus.ON_HOLD -> "On Hold"
+                                LibraryTrackStatus.DROPPED -> "Dropped"
+                                LibraryTrackStatus.PLAN_TO_READ -> "Plan to watch"
+                                LibraryTrackStatus.OTHER -> "Other"
+                            }
+                            val statusId = -(status.int + 10L)
+                            val category = trackCategories.keys.find { it.id == statusId } ?: Category(
+                                id = statusId,
+                                name = statusName,
+                                order = statusId,
+                                flags = sortFlags,
+                                hidden = false,
+                                hiddenFromHomeHub = false,
+                            )
+                            trackCategories.getOrPut(category) { mutableListOf() }.add(item)
+                        }
+                    }
+                }
+                trackCategories
+            }
+            else -> this
+        }
+
+        return grouped.entries
+            .sortedBy { entry -> entry.key.id }
+            .associate { entry -> entry.key to entry.value }
     }
 
     private fun getAnimelibItemPreferencesFlow(): Flow<ItemPreferences> {
@@ -800,8 +941,14 @@ class AnimeLibraryScreenModel(
         val showCategoryTabs: Boolean = false,
         val showAnimeCount: Boolean = false,
         val showAnimeContinueButton: Boolean = false,
+        val groupType: Int = LibraryGroup.BY_DEFAULT,
         val dialog: Dialog? = null,
     ) {
+        val items: List<AnimeLibraryItem>
+            get() = library.values.flatten()
+
+        val rawItems: List<AnimeLibraryItem>
+            get() = library.values.flatten()
         private val libraryCount by lazy {
             library.values
                 .flatten()

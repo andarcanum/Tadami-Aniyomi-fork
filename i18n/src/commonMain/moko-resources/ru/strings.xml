@@ -1200,4 +1200,18 @@
     <string name="pref_category_epub_import">Импорт EPUB</string>
     <string name="pref_epub_import_add_to_library">Добавлять импортированные EPUB в библиотеку</string>
     <string name="pref_epub_import_add_to_library_summary">Импортированные EPUB-новеллы сразу появятся в библиотеке. Если отключено, их можно добавить вручную из локального источника.</string>
+
+    <!-- Library Grouping -->
+    <string name="action_group">Группа</string>
+    <string name="action_group_by">Группировать по</string>
+    <string name="action_group_ungrouped">Без группы</string>
+    <string name="action_group_by_source">По источнику</string>
+    <string name="action_group_by_status">По статусу</string>
+    <string name="action_group_by_track_status">По статусу трекера</string>
+
+    <string name="pref_group_library_update_type">Обновление динамических групп</string>
+    <string name="pref_group_library_update_type_summary">Управляет тем, какие динамические/виртуальные группы обновляются при ручном обновлении</string>
+    <string name="pref_group_library_update_type_global">Общие настройки (по умолчанию)</string>
+    <string name="pref_group_library_update_type_all_but_ungrouped">Все группы, кроме \"Без группы\"</string>
+    <string name="pref_group_library_update_type_all">Все динамические группы</string>
 </resources>

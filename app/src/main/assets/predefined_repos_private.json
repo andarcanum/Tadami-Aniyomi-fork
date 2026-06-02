@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Yūzōnō Anime Extensions",
+    "url": "https://raw.githubusercontent.com/yuzono/anime-repo/repo/index.min.json",
+    "type": "anime"
+  },
+  {
+    "name": "Keiyoushi Manga Extensions",
+    "url": "https://raw.githubusercontent.com/keiyoushi/extensions/repo/index.min.json",
+    "type": "manga"
+  },
+  {
+    "name": "Lnreader Novel Extensions",
+    "url": "https://raw.githubusercontent.com/LNReader/lnreader-plugins/plugins/v3.0.0/.dist/plugins.min.json",
+    "type": "novel"
+  }
+]

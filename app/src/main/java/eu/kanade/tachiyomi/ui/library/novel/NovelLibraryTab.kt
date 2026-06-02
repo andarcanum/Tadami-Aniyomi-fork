@@ -6,27 +6,10 @@ import androidx.compose.animation.graphics.ExperimentalAnimationGraphicsApi
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,7 +18,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -45,16 +27,13 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
-import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.library.DeleteLibraryEntryDialog
 import eu.kanade.presentation.library.components.LibraryToolbar
-import eu.kanade.presentation.library.components.LibraryToolbarTitle
+import eu.kanade.presentation.library.novel.NovelLibraryContent
 import eu.kanade.presentation.library.novel.NovelLibraryItem
 import eu.kanade.presentation.library.novel.NovelLibrarySettingsDialog
 import eu.kanade.presentation.library.novel.components.AddToSeriesDialog
 import eu.kanade.presentation.library.novel.components.CreateSeriesDialog
-import eu.kanade.presentation.library.novel.resolveNovelLibraryBadgeState
-import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
@@ -67,13 +46,10 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
-import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.Badge
-import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
@@ -135,17 +111,17 @@ data object NovelLibraryTab : Tab {
         }
         val columns by columnPreference.collectAsStateWithLifecycle()
         val downloadedIds by downloadCache.downloadedIds.collectAsStateWithLifecycle()
-        val downloadedNovelIds = remember(state.items, showDownloadBadge, downloadedIds) {
+        val downloadedNovelIds = remember(state.library, showDownloadBadge, downloadedIds) {
             if (!showDownloadBadge) return@remember emptySet<Long>()
-            val libraryNovelIds = state.items.mapNotNullTo(HashSet()) {
+            val libraryNovelIds = state.library.values.flatten().mapNotNullTo(HashSet()) {
                 (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.id
             }
             downloadedIds.intersect(libraryNovelIds)
         }
-        val sourceLanguageByNovelId = remember(state.items, showLanguageBadge) {
+        val sourceLanguageByNovelId = remember(state.library, showLanguageBadge) {
             if (!showLanguageBadge) return@remember emptyMap()
 
-            state.items.mapNotNull { item ->
+            state.library.values.flatten().mapNotNull { item ->
                 val source = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.source ?: return@mapNotNull null
                 item.id to sourceManager.getOrStub(source).lang
             }.toMap()
@@ -183,22 +159,24 @@ data object NovelLibraryTab : Tab {
 
         Scaffold(
             topBar = { scrollBehavior ->
+                val selectedCount = state.selection.size
                 LibraryToolbar(
                     hasActiveFilters = state.hasActiveFilters,
-                    selectedCount = 0,
-                    title = LibraryToolbarTitle(
-                        text = stringResource(MR.strings.label_library),
-                        numberOfEntries = state.rawItems.size.takeIf { it > 0 },
+                    selectedCount = selectedCount,
+                    title = state.getToolbarTitle(
+                        defaultTitle = stringResource(MR.strings.label_library),
+                        defaultCategoryTitle = stringResource(MR.strings.label_default),
+                        page = screenModel.activeCategoryIndex,
                     ),
-                    onClickUnselectAll = {},
-                    onClickSelectAll = {},
-                    onClickInvertSelection = {},
+                    onClickUnselectAll = screenModel::clearSelection,
+                    onClickSelectAll = { screenModel.selectAll(screenModel.activeCategoryIndex) },
+                    onClickInvertSelection = { screenModel.invertSelection(screenModel.activeCategoryIndex) },
                     onClickFilter = screenModel::showSettingsDialog,
                     onClickRefresh = onClickRefresh,
                     onClickGlobalUpdate = onClickRefresh,
                     onClickOpenRandomEntry = {
                         scope.launch {
-                            val randomItem = state.items.randomOrNull()
+                            val randomItem = state.library.values.flatten().randomOrNull()
                             if (randomItem != null) {
                                 if (randomItem is NovelLibraryItem.Series) {
                                     navigator.push(NovelSeriesScreen(randomItem.librarySeries.id))
@@ -229,76 +207,43 @@ data object NovelLibraryTab : Tab {
                     )
                 }
                 else -> {
-                    if (displayMode == LibraryDisplayMode.List) {
-                        LazyColumn(
-                            modifier = Modifier.padding(contentPadding),
-                            contentPadding = PaddingValues(
-                                horizontal = MaterialTheme.padding.medium,
-                                vertical = MaterialTheme.padding.small,
-                            ),
-                            verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-                        ) {
-                            items(state.items, key = { it.id }) { item ->
-                                NovelLibraryListItem(
-                                    item = item,
-                                    badgeState = resolveNovelLibraryBadgeState(
-                                        item = item,
-                                        showDownloadBadge = showDownloadBadge,
-                                        downloadedNovelIds = downloadedNovelIds,
-                                        showUnreadBadge = showUnreadBadge,
-                                        showLanguageBadge = showLanguageBadge,
-                                        sourceLanguage = sourceLanguageByNovelId[item.id].orEmpty(),
-                                    ),
-                                    onClick = {
-                                        if (item is NovelLibraryItem.Series) {
-                                            navigator.push(NovelSeriesScreen(item.librarySeries.id))
-                                        } else {
-                                            navigator.push(NovelScreen(item.id))
-                                        }
-                                    },
-                                )
+                    NovelLibraryContent(
+                        categories = state.categories,
+                        searchQuery = state.searchQuery,
+                        selection = state.selection,
+                        contentPadding = contentPadding,
+                        currentPage = { screenModel.activeCategoryIndex },
+                        hasActiveFilters = state.hasActiveFilters,
+                        showPageTabs = state.showCategoryTabs,
+                        onChangeCurrentPage = { screenModel.activeCategoryIndex = it },
+                        onNovelClicked = { item ->
+                            if (item is NovelLibraryItem.Series) {
+                                navigator.push(NovelSeriesScreen(item.librarySeries.id))
+                            } else {
+                                navigator.push(NovelScreen(item.id))
                             }
-                        }
-                    } else {
-                        val gridCells = when {
-                            columns > 0 -> GridCells.Fixed(columns)
-                            displayMode == LibraryDisplayMode.ComfortableGrid -> GridCells.Adaptive(minSize = 180.dp)
-                            else -> GridCells.Adaptive(minSize = 140.dp)
-                        }
-
-                        LazyVerticalGrid(
-                            columns = gridCells,
-                            modifier = Modifier.padding(contentPadding),
-                            contentPadding = PaddingValues(
-                                horizontal = MaterialTheme.padding.medium,
-                                vertical = MaterialTheme.padding.small,
-                            ),
-                            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-                            verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-                        ) {
-                            items(state.items, key = { it.id }) { item ->
-                                NovelLibraryGridItem(
-                                    item = item,
-                                    badgeState = resolveNovelLibraryBadgeState(
-                                        item = item,
-                                        showDownloadBadge = showDownloadBadge,
-                                        downloadedNovelIds = downloadedNovelIds,
-                                        showUnreadBadge = showUnreadBadge,
-                                        showLanguageBadge = showLanguageBadge,
-                                        sourceLanguage = sourceLanguageByNovelId[item.id].orEmpty(),
-                                    ),
-                                    showMetadata = displayMode != LibraryDisplayMode.CoverOnlyGrid,
-                                    onClick = {
-                                        if (item is NovelLibraryItem.Series) {
-                                            navigator.push(NovelSeriesScreen(item.librarySeries.id))
-                                        } else {
-                                            navigator.push(NovelScreen(item.id))
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                    }
+                        },
+                        onToggleSelection = screenModel::toggleSelection,
+                        onToggleRangeSelection = screenModel::toggleRangeSelection,
+                        onRefresh = { category ->
+                            val categoryId = category?.id ?: -1L
+                            val started = NovelLibraryUpdateJob.startNow(context, categoryId = categoryId)
+                            started
+                        },
+                        getNumberOfNovelForCategory = { category ->
+                            state.getNovelCountForCategory(category)
+                        },
+                        displayMode = displayMode,
+                        columns = columns,
+                        showDownloadBadge = showDownloadBadge,
+                        downloadedNovelIds = downloadedNovelIds,
+                        showUnreadBadge = showUnreadBadge,
+                        showLanguageBadge = showLanguageBadge,
+                        sourceLanguageByNovelId = sourceLanguageByNovelId,
+                        getLibraryForPage = { page ->
+                            state.getLibraryItemsByPage(page)
+                        },
+                    )
                 }
             }
         }
@@ -358,148 +303,4 @@ data object NovelLibraryTab : Tab {
 
     private val queryEvent = Channel<String>()
     suspend fun search(query: String) = queryEvent.send(query)
-}
-
-@Composable
-private fun NovelLibraryGridItem(
-    item: NovelLibraryItem,
-    badgeState: eu.kanade.presentation.library.novel.NovelLibraryBadgeState,
-    showMetadata: Boolean,
-    onClick: () -> Unit,
-) {
-    val progressText = if (item.totalChapters > 0) {
-        "${item.unreadCount}/${item.totalChapters}"
-    } else {
-        null
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        androidx.compose.foundation.layout.Column(
-            modifier = Modifier.padding(MaterialTheme.padding.small),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(170.dp),
-            ) {
-                ItemCover.Book(
-                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let {
-                        sourceAwareNovelCoverModel(it)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(170.dp),
-                )
-                if (badgeState.showDownloaded || badgeState.unreadCount != null || badgeState.language != null) {
-                    BadgeGroup(
-                        modifier = Modifier
-                            .align(androidx.compose.ui.Alignment.TopStart)
-                            .padding(6.dp),
-                    ) {
-                        if (badgeState.showDownloaded) {
-                            Badge(text = "DL")
-                        }
-                        badgeState.unreadCount?.let {
-                            Badge(text = it.toString())
-                        }
-                        badgeState.language?.let {
-                            Badge(text = it.uppercase())
-                        }
-                    }
-                }
-            }
-            if (showMetadata) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                )
-                if (progressText != null) {
-                    Text(
-                        text = progressText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun NovelLibraryListItem(
-    item: NovelLibraryItem,
-    badgeState: eu.kanade.presentation.library.novel.NovelLibraryBadgeState,
-    onClick: () -> Unit,
-) {
-    val progressText = if (item.totalChapters > 0) {
-        "${item.unreadCount}/${item.totalChapters}"
-    } else {
-        null
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier.padding(MaterialTheme.padding.small),
-            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
-        ) {
-            Box(
-                modifier = Modifier
-                    .height(112.dp)
-                    .aspectRatio(0.68f),
-            ) {
-                ItemCover.Book(
-                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let {
-                        sourceAwareNovelCoverModel(it)
-                    },
-                    modifier = Modifier
-                        .height(112.dp)
-                        .aspectRatio(0.68f),
-                )
-                if (badgeState.showDownloaded || badgeState.unreadCount != null || badgeState.language != null) {
-                    BadgeGroup(
-                        modifier = Modifier
-                            .align(androidx.compose.ui.Alignment.TopStart)
-                            .padding(6.dp),
-                    ) {
-                        if (badgeState.showDownloaded) {
-                            Badge(text = "DL")
-                        }
-                        badgeState.unreadCount?.let {
-                            Badge(text = it.toString())
-                        }
-                        badgeState.language?.let {
-                            Badge(text = it.uppercase())
-                        }
-                    }
-                }
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = item.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 2,
-                )
-                if (progressText != null) {
-                    Text(
-                        text = progressText,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-    }
 }

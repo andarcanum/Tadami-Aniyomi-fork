@@ -4,6 +4,7 @@ import tachiyomi.domain.category.manga.repository.MangaCategoryRepository
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.model.CategoryUpdate
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
+import tachiyomi.domain.library.model.LibraryGroup
 import tachiyomi.domain.library.model.plus
 import tachiyomi.domain.library.service.LibraryPreferences
 import kotlin.random.Random
@@ -22,6 +23,11 @@ class SetSortModeForMangaCategory(
         val flags = (category?.flags ?: 0) + type + direction
         if (type == MangaLibrarySort.Type.Random) {
             preferences.randomMangaSortSeed().set(Random.nextInt())
+        }
+        if (preferences.mangaGroupLibraryBy().get() != LibraryGroup.BY_DEFAULT) {
+            preferences.mangaSortingMode().set(MangaLibrarySort(type, direction))
+            categoryRepository.updateAllMangaCategoryFlags(flags)
+            return
         }
         if (category != null && preferences.categorizedDisplaySettings().get()) {
             categoryRepository.updatePartialMangaCategory(

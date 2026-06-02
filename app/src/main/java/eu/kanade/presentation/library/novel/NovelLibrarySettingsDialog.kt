@@ -23,6 +23,7 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
 import eu.kanade.presentation.library.auroraLibraryCardStyleOptions
+import eu.kanade.presentation.library.components.GroupPage
 import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryScreenModel
 import eu.kanade.tachiyomi.util.system.isReleaseBuildType
 import kotlinx.collections.immutable.persistentListOf
@@ -59,6 +60,7 @@ fun NovelLibrarySettingsDialog(
             stringResource(MR.strings.action_filter),
             stringResource(MR.strings.action_sort),
             stringResource(MR.strings.action_display),
+            stringResource(MR.strings.action_group),
         ),
     ) { page ->
         Column(
@@ -70,6 +72,9 @@ fun NovelLibrarySettingsDialog(
                 0 -> FilterPage(screenModel, libraryPreferences)
                 1 -> SortPage(screenModel)
                 2 -> DisplayPage(libraryPreferences)
+                3 -> GroupPage(
+                    groupPreference = libraryPreferences.novelGroupLibraryBy(),
+                )
             }
         }
     }

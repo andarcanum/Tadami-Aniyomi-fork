@@ -1338,4 +1338,18 @@
     <string name="pref_category_epub_import">EPUB Import</string>
     <string name="pref_epub_import_add_to_library">Add imported EPUBs to library</string>
     <string name="pref_epub_import_add_to_library_summary">Imported EPUB novels will automatically appear in the library. When disabled, they can be added manually from the local source browse.</string>
+
+    <!-- Library Grouping -->
+    <string name="action_group">Group</string>
+    <string name="action_group_by">Group by</string>
+    <string name="action_group_ungrouped">Ungrouped</string>
+    <string name="action_group_by_source">By source</string>
+    <string name="action_group_by_status">By status</string>
+    <string name="action_group_by_track_status">By tracker status</string>
+
+    <string name="pref_group_library_update_type">Dynamic groups update behavior</string>
+    <string name="pref_group_library_update_type_summary">Controls how dynamic/virtual groups behave during manual updates</string>
+    <string name="pref_group_library_update_type_global">General update (default)</string>
+    <string name="pref_group_library_update_type_all_but_ungrouped">All groups except Ungrouped</string>
+    <string name="pref_group_library_update_type_all">All dynamic groups</string>
 </resources>

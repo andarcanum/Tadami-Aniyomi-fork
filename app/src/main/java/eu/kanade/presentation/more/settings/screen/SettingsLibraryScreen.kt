@@ -438,6 +438,51 @@ object SettingsLibraryScreen : SearchableSettings {
                     preference = libraryPreferences.newShowUpdatesCount(),
                     title = stringResource(AYMR.strings.pref_library_update_show_tab_badge),
                 ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = libraryPreferences.animeGroupLibraryUpdateType(),
+                    entries = persistentMapOf(
+                        tachiyomi.domain.library.model.GroupLibraryMode.GLOBAL to
+                            stringResource(MR.strings.pref_group_library_update_type_global),
+                        tachiyomi.domain.library.model.GroupLibraryMode.ALL_BUT_UNGROUPED to
+                            stringResource(MR.strings.pref_group_library_update_type_all_but_ungrouped),
+                        tachiyomi.domain.library.model.GroupLibraryMode.ALL to
+                            stringResource(MR.strings.pref_group_library_update_type_all),
+                    ),
+                    title = "${stringResource(
+                        MR.strings.pref_group_library_update_type,
+                    )} (${stringResource(AYMR.strings.label_anime)})",
+                    subtitle = stringResource(MR.strings.pref_group_library_update_type_summary),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = libraryPreferences.novelGroupLibraryUpdateType(),
+                    entries = persistentMapOf(
+                        tachiyomi.domain.library.model.GroupLibraryMode.GLOBAL to
+                            stringResource(MR.strings.pref_group_library_update_type_global),
+                        tachiyomi.domain.library.model.GroupLibraryMode.ALL_BUT_UNGROUPED to
+                            stringResource(MR.strings.pref_group_library_update_type_all_but_ungrouped),
+                        tachiyomi.domain.library.model.GroupLibraryMode.ALL to
+                            stringResource(MR.strings.pref_group_library_update_type_all),
+                    ),
+                    title = "${stringResource(
+                        MR.strings.pref_group_library_update_type,
+                    )} (${stringResource(AYMR.strings.label_novel)})",
+                    subtitle = stringResource(MR.strings.pref_group_library_update_type_summary),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = libraryPreferences.mangaGroupLibraryUpdateType(),
+                    entries = persistentMapOf(
+                        tachiyomi.domain.library.model.GroupLibraryMode.GLOBAL to
+                            stringResource(MR.strings.pref_group_library_update_type_global),
+                        tachiyomi.domain.library.model.GroupLibraryMode.ALL_BUT_UNGROUPED to
+                            stringResource(MR.strings.pref_group_library_update_type_all_but_ungrouped),
+                        tachiyomi.domain.library.model.GroupLibraryMode.ALL to
+                            stringResource(MR.strings.pref_group_library_update_type_all),
+                    ),
+                    title = "${stringResource(
+                        MR.strings.pref_group_library_update_type,
+                    )} (${stringResource(AYMR.strings.label_manga)})",
+                    subtitle = stringResource(MR.strings.pref_group_library_update_type_summary),
+                ),
             ),
         )
     }

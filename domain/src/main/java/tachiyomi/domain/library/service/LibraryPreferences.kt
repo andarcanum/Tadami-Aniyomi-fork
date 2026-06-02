@@ -11,7 +11,9 @@ import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
 import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
+import tachiyomi.domain.library.model.GroupLibraryMode
 import tachiyomi.domain.library.model.LibraryDisplayMode
+import tachiyomi.domain.library.model.LibraryGroup
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 
 class LibraryPreferences(
@@ -263,6 +265,23 @@ class LibraryPreferences(
     fun lastUsedAnimeCategory() = preferenceStore.getInt(Preference.appStateKey("last_used_anime_category"), 0)
     fun lastUsedMangaCategory() = preferenceStore.getInt(Preference.appStateKey("last_used_category"), 0)
     fun lastUsedNovelCategory() = preferenceStore.getInt(Preference.appStateKey("last_used_novel_category"), 0)
+
+    fun mangaGroupLibraryBy() = preferenceStore.getInt("manga_group_library_by", LibraryGroup.BY_DEFAULT)
+    fun animeGroupLibraryBy() = preferenceStore.getInt("anime_group_library_by", LibraryGroup.BY_DEFAULT)
+    fun novelGroupLibraryBy() = preferenceStore.getInt("novel_group_library_by", LibraryGroup.BY_DEFAULT)
+
+    fun mangaGroupLibraryUpdateType() = preferenceStore.getEnum(
+        "manga_group_library_update_type",
+        GroupLibraryMode.GLOBAL,
+    )
+    fun animeGroupLibraryUpdateType() = preferenceStore.getEnum(
+        "anime_group_library_update_type",
+        GroupLibraryMode.GLOBAL,
+    )
+    fun novelGroupLibraryUpdateType() = preferenceStore.getEnum(
+        "novel_group_library_update_type",
+        GroupLibraryMode.GLOBAL,
+    )
 
     fun animeUpdateCategories() =
         preferenceStore.getStringSet(LIBRARY_UPDATE_ANIME_CATEGORIES_PREF_KEY, emptySet())

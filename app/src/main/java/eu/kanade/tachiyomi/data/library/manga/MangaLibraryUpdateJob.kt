@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.manga.model.toSManga
 import eu.kanade.domain.items.chapter.interactor.SyncChaptersWithSource
+import eu.kanade.domain.track.manga.MapMangaTrackStatusToLibrary
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
@@ -35,6 +36,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
@@ -58,6 +60,7 @@ import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_V
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_OUTSIDE_RELEASE_PERIOD
 import tachiyomi.domain.source.manga.model.SourceNotInstalledException
 import tachiyomi.domain.source.manga.service.MangaSourceManager
+import tachiyomi.domain.track.manga.interactor.GetTracksPerManga
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -122,7 +125,11 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
 
         libraryPreferences.lastUpdatedTimestamp().set(Instant.now().toEpochMilli())
 
-        val categoryId = inputData.getLong(KEY_CATEGORY, -1L)
+        val categoryId = if (inputData.keyValueMap.containsKey(KEY_CATEGORY)) {
+            inputData.getLong(KEY_CATEGORY, -1L)
+        } else {
+            -999L
+        }
         addMangaToQueue(categoryId)
 
         return withIOContext {
@@ -153,6 +160,70 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         )
     }
 
+    private suspend fun filterByCategoryId(libraryManga: List<LibraryManga>, categoryId: Long): List<LibraryManga> {
+        return when {
+            categoryId == -1L -> {
+                // Ungrouped
+                libraryManga.filter { it.category == 0L }
+            }
+            categoryId == -2L -> {
+                // Untracked
+                val getTracksPerManga: GetTracksPerManga = Injekt.get()
+                val tracks = getTracksPerManga.subscribe().first()
+                libraryManga.filter { tracks[it.manga.id].orEmpty().isEmpty() }
+            }
+            categoryId in -17L..-10L -> {
+                // Tracked status
+                val targetStatusInt = (-categoryId - 10L).toInt()
+                val getTracksPerManga: GetTracksPerManga = Injekt.get()
+                val tracks = getTracksPerManga.subscribe().first()
+                val trackerManager = Injekt.get<eu.kanade.tachiyomi.data.track.TrackerManager>()
+                val trackMapper = MapMangaTrackStatusToLibrary(trackerManager)
+                libraryManga.filter { item ->
+                    val itemTracks = tracks[item.manga.id].orEmpty()
+                    itemTracks.any { track ->
+                        trackMapper.map(track.trackerId, track.status).int == targetStatusInt
+                    }
+                }
+            }
+            categoryId in -26L..-20L -> {
+                // Status
+                val targetStatus = when (categoryId) {
+                    -21L -> SManga.ONGOING
+                    -22L -> SManga.COMPLETED
+                    -23L -> SManga.LICENSED
+                    -24L -> SManga.PUBLISHING_FINISHED
+                    -25L -> SManga.CANCELLED
+                    -26L -> SManga.ON_HIATUS
+                    else -> -1
+                }
+                if (targetStatus == -1) {
+                    libraryManga.filter {
+                        it.manga.status.toInt() !in
+                            listOf(
+                                SManga.ONGOING,
+                                SManga.COMPLETED,
+                                SManga.LICENSED,
+                                SManga.PUBLISHING_FINISHED,
+                                SManga.CANCELLED,
+                                SManga.ON_HIATUS,
+                            )
+                    }
+                } else {
+                    libraryManga.filter { it.manga.status.toInt() == targetStatus }
+                }
+            }
+            categoryId < -1000L -> {
+                // Source
+                val targetSourceId = -categoryId - 1000L
+                libraryManga.filter { it.manga.source == targetSourceId }
+            }
+            else -> {
+                libraryManga.filter { it.category == categoryId }
+            }
+        }
+    }
+
     /**
      * Adds list of manga to be updated.
      *
@@ -161,8 +232,8 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private suspend fun addMangaToQueue(categoryId: Long) {
         val libraryManga = getLibraryManga.await()
 
-        val listToUpdate = if (categoryId != -1L) {
-            libraryManga.filter { it.category == categoryId }
+        val listToUpdate = if (categoryId != -999L) {
+            filterByCategoryId(libraryManga, categoryId)
         } else {
             val categoriesToUpdate = libraryPreferences.mangaUpdateCategories().get().map { it.toLong() }
             val includedManga = if (categoriesToUpdate.isNotEmpty()) {

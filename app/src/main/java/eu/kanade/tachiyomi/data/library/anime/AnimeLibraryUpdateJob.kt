@@ -16,6 +16,7 @@ import eu.kanade.domain.entries.anime.interactor.AnimeRatingFetcher
 import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.entries.anime.model.toSAnime
 import eu.kanade.domain.items.episode.interactor.SyncEpisodesWithSource
+import eu.kanade.domain.track.anime.MapAnimeTrackStatusToLibrary
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
 import eu.kanade.tachiyomi.animesource.model.FetchType
@@ -36,6 +37,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
@@ -61,6 +63,7 @@ import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_V
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_OUTSIDE_RELEASE_PERIOD
 import tachiyomi.domain.source.anime.model.AnimeSourceNotInstalledException
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
+import tachiyomi.domain.track.anime.interactor.GetTracksPerAnime
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
@@ -118,7 +121,11 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
 
         libraryPreferences.lastUpdatedTimestamp().set(Instant.now().toEpochMilli())
 
-        val categoryId = inputData.getLong(KEY_CATEGORY, -1L)
+        val categoryId = if (inputData.keyValueMap.containsKey(KEY_CATEGORY)) {
+            inputData.getLong(KEY_CATEGORY, -1L)
+        } else {
+            -999L
+        }
         addAnimeToQueue(categoryId)
 
         return withIOContext {
@@ -146,8 +153,71 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             } else {
                 0
             },
-
         )
+    }
+
+    private suspend fun filterByCategoryId(libraryAnime: List<LibraryAnime>, categoryId: Long): List<LibraryAnime> {
+        return when {
+            categoryId == -1L -> {
+                // Ungrouped
+                libraryAnime.filter { it.category == 0L }
+            }
+            categoryId == -2L -> {
+                // Untracked
+                val getTracksPerAnime: GetTracksPerAnime = Injekt.get()
+                val tracks = getTracksPerAnime.subscribe().first()
+                libraryAnime.filter { tracks[it.anime.id].orEmpty().isEmpty() }
+            }
+            categoryId in -17L..-10L -> {
+                // Tracked status
+                val targetStatusInt = (-categoryId - 10L).toInt()
+                val getTracksPerAnime: GetTracksPerAnime = Injekt.get()
+                val tracks = getTracksPerAnime.subscribe().first()
+                val trackerManager = Injekt.get<eu.kanade.tachiyomi.data.track.TrackerManager>()
+                val trackMapper = MapAnimeTrackStatusToLibrary(trackerManager)
+                libraryAnime.filter { item ->
+                    val itemTracks = tracks[item.anime.id].orEmpty()
+                    itemTracks.any { track ->
+                        trackMapper.map(track.trackerId, track.status).int == targetStatusInt
+                    }
+                }
+            }
+            categoryId in -26L..-20L -> {
+                // Status
+                val targetStatus = when (categoryId) {
+                    -21L -> SAnime.ONGOING
+                    -22L -> SAnime.COMPLETED
+                    -23L -> SAnime.LICENSED
+                    -24L -> SAnime.PUBLISHING_FINISHED
+                    -25L -> SAnime.CANCELLED
+                    -26L -> SAnime.ON_HIATUS
+                    else -> -1
+                }
+                if (targetStatus == -1) {
+                    libraryAnime.filter {
+                        it.anime.status.toInt() !in
+                            listOf(
+                                SAnime.ONGOING,
+                                SAnime.COMPLETED,
+                                SAnime.LICENSED,
+                                SAnime.PUBLISHING_FINISHED,
+                                SAnime.CANCELLED,
+                                SAnime.ON_HIATUS,
+                            )
+                    }
+                } else {
+                    libraryAnime.filter { it.anime.status.toInt() == targetStatus }
+                }
+            }
+            categoryId < -1000L -> {
+                // Source
+                val targetSourceId = -categoryId - 1000L
+                libraryAnime.filter { it.anime.source == targetSourceId }
+            }
+            else -> {
+                libraryAnime.filter { it.category == categoryId }
+            }
+        }
     }
 
     /**
@@ -158,8 +228,8 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private suspend fun addAnimeToQueue(categoryId: Long) {
         val libraryAnime = getLibraryAnime.await()
 
-        val listToUpdate = if (categoryId != -1L) {
-            libraryAnime.filter { it.category == categoryId }
+        val listToUpdate = if (categoryId != -999L) {
+            filterByCategoryId(libraryAnime, categoryId)
         } else {
             val categoriesToUpdate = libraryPreferences.animeUpdateCategories().get().map { it.toLong() }
             val includedAnime = if (categoriesToUpdate.isNotEmpty()) {

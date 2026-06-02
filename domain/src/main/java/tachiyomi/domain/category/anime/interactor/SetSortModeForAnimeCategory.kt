@@ -4,6 +4,7 @@ import tachiyomi.domain.category.anime.repository.AnimeCategoryRepository
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.model.CategoryUpdate
 import tachiyomi.domain.library.anime.model.AnimeLibrarySort
+import tachiyomi.domain.library.model.LibraryGroup
 import tachiyomi.domain.library.model.plus
 import tachiyomi.domain.library.service.LibraryPreferences
 import kotlin.random.Random
@@ -22,6 +23,11 @@ class SetSortModeForAnimeCategory(
         val flags = (category?.flags ?: 0) + type + direction
         if (type == AnimeLibrarySort.Type.Random) {
             preferences.randomAnimeSortSeed().set(Random.nextInt())
+        }
+        if (preferences.animeGroupLibraryBy().get() != LibraryGroup.BY_DEFAULT) {
+            preferences.animeSortingMode().set(AnimeLibrarySort(type, direction))
+            categoryRepository.updateAllAnimeCategoryFlags(flags)
+            return
         }
         if (category != null && preferences.categorizedDisplaySettings().get()) {
             categoryRepository.updatePartialAnimeCategory(

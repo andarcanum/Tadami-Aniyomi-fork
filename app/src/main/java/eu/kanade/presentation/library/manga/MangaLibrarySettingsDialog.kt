@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
 import eu.kanade.presentation.library.auroraLibraryCardStyleOptions
+import eu.kanade.presentation.library.components.GroupPage
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibrarySettingsScreenModel
 import eu.kanade.tachiyomi.util.system.isReleaseBuildType
 import kotlinx.collections.immutable.persistentListOf
@@ -59,6 +60,7 @@ fun MangaLibrarySettingsDialog(
             stringResource(MR.strings.action_filter),
             stringResource(MR.strings.action_sort),
             stringResource(MR.strings.action_display),
+            stringResource(MR.strings.action_group),
         ),
     ) { page ->
         Column(
@@ -76,6 +78,9 @@ fun MangaLibrarySettingsDialog(
                 )
                 2 -> DisplayPage(
                     screenModel = screenModel,
+                )
+                3 -> GroupPage(
+                    groupPreference = screenModel.libraryPreferences.mangaGroupLibraryBy(),
                 )
             }
         }

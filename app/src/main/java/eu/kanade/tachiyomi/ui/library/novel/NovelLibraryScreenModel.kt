@@ -5,20 +5,23 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.core.preference.asState
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.domain.track.novel.MapNovelTrackStatusToLibrary
 import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
+import eu.kanade.presentation.library.components.LibraryToolbarTitle
 import eu.kanade.presentation.library.novel.NovelLibraryItem
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
+import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
@@ -36,7 +39,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,6 +51,7 @@ import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.category.novel.interactor.GetVisibleNovelCategories
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.model.Novel
@@ -55,6 +61,8 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.items.novelchapter.service.getNovelChapterSort
+import tachiyomi.domain.library.model.LibraryGroup
+import tachiyomi.domain.library.model.LibraryTrackStatus
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.series.novel.interactor.AddNovelsToSeries
@@ -66,11 +74,15 @@ import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
 import tachiyomi.domain.series.novel.model.NovelSeries
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.storage.service.StorageManager
+import tachiyomi.domain.track.novel.interactor.GetTracksPerNovel
+import tachiyomi.domain.track.novel.model.NovelTrack
 import tachiyomi.source.local.entries.novel.LocalNovelSource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.IOException
 import kotlin.random.Random
+
+typealias NovelLibraryMap = Map<Category, List<NovelLibraryItem>>
 
 class NovelLibraryScreenModel(
     private val getLibraryNovel: GetLibraryNovel = Injekt.get(),
@@ -81,6 +93,8 @@ class NovelLibraryScreenModel(
     private val addNovelsToSeries: AddNovelsToSeries = Injekt.get(),
     private val updateNovelSeries: UpdateNovelSeries = Injekt.get(),
     private val getNovelCategories: GetNovelCategories = Injekt.get(),
+    private val getVisibleNovelCategories: GetVisibleNovelCategories = Injekt.get(),
+    private val getTracksPerNovel: GetTracksPerNovel = Injekt.get(),
     private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val updateNovel: UpdateNovel = Injekt.get(),
     private val chapterRepository: NovelChapterRepository = Injekt.get(),
@@ -92,6 +106,7 @@ class NovelLibraryScreenModel(
     private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
     private val downloadedIdsFlow: StateFlow<Set<Long>> = downloadCache.downloadedIds,
     private val searchDebounceMillis: Long = SEARCH_DEBOUNCE_MILLIS,
+    private val trackerManager: TrackerManager = Injekt.get(),
 ) : StateScreenModel<NovelLibraryScreenModel.State>(
     State(
         downloadedOnly = basePreferences.downloadedOnly().get(),
@@ -105,97 +120,94 @@ class NovelLibraryScreenModel(
         randomSortSeed = libraryPreferences.randomNovelSortSeed().get(),
     ),
 ) {
-    var activeCategoryIndex: Int by mutableStateOf(0)
+    var activeCategoryIndex: Int by libraryPreferences.lastUsedNovelCategory().asState(screenModelScope)
 
     init {
         screenModelScope.launch {
             combine(
-                flow = state
-                    .map { screenState -> screenState.searchQuery }
-                    .debounce { query: String? ->
-                        if (query.isNullOrBlank()) 0L else searchDebounceMillis
+                state.map { it.searchQuery }.debounce(searchDebounceMillis),
+                getLibraryFlow(),
+                getFilterPreferencesFlow(),
+                getSortPreferencesFlow(),
+                getTracksPerNovel.subscribe(),
+                state.map { it.groupType }.distinctUntilChanged(),
+                downloadedIdsFlow,
+            ) { flowsArray ->
+                val searchQuery = flowsArray[0] as String?
+                val library = flowsArray[1] as NovelLibraryMap
+                val filterPrefs = flowsArray[2] as FilterPreferences
+                val sortPrefs = flowsArray[3] as SortPreferences
+                val tracks = flowsArray[4] as Map<Long, List<NovelTrack>>
+                val groupType = flowsArray[5] as Int
+                val downloadedIds = flowsArray[6] as Set<Long>
+
+                val effectiveDownloadedFilter = if (filterPrefs.downloadedOnly) {
+                    TriState.ENABLED_IS
+                } else {
+                    filterPrefs.downloadedFilter
+                }
+                val downloadedNovelIds = if (effectiveDownloadedFilter != TriState.DISABLED) {
+                    val novelIdSet = library.values.flatten().mapNotNullTo(HashSet()) {
+                        (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.id
                     }
-                    .distinctUntilChanged(),
-                flow2 = combine(
-                    getLibraryNovel.subscribe(),
-                    getLibraryNovelSeries.subscribe(),
-                    getNovelIdsInAnySeries.subscribe(),
-                ) { novels, series, idsInSeries ->
-                    val singleItems = novels.filterNot {
-                        it.novel.id in idsInSeries
-                    }.map { NovelLibraryItem.Single(it) }
-                    val seriesItems = series.map { NovelLibraryItem.Series(it) }
-                    singleItems + seriesItems
-                },
-                flow3 = getFilterPreferencesFlow(),
-                flow4 = getSortPreferencesFlow(),
-                flow5 = downloadedIdsFlow,
-                transform = {
-                        query: String?,
-                        novels: List<NovelLibraryItem>,
-                        filterPrefs: FilterPreferences,
-                        sortPrefs: SortPreferences,
-                        downloadedIds: Set<Long>,
-                    ->
-                    RecomputeInput(
-                        query = query,
-                        novels = novels,
-                        filterPreferences = filterPrefs,
-                        sortPreferences = sortPrefs,
-                        downloadedIds = downloadedIds,
-                    )
-                },
-            )
-                .collectLatest { input ->
-                    val effectiveDownloadedFilter = if (input.filterPreferences.downloadedOnly) {
-                        TriState.ENABLED_IS
-                    } else {
-                        input.filterPreferences.downloadedFilter
-                    }
-                    val downloadedNovelIds = if (effectiveDownloadedFilter != TriState.DISABLED) {
-                        val novelIdSet = input.novels.mapNotNullTo(HashSet()) {
-                            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.id
-                        }
-                        input.downloadedIds.intersect(novelIdSet)
-                    } else {
-                        emptySet()
-                    }
-                    val recomputed = RecomputedState(
-                        items = filterItems(
-                            novels = input.novels,
-                            query = input.query,
-                            downloadedFilter = effectiveDownloadedFilter,
-                            downloadedNovelIds = downloadedNovelIds,
-                            unreadFilter = input.filterPreferences.unreadFilter,
-                            startedFilter = input.filterPreferences.startedFilter,
-                            bookmarkedFilter = input.filterPreferences.bookmarkedFilter,
-                            completedFilter = input.filterPreferences.completedFilter,
-                            filterIntervalCustom = input.filterPreferences.filterIntervalCustom,
-                            sort = input.sortPreferences.sort,
-                            randomSortSeed = input.sortPreferences.randomSortSeed,
-                        ),
+                    downloadedIds.intersect(novelIdSet)
+                } else {
+                    emptySet()
+                }
+
+                library
+                    .applyFilters(
+                        effectiveDownloadedFilter = effectiveDownloadedFilter,
                         downloadedNovelIds = downloadedNovelIds,
+                        unreadFilter = filterPrefs.unreadFilter,
+                        startedFilter = filterPrefs.startedFilter,
+                        bookmarkedFilter = filterPrefs.bookmarkedFilter,
+                        completedFilter = filterPrefs.completedFilter,
+                        filterIntervalCustom = filterPrefs.filterIntervalCustom,
                     )
-                    mutableState.update { current ->
-                        current.copy(
+                    .applySort(sortPrefs.sortMode, sortPrefs.randomSortSeed)
+                    .applyGrouping(groupType, tracks)
+                    .mapValues { (_, value) ->
+                        if (searchQuery != null) {
+                            value.filter { it.title.contains(searchQuery, ignoreCase = true) }
+                        } else {
+                            value
+                        }
+                    }
+                    .filterValues { it.isNotEmpty() }
+            }
+                .collectLatest { libraryMap ->
+                    mutableState.update { state ->
+                        state.copy(
                             isLoading = false,
-                            rawItems = input.novels,
-                            items = recomputed.items,
-                            searchQuery = input.query,
-                            downloadedOnly = input.filterPreferences.downloadedOnly,
-                            downloadedFilter = input.filterPreferences.downloadedFilter,
-                            unreadFilter = input.filterPreferences.unreadFilter,
-                            startedFilter = input.filterPreferences.startedFilter,
-                            bookmarkedFilter = input.filterPreferences.bookmarkedFilter,
-                            completedFilter = input.filterPreferences.completedFilter,
-                            filterIntervalCustom = input.filterPreferences.filterIntervalCustom,
-                            downloadedNovelIds = recomputed.downloadedNovelIds,
-                            sort = input.sortPreferences.sort,
-                            randomSortSeed = input.sortPreferences.randomSortSeed,
+                            library = libraryMap,
                         )
                     }
                 }
         }
+
+        combine(
+            libraryPreferences.categoryTabs().changes(),
+            libraryPreferences.categoryNumberOfItems().changes(),
+            libraryPreferences.showContinueViewingButton().changes(),
+        ) { a, b, c -> arrayOf(a, b, c) }
+            .onEach { (showCategoryTabs, showNovelCount, showNovelContinueButton) ->
+                mutableState.update { state ->
+                    state.copy(
+                        showCategoryTabs = showCategoryTabs,
+                        showNovelCount = showNovelCount,
+                        showNovelContinueButton = showNovelContinueButton,
+                    )
+                }
+            }
+            .launchIn(screenModelScope)
+
+        libraryPreferences.novelGroupLibraryBy().changes()
+            .onEach { groupType ->
+                mutableState.update { it.copy(groupType = groupType) }
+                activeCategoryIndex = 0
+            }
+            .launchIn(screenModelScope)
     }
 
     fun search(query: String?) {
@@ -243,7 +255,9 @@ class NovelLibraryScreenModel(
                 return@update current.copy(selection = persistentListOf<NovelLibraryItem>().addAll(mutable))
             }
 
-            val items = current.items.filter { it.category == novel.category }
+            val items = current.library.entries.firstNotNullOfOrNull { entry ->
+                entry.value.takeIf { entry.key.id == novel.category }
+            }.orEmpty()
             val lastIndex = items.indexOfFirst { it.id == lastSelected.id }
             val currentIndex = items.indexOfFirst { it.id == novel.id }
             if (lastIndex < 0 || currentIndex < 0 || lastIndex == currentIndex) {
@@ -263,11 +277,13 @@ class NovelLibraryScreenModel(
 
     fun selectAll(index: Int) {
         mutableState.update { current ->
-            val targetCategoryId = current.visibleCategoryIds().getOrNull(index)
+            val targetCategoryId = current.categories.getOrNull(index)?.id
             val scopeItems = if (targetCategoryId == null) {
-                current.items
+                current.library.values.flatten()
             } else {
-                current.items.filter { it.category == targetCategoryId }
+                current.library.entries.firstNotNullOfOrNull { entry ->
+                    entry.value.takeIf { entry.key.id == targetCategoryId }
+                }.orEmpty()
             }
             val selectedIds = current.selection.map { it.id }.toSet()
             val mutable = current.selection.toMutableList()
@@ -278,11 +294,13 @@ class NovelLibraryScreenModel(
 
     fun invertSelection(index: Int) {
         mutableState.update { current ->
-            val targetCategoryId = current.visibleCategoryIds().getOrNull(index)
+            val targetCategoryId = current.categories.getOrNull(index)?.id
             val scopeItems = if (targetCategoryId == null) {
-                current.items
+                current.library.values.flatten()
             } else {
-                current.items.filter { it.category == targetCategoryId }
+                current.library.entries.firstNotNullOfOrNull { entry ->
+                    entry.value.takeIf { entry.key.id == targetCategoryId }
+                }.orEmpty()
             }
             val selectedIds = current.selection.map { it.id }.toSet()
             val toRemoveIds = scopeItems.filter { it.id in selectedIds }.map { it.id }.toSet()
@@ -659,56 +677,222 @@ class NovelLibraryScreenModel(
             .filterNot(Category::isSystemCategory)
     }
 
-    private fun filterItems(
-        novels: List<NovelLibraryItem>,
-        query: String?,
-        downloadedFilter: TriState,
+    private fun applyFilter(
+        filter: TriState,
+        predicate: () -> Boolean,
+    ): Boolean {
+        return when (filter) {
+            TriState.DISABLED -> true
+            TriState.ENABLED_IS -> predicate()
+            TriState.ENABLED_NOT -> !predicate()
+        }
+    }
+
+    private fun NovelLibraryMap.applyFilters(
+        effectiveDownloadedFilter: TriState,
         downloadedNovelIds: Set<Long>,
         unreadFilter: TriState,
         startedFilter: TriState,
         bookmarkedFilter: TriState,
         completedFilter: TriState,
         filterIntervalCustom: TriState,
-        sort: NovelLibrarySort,
-        randomSortSeed: Int,
-    ): List<NovelLibraryItem> {
-        var filtered = novels
-        if (!query.isNullOrBlank()) {
-            filtered = filtered.filter { it.title.contains(query, ignoreCase = true) }
+    ): NovelLibraryMap {
+        val filterFnDownloaded: (NovelLibraryItem) -> Boolean = { item ->
+            applyFilter(effectiveDownloadedFilter) {
+                (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.id in downloadedNovelIds
+            }
         }
-        filtered =
-            applyFilter(filtered, downloadedFilter) {
-                (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.id in
-                    downloadedNovelIds
-            }
-        filtered = applyFilter(filtered, unreadFilter) { it.unreadCount > 0 }
-        filtered = applyFilter(filtered, startedFilter) { it.hasStarted }
-        filtered =
-            applyFilter(filtered, bookmarkedFilter) {
-                (it as? NovelLibraryItem.Single)?.libraryNovel?.hasBookmarks ==
-                    true
-            }
-        filtered = applyFilter(filtered, completedFilter) {
-            (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.status?.toInt() == SManga.COMPLETED
+        val filterFnUnread: (NovelLibraryItem) -> Boolean = { item ->
+            applyFilter(unreadFilter) { item.unreadCount > 0 }
         }
-        filtered =
-            applyFilter(filtered, filterIntervalCustom) {
-                (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.fetchInterval?.compareTo(0) ==
-                    -1
+        val filterFnStarted: (NovelLibraryItem) -> Boolean = { item ->
+            applyFilter(startedFilter) { item.hasStarted }
+        }
+        val filterFnBookmarked: (NovelLibraryItem) -> Boolean = { item ->
+            applyFilter(bookmarkedFilter) {
+                (item as? NovelLibraryItem.Single)?.libraryNovel?.hasBookmarks == true
             }
-
-        return sortItems(filtered, sort, randomSortSeed)
+        }
+        val filterFnCompleted: (NovelLibraryItem) -> Boolean = { item ->
+            applyFilter(completedFilter) {
+                (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.status?.toInt() == SManga.COMPLETED
+            }
+        }
+        val filterFnIntervalCustom: (NovelLibraryItem) -> Boolean = { item ->
+            applyFilter(filterIntervalCustom) {
+                (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.fetchInterval?.compareTo(0) == -1
+            }
+        }
+        val filterFn: (NovelLibraryItem) -> Boolean = {
+            filterFnDownloaded(it) &&
+                filterFnUnread(it) &&
+                filterFnStarted(it) &&
+                filterFnBookmarked(it) &&
+                filterFnCompleted(it) &&
+                filterFnIntervalCustom(it)
+        }
+        return mapValues { (_, value) -> value.filter(filterFn) }
     }
 
-    private fun applyFilter(
-        items: List<NovelLibraryItem>,
-        filter: TriState,
-        predicate: (NovelLibraryItem) -> Boolean,
-    ): List<NovelLibraryItem> {
-        return when (filter) {
-            TriState.DISABLED -> items
-            TriState.ENABLED_IS -> items.filter(predicate)
-            TriState.ENABLED_NOT -> items.filterNot(predicate)
+    private fun NovelLibraryMap.applySort(
+        sort: NovelLibrarySort,
+        randomSortSeed: Int,
+    ): NovelLibraryMap {
+        return mapValues { (_, value) -> sortItems(value, sort, randomSortSeed) }
+    }
+
+    private fun NovelLibraryMap.applyGrouping(
+        groupType: Int,
+        tracks: Map<Long, List<NovelTrack>>,
+    ): NovelLibraryMap {
+        if (groupType == LibraryGroup.BY_DEFAULT) return this
+
+        val items = this.values.flatten().distinctBy { it.id }
+        val sortFlags = libraryPreferences.novelSortingMode().get().flag
+
+        val grouped = when (groupType) {
+            LibraryGroup.UNGROUPED -> {
+                val ungroupedCategory = Category(
+                    id = -1L,
+                    name = "Ungrouped",
+                    order = 0,
+                    flags = sortFlags,
+                    hidden = false,
+                    hiddenFromHomeHub = false,
+                )
+                mapOf(ungroupedCategory to items)
+            }
+            LibraryGroup.BY_STATUS -> {
+                val statusCategories = mutableMapOf<Category, MutableList<NovelLibraryItem>>()
+                items.forEach { item ->
+                    val single = item as? NovelLibraryItem.Single
+                    val status = single?.libraryNovel?.novel?.status ?: 0L
+                    val statusInt = status.toInt()
+                    val (statusName, statusId) = when (statusInt) {
+                        SManga.ONGOING -> "Ongoing" to -21L
+                        SManga.COMPLETED -> "Completed" to -22L
+                        SManga.LICENSED -> "Licensed" to -23L
+                        SManga.PUBLISHING_FINISHED -> "Publishing Finished" to -24L
+                        SManga.CANCELLED -> "Cancelled" to -25L
+                        SManga.ON_HIATUS -> "On Hiatus" to -26L
+                        else -> "Unknown" to -20L
+                    }
+                    val category = statusCategories.keys.find { it.id == statusId } ?: Category(
+                        id = statusId,
+                        name = statusName,
+                        order = statusId,
+                        flags = sortFlags,
+                        hidden = false,
+                        hiddenFromHomeHub = false,
+                    )
+                    statusCategories.getOrPut(category) { mutableListOf() }.add(item)
+                }
+                statusCategories
+            }
+            LibraryGroup.BY_SOURCE -> {
+                val sourceCategories = mutableMapOf<Category, MutableList<NovelLibraryItem>>()
+                items.forEach { item ->
+                    val single = item as? NovelLibraryItem.Single
+                    val sourceId = single?.libraryNovel?.novel?.source ?: 0L
+                    val sourceName = sourceManager.getOrStub(sourceId).name
+                    val categoryId = -sourceId - 1000L
+                    val category = sourceCategories.keys.find { it.id == categoryId } ?: Category(
+                        id = categoryId,
+                        name = sourceName,
+                        order = categoryId,
+                        flags = sortFlags,
+                        hidden = false,
+                        hiddenFromHomeHub = false,
+                    )
+                    sourceCategories.getOrPut(category) { mutableListOf() }.add(item)
+                }
+                sourceCategories
+            }
+            LibraryGroup.BY_TRACK_STATUS -> {
+                val trackMapper = MapNovelTrackStatusToLibrary(trackerManager)
+                val trackCategories = mutableMapOf<Category, MutableList<NovelLibraryItem>>()
+                items.forEach { item ->
+                    val single = item as? NovelLibraryItem.Single
+                    val itemTracks = single?.libraryNovel?.novel?.id?.let { tracks[it] }.orEmpty()
+                    if (itemTracks.isEmpty()) {
+                        val categoryId = -2L
+                        val category = trackCategories.keys.find { it.id == categoryId } ?: Category(
+                            id = categoryId,
+                            name = "Untracked",
+                            order = categoryId,
+                            flags = sortFlags,
+                            hidden = false,
+                            hiddenFromHomeHub = false,
+                        )
+                        trackCategories.getOrPut(category) { mutableListOf() }.add(item)
+                    } else {
+                        val statuses = itemTracks.map { track ->
+                            trackMapper.map(track.trackerId, track.status)
+                        }.distinct()
+                        statuses.forEach { status ->
+                            val statusName = when (status) {
+                                LibraryTrackStatus.READING -> "Reading"
+                                LibraryTrackStatus.REPEATING -> "Repeating"
+                                LibraryTrackStatus.COMPLETED -> "Completed"
+                                LibraryTrackStatus.ON_HOLD -> "On Hold"
+                                LibraryTrackStatus.DROPPED -> "Dropped"
+                                LibraryTrackStatus.PLAN_TO_READ -> "Plan to read"
+                                LibraryTrackStatus.OTHER -> "Other"
+                            }
+                            val statusId = -(status.int + 10L)
+                            val category = trackCategories.keys.find { it.id == statusId } ?: Category(
+                                id = statusId,
+                                name = statusName,
+                                order = statusId,
+                                flags = sortFlags,
+                                hidden = false,
+                                hiddenFromHomeHub = false,
+                            )
+                            trackCategories.getOrPut(category) { mutableListOf() }.add(item)
+                        }
+                    }
+                }
+                trackCategories
+            }
+            else -> this
+        }
+
+        return grouped.entries
+            .sortedBy { entry -> entry.key.id }
+            .associate { entry -> entry.key to entry.value }
+    }
+
+    private fun getLibraryFlow(): Flow<NovelLibraryMap> {
+        val libraryNovelsFlow = combine(
+            getLibraryNovel.subscribe(),
+            getLibraryNovelSeries.subscribe(),
+            getNovelIdsInAnySeries.subscribe(),
+        ) { novels, series, idsInSeries ->
+            val singleItems = novels.filterNot {
+                it.novel.id in idsInSeries
+            }.map { NovelLibraryItem.Single(it) }
+            val seriesItems = series.map { NovelLibraryItem.Series(it) }
+            (singleItems + seriesItems).groupBy { it.category }
+        }
+
+        return combine(getVisibleNovelCategories.subscribe(), libraryNovelsFlow) { categories, libraryNovels ->
+            val mappedCategories = categories.map {
+                Category(
+                    id = it.id,
+                    name = it.name,
+                    order = it.order,
+                    flags = it.flags,
+                    hidden = it.hidden,
+                    hiddenFromHomeHub = false,
+                )
+            }
+            val displayCategories = if (libraryNovels.isNotEmpty() && !libraryNovels.containsKey(0L)) {
+                mappedCategories.filterNot { it.isSystemCategory }
+            } else {
+                mappedCategories
+            }
+
+            displayCategories.associateWith { libraryNovels[it.id].orEmpty() }
         }
     }
 
@@ -794,10 +978,14 @@ class NovelLibraryScreenModel(
     @Immutable
     data class State(
         val isLoading: Boolean = true,
-        val rawItems: List<NovelLibraryItem> = emptyList(),
-        val items: List<NovelLibraryItem> = emptyList(),
-        val selection: PersistentList<NovelLibraryItem> = persistentListOf(),
+        val library: NovelLibraryMap = emptyMap(),
         val searchQuery: String? = null,
+        val selection: PersistentList<NovelLibraryItem> = persistentListOf(),
+        val hasActiveFilters: Boolean = false,
+        val showCategoryTabs: Boolean = false,
+        val showNovelCount: Boolean = false,
+        val showNovelContinueButton: Boolean = false,
+        val groupType: Int = LibraryGroup.BY_DEFAULT,
         val downloadedOnly: Boolean = false,
         val downloadedFilter: TriState = TriState.DISABLED,
         val unreadFilter: TriState = TriState.DISABLED,
@@ -810,25 +998,62 @@ class NovelLibraryScreenModel(
         val randomSortSeed: Int = 0,
         val dialog: Dialog? = null,
     ) {
+        val items: List<NovelLibraryItem>
+            get() = library.values.flatten()
+
+        val rawItems: List<NovelLibraryItem>
+            get() = library.values.flatten()
+
         val effectiveDownloadedFilter: TriState
             get() = if (downloadedOnly) TriState.ENABLED_IS else downloadedFilter
 
-        val isLibraryEmpty: Boolean
-            get() = rawItems.isEmpty()
+        private val libraryCount by lazy {
+            library.values
+                .flatten()
+                .distinctBy {
+                    when (it) {
+                        is NovelLibraryItem.Single -> it.libraryNovel.novel.id
+                        is NovelLibraryItem.Series -> it.librarySeries.id
+                    }
+                }
+                .size
+        }
 
-        val selectionMode: Boolean
-            get() = selection.isNotEmpty()
+        val isLibraryEmpty by lazy { libraryCount == 0 }
 
-        val hasActiveFilters: Boolean
-            get() = effectiveDownloadedFilter != TriState.DISABLED ||
-                unreadFilter != TriState.DISABLED ||
-                startedFilter != TriState.DISABLED ||
-                bookmarkedFilter != TriState.DISABLED ||
-                completedFilter != TriState.DISABLED ||
-                filterIntervalCustom != TriState.DISABLED
+        val selectionMode = selection.isNotEmpty()
 
-        fun visibleCategoryIds(): List<Long> {
-            return items.map { it.category }.distinct()
+        val categories = library.keys.toList()
+
+        fun getLibraryItemsByCategoryId(categoryId: Long): List<NovelLibraryItem>? {
+            return library.entries.firstOrNull { it.key.id == categoryId }?.value
+        }
+
+        fun getLibraryItemsByPage(page: Int): List<NovelLibraryItem> {
+            return library.values.toTypedArray().getOrNull(page).orEmpty()
+        }
+
+        fun getNovelCountForCategory(category: Category): Int? {
+            return if (showNovelCount || !searchQuery.isNullOrEmpty()) library[category]?.size else null
+        }
+
+        fun getToolbarTitle(
+            defaultTitle: String,
+            defaultCategoryTitle: String,
+            page: Int,
+        ): LibraryToolbarTitle {
+            val category = categories.getOrNull(page) ?: return LibraryToolbarTitle(defaultTitle)
+            val categoryName = category.let {
+                if (it.isSystemCategory) defaultCategoryTitle else it.name
+            }
+            val title = if (showCategoryTabs) defaultTitle else categoryName
+            val count = when {
+                !showNovelCount -> null
+                !showCategoryTabs -> getNovelCountForCategory(category)
+                else -> libraryCount
+            }
+
+            return LibraryToolbarTitle(title, count)
         }
     }
 
@@ -843,7 +1068,7 @@ class NovelLibraryScreenModel(
     )
 
     private data class SortPreferences(
-        val sort: NovelLibrarySort,
+        val sortMode: NovelLibrarySort,
         val randomSortSeed: Int,
     )
 
@@ -893,7 +1118,7 @@ class NovelLibraryScreenModel(
             libraryPreferences.randomNovelSortSeed().changes(),
         ) { sort, randomSortSeed ->
             SortPreferences(
-                sort = sort,
+                sortMode = sort,
                 randomSortSeed = randomSortSeed,
             )
         }.distinctUntilChanged()

@@ -15,6 +15,7 @@ import androidx.work.workDataOf
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.domain.track.novel.MapNovelTrackStatusToLibrary
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
@@ -33,6 +34,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
@@ -54,6 +56,7 @@ import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_V
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_OUTSIDE_RELEASE_PERIOD
 import tachiyomi.domain.source.novel.model.SourceNotInstalledException
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import tachiyomi.domain.track.novel.interactor.GetTracksPerNovel
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -115,7 +118,11 @@ class NovelLibraryUpdateJob(
 
         libraryPreferences.lastUpdatedTimestamp().set(System.currentTimeMillis())
 
-        val categoryId = inputData.getLong(KEY_CATEGORY, -1L)
+        val categoryId = if (inputData.keyValueMap.containsKey(KEY_CATEGORY)) {
+            inputData.getLong(KEY_CATEGORY, -1L)
+        } else {
+            -999L
+        }
         addNovelToQueue(categoryId)
 
         return withIOContext {
@@ -145,10 +152,74 @@ class NovelLibraryUpdateJob(
         )
     }
 
+    private suspend fun filterByCategoryId(libraryNovel: List<LibraryNovel>, categoryId: Long): List<LibraryNovel> {
+        return when {
+            categoryId == -1L -> {
+                // Ungrouped
+                libraryNovel.filter { it.category == 0L }
+            }
+            categoryId == -2L -> {
+                // Untracked
+                val getTracksPerNovel: GetTracksPerNovel = Injekt.get()
+                val tracks = getTracksPerNovel.subscribe().first()
+                libraryNovel.filter { tracks[it.novel.id].orEmpty().isEmpty() }
+            }
+            categoryId in -17L..-10L -> {
+                // Tracked status
+                val targetStatusInt = (-categoryId - 10L).toInt()
+                val getTracksPerNovel: GetTracksPerNovel = Injekt.get()
+                val tracks = getTracksPerNovel.subscribe().first()
+                val trackerManager = Injekt.get<eu.kanade.tachiyomi.data.track.TrackerManager>()
+                val trackMapper = MapNovelTrackStatusToLibrary(trackerManager)
+                libraryNovel.filter { item ->
+                    val itemTracks = tracks[item.novel.id].orEmpty()
+                    itemTracks.any { track ->
+                        trackMapper.map(track.trackerId, track.status).int == targetStatusInt
+                    }
+                }
+            }
+            categoryId in -26L..-20L -> {
+                // Status
+                val targetStatus = when (categoryId) {
+                    -21L -> SManga.ONGOING
+                    -22L -> SManga.COMPLETED
+                    -23L -> SManga.LICENSED
+                    -24L -> SManga.PUBLISHING_FINISHED
+                    -25L -> SManga.CANCELLED
+                    -26L -> SManga.ON_HIATUS
+                    else -> -1
+                }
+                if (targetStatus == -1) {
+                    libraryNovel.filter {
+                        it.novel.status.toInt() !in
+                            listOf(
+                                SManga.ONGOING,
+                                SManga.COMPLETED,
+                                SManga.LICENSED,
+                                SManga.PUBLISHING_FINISHED,
+                                SManga.CANCELLED,
+                                SManga.ON_HIATUS,
+                            )
+                    }
+                } else {
+                    libraryNovel.filter { it.novel.status.toInt() == targetStatus }
+                }
+            }
+            categoryId < -1000L -> {
+                // Source
+                val targetSourceId = -categoryId - 1000L
+                libraryNovel.filter { it.novel.source == targetSourceId }
+            }
+            else -> {
+                libraryNovel.filter { it.category == categoryId }
+            }
+        }
+    }
+
     private suspend fun addNovelToQueue(categoryId: Long) {
         val libraryNovels = getLibraryNovel.await()
-        val listToUpdate = if (categoryId != -1L) {
-            libraryNovels.filter { it.category == categoryId }
+        val listToUpdate = if (categoryId != -999L) {
+            filterByCategoryId(libraryNovels, categoryId)
         } else {
             val categoriesToUpdate = libraryPreferences.novelUpdateCategories().get().map { it.toLong() }
             val includedNovels = if (categoriesToUpdate.isNotEmpty()) {
