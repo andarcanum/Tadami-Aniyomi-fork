@@ -105,6 +105,8 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
+import eu.kanade.tachiyomi.util.debugTitleCoverFlow
+import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -182,6 +184,18 @@ fun NovelScreenAuroraImpl(
     onOpenSuggestions: () -> Unit = {},
 ) {
     val novel = state.novel
+    LaunchedEffect(
+        novel.id,
+        novel.thumbnailUrl,
+        novel.coverLastModified,
+    ) {
+        debugTitleCoverFlow(
+            scope = "novel-screen",
+            message = "id=${novel.id} coverLastModified=${novel.coverLastModified} thumbnail=${previewTitleCoverUrl(
+                novel.thumbnailUrl,
+            )}",
+        )
+    }
     val globalSearchQuery = remember(novel.displayTitle) { normalizeAuroraGlobalSearchQuery(novel.displayTitle) }
     val posterLongPressModifier = onPosterLongClicked?.let { Modifier.auroraPosterLongPress(it) } ?: Modifier
     val chapters = state.processedChapters

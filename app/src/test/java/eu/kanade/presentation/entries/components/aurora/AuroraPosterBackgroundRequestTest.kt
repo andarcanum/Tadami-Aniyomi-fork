@@ -47,6 +47,55 @@ class AuroraPosterBackgroundRequestTest {
     }
 
     @Test
+    fun `buildAuroraPosterBackgroundRequest can keep thumbnail cache as placeholder`() = runTest {
+        val spec = auroraPosterBackgroundSpec(
+            baseCacheKey = "anime-bg;42;1234;request",
+            containerWidthPx = 1080,
+            containerHeightPx = 1920,
+        )
+
+        val request = buildAuroraPosterBackgroundRequest(
+            context = mockk<Context>(relaxed = true),
+            data = "https://example.org/full.jpg",
+            spec = spec,
+            containerWidthPx = 1080,
+            containerHeightPx = 1920,
+            placeholderData = "https://example.org/thumb.jpg",
+        )
+
+        request.memoryCacheKey shouldBe spec.memoryCacheKey
+        request.placeholderMemoryCacheKey?.key shouldBe "https://example.org/thumb.jpg"
+        request.sizeResolver.size() shouldBe Size(1080, 1920)
+    }
+
+    @Test
+    fun `buildAuroraPosterBackgroundRequest can keep previous background bitmap as placeholder`() = runTest {
+        val placeholderSpec = auroraPosterBackgroundSpec(
+            baseCacheKey = "anime-bg;42;1234;thumb",
+            containerWidthPx = 1080,
+            containerHeightPx = 1920,
+        )
+        val spec = auroraPosterBackgroundSpec(
+            baseCacheKey = "anime-bg;42;1234;full",
+            containerWidthPx = 1080,
+            containerHeightPx = 1920,
+        )
+
+        val request = buildAuroraPosterBackgroundRequest(
+            context = mockk<Context>(relaxed = true),
+            data = "https://example.org/full.jpg",
+            spec = spec,
+            containerWidthPx = 1080,
+            containerHeightPx = 1920,
+            placeholderData = placeholderSpec,
+        )
+
+        request.memoryCacheKey shouldBe spec.memoryCacheKey
+        request.placeholderMemoryCacheKey?.key shouldBe placeholderSpec.memoryCacheKey
+        request.sizeResolver.size() shouldBe Size(1080, 1920)
+    }
+
+    @Test
     fun `aurora poster model pair keeps primary and fallback candidates`() {
         val primary = MangaCover(
             mangaId = 7L,

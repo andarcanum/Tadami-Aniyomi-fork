@@ -2,6 +2,8 @@ package eu.kanade.presentation.entries.components
 
 import android.content.Context
 import eu.kanade.domain.metadata.model.MetadataLoadError
+import eu.kanade.tachiyomi.util.debugTitleCoverFlow
+import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import tachiyomi.domain.metadata.model.ExternalMetadata
 import tachiyomi.domain.metadata.model.MetadataSource
 import tachiyomi.i18n.MR
@@ -92,14 +94,34 @@ internal fun resolveExternalMetadataCover(
     useMetadataCovers: Boolean,
 ): ResolvedCover {
     if (!useMetadataCovers || isMetadataLoading) {
-        return ResolvedCover(baseCoverUrl, null)
+        val resolved = ResolvedCover(baseCoverUrl, null)
+        debugTitleCoverFlow(
+            scope = "metadata-cover",
+            message = "skip useMetadataCovers=$useMetadataCovers loading=$isMetadataLoading base=${previewTitleCoverUrl(
+                baseCoverUrl,
+            )} result=${previewTitleCoverUrl(resolved.coverUrl)}",
+        )
+        return resolved
     }
 
     val metadataCoverUrl = metadata?.coverUrl?.takeIf { it.isNotBlank() }
     val metadataCoverUrlFallback = metadata?.coverUrlFallback?.takeIf { it.isNotBlank() }
-    return if (metadataCoverUrl != null) {
+    val resolved = if (metadataCoverUrl != null) {
         ResolvedCover(metadataCoverUrl, metadataCoverUrlFallback ?: baseCoverUrl)
     } else {
         ResolvedCover(baseCoverUrl, null)
     }
+    debugTitleCoverFlow(
+        scope = "metadata-cover",
+        message = "resolved metadata=${previewTitleCoverUrl(
+            metadataCoverUrl,
+        )} fallback=${previewTitleCoverUrl(
+            metadataCoverUrlFallback,
+        )} base=${previewTitleCoverUrl(
+            baseCoverUrl,
+        )} error=${metadataError?.javaClass?.simpleName ?: "none"} result=${previewTitleCoverUrl(
+            resolved.coverUrl,
+        )} resultFallback=${previewTitleCoverUrl(resolved.coverUrlFallback)}",
+    )
+    return resolved
 }

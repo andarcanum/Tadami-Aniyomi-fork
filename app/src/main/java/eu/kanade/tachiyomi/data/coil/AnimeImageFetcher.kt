@@ -17,6 +17,8 @@ import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.coil.AnimeImageFetcher.Companion.USE_CUSTOM_COVER_KEY
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.util.debugTitleCoverFlow
+import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import logcat.LogPriority
 import okhttp3.CacheControl
 import okhttp3.Call
@@ -64,9 +66,17 @@ class AnimeImageFetcher(
     override suspend fun fetch(): FetchResult {
         // Use custom cover if exists
         val useCustomCover = options.extras.getOrDefault(USE_CUSTOM_COVER_KEY)
+        val debugMessage = "fetch url=${previewTitleCoverUrl(url)} " +
+            "diskCacheKey=$diskCacheKey useCustomCover=$useCustomCover " +
+            "isLibrary=$isLibraryAnime useBackground=${options.useBackground}"
+        debugTitleCoverFlow(
+            scope = "anime-fetcher",
+            message = debugMessage,
+        )
         if (useCustomCover) {
             val customCoverFile = customCoverFileLazy.value
             if (customCoverFile.exists()) {
+                debugTitleCoverFlow(scope = "anime-fetcher", message = "custom-cover-hit file=${customCoverFile.name}")
                 return fileLoader(customCoverFile)
             }
         }
@@ -111,6 +121,10 @@ class AnimeImageFetcher(
             null
         }
         if (libraryCoverCacheFile?.exists() == true && options.diskCachePolicy.readEnabled) {
+            debugTitleCoverFlow(
+                scope = "anime-fetcher",
+                message = "library-cache-hit file=${libraryCoverCacheFile.name}",
+            )
             return fileLoader(libraryCoverCacheFile)
         }
 
@@ -118,9 +132,14 @@ class AnimeImageFetcher(
         try {
             // Fetch from disk cache
             if (snapshot != null) {
+                debugTitleCoverFlow(scope = "anime-fetcher", message = "disk-cache-hit key=$diskCacheKey")
                 val snapshotCoverCache = moveSnapshotToCoverCache(snapshot, libraryCoverCacheFile)
                 if (snapshotCoverCache != null) {
                     // Read from cover cache after added to library
+                    debugTitleCoverFlow(
+                        scope = "anime-fetcher",
+                        message = "snapshot-moved-to-library-cache file=${snapshotCoverCache.name}",
+                    )
                     return fileLoader(snapshotCoverCache)
                 }
 
@@ -133,18 +152,30 @@ class AnimeImageFetcher(
             }
 
             // Fetch from network
+            debugTitleCoverFlow(
+                scope = "anime-fetcher",
+                message = "network-fetch url=${previewTitleCoverUrl(url)} key=$diskCacheKey",
+            )
             val response = executeNetworkRequest()
             val responseBody = checkNotNull(response.body) { "Null response source" }
             try {
                 // Read from cover cache after library manga cover updated
                 val responseCoverCache = writeResponseToCoverCache(response, libraryCoverCacheFile)
                 if (responseCoverCache != null) {
+                    debugTitleCoverFlow(
+                        scope = "anime-fetcher",
+                        message = "network-response-written-to-library-cache file=${responseCoverCache.name}",
+                    )
                     return fileLoader(responseCoverCache)
                 }
 
                 // Read from disk cache
                 snapshot = writeToDiskCache(response)
                 if (snapshot != null) {
+                    debugTitleCoverFlow(
+                        scope = "anime-fetcher",
+                        message = "network-response-written-to-disk-cache key=$diskCacheKey",
+                    )
                     return SourceFetchResult(
                         source = snapshot.toImageSource(),
                         mimeType = "image/*",

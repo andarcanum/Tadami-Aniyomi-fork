@@ -16,6 +16,8 @@ import eu.kanade.tachiyomi.source.novel.NovelImageRequestSource
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
+import eu.kanade.tachiyomi.util.debugTitleCoverFlow
+import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import logcat.LogPriority
 import okhttp3.CacheControl
 import okhttp3.Call
@@ -54,6 +56,12 @@ class NovelCoverFetcher(
     override suspend fun fetch(): FetchResult {
         val rawUrl = data.url?.takeIf { it.isNotBlank() }
             ?: throw IOException("No cover URL specified for novel ${data.novelId}")
+        debugTitleCoverFlow(
+            scope = "novel-fetcher",
+            message = "fetch url=${previewTitleCoverUrl(
+                rawUrl,
+            )} diskCacheKey=$diskCacheKey isLibrary=${data.isNovelFavorite}",
+        )
         return when (getResourceType(rawUrl)) {
             Type.URL -> httpLoader(rawUrl)
             Type.PLUGIN_IMAGE -> pluginImageLoader(rawUrl)
@@ -83,6 +91,7 @@ class NovelCoverFetcher(
     }
 
     private suspend fun pluginImageLoader(url: String): FetchResult {
+        debugTitleCoverFlow(scope = "novel-fetcher", message = "plugin-image-fetch url=${previewTitleCoverUrl(url)}")
         val resolved = pluginImageResolver(url)
             ?: throw IOException("Failed to resolve plugin image: $url")
         return SourceFetchResult(
@@ -114,14 +123,23 @@ class NovelCoverFetcher(
             null
         }
         if (libraryCoverCacheFile?.exists() == true && options.diskCachePolicy.readEnabled) {
+            debugTitleCoverFlow(
+                scope = "novel-fetcher",
+                message = "library-cache-hit file=${libraryCoverCacheFile.name}",
+            )
             return fileLoader(libraryCoverCacheFile)
         }
 
         var snapshot = readFromDiskCache()
         try {
             if (snapshot != null) {
+                debugTitleCoverFlow(scope = "novel-fetcher", message = "disk-cache-hit key=$diskCacheKey")
                 val snapshotCoverCache = moveSnapshotToCoverCache(snapshot, libraryCoverCacheFile)
                 if (snapshotCoverCache != null) {
+                    debugTitleCoverFlow(
+                        scope = "novel-fetcher",
+                        message = "snapshot-moved-to-library-cache file=${snapshotCoverCache.name}",
+                    )
                     return fileLoader(snapshotCoverCache)
                 }
 
@@ -132,16 +150,28 @@ class NovelCoverFetcher(
                 )
             }
 
+            debugTitleCoverFlow(
+                scope = "novel-fetcher",
+                message = "network-fetch url=${previewTitleCoverUrl(url)} key=$diskCacheKey",
+            )
             val response = executeNetworkRequest(url)
             val responseBody = checkNotNull(response.body) { "Null response source" }
             try {
                 val responseCoverCache = writeResponseToCoverCache(response, libraryCoverCacheFile)
                 if (responseCoverCache != null) {
+                    debugTitleCoverFlow(
+                        scope = "novel-fetcher",
+                        message = "network-response-written-to-library-cache file=${responseCoverCache.name}",
+                    )
                     return fileLoader(responseCoverCache)
                 }
 
                 snapshot = writeToDiskCache(response)
                 if (snapshot != null) {
+                    debugTitleCoverFlow(
+                        scope = "novel-fetcher",
+                        message = "network-response-written-to-disk-cache key=$diskCacheKey",
+                    )
                     return SourceFetchResult(
                         source = snapshot.toImageSource(),
                         mimeType = "image/*",

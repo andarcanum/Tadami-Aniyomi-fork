@@ -119,6 +119,8 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeSeasonItem
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
+import eu.kanade.tachiyomi.util.debugTitleCoverFlow
+import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -358,6 +360,24 @@ fun AnimeScreenAuroraImpl(
     }
     val refererUrl = remember(state.source) {
         (state.source as? HttpSource)?.baseUrl
+    }
+    LaunchedEffect(
+        anime.id,
+        state.isMetadataLoading,
+        state.metadataError,
+        resolvedCover.coverUrl,
+        resolvedCover.coverUrlFallback,
+    ) {
+        val debugMessage = "id=${anime.id} loading=${state.isMetadataLoading} " +
+            "error=${state.metadataError?.javaClass?.simpleName ?: "none"} " +
+            "base=${previewTitleCoverUrl(anime.thumbnailUrl)} " +
+            "resolved=${previewTitleCoverUrl(resolvedCover.coverUrl)} " +
+            "fallback=${previewTitleCoverUrl(resolvedCover.coverUrlFallback)} " +
+            "referer=${previewTitleCoverUrl(refererUrl)}"
+        debugTitleCoverFlow(
+            scope = "anime-screen",
+            message = debugMessage,
+        )
     }
 
     val lazyListState = rememberLazyListState()

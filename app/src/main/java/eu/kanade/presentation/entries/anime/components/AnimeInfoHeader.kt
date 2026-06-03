@@ -150,6 +150,7 @@ fun AnimeInfoBox(
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
                     .data(posterCover)
+                    .placeholderMemoryCacheKey(anime.thumbnailUrl)
                     .useBackground(true)
                     .crossfade(true)
                     .staticBlur(blurRadiusPx, intensityFactor = 0.6f)

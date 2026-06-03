@@ -12,6 +12,9 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
 import coil3.request.ImageRequest
+import eu.kanade.presentation.components.resolveAuroraCoverPlaceholderMemoryCacheKey
+import eu.kanade.tachiyomi.util.debugTitleCoverFlow
+import eu.kanade.tachiyomi.util.previewTitleCoverValue
 
 internal data class AuroraPosterBackgroundSpec(
     val memoryCacheKey: String,
@@ -33,14 +36,30 @@ internal fun buildAuroraPosterBackgroundRequest(
     spec: AuroraPosterBackgroundSpec,
     containerWidthPx: Int,
     containerHeightPx: Int,
+    placeholderData: Any? = null,
     configure: ImageRequest.Builder.() -> Unit = {},
 ): ImageRequest {
+    val placeholderKey = resolveAuroraPosterPlaceholderMemoryCacheKey(placeholderData)
+    debugTitleCoverFlow(
+        scope = "poster-request",
+        message = "build data=${previewTitleCoverValue(
+            data,
+        )} memoryKey=${spec.memoryCacheKey} placeholderKey=$placeholderKey size=${containerWidthPx}x$containerHeightPx",
+    )
     return ImageRequest.Builder(context)
         .data(data)
         .memoryCacheKey(spec.memoryCacheKey)
+        .placeholderMemoryCacheKey(placeholderKey)
         .size(containerWidthPx, containerHeightPx)
         .apply(configure)
         .build()
+}
+
+private fun resolveAuroraPosterPlaceholderMemoryCacheKey(placeholderData: Any?): String? {
+    return when (placeholderData) {
+        is AuroraPosterBackgroundSpec -> placeholderData.memoryCacheKey
+        else -> resolveAuroraCoverPlaceholderMemoryCacheKey(placeholderData)
+    }
 }
 
 @Composable

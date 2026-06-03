@@ -9,8 +9,11 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -19,8 +22,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImagePainter
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.entries.components.aurora.AuroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBlur
 import eu.kanade.presentation.entries.components.aurora.buildAuroraPosterBackgroundRequest
@@ -28,6 +33,9 @@ import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterBack
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.util.debugTitleCoverFlow
+import eu.kanade.tachiyomi.util.previewTitleCoverUrl
+import kotlinx.coroutines.flow.collectLatest
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.asAnimeCover
 
@@ -92,6 +100,19 @@ fun FullscreenPosterBackground(
     )
     val containerWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val containerHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
+    val placeholderPosterUrl = resolvedCoverUrlFallback?.takeIf { it.isNotBlank() } ?: anime.thumbnailUrl
+    val placeholderCover = remember(
+        anime.id,
+        anime.source,
+        anime.favorite,
+        anime.coverLastModified,
+        placeholderPosterUrl,
+    ) {
+        anime.asAnimeCover().copy(url = placeholderPosterUrl)
+    }
+    var previousSuccessfulBackgroundSpec by remember(anime.id) {
+        mutableStateOf<AuroraPosterBackgroundSpec?>(null)
+    }
 
     Box(
         modifier = modifier
@@ -126,6 +147,8 @@ fun FullscreenPosterBackground(
             }
             val backgroundRequest = remember(
                 posterCover,
+                placeholderCover,
+                previousSuccessfulBackgroundSpec?.memoryCacheKey,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
                 containerHeightPx,
@@ -136,12 +159,44 @@ fun FullscreenPosterBackground(
                     spec = backgroundSpec,
                     containerWidthPx = containerWidthPx,
                     containerHeightPx = containerHeightPx,
+                    placeholderData = previousSuccessfulBackgroundSpec
+                        ?.takeIf { it.memoryCacheKey != backgroundSpec.memoryCacheKey }
+                        ?: placeholderCover,
                 )
             }
             val backgroundPainter = rememberAuroraPosterBackgroundPainter(
                 request = backgroundRequest,
                 placeholderPainter = placeholderPainter,
             )
+            LaunchedEffect(
+                posterCover.url,
+                placeholderPosterUrl,
+                backgroundSpec.memoryCacheKey,
+                previousSuccessfulBackgroundSpec?.memoryCacheKey,
+            ) {
+                val fallbackKey = "anime;${anime.id};$placeholderPosterUrl;${anime.coverLastModified}"
+                val debugMessage = "request poster=${previewTitleCoverUrl(posterCover.url)} " +
+                    "placeholder=${previewTitleCoverUrl(placeholderPosterUrl)} " +
+                    "memoryKey=${backgroundSpec.memoryCacheKey} " +
+                    "placeholderKey=${previousSuccessfulBackgroundSpec?.memoryCacheKey ?: fallbackKey}"
+                debugTitleCoverFlow(
+                    scope = "anime-bg",
+                    message = debugMessage,
+                )
+            }
+            LaunchedEffect(backgroundPainter, backgroundSpec) {
+                backgroundPainter.state.collectLatest { state ->
+                    if (state is AsyncImagePainter.State.Success) {
+                        previousSuccessfulBackgroundSpec = backgroundSpec
+                    }
+                    debugTitleCoverFlow(
+                        scope = "anime-bg",
+                        message = "painterState=${state::class.simpleName} poster=${previewTitleCoverUrl(
+                            posterCover.url,
+                        )} memoryKey=${backgroundSpec.memoryCacheKey}",
+                    )
+                }
+            }
 
             Image(
                 painter = backgroundPainter,

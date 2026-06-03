@@ -106,6 +106,8 @@ import eu.kanade.tachiyomi.source.manga.getNameForMangaInfo
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreenModel
+import eu.kanade.tachiyomi.util.debugTitleCoverFlow
+import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -213,6 +215,24 @@ fun MangaScreenAuroraImpl(
     }
     val refererUrl = remember(state.source) {
         (state.source as? HttpSource)?.baseUrl
+    }
+    LaunchedEffect(
+        manga.id,
+        state.isMetadataLoading,
+        state.metadataError,
+        resolvedCover.coverUrl,
+        resolvedCover.coverUrlFallback,
+    ) {
+        val debugMessage = "id=${manga.id} loading=${state.isMetadataLoading} " +
+            "error=${state.metadataError?.javaClass?.simpleName ?: "none"} " +
+            "base=${previewTitleCoverUrl(manga.thumbnailUrl)} " +
+            "resolved=${previewTitleCoverUrl(resolvedCover.coverUrl)} " +
+            "fallback=${previewTitleCoverUrl(resolvedCover.coverUrlFallback)} " +
+            "referer=${previewTitleCoverUrl(refererUrl)}"
+        debugTitleCoverFlow(
+            scope = "manga-screen",
+            message = debugMessage,
+        )
     }
     val chapterModels = remember(chapters) {
         chapters.mapNotNull { (it as? ChapterList.Item)?.chapter }
