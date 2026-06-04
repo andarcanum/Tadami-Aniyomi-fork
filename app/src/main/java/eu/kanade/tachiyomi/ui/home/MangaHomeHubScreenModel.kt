@@ -1,9 +1,7 @@
 package eu.kanade.tachiyomi.ui.home
 
 import android.content.Context
-import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
@@ -24,88 +22,90 @@ import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.io.File
 
-class MangaHomeHubScreenModel(
+internal class MangaHomeHubScreenModel(
+    context: android.content.Context = Injekt.get<android.app.Application>(),
     private val getMangaHistory: GetMangaHistory = Injekt.get(),
     private val getMangaWithChapters: GetMangaWithChapters = Injekt.get(),
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
     private val getMangaCategories: GetMangaCategories = Injekt.get(),
-    private val userProfilePreferences: UserProfilePreferences = Injekt.get(),
+    userProfilePreferences: UserProfilePreferences = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: MangaSourceManager = Injekt.get(),
-) : StateScreenModel<MangaHomeHubScreenModel.State>(State()) {
+) : BaseHomeHubScreenModel(
+    context = context,
+    initialState = HomeHubUiState(
+        userName = userProfilePreferences.name().get(),
+        userAvatar = userProfilePreferences.avatarUrl().get(),
+        greeting = AYMR.strings.aurora_welcome_back,
+        greetingReady = false,
+        isLoading = true,
+        showWelcome = true,
+    ),
+    userProfilePreferences = userProfilePreferences,
+) {
 
-    private val fastCache = MangaHomeHubFastCache(Injekt.get<android.app.Application>())
+    override val avatarFileName: String = "user_avatar_manga.jpg"
+
+    private val fastCache = MangaHomeHubFastCache(context)
 
     @Volatile
     private var liveUpdatesStarted = false
 
-    data class State(
-        val hero: HeroData? = null,
-        val history: List<HistoryData> = emptyList(),
-        val recommendations: List<RecommendationData> = emptyList(),
-        val heroChapter: Chapter? = null,
-        val userName: String = "",
-        val userAvatar: String = "",
-        val greeting: StringResource = AYMR.strings.aurora_welcome_back,
-        val greetingReady: Boolean = false,
-        val isInitialized: Boolean = false,
-        val isLoading: Boolean = true,
-    ) {
-        val isEmpty: Boolean
-            get() = hero == null && history.isEmpty() && recommendations.isEmpty()
+    private var heroChapter: Chapter? = null
+    private var originalHeroChapterId: Long? = null
 
-        val showWelcome: Boolean
-            get() = !isInitialized && isEmpty && !isLoading
-
-        val showFilteredEmpty: Boolean
-            get() = isInitialized && isEmpty && !isLoading
+    override fun updateCacheUserName(name: String) {
+        fastCache.updateUserName(name)
     }
 
-    data class HeroData(
-        val mangaId: Long,
-        val title: String,
-        val chapterNumber: Double,
-        val coverData: MangaCover,
-        val chapterId: Long,
-    )
-
-    data class HistoryData(
-        val mangaId: Long,
-        val title: String,
-        val chapterNumber: Double,
-        val coverData: MangaCover,
-    )
-
-    data class RecommendationData(
-        val mangaId: Long,
-        val title: String,
-        val coverData: MangaCover,
-        val totalCount: Long,
-        val unreadCount: Long,
-    )
+    override fun updateCacheUserAvatar(path: String) {
+        fastCache.updateUserAvatar(path)
+    }
 
     init {
         val cached = fastCache.load()
-        mutableState.update {
-            it.copy(
-                hero = cached.hero?.toHeroData(),
-                history = cached.history.map { h -> h.toHistoryData() },
-                recommendations = cached.recommendations.map { r -> r.toRecommendationData() },
-                userName = cached.userName,
-                userAvatar = cached.userAvatar,
-                isInitialized = cached.isInitialized,
-                isLoading = false,
-            )
+        if (!cached.isEmpty || cached.isInitialized) {
+            originalHeroChapterId = cached.hero?.chapterId
+            mutableState.update {
+                it.copy(
+                    hero = cached.hero?.let { h ->
+                        HomeHubHero(
+                            entryId = h.mangaId,
+                            title = h.title,
+                            progressNumber = h.chapterNumber,
+                            coverData = MangaCover(h.mangaId, -1, true, h.coverUrl, h.coverLastModified),
+                        )
+                    },
+                    history = cached.history.map { h ->
+                        HomeHubHistory(
+                            entryId = h.mangaId,
+                            title = h.title,
+                            progressNumber = h.chapterNumber,
+                            coverData = MangaCover(h.mangaId, -1, true, h.coverUrl, h.coverLastModified),
+                            section = HomeHubSection.Manga,
+                        )
+                    },
+                    recommendations = cached.recommendations.map { r ->
+                        HomeHubRecommendation(
+                            entryId = r.mangaId,
+                            title = r.title,
+                            coverData = MangaCover(r.mangaId, -1, true, r.coverUrl, r.coverLastModified),
+                            section = HomeHubSection.Manga,
+                            progressNumerator = r.totalCount - r.unreadCount,
+                            progressDenominator = r.totalCount,
+                        )
+                    },
+                    userName = cached.userName,
+                    userAvatar = cached.userAvatar,
+                    isLoading = false,
+                    showWelcome = !cached.isInitialized && cached.isEmpty,
+                    showFilteredEmpty = cached.isInitialized && cached.isEmpty,
+                )
+            }
         }
 
-        screenModelScope.launchIO {
-            val greetingSelection = HomeGreetingSession.resolveGreeting(
-                userProfilePreferences = userProfilePreferences,
-            )
-            mutableState.update { it.copy(greeting = greetingSelection.greeting, greetingReady = true) }
-        }
+        initializeGreeting()
 
         cached.hero?.let { hero ->
             screenModelScope.launchIO {
@@ -156,33 +156,77 @@ class MangaHomeHubScreenModel(
                     .take(6)
 
                 val hasData = hero != null || history.isNotEmpty() || filteredManga.isNotEmpty()
-                if (hasData && !state.value.isInitialized) {
-                    fastCache.markInitialized()
-                }
-
-                val previousHero = mutableState.value.hero
+                val isInitialized = hasData ||
+                    (
+                        state.value.showFilteredEmpty ||
+                            (state.value.showWelcome.not() && state.value.isLoading.not())
+                        )
 
                 val mangaRecommendations = filteredManga
                     .sortedByDescending { it.manga.dateAdded }
                     .take(10)
 
+                val previousHero = state.value.hero
+                val previousHeroChapterId = originalHeroChapterId
+
+                originalHeroChapterId = hero?.chapterId
+
+                val isEmpty = hero == null && history.isEmpty() && mangaRecommendations.isEmpty()
+                val showWelcome = !isInitialized && isEmpty
+                val showFilteredEmpty = isInitialized && isEmpty
+
                 mutableState.update {
                     it.copy(
-                        hero = hero?.toHeroData(),
-                        history = history.map { h -> h.toHistoryData() },
-                        recommendations = mangaRecommendations.map { m -> m.toRecommendationData() },
+                        hero = hero?.let { h ->
+                            HomeHubHero(
+                                entryId = h.mangaId,
+                                title = h.title,
+                                progressNumber = h.chapterNumber,
+                                coverData = h.coverData,
+                            )
+                        },
+                        history = history.map { h ->
+                            HomeHubHistory(
+                                entryId = h.mangaId,
+                                title = h.title,
+                                progressNumber = h.chapterNumber,
+                                coverData = h.coverData,
+                                section = HomeHubSection.Manga,
+                            )
+                        },
+                        recommendations = mangaRecommendations.map { m ->
+                            HomeHubRecommendation(
+                                entryId = m.manga.id,
+                                title = m.manga.title,
+                                coverData = MangaCover(
+                                    mangaId = m.manga.id,
+                                    sourceId = m.manga.source,
+                                    isMangaFavorite = m.manga.favorite,
+                                    url = m.manga.thumbnailUrl,
+                                    lastModified = m.manga.coverLastModified,
+                                ),
+                                section = HomeHubSection.Manga,
+                                progressNumerator = m.totalChapters - m.unreadCount,
+                                progressDenominator = m.totalChapters,
+                            )
+                        },
                         userName = data.name,
                         userAvatar = data.avatar,
-                        isInitialized = hasData || it.isInitialized,
                         isLoading = false,
+                        showWelcome = showWelcome,
+                        showFilteredEmpty = showFilteredEmpty,
                     )
+                }
+
+                if (hasData && !fastCache.load().isInitialized) {
+                    fastCache.markInitialized()
                 }
 
                 if (
                     hero != null &&
                     shouldReloadMangaHomeHeroChapter(
-                        previousHeroMangaId = previousHero?.mangaId,
-                        previousHeroChapterId = previousHero?.chapterId,
+                        previousHeroMangaId = previousHero?.entryId,
+                        previousHeroChapterId = previousHeroChapterId,
                         currentHeroMangaId = hero.mangaId,
                         currentHeroChapterId = hero.chapterId,
                     )
@@ -197,56 +241,54 @@ class MangaHomeHubScreenModel(
 
     private suspend fun loadHeroChapter(mangaId: Long, chapterId: Long) {
         val chapters = getMangaWithChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
-        val heroChapter = resolveMangaResumeChapter(chapters, chapterId)
-        mutableState.update { it.copy(heroChapter = heroChapter) }
+        heroChapter = resolveMangaResumeChapter(chapters, chapterId)
     }
 
     fun readHeroChapter(context: Context) {
         val hero = state.value.hero ?: return
-        val chapter = state.value.heroChapter
-        val chapterId = chapter?.id ?: hero.chapterId
-        context.startActivity(ReaderActivity.newIntent(context, hero.mangaId, chapterId))
+        val chapterId = heroChapter?.id ?: originalHeroChapterId ?: return
+        context.startActivity(ReaderActivity.newIntent(context, hero.entryId, chapterId))
     }
 
     fun saveCache() {
         val currentState = state.value
         fastCache.save(
             CachedMangaHomeState(
-                hero = currentState.hero?.toCached(),
-                history = currentState.history.map { it.toCached() },
-                recommendations = currentState.recommendations.map { it.toCached() },
+                hero = currentState.hero?.let { hero ->
+                    CachedMangaHeroItem(
+                        mangaId = hero.entryId,
+                        title = hero.title,
+                        chapterNumber = hero.progressNumber,
+                        coverUrl = (hero.coverData as? MangaCover)?.url,
+                        coverLastModified = (hero.coverData as? MangaCover)?.lastModified ?: 0L,
+                        chapterId = originalHeroChapterId ?: 0L,
+                    )
+                },
+                history = currentState.history.map { h ->
+                    CachedMangaHistoryItem(
+                        mangaId = h.entryId,
+                        title = h.title,
+                        chapterNumber = h.progressNumber,
+                        coverUrl = (h.coverData as? MangaCover)?.url,
+                        coverLastModified = (h.coverData as? MangaCover)?.lastModified ?: 0L,
+                    )
+                },
+                recommendations = currentState.recommendations.map { r ->
+                    CachedMangaRecommendationItem(
+                        mangaId = r.entryId,
+                        title = r.title,
+                        coverUrl = (r.coverData as? MangaCover)?.url,
+                        coverLastModified = (r.coverData as? MangaCover)?.lastModified ?: 0L,
+                        totalCount = r.progressDenominator,
+                        unreadCount = r.progressDenominator - r.progressNumerator,
+                    )
+                },
                 userName = currentState.userName,
                 userAvatar = currentState.userAvatar,
-                isInitialized = currentState.isInitialized,
+                isInitialized =
+                currentState.showFilteredEmpty || (currentState.showWelcome.not() && currentState.isLoading.not()),
             ),
         )
-    }
-
-    fun updateUserName(name: String) {
-        val previousName = userProfilePreferences.name().get()
-        userProfilePreferences.name().set(name)
-        if (name != previousName) {
-            userProfilePreferences.nameEdited().set(true)
-        }
-        fastCache.updateUserName(name)
-        mutableState.update { it.copy(userName = name) }
-    }
-
-    fun updateUserAvatar(uriString: String) {
-        val context = Injekt.get<android.app.Application>()
-        try {
-            val uri = android.net.Uri.parse(uriString)
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return
-            val file = File(context.filesDir, "user_avatar_manga.jpg")
-            file.outputStream().use { output ->
-                inputStream.use { input -> input.copyTo(output) }
-            }
-            val path = file.absolutePath
-            userProfilePreferences.avatarUrl().set(path)
-            fastCache.updateUserAvatar(path)
-            mutableState.update { it.copy(userAvatar = path) }
-        } catch (_: Exception) {
-        }
     }
 
     fun getLastUsedMangaSourceId(): Long = sourcePreferences.lastUsedMangaSource().get()
@@ -263,78 +305,6 @@ class MangaHomeHubScreenModel(
         val categories: List<tachiyomi.domain.category.model.Category>,
         val historyList: List<MangaHistoryWithRelations>,
         val mangaList: List<LibraryManga>,
-    )
-
-    private fun CachedMangaHeroItem.toHeroData() = HeroData(
-        mangaId = mangaId,
-        title = title,
-        chapterNumber = chapterNumber,
-        coverData = MangaCover(mangaId, -1, true, coverUrl, coverLastModified),
-        chapterId = chapterId,
-    )
-
-    private fun CachedMangaHistoryItem.toHistoryData() = HistoryData(
-        mangaId = mangaId,
-        title = title,
-        chapterNumber = chapterNumber,
-        coverData = MangaCover(mangaId, -1, true, coverUrl, coverLastModified),
-    )
-
-    private fun CachedMangaRecommendationItem.toRecommendationData() = RecommendationData(
-        mangaId = mangaId,
-        title = title,
-        coverData = MangaCover(mangaId, -1, true, coverUrl, coverLastModified),
-        totalCount = totalCount,
-        unreadCount = unreadCount,
-    )
-
-    private fun MangaHistoryWithRelations.toHeroData() = HeroData(
-        mangaId = mangaId,
-        title = title,
-        chapterNumber = chapterNumber,
-        coverData = coverData,
-        chapterId = chapterId,
-    )
-
-    private fun MangaHistoryWithRelations.toHistoryData() = HistoryData(
-        mangaId = mangaId,
-        title = title,
-        chapterNumber = chapterNumber,
-        coverData = coverData,
-    )
-
-    private fun LibraryManga.toRecommendationData() = RecommendationData(
-        mangaId = manga.id,
-        title = manga.title,
-        coverData = MangaCover(manga.id, manga.source, manga.favorite, manga.thumbnailUrl, manga.coverLastModified),
-        totalCount = totalChapters,
-        unreadCount = unreadCount,
-    )
-
-    private fun HeroData.toCached() = CachedMangaHeroItem(
-        mangaId = mangaId,
-        title = title,
-        chapterNumber = chapterNumber,
-        coverUrl = coverData.url,
-        coverLastModified = coverData.lastModified,
-        chapterId = chapterId,
-    )
-
-    private fun HistoryData.toCached() = CachedMangaHistoryItem(
-        mangaId = mangaId,
-        title = title,
-        chapterNumber = chapterNumber,
-        coverUrl = coverData.url,
-        coverLastModified = coverData.lastModified,
-    )
-
-    private fun RecommendationData.toCached() = CachedMangaRecommendationItem(
-        mangaId = mangaId,
-        title = title,
-        coverUrl = coverData.url,
-        coverLastModified = coverData.lastModified,
-        totalCount = totalCount,
-        unreadCount = unreadCount,
     )
 
     companion object {

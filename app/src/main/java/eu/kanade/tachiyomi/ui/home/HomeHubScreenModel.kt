@@ -1,9 +1,7 @@
 package eu.kanade.tachiyomi.ui.home
 
 import android.content.Context
-import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.tachiyomi.ui.main.MainActivity
@@ -23,109 +21,110 @@ import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.io.File
 
-class HomeHubScreenModel(
+internal class HomeHubScreenModel(
+    context: android.content.Context = Injekt.get<android.app.Application>(),
     private val getAnimeHistory: GetAnimeHistory = Injekt.get(),
     private val getNextEpisodes: GetNextEpisodes = Injekt.get(),
     private val getLibraryAnime: GetLibraryAnime = Injekt.get(),
     private val getAnimeCategories: GetAnimeCategories = Injekt.get(),
-    private val userProfilePreferences: UserProfilePreferences = Injekt.get(),
+    userProfilePreferences: UserProfilePreferences = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val userProfileManager: tachiyomi.data.achievement.UserProfileManager = Injekt.get(),
     private val streakChecker: tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker = Injekt.get(),
     private val activityDataRepository: tachiyomi.domain.achievement.repository.ActivityDataRepository = Injekt.get(),
-) : StateScreenModel<HomeHubScreenModel.State>(State()) {
+) : BaseHomeHubScreenModel(
+    context = context,
+    initialState = HomeHubUiState(
+        userName = userProfilePreferences.name().get(),
+        userAvatar = userProfilePreferences.avatarUrl().get(),
+        greeting = AYMR.strings.aurora_welcome_back,
+        greetingReady = false,
+        isLoading = true,
+        showWelcome = true,
+    ),
+    userProfilePreferences = userProfilePreferences,
+) {
 
-    private val fastCache = HomeHubFastCache(Injekt.get<android.app.Application>())
+    override val avatarFileName: String = "user_avatar.jpg"
+
+    private val fastCache = HomeHubFastCache(context)
 
     @Volatile
     private var liveUpdatesStarted = false
 
-    data class State(
-        val hero: HeroData? = null,
-        val history: List<HistoryData> = emptyList(),
-        val recommendations: List<RecommendationData> = emptyList(),
-        val heroEpisode: Episode? = null,
-        val userName: String = "",
-        val userAvatar: String = "",
-        val greeting: StringResource = AYMR.strings.aurora_welcome_back,
-        val greetingReady: Boolean = false,
-        val isInitialized: Boolean = false,
-        val isLoading: Boolean = true,
-    ) {
-        val isEmpty: Boolean
-            get() = hero == null && history.isEmpty() && recommendations.isEmpty()
+    private var heroEpisode: Episode? = null
+    private var originalHeroEpisodeId: Long? = null
 
-        val showWelcome: Boolean
-            get() = !isInitialized && isEmpty && !isLoading
-
-        val showFilteredEmpty: Boolean
-            get() = isInitialized && isEmpty && !isLoading
+    override fun updateCacheUserName(name: String) {
+        fastCache.updateUserName(name)
     }
 
-    data class HeroData(
-        val animeId: Long,
-        val title: String,
-        val episodeNumber: Double,
-        val coverData: AnimeCover,
-        val episodeId: Long,
-    )
+    override fun updateCacheUserAvatar(path: String) {
+        fastCache.updateUserAvatar(path)
+    }
 
-    data class HistoryData(
-        val animeId: Long,
-        val title: String,
-        val episodeNumber: Double,
-        val coverData: AnimeCover,
-    )
+    override suspend fun loadGreetingStats(): HomeGreetingStats {
+        val profile = userProfileManager.getCurrentProfile()
+        val currentStreak = streakChecker.getCurrentStreak()
+        val monthStats = activityDataRepository.getCurrentMonthStats()
+        val libraryAnime = getLibraryAnime.await()
 
-    data class RecommendationData(
-        val animeId: Long,
-        val title: String,
-        val coverData: AnimeCover,
-        val totalCount: Long,
-        val seenCount: Long,
-    )
+        return HomeGreetingStats(
+            achievementCount = profile.achievementsUnlocked,
+            episodesWatched = monthStats.episodesWatched,
+            librarySize = libraryAnime.size,
+            currentStreak = currentStreak,
+        )
+    }
 
     init {
         val cached = fastCache.load()
-
-        // Собираем статистику для умного приветствия
-        screenModelScope.launchIO {
-            val profile = userProfileManager.getCurrentProfile()
-            val currentStreak = streakChecker.getCurrentStreak()
-            val monthStats = activityDataRepository.getCurrentMonthStats()
-            val libraryAnime = getLibraryAnime.await()
-
-            val achievementCount = profile.achievementsUnlocked
-            val episodesWatched = monthStats.episodesWatched
-            val librarySize = libraryAnime.size
-            val greetingSelection = HomeGreetingSession.resolveGreeting(
-                userProfilePreferences = userProfilePreferences,
-                stats = HomeGreetingStats(
-                    achievementCount = achievementCount,
-                    episodesWatched = episodesWatched,
-                    librarySize = librarySize,
-                    currentStreak = currentStreak,
-                ),
-            )
-
+        if (!cached.isEmpty || cached.isInitialized) {
+            originalHeroEpisodeId = cached.hero?.episodeId
             mutableState.update {
                 it.copy(
-                    hero = cached.hero?.toHeroData(),
-                    history = cached.history.map { h -> h.toHistoryData() },
-                    recommendations = cached.recommendations.map { r -> r.toRecommendationData() },
+                    hero = cached.hero?.let { h ->
+                        HomeHubHero(
+                            entryId = h.animeId,
+                            title = h.title,
+                            progressNumber = h.episodeNumber,
+                            coverData = AnimeCover(h.animeId, -1, true, h.coverUrl, h.coverLastModified),
+                        )
+                    },
+                    history = cached.history.map { h ->
+                        HomeHubHistory(
+                            entryId = h.animeId,
+                            title = h.title,
+                            progressNumber = h.episodeNumber,
+                            coverData = AnimeCover(h.animeId, -1, true, h.coverUrl, h.coverLastModified),
+                            section = HomeHubSection.Anime,
+                        )
+                    },
+                    recommendations = cached.recommendations.map { r ->
+                        HomeHubRecommendation(
+                            entryId = r.animeId,
+                            title = r.title,
+                            coverData = AnimeCover(r.animeId, -1, true, r.coverUrl, r.coverLastModified),
+                            section = HomeHubSection.Anime,
+                            progressNumerator = r.seenCount,
+                            progressDenominator = r.totalCount,
+                        )
+                    },
                     userName = cached.userName,
                     userAvatar = cached.userAvatar,
-                    greeting = greetingSelection.greeting,
-                    greetingReady = true,
-                    isInitialized = cached.isInitialized,
                     isLoading = false,
+                    showWelcome = !cached.isInitialized && cached.isEmpty,
+                    showFilteredEmpty = cached.isInitialized && cached.isEmpty,
                 )
             }
+        }
 
-            cached.hero?.let { hero ->
+        initializeGreeting()
+
+        cached.hero?.let { hero ->
+            screenModelScope.launchIO {
                 loadHeroEpisode(hero.animeId, hero.episodeId)
             }
         }
@@ -173,29 +172,72 @@ class HomeHubScreenModel(
                     .take(6)
 
                 val hasData = hero != null || history.isNotEmpty() || filteredAnime.isNotEmpty()
-                if (hasData && !state.value.isInitialized) {
-                    fastCache.markInitialized()
-                }
-
-                val previousHeroId = mutableState.value.hero?.animeId
+                val isInitialized = hasData || (
+                    state.value.showFilteredEmpty ||
+                        (state.value.showWelcome.not() && state.value.isLoading.not())
+                    )
 
                 val animeRecommendations = filteredAnime
                     .sortedByDescending { it.anime.dateAdded }
                     .take(10)
 
+                val previousHero = state.value.hero
+                val previousHeroEpisodeId = originalHeroEpisodeId
+
+                originalHeroEpisodeId = hero?.episodeId
+
+                val isEmpty = hero == null && history.isEmpty() && animeRecommendations.isEmpty()
+                val showWelcome = !isInitialized && isEmpty
+                val showFilteredEmpty = isInitialized && isEmpty
+
                 mutableState.update {
                     it.copy(
-                        hero = hero?.toHeroData(),
-                        history = history.map { h -> h.toHistoryData() },
-                        recommendations = animeRecommendations.map { a -> a.toRecommendationData() },
+                        hero = hero?.let { h ->
+                            HomeHubHero(
+                                entryId = h.animeId,
+                                title = h.title,
+                                progressNumber = h.episodeNumber,
+                                coverData = h.coverData,
+                            )
+                        },
+                        history = history.map { h ->
+                            HomeHubHistory(
+                                entryId = h.animeId,
+                                title = h.title,
+                                progressNumber = h.episodeNumber,
+                                coverData = h.coverData,
+                                section = HomeHubSection.Anime,
+                            )
+                        },
+                        recommendations = animeRecommendations.map { a ->
+                            HomeHubRecommendation(
+                                entryId = a.anime.id,
+                                title = a.anime.title,
+                                coverData = AnimeCover(
+                                    animeId = a.anime.id,
+                                    sourceId = a.anime.source,
+                                    isAnimeFavorite = a.anime.favorite,
+                                    url = a.anime.thumbnailUrl,
+                                    lastModified = a.anime.coverLastModified,
+                                ),
+                                section = HomeHubSection.Anime,
+                                progressNumerator = a.seenCount,
+                                progressDenominator = a.totalCount,
+                            )
+                        },
                         userName = data.name,
                         userAvatar = data.avatar,
-                        isInitialized = hasData || it.isInitialized,
                         isLoading = false,
+                        showWelcome = showWelcome,
+                        showFilteredEmpty = showFilteredEmpty,
                     )
                 }
 
-                if (hero != null && hero.animeId != previousHeroId) {
+                if (hasData && !fastCache.load().isInitialized) {
+                    fastCache.markInitialized()
+                }
+
+                if (hero != null && hero.animeId != previousHero?.entryId) {
                     loadHeroEpisode(hero.animeId, hero.episodeId)
                 }
 
@@ -206,58 +248,58 @@ class HomeHubScreenModel(
 
     private suspend fun loadHeroEpisode(animeId: Long, episodeId: Long) {
         val nextEpisodes = getNextEpisodes.await(animeId, episodeId, onlyUnseen = true)
-        val heroEp = nextEpisodes.firstOrNull()
+        heroEpisode = nextEpisodes.firstOrNull()
             ?: getNextEpisodes.await(animeId, episodeId, onlyUnseen = false).firstOrNull()
-        mutableState.update { it.copy(heroEpisode = heroEp) }
+    }
+
+    fun playHeroEpisode(context: Context) {
+        val hero = state.value.hero ?: return
+        val episodeId = heroEpisode?.id ?: originalHeroEpisodeId ?: return
+
+        screenModelScope.launchIO {
+            MainActivity.startPlayerActivity(context, hero.entryId, episodeId, false)
+        }
     }
 
     fun saveCache() {
         val currentState = state.value
         fastCache.save(
             CachedHomeState(
-                hero = currentState.hero?.toCached(),
-                history = currentState.history.map { it.toCached() },
-                recommendations = currentState.recommendations.map { it.toCached() },
+                hero = currentState.hero?.let { hero ->
+                    CachedHeroItem(
+                        animeId = hero.entryId,
+                        title = hero.title,
+                        episodeNumber = hero.progressNumber,
+                        coverUrl = (hero.coverData as? AnimeCover)?.url,
+                        coverLastModified = (hero.coverData as? AnimeCover)?.lastModified ?: 0L,
+                        episodeId = originalHeroEpisodeId ?: 0L,
+                    )
+                },
+                history = currentState.history.map { h ->
+                    CachedHistoryItem(
+                        animeId = h.entryId,
+                        title = h.title,
+                        episodeNumber = h.progressNumber,
+                        coverUrl = (h.coverData as? AnimeCover)?.url,
+                        coverLastModified = (h.coverData as? AnimeCover)?.lastModified ?: 0L,
+                    )
+                },
+                recommendations = currentState.recommendations.map { r ->
+                    CachedRecommendationItem(
+                        animeId = r.entryId,
+                        title = r.title,
+                        coverUrl = (r.coverData as? AnimeCover)?.url,
+                        coverLastModified = (r.coverData as? AnimeCover)?.lastModified ?: 0L,
+                        totalCount = r.progressDenominator,
+                        seenCount = r.progressNumerator,
+                    )
+                },
                 userName = currentState.userName,
                 userAvatar = currentState.userAvatar,
-                isInitialized = currentState.isInitialized,
+                isInitialized =
+                currentState.showFilteredEmpty || (currentState.showWelcome.not() && currentState.isLoading.not()),
             ),
         )
-    }
-
-    fun playHeroEpisode(context: Context) {
-        val hero = state.value.hero ?: return
-        val episode = state.value.heroEpisode ?: return
-
-        screenModelScope.launchIO {
-            MainActivity.startPlayerActivity(context, hero.animeId, episode.id, false)
-        }
-    }
-
-    fun updateUserName(name: String) {
-        val previousName = userProfilePreferences.name().get()
-        userProfilePreferences.name().set(name)
-        if (name != previousName) {
-            userProfilePreferences.nameEdited().set(true)
-        }
-        fastCache.updateUserName(name)
-        mutableState.update { it.copy(userName = name) }
-    }
-
-    fun updateUserAvatar(uriString: String) {
-        val context = Injekt.get<android.app.Application>()
-        try {
-            val uri = android.net.Uri.parse(uriString)
-            val inputStream = context.contentResolver.openInputStream(uri) ?: return
-            val file = File(context.filesDir, "user_avatar.jpg")
-            file.outputStream().use { output ->
-                inputStream.use { input -> input.copyTo(output) }
-            }
-            val path = file.absolutePath
-            userProfilePreferences.avatarUrl().set(path)
-            fastCache.updateUserAvatar(path)
-            mutableState.update { it.copy(userAvatar = path) }
-        } catch (_: Exception) { }
     }
 
     fun getLastUsedAnimeSourceId(): Long = sourcePreferences.lastUsedAnimeSource().get()
@@ -274,78 +316,6 @@ class HomeHubScreenModel(
         val categories: List<tachiyomi.domain.category.model.Category>,
         val historyList: List<AnimeHistoryWithRelations>,
         val animeList: List<LibraryAnime>,
-    )
-
-    private fun CachedHeroItem.toHeroData() = HeroData(
-        animeId = animeId,
-        title = title,
-        episodeNumber = episodeNumber,
-        coverData = AnimeCover(animeId, -1, true, coverUrl, coverLastModified),
-        episodeId = episodeId,
-    )
-
-    private fun CachedHistoryItem.toHistoryData() = HistoryData(
-        animeId = animeId,
-        title = title,
-        episodeNumber = episodeNumber,
-        coverData = AnimeCover(animeId, -1, true, coverUrl, coverLastModified),
-    )
-
-    private fun CachedRecommendationItem.toRecommendationData() = RecommendationData(
-        animeId = animeId,
-        title = title,
-        coverData = AnimeCover(animeId, -1, true, coverUrl, coverLastModified),
-        totalCount = totalCount,
-        seenCount = seenCount,
-    )
-
-    private fun AnimeHistoryWithRelations.toHeroData() = HeroData(
-        animeId = animeId,
-        title = title,
-        episodeNumber = episodeNumber,
-        coverData = coverData,
-        episodeId = episodeId,
-    )
-
-    private fun AnimeHistoryWithRelations.toHistoryData() = HistoryData(
-        animeId = animeId,
-        title = title,
-        episodeNumber = episodeNumber,
-        coverData = coverData,
-    )
-
-    private fun LibraryAnime.toRecommendationData() = RecommendationData(
-        animeId = anime.id,
-        title = anime.title,
-        coverData = AnimeCover(anime.id, -1, true, anime.thumbnailUrl, anime.coverLastModified),
-        totalCount = totalCount,
-        seenCount = seenCount,
-    )
-
-    private fun HeroData.toCached() = CachedHeroItem(
-        animeId = animeId,
-        title = title,
-        episodeNumber = episodeNumber,
-        coverUrl = coverData.url,
-        coverLastModified = coverData.lastModified,
-        episodeId = episodeId,
-    )
-
-    private fun HistoryData.toCached() = CachedHistoryItem(
-        animeId = animeId,
-        title = title,
-        episodeNumber = episodeNumber,
-        coverUrl = coverData.url,
-        coverLastModified = coverData.lastModified,
-    )
-
-    private fun RecommendationData.toCached() = CachedRecommendationItem(
-        animeId = animeId,
-        title = title,
-        coverUrl = coverData.url,
-        coverLastModified = coverData.lastModified,
-        totalCount = totalCount,
-        seenCount = seenCount,
     )
 
     companion object {
