@@ -1361,4 +1361,14 @@
     <string name="copied_to_clipboard">Copied to clipboard: %s</string>
     <string name="open_link">Open link</string>
     <string name="copy_address">Copy address</string>
+
+    <!-- Donation Options -->
+    <string name="donation_option_cloudtips_title">Support from RF / CIS</string>
+    <string name="donation_option_cloudtips_desc">CloudTips: transfer via SBP, T-Pay or bank card. Fast and simple voluntary transfer.</string>
+    <string name="donation_option_boosty_title">Boosty</string>
+    <string name="donation_option_boosty_desc">Popular platform for supporting creators. Suitable for one-time donations from RF/CIS and other countries.</string>
+    <string name="donation_option_crypto_usdt_tron_title">USDT Tron (TRC20)</string>
+    <string name="donation_option_crypto_usdt_tron_desc">Direct transfer of USDT stablecoin on the Tron network (TRC20).</string>
+    <string name="donation_option_crypto_usdt_ton_title">USDT (TON)</string>
+    <string name="donation_option_crypto_usdt_ton_desc">Direct transfer of USDT stablecoin on the TON network.</string>
 </resources>

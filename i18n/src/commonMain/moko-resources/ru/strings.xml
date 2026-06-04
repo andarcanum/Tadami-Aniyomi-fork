@@ -1223,4 +1223,14 @@
     <string name="copied_to_clipboard">Скопировано в буфер обмена: %s</string>
     <string name="open_link">Открыть ссылку</string>
     <string name="copy_address">Копировать адрес</string>
+
+    <!-- Donation Options -->
+    <string name="donation_option_cloudtips_title">Поддержать из РФ / СНГ</string>
+    <string name="donation_option_cloudtips_desc">CloudTips: перевод через СБП, T-Pay или банковскую карту. Быстрый и простой добровольный перевод.</string>
+    <string name="donation_option_boosty_title">Boosty</string>
+    <string name="donation_option_boosty_desc">Популярная платформа для поддержки создателей. Подходит для разовых донатов из РФ/СНГ и других стран.</string>
+    <string name="donation_option_crypto_usdt_tron_title">USDT Tron (TRC20)</string>
+    <string name="donation_option_crypto_usdt_tron_desc">Прямой перевод стейблкоина USDT в сети Tron (TRC20).</string>
+    <string name="donation_option_crypto_usdt_ton_title">USDT (TON)</string>
+    <string name="donation_option_crypto_usdt_ton_desc">Перевод стейблкоина USDT в сети TON.</string>
 </resources>

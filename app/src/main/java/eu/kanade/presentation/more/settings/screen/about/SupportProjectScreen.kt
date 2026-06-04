@@ -500,6 +500,22 @@ private fun DonationOptionCardContent(
         Color(0xFFF6F7F8)
     }
 
+    val title = when (option.id) {
+        "cloudtips" -> stringResource(MR.strings.donation_option_cloudtips_title)
+        "boosty" -> stringResource(MR.strings.donation_option_boosty_title)
+        "crypto_usdt_tron" -> stringResource(MR.strings.donation_option_crypto_usdt_tron_title)
+        "crypto_usdt" -> stringResource(MR.strings.donation_option_crypto_usdt_ton_title)
+        else -> option.title
+    }
+
+    val description = when (option.id) {
+        "cloudtips" -> stringResource(MR.strings.donation_option_cloudtips_desc)
+        "boosty" -> stringResource(MR.strings.donation_option_boosty_desc)
+        "crypto_usdt_tron" -> stringResource(MR.strings.donation_option_crypto_usdt_tron_desc)
+        "crypto_usdt" -> stringResource(MR.strings.donation_option_crypto_usdt_ton_desc)
+        else -> option.description
+    }
+
     Column(
         modifier = Modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -534,14 +550,14 @@ private fun DonationOptionCardContent(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = option.title,
+                    text = title,
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                     ),
                     color = auroraColors.textPrimary,
                 )
                 Text(
-                    text = option.description,
+                    text = description,
                     style = MaterialTheme.typography.bodyMedium.copy(
                         lineHeight = 18.sp,
                     ),
@@ -582,7 +598,7 @@ private fun DonationOptionCardContent(
             }
 
             TactileButton(
-                onClick = { context.copyToClipboard(option.title, option.value) },
+                onClick = { context.copyToClipboard(title, option.value) },
                 text = stringResource(MR.strings.copy_address),
                 icon = Icons.Outlined.ContentCopy,
                 brandColor = brandColor,
