@@ -1,10 +1,4 @@
 package eu.kanade.tachiyomi.ui.home
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,7 +42,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
@@ -80,6 +73,7 @@ import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
+import eu.kanade.tachiyomi.ui.home.components.AvatarFrameDecorations
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import kotlin.math.roundToInt
@@ -573,6 +567,7 @@ private fun HomeHubProfileHeaderCanvas(
                             StyledNicknameText(
                                 text = decoratedUserName,
                                 nicknameStyle = nicknameStyle,
+                                badgeStyleKey = homeBadgeStyleKey,
                             )
                         }
                         if (showNameEditHint) {
@@ -656,78 +651,43 @@ private fun HomeHubProfileHeaderCanvas(
                             }
                         }
 
-                        val avatarFrameBrush = remember(avatarFrameStyleKey, colors.accent) {
-                            when (avatarFrameStyleKey) {
-                                "neon" -> Brush.sweepGradient(
-                                    listOf(
-                                        Color(0xFF00E5FF),
-                                        colors.accent,
-                                        Color(0xFFFFD700),
-                                        Color(0xFF00E5FF),
-                                    ),
-                                )
-                                "hologram" -> Brush.sweepGradient(
-                                    listOf(
-                                        Color(0xFF74F9FF),
-                                        Color(0xFFA6FFE1),
-                                        Color(0xFFD7FF7A),
-                                        Color(0xFF74F9FF),
-                                    ),
-                                )
-                                "prismatic" -> Brush.sweepGradient(
-                                    listOf(
-                                        Color(0xFFFF4E9E),
-                                        Color(0xFFFF9A3C),
-                                        Color(0xFFFFF176),
-                                        Color(0xFF72F6C0),
-                                        Color(0xFF6CC6FF),
-                                        Color(0xFFB388FF),
-                                        Color(0xFFFF4E9E),
-                                    ),
-                                )
-                                else -> null
-                            }
-                        }
-
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
-                                .then(
-                                    if (avatarFrameBrush != null) {
-                                        Modifier
-                                            .border(
-                                                width = 2.dp,
-                                                brush = avatarFrameBrush,
-                                                shape = CircleShape,
-                                            )
-                                            .padding(2.dp)
-                                    } else {
-                                        Modifier
-                                    },
-                                )
                                 .clickable(onClick = onAvatarClick),
+                            contentAlignment = Alignment.Center,
                         ) {
                             AvatarFrameDecorations(
                                 styleKey = avatarFrameStyleKey,
                                 accentColor = colors.accent,
                             )
+                            val avatarModifier = Modifier
+                                .fillMaxSize()
+                                .then(
+                                    if (avatarFrameStyleKey != "none") {
+                                        Modifier.padding(2.dp)
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .clip(CircleShape)
+
                             if (userAvatar.isNotEmpty()) {
                                 AsyncImage(
                                     model = userAvatar,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape),
+                                    modifier = avatarModifier,
                                 )
                             } else {
                                 Icon(
                                     Icons.Filled.AccountCircle,
                                     null,
                                     tint = colors.accent,
-                                    modifier = Modifier.fillMaxSize(),
+                                    modifier = avatarModifier,
                                 )
                             }
+
                             if (userAvatar.isEmpty()) {
                                 Box(
                                     modifier = Modifier
@@ -746,198 +706,6 @@ private fun HomeHubProfileHeaderCanvas(
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AvatarFrameDecorations(
-    styleKey: String,
-    accentColor: Color,
-) {
-    if (styleKey == "none") return
-
-    val transition = rememberInfiniteTransition(label = "avatar_frame")
-    val spin by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(4200, easing = LinearEasing)),
-        label = "avatar_frame_spin",
-    )
-    val pulse by transition.animateFloat(
-        initialValue = 0.65f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "avatar_frame_pulse",
-    )
-    val scanline by transition.animateFloat(
-        initialValue = -1f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "avatar_frame_scanline",
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .clip(CircleShape),
-    ) {
-        when (styleKey) {
-            "neon" -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .border(
-                            width = 1.dp,
-                            color = accentColor.copy(alpha = 0.45f + (0.25f * pulse)),
-                            shape = CircleShape,
-                        ),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(3.dp)
-                        .border(
-                            width = 1.dp,
-                            color = Color.White.copy(alpha = 0.18f + (0.12f * pulse)),
-                            shape = CircleShape,
-                        ),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { rotationZ = spin * 0.8f },
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .offset(y = (-1).dp)
-                            .size(8.dp)
-                            .background(Color.White.copy(alpha = 0.88f), CircleShape),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .offset(x = 1.dp)
-                            .size(5.dp)
-                            .background(accentColor.copy(alpha = 0.8f), CircleShape),
-                    )
-                }
-            }
-            "hologram" -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .border(
-                            width = 1.dp,
-                            color = Color(0xFF9AE7FF).copy(alpha = 0.55f),
-                            shape = CircleShape,
-                        ),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(CircleShape),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .offset(y = (scanline * 11f).dp)
-                            .background(
-                                Brush.horizontalGradient(
-                                    listOf(
-                                        Color.Transparent,
-                                        Color.White.copy(alpha = 0.05f + (0.18f * pulse)),
-                                        Color.Transparent,
-                                    ),
-                                ),
-                            ),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .graphicsLayer { rotationZ = spin * -0.3f },
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.CenterStart)
-                                .offset(x = (-1).dp)
-                                .size(7.dp, 2.dp)
-                                .background(
-                                    Color(0xFFA6FFE1).copy(alpha = 0.85f),
-                                    RoundedCornerShape(999.dp),
-                                ),
-                        )
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .offset(x = 1.dp, y = 1.dp)
-                                .size(6.dp, 2.dp)
-                                .background(
-                                    Color(0xFF74F9FF).copy(alpha = 0.7f),
-                                    RoundedCornerShape(999.dp),
-                                ),
-                        )
-                    }
-                }
-            }
-            "prismatic" -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.sweepGradient(
-                                listOf(
-                                    Color(0xFFFF4E9E),
-                                    Color(0xFFFF9A3C),
-                                    Color(0xFFFFF176),
-                                    Color(0xFF72F6C0),
-                                    Color(0xFF6CC6FF),
-                                    Color(0xFFB388FF),
-                                    Color(0xFFFF4E9E),
-                                ),
-                            ),
-                            shape = CircleShape,
-                        ),
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(3.dp)
-                        .graphicsLayer { rotationZ = spin },
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .offset(y = (-1).dp)
-                            .size(8.dp)
-                            .background(Color.White.copy(alpha = 0.9f), CircleShape),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .offset(x = 1.dp)
-                            .size(5.dp)
-                            .background(Color(0xFFFF9A3C).copy(alpha = 0.85f), CircleShape),
-                    )
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .offset(y = 1.dp)
-                            .size(6.dp)
-                            .background(Color(0xFF72F6C0).copy(alpha = 0.85f), CircleShape),
-                    )
                 }
             }
         }
@@ -1106,12 +874,7 @@ private fun decorateHomeHubNicknameWithBadge(
     nickname: String,
     badgeStyleKey: String,
 ): String {
-    return when (badgeStyleKey) {
-        "orbit" -> "◌ $nickname ◌"
-        "crown" -> "⌈✦⌋ $nickname ⌈✦⌋"
-        "shuriken" -> "✣ $nickname ✣"
-        else -> nickname
-    }
+    return nickname
 }
 
 @Composable

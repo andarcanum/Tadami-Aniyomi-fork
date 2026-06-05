@@ -225,9 +225,9 @@ class UnlockableManager(
             "avatar_frame_prismatic" -> "Призматическая рамка аватара"
 
             // Home presets
-            "home_badge_orbit" -> "Бейдж Home Hub «Orbit»"
-            "home_badge_crown" -> "Бейдж Home Hub «Crown»"
-            "home_badge_shuriken" -> "Бейдж Home Hub «Shuriken»"
+            "home_badge_orbit" -> "Эффект Home Hub «Orbit»"
+            "home_badge_crown" -> "Эффект Home Hub «Crown»"
+            "home_badge_shuriken" -> "Эффект Home Hub «Shuriken»"
 
             // Special visual rewards
             "special_background_petal_storm" -> "Фон «Лепестковый шторм»"

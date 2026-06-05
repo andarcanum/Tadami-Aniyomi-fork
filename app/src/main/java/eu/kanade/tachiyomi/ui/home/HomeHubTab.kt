@@ -76,6 +76,9 @@ import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.util.Tab
+import eu.kanade.tachiyomi.ui.home.components.AnimatedNicknameOverlay
+import eu.kanade.tachiyomi.ui.home.components.NicknameBadgeDecorator
+import eu.kanade.tachiyomi.ui.home.components.isTreasury
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.launch
 import tachiyomi.domain.achievement.model.DayActivity
@@ -1119,9 +1122,9 @@ private fun applyNicknameEffect(text: String, effect: NicknameEffectPreset): Str
         NicknameEffectPreset.Cloud -> "☁ $text ☁"
         NicknameEffectPreset.Ribbon -> "୨୧ $text ୨୧"
         NicknameEffectPreset.Sakura -> "❀ $text ❀"
-        NicknameEffectPreset.AuroraCrown -> "⌈✦⌋ $text ⌈✦⌋"
-        NicknameEffectPreset.GlitchRune -> "⟦▓⟧ $text ⟦▓⟧"
-        NicknameEffectPreset.Cipher -> "⟨∆⟩ $text ⟨∆⟩"
+        NicknameEffectPreset.AuroraCrown -> text
+        NicknameEffectPreset.GlitchRune -> text
+        NicknameEffectPreset.Cipher -> text
     }
 }
 
@@ -1181,6 +1184,9 @@ private fun nicknameEffectPickerPresets(): List<NicknameEffectPreset> {
         NicknameEffectPreset.Cloud,
         NicknameEffectPreset.Ribbon,
         NicknameEffectPreset.Sakura,
+        NicknameEffectPreset.AuroraCrown,
+        NicknameEffectPreset.GlitchRune,
+        NicknameEffectPreset.Cipher,
     )
 }
 
@@ -1201,70 +1207,97 @@ internal fun StyledNicknameText(
     text: String,
     nicknameStyle: NicknameStyle,
     modifier: Modifier = Modifier,
+    badgeStyleKey: String = "none",
 ) {
-    val colors = AuroraTheme.colors
-    val displayText = applyNicknameEffect(text, nicknameStyle.effect)
-    val textColor = resolveNicknameColor(nicknameStyle.color, nicknameStyle.customColorHex, colors)
-    val outlineColor = if (textColor.luminance() > 0.5f) {
-        Color.Black.copy(alpha = 0.85f)
-    } else {
-        Color.White.copy(alpha = 0.8f)
-    }
-    val outlineOffset = nicknameStyle.outlineWidth.coerceIn(1, 8).dp
-    val fontFamily = nicknameStyle.font.fontRes?.let { FontFamily(Font(it)) }
-    val baseStyle = MaterialTheme.typography.headlineSmall.copy(
-        fontFamily = fontFamily,
-        fontWeight = FontWeight.Black,
-        fontSize = nicknameStyle.fontSize.coerceIn(14, 36).sp,
-        lineHeight = (nicknameStyle.fontSize.coerceIn(14, 36) + 2).sp,
-    )
-    val shadow = if (nicknameStyle.glow) {
-        Shadow(
-            color = if (colors.isDark) {
-                textColor.copy(alpha = 0.85f)
+    NicknameBadgeDecorator(
+        badgeStyleKey = badgeStyleKey,
+        modifier = modifier,
+    ) {
+        if (nicknameStyle.effect.isTreasury()) {
+            AnimatedNicknameOverlay(
+                text = text,
+                nicknameStyle = nicknameStyle,
+            )
+        } else {
+            val colors = AuroraTheme.colors
+            val displayText = applyNicknameEffect(text, nicknameStyle.effect)
+            val textColor = resolveNicknameColor(nicknameStyle.color, nicknameStyle.customColorHex, colors)
+            val outlineColor = if (textColor.luminance() > 0.5f) {
+                Color.Black.copy(alpha = 0.85f)
             } else {
-                if (textColor.luminance() > 0.6f) {
-                    colors.accent.copy(alpha = 0.45f)
-                } else {
-                    textColor.copy(alpha = 0.55f)
-                }
-            },
-            blurRadius = if (colors.isDark) 20f else 12f,
-        )
-    } else {
-        null
-    }
+                Color.White.copy(alpha = 0.8f)
+            }
+            val outlineOffset = nicknameStyle.outlineWidth.coerceIn(1, 8).dp
+            val fontFamily = nicknameStyle.font.fontRes?.let { FontFamily(Font(it)) }
+            val baseStyle = MaterialTheme.typography.headlineSmall.copy(
+                fontFamily = fontFamily,
+                fontWeight = FontWeight.Black,
+                fontSize = nicknameStyle.fontSize.coerceIn(14, 36).sp,
+                lineHeight = (nicknameStyle.fontSize.coerceIn(14, 36) + 2).sp,
+            )
+            val shadow = if (nicknameStyle.glow) {
+                Shadow(
+                    color = if (colors.isDark) {
+                        textColor.copy(alpha = 0.85f)
+                    } else {
+                        if (textColor.luminance() > 0.6f) {
+                            colors.accent.copy(alpha = 0.45f)
+                        } else {
+                            textColor.copy(alpha = 0.55f)
+                        }
+                    },
+                    blurRadius = if (colors.isDark) 20f else 12f,
+                )
+            } else {
+                null
+            }
 
-    Box(modifier = modifier) {
-        if (nicknameStyle.outline) {
-            listOf(
-                -outlineOffset to 0.dp,
-                outlineOffset to 0.dp,
-                0.dp to -outlineOffset,
-                0.dp to outlineOffset,
-                -outlineOffset to -outlineOffset,
-                -outlineOffset to outlineOffset,
-                outlineOffset to -outlineOffset,
-                outlineOffset to outlineOffset,
-            ).forEach { (x, y) ->
+            Box {
+                if (nicknameStyle.outline) {
+                    listOf(
+                        -outlineOffset to 0.dp,
+                        outlineOffset to 0.dp,
+                        0.dp to -outlineOffset,
+                        0.dp to outlineOffset,
+                        -outlineOffset to -outlineOffset,
+                        -outlineOffset to outlineOffset,
+                        outlineOffset to -outlineOffset,
+                        outlineOffset to outlineOffset,
+                    ).forEach { (x, y) ->
+                        Text(
+                            text = displayText,
+                            modifier = Modifier.offset(x = x, y = y),
+                            style = baseStyle.copy(color = outlineColor),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                val textStyle = if (badgeStyleKey == "crown") {
+                    baseStyle.copy(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFFFFEFA7), // Bright golden sheen
+                                Color(0xFFD4AF37), // Metallic gold
+                                Color(0xFF8A640F), // Bronze-gold shadow
+                            ),
+                        ),
+                        shadow = shadow,
+                    )
+                } else {
+                    baseStyle.copy(
+                        color = textColor,
+                        shadow = shadow,
+                    )
+                }
                 Text(
                     text = displayText,
-                    modifier = Modifier.offset(x = x, y = y),
-                    style = baseStyle.copy(color = outlineColor),
+                    style = textStyle,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
         }
-        Text(
-            text = displayText,
-            style = baseStyle.copy(
-                color = textColor,
-                shadow = shadow,
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
 
@@ -1360,10 +1393,12 @@ private fun NameDialog(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .heightIn(min = 80.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(AuroraTheme.colors.glass)
                         .border(1.dp, AuroraTheme.colors.divider, RoundedCornerShape(12.dp))
                         .padding(horizontal = 12.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     StyledNicknameText(
                         text = text.trim().ifEmpty { currentName },

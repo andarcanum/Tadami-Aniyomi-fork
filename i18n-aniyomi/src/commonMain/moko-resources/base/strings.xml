@@ -1855,9 +1855,9 @@
     <string name="treasury_reward_neon_frame_description">Animated neon frame with an electric sweep around the avatar.</string>
     <string name="treasury_reward_hologram_frame_description">Holographic avatar frame with a soft scanline shimmer.</string>
     <string name="treasury_reward_prismatic_frame_description">Prismatic avatar frame with a shifting spectrum glow.</string>
-    <string name="treasury_reward_orbit_badge_description">Orbit badge that wraps the Home Hub nickname.</string>
-    <string name="treasury_reward_crown_badge_description">Crown badge for a more regal Home Hub header.</string>
-    <string name="treasury_reward_shuriken_badge_description">Sharp-edged badge with an arcade-like profile vibe.</string>
+    <string name="treasury_reward_orbit_badge_description">Orbit effect that wraps the Home Hub nickname.</string>
+    <string name="treasury_reward_crown_badge_description">Crown effect for a more regal Home Hub header.</string>
+    <string name="treasury_reward_shuriken_badge_description">Sharp-edged effect with an arcade-like profile vibe.</string>
     <string name="treasury_reward_petal_storm_background_description">Animated sakura petals drifting across the Aurora background.</string>
     <string name="treasury_reward_neon_orbit_background_description">Neon orbital rings and particles that replace the default ambient bloom.</string>
     <string name="treasury_visual_effects">Visual effects</string>

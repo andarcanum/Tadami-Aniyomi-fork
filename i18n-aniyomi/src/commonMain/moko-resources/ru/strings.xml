@@ -2105,9 +2105,9 @@
     <string name="treasury_reward_neon_frame_description">Анимированная неоновая рамка с электрическим свечением вокруг аватара.</string>
     <string name="treasury_reward_hologram_frame_description">Голографическая рамка аватара с мягким сканлайновым мерцанием.</string>
     <string name="treasury_reward_prismatic_frame_description">Призматическая рамка аватара с переливающимся спектральным светом.</string>
-    <string name="treasury_reward_orbit_badge_description">Бейдж Orbit, обрамляющий никнейм в шапке Home Hub.</string>
-    <string name="treasury_reward_crown_badge_description">Бейдж Crown для более королевской шапки Home Hub.</string>
-    <string name="treasury_reward_shuriken_badge_description">Острый бейдж с аркадным характером для профиля Home Hub.</string>
+    <string name="treasury_reward_orbit_badge_description">Эффект Orbit, обрамляющий никнейм в шапке Home Hub.</string>
+    <string name="treasury_reward_crown_badge_description">Эффект Crown для более королевской шапки Home Hub.</string>
+    <string name="treasury_reward_shuriken_badge_description">Эффект Shuriken с аркадным характером для профиля Home Hub.</string>
     <string name="treasury_reward_petal_storm_background_description">Анимированный фон с лепестками сакуры, который скользит по Aurora.</string>
     <string name="treasury_reward_neon_orbit_background_description">Неоновые орбитальные кольца и частицы, заменяющие стандартное свечение фона.</string>
     <string name="treasury_visual_effects">Визуальные эффекты</string>
