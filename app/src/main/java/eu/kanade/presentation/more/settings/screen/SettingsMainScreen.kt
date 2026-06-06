@@ -44,18 +44,18 @@ import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
 import eu.kanade.presentation.more.resolveAuroraMoreCardContainerColor
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
+import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_VERTICAL_PADDING
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.settingsSelectionBackgroundColor
 import eu.kanade.presentation.more.settings.settingsSelectionBorderColor
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
-import eu.kanade.presentation.theme.AuroraSurfaceLevel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
-import eu.kanade.presentation.theme.resolveAuroraElevation
 import eu.kanade.presentation.util.LocalBackPress
 import eu.kanade.presentation.util.Screen
 import kotlinx.collections.immutable.persistentListOf
@@ -226,11 +226,12 @@ private fun AuroraMainSettingsItem(
         },
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = AURORA_SETTINGS_CARD_VERTICAL_PADDING)
+            .auroraCardStyle(colors, AURORA_SETTINGS_CARD_SHAPE),
         shape = AURORA_SETTINGS_CARD_SHAPE,
         colors = CardDefaults.cardColors(
             containerColor = if (!colors.isDark && !colors.isEInk) {
-                Color.White
+                Color.Transparent
             } else {
                 resolveAuroraMoreCardContainerColor(colors)
             },
@@ -244,11 +245,7 @@ private fun AuroraMainSettingsItem(
             null
         },
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (!colors.isDark && !colors.isEInk) {
-                resolveAuroraElevation(colors, AuroraSurfaceLevel.Glass)
-            } else {
-                0.dp
-            },
+            defaultElevation = 0.dp,
         ),
     ) {
         Row(

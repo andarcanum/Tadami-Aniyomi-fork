@@ -65,6 +65,7 @@ import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.SettingsAuroraBackground
 import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsAdvancedScreen
@@ -75,7 +76,6 @@ import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsPlayerSc
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsSubtitleScreen
 import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutMainScreen
 import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutScreen
-import eu.kanade.presentation.more.settings.settingsCardContainerColor
 import eu.kanade.presentation.more.settings.settingsSubtitleColor
 import eu.kanade.presentation.more.settings.settingsTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
@@ -163,8 +163,12 @@ class SettingsSearchScreen(
                                             state = textFieldState,
                                             modifier = Modifier
                                                 .fillMaxWidth()
+                                                .auroraCardStyle(
+                                                    colors = auroraColors,
+                                                    shape = AURORA_SETTINGS_CARD_SHAPE,
+                                                    applyModifierBackgroundInDark = true,
+                                                )
                                                 .clip(AURORA_SETTINGS_CARD_SHAPE)
-                                                .background(settingsCardContainerColor())
                                                 .padding(horizontal = 16.dp, vertical = 10.dp)
                                                 .focusRequester(focusRequester)
                                                 .runOnEnterKeyPressed(action = focusManager::clearFocus),
@@ -395,8 +399,12 @@ private fun SearchResult(
                                                 horizontal = AURORA_SETTINGS_CARD_HORIZONTAL_INSET,
                                                 vertical = 6.dp,
                                             )
+                                            .auroraCardStyle(
+                                                colors = AuroraTheme.colors,
+                                                shape = AURORA_SETTINGS_CARD_SHAPE,
+                                                applyModifierBackgroundInDark = true,
+                                            )
                                             .clip(AURORA_SETTINGS_CARD_SHAPE)
-                                            .background(settingsCardContainerColor())
                                     } else {
                                         Modifier
                                     },

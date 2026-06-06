@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,15 +38,15 @@ import eu.kanade.presentation.more.auroraPrimaryMenuTitleTextStyle
 import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
 import eu.kanade.presentation.more.resolveAuroraMoreCardContainerColor
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
+import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_VERTICAL_PADDING
 import eu.kanade.presentation.more.settings.LocalPreferenceHighlighted
 import eu.kanade.presentation.more.settings.LocalPreferenceMinHeight
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.SettingsUiStyle
+import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.more.settings.settingsTitleColor
-import eu.kanade.presentation.theme.AuroraSurfaceLevel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
-import eu.kanade.presentation.theme.resolveAuroraElevation
 import kotlinx.coroutines.delay
 import tachiyomi.presentation.core.util.LocalAppHaptics
 import kotlin.time.Duration.Companion.seconds
@@ -67,11 +68,12 @@ internal fun AuroraSettingsCard(
         enabled = onClick != null,
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = AURORA_SETTINGS_CARD_VERTICAL_PADDING)
+            .auroraCardStyle(colors, AURORA_SETTINGS_CARD_SHAPE),
         shape = AURORA_SETTINGS_CARD_SHAPE,
         colors = CardDefaults.cardColors(
             containerColor = if (!colors.isDark && !colors.isEInk) {
-                Color.White
+                Color.Transparent
             } else {
                 resolveAuroraMoreCardContainerColor(colors)
             },
@@ -85,14 +87,12 @@ internal fun AuroraSettingsCard(
             null
         },
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (!colors.isDark && !colors.isEInk) {
-                resolveAuroraElevation(colors, AuroraSurfaceLevel.Glass)
-            } else {
-                0.dp
-            },
+            defaultElevation = 0.dp,
         ),
     ) {
-        content()
+        Box(modifier = Modifier.clip(AURORA_SETTINGS_CARD_SHAPE)) {
+            content()
+        }
     }
 }
 

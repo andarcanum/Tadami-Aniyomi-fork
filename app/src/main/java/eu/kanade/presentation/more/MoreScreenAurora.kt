@@ -52,10 +52,9 @@ import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
 import eu.kanade.presentation.more.resolveAuroraMoreSwitchColors
 import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
-import eu.kanade.presentation.theme.AuroraSurfaceLevel
+import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
-import eu.kanade.presentation.theme.resolveAuroraElevation
 import eu.kanade.tachiyomi.ui.more.DownloadQueueState
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -256,11 +255,12 @@ fun AuroraSettingItem(
         },
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET),
+            .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
+            .auroraCardStyle(colors, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (!colors.isDark && !colors.isEInk) {
-                Color.White
+                Color.Transparent
             } else {
                 resolveAuroraMoreCardContainerColor(colors)
             },
@@ -274,11 +274,7 @@ fun AuroraSettingItem(
             null
         },
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (!colors.isDark && !colors.isEInk) {
-                resolveAuroraElevation(colors, AuroraSurfaceLevel.Glass)
-            } else {
-                0.dp
-            },
+            defaultElevation = 0.dp,
         ),
     ) {
         Row(
@@ -331,11 +327,12 @@ fun AuroraToggleItem(
         },
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET),
+            .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
+            .auroraCardStyle(colors, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (!colors.isDark && !colors.isEInk) {
-                Color.White
+                Color.Transparent
             } else {
                 resolveAuroraMoreCardContainerColor(colors)
             },
@@ -349,11 +346,7 @@ fun AuroraToggleItem(
             null
         },
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (!colors.isDark && !colors.isEInk) {
-                resolveAuroraElevation(colors, AuroraSurfaceLevel.Glass)
-            } else {
-                0.dp
-            },
+            defaultElevation = 0.dp,
         ),
     ) {
         Row(

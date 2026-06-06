@@ -13,7 +13,7 @@ import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 internal const val AURORA_MORE_DARK_CARD_ALPHA = 0.05f
 internal const val AURORA_MORE_DARK_SWITCH_TRACK_ALPHA = 0.4f
 internal const val AURORA_MORE_LIGHT_SWITCH_TRACK_ALPHA = 0.24f
-internal val AURORA_MORE_CARD_VERTICAL_INSET = 4.dp
+internal val AURORA_MORE_CARD_VERTICAL_INSET = 6.dp
 
 internal fun resolveAuroraMoreCardContainerColor(colors: AuroraColors): Color {
     return when {
