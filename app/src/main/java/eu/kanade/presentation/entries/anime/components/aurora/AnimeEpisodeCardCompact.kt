@@ -1,10 +1,10 @@
 package eu.kanade.presentation.entries.anime.components.aurora
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -50,9 +49,7 @@ import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.entries.anime.components.EpisodeDownloadIndicator
 import eu.kanade.presentation.entries.anime.components.isLikelyEpisodeDescription
 import eu.kanade.presentation.entries.components.ItemCover
-import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
-import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
-import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.entries.components.aurora.AuroraCompactEntryRowCard
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
@@ -86,14 +83,6 @@ fun AnimeEpisodeCardCompact(
 ) {
     val colors = AuroraTheme.colors
     val episode = item.episode
-    val cardAlpha = if (episode.seen) AURORA_DIMMED_ITEM_ALPHA else 1f
-    val cardTint = if (selected) {
-        colors.accent.copy(alpha = 0.16f)
-    } else if (isNew && !episode.seen) {
-        colors.accent.copy(alpha = AURORA_NEW_ITEM_HIGHLIGHT_ALPHA)
-    } else {
-        null
-    }
     val startSwipeAction = auroraAnimeSwipeAction(
         action = episodeSwipeStartAction,
         seen = episode.seen,
@@ -114,23 +103,19 @@ fun AnimeEpisodeCardCompact(
     )
 
     val episodeCard: @Composable () -> Unit = {
-        GlassmorphismCard(
-            modifier = modifier.alpha(cardAlpha),
-            cornerRadius = 16.dp,
-            verticalPadding = 4.dp,
-            innerPadding = 12.dp,
-            overlayColor = cardTint,
+        AuroraCompactEntryRowCard(
+            modifier = modifier,
+            selected = selected,
+            highlighted = isNew && !episode.seen,
+            dimmed = episode.seen,
+            cornerRadius = 20.dp,
+            outerVerticalPadding = 6.dp,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            onClick = onClick,
+            onLongClick = onLongClick,
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent)
-                    .combinedClickable(
-                        onClick = onClick,
-                        onLongClick = onLongClick,
-                    )
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(

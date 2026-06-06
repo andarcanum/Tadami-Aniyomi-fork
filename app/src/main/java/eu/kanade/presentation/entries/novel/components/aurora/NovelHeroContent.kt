@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.entries.components.aurora.AuroraNotePreviewCard
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
+import eu.kanade.presentation.entries.components.aurora.auroraCoverHeroCardStyle
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipBorderColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipContainerColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroChipTextColor
@@ -47,7 +48,6 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroPanelCo
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
 import eu.kanade.presentation.entries.manga.components.aurora.MangaStatusFormatter
 import eu.kanade.presentation.entries.translation.AuroraEntryTranslationState
-import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
 import tachiyomi.domain.entries.novel.model.Novel
@@ -110,7 +110,7 @@ fun NovelHeroContent(
                             .padding(horizontal = 12.dp, vertical = 14.dp)
                     } else {
                         Modifier
-                            .auroraCardStyle(
+                            .auroraCoverHeroCardStyle(
                                 colors = colors,
                                 shape = heroPanelShape,
                                 cornerRadius = 24.dp,

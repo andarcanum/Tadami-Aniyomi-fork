@@ -607,7 +607,7 @@ fun MangaScreenAuroraImpl(
                                             onDownloadChapter = onDownloadChapter,
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
                                         )
                                     }
                                 }
@@ -884,7 +884,7 @@ fun MangaScreenAuroraImpl(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
                                 )
                             }
                         }

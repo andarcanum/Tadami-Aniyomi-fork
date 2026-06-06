@@ -1,18 +1,16 @@
 package eu.kanade.presentation.entries.novel.components.aurora
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -24,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -33,9 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.relativeDateTimeText
-import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
-import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
-import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.entries.components.aurora.AuroraCompactEntryRowCard
 import eu.kanade.presentation.entries.novel.components.NovelChapterActionButton
 import eu.kanade.presentation.entries.novel.novelChapterDateText
 import eu.kanade.presentation.entries.novel.novelSwipeAction
@@ -82,12 +77,6 @@ object NovelChapterCardCompactUi {
     ) {
         val colors = AuroraTheme.colors
         val chapterDisplayNumber = displayNumber?.toDouble() ?: chapter.chapterNumber
-        val cardAlpha = if (chapter.read) AURORA_DIMMED_ITEM_ALPHA else 1f
-        val cardTint = if (isNew && !chapter.read) {
-            colors.accent.copy(alpha = AURORA_NEW_ITEM_HIGHLIGHT_ALPHA)
-        } else {
-            null
-        }
         val title = titleOverride ?: when (novel.displayMode) {
             Novel.CHAPTER_DISPLAY_NUMBER -> stringResource(
                 MR.strings.display_mode_chapter,
@@ -99,23 +88,19 @@ object NovelChapterCardCompactUi {
         }
 
         val chapterCard: @Composable () -> Unit = {
-            GlassmorphismCard(
-                modifier = modifier.alpha(cardAlpha),
-                cornerRadius = 16.dp,
-                verticalPadding = 2.dp,
-                innerPadding = 8.dp,
-                overlayColor = cardTint,
+            AuroraCompactEntryRowCard(
+                modifier = modifier,
+                selected = selected,
+                highlighted = isNew && !chapter.read,
+                dimmed = chapter.read,
+                cornerRadius = 20.dp,
+                outerVerticalPadding = 5.dp,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                onClick = onClick,
+                onLongClick = onLongClick,
             ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent)
-                        .combinedClickable(
-                            onClick = onClick,
-                            onLongClick = onLongClick,
-                        )
-                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {

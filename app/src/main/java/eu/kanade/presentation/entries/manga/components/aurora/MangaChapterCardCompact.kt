@@ -1,10 +1,10 @@
 package eu.kanade.presentation.entries.manga.components.aurora
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +28,6 @@ import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
@@ -39,8 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.entries.components.DotSeparatorText
-import eu.kanade.presentation.entries.components.aurora.AURORA_DIMMED_ITEM_ALPHA
-import eu.kanade.presentation.entries.components.aurora.AURORA_NEW_ITEM_HIGHLIGHT_ALPHA
+import eu.kanade.presentation.entries.components.aurora.AuroraCompactEntryRowCard
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadAction
 import eu.kanade.presentation.entries.manga.components.ChapterDownloadIndicator
 import eu.kanade.presentation.theme.AuroraTheme
@@ -71,12 +69,6 @@ fun MangaChapterCardCompact(
 ) {
     val colors = AuroraTheme.colors
     val chapter = item.chapter
-    val cardAlpha = if (chapter.read) AURORA_DIMMED_ITEM_ALPHA else 1f
-    val cardTint = if (isNew && !chapter.read) {
-        colors.accent.copy(alpha = AURORA_NEW_ITEM_HIGHLIGHT_ALPHA)
-    } else {
-        null
-    }
     val scanlator = chapter.scanlator?.trim()?.takeIf(String::isNotEmpty)
     val startSwipeAction = auroraMangaSwipeAction(
         action = chapterSwipeStartAction,
@@ -96,23 +88,19 @@ fun MangaChapterCardCompact(
     )
 
     val chapterCard: @Composable () -> Unit = {
-        GlassmorphismCard(
-            modifier = modifier.alpha(cardAlpha),
-            cornerRadius = 16.dp,
-            verticalPadding = 4.dp,
-            innerPadding = 12.dp,
-            overlayColor = cardTint,
+        AuroraCompactEntryRowCard(
+            modifier = modifier,
+            selected = selected,
+            highlighted = isNew && !chapter.read,
+            dimmed = chapter.read,
+            cornerRadius = 20.dp,
+            outerVerticalPadding = 6.dp,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            onClick = { onChapterClicked(chapter) },
+            onLongClick = onLongClick,
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (selected) colors.accent.copy(alpha = 0.16f) else Color.Transparent)
-                    .combinedClickable(
-                        onClick = { onChapterClicked(chapter) },
-                        onLongClick = onLongClick,
-                    )
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
