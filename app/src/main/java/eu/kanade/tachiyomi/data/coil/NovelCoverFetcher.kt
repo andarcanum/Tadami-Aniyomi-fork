@@ -90,8 +90,11 @@ class NovelCoverFetcher(
     }
 
     private fun uniFileLoader(urlString: String): FetchResult {
-        val uniFile = UniFile.fromUri(options.context, urlString.toUri())!!
-        val tempFile = uniFile.openInputStream().source().buffer()
+        val uniFile = UniFile.fromUri(options.context, urlString.toUri())
+            ?: throw IOException("Unable to resolve image uri: $urlString")
+        val inputStream = uniFile.openInputStream()
+            ?: throw IOException("Unable to open image uri: $urlString")
+        val tempFile = inputStream.source().buffer()
         return SourceFetchResult(
             source = ImageSource(source = tempFile, fileSystem = FileSystem.SYSTEM),
             mimeType = "image/*",
@@ -340,7 +343,10 @@ class NovelCoverFetcher(
                 sourceSiteUrlLazy = lazy { (sourceManager.get(data.sourceId) as? NovelSiteSource)?.siteUrl },
                 coverFileLazy = lazy { coverCache.getCoverFile(data.url).takeIf { data.isNovelFavorite } },
                 customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.novelId) },
-                diskCacheKeyLazy = lazy { imageLoader.components.key(data, options)!! },
+                diskCacheKeyLazy = lazy {
+                    imageLoader.components.key(data, options)
+                        ?: "novel-cover:${data.novelId}:${data.url.orEmpty()}"
+                },
                 pluginHeadersProvider = {
                     (sourceManager.get(data.sourceId) as? NovelImageRequestSource)
                         ?.getImageRequestHeaders()

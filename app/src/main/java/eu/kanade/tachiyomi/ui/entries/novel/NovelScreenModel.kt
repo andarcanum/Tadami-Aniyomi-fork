@@ -71,6 +71,7 @@ import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
+import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
@@ -1588,7 +1589,33 @@ class NovelScreenModel(
         page: Int,
         manualFetch: Boolean,
     ): Boolean {
-        return false
+        if (!state.chapterPageEnabled) return false
+
+        val nominalSize = state.chapterPageNominalSize.takeIf { it > 0 }
+            ?: state.chapterPageVisibleUrls.size.takeIf { it > 0 }
+            ?: return false
+        val sortedChapters = state.chapters.sortedWith(Comparator(getNovelChapterSort(state.novel)))
+        if (sortedChapters.isEmpty()) return false
+
+        val totalPages = ((sortedChapters.size + nominalSize - 1) / nominalSize).coerceAtLeast(1)
+        val targetPage = page.coerceIn(1, totalPages)
+        val visibleUrls = sortedChapters
+            .drop((targetPage - 1) * nominalSize)
+            .take(nominalSize)
+            .mapTo(mutableSetOf()) { it.url }
+
+        updateSuccessState { current ->
+            if (current.novel.id != state.novel.id) return@updateSuccessState current
+            current.copy(
+                chapterPageCurrent = targetPage,
+                chapterPageTotal = totalPages,
+                chapterPageLoading = false,
+                chapterPageEstimatedTotal = sortedChapters.size,
+                chapterPageNominalSize = nominalSize,
+                chapterPageVisibleUrls = visibleUrls,
+            )
+        }
+        return true
     }
 
     private fun NovelSource.isJaomixPagedSource(): Boolean {
@@ -2509,10 +2536,11 @@ class NovelScreenModel(
                     return@launchIO
                 }
 
+                val translationCacheRequirements = readerSettings.toTranslationCacheRequirements()
                 val alreadyTranslatedChapterIds = resolvedChapterIds.filterTo(mutableSetOf()) { chapterId ->
                     NovelReaderTranslationDiskCacheStore.has(
                         chapterId = chapterId,
-                        targetLang = readerSettings.geminiTargetLang,
+                        requirements = translationCacheRequirements,
                     )
                 }
                 val filteredSelection = filterTranslationBatchChapterIds(

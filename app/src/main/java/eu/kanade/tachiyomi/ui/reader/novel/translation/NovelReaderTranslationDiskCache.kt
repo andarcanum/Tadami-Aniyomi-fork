@@ -136,21 +136,24 @@ internal class NovelReaderTranslationDiskCache(
     }
 
     private fun rebuildIndex() {
-        index.clear()
-        if (!directory.exists()) return
-        directory.listFiles()?.filter { it.isFile && it.extension == "json" }?.forEach { file ->
-            val chapterId = file.nameWithoutExtension.toLongOrNull() ?: return@forEach
-            // Placeholder: targetLang is set to empty to trigger lazy load on demand
-            index[chapterId] = IndexEntry(
-                targetLang = "",
-                provider = NovelTranslationProvider.GEMINI,
-                model = "",
-                sourceLang = "",
-                promptMode = GeminiPromptMode.CLASSIC,
-                stylePreset = NovelTranslationStylePreset.PROFESSIONAL,
-                hasTranslatedContent = true,
-            )
+        val rebuilt = linkedMapOf<Long, IndexEntry>()
+        if (directory.exists()) {
+            directory.listFiles()?.filter { it.isFile && it.extension == "json" }?.forEach { file ->
+                val chapterId = file.nameWithoutExtension.toLongOrNull() ?: return@forEach
+                // Placeholder: targetLang is set to empty to trigger lazy load on demand.
+                rebuilt[chapterId] = IndexEntry(
+                    targetLang = "",
+                    provider = NovelTranslationProvider.GEMINI,
+                    model = "",
+                    sourceLang = "",
+                    promptMode = GeminiPromptMode.CLASSIC,
+                    stylePreset = NovelTranslationStylePreset.PROFESSIONAL,
+                    hasTranslatedContent = true,
+                )
+            }
         }
+        index.clear()
+        index.putAll(rebuilt)
     }
 
     private fun readEntryDiskModel(chapterId: Long): GeminiTranslationCacheDiskModel? {

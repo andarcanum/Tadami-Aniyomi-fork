@@ -447,7 +447,7 @@ class NovelReaderScreenModel(
     private var selectedTextTranslationJob: Job? = null
     private val selectedTextTranslationSessionCache = NovelSelectedTextTranslationSessionCache()
     private val progressPersistenceMutex = Mutex()
-    private var pendingProgressPersistence: PendingProgressPersistence? = null
+    private val pendingProgressPersistenceByChapterId = linkedMapOf<Long, PendingProgressPersistence>()
     private var progressPersistenceJob: Job? = null
 
     @Volatile
@@ -854,7 +854,7 @@ class NovelReaderScreenModel(
         val decodedPageReaderProgress = decodePageReaderProgress(chapter.lastPageRead)
         val lastSavedIndex = when {
             decodedNativeProgress != null -> decodedNativeProgress.index
-            decodedPageReaderProgress != null -> 0
+            decodedPageReaderProgress != null -> decodedPageReaderProgress.index
             decodedWebProgressPercent != null -> 0
             else -> chapter.lastPageRead.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         }
@@ -964,7 +964,9 @@ class NovelReaderScreenModel(
             novel = novel,
             chapter = chapter,
             html = displayContent,
-            enableJs = !pluginJs.isNullOrBlank() || settings.selectedTextTranslationEnabled,
+            enableJs = !pluginJs.isNullOrBlank() ||
+                settings.selectedTextTranslationEnabled ||
+                settings.customJS.isNotBlank(),
             readerSettings = settings,
             contentBlocks = displayContentBlocks,
             richContentBlocks = displayRichBlocks,
@@ -1641,7 +1643,8 @@ class NovelReaderScreenModel(
         progressPersistenceScheduled = true
         screenModelScope.launch(NonCancellable) {
             progressPersistenceMutex.withLock {
-                pendingProgressPersistence = pendingProgressPersistence?.merge(update) ?: update
+                pendingProgressPersistenceByChapterId[update.chapterId] =
+                    pendingProgressPersistenceByChapterId[update.chapterId]?.merge(update) ?: update
                 if (progressPersistenceJob?.isActive == true) {
                     return@launch
                 }
@@ -1651,7 +1654,7 @@ class NovelReaderScreenModel(
                     } finally {
                         progressPersistenceMutex.withLock {
                             progressPersistenceJob = null
-                            progressPersistenceScheduled = pendingProgressPersistence != null
+                            progressPersistenceScheduled = pendingProgressPersistenceByChapterId.isNotEmpty()
                         }
                     }
                 }
@@ -1690,8 +1693,10 @@ class NovelReaderScreenModel(
     private suspend fun flushPendingProgressPersistence() {
         while (true) {
             val nextUpdate = progressPersistenceMutex.withLock {
-                val next = pendingProgressPersistence ?: return
-                pendingProgressPersistence = null
+                val iterator = pendingProgressPersistenceByChapterId.entries.iterator()
+                if (!iterator.hasNext()) return
+                val next = iterator.next().value
+                iterator.remove()
                 next
             }
 
@@ -1907,7 +1912,7 @@ class NovelReaderScreenModel(
             val decodedPageReaderProgress = decodePageReaderProgress(progress)
             val lastSavedIndex = when {
                 decodedNativeProgress != null -> decodedNativeProgress.index
-                decodedPageReaderProgress != null -> 0
+                decodedPageReaderProgress != null -> decodedPageReaderProgress.index
                 decodedWebProgressPercent != null -> currentState.lastSavedIndex
                 else -> progress.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
             }
@@ -1960,6 +1965,8 @@ class NovelReaderScreenModel(
         googleTranslationJob?.cancel()
         selectedTextTranslationJob?.cancel()
         progressPersistenceJob?.cancel()
+        pendingProgressPersistenceByChapterId.clear()
+        progressPersistenceScheduled = false
         ttsWordProgressJob?.cancel()
         clearChapterTransientState()
         ttsAudioFocusManager.abandonPlaybackFocus()
@@ -2916,11 +2923,9 @@ class NovelReaderScreenModel(
                         updateContent(settings)
                     },
                 )
-                val results = baseTextBlocks.mapIndexedNotNull { index, text ->
-                    response.translatedByText[text]?.takeIf { it.isNotBlank() }?.let { translated ->
-                        index to translated
-                    }
-                }.toMap()
+                val results = response.translatedByIndex
+                    .filterKeys { index -> index in baseTextBlocks.indices }
+                    .filterValues { translated -> translated.isNotBlank() }
                 addGoogleLog(
                     "Finished: translatedSegments=${results.values.count {
                         it.isNotBlank()

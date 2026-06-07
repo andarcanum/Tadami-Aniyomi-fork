@@ -6,6 +6,6 @@ data class GoogleTranslationParams(
 )
 
 data class GoogleTranslationBatchResponse(
-    val translatedByText: Map<String, String>,
+    val translatedByIndex: Map<Int, String>,
     val detectedSourceLanguage: String? = null,
 )

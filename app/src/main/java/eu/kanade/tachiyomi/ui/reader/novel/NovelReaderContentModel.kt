@@ -52,12 +52,13 @@ class NovelReaderContentModel(
     ): String {
         val css = customCss
         val js = customJs
-        if (cachedNormalizedHtml != null &&
+        val cached = cachedNormalizedHtml
+        if (cached != null &&
             lastSettings == settings &&
             lastCustomCss == css &&
             lastCustomJs == js
         ) {
-            return cachedNormalizedHtml!!
+            return cached
         }
         val result = normalizeHtml(canonicalHtml, settings, css, js)
         cachedNormalizedHtml = result

@@ -58,7 +58,7 @@ fun rememberBrowseNovelTitleTranslation(
                     sourceLang = "auto",
                     targetLang = targetLanguage,
                 ),
-            ).translatedByText[title]
+            ).translatedByIndex[0]
                 ?.takeIf { it.isNotBlank() }
         } catch (error: CancellationException) {
             throw error

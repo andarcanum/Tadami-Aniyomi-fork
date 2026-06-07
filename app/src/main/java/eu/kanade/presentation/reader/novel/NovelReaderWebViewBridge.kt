@@ -253,10 +253,10 @@ internal fun WebView.resolveCurrentWebViewProgressPercent(
 internal fun WebView.restoreWebViewScroll(
     progressPercent: Int,
     maxAttempts: Int = 14,
-    onComplete: (() -> Unit)? = null,
+    onComplete: ((restored: Boolean) -> Unit)? = null,
 ) {
     if (progressPercent <= 0) {
-        onComplete?.invoke()
+        onComplete?.invoke(true)
         return
     }
 
@@ -269,11 +269,12 @@ internal fun WebView.restoreWebViewScroll(
             postDelayed({ attemptRestore(attempt + 1) }, 42L)
             return
         }
-        if (totalScrollable > 0) {
+        val restored = totalScrollable > 0
+        if (restored) {
             val targetY = ((progressPercent.toFloat() / 100f) * totalScrollable.toFloat()).roundToInt()
             scrollTo(0, targetY.coerceIn(0, totalScrollable))
         }
-        onComplete?.invoke()
+        onComplete?.invoke(restored)
     }
 
     post { attemptRestore(0) }

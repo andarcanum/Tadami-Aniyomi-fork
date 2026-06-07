@@ -81,7 +81,7 @@ fun rememberAuroraEntryTranslation(
                     sourceLang = "auto",
                     targetLang = targetLanguage,
                 ),
-            ).translatedByText
+            ).translatedByIndex
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
@@ -93,11 +93,11 @@ fun rememberAuroraEntryTranslation(
             return@produceState
         }
 
-        val translatedTitle = translatedTexts[title]
+        val translatedTitle = translatedTexts[0]
             ?.takeIf { it.isNotBlank() }
             ?: title
         val translatedDescription = description?.let { originalDescription ->
-            translatedTexts[originalDescription]
+            translatedTexts[1]
                 ?.takeIf { it.isNotBlank() }
                 ?: originalDescription
         }

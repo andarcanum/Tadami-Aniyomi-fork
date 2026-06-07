@@ -47,9 +47,9 @@ internal fun NovelPageTurnSnapshotRenderer(
         mutableStateOf(snapshotCache[snapshotKey])
     }
 
-    if (bitmap != null) {
+    bitmap?.let { cachedBitmap ->
         Image(
-            bitmap = bitmap!!,
+            bitmap = cachedBitmap,
             contentDescription = null,
             modifier = modifier.fillMaxSize(),
             contentScale = ContentScale.FillBounds,
