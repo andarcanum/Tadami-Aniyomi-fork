@@ -206,7 +206,7 @@ class NovelReaderScreen(
                     }
                 }
                 NovelReaderScreen(
-                    state = successState,
+                    rawState = successState,
                     showReaderUi = showReaderUi,
                     onSetShowReaderUi = { showReaderUi = it },
                     onOpenBottomSheet = screenModel::loadFullChapterOrderList,

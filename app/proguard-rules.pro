@@ -180,3 +180,25 @@
 -keep class eu.kanade.presentation.browse.local.SecretHallOfFameScreen { *; }
 -keep class eu.kanade.presentation.browse.local.SecretHallSceneConfig { *; }
 -keep class eu.kanade.presentation.browse.SecretHallGate { *; }
+
+# Novel reader release stability
+# Reader settings and source overrides are persisted and may be restored through
+# preference/serialization layers. Keep these models/enums non-optimized so R8
+# cannot enum-unbox/merge/specialize them in a way that changes nullable runtime
+# behavior in release builds.
+-keep class eu.kanade.tachiyomi.ui.reader.novel.setting.** { *; }
+-keepclassmembers enum eu.kanade.tachiyomi.ui.reader.novel.setting.** {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+# The novel reader screen contains Compose state machines for page reader,
+# page-curl renderer, WebView, TTS, translations, and chapter handoff. Keep it
+# non-optimized in release to avoid R8 lambda/enum switch specialization around
+# nullable preference-derived enum values.
+-keep class eu.kanade.presentation.reader.novel.NovelReaderScreenKt { *; }
+-keep class eu.kanade.presentation.reader.novel.NovelReaderScreenKt$* { *; }
+-keep class eu.kanade.presentation.reader.novel.PageTurnPageRendererKt { *; }
+-keep class eu.kanade.presentation.reader.novel.PageTurnPageRendererKt$* { *; }
+-keep class eu.kanade.presentation.reader.novel.NovelReaderSystemUiPolicyKt { *; }
+-keep class eu.kanade.presentation.reader.novel.NovelReaderSystemUiPolicyKt$* { *; }

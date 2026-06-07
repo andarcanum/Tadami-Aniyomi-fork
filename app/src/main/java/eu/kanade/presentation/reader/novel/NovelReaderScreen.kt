@@ -229,7 +229,7 @@ fun createNovelReaderWebView(context: Context): WebView {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NovelReaderScreen(
-    state: NovelReaderScreenModel.State.Success,
+    rawState: NovelReaderScreenModel.State.Success,
     onBack: () -> Unit,
     onReadingProgress: (currentIndex: Int, totalItems: Int, persistedProgress: Long?) -> Unit,
     onToggleBookmark: () -> Unit = {},
@@ -319,32 +319,28 @@ fun NovelReaderScreen(
     onRetrySelectedTextTranslation: () -> Unit = onTranslateSelectedText,
     onDismissSelectedTextTranslation: () -> Unit = {},
 ) {
-    val sanitizedSettings = remember(state.readerSettings) {
-        state.readerSettings.copy(
-            theme = safeEnum(state.readerSettings.theme, NovelReaderTheme.SYSTEM),
-            appearanceMode = safeEnum(state.readerSettings.appearanceMode, NovelReaderAppearanceMode.THEME),
-            backgroundSource = safeEnum(state.readerSettings.backgroundSource, NovelReaderBackgroundSource.PRESET),
-            backgroundTexture = safeEnum(state.readerSettings.backgroundTexture, NovelReaderBackgroundTexture.NONE),
-            textAlign = safeEnum(state.readerSettings.textAlign, TextAlign.SOURCE),
-            pageTransitionStyle = safeEnum(state.readerSettings.pageTransitionStyle, NovelPageTransitionStyle.SLIDE),
-            bookFlipAnimationSpeed = safeEnum(state.readerSettings.bookFlipAnimationSpeed, NovelBookFlipAnimationSpeed.SLOW),
-            pageTurnSpeed = safeEnum(state.readerSettings.pageTurnSpeed, NovelPageTurnSpeed.NORMAL),
-            pageTurnIntensity = safeEnum(state.readerSettings.pageTurnIntensity, NovelPageTurnIntensity.MEDIUM),
-            pageTurnShadowIntensity = safeEnum(state.readerSettings.pageTurnShadowIntensity, NovelPageTurnShadowIntensity.MEDIUM),
-            pageTurnActivationZone = safeEnum(state.readerSettings.pageTurnActivationZone, NovelPageTurnActivationZone.WIDE),
-            translationProvider = safeEnum(state.readerSettings.translationProvider, NovelTranslationProvider.GEMINI),
-            geminiPromptMode = safeEnum(state.readerSettings.geminiPromptMode, GeminiPromptMode.ADULT_18),
-            geminiStylePreset = safeEnum(state.readerSettings.geminiStylePreset, NovelTranslationStylePreset.PROFESSIONAL),
-            ttsHighlightMode = safeEnum(state.readerSettings.ttsHighlightMode, NovelTtsHighlightMode.AUTO),
+    val sanitizedSettings = remember(rawState.readerSettings) {
+        rawState.readerSettings.copy(
+            theme = safeEnum(rawState.readerSettings.theme, NovelReaderTheme.SYSTEM),
+            appearanceMode = safeEnum(rawState.readerSettings.appearanceMode, NovelReaderAppearanceMode.THEME),
+            backgroundSource = safeEnum(rawState.readerSettings.backgroundSource, NovelReaderBackgroundSource.PRESET),
+            backgroundTexture = safeEnum(rawState.readerSettings.backgroundTexture, NovelReaderBackgroundTexture.NONE),
+            textAlign = safeEnum(rawState.readerSettings.textAlign, TextAlign.SOURCE),
+            pageTransitionStyle = safeEnum(rawState.readerSettings.pageTransitionStyle, NovelPageTransitionStyle.SLIDE),
+            bookFlipAnimationSpeed = safeEnum(rawState.readerSettings.bookFlipAnimationSpeed, NovelBookFlipAnimationSpeed.SLOW),
+            pageTurnSpeed = safeEnum(rawState.readerSettings.pageTurnSpeed, NovelPageTurnSpeed.NORMAL),
+            pageTurnIntensity = safeEnum(rawState.readerSettings.pageTurnIntensity, NovelPageTurnIntensity.MEDIUM),
+            pageTurnShadowIntensity = safeEnum(rawState.readerSettings.pageTurnShadowIntensity, NovelPageTurnShadowIntensity.MEDIUM),
+            pageTurnActivationZone = safeEnum(rawState.readerSettings.pageTurnActivationZone, NovelPageTurnActivationZone.WIDE),
+            translationProvider = safeEnum(rawState.readerSettings.translationProvider, NovelTranslationProvider.GEMINI),
+            geminiPromptMode = safeEnum(rawState.readerSettings.geminiPromptMode, GeminiPromptMode.ADULT_18),
+            geminiStylePreset = safeEnum(rawState.readerSettings.geminiStylePreset, NovelTranslationStylePreset.PROFESSIONAL),
+            ttsHighlightMode = safeEnum(rawState.readerSettings.ttsHighlightMode, NovelTtsHighlightMode.AUTO),
         )
     }
-    val state = remember(state, sanitizedSettings) {
-        state.copy(readerSettings = sanitizedSettings)
+    val state = remember(rawState, sanitizedSettings) {
+        rawState.copy(readerSettings = sanitizedSettings)
     }
-    if (System.currentTimeMillis() == 0L) {
-        preventR8Optimization()
-    }
-
     // Sub-object selectors: derivedStateOf prevents recomposition of translation/gemini
     // panels when unrelated state (scroll progress) changes.
     val readerSettings by remember(state) { derivedStateOf { state.readerSettings } }
@@ -565,17 +561,18 @@ fun NovelReaderScreen(
         val candidatePath = selectedPathFromCatalog ?: customBackgroundPath
         candidatePath.isNotBlank() && File(candidatePath).exists()
     }
+    val backgroundSource = readerSettings.backgroundSource
     val backgroundSelection = remember(
-        state.readerSettings.backgroundSource,
-        state.readerSettings.backgroundPresetId,
+        backgroundSource,
+        readerSettings.backgroundPresetId,
         customBackgroundId,
         customBackgroundPath,
         customBackgroundItems,
         customBackgroundExists,
     ) {
         resolveReaderBackgroundSelection(
-            backgroundSource = state.readerSettings.backgroundSource,
-            backgroundPresetId = state.readerSettings.backgroundPresetId,
+            backgroundSource = backgroundSource,
+            backgroundPresetId = readerSettings.backgroundPresetId,
             customBackgroundId = customBackgroundId,
             customBackgroundItems = customBackgroundItems,
             customBackgroundPath = customBackgroundPath,
@@ -623,19 +620,19 @@ fun NovelReaderScreen(
         resolveReaderBackgroundIdentity(backgroundSelection)
     }
     val isEInkMode = AuroraTheme.colors.isEInk
-    val appearanceMode = state.readerSettings.appearanceMode ?: NovelReaderAppearanceMode.THEME
+    val appearanceMode = readerSettings.appearanceMode
     val isBackgroundMode = appearanceMode == NovelReaderAppearanceMode.BACKGROUND
     val activeBackgroundTexture = if (isBackgroundMode || isEInkMode) {
         NovelReaderBackgroundTexture.NONE
     } else {
-        state.readerSettings.backgroundTexture ?: NovelReaderBackgroundTexture.NONE
+        readerSettings.backgroundTexture
     }
     val activeOledEdgeGradient = if (isBackgroundMode || isEInkMode) {
         false
     } else {
         state.readerSettings.oledEdgeGradient == true
     }
-    val theme = state.readerSettings.theme ?: NovelReaderTheme.SYSTEM
+    val theme = readerSettings.theme
     val isDarkTheme = when {
         isEInkMode -> AuroraTheme.colors.isDark
         else -> when (theme) {
@@ -680,7 +677,6 @@ fun NovelReaderScreen(
         NovelReaderBackdropSession.update(textBackground)
     }
 
-    val backgroundSource = state.readerSettings.backgroundSource ?: NovelReaderBackgroundSource.PRESET
     LaunchedEffect(
         isBackgroundMode,
         isEInkMode,
@@ -1507,13 +1503,29 @@ fun NovelReaderScreen(
         )
     }
 
+    fun openPreviousChapterFromReader() {
+        val chapterId = state.previousChapterId ?: return
+        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+            NovelReaderPageReaderHandoffTarget.END,
+        )
+        onOpenPreviousChapter?.invoke(chapterId)
+    }
+
+    fun openNextChapterFromReader() {
+        val chapterId = state.nextChapterId ?: return
+        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+            NovelReaderPageReaderHandoffTarget.START,
+        )
+        onOpenNextChapter?.invoke(chapterId)
+    }
+
     suspend fun moveBackwardByReaderActionWithAnimation(pageAnimationDurationMillis: Int?) {
         if (showWebView) {
             val webView = webViewInstance
             if (webView != null && webView.canScrollVertically(-1)) {
                 webView.scrollBy(0, -volumeScrollStepPx.roundToInt())
             } else if (state.readerSettings.swipeToPrevChapter && state.previousChapterId != null) {
-                onOpenPreviousChapter?.invoke(state.previousChapterId)
+                openPreviousChapterFromReader()
             }
         } else if (usePageReader) {
             if (
@@ -1543,13 +1555,13 @@ fun NovelReaderScreen(
                         pagerState.animateScrollToPage(targetVirtualPage)
                     }
                 } else if (state.readerSettings.swipeToPrevChapter && state.previousChapterId != null) {
-                    onOpenPreviousChapter?.invoke(state.previousChapterId)
+                    openPreviousChapterFromReader()
                 }
             }
         } else if (textListState.canScrollBackward) {
             textListState.scrollBy(-volumeScrollStepPx)
         } else if (state.readerSettings.swipeToPrevChapter && state.previousChapterId != null) {
-            onOpenPreviousChapter?.invoke(state.previousChapterId)
+            openPreviousChapterFromReader()
         }
     }
 
@@ -1559,7 +1571,7 @@ fun NovelReaderScreen(
             if (webView != null && webView.canScrollVertically(1)) {
                 webView.scrollBy(0, volumeScrollStepPx.roundToInt())
             } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
-                onOpenNextChapter?.invoke(state.nextChapterId)
+                openNextChapterFromReader()
             }
         } else if (usePageReader) {
             if (
@@ -1590,13 +1602,13 @@ fun NovelReaderScreen(
                         pagerState.animateScrollToPage(targetVirtualPage)
                     }
                 } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
-                    onOpenNextChapter?.invoke(state.nextChapterId)
+                    openNextChapterFromReader()
                 }
             }
         } else if (textListState.canScrollForward) {
             textListState.scrollBy(volumeScrollStepPx)
         } else if (state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
-            onOpenNextChapter?.invoke(state.nextChapterId)
+            openNextChapterFromReader()
         }
     }
 
@@ -1727,7 +1739,7 @@ fun NovelReaderScreen(
                 val reachedEnd = !webView.canScrollVertically(1)
                 if (reachedEnd && state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
                     autoScrollEnabled = false
-                    onOpenNextChapter?.invoke(state.nextChapterId)
+                    openNextChapterFromReader()
                 } else if (reachedEnd && !canScrollBefore) {
                     autoScrollEnabled = false
                 }
@@ -1765,7 +1777,7 @@ fun NovelReaderScreen(
                 val reachedEnd = consumed == 0f || !textListState.canScrollForward
                 if (reachedEnd && state.readerSettings.swipeToNextChapter && state.nextChapterId != null) {
                     autoScrollEnabled = false
-                    onOpenNextChapter?.invoke(state.nextChapterId)
+                    openNextChapterFromReader()
                 } else if (reachedEnd) {
                     autoScrollEnabled = false
                 }
@@ -1894,7 +1906,7 @@ fun NovelReaderScreen(
                             textColor = textColor,
                             textBackground = textBackground,
                             chapterTitleTextColor = chapterTitleTextColor,
-                            backgroundTexture = state.readerSettings.backgroundTexture,
+                            backgroundTexture = activeBackgroundTexture,
                             nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
                             backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
                             activeOledEdgeGradient = activeOledEdgeGradient,
@@ -1930,9 +1942,9 @@ fun NovelReaderScreen(
                                 }
                             },
                             onOpenPreviousChapter = {
-                                state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
+                                openPreviousChapterFromReader()
                             },
-                            onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
+                            onOpenNextChapter = { openNextChapterFromReader() },
                             onTextTap = { tapX, width -> latestReaderShortTapHandler(tapX, width) },
                             selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
@@ -1947,7 +1959,7 @@ fun NovelReaderScreen(
                             textColor = textColor,
                             textBackground = textBackground,
                             chapterTitleTextColor = chapterTitleTextColor,
-                            backgroundTexture = state.readerSettings.backgroundTexture,
+                            backgroundTexture = activeBackgroundTexture,
                             nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
                             backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
                             backgroundModeIdentity = if (isBackgroundMode) backgroundModeIdentity else "",
@@ -1977,9 +1989,9 @@ fun NovelReaderScreen(
                             onMoveBackward = { coroutineScope.launch { moveBackwardByReaderAction() } },
                             onMoveForward = { coroutineScope.launch { moveForwardByReaderAction() } },
                             onOpenPreviousChapter = {
-                                state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
+                                openPreviousChapterFromReader()
                             },
-                            onOpenNextChapter = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
+                            onOpenNextChapter = { openNextChapterFromReader() },
                             chapterNavigationRequest = pageTurnChapterNavigationRequest,
                             onChapterNavigationRequestConsumed = {
                                 pageTurnChapterNavigationRequest = null
@@ -2032,13 +2044,13 @@ fun NovelReaderScreen(
                                                         state.previousChapterId != null
                                                     ) {
                                                         handled = true
-                                                        onOpenPreviousChapter?.invoke(state.previousChapterId)
+                                                        openPreviousChapterFromReader()
                                                     } else if (
                                                         totalDrag < -160f &&
                                                         state.nextChapterId != null
                                                     ) {
                                                         handled = true
-                                                        onOpenNextChapter?.invoke(state.nextChapterId)
+                                                        openNextChapterFromReader()
                                                     }
                                                 },
                                             )
@@ -2394,7 +2406,7 @@ fun NovelReaderScreen(
                                     firstLineIndentCss = initialCssFirstLineIndent,
                                     textColorHex = colorToCssHex(textColor),
                                     backgroundHex = colorToCssHex(textBackground),
-                                    appearanceMode = state.readerSettings.appearanceMode,
+                                    appearanceMode = appearanceMode,
                                     backgroundTexture = activeBackgroundTexture,
                                     oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
                                     backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
@@ -2461,7 +2473,7 @@ fun NovelReaderScreen(
                                         firstLineIndentCss = initialCssFirstLineIndent,
                                         textColorHex = colorToCssHex(textColor),
                                         backgroundHex = colorToCssHex(textBackground),
-                                        appearanceMode = state.readerSettings.appearanceMode,
+                                        appearanceMode = appearanceMode,
                                         backgroundTexture = activeBackgroundTexture,
                                         oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
                                         backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
@@ -2484,7 +2496,7 @@ fun NovelReaderScreen(
                                         firstLineIndentCss = initialCssFirstLineIndent,
                                         textColorHex = colorToCssHex(textColor),
                                         backgroundHex = colorToCssHex(textBackground),
-                                        appearanceMode = state.readerSettings.appearanceMode,
+                                        appearanceMode = appearanceMode,
                                         backgroundTexture = activeBackgroundTexture,
                                         oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
                                         backgroundImageIdentity = if (isBackgroundMode) backgroundModeIdentity else null,
@@ -2659,11 +2671,11 @@ fun NovelReaderScreen(
                                             ) {
                                                 HorizontalChapterSwipeAction.PREVIOUS -> {
                                                     horizontalSwipeHandled = true
-                                                    state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
+                                                    openPreviousChapterFromReader()
                                                 }
                                                 HorizontalChapterSwipeAction.NEXT -> {
                                                     horizontalSwipeHandled = true
-                                                    state.nextChapterId?.let { onOpenNextChapter?.invoke(it) }
+                                                    openNextChapterFromReader()
                                                 }
                                                 HorizontalChapterSwipeAction.NONE -> Unit
                                             }
@@ -2696,10 +2708,10 @@ fun NovelReaderScreen(
                                                 )
                                             ) {
                                                 VerticalChapterSwipeAction.NEXT -> {
-                                                    state.nextChapterId?.let { onOpenNextChapter?.invoke(it) }
+                                                    openNextChapterFromReader()
                                                 }
                                                 VerticalChapterSwipeAction.PREVIOUS -> {
-                                                    state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) }
+                                                    openPreviousChapterFromReader()
                                                 }
                                                 VerticalChapterSwipeAction.NONE -> Unit
                                             }
@@ -2759,7 +2771,7 @@ fun NovelReaderScreen(
                                 firstLineIndentCss = cssFirstLineIndent,
                                 textColorHex = colorToCssHex(textColor),
                                 backgroundHex = colorToCssHex(textBackground),
-                                appearanceMode = state.readerSettings.appearanceMode,
+                                appearanceMode = appearanceMode,
                                 backgroundTexture = activeBackgroundTexture,
                                 oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
                                 backgroundImageIdentity = if (isBackgroundMode) backgroundModeIdentity else null,
@@ -2827,7 +2839,7 @@ fun NovelReaderScreen(
                                         firstLineIndentCss = cssFirstLineIndent,
                                         textColorHex = currentTextColorCss,
                                         backgroundHex = currentBackgroundCss,
-                                        appearanceMode = state.readerSettings.appearanceMode,
+                                        appearanceMode = appearanceMode,
                                         backgroundTexture = activeBackgroundTexture,
                                         oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
                                         backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
@@ -2910,7 +2922,7 @@ fun NovelReaderScreen(
                                     firstLineIndentCss = cssFirstLineIndent,
                                     textColorHex = currentTextColorCss,
                                     backgroundHex = currentBackgroundCss,
-                                    appearanceMode = state.readerSettings.appearanceMode,
+                                    appearanceMode = appearanceMode,
                                     backgroundTexture = activeBackgroundTexture,
                                     oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
                                     backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
@@ -2945,7 +2957,7 @@ fun NovelReaderScreen(
                                     firstLineIndentCss = cssFirstLineIndent,
                                     textColorHex = colorToCssHex(textColor),
                                     backgroundHex = colorToCssHex(textBackground),
-                                    appearanceMode = state.readerSettings.appearanceMode,
+                                    appearanceMode = appearanceMode,
                                     backgroundTexture = activeBackgroundTexture,
                                     oledEdgeGradient = activeOledEdgeGradient && isDarkTheme,
                                     backgroundImageUrl = if (isBackgroundMode) backgroundModeWebImageUrl else null,
@@ -3607,7 +3619,7 @@ fun NovelReaderScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         IconButton(
-                            onClick = { state.previousChapterId?.let { onOpenPreviousChapter?.invoke(it) } },
+                            onClick = { openPreviousChapterFromReader() },
                             enabled = state.previousChapterId != null && onOpenPreviousChapter != null,
                         ) {
                             Icon(imageVector = Icons.Outlined.ChevronLeft, contentDescription = null)
@@ -3700,7 +3712,7 @@ fun NovelReaderScreen(
                             }
                         }
                         IconButton(
-                            onClick = { state.nextChapterId?.let { onOpenNextChapter?.invoke(it) } },
+                            onClick = { openNextChapterFromReader() },
                             enabled = state.nextChapterId != null && onOpenNextChapter != null,
                         ) {
                             Icon(imageVector = Icons.Outlined.ChevronRight, contentDescription = null)
@@ -4009,28 +4021,9 @@ private fun rememberCurrentTimeText(context: Context): State<String> {
 
 @Suppress("UNCHECKED_CAST")
 internal fun <T : Any> safeEnum(value: Any?, fallback: T): T {
-    if (value == null) return fallback
-    return try {
+    return if (value != null && fallback::class.java.isInstance(value)) {
         value as T
-    } catch (e: Exception) {
+    } else {
         fallback
     }
-}
-
-private fun preventR8Optimization() {
-    safeEnum(null, NovelReaderTheme.SYSTEM)
-    safeEnum(null, NovelReaderAppearanceMode.THEME)
-    safeEnum(null, NovelReaderBackgroundSource.PRESET)
-    safeEnum(null, NovelReaderBackgroundTexture.NONE)
-    safeEnum(null, TextAlign.SOURCE)
-    safeEnum(null, NovelPageTransitionStyle.SLIDE)
-    safeEnum(null, NovelBookFlipAnimationSpeed.SLOW)
-    safeEnum(null, NovelPageTurnSpeed.NORMAL)
-    safeEnum(null, NovelPageTurnIntensity.MEDIUM)
-    safeEnum(null, NovelPageTurnShadowIntensity.MEDIUM)
-    safeEnum(null, NovelPageTurnActivationZone.WIDE)
-    safeEnum(null, NovelTranslationProvider.GEMINI)
-    safeEnum(null, GeminiPromptMode.ADULT_18)
-    safeEnum(null, NovelTranslationStylePreset.PROFESSIONAL)
-    safeEnum(null, NovelTtsHighlightMode.AUTO)
 }
