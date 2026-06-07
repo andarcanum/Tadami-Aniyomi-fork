@@ -186,7 +186,7 @@ internal fun resolveNovelReaderBackdropColor(
     settings: NovelReaderSettings,
     isSystemDark: Boolean,
 ): Color {
-    val theme = settings.theme ?: NovelReaderTheme.SYSTEM
+    val theme = settings.theme
     val themeFallback = when (theme) {
         NovelReaderTheme.SYSTEM -> if (isSystemDark) Color(0xFF121212) else Color.White
         NovelReaderTheme.LIGHT -> Color.White
@@ -196,7 +196,7 @@ internal fun resolveNovelReaderBackdropColor(
         .takeIf { settings.backgroundColor?.isNotBlank() == true }
         ?: themeFallback
 
-    val appearanceMode = settings.appearanceMode ?: NovelReaderAppearanceMode.THEME
+    val appearanceMode = settings.appearanceMode
     return when (appearanceMode) {
         NovelReaderAppearanceMode.THEME -> themeBackground
         NovelReaderAppearanceMode.BACKGROUND -> {
@@ -605,19 +605,19 @@ fun NovelReaderScreen(
         resolveReaderBackgroundIdentity(backgroundSelection)
     }
     val isEInkMode = AuroraTheme.colors.isEInk
-    val appearanceMode = state.readerSettings.appearanceMode ?: NovelReaderAppearanceMode.THEME
+    val appearanceMode = state.readerSettings.appearanceMode
     val isBackgroundMode = appearanceMode == NovelReaderAppearanceMode.BACKGROUND
     val activeBackgroundTexture = if (isBackgroundMode || isEInkMode) {
         NovelReaderBackgroundTexture.NONE
     } else {
-        state.readerSettings.backgroundTexture ?: NovelReaderBackgroundTexture.NONE
+        state.readerSettings.backgroundTexture
     }
     val activeOledEdgeGradient = if (isBackgroundMode || isEInkMode) {
         false
     } else {
         state.readerSettings.oledEdgeGradient == true
     }
-    val theme = state.readerSettings.theme ?: NovelReaderTheme.SYSTEM
+    val theme = state.readerSettings.theme
     val isDarkTheme = when {
         isEInkMode -> AuroraTheme.colors.isDark
         else -> when (theme) {
@@ -662,7 +662,7 @@ fun NovelReaderScreen(
         NovelReaderBackdropSession.update(textBackground)
     }
 
-    val backgroundSource = state.readerSettings.backgroundSource ?: NovelReaderBackgroundSource.PRESET
+    val backgroundSource = state.readerSettings.backgroundSource
     LaunchedEffect(
         isBackgroundMode,
         isEInkMode,

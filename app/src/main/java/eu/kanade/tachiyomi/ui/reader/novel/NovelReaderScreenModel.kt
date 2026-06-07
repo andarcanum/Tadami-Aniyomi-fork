@@ -584,7 +584,6 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.MISTRAL -> refreshMistralModels()
             NovelTranslationProvider.NVIDIA -> refreshNvidiaModels()
             NovelTranslationProvider.OLLAMA_CLOUD -> refreshOllamaCloudModels()
-            else -> Unit
         }
     }
     fun loadFullChapterOrderList() {
@@ -3489,7 +3488,6 @@ class NovelReaderScreenModel(
             NovelTranslationProvider.NVIDIA,
             NovelTranslationProvider.OLLAMA_CLOUD,
             -> resolveNovelTranslationPromptFamily(geminiTargetLang)
-            else -> resolveNovelTranslationPromptFamily(geminiTargetLang)
         }
     }
 
@@ -3678,7 +3676,6 @@ class NovelReaderScreenModel(
                 "baseUrl=${params.baseUrl.trim()}, temp=${params.temperature.toLogFloat()}, " +
                     "topP=${params.topP.toLogFloat()}, think=$reasoning, stream=false"
             }
-            else -> "provider=unknown"
         }
         return "$common, $sampling"
     }
@@ -3738,7 +3735,6 @@ class NovelReaderScreenModel(
                     onLog = onLog,
                 )
             }
-            else -> null
         }
     }
     private fun NovelReaderSettings.hasConfiguredTranslationProvider(): Boolean {
@@ -3772,7 +3768,6 @@ class NovelReaderScreenModel(
                     ollamaCloudApiKey.isNotBlank() &&
                     ollamaCloudModel.isNotBlank()
             }
-            else -> false
         }
     }
     private fun NovelReaderSettings.translationConcurrencyLimit(): Int {
