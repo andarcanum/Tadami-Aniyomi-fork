@@ -231,7 +231,8 @@ class AnimeExtensionManager(
                 installedExtensionsMap[pkgName] = extension.copy(
                     hasUpdate = hasUpdate,
                     needsReinstall = needsReinstall,
-                    repoUrl = extension.repoUrl,
+                    repoUrl = extension.repoUrl ?: availableExt.repoUrl,
+                    repoName = extension.repoName ?: availableExt.repoName.takeIf { it.isNotBlank() },
                 )
                 changed = true
             }

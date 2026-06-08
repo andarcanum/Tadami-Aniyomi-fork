@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.browse.anime
+package eu.kanade.presentation.browse.anime
 
 import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
@@ -65,6 +65,7 @@ import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.components.material.topSmallPaddingValues
+import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
@@ -303,7 +304,7 @@ private fun AnimeExtensionItem(
     modifier: Modifier = Modifier,
     onClickItemSecondaryAction: (AnimeExtension) -> Unit,
 ) {
-    val (extension, installStep) = item
+    val (extension, installStep, repoSourceCount) = item
     BaseBrowseItem(
         modifier = modifier
             .combinedClickable(
@@ -351,6 +352,7 @@ private fun AnimeExtensionItem(
         AnimeExtensionItemContent(
             extension = extension,
             installStep = installStep,
+            repoSourceCount = repoSourceCount,
             modifier = Modifier.weight(1f),
         )
     }
@@ -360,6 +362,7 @@ private fun AnimeExtensionItem(
 private fun AnimeExtensionItemContent(
     extension: AnimeExtension,
     installStep: InstallStep,
+    repoSourceCount: Int,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -392,6 +395,19 @@ private fun AnimeExtensionItemContent(
                     )
                 }
 
+                val repoName = if (extension is AnimeExtension.Available && repoSourceCount > 1) {
+                    pluralStringResource(MR.plurals.num_repos, count = repoSourceCount, repoSourceCount)
+                } else {
+                    extension.repoDisplayName(repoSourceCount)
+                }
+                repoName?.let { name ->
+                    Text(
+                        text = "· $name",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
                 val warning = when {
                     extension is AnimeExtension.Untrusted -> MR.strings.ext_untrusted
                     extension is AnimeExtension.Installed && extension.isObsolete -> MR.strings.ext_obsolete
@@ -421,6 +437,59 @@ private fun AnimeExtensionItemContent(
             }
         }
     }
+}
+
+private fun AnimeExtension.repoDisplayName(repoSourceCount: Int): String? {
+    if (this is AnimeExtension.Available && repoSourceCount > 1) {
+        return null
+    }
+
+    val rawName = when (this) {
+        is AnimeExtension.Available -> repoName.ifBlank { repoUrl.shortRepoName() }
+        is AnimeExtension.Installed -> repoName?.takeIf { it.isNotBlank() } ?: repoUrl?.shortRepoName()
+        is AnimeExtension.Untrusted -> null
+    } ?: return null
+
+    return rawName.oneWordRepoName()
+}
+
+private fun String.shortRepoName(): String {
+    val withoutScheme = substringAfter("://", this)
+    val host = withoutScheme.substringBefore('/').removePrefix("www.")
+    if (host.equals("github.com", ignoreCase = true) || host.equals("raw.githubusercontent.com", ignoreCase = true)) {
+        val owner = withoutScheme.substringAfter('/', "").substringBefore('/')
+        if (owner.isNotBlank()) return owner
+    }
+    return host.ifBlank { this }
+}
+
+private fun String.oneWordRepoName(maxLength: Int = 14): String {
+    val commonWords = setOf(
+        "anime",
+        "manga",
+        "extension",
+        "extensions",
+        "repo",
+        "repos",
+        "repository",
+        "repositories",
+        "source",
+        "sources",
+    )
+    val normalized = trim()
+        .removePrefix("http://")
+        .removePrefix("https://")
+        .substringBefore('/')
+        .removePrefix("www.")
+        .replace('-', ' ')
+        .replace('_', ' ')
+        .replace('.', ' ')
+    val word = normalized
+        .split(' ')
+        .firstOrNull { it.isNotBlank() && it.lowercase() !in commonWords }
+        ?: trim()
+
+    return if (word.length <= maxLength) word else word.take(maxLength - 1).trimEnd() + "…"
 }
 
 @Composable

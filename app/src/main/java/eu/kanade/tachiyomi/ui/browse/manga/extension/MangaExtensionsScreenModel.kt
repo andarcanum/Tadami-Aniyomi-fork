@@ -49,9 +49,16 @@ class MangaExtensionsScreenModel(
 
     init {
         val context = Injekt.get<Application>()
-        val extensionMapper: (Map<String, InstallStep>) -> ((MangaExtension) -> MangaExtensionUiModel.Item) = { map ->
-            {
-                MangaExtensionUiModel.Item(it, map[it.pkgName] ?: InstallStep.Idle)
+        val extensionMapper: (
+            Map<String, InstallStep>,
+            Map<String, Int>,
+        ) -> ((MangaExtension) -> MangaExtensionUiModel.Item) = { map, repoCounts ->
+            { extension ->
+                MangaExtensionUiModel.Item(
+                    extension = extension,
+                    installStep = map[extension.pkgName] ?: InstallStep.Idle,
+                    repoSourceCount = repoCounts[extension.pkgName] ?: 1,
+                )
             }
         }
         val queryFilter: (String) -> ((MangaExtension) -> Boolean) = { query ->
@@ -106,6 +113,13 @@ class MangaExtensionsScreenModel(
                 val itemsGroups: ItemGroups = mutableMapOf()
                 availableExtensionVariants.value = _available.groupBy { it.pkgName }
                 updateExtensionVariants.value = rawAvailable.groupBy { it.pkgName }
+                val availableRepoCounts = _available
+                    .groupBy { it.pkgName }
+                    .mapValues { (_, variants) -> variants.map { it.repoUrl }.distinct().size }
+                val updateRepoCounts = rawAvailable
+                    .groupBy { it.pkgName }
+                    .mapValues { (_, variants) -> variants.map { it.repoUrl }.distinct().size }
+                val repoCounts = availableRepoCounts + updateRepoCounts
                 val displayAvailable = _available
                     .filter(queryFilter(searchQuery))
                     .groupBy { it.pkgName }
@@ -113,17 +127,17 @@ class MangaExtensionsScreenModel(
                     .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 
                 val updates = _updates.filter(queryFilter(searchQuery)).map(
-                    extensionMapper(downloads),
+                    extensionMapper(downloads, repoCounts),
                 )
                 if (updates.isNotEmpty()) {
                     itemsGroups[MangaExtensionUiModel.Header.Resource(MR.strings.ext_updates_pending)] = updates
                 }
 
                 val installed = _installed.filter(queryFilter(searchQuery)).map(
-                    extensionMapper(downloads),
+                    extensionMapper(downloads, repoCounts),
                 )
                 val untrusted = _untrusted.filter(queryFilter(searchQuery)).map(
-                    extensionMapper(downloads),
+                    extensionMapper(downloads, repoCounts),
                 )
                 if (installed.isNotEmpty() || untrusted.isNotEmpty()) {
                     itemsGroups[MangaExtensionUiModel.Header.Resource(MR.strings.ext_installed)] = installed + untrusted
@@ -140,7 +154,7 @@ class MangaExtensionsScreenModel(
                         val items = if (header.text in _collapsedLanguages && searchQuery.isEmpty()) {
                             emptyList()
                         } else {
-                            exts.map(extensionMapper(downloads))
+                            exts.map(extensionMapper(downloads, repoCounts))
                         }
                         header to items
                     }
@@ -329,5 +343,6 @@ object MangaExtensionUiModel {
     data class Item(
         val extension: MangaExtension,
         val installStep: InstallStep,
+        val repoSourceCount: Int = 1,
     )
 }

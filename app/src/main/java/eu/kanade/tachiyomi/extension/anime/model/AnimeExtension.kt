@@ -30,6 +30,7 @@ sealed class AnimeExtension {
         val isObsolete: Boolean = false,
         val isShared: Boolean,
         val repoUrl: String? = null,
+        val repoName: String? = null,
     ) : AnimeExtension()
 
     data class Available(
