@@ -442,9 +442,9 @@
     <string name="theme_aurora">Aurora</string>
     <string name="theme_doom">Doom</string>
     <string name="theme_matrix">Matrix</string>
-    <string name="theme_onyx_gold">Obsidian Gold</string>
-    <string name="theme_sakura_noir">Sakura Noir</string>
-    <string name="theme_nebula_tide">Nebula Tide</string>
+    <string name="theme_onyx_gold">Onyx Regalia</string>
+    <string name="theme_sakura_noir">Sakura Eclipse</string>
+    <string name="theme_nebula_tide">Astral Tide</string>
     <string name="pref_library_rows">List size</string>
     <!-- Reader section -->
     <string name="pref_preserve_reading_position">Preserve reading position on read chapters</string>
@@ -1868,6 +1868,14 @@
     <string name="treasury_background_effects">Background effects</string>
     <string name="treasury_empty_title">The Treasury is Empty</string>
     <string name="treasury_empty_description">Complete rare or secret achievements to unlock exclusive rewards!</string>
+    <string name="treasury_exclusive_rarity_mythic">Mythic</string>
+    <string name="treasury_exclusive_rarity_secret">Secret</string>
+    <string name="treasury_exclusive_rarity_transcendent">Transcendent</string>
+    <string name="treasury_exclusive_active">Active exclusive</string>
+    <string name="treasury_exclusive_unlocked">Unlocked exclusive</string>
+    <string name="treasury_tagline_onyx_gold">Black-diamond surfaces with royal gold and a ruby trophy accent</string>
+    <string name="treasury_tagline_sakura_noir">Midnight sakura neon, plum noir cards, and jade hidden-hall glow</string>
+    <string name="treasury_tagline_nebula_tide">Abyssal space blue with plasma cyan, violet gravity, and alien-lime sparks</string>
     <string name="achievement_stats_points">Points • %d%%</string>
     <string name="achievement_stats_unlocked">Unlocked • %d%%</string>
     <string name="achievement_back">Back</string>

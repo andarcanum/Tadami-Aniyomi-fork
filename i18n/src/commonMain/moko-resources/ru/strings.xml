@@ -1398,9 +1398,9 @@
     <string name="unlockable_theme_achievement_gold">Золотая тема достижений</string>
     <string name="unlockable_theme_achievement_sapphire">Сапфировая тема достижений</string>
     <string name="unlockable_theme_master">Тема мастера контента</string>
-    <string name="unlockable_theme_ONYX_GOLD">Тема Ониксовое золото</string>
-    <string name="unlockable_theme_SAKURA_NOIR">Тема Цветущая сакура</string>
-    <string name="unlockable_theme_NEBULA_TIDE">Тема Туманный прилив</string>
+    <string name="unlockable_theme_ONYX_GOLD">Тема «Ониксовые регалии»</string>
+    <string name="unlockable_theme_SAKURA_NOIR">Тема «Затмение сакуры»</string>
+    <string name="unlockable_theme_NEBULA_TIDE">Тема «Астральный прилив»</string>
     <string name="unlockable_badge_achievement_master">Значок мастера достижений</string>
     <string name="unlockable_badge_week_warrior">Значок воина недели</string>
     <string name="unlockable_display_grid_large">Большая сетка библиотеки</string>

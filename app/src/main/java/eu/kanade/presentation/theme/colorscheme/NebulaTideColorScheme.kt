@@ -4,37 +4,44 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
+/**
+ * Nebula Tide.
+ *
+ * Endgame cosmic palette: abyssal blue surfaces, plasma cyan actions,
+ * violet gravity wells, and alien-lime highlights. Designed to be clearly
+ * separate from Tidal Wave and Sapphire.
+ */
 internal object NebulaTideColorScheme : BaseColorScheme() {
 
     override val darkScheme = darkColorScheme(
-        primary = Color(0xFF6EF6FF),
-        onPrimary = Color(0xFF07111F),
-        primaryContainer = Color(0xFF1D5160),
-        onPrimaryContainer = Color(0xFFCEF9FF),
-        inversePrimary = Color(0xFF2A86A0),
+        primary = Color(0xFF46F4FF),
+        onPrimary = Color(0xFF001F26),
+        primaryContainer = Color(0xFF005866),
+        onPrimaryContainer = Color(0xFFB8F8FF),
+        inversePrimary = Color(0xFF007586),
 
-        secondary = Color(0xFF9B8CFF),
-        onSecondary = Color(0xFF090A17),
-        secondaryContainer = Color(0xFF352E78),
-        onSecondaryContainer = Color(0xFFE4DEFF),
+        secondary = Color(0xFFB39BFF),
+        onSecondary = Color(0xFF21005D),
+        secondaryContainer = Color(0xFF49328F),
+        onSecondaryContainer = Color(0xFFE9DDFF),
 
-        tertiary = Color(0xFF79F2B5),
-        onTertiary = Color(0xFF032116),
-        tertiaryContainer = Color(0xFF184339),
-        onTertiaryContainer = Color(0xFFC9FFE6),
+        tertiary = Color(0xFFA7FF6E),
+        onTertiary = Color(0xFF113800),
+        tertiaryContainer = Color(0xFF2D5B12),
+        onTertiaryContainer = Color(0xFFD8FFC1),
 
-        background = Color(0xFF07111F),
-        onBackground = Color(0xFFE8F3FF),
-        surface = Color(0xFF0B1528),
-        onSurface = Color(0xFFE8F3FF),
-        surfaceVariant = Color(0xFF16263A),
-        onSurfaceVariant = Color(0xFFCBD8EA),
-        surfaceTint = Color(0xFF6EF6FF),
-        inverseSurface = Color(0xFFEAF3FF),
-        inverseOnSurface = Color(0xFF08111E),
+        background = Color(0xFF030812),
+        onBackground = Color(0xFFEAF2FF),
+        surface = Color(0xFF07101D),
+        onSurface = Color(0xFFEAF2FF),
+        surfaceVariant = Color(0xFF16233A),
+        onSurfaceVariant = Color(0xFFC9D6EA),
+        surfaceTint = Color(0xFF46F4FF),
+        inverseSurface = Color(0xFFEAF2FF),
+        inverseOnSurface = Color(0xFF102033),
 
-        outline = Color(0xFF556A80),
-        outlineVariant = Color(0xFF223247),
+        outline = Color(0xFF7B8DA8),
+        outlineVariant = Color(0xFF314158),
 
         error = Color(0xFFFFB4AB),
         onError = Color(0xFF690005),
@@ -43,44 +50,44 @@ internal object NebulaTideColorScheme : BaseColorScheme() {
 
         scrim = Color(0xFF000000),
 
-        surfaceDim = Color(0xFF07111F),
-        surfaceBright = Color(0xFF20304A),
-        surfaceContainerLowest = Color(0xFF050B14),
-        surfaceContainerLow = Color(0xFF0B1423),
-        surfaceContainer = Color(0xFF111B2C),
-        surfaceContainerHigh = Color(0xFF172338),
-        surfaceContainerHighest = Color(0xFF20304A),
+        surfaceDim = Color(0xFF030812),
+        surfaceBright = Color(0xFF243651),
+        surfaceContainerLowest = Color(0xFF01040A),
+        surfaceContainerLow = Color(0xFF07111F),
+        surfaceContainer = Color(0xFF0D1828),
+        surfaceContainerHigh = Color(0xFF14233A),
+        surfaceContainerHighest = Color(0xFF1E2F4A),
     )
 
     override val lightScheme = lightColorScheme(
-        primary = Color(0xFF116A7A),
+        primary = Color(0xFF006B78),
         onPrimary = Color(0xFFFFFFFF),
-        primaryContainer = Color(0xFFC9F7FF),
-        onPrimaryContainer = Color(0xFF004955),
-        inversePrimary = Color(0xFF6EF6FF),
+        primaryContainer = Color(0xFFB8F8FF),
+        onPrimaryContainer = Color(0xFF001F26),
+        inversePrimary = Color(0xFF46F4FF),
 
-        secondary = Color(0xFF5148A7),
+        secondary = Color(0xFF6250B5),
         onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFFE4DEFF),
-        onSecondaryContainer = Color(0xFF2C246E),
+        secondaryContainer = Color(0xFFE9DDFF),
+        onSecondaryContainer = Color(0xFF1D0061),
 
-        tertiary = Color(0xFF137A58),
+        tertiary = Color(0xFF3D6F19),
         onTertiary = Color(0xFFFFFFFF),
-        tertiaryContainer = Color(0xFFC9FFE6),
-        onTertiaryContainer = Color(0xFF00482F),
+        tertiaryContainer = Color(0xFFD8FFC1),
+        onTertiaryContainer = Color(0xFF0B2100),
 
-        background = Color(0xFFF6FBFF),
-        onBackground = Color(0xFF172231),
-        surface = Color(0xFFF6FBFF),
-        onSurface = Color(0xFF172231),
-        surfaceVariant = Color(0xFFE4EDF7),
-        onSurfaceVariant = Color(0xFF4A5B70),
-        surfaceTint = Color(0xFF116A7A),
-        inverseSurface = Color(0xFF233144),
-        inverseOnSurface = Color(0xFFF6FBFF),
+        background = Color(0xFFF6FAFF),
+        onBackground = Color(0xFF182334),
+        surface = Color(0xFFF6FAFF),
+        onSurface = Color(0xFF182334),
+        surfaceVariant = Color(0xFFE1EAF8),
+        onSurfaceVariant = Color(0xFF44546B),
+        surfaceTint = Color(0xFF006B78),
+        inverseSurface = Color(0xFF2D3142),
+        inverseOnSurface = Color(0xFFF4F0FF),
 
-        outline = Color(0xFF6E8096),
-        outlineVariant = Color(0xFFD7E1ED),
+        outline = Color(0xFF73839B),
+        outlineVariant = Color(0xFFC7D4E5),
 
         error = Color(0xFFBA1A1A),
         onError = Color(0xFFFFFFFF),
@@ -89,12 +96,12 @@ internal object NebulaTideColorScheme : BaseColorScheme() {
 
         scrim = Color(0xFF000000),
 
-        surfaceDim = Color(0xFFE6EDF6),
-        surfaceBright = Color(0xFFFFFFFF),
+        surfaceDim = Color(0xFFDDE5F0),
+        surfaceBright = Color(0xFFF6FAFF),
         surfaceContainerLowest = Color(0xFFFFFFFF),
-        surfaceContainerLow = Color(0xFFF2F7FC),
-        surfaceContainer = Color(0xFFE9F0F8),
-        surfaceContainerHigh = Color(0xFFE0E9F2),
-        surfaceContainerHighest = Color(0xFFD4DFEA),
+        surfaceContainerLow = Color(0xFFF0F6FF),
+        surfaceContainer = Color(0xFFE8F0FA),
+        surfaceContainerHigh = Color(0xFFE0E8F4),
+        surfaceContainerHighest = Color(0xFFD5DEEC),
     )
 }

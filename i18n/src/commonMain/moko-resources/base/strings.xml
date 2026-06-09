@@ -1536,9 +1536,9 @@
     <string name="unlockable_theme_achievement_gold">Achievement Gold Theme</string>
     <string name="unlockable_theme_achievement_sapphire">Achievement Sapphire Theme</string>
     <string name="unlockable_theme_master">Content Master Theme</string>
-    <string name="unlockable_theme_ONYX_GOLD">Onyx Gold Theme</string>
-    <string name="unlockable_theme_SAKURA_NOIR">Sakura Noir Theme</string>
-    <string name="unlockable_theme_NEBULA_TIDE">Nebula Tide Theme</string>
+    <string name="unlockable_theme_ONYX_GOLD">Onyx Regalia Theme</string>
+    <string name="unlockable_theme_SAKURA_NOIR">Sakura Eclipse Theme</string>
+    <string name="unlockable_theme_NEBULA_TIDE">Astral Tide Theme</string>
     <string name="unlockable_badge_achievement_master">Achievement Master Badge</string>
     <string name="unlockable_badge_week_warrior">Week Warrior Badge</string>
     <string name="unlockable_display_grid_large">Large Library Grid</string>

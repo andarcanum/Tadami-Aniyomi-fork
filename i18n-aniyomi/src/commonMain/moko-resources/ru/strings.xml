@@ -289,9 +289,9 @@
     <string name="theme_aurora">Aurora</string>
     <string name="theme_doom">Doom</string>
     <string name="theme_matrix">Матрица</string>
-    <string name="theme_onyx_gold">Обсидиановое золото</string>
-    <string name="theme_sakura_noir">Сакура Ноир</string>
-    <string name="theme_nebula_tide">Туманность прилива</string>
+    <string name="theme_onyx_gold">Ониксовые регалии</string>
+    <string name="theme_sakura_noir">Затмение сакуры</string>
+    <string name="theme_nebula_tide">Астральный прилив</string>
     <string name="pref_library_rows">Размер списка</string>
     <string name="pref_preserve_reading_position">Сохранение позиции чтения в прочитанных главах</string>
     <string name="pref_download_slots">Максимум загрузок</string>
@@ -2119,6 +2119,14 @@
     <string name="treasury_empty_title">Сокровищница пуста</string>
     <string name="treasury_empty_description">Выполняйте редкие или секретные достижения, чтобы разблокировать уникальные награды!</string>
     <string name="treasury_requires_achievement">Требуется достижение: %1$s</string>
+    <string name="treasury_exclusive_rarity_mythic">Мифический</string>
+    <string name="treasury_exclusive_rarity_secret">Секретный</string>
+    <string name="treasury_exclusive_rarity_transcendent">Трансцендентный</string>
+    <string name="treasury_exclusive_active">Активна</string>
+    <string name="treasury_exclusive_unlocked">Разблокирована</string>
+    <string name="treasury_tagline_onyx_gold">Чёрно-бриллиантовые поверхности с королевским золотом и рубиновым акцентом</string>
+    <string name="treasury_tagline_sakura_noir">Полуночный неон сакуры, сливовые тона и нефритовое свечение</string>
+    <string name="treasury_tagline_nebula_tide">Бездонная космическая синева с плазменным цианом, фиолетовой гравитацией и лаймовыми искрами</string>
     <string name="pref_category_debug">Режим отладки</string>
     <string name="pref_debug_bypass_treasury_locks">Обойти блокировки для тестирования</string>
     <string name="pref_debug_bypass_treasury_locks_summary">Временно разблокирует все награды Сокровищницы для визуальной проверки</string>

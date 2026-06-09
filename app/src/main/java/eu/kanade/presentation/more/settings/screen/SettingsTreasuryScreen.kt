@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,6 +52,7 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.tadami.aurora.BuildConfig
+import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.AppTheme
@@ -547,6 +549,13 @@ private data class TreasuryPreset(
     val onDeactivate: () -> Unit,
 )
 
+private data class TreasuryExclusiveThemeSpec(
+    val theme: AppTheme,
+    val rarity: StringResource,
+    val tagline: StringResource,
+    val accentColor: Color,
+)
+
 @Composable
 private fun TreasuryThemeSelector(
     uiPreferences: UiPreferences,
@@ -558,9 +567,24 @@ private fun TreasuryThemeSelector(
     val amoled by uiPreferences.themeDarkAmoled().collectAsStateWithLifecycle()
 
     val treasuryThemes = listOf(
-        AppTheme.ONYX_GOLD,
-        AppTheme.SAKURA_NOIR,
-        AppTheme.NEBULA_TIDE,
+        TreasuryExclusiveThemeSpec(
+            theme = AppTheme.ONYX_GOLD,
+            rarity = AYMR.strings.treasury_exclusive_rarity_mythic,
+            tagline = AYMR.strings.treasury_tagline_onyx_gold,
+            accentColor = Color(0xFFFFD36E),
+        ),
+        TreasuryExclusiveThemeSpec(
+            theme = AppTheme.SAKURA_NOIR,
+            rarity = AYMR.strings.treasury_exclusive_rarity_secret,
+            tagline = AYMR.strings.treasury_tagline_sakura_noir,
+            accentColor = Color(0xFFFF78B7),
+        ),
+        TreasuryExclusiveThemeSpec(
+            theme = AppTheme.NEBULA_TIDE,
+            rarity = AYMR.strings.treasury_exclusive_rarity_transcendent,
+            tagline = AYMR.strings.treasury_tagline_nebula_tide,
+            accentColor = Color(0xFF46F4FF),
+        ),
     )
 
     Row(
@@ -568,83 +592,139 @@ private fun TreasuryThemeSelector(
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
             .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
     ) {
-        treasuryThemes.forEach { theme ->
+        treasuryThemes.forEach { spec ->
+            val theme = spec.theme
             val rewardId = "theme_${theme.name}"
             val isUnlocked = isThemePreviewUnlocked(theme, unlockedUnlockables)
             val achievementTitle = rewardToAchievementMap[rewardId]?.title ?: "Achievement"
             val isSelected = appTheme == theme
 
-            Column(
+            Card(
                 modifier = Modifier
-                    .width(156.dp)
-                    .alpha(if (isUnlocked) 1f else 0.5f),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                    .width(180.dp)
+                    .alpha(if (isUnlocked) 1f else 0.62f)
+                    .heightIn(min = 460.dp),
+                shape = AURORA_SETTINGS_CARD_SHAPE,
+                colors = CardDefaults.cardColors(
+                    containerColor = if (AuroraTheme.colors.isDark) {
+                        Color.White.copy(alpha = 0.045f)
+                    } else {
+                        Color.White
+                    },
+                ),
+                border = BorderStroke(
+                    width = if (isSelected && isUnlocked) 2.dp else 1.dp,
+                    color = spec.accentColor.copy(alpha = if (isUnlocked) 0.72f else 0.32f),
+                ),
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(9f / 16f),
-                    contentAlignment = Alignment.Center,
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    TachiyomiTheme(appTheme = theme, amoled = amoled) {
-                        AppThemePreviewItem(
-                            selected = isSelected && isUnlocked,
-                            onClick = {
-                                if (isUnlocked) {
-                                    uiPreferences.appTheme().set(theme)
-                                    (context as? Activity)?.let { ActivityCompat.recreate(it) }
-                                }
-                            },
-                        )
-                    }
-
-                    if (!isUnlocked) {
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(Color.Black.copy(alpha = 0.4f), shape = RoundedCornerShape(17.dp))
-                                .clip(RoundedCornerShape(17.dp))
-                                .clickable(enabled = false) {},
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = "Locked",
-                                tint = Color.White,
-                                modifier = Modifier.size(36.dp),
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(9f / 16f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        TachiyomiTheme(appTheme = theme, amoled = amoled) {
+                            AppThemePreviewItem(
+                                selected = isSelected && isUnlocked,
+                                onClick = {
+                                    if (isUnlocked) {
+                                        uiPreferences.appTheme().set(theme)
+                                        (context as? Activity)?.let { ActivityCompat.recreate(it) }
+                                    }
+                                },
                             )
                         }
+
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(8.dp)
+                                .background(
+                                    color = spec.accentColor.copy(alpha = if (isUnlocked) 0.92f else 0.62f),
+                                    shape = RoundedCornerShape(999.dp),
+                                )
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        ) {
+                            Text(
+                                text = stringResource(spec.rarity).uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF08080C),
+                                maxLines = 1,
+                            )
+                        }
+
+                        if (!isUnlocked) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .background(Color.Black.copy(alpha = 0.48f), shape = RoundedCornerShape(17.dp))
+                                    .clip(RoundedCornerShape(17.dp))
+                                    .clickable(enabled = false) {},
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = "Locked",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(36.dp),
+                                )
+                            }
+                        }
                     }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = theme.titleRes?.let { stringResource(it) } ?: theme.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = settingsTitleColor(),
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = stringResource(spec.tagline),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
+                        textAlign = TextAlign.Center,
+                        minLines = 3,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = if (isUnlocked) {
+                            if (isSelected) {
+                                stringResource(
+                                    AYMR.strings.treasury_exclusive_active,
+                                )
+                            } else {
+                                stringResource(AYMR.strings.treasury_exclusive_unlocked)
+                            }
+                        } else {
+                            stringResource(AYMR.strings.treasury_requires_achievement, achievementTitle)
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (isUnlocked) spec.accentColor else MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = theme.titleRes?.let { stringResource(it) } ?: theme.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = settingsTitleColor(),
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = if (isUnlocked) {
-                        if (isSelected) "Active" else "Unlocked"
-                    } else {
-                        stringResource(AYMR.strings.treasury_requires_achievement, achievementTitle)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isUnlocked) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
         }
     }

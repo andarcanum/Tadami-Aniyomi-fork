@@ -831,8 +831,8 @@
                 {
                     "type": "THEME",
                     "id": "theme_SAKURA_NOIR",
-                    "title": "Sakura Noir",
-                    "description": "Exclusive moody sakura theme with a cinematic noir palette"
+                    "title": "Sakura Eclipse",
+                    "description": "Secret midnight-sakura theme with neon petals, plum noir surfaces, and jade glow"
                 },
                 {
                     "type": "SPECIAL",
@@ -1013,8 +1013,8 @@
                 {
                     "type": "THEME",
                     "id": "theme_ONYX_GOLD",
-                    "title": "Onyx Gold",
-                    "description": "Exclusive luxury dark gold theme"
+                    "title": "Onyx Regalia",
+                    "description": "Mythic black-diamond theme with royal gold hierarchy and a restrained ruby trophy accent"
                 },
                 {
                     "type": "SPECIAL",
@@ -1045,8 +1045,8 @@
                 {
                     "type": "THEME",
                     "id": "theme_NEBULA_TIDE",
-                    "title": "Nebula Tide",
-                    "description": "Exclusive cosmic theme with deep cyan and violet tides"
+                    "title": "Astral Tide",
+                    "description": "Transcendent cosmic theme with plasma cyan, violet gravity wells, and alien-lime highlights"
                 }
             ]
         }
