@@ -20,8 +20,8 @@ import kotlinx.coroutines.launch
 import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.io.File
 import java.io.Closeable
+import java.io.File
 
 /**
  * Combines anime, manga, and novel backend queue states into one aggregated

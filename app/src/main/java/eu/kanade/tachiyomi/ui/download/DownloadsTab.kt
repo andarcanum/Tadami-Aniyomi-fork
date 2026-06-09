@@ -1,7 +1,7 @@
 package eu.kanade.tachiyomi.ui.download
 
-import android.content.Intent
 import android.content.ClipData
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
