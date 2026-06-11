@@ -221,7 +221,6 @@ class NovelLibraryScreenModel(
             }
             .launchIn(screenModelScope)
 
-
         getFilterPreferencesFlow()
             .onEach { filterPrefs ->
                 mutableState.update { state ->

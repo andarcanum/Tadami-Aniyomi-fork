@@ -227,7 +227,6 @@ class MigrateMangaUseCaseTest {
         verify(exactly = 0) { downloadManager.deleteManga(any(), any()) }
     }
 
-
     @Test
     fun `network manga target is localized before replacing old favorite`() = runTest {
         val sourceManager = mockk<MangaSourceManager>()
