@@ -2,15 +2,20 @@ package eu.kanade.tachiyomi.ui.novel
 
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 
+internal val novelReadingOrderComparator =
+    compareBy<NovelChapter> { it.chapterNumber }
+        .thenBy { it.sourceOrder }
+        .thenBy { it.id }
+
+internal fun List<NovelChapter>.sortedByNovelReadingOrder(): List<NovelChapter> {
+    return sortedWith(novelReadingOrderComparator)
+}
+
 internal fun resolveNovelResumeChapter(
     chapters: List<NovelChapter>,
     fromChapterId: Long? = null,
 ): NovelChapter? {
-    val sortedChapters = chapters.sortedWith(
-        compareBy<NovelChapter> { it.sourceOrder }
-            .thenBy { it.chapterNumber }
-            .thenBy { it.id },
-    )
+    val sortedChapters = chapters.sortedByNovelReadingOrder()
     if (sortedChapters.isEmpty()) return null
 
     if (fromChapterId != null) {

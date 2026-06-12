@@ -24,6 +24,7 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
+import eu.kanade.tachiyomi.ui.novel.sortedByNovelReadingOrder
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
@@ -723,11 +724,7 @@ class NovelReaderScreenModel(
                 novelChapterRepository.getChapterByNovelId(
                     entryNovel.id,
                     applyScanlatorFilter = true,
-                ).sortedWith(
-                    compareBy<NovelChapter> { it.sourceOrder }
-                        .thenBy { it.chapterNumber }
-                        .thenBy { it.id },
-                )
+                ).sortedByNovelReadingOrder()
             }
             resolveNovelResumeChapter(chapters)
         }
@@ -767,11 +764,7 @@ class NovelReaderScreenModel(
     private suspend fun loadChapterOrderList(novelId: Long): List<NovelChapter> {
         return withContext(Dispatchers.IO) {
             val chapters = novelChapterRepository.getChapterByNovelId(novelId, applyScanlatorFilter = true)
-            chapters.sortedWith(
-                compareBy<NovelChapter> { it.sourceOrder }
-                    .thenBy { it.chapterNumber }
-                    .thenBy { it.id },
-            )
+            chapters.sortedByNovelReadingOrder()
         }
     }
     private fun maybeEnsureJaomixAdjacentPage(
