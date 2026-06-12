@@ -2,6 +2,12 @@ package eu.kanade.presentation.libraryUpdateError
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
@@ -41,6 +47,7 @@ import androidx.compose.material.icons.outlined.SwapCalls
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +65,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -68,7 +76,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
-import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.entries.components.ItemCover
@@ -161,14 +168,9 @@ fun LibraryUpdateErrorScreen(
                         navigateUp = onBackPressed,
                         actions = {
                             if (state.visibleItems.isNotEmpty()) {
-                                AppBarActions(
-                                    persistentListOf(
-                                        AppBar.Action(
-                                            title = stringResource(MR.strings.action_update_library),
-                                            icon = Icons.Outlined.Refresh,
-                                            onClick = onRetryVisibleErrors,
-                                        ),
-                                    ),
+                                LibraryUpdateErrorRetryButton(
+                                    isRetrying = state.isRetryingVisible,
+                                    onClick = onRetryVisibleErrors,
                                 )
                             }
                         },
@@ -250,6 +252,43 @@ fun LibraryUpdateErrorScreen(
 }
 
 @Composable
+private fun LibraryUpdateErrorRetryButton(
+    isRetrying: Boolean,
+    onClick: () -> Unit,
+    aurora: Boolean = false,
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "library_update_error_retry_rotation")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "library_update_error_retry_icon_rotation",
+    )
+    val contentDescription = stringResource(MR.strings.action_update_library)
+    val iconModifier = Modifier.rotate(if (isRetrying) rotation else 0f)
+
+    if (aurora) {
+        AuroraTopBarIconButton(
+            onClick = onClick,
+            icon = Icons.Outlined.Refresh,
+            contentDescription = contentDescription,
+            iconRotation = if (isRetrying) rotation else 0f,
+        )
+    } else {
+        IconButton(onClick = onClick) {
+            Icon(
+                imageVector = Icons.Outlined.Refresh,
+                contentDescription = contentDescription,
+                modifier = iconModifier,
+            )
+        }
+    }
+}
+
+@Composable
 private fun AuroraLibraryUpdateErrorTopBar(
     state: LibraryUpdateErrorScreenState,
     onBackPressed: () -> Unit,
@@ -265,10 +304,10 @@ private fun AuroraLibraryUpdateErrorTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                AuroraTopBarIconButton(
+                LibraryUpdateErrorRetryButton(
+                    isRetrying = state.isRetryingVisible,
                     onClick = onRetryVisibleErrors,
-                    icon = Icons.Outlined.Refresh,
-                    contentDescription = stringResource(MR.strings.action_update_library),
+                    aurora = true,
                 )
             }
         }
@@ -644,6 +683,15 @@ private fun LibraryUpdateErrorRow(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            if (item.retrying) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .padding(start = 8.dp, end = 4.dp)
+                        .size(22.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
             IconButton(onClick = { onDelete(record.id) }) {
                 Icon(

@@ -22,10 +22,16 @@ class LibraryUpdateErrorScreenModel : StateScreenModel<LibraryUpdateErrorScreenS
 ) {
 
     private val selectedErrorIds: HashSet<Long> = HashSet()
+    private val retryingErrors = mutableMapOf<LibraryUpdateErrorKey, Long>()
 
     init {
         screenModelScope.launchIO {
             LibraryUpdateErrorStore.errors.collectLatest { errors ->
+                reconcileRetryingLibraryUpdateErrors(
+                    errors = errors,
+                    retryingErrors = retryingErrors,
+                )
+
                 mutableState.update { state ->
                     state.copy(
                         isLoading = false,
@@ -33,6 +39,7 @@ class LibraryUpdateErrorScreenModel : StateScreenModel<LibraryUpdateErrorScreenS
                             LibraryUpdateErrorItem(
                                 record = record,
                                 selected = record.id in selectedErrorIds,
+                                retrying = record.key in retryingErrors,
                             )
                         },
                     )
@@ -105,20 +112,43 @@ class LibraryUpdateErrorScreenModel : StateScreenModel<LibraryUpdateErrorScreenS
             .distinct()
             .toLongArray()
 
-        when (state.value.selectedMedia) {
+        val started = when (state.value.selectedMedia) {
             LibraryUpdateErrorMedia.Manga -> MangaLibraryUpdateJob.startNow(context, entryIds)
             LibraryUpdateErrorMedia.Anime -> AnimeLibraryUpdateJob.startNow(context, entryIds)
             LibraryUpdateErrorMedia.Novel -> NovelLibraryUpdateJob.startNow(context, entryIds)
+        }
+        if (!started) return
+
+        visibleItems.forEach { item ->
+            retryingErrors[item.record.key] = item.record.id
+        }
+        mutableState.update { state ->
+            state.copy(
+                items = state.items.map { item ->
+                    if (item.record.key in retryingErrors) {
+                        item.copy(retrying = true)
+                    } else {
+                        item
+                    }
+                },
+            )
         }
     }
 
     fun deleteSelected() {
         val selected = selectedErrorIds.toList()
+        val selectedSet = selected.toSet()
+        state.value.items
+            .filter { it.record.id in selectedSet }
+            .forEach { retryingErrors.remove(it.record.key) }
         LibraryUpdateErrorStore.delete(selected)
-        selectedErrorIds.removeAll(selected.toSet())
+        selectedErrorIds.removeAll(selectedSet)
     }
 
     fun delete(errorId: Long) {
+        state.value.items
+            .firstOrNull { it.record.id == errorId }
+            ?.let { retryingErrors.remove(it.record.key) }
         LibraryUpdateErrorStore.delete(errorId)
         selectedErrorIds.remove(errorId)
     }
@@ -130,6 +160,29 @@ class LibraryUpdateErrorScreenModel : StateScreenModel<LibraryUpdateErrorScreenS
             .map { it.record.id }
         LibraryUpdateErrorStore.delete(ids)
         selectedErrorIds.removeAll(ids.toSet())
+        retryingErrors.keys.removeAll { it.media == selectedMedia }
+    }
+}
+
+internal data class LibraryUpdateErrorKey(
+    val media: LibraryUpdateErrorMedia,
+    val entryId: Long,
+)
+
+internal val LibraryUpdateErrorRecord.key: LibraryUpdateErrorKey
+    get() = LibraryUpdateErrorKey(media = media, entryId = entryId)
+
+internal fun reconcileRetryingLibraryUpdateErrors(
+    errors: List<LibraryUpdateErrorRecord>,
+    retryingErrors: MutableMap<LibraryUpdateErrorKey, Long>,
+) {
+    val currentKeys = errors.mapTo(mutableSetOf()) { it.key }
+    retryingErrors.keys.removeAll { it !in currentKeys }
+    errors.forEach { record ->
+        val initialErrorId = retryingErrors[record.key]
+        if (initialErrorId != null && initialErrorId != record.id) {
+            retryingErrors.remove(record.key)
+        }
     }
 }
 
@@ -142,6 +195,7 @@ data class LibraryUpdateErrorScreenState(
     val visibleItems = items.filter { it.record.media == selectedMedia }
     val selected = visibleItems.filter { it.selected }
     val selectionMode = selected.isNotEmpty()
+    val isRetryingVisible = visibleItems.any { it.retrying }
 
     fun count(media: LibraryUpdateErrorMedia): Int = items.count { it.record.media == media }
 
@@ -160,6 +214,7 @@ data class LibraryUpdateErrorScreenState(
 data class LibraryUpdateErrorItem(
     val record: LibraryUpdateErrorRecord,
     val selected: Boolean,
+    val retrying: Boolean = false,
 )
 
 sealed class LibraryUpdateErrorUiModel {
