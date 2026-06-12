@@ -92,6 +92,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsResolvedChapter
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSession
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSessionController
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSessionUiState
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsTextSource
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsWordTokenizer
 import eu.kanade.tachiyomi.ui.reader.novel.tts.SharedNovelTtsSessionStore
 import eu.kanade.tachiyomi.ui.reader.novel.tts.resolveNovelTtsVoiceSelection
@@ -962,6 +963,8 @@ class NovelReaderScreenModel(
             else -> baseContent
         }
         ttsSessionController.setPreferredTranslatedText(shouldPreferTranslatedTts(settings))
+        maybeSyncActiveTtsSessionOptions(settings)
+        maybeSwitchActiveTtsTextSource(settings)
         mutableState.value = State.Success(
             novel = novel,
             chapter = chapter,
@@ -1335,6 +1338,7 @@ class NovelReaderScreenModel(
         ttsUiState = ttsUiState.copy(
             playbackState = sessionState.playbackState,
             activeSession = session,
+            pendingChapterHandoffId = sessionState.pendingChapterHandoffId,
             activeUtteranceText = activeUtterance?.text,
             activeSourceBlockIndex = activeUtterance?.sourceBlockIndex,
             activeWordRange = activeUtterance?.wordRanges?.getOrNull(session.wordIndex),
@@ -1705,6 +1709,35 @@ class NovelReaderScreenModel(
         return settings.ttsPreferTranslatedText ||
             isGeminiTranslationVisible ||
             isGoogleTranslationVisible
+    }
+
+    private fun hasCurrentTranslatedTtsContent(settings: NovelReaderSettings): Boolean {
+        return (settings.geminiEnabled && !translationHolder.isEmpty("gemini")) ||
+            (settings.googleTranslationEnabled && !translationHolder.isEmpty("google"))
+    }
+
+    private fun maybeSyncActiveTtsSessionOptions(settings: NovelReaderSettings) {
+        val session = ttsSessionController.state.value.session ?: return
+        if (session.autoAdvanceChapter == settings.ttsAutoAdvanceChapter) return
+        screenModelScope.launch {
+            ttsSessionController.setAutoAdvanceChapter(settings.ttsAutoAdvanceChapter)
+        }
+    }
+
+    private fun maybeSwitchActiveTtsTextSource(settings: NovelReaderSettings) {
+        val session = ttsSessionController.state.value.session ?: return
+        val chapter = currentChapter ?: return
+        if (session.chapterId != chapter.id) return
+        val preferTranslated = shouldPreferTranslatedTts(settings) && hasCurrentTranslatedTtsContent(settings)
+        val targetTextSource = if (preferTranslated) {
+            NovelTtsTextSource.TRANSLATED
+        } else {
+            NovelTtsTextSource.ORIGINAL
+        }
+        if (session.textSource == targetTextSource) return
+        screenModelScope.launch {
+            ttsSessionController.switchToPreferredTextSource(preferTranslated)
+        }
     }
     private fun enqueueProgressPersistence(update: PendingProgressPersistence) {
         progressPersistenceScheduled = true

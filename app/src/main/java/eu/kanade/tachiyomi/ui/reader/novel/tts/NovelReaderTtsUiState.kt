@@ -6,6 +6,7 @@ data class NovelReaderTtsUiState(
     val enabled: Boolean = false,
     val playbackState: NovelTtsPlaybackState = NovelTtsPlaybackState.IDLE,
     val activeSession: NovelTtsSession? = null,
+    val pendingChapterHandoffId: Long? = null,
     val activeHighlightMode: NovelTtsHighlightMode = NovelTtsHighlightMode.OFF,
     val activeWordRange: NovelTtsWordRange? = null,
     val activeUtteranceText: String? = null,

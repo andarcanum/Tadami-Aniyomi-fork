@@ -1303,13 +1303,16 @@ fun NovelReaderScreen(
     LaunchedEffect(
         state.chapter.id,
         state.nextChapterId,
+        state.ttsUiState.pendingChapterHandoffId,
         state.ttsUiState.activeSession?.chapterId,
     ) {
-        val targetChapterId = resolveTtsAutoAdvancedChapterNavigationTarget(
-            currentChapterId = state.chapter.id,
-            activeTtsChapterId = state.ttsUiState.activeSession?.chapterId,
-            nextChapterId = state.nextChapterId,
-        ) ?: return@LaunchedEffect
+        val targetChapterId = state.ttsUiState.pendingChapterHandoffId
+            ?: resolveTtsAutoAdvancedChapterNavigationTarget(
+                currentChapterId = state.chapter.id,
+                activeTtsChapterId = state.ttsUiState.activeSession?.chapterId,
+                nextChapterId = state.nextChapterId,
+            )
+            ?: return@LaunchedEffect
         if (requestedTtsChapterSyncTarget == targetChapterId) return@LaunchedEffect
         requestedTtsChapterSyncTarget = targetChapterId
         NovelReaderTtsChapterHandoffPolicy.markPendingRestore(targetChapterId)
