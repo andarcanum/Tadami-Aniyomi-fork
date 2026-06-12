@@ -1841,12 +1841,8 @@ class NovelScreenModel(
 
     fun markPreviousChapterRead(pointer: NovelChapter) {
         val state = successState ?: return
-        val novel = state.novel
         val chapters = state.processedChapters
-        val prevChapters = if (novel.sortDescending()) chapters.asReversed() else chapters
-        val pointerPos = prevChapters.indexOf(pointer)
-        if (pointerPos == -1) return
-        val chaptersToMark = prevChapters.take(pointerPos)
+        val chaptersToMark = resolveNovelChaptersBeforePointer(chapters, pointer)
         if (chaptersToMark.isEmpty()) return
         val chaptersToAchieve = chaptersToMark.filter { !it.read }
         val updates = chaptersToMark
@@ -1889,6 +1885,24 @@ class NovelScreenModel(
             }
             toggleAllSelection(false)
         }
+    }
+
+    private fun resolveNovelChaptersBeforePointer(
+        chapters: List<NovelChapter>,
+        pointer: NovelChapter,
+    ): List<NovelChapter> {
+        val pointerPos = chapters.indexOfFirst { it.id == pointer.id }
+        if (pointerPos == -1) return emptyList()
+
+        if (pointer.isRecognizedNumber) {
+            return chapters.filter { chapter ->
+                chapter.id != pointer.id &&
+                    chapter.isRecognizedNumber &&
+                    chapter.chapterNumber < pointer.chapterNumber
+            }
+        }
+
+        return chapters.take(pointerPos)
     }
 
     private suspend fun maybeTrackMarkedRead(
