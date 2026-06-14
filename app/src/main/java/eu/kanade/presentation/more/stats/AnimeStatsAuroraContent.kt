@@ -2,7 +2,6 @@ package eu.kanade.presentation.more.stats
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,8 +30,6 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Sync
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +40,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -52,6 +52,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
+import eu.kanade.presentation.more.resolveAuroraMoreCardContainerColor
 import eu.kanade.presentation.more.stats.components.StatsAuroraProgressData
 import eu.kanade.presentation.more.stats.components.StatsAuroraStatItem
 import eu.kanade.presentation.theme.AuroraTheme
@@ -335,32 +338,91 @@ private fun DoubleBezelCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    val outerColor = if (colors.isDark) Color.White.copy(alpha = 0.03f) else Color.Black.copy(alpha = 0.02f)
-    val innerColor = if (colors.isDark) Color.Black.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.45f)
-    val borderColor = colors.accent.copy(alpha = if (colors.isDark) 0.16f else 0.12f)
+    val shape = RoundedCornerShape(24.dp)
 
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = outerColor,
-        ),
-        border = BorderStroke(
-            width = 1.dp,
-            color = borderColor,
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(6.dp)
-                .background(
-                    color = innerColor,
-                    shape = RoundedCornerShape(18.dp),
+    val modifierWithStyle = if (!colors.isDark && !colors.isEInk) {
+        modifier
+            .drawBehind {
+                val radius = 24.dp.toPx()
+                val cornerRadius = androidx.compose.ui.geometry.CornerRadius(radius, radius)
+
+                val neutralOffsetY = 3.dp.toPx()
+                val warmOffsetY = 5.dp.toPx()
+
+                val neutralInset = 1.dp.toPx()
+                val warmInset = 3.dp.toPx()
+
+                // 1. Neutral shadow
+                drawRoundRect(
+                    color = Color.Black.copy(alpha = 0.035f),
+                    topLeft = Offset(x = neutralInset, y = neutralOffsetY),
+                    size = androidx.compose.ui.geometry.Size(
+                        width = size.width - neutralInset * 2,
+                        height = size.height,
+                    ),
+                    cornerRadius = cornerRadius,
                 )
-                .padding(12.dp),
-        ) {
-            content()
-        }
+
+                // 2. Accent glow (colors.accent)
+                drawRoundRect(
+                    color = colors.accent.copy(alpha = 0.025f),
+                    topLeft = Offset(x = warmInset, y = warmOffsetY),
+                    size = androidx.compose.ui.geometry.Size(
+                        width = size.width - warmInset * 2,
+                        height = size.height,
+                    ),
+                    cornerRadius = cornerRadius,
+                )
+            }
+            .background(
+                brush = Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.78f),
+                        Color.White.copy(alpha = 0.68f),
+                        Color.White.copy(alpha = 0.60f),
+                    ),
+                ),
+                shape = shape,
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.75f),
+                        Color.White.copy(alpha = 0.28f),
+                        Color.White.copy(alpha = 0.12f),
+                    ),
+                ),
+                shape = shape,
+            )
+    } else if (colors.isDark && !colors.isEInk) {
+        modifier
+            .background(
+                color = resolveAuroraMoreCardContainerColor(colors),
+                shape = shape,
+            )
+            .border(
+                width = 1.dp,
+                brush = auroraMenuRimLightBrush(colors),
+                shape = shape,
+            )
+    } else {
+        modifier
+            .background(
+                color = resolveAuroraMoreCardContainerColor(colors),
+                shape = shape,
+            )
+            .border(
+                width = 1.dp,
+                color = resolveAuroraMoreCardBorderColor(colors),
+                shape = shape,
+            )
+    }
+
+    Column(
+        modifier = modifierWithStyle.padding(18.dp),
+    ) {
+        content()
     }
 }
 
