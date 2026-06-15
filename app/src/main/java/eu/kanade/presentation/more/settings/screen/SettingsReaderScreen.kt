@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalView
 import eu.kanade.presentation.more.settings.Preference
+import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReadingMode
@@ -71,6 +72,7 @@ object SettingsReaderScreen : SearchableSettings {
             getDisplayGroup(readerPreferences = readerPref),
             getEInkGroup(readerPreferences = readerPref),
             getReadingGroup(readerPreferences = readerPref),
+            getPerformanceGroup(readerPreferences = readerPref),
             getPagedGroup(readerPreferences = readerPref),
             getWebtoonGroup(readerPreferences = readerPref),
             getNavigationGroup(readerPreferences = readerPref),
@@ -154,6 +156,54 @@ object SettingsReaderScreen : SearchableSettings {
                 Preference.PreferenceItem.SwitchPreference(
                     preference = readerPreferences.preserveReadingPosition(),
                     title = stringResource(AYMR.strings.pref_preserve_reading_position),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getPerformanceGroup(readerPreferences: ReaderPreferences): Preference.PreferenceGroup {
+        val preloadEntries = (ReaderPreferences.PRELOAD_PAGES_MIN..ReaderPreferences.PRELOAD_PAGES_MAX)
+            .associateWith { it.toString() }
+            .toImmutableMap()
+        val cacheEntries = persistentMapOf(
+            50 to stringResource(MR.strings.pref_reader_image_cache_size_50_mb),
+            100 to stringResource(MR.strings.pref_reader_image_cache_size_100_mb),
+            250 to stringResource(MR.strings.pref_reader_image_cache_size_250_mb),
+            500 to stringResource(MR.strings.pref_reader_image_cache_size_500_mb),
+            1024 to stringResource(MR.strings.pref_reader_image_cache_size_1_gb),
+        )
+        val chapterCache = remember { Injekt.get<ChapterCache>() }
+
+        return Preference.PreferenceGroup(
+            title = stringResource(MR.strings.pref_reader_performance_cache),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = readerPreferences.preloadPagesBefore(),
+                    entries = preloadEntries,
+                    title = stringResource(MR.strings.pref_reader_preload_pages_before),
+                    subtitle = stringResource(MR.strings.pref_reader_preload_pages_before_summary),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = readerPreferences.preloadPagesAfter(),
+                    entries = preloadEntries,
+                    title = stringResource(MR.strings.pref_reader_preload_pages_after),
+                    subtitle = stringResource(MR.strings.pref_reader_preload_pages_after_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = readerPreferences.preloadNextChapter(),
+                    title = stringResource(MR.strings.pref_reader_preload_next_chapter),
+                    subtitle = stringResource(MR.strings.pref_reader_preload_next_chapter_summary),
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = readerPreferences.imageCacheSizeMb(),
+                    entries = cacheEntries,
+                    title = stringResource(MR.strings.pref_reader_image_cache_size),
+                    subtitle = stringResource(MR.strings.pref_reader_image_cache_size_summary),
+                    onValueChanged = {
+                        chapterCache.setMaxSizeMb(it)
+                        true
+                    },
                 ),
             ),
         )

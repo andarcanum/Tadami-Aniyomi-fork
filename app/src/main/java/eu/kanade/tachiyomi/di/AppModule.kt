@@ -47,6 +47,7 @@ import eu.kanade.tachiyomi.extension.novel.NovelPluginSourceFactory
 import eu.kanade.tachiyomi.extension.novel.api.NetworkNovelPluginIndexFetcher
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApi
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApiFacade
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginIndexFetcher
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginIndexParser
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginRepoProvider
@@ -544,7 +545,14 @@ class AppModule(val app: Application) : InjektModule {
             ProtoBuf
         }
 
-        addSingletonFactory { ChapterCache(app, get()) }
+        addSingletonFactory {
+            val readerPreferences = get<ReaderPreferences>()
+            ChapterCache(
+                context = app,
+                json = get(),
+                maxSizeBytes = readerPreferences.imageCacheSizeMb().get().toLong() * 1024L * 1024L,
+            )
+        }
 
         addSingletonFactory { MangaCoverCache(app) }
         addSingletonFactory { AnimeCoverCache(app) }

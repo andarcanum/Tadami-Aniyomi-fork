@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +25,6 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.PriorityBlockingQueue
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.min
 
 /**
  * Loader used to load chapters from an online source.
@@ -36,6 +36,7 @@ internal class HttpPageLoader(
     // SY -->
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     // SY <--
+    private val readerPreferences: ReaderPreferences = Injekt.get(),
 ) : PageLoader() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -45,7 +46,11 @@ internal class HttpPageLoader(
      */
     private val queue = PriorityBlockingQueue<PriorityPage>()
 
-    private val preloadSize = 4
+    private val preloadPagesBefore: Int
+        get() = readerPreferences.preloadPagesBefore().get()
+
+    private val preloadPagesAfter: Int
+        get() = readerPreferences.preloadPagesAfter().get()
 
     // SY -->
     private val dataSaver = DataSaver(source, sourcePreferences)
@@ -115,7 +120,7 @@ internal class HttpPageLoader(
         if (page.status == Page.State.QUEUE) {
             queuedPages += PriorityPage(page, 1).also { queue.offer(it) }
         }
-        queuedPages += preloadNextPages(page, preloadSize)
+        queuedPages += preloadAroundPage(page)
 
         suspendCancellableCoroutine<Nothing> { continuation ->
             continuation.invokeOnCancellation {
@@ -163,17 +168,20 @@ internal class HttpPageLoader(
     }
 
     /**
-     * Preloads the given [amount] of pages after the [currentPage] with a lower priority.
+     * Preloads surrounding pages with a lower priority so both paged readers and long strip
+     * readers have nearby images ready before the user reaches them.
      *
      * @return a list of [PriorityPage] that were added to the [queue]
      */
-    private fun preloadNextPages(currentPage: ReaderPage, amount: Int): List<PriorityPage> {
-        val pageIndex = currentPage.index
+    private fun preloadAroundPage(currentPage: ReaderPage): List<PriorityPage> {
         val pages = currentPage.chapter.pages ?: return emptyList()
-        if (pageIndex == pages.lastIndex) return emptyList()
 
-        return pages
-            .subList(pageIndex + 1, min(pageIndex + 1 + amount, pages.size))
+        return ImagePreloadPlanner.pagesAround(
+            currentPage = currentPage,
+            pages = pages,
+            pagesBefore = preloadPagesBefore,
+            pagesAfter = preloadPagesAfter,
+        )
             .mapNotNull {
                 if (it.status == Page.State.QUEUE) {
                     PriorityPage(it, 0).apply { queue.offer(this) }

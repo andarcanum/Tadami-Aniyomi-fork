@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.every
@@ -31,6 +32,7 @@ class HttpPageLoaderTest {
         every { sourcePreferences.dataSaver() } returns mockk {
             every { get() } returns SourcePreferences.DataSaver.NONE
         }
+        val readerPreferences = mockk<ReaderPreferences>()
 
         val loader = HttpPageLoader(
             chapter = ReaderChapter(
@@ -43,6 +45,7 @@ class HttpPageLoaderTest {
             source = source,
             chapterCache = chapterCache,
             sourcePreferences = sourcePreferences,
+            readerPreferences = readerPreferences,
         )
 
         try {

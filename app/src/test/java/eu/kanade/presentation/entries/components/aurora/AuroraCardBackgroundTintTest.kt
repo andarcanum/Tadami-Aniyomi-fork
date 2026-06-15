@@ -2,7 +2,7 @@ package eu.kanade.presentation.entries.components.aurora
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import eu.kanade.presentation.entries.manga.components.aurora.tintAuroraCardBackgroundColors
+import eu.kanade.presentation.entries.components.aurora.tintAuroraCardBackgroundColors
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
