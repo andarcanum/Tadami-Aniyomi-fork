@@ -15,8 +15,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.suspendCancellableCoroutine
 import tachiyomi.core.common.util.lang.launchIO
@@ -46,6 +44,16 @@ internal class HttpPageLoader(
      */
     private val queue = PriorityBlockingQueue<PriorityPage>()
 
+    /**
+     * Pages that are already queued for this chapter.
+     *
+     * A single visible page can ask to warm several neighbours, and neighbouring holders can ask
+     * for the same pages again before the worker has a chance to update their state. Keeping this
+     * map bounded to queued items prevents duplicate cache checks and network attempts while still
+     * allowing a visible page request to raise the priority of a preloaded page.
+     */
+    private val queuedPages = mutableMapOf<ReaderPage, PriorityPage>()
+
     private val preloadPagesBefore: Int
         get() = readerPreferences.preloadPagesBefore().get()
 
@@ -58,13 +66,16 @@ internal class HttpPageLoader(
 
     init {
         scope.launchIO {
-            flow {
-                while (true) {
-                    emit(runInterruptible { queue.take() }.page)
+            while (true) {
+                val queuedPage = runInterruptible { queue.take() }
+                try {
+                    if (queuedPage.page.status == Page.State.QUEUE) {
+                        internalLoadPage(queuedPage.page)
+                    }
+                } finally {
+                    removeQueuedPage(queuedPage)
                 }
             }
-                .filter { it.status == Page.State.QUEUE }
-                .collect(::internalLoadPage)
         }
     }
 
@@ -116,17 +127,17 @@ internal class HttpPageLoader(
             page.status = Page.State.QUEUE
         }
 
-        val queuedPages = mutableListOf<PriorityPage>()
+        val offeredPages = mutableListOf<PriorityPage>()
         if (page.status == Page.State.QUEUE) {
-            queuedPages += PriorityPage(page, 1).also { queue.offer(it) }
+            offerPage(page, 1)?.let { offeredPages += it }
         }
-        queuedPages += preloadAroundPage(page)
+        offeredPages += preloadAroundPage(page)
 
         suspendCancellableCoroutine<Nothing> { continuation ->
             continuation.invokeOnCancellation {
-                queuedPages.forEach {
+                offeredPages.forEach {
                     if (it.page.status == Page.State.QUEUE) {
-                        queue.remove(it)
+                        cancelQueuedPage(it)
                     }
                 }
             }
@@ -140,13 +151,16 @@ internal class HttpPageLoader(
         if (page.status == Page.State.ERROR) {
             page.status = Page.State.QUEUE
         }
-        queue.offer(PriorityPage(page, 2))
+        offerPage(page, 2)
     }
 
     override fun recycle() {
         super.recycle()
         scope.cancel()
         queue.clear()
+        synchronized(queuedPages) {
+            queuedPages.clear()
+        }
 
         // Cache current page list progress for online chapters to allow a faster reopen
         chapter.pages?.let { pages ->
@@ -184,11 +198,46 @@ internal class HttpPageLoader(
         )
             .mapNotNull {
                 if (it.status == Page.State.QUEUE) {
-                    PriorityPage(it, 0).apply { queue.offer(this) }
+                    offerPage(it, 0)
                 } else {
                     null
                 }
             }
+    }
+
+    private fun offerPage(page: ReaderPage, priority: Int): PriorityPage? {
+        return synchronized(queuedPages) {
+            val existing = queuedPages[page]
+            if (existing != null) {
+                if (existing.priority >= priority) {
+                    return@synchronized null
+                }
+                if (!queue.remove(existing)) {
+                    return@synchronized null
+                }
+            }
+
+            PriorityPage(page, priority).also {
+                queuedPages[page] = it
+                queue.offer(it)
+            }
+        }
+    }
+
+    private fun cancelQueuedPage(priorityPage: PriorityPage) {
+        synchronized(queuedPages) {
+            if (queuedPages[priorityPage.page] == priorityPage && queue.remove(priorityPage)) {
+                queuedPages.remove(priorityPage.page)
+            }
+        }
+    }
+
+    private fun removeQueuedPage(priorityPage: PriorityPage) {
+        synchronized(queuedPages) {
+            if (queuedPages[priorityPage.page] == priorityPage) {
+                queuedPages.remove(priorityPage.page)
+            }
+        }
     }
 
     /**
