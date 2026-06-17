@@ -54,6 +54,11 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RadialGradientShader
+import androidx.compose.ui.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.SweepGradientShader
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -1131,7 +1136,7 @@ private fun TreasuryCoreOrb(
     modifier: Modifier = Modifier,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "orb-pulse")
-    val ringPulse by infiniteTransition.animateFloat(
+    val ringPulseState = infiniteTransition.animateFloat(
         initialValue = 0.95f,
         targetValue = 1.15f,
         animationSpec = infiniteRepeatable(
@@ -1140,7 +1145,7 @@ private fun TreasuryCoreOrb(
         ),
         label = "ring-pulse",
     )
-    val ringAlpha by infiniteTransition.animateFloat(
+    val ringAlphaState = infiniteTransition.animateFloat(
         initialValue = 0.8f,
         targetValue = 0.2f,
         animationSpec = infiniteRepeatable(
@@ -1152,7 +1157,7 @@ private fun TreasuryCoreOrb(
 
     val isComplete = percent >= 100
 
-    val completeRotation by infiniteTransition.animateFloat(
+    val completeRotationState = infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
@@ -1162,7 +1167,7 @@ private fun TreasuryCoreOrb(
         label = "complete-rotation",
     )
 
-    val completeGlowRadius by infiniteTransition.animateFloat(
+    val completeGlowRadiusState = infiniteTransition.animateFloat(
         initialValue = 1.2f,
         targetValue = 1.6f,
         animationSpec = infiniteRepeatable(
@@ -1171,6 +1176,101 @@ private fun TreasuryCoreOrb(
         ),
         label = "complete-glow-radius",
     )
+
+    val innerBackingColors = remember(isComplete) {
+        if (isComplete) {
+            listOf(
+                TreasuryCyan.copy(alpha = 0.45f),
+                TreasuryViolet.copy(alpha = 0.30f),
+                TreasuryGold.copy(alpha = 0.15f),
+                Color.Transparent,
+            )
+        } else {
+            listOf(
+                TreasuryGold.copy(alpha = 0.35f),
+                TreasuryViolet.copy(alpha = 0.15f),
+                Color.Transparent,
+            )
+        }
+    }
+
+    val sphereColors = remember(isComplete) {
+        if (isComplete) {
+            listOf(
+                Color.White,
+                TreasuryGold.copy(alpha = 0.95f),
+                TreasuryViolet.copy(alpha = 0.85f),
+                TreasuryCyan.copy(alpha = 0.75f),
+                Color(0xFF0F0A1C),
+            )
+        } else {
+            listOf(
+                Color.White,
+                TreasuryGold.copy(alpha = 0.9f),
+                TreasuryViolet.copy(alpha = 0.7f),
+                Color(0xFF1B1328),
+            )
+        }
+    }
+
+    val sweepColors = remember {
+        listOf(
+            TreasuryViolet,
+            TreasuryCyan,
+            TreasuryGold,
+            TreasuryViolet,
+        )
+    }
+
+    val sphereBrush = remember(isComplete, sphereColors) {
+        object : ShaderBrush() {
+            override fun createShader(size: androidx.compose.ui.geometry.Size): Shader {
+                val baseRadius = size.minDimension * 0.40f
+                return RadialGradientShader(
+                    colors = sphereColors,
+                    colorStops = null,
+                    center = Offset(size.width * 0.4f, size.height * 0.4f),
+                    radius = baseRadius,
+                    tileMode = TileMode.Clamp,
+                )
+            }
+        }
+    }
+
+    val innerBackingBrush = remember(isComplete, innerBackingColors) {
+        object : ShaderBrush() {
+            override fun createShader(size: androidx.compose.ui.geometry.Size): Shader {
+                val baseRadius = size.minDimension * 0.40f
+                val innerBackingRadius = if (isComplete) {
+                    baseRadius * completeGlowRadiusState.value
+                } else {
+                    baseRadius *
+                        1.2f
+                }
+                val centerOffset = Offset(size.width / 2f, size.height / 2f)
+                return RadialGradientShader(
+                    colors = innerBackingColors,
+                    colorStops = null,
+                    center = centerOffset,
+                    radius = innerBackingRadius,
+                    tileMode = TileMode.Clamp,
+                )
+            }
+        }
+    }
+
+    val sweepBrush = remember(sweepColors) {
+        object : ShaderBrush() {
+            override fun createShader(size: androidx.compose.ui.geometry.Size): Shader {
+                val centerOffset = Offset(size.width / 2f, size.height / 2f)
+                return SweepGradientShader(
+                    colors = sweepColors,
+                    colorStops = null,
+                    center = centerOffset,
+                )
+            }
+        }
+    }
 
     val progressDescription = stringResource(AYMR.strings.treasury_vault_progress_description, percent)
     Box(
@@ -1182,6 +1282,8 @@ private fun TreasuryCoreOrb(
         Canvas(modifier = Modifier.matchParentSize()) {
             val centerOffset = Offset(size.width / 2, size.height / 2)
             val baseRadius = size.minDimension * 0.40f
+            val ringAlpha = ringAlphaState.value
+            val ringPulse = ringPulseState.value
 
             // Pulsing outer orbit ring
             drawCircle(
@@ -1191,52 +1293,13 @@ private fun TreasuryCoreOrb(
             )
 
             // Inner glass shadow / backing
-            val innerBackingRadius = if (isComplete) baseRadius * completeGlowRadius else baseRadius * 1.2f
-            val innerBackingColors = if (isComplete) {
-                listOf(
-                    TreasuryCyan.copy(alpha = 0.45f),
-                    TreasuryViolet.copy(alpha = 0.30f),
-                    TreasuryGold.copy(alpha = 0.15f),
-                    Color.Transparent,
-                )
-            } else {
-                listOf(
-                    TreasuryGold.copy(alpha = 0.35f),
-                    TreasuryViolet.copy(alpha = 0.15f),
-                    Color.Transparent,
-                )
-            }
             drawCircle(
-                brush = Brush.radialGradient(
-                    colors = innerBackingColors,
-                    center = centerOffset,
-                    radius = innerBackingRadius,
-                ),
+                brush = innerBackingBrush,
             )
 
             // 3D Glass Sphere Body (radial gradient shifted slightly up-left for lighting)
-            val sphereColors = if (isComplete) {
-                listOf(
-                    Color.White,
-                    TreasuryGold.copy(alpha = 0.95f),
-                    TreasuryViolet.copy(alpha = 0.85f),
-                    TreasuryCyan.copy(alpha = 0.75f),
-                    Color(0xFF0F0A1C),
-                )
-            } else {
-                listOf(
-                    Color.White,
-                    TreasuryGold.copy(alpha = 0.9f),
-                    TreasuryViolet.copy(alpha = 0.7f),
-                    Color(0xFF1B1328),
-                )
-            }
             drawCircle(
-                brush = Brush.radialGradient(
-                    colors = sphereColors,
-                    center = Offset(size.width * 0.4f, size.height * 0.4f),
-                    radius = baseRadius,
-                ),
+                brush = sphereBrush,
             )
 
             // Lens highlight reflection (specular gloss)
@@ -1250,20 +1313,10 @@ private fun TreasuryCoreOrb(
             val sweepAngle = (percent.toFloat() / 100f) * 360f
 
             if (isComplete) {
-                val sweepGradient = Brush.sweepGradient(
-                    colors = listOf(
-                        TreasuryViolet,
-                        TreasuryCyan,
-                        TreasuryGold,
-                        TreasuryViolet,
-                    ),
-                    center = centerOffset,
-                )
-
-                rotate(degrees = completeRotation, pivot = centerOffset) {
+                rotate(degrees = completeRotationState.value, pivot = centerOffset) {
                     // Active progress arc rotating at 100%
                     drawArc(
-                        brush = sweepGradient,
+                        brush = sweepBrush,
                         startAngle = -90f,
                         sweepAngle = 360f,
                         useCenter = false,
