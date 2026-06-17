@@ -92,6 +92,7 @@ import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
 import eu.kanade.tachiyomi.data.updater.AppUpdateJob
 import eu.kanade.tachiyomi.data.updater.GITHUB_REPO
 import eu.kanade.tachiyomi.data.updater.RELEASE_URL
+import eu.kanade.tachiyomi.data.updater.resolveUpdatedChangelogPrompt
 import eu.kanade.tachiyomi.extension.anime.api.AnimeExtensionApi
 import eu.kanade.tachiyomi.extension.manga.api.MangaExtensionApi
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
@@ -190,7 +191,6 @@ class MainActivity : BaseActivity() {
         // Await preference migrations without blocking the main thread.
         // Keep splash up until migrations are either complete or the startup timeout is reached.
         // Always release the migrator so a failed migration cannot leave startup state stuck.
-        val didMigration = mutableStateOf(false)
         val migrationReady = mutableStateOf(false)
         lifecycleScope.launch {
             val migrationStart = System.currentTimeMillis()
@@ -200,7 +200,6 @@ class MainActivity : BaseActivity() {
                 }
             }
 
-            didMigration.value = result.getOrDefault(false)
             result.exceptionOrNull()?.let { error ->
                 logcat(LogPriority.ERROR, error) {
                     "Preference migration failed or timed out after ${System.currentTimeMillis() - migrationStart}ms"
@@ -427,21 +426,39 @@ class MainActivity : BaseActivity() {
             var showChangelog by remember { mutableStateOf(false) }
             var installedRelease by remember { mutableStateOf<Release?>(null) }
             LaunchedEffect(migrationReady.value) {
-                if (migrationReady.value && didMigration.value && !BuildConfig.DEBUG) {
-                    installedRelease = withContext(Dispatchers.IO) {
-                        runCatching {
-                            Injekt.get<GetApplicationRelease>().awaitCurrent(
-                                GetApplicationRelease.Arguments(
-                                    isPreview = isPreviewBuildType,
-                                    commitCount = BuildConfig.COMMIT_COUNT.toInt(),
-                                    versionName = BuildConfig.VERSION_NAME,
-                                    repository = GITHUB_REPO,
-                                    forceCheck = true,
-                                ),
-                            )
-                        }.getOrNull()
+                if (migrationReady.value) {
+                    val shouldShowChangelog = withContext(Dispatchers.IO) {
+                        val appUpdatePreferences = Injekt.get<AppUpdatePreferences>()
+                        val seenVersionPreference = appUpdatePreferences.lastSeenUpdatedChangelogVersionCode()
+                        val decision = resolveUpdatedChangelogPrompt(
+                            currentVersionCode = BuildConfig.VERSION_CODE,
+                            lastSeenVersionCode = seenVersionPreference.get(),
+                            isDebug = BuildConfig.DEBUG,
+                        )
+
+                        if (decision.nextSeenVersionCode != seenVersionPreference.get()) {
+                            seenVersionPreference.set(decision.nextSeenVersionCode)
+                        }
+
+                        decision.shouldPrompt
                     }
-                    showChangelog = true
+
+                    if (shouldShowChangelog) {
+                        installedRelease = withContext(Dispatchers.IO) {
+                            runCatching {
+                                Injekt.get<GetApplicationRelease>().awaitCurrent(
+                                    GetApplicationRelease.Arguments(
+                                        isPreview = isPreviewBuildType,
+                                        commitCount = BuildConfig.COMMIT_COUNT.toInt(),
+                                        versionName = BuildConfig.VERSION_NAME,
+                                        repository = GITHUB_REPO,
+                                        forceCheck = true,
+                                    ),
+                                )
+                            }.getOrNull()
+                        }
+                        showChangelog = true
+                    }
                 }
             }
             if (showChangelog) {

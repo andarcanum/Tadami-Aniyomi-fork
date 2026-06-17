@@ -79,6 +79,22 @@ internal fun resolveAppUpdatePrompt(
     }
 }
 
+data class UpdatedChangelogPromptDecision(
+    val shouldPrompt: Boolean,
+    val nextSeenVersionCode: Int,
+)
+
+internal fun resolveUpdatedChangelogPrompt(
+    currentVersionCode: Int,
+    lastSeenVersionCode: Int,
+    isDebug: Boolean,
+): UpdatedChangelogPromptDecision {
+    return UpdatedChangelogPromptDecision(
+        shouldPrompt = !isDebug && lastSeenVersionCode > 0 && currentVersionCode > lastSeenVersionCode,
+        nextSeenVersionCode = currentVersionCode,
+    )
+}
+
 val GITHUB_REPO = "andarcanum/Tadami-Aniyomi-fork"
 
 val RELEASE_TAG: String by lazy {

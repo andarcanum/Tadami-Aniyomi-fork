@@ -440,9 +440,7 @@ private fun AuroraSpecialBackgroundCanvas(
     }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
-        if (styleKey == "neon_orbit" ||
-            styleKey == "trinity_constellation"
-        ) {
+        if (styleKey == "neon_orbit") {
             FLOATING_STARS.forEach { star ->
                 val alpha =
                     0.04f + 0.06f * kotlin.math.abs(kotlin.math.sin(elapsedSeconds * star.pulseSpeed + star.phase))
@@ -498,164 +496,198 @@ private fun AuroraSpecialBackgroundCanvas(
             }
             "trinity_constellation" -> {
                 val center = Offset(size.width * 0.5f, size.height * 0.42f)
-                val nodeColors = listOf(Color(0xFF64E8FF), Color(0xFF9C7CFF), Color(0xFFFFD36E))
+                val minDim = size.minDimension
+                val time = if (animate) elapsedSeconds else 0f
 
-                // 2. Rotating Astrolabe Grid & Constellation
-                val rotationAngle = orbitSpin * 0.4f // very slow, elegant rotation
-                withTransform({
-                    rotate(rotationAngle, pivot = center)
-                }) {
-                    // Draw Astrolabe / Celestial Coordinates Grid
-                    val gridAlpha = 0.015f // extremely subtle
-                    val strokeDash = PathEffect.dashPathEffect(floatArrayOf(8f, 16f), 0f)
+                val orbitSize = 1.50f
+                val orbitSpeed = 0.05f
+                val coreSize = 0.78f
+                val particles = 0.12f
+                val energySpeed = 0.02f
+                val spread = 0.35f
+                val swirl = 0.11f
+                val glow = 0.44f
 
-                    // Concentric rings
-                    drawCircle(
-                        color = Color.White.copy(alpha = gridAlpha),
-                        radius = size.minDimension * 0.22f,
-                        style = Stroke(width = 0.8.dp.toPx()),
-                    )
-                    drawCircle(
-                        color = Color.White.copy(alpha = gridAlpha),
-                        radius = size.minDimension * 0.38f,
-                        style = Stroke(width = 0.8.dp.toPx(), pathEffect = strokeDash),
-                    )
-                    drawCircle(
-                        color = Color.White.copy(alpha = gridAlpha * 0.7f),
-                        radius = size.minDimension * 0.54f,
-                        style = Stroke(width = 0.6.dp.toPx()),
-                    )
+                val orbitR = orbitSize * minDim * 0.28f
+                val coreR = coreSize * minDim * 0.12f
+                val baseAng = time * orbitSpeed * 0.6f
+                val swirlFactor = swirl * 80f
+                val spreadBase = spread * minDim * 0.15f
 
-                    // Faint radial coordinate ticks / lines
-                    repeat(8) { j ->
-                        val angleRad = Math.toRadians((j * 45.0)).toFloat()
-                        val cos = kotlin.math.cos(angleRad)
-                        val sin = kotlin.math.sin(angleRad)
-                        val startRadius = size.minDimension * 0.15f
-                        val endRadius = size.minDimension * 0.58f
-                        drawLine(
-                            color = Color.White.copy(alpha = gridAlpha * 0.5f),
-                            start = Offset(center.x + cos * startRadius, center.y + sin * startRadius),
-                            end = Offset(center.x + cos * endRadius, center.y + sin * endRadius),
-                            strokeWidth = 0.6.dp.toPx(),
-                        )
-                    }
+                val coreCyan = Color(0xFF64E8FF)
+                val corePurple = Color(0xFF9C7CFF)
+                val coreGold = Color(0xFFFFD36E)
+                val accentColor = colors.accent
 
-                    val numStars = 12
-                    // Draw connecting lines and traveling stardust (zero allocation)
-                    repeat(numStars) { i ->
-                        val star = FLOATING_STARS[i]
-                        val nextStar = FLOATING_STARS[(i + 3) % numStars]
-                        val color = nodeColors[i % nodeColors.size]
-
-                        val startX = star.xFraction * size.width
-                        val startY = star.yFraction * size.height
-                        val endX = nextStar.xFraction * size.width
-                        val endY = nextStar.yFraction * size.height
-
-                        val lineAlpha = 0.02f + 0.02f * kotlin.math.abs(kotlin.math.sin(elapsedSeconds * 1.5f + i))
-
-                        drawLine(
-                            color = color.copy(alpha = lineAlpha),
-                            start = Offset(startX, startY),
-                            end = Offset(endX, endY),
-                            strokeWidth = 0.8.dp.toPx(),
-                        )
-
-                        // Traveling stardust particle along the line
-                        val travelProgress = (elapsedSeconds * 0.08f + i * 0.15f) % 1.0f
-                        val pX = startX + (endX - startX) * travelProgress
-                        val pY = startY + (endY - startY) * travelProgress
-                        drawCircle(
-                            color = Color.White.copy(alpha = 0.14f),
-                            radius = 1.2.dp.toPx(),
-                            center = Offset(pX, pY),
-                        )
-                    }
-
-                    // Draw star nodes (with twinkle effect)
-                    repeat(numStars) { i ->
-                        val star = FLOATING_STARS[i]
-                        val color = nodeColors[i % nodeColors.size]
-                        val startX = star.xFraction * size.width
-                        val startY = star.yFraction * size.height
-
-                        val twinkle = 0.5f + 0.5f * kotlin.math.sin(elapsedSeconds * 2.5f + i)
-                        val outerRadius = (2.2f + (i % 3) * 0.6f + twinkle * 0.8f).dp.toPx()
-
-                        drawCircle(
-                            color = color.copy(alpha = 0.08f * twinkle),
-                            radius = outerRadius * 1.6f,
-                            center = Offset(startX, startY),
-                        )
-                        drawCircle(
-                            color = Color.White.copy(alpha = 0.15f + 0.10f * twinkle),
-                            radius = 1.0.dp.toPx(),
-                            center = Offset(startX, startY),
-                        )
-                    }
+                fun srHash(seed: Float): Float {
+                    return kotlin.math.abs(kotlin.math.sin(seed * 127.1f + 311.7f) * 43758.5453f) % 1f
                 }
 
-                // 3. Subtle shooting stars (not rotated, they dash across the screen naturally)
-                fun drawSubtleComet(
-                    progress: Float,
-                    start: Offset,
-                    end: Offset,
-                    color: Color,
-                ) {
-                    val visibility = when {
-                        progress < 0.08f -> progress / 0.08f
-                        progress < 0.18f -> 1f - ((progress - 0.08f) / 0.10f)
-                        else -> 0f
-                    }
-                    if (visibility <= 0f) return
-
-                    val head = Offset(
-                        x = start.x + ((end.x - start.x) * progress),
-                        y = start.y + ((end.y - start.y) * progress),
-                    )
-                    val tailLength = size.minDimension * (0.12f + (0.03f * progress))
-                    val tailDirection = Offset(
-                        x = -(end.x - start.x),
-                        y = -(end.y - start.y),
-                    )
-                    val magnitude = kotlin.math.sqrt(
-                        (tailDirection.x * tailDirection.x) + (tailDirection.y * tailDirection.y),
-                    ).coerceAtLeast(1f)
-                    val tailUnit = Offset(
-                        x = tailDirection.x / magnitude,
-                        y = tailDirection.y / magnitude,
-                    )
-                    val tail = Offset(
-                        x = head.x + (tailUnit.x * tailLength),
-                        y = head.y + (tailUnit.y * tailLength),
-                    )
-
-                    drawLine(
-                        color = color.copy(alpha = 0.015f * visibility),
-                        start = tail,
-                        end = head,
-                        strokeWidth = 1.2.dp.toPx(),
-                        cap = StrokeCap.Round,
-                    )
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.025f * visibility),
-                        radius = 1.2.dp.toPx(),
-                        center = head,
+                fun blendColor(a: Color, b: Color, t: Float): Color {
+                    val clamped = t.coerceIn(0f, 1f)
+                    val inv = 1f - clamped
+                    return Color(
+                        red = a.red * inv + b.red * clamped,
+                        green = a.green * inv + b.green * clamped,
+                        blue = a.blue * inv + b.blue * clamped,
+                        alpha = a.alpha * inv + b.alpha * clamped,
                     )
                 }
 
-                drawSubtleComet(
-                    progress = cometProgressOne,
-                    start = Offset(-size.width * 0.1f, size.height * 0.15f),
-                    end = Offset(size.width * 1.1f, size.height * 0.75f),
-                    color = Color(0xFFBDFBFF),
+                val cores = listOf(
+                    Pair(coreCyan, baseAng),
+                    Pair(corePurple, baseAng + (2f * Math.PI.toFloat() / 3f)),
+                    Pair(coreGold, baseAng + (4f * Math.PI.toFloat() / 3f))
                 )
-                drawSubtleComet(
-                    progress = cometProgressTwo,
-                    start = Offset(-size.width * 0.05f, size.height * 0.8f),
-                    end = Offset(size.width * 1.05f, size.height * 0.2f),
-                    color = Color(0xFF9B8CFF),
+
+                val corePts = cores.map { (col, ang) ->
+                    Triple(
+                        center.x + kotlin.math.cos(ang) * orbitR,
+                        center.y + kotlin.math.sin(ang) * orbitR,
+                        col
+                    )
+                }
+
+                // Swirling background stars
+                FLOATING_STARS.forEachIndexed { i, star ->
+                    val seed = i + 1f
+                    val sxRaw = star.xFraction * size.width
+                    val syRaw = star.yFraction * size.height
+                    val dx = sxRaw - center.x
+                    val dy = syRaw - center.y
+                    val baseDist = kotlin.math.hypot(dx, dy)
+                    val baseAngle = kotlin.math.atan2(dy.toDouble(), dx.toDouble()).toFloat()
+                    
+                    val swirlOff = (swirlFactor * minDim) / (baseDist + 100f)
+                    val ang = baseAngle + time * 0.08f * orbitSpeed * swirlOff
+                    
+                    val sx = center.x + kotlin.math.cos(ang) * baseDist
+                    val sy = center.y + kotlin.math.sin(ang) * baseDist
+                    
+                    val blink = 0.6f + 0.4f * kotlin.math.sin(time * 1.5f + star.phase)
+                    val starCol = when (i % 3) {
+                        0 -> coreCyan
+                        1 -> corePurple
+                        else -> coreGold
+                    }
+                    drawCircle(
+                        color = starCol.copy(alpha = (star.size * 0.15f * blink * glow).coerceIn(0f, 1f)),
+                        radius = (star.size * 1.2f).dp.toPx(),
+                        center = Offset(sx, sy)
+                    )
+                }
+
+                // Connective Triangle (Accent Color)
+                val path = Path().apply {
+                    moveTo(corePts[0].first, corePts[0].second)
+                    lineTo(corePts[1].first, corePts[1].second)
+                    lineTo(corePts[2].first, corePts[2].second)
+                    close()
+                }
+                drawPath(
+                    path = path,
+                    color = accentColor.copy(alpha = 0.16f * glow),
+                    style = Stroke(width = 1.5f.dp.toPx())
+                )
+
+                // Energy Flow Particles
+                val numParts = (particles * 450).toInt()
+                repeat(numParts) { i ->
+                    val seed = i + 1f
+                    val phase = srHash(seed * 1.1f)
+                    val nx = (srHash(seed * 2.2f) + srHash(seed * 3.3f) + srHash(seed * 4.4f) - 1.5f) * 1.5f
+                    val ny = (srHash(seed * 5.5f) + srHash(seed * 6.6f) + srHash(seed * 7.7f) - 1.5f) * 1.5f
+                    val pSize = (0.8f + srHash(seed * 8.8f) * 1.8f).dp.toPx()
+                    val speedMod = 0.7f + srHash(seed * 9.9f) * 0.6f
+                    
+                    val t = (phase + time * energySpeed * 0.4f * speedMod) % 1f
+                    val segment = (t * 3f).toInt()
+                    val u = (t * 3f) % 1f
+                    
+                    val c1 = corePts[segment]
+                    val c2 = corePts[(segment + 1) % 3]
+                    
+                    val cpX = center.x + nx * spreadBase
+                    val cpY = center.y + ny * spreadBase
+                    
+                    val inv = 1f - u
+                    val px = inv * inv * c1.first + 2f * inv * u * cpX + u * u * c2.first
+                    val py = inv * inv * c1.second + 2f * inv * u * cpY + u * u * c2.second
+                    
+                    val baseCol = if (u > 0.5f) c2.third else c1.third
+                    val finalCol = blendColor(baseCol, accentColor, 0.4f + 0.2f * srHash(seed * 10.1f))
+                    val particleA = (0.2f + 0.8f * kotlin.math.sin(u * Math.PI.toFloat())) * glow
+                    
+                    drawCircle(
+                        color = finalCol.copy(alpha = particleA.coerceIn(0f, 1f)),
+                        radius = pSize,
+                        center = Offset(px, py)
+                    )
+                    drawCircle(
+                        color = finalCol.copy(alpha = (particleA * 0.3f).coerceIn(0f, 1f)),
+                        radius = pSize * 1.5f,
+                        center = Offset(px - (px - cpX) * 0.015f, py - (py - cpY) * 0.015f)
+                    )
+                }
+
+                // Draw The 3 Cores
+                corePts.forEach { (cx, cy, col) ->
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                col.copy(alpha = 0.4f * glow),
+                                col.copy(alpha = 0.15f * glow),
+                                col.copy(alpha = 0f)
+                            ),
+                            center = Offset(cx, cy),
+                            radius = coreR * 3f
+                        ),
+                        radius = coreR * 3f,
+                        center = Offset(cx, cy)
+                    )
+                    
+                    val innerCol = blendColor(col, accentColor, 0.35f)
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color.White.copy(alpha = 1f * glow),
+                                innerCol.copy(alpha = 0.9f * glow),
+                                innerCol.copy(alpha = 0f)
+                            ),
+                            center = Offset(cx, cy),
+                            radius = coreR
+                        ),
+                        radius = coreR,
+                        center = Offset(cx, cy)
+                    )
+                    
+                    drawCircle(
+                        color = Color.Black.copy(alpha = 0.4f * glow),
+                        radius = coreR * 0.4f,
+                        center = Offset(cx, cy),
+                        style = Stroke(width = 1.5f.dp.toPx())
+                    )
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.8f * glow),
+                        radius = coreR * 0.2f,
+                        center = Offset(cx, cy),
+                        style = Stroke(width = 0.5f.dp.toPx())
+                    )
+                }
+
+                // Center ambient glow with accent
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.18f * glow),
+                            coreCyan.copy(alpha = 0.04f * glow),
+                            Color.Transparent
+                        ),
+                        center = center,
+                        radius = orbitR * 1.5f
+                    ),
+                    radius = orbitR * 1.5f,
+                    center = center
                 )
             }
             "deep_space_archive" -> {
@@ -787,12 +819,7 @@ private fun AuroraSpecialBackgroundCanvas(
                     val hd = book.depth * 0.5f
                     return when (face) {
                         "top" -> listOf(Vec3(-hw, hh, -hd), Vec3(hw, hh, -hd), Vec3(hw, hh, hd), Vec3(-hw, hh, hd))
-                        "bottom" -> listOf(
-                            Vec3(-hw, -hh, hd),
-                            Vec3(hw, -hh, hd),
-                            Vec3(hw, -hh, -hd),
-                            Vec3(-hw, -hh, -hd),
-                        )
+                        "bottom" -> listOf(Vec3(-hw, -hh, hd), Vec3(hw, -hh, hd), Vec3(hw, -hh, -hd), Vec3(-hw, -hh, -hd))
                         "front" -> listOf(Vec3(-hw, -hh, hd), Vec3(hw, -hh, hd), Vec3(hw, hh, hd), Vec3(-hw, hh, hd))
                         "back" -> listOf(Vec3(hw, -hh, -hd), Vec3(-hw, -hh, -hd), Vec3(-hw, hh, -hd), Vec3(hw, hh, -hd))
                         "right" -> listOf(Vec3(hw, -hh, hd), Vec3(hw, -hh, -hd), Vec3(hw, hh, -hd), Vec3(hw, hh, hd))
@@ -882,14 +909,8 @@ private fun AuroraSpecialBackgroundCanvas(
                         lineTo(faceDraw.corners[3].x, faceDraw.corners[3].y)
                         close()
                     }
-                    val vx = Offset(
-                        faceDraw.corners[1].x - faceDraw.corners[0].x,
-                        faceDraw.corners[1].y - faceDraw.corners[0].y,
-                    )
-                    val vy = Offset(
-                        faceDraw.corners[3].x - faceDraw.corners[0].x,
-                        faceDraw.corners[3].y - faceDraw.corners[0].y,
-                    )
+                    val vx = Offset(faceDraw.corners[1].x - faceDraw.corners[0].x, faceDraw.corners[1].y - faceDraw.corners[0].y)
+                    val vy = Offset(faceDraw.corners[3].x - faceDraw.corners[0].x, faceDraw.corners[3].y - faceDraw.corners[0].y)
                     val faceWidthPx = kotlin.math.hypot(vx.x, vx.y)
                     val faceHeightPx = kotlin.math.hypot(vy.x, vy.y)
                     val axisDeg = (Math.atan2(vx.y.toDouble(), vx.x.toDouble()) * 180.0 / Math.PI).toFloat()
@@ -931,25 +952,12 @@ private fun AuroraSpecialBackgroundCanvas(
                     drawPath(path = path, brush = brush)
                     drawPath(
                         path = path,
-                        color = if (isPageEdge) {
-                            scaleColor(paperShadow, pageTint * 0.96f).copy(
-                                alpha =
-                                0.24f + 0.06f * near,
-                            )
-                        } else {
-                            cover.copy(alpha = 0.06f + 0.03f * near)
-                        },
+                        color = if (isPageEdge) scaleColor(paperShadow, pageTint * 0.96f).copy(alpha = 0.24f + 0.06f * near)
+                        else cover.copy(alpha = 0.06f + 0.03f * near),
                     )
                     drawPath(
                         path = path,
-                        color = if (isPageEdge) {
-                            archiveWhite.copy(alpha = 0.07f + 0.03f * near)
-                        } else {
-                            cover.copy(
-                                alpha =
-                                0.10f + 0.04f * near,
-                            )
-                        },
+                        color = if (isPageEdge) archiveWhite.copy(alpha = 0.07f + 0.03f * near) else cover.copy(alpha = 0.10f + 0.04f * near),
                         style = Stroke(width = 1.0f.dp.toPx()),
                     )
 
@@ -958,28 +966,8 @@ private fun AuroraSpecialBackgroundCanvas(
                         val count = kotlin.math.max(6, (longest / (6f.dp.toPx())).toInt())
                         repeat(count + 1) { i ->
                             val t = i / count.toFloat()
-                            val a = if (faceWidthPx >=
-                                faceHeightPx
-                            ) {
-                                bilinear(faceDraw.corners, 0.06f, 0.08f + t * 0.84f)
-                            } else {
-                                bilinear(
-                                    faceDraw.corners,
-                                    0.08f + t * 0.84f,
-                                    0.06f,
-                                )
-                            }
-                            val b = if (faceWidthPx >=
-                                faceHeightPx
-                            ) {
-                                bilinear(faceDraw.corners, 0.94f, 0.08f + t * 0.84f)
-                            } else {
-                                bilinear(
-                                    faceDraw.corners,
-                                    0.08f + t * 0.84f,
-                                    0.94f,
-                                )
-                            }
+                            val a = if (faceWidthPx >= faceHeightPx) bilinear(faceDraw.corners, 0.06f, 0.08f + t * 0.84f) else bilinear(faceDraw.corners, 0.08f + t * 0.84f, 0.06f)
+                            val b = if (faceWidthPx >= faceHeightPx) bilinear(faceDraw.corners, 0.94f, 0.08f + t * 0.84f) else bilinear(faceDraw.corners, 0.08f + t * 0.84f, 0.94f)
                             drawLine(
                                 color = archiveWhite.copy(alpha = 0.08f + 0.04f * near),
                                 start = a,
@@ -1062,9 +1050,7 @@ private fun AuroraSpecialBackgroundCanvas(
                         height = mix(0.05f, 0.11f, srHash(seed * 4.2f)) * mix(0.88f, 1.10f, variety),
                         x = (srHash(seed * 5.3f) - 0.5f) * 0.22f * scatter,
                         z = (srHash(seed * 6.1f) - 0.5f) * 0.12f * scatter,
-                        y =
-                        (i - (booksCount - 1) * 0.5f) * 0.155f * vertical +
-                            (srHash(seed * 7.4f) - 0.5f) * 0.022f * scatter,
+                        y = (i - (booksCount - 1) * 0.5f) * 0.155f * vertical + (srHash(seed * 7.4f) - 0.5f) * 0.022f * scatter,
                         bobPhase = srHash(seed * 11.3f) * (2f * Math.PI.toFloat()),
                         bobAmp = mix(0.010f, 0.026f, srHash(seed * 12.7f)),
                     )
@@ -1103,8 +1089,7 @@ private fun AuroraSpecialBackgroundCanvas(
                 val particleHeight = (size.height / (scale * 1.02f)).coerceAtLeast(3.0f) * 1.08f
                 repeat((42 + 96 * dustDensity).toInt()) { i ->
                     val seed = i + 1f
-                    val loopT =
-                        (srHash(seed * 2.1f) + time * (0.45f + srHash(seed * 3.3f) * 0.95f) * flowSpeed * 0.11f) % 1f
+                    val loopT = (srHash(seed * 2.1f) + time * (0.45f + srHash(seed * 3.3f) * 0.95f) * flowSpeed * 0.11f) % 1f
                     val angle = loopT * 2f * Math.PI.toFloat() * 3.2f + srHash(seed * 4.7f) * 2f * Math.PI.toFloat()
                     val radial = 0.76f + 0.22f * kotlin.math.sin(angle * 2.0f + srHash(seed * 6.4f) * 8f)
                     val y = (loopT - 0.5f) * particleHeight
@@ -1116,9 +1101,7 @@ private fun AuroraSpecialBackgroundCanvas(
                         tone > 0.45f -> archiveCyan
                         else -> archivePurple
                     }
-                    val alpha =
-                        (0.05f + 0.18f * pr.p) * glowStrength *
-                            if (tone > 0.82f) (0.72f + 0.42f * accentStrength) else 1f
+                    val alpha = (0.05f + 0.18f * pr.p) * glowStrength * if (tone > 0.82f) (0.72f + 0.42f * accentStrength) else 1f
                     drawCircle(
                         color = color.copy(alpha = alpha.coerceIn(0f, 0.55f)),
                         radius = (0.7f + srHash(seed * 9.9f) * 1.25f).dp.toPx() * pr.p,
