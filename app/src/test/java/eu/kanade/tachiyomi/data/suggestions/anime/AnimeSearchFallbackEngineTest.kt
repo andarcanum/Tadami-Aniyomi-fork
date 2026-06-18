@@ -48,6 +48,35 @@ class AnimeSearchFallbackEngineTest {
     }
 
     @Test
+    fun `fetchSearchFallback fills missing thumbnail from anime details`() = runTest {
+        val anime = Anime.create().copy(id = 123L, title = "Solo Leveling", url = "/solo-thumb-source-anime")
+        val source = FakeAnimeCatalogueSource()
+        val searchResult = SAnime.create().apply {
+            title = "Solo Leveling Side Stories"
+            url = "/solo-thumb-result-anime"
+            thumbnail_url = null
+        }
+        val detailResult = searchResult.copy().apply {
+            thumbnail_url = "https://img.example/solo-anime.jpg"
+        }
+        source.searchAnimesToReturn = listOf(searchResult)
+        source.detailsByUrl = mapOf(searchResult.url to detailResult)
+
+        val seed = SuggestionSeed(
+            mediaType = SuggestionMediaType.ANIME,
+            primaryTitle = "Solo Leveling",
+            candidateTitles = listOf("Solo Leveling"),
+            description = "",
+        )
+
+        val outcome = AnimeSearchFallbackEngine().fetchSearchFallback(anime, source, seed)
+
+        val success = outcome as AnimeFallbackOutcome.Success
+        assertEquals("https://img.example/solo-anime.jpg", success.items.single().thumbnailUrl)
+        assertEquals(1, source.getAnimeDetailsCallCount)
+    }
+
+    @Test
     fun `fetchSearchFallback filters out franchise duplicates`() = runTest {
         val anime = Anime.create().copy(id = 123L, title = "Solo Leveling Vol 1", url = "/solo-1")
         val source = FakeAnimeCatalogueSource()

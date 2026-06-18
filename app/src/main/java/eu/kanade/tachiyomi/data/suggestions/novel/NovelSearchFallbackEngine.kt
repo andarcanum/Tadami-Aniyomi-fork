@@ -13,7 +13,6 @@ import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilter
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
@@ -193,15 +192,9 @@ class NovelSearchFallbackEngine {
             if (tierQueries.isEmpty()) continue
             logcat { "[NovelSearchFallbackEngine] Processing $tierName with queries: $tierQueries" }
 
-            val staggerMs = when {
-                tierName.startsWith("Tier 4") -> 3000L
-                tierName.startsWith("Tier 3") -> 1500L
-                else -> 500L
-            }
             coroutineScope {
-                tierQueries.forEachIndexed { index, query ->
+                tierQueries.forEach { query ->
                     launch {
-                        delay(staggerMs * index)
                         if (synchronized(uniqueResults) { uniqueResults.size >= boundedMaxResults }) return@launch
                         try {
                             logcat { "[NovelSearchFallbackEngine] Searching for query: '$query'" }
@@ -234,6 +227,10 @@ class NovelSearchFallbackEngine {
                                     return@mapNotNull null
                                 }
 
+                                if (synchronized(uniqueResults) { uniqueResults.containsKey(sNovel.url) }) {
+                                    return@mapNotNull null
+                                }
+
                                 val bestScore = candidatesToScore.maxOfOrNull { candidate ->
                                     SuggestionTitleResolver.scoreMatch(candidate, sNovel.title)
                                 } ?: 0
@@ -263,7 +260,7 @@ class NovelSearchFallbackEngine {
                                     val item = SuggestionItem(
                                         title = sNovel.title,
                                         searchQueries = listOf(sNovel.title),
-                                        thumbnailUrl = sNovel.thumbnail_url,
+                                        thumbnailUrl = resolveThumbnail(source, sNovel),
                                         providerName = source.name,
                                         providerUrl = sNovel.url,
                                         providerId = "${source.id}:${sNovel.url}",
@@ -432,7 +429,7 @@ class NovelSearchFallbackEngine {
                     candidateMetadata[sNovel.url] = SuggestionItem(
                         title = sNovel.title,
                         searchQueries = listOf(sNovel.title),
-                        thumbnailUrl = sNovel.thumbnail_url,
+                        thumbnailUrl = resolveThumbnail(source, sNovel),
                         providerName = source.name,
                         providerUrl = sNovel.url,
                         providerId = "${source.id}:${sNovel.url}",
@@ -489,27 +486,25 @@ class NovelSearchFallbackEngine {
             if (novelsPage.novels.isEmpty()) return
 
             var addedAny = false
-            val currentProgress = synchronized(uniqueResults) {
-                novelsPage.novels.forEach { sNovel ->
-                    if (uniqueResults.size >= targetCount) return@forEach
-                    if (sNovel.url == novel.url) return@forEach
-                    if (SuggestionTitleResolver.isFranchiseDuplicate(sNovel.title, novel.title)) return@forEach
-                    if (uniqueResults.containsKey(sNovel.url)) return@forEach
+            novelsPage.novels.forEach { sNovel ->
+                if (uniqueResults.size >= targetCount) return@forEach
+                if (sNovel.url == novel.url) return@forEach
+                if (SuggestionTitleResolver.isFranchiseDuplicate(sNovel.title, novel.title)) return@forEach
+                if (uniqueResults.containsKey(sNovel.url)) return@forEach
 
-                    uniqueResults[sNovel.url] = SuggestionItem(
-                        title = sNovel.title,
-                        searchQueries = listOf(sNovel.title),
-                        thumbnailUrl = sNovel.thumbnail_url,
-                        providerName = source.name,
-                        providerUrl = sNovel.url,
-                        providerId = "${source.id}:${sNovel.url}",
-                        mediaType = SuggestionMediaType.NOVEL,
-                        reason = SuggestionReason.POPULAR_BACKFILL,
-                    )
-                    addedAny = true
-                }
-                if (addedAny) uniqueResults.values.toList() else null
+                uniqueResults[sNovel.url] = SuggestionItem(
+                    title = sNovel.title,
+                    searchQueries = listOf(sNovel.title),
+                    thumbnailUrl = resolveThumbnail(source, sNovel),
+                    providerName = source.name,
+                    providerUrl = sNovel.url,
+                    providerId = "${source.id}:${sNovel.url}",
+                    mediaType = SuggestionMediaType.NOVEL,
+                    reason = SuggestionReason.POPULAR_BACKFILL,
+                )
+                addedAny = true
             }
+            val currentProgress = if (addedAny) uniqueResults.values.toList() else null
             if (currentProgress != null) {
                 onProgress?.invoke(currentProgress)
             }
@@ -590,6 +585,15 @@ class NovelSearchFallbackEngine {
         }
 
         traverse(filterList)
+    }
+
+    private suspend fun resolveThumbnail(
+        source: NovelCatalogueSource,
+        novel: eu.kanade.tachiyomi.novelsource.model.SNovel,
+    ): String? {
+        return novel.thumbnail_url?.takeIf { it.isNotBlank() }
+            ?: runCatching { source.getNovelDetails(novel.copy()).thumbnail_url?.takeIf { it.isNotBlank() } }
+                .getOrNull()
     }
 
     private companion object {

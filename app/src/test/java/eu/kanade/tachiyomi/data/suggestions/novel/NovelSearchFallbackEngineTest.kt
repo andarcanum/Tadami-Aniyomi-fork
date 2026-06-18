@@ -101,6 +101,35 @@ class NovelSearchFallbackEngineTest {
     }
 
     @Test
+    fun `fetchSearchFallback fills missing thumbnail from novel details`() = runTest {
+        val novel = Novel.create().copy(id = 123L, title = "Solo Leveling", url = "/solo-thumb-source-novel")
+        val source = FakeNovelCatalogueSource()
+        val searchResult = SNovel.create().apply {
+            title = "Solo Leveling Side Stories"
+            url = "/solo-thumb-result-novel"
+            thumbnail_url = null
+        }
+        val detailResult = searchResult.copy().apply {
+            thumbnail_url = "https://img.example/solo-novel.jpg"
+        }
+        source.searchNovelsToReturn = listOf(searchResult)
+        source.detailsByUrl = mapOf(searchResult.url to detailResult)
+
+        val seed = SuggestionSeed(
+            mediaType = SuggestionMediaType.NOVEL,
+            primaryTitle = "Solo Leveling",
+            candidateTitles = listOf("Solo Leveling"),
+            description = "",
+        )
+
+        val outcome = NovelSearchFallbackEngine().fetchSearchFallback(novel, source, seed)
+
+        val success = outcome as NovelFallbackOutcome.Success
+        assertEquals("https://img.example/solo-novel.jpg", success.items.single().thumbnailUrl)
+        assertEquals(1, source.getNovelDetailsCallCount)
+    }
+
+    @Test
     fun `fetchSearchFallback backfills from popular novels when search results are empty`() = runTest {
         val novel = Novel.create().copy(id = 123L, title = "Solo Leveling", url = "/solo-backfill")
         val source = FakeNovelCatalogueSource()

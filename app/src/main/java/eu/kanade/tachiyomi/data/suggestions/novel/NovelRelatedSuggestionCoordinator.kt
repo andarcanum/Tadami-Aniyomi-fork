@@ -57,7 +57,7 @@ class NovelRelatedSuggestionCoordinator {
                         SuggestionItem(
                             title = sNovel.title,
                             searchQueries = listOf(sNovel.title),
-                            thumbnailUrl = sNovel.thumbnail_url,
+                            thumbnailUrl = resolveThumbnail(source, sNovel),
                             providerName = source.name,
                             providerUrl = sNovel.url,
                             providerId = "${source.id}:${sNovel.url}",
@@ -77,5 +77,14 @@ class NovelRelatedSuggestionCoordinator {
             logcat { "[NovelRelatedSuggestionCoordinator] Failed to fetch related novels: ${e.message}" }
             NovelFallbackOutcome.Empty(NovelFallbackReason.RELATED_EMPTY)
         }
+    }
+
+    private suspend fun resolveThumbnail(
+        source: NovelCatalogueSource,
+        novel: eu.kanade.tachiyomi.novelsource.model.SNovel,
+    ): String? {
+        return novel.thumbnail_url?.takeIf { it.isNotBlank() }
+            ?: runCatching { source.getNovelDetails(novel.copy()).thumbnail_url?.takeIf { it.isNotBlank() } }
+                .getOrNull()
     }
 }
