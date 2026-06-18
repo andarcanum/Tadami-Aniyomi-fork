@@ -1,9 +1,18 @@
 package eu.kanade.tachiyomi.data.download.engine
 
+import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
+import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -44,6 +53,66 @@ class DownloadEngineFacadeTest {
     }
 
     // --- DownloadEngineSnapshot edge cases ---
+
+    @Test
+    fun `engine inputs still emit when WorkManager running flows are silent`() = runTest {
+        val animeQueue = MutableStateFlow(emptyList<AnimeDownload>())
+        val mangaQueue = MutableStateFlow(emptyList<MangaDownload>())
+        val novelState = MutableStateFlow(NovelDownloadQueueState())
+
+        val snapshot = withTimeout(250) {
+            combineDownloadEngineInputs(
+                animeQueueFlow = animeQueue,
+                mangaQueueFlow = mangaQueue,
+                novelStateFlow = novelState,
+                animeRunningFlow = emptyFlow(),
+                mangaRunningFlow = emptyFlow(),
+                telemetryVersionFlow = flowOf(0L),
+                buildSnapshot = { anime, manga, novel ->
+                    DownloadEngineSnapshot(
+                        animeItems = anime.size,
+                        mangaItems = manga.size,
+                        novelPending = novel.pendingCount,
+                    )
+                },
+            ).first()
+        }
+
+        snapshot.activeCount shouldBe 0
+        snapshot.queuedCount shouldBe 0
+    }
+
+    @Test
+    fun `storage stats refresh does not overlap while previous refresh is running`() {
+        shouldStartStorageStatsRefresh(
+            nowMs = 10_000L,
+            lastRefreshMs = 0L,
+            refreshIntervalMs = 5_000L,
+            isRefreshRunning = true,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `storage stats refresh starts only after interval elapses`() {
+        shouldStartStorageStatsRefresh(
+            nowMs = 4_999L,
+            lastRefreshMs = 0L,
+            refreshIntervalMs = 5_000L,
+            isRefreshRunning = false,
+        ) shouldBe false
+
+        shouldStartStorageStatsRefresh(
+            nowMs = 5_000L,
+            lastRefreshMs = 0L,
+            refreshIntervalMs = 5_000L,
+            isRefreshRunning = false,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `file path free space returns null for pathless SAF directory`() {
+        freeSpaceFromFilePath(null) shouldBe null
+    }
 
     @Test
     fun `snapshot with anime-only active items computes counts correctly`() {
