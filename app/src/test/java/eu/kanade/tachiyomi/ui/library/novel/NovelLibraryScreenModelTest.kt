@@ -409,11 +409,11 @@ class NovelLibraryScreenModelTest {
             downloadedIdsDispatcher = testDispatcher,
         )
 
-        screenModel.getNextUnreadChapter(novel)?.id shouldBe 102L
+        screenModel.getNextUnreadChapter(novel)?.id shouldBe 101L
     }
 
     @Test
-    fun `fully read series resumes the last touched chapter`() = runTest(testDispatcher) {
+    fun `fully read series resumes the latest chapter in reading order`() = runTest(testDispatcher) {
         val novel = Novel.create().copy(
             id = 10L,
             title = "Novel",
@@ -455,11 +455,13 @@ class NovelLibraryScreenModelTest {
             downloadedIdsDispatcher = testDispatcher,
         )
 
-        screenModel.getNextUnreadChapter(novel)?.id shouldBe 103L
+        screenModel.getNextUnreadChapter(novel)?.id shouldBe 101L
     }
 
     @Test
-    fun `resume selection follows source order when chapter numbers are out of order`() = runTest(testDispatcher) {
+    fun `resume selection follows chapter number order when chapter numbers are out of order`() = runTest(
+        testDispatcher,
+    ) {
         val novel = Novel.create().copy(
             id = 11L,
             title = "Novel",
@@ -501,7 +503,7 @@ class NovelLibraryScreenModelTest {
             downloadedIdsDispatcher = testDispatcher,
         )
 
-        screenModel.getNextUnreadChapter(novel)?.id shouldBe 201L
+        screenModel.getNextUnreadChapter(novel)?.id shouldBe 203L
     }
 
     private fun trackedNovelLibraryScreenModel(

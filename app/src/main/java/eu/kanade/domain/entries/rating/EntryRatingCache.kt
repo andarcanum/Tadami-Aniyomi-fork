@@ -2,17 +2,31 @@ package eu.kanade.domain.entries.rating
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import uy.kohesive.injekt.injectLazy
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.util.Locale
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 
-class EntryRatingCache {
-    private val app: Application by injectLazy()
+class EntryRatingCache(
+    private val sharedPreferences: SharedPreferences? = null,
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+) {
     private val preferences by lazy {
-        app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        sharedPreferences ?: Injekt.get<Application>().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
     private val mutex = Mutex()
+    private val loaderScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val inFlight = mutableMapOf<String, Deferred<Float?>>()
 
     suspend fun resolve(
         contentType: String,
@@ -23,16 +37,16 @@ class EntryRatingCache {
     ): Float? {
         val key = buildKey(contentType, sourceName, url)
         val cached = read(key)
-        if (cached != null && !forceRefresh) {
+        if (cached != null && !forceRefresh && cached.isFresh(nowMillis())) {
             return cached.rating
         }
 
-        val fresh = loader()
+        val fresh = loadOnce(key, loader)
 
         mutex.withLock {
             when {
                 fresh != null -> write(key, fresh)
-                cached == null -> write(key, null)
+                cached == null || cached.isEmptyRatingStale(nowMillis()) -> write(key, fresh)
             }
         }
 
@@ -56,6 +70,28 @@ class EntryRatingCache {
         mutex.withLock {
             write(buildKey(contentType, sourceName, url), rating)
         }
+    }
+
+    private suspend fun loadOnce(
+        key: String,
+        loader: suspend () -> Float?,
+    ): Float? {
+        val deferred = mutex.withLock {
+            inFlight[key] ?: loaderScope.async { loader() }.also { newDeferred ->
+                inFlight[key] = newDeferred
+                newDeferred.invokeOnCompletion {
+                    // ponytail: app-scope load survives caller cancellation; completion cleanup is enough.
+                    loaderScope.launch {
+                        mutex.withLock {
+                            if (inFlight[key] === newDeferred) {
+                                inFlight.remove(key)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return deferred.await()
     }
 
     private fun read(key: String): CachedRating? {
@@ -83,7 +119,7 @@ class EntryRatingCache {
     }
 
     private fun encode(rating: Float?): String {
-        val updatedAtMillis = System.currentTimeMillis()
+        val updatedAtMillis = nowMillis()
         return if (rating == null) {
             "n|$updatedAtMillis"
         } else {
@@ -111,9 +147,21 @@ class EntryRatingCache {
     private data class CachedRating(
         val rating: Float?,
         val updatedAtMillis: Long,
-    )
+    ) {
+        fun isFresh(nowMillis: Long): Boolean {
+            val age = nowMillis - updatedAtMillis
+            val ttl = if (rating == null) EMPTY_TTL_MS else RATING_TTL_MS
+            return age in 0..ttl
+        }
+
+        fun isEmptyRatingStale(nowMillis: Long): Boolean {
+            return rating == null && !isFresh(nowMillis)
+        }
+    }
 
     private companion object {
         private const val PREFS_NAME = "entry_rating_cache"
+        private val RATING_TTL_MS = 7.days.inWholeMilliseconds
+        private val EMPTY_TTL_MS = 6.hours.inWholeMilliseconds
     }
 }

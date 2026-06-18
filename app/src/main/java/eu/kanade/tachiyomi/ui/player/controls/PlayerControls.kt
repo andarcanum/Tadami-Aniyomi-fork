@@ -605,6 +605,7 @@ fun PlayerControls(
         val dismissSheet by viewModel.dismissSheet.collectAsStateWithLifecycle()
         val subtitles by viewModel.subtitleTracks.collectAsStateWithLifecycle()
         val selectedSubtitles by viewModel.selectedSubtitles.collectAsStateWithLifecycle()
+        val subtitleTranslationUiState by viewModel.subtitleTranslationUiState.collectAsStateWithLifecycle()
         val audioTracks by viewModel.audioTracks.collectAsStateWithLifecycle()
         val selectedAudio by viewModel.selectedAudio.collectAsStateWithLifecycle()
         val isLoadingHosters by viewModel.isLoadingHosters.collectAsStateWithLifecycle()
@@ -624,6 +625,15 @@ fun PlayerControls(
             subtitles = subtitles.toImmutableList(),
             selectedSubtitles = selectedSubtitles.toList().toImmutableList(),
             onAddSubtitle = viewModel::addSubtitle,
+            onTranslateSubtitle = viewModel::openSubtitleTranslationSheet,
+            subtitleTranslationUiState = subtitleTranslationUiState,
+            onSelectSubtitleTranslationTrack = viewModel::selectSubtitleTranslationTrack,
+            onSelectSubtitleTranslationProvider = viewModel::selectSubtitleTranslationProvider,
+            onSubtitleTranslationSourceLanguageChange = viewModel::setSubtitleTranslationSourceLanguage,
+            onSubtitleTranslationTargetLanguageChange = viewModel::setSubtitleTranslationTargetLanguage,
+            onToggleSubtitleTranslationCache = viewModel::toggleSubtitleTranslationCache,
+            onStartSubtitleTranslation = viewModel::startSubtitleTranslation,
+            onCancelSubtitleTranslation = viewModel::cancelSubtitleTranslation,
             onSelectSubtitle = viewModel::selectSub,
             audioTracks = audioTracks.toImmutableList(),
             selectedAudio = selectedAudio,

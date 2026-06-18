@@ -14,9 +14,30 @@ import eu.kanade.tachiyomi.data.suggestions.SuggestionTitleResolver
  */
 fun List<SuggestionItem>.dedupeByCleanTitle(): List<SuggestionItem> {
     if (isEmpty()) return this
-    val ordered = sortedByDescending { SuggestionSourceWeight.of(it.reason) }
+    val ordered = sortedWith(
+        compareByDescending<SuggestionItem> { SuggestionSourceWeight.of(it.reason) }
+            .thenByDescending { !it.thumbnailUrl.isNullOrBlank() }
+            .thenBy { it.title.length },
+    )
+    return ordered.dedupeByCleanTitleKeepingFirst()
+}
+
+fun List<SuggestionItem>.dedupeByCleanTitle(seed: SuggestionSeed): List<SuggestionItem> {
+    if (isEmpty()) return this
+    val ordered = sortedWith(
+        compareByDescending<SuggestionItem> {
+            SuggestionSourceWeight.finalScore(it.reason, it.bestMatchScoreFor(seed))
+        }
+            .thenByDescending { SuggestionSourceWeight.of(it.reason) }
+            .thenByDescending { !it.thumbnailUrl.isNullOrBlank() }
+            .thenBy { it.title.length },
+    )
+    return ordered.dedupeByCleanTitleKeepingFirst()
+}
+
+private fun List<SuggestionItem>.dedupeByCleanTitleKeepingFirst(): List<SuggestionItem> {
     val seenKeys = LinkedHashMap<String, SuggestionItem>()
-    for (item in ordered) {
+    for (item in this) {
         val key = SuggestionTitleResolver.cleanTitle(item.title)
         if (key.isBlank()) {
             val pk = item.providerId ?: item.providerUrl
@@ -37,8 +58,11 @@ fun List<SuggestionItem>.dedupeByCleanTitle(): List<SuggestionItem> {
  * Used to drive the final score = weight × bestMatchScore in the ranker.
  */
 fun SuggestionItem.bestMatchScoreFor(seed: SuggestionSeed): Int {
-    if (seed.candidateTitles.isEmpty()) return 0
-    return seed.candidateTitles.maxOfOrNull { candidate ->
+    val candidates = (listOf(seed.primaryTitle) + seed.candidateTitles)
+        .filter { it.isNotBlank() }
+        .distinct()
+    if (candidates.isEmpty()) return 0
+    return candidates.maxOfOrNull { candidate ->
         SuggestionTitleResolver.scoreMatch(candidate, title)
     } ?: 0
 }

@@ -42,6 +42,7 @@ class NovelCoverFetcher(
     private val options: Options,
     private val sourceSiteUrlLazy: Lazy<String?>,
     private val coverFileLazy: Lazy<File?>,
+    private val customCoverFileLazy: Lazy<File>,
     private val diskCacheKeyLazy: Lazy<String>,
     private val pluginHeadersProvider: suspend () -> Map<String, String>,
     private val callFactoryLazy: Lazy<Call.Factory>,
@@ -54,6 +55,14 @@ class NovelCoverFetcher(
         get() = diskCacheKeyLazy.value
 
     override suspend fun fetch(): FetchResult {
+        val customCoverFile = customCoverFileLazy.value
+        if (customCoverFile.exists()) {
+            debugTitleCoverFlow(
+                scope = "novel-fetcher",
+                message = "custom-cover-hit file=${customCoverFile.name}",
+            )
+            return fileLoader(customCoverFile)
+        }
         val rawUrl = data.url?.takeIf { it.isNotBlank() }
             ?: throw IOException("No cover URL specified for novel ${data.novelId}")
         debugTitleCoverFlow(
@@ -81,8 +90,10 @@ class NovelCoverFetcher(
     }
 
     private fun uniFileLoader(urlString: String): FetchResult {
-        val uniFile = UniFile.fromUri(options.context, urlString.toUri())!!
-        val tempFile = uniFile.openInputStream().source().buffer()
+        val uniFile = UniFile.fromUri(options.context, urlString.toUri())
+            ?: throw IOException("Unable to resolve image uri: $urlString")
+        val inputStream = uniFile.openInputStream()
+        val tempFile = inputStream.source().buffer()
         return SourceFetchResult(
             source = ImageSource(source = tempFile, fileSystem = FileSystem.SYSTEM),
             mimeType = "image/*",
@@ -92,7 +103,7 @@ class NovelCoverFetcher(
 
     private suspend fun pluginImageLoader(url: String): FetchResult {
         debugTitleCoverFlow(scope = "novel-fetcher", message = "plugin-image-fetch url=${previewTitleCoverUrl(url)}")
-        val resolved = pluginImageResolver(url)
+        val resolved = resolveNovelPluginImagePayload(url, resolver = pluginImageResolver)
             ?: throw IOException("Failed to resolve plugin image: $url")
         return SourceFetchResult(
             source = ImageSource(
@@ -322,15 +333,19 @@ class NovelCoverFetcher(
         private val sourceManager: NovelSourceManager by injectLazy()
 
         override fun create(data: NovelCover, options: Options, imageLoader: ImageLoader): Fetcher? {
-            // Return null when there is no URL — Coil will fall back to the placeholder/error
-            // drawable instead of invoking the fetcher and crashing on a null URL.
-            if (data.url.isNullOrBlank()) return null
+            // Return null for non-library entries without a URL. Library entries may still
+            // have a custom local cover, so keep the fetcher available for them.
+            if (data.url.isNullOrBlank() && !data.isNovelFavorite) return null
             return NovelCoverFetcher(
                 data = data,
                 options = options,
                 sourceSiteUrlLazy = lazy { (sourceManager.get(data.sourceId) as? NovelSiteSource)?.siteUrl },
                 coverFileLazy = lazy { coverCache.getCoverFile(data.url).takeIf { data.isNovelFavorite } },
-                diskCacheKeyLazy = lazy { imageLoader.components.key(data, options)!! },
+                customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.novelId) },
+                diskCacheKeyLazy = lazy {
+                    imageLoader.components.key(data, options)
+                        ?: "novel-cover:${data.novelId}:${data.url.orEmpty()}"
+                },
                 pluginHeadersProvider = {
                     (sourceManager.get(data.sourceId) as? NovelImageRequestSource)
                         ?.getImageRequestHeaders()

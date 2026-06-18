@@ -18,6 +18,7 @@ class MangaMigrationFlagsTest {
                 MR.strings.categories,
                 MR.strings.track,
                 MR.strings.migration_extra,
+                MR.strings.action_notes,
             ),
             flags.map { it.titleId },
         )
@@ -25,11 +26,13 @@ class MangaMigrationFlagsTest {
     }
 
     @Test
-    fun `hasTracking and hasExtra recognize their bit masks`() {
+    fun `hasTracking hasExtra and hasNotes recognize their bit masks`() {
         assertTrue(MangaMigrationFlags.hasTracking(0b00100))
         assertFalse(MangaMigrationFlags.hasTracking(0))
         assertTrue(MangaMigrationFlags.hasExtra(0b100000))
         assertFalse(MangaMigrationFlags.hasExtra(0))
+        assertTrue(MangaMigrationFlags.hasNotes(0b1000000))
+        assertFalse(MangaMigrationFlags.hasNotes(0))
     }
 
     @Test

@@ -8,6 +8,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.resume
 
 class AndroidNovelTtsPlatformFactory(
@@ -57,6 +58,7 @@ private class AndroidNovelTtsPlatformEngine(
     private var tts: TextToSpeech? = null
     private var progressListener: NovelTtsPlaybackProgressListener? = null
     private var initializedEnginePackage: String? = null
+    private val generation = AtomicInteger(0)
 
     override suspend fun initialize(enginePackageName: String?) {
         val normalizedEnginePackage = enginePackageName?.takeIf { it.isNotBlank() }
@@ -64,20 +66,39 @@ private class AndroidNovelTtsPlatformEngine(
         if (tts != null) {
             shutdown()
         }
+        val requestGeneration = generation.incrementAndGet()
         val initialized = suspendCancellableCoroutine<TextToSpeech?> { continuation ->
-            val instance = if (normalizedEnginePackage.isNullOrBlank()) {
-                TextToSpeech(context) { status ->
-                    continuation.resume(if (status == TextToSpeech.SUCCESS) tts else null)
+            var localInstance: TextToSpeech? = null
+            val listener = TextToSpeech.OnInitListener { status ->
+                val instance = localInstance
+                if (requestGeneration != generation.get()) {
+                    runCatching { instance?.shutdown() }
+                    if (continuation.isActive) continuation.resume(null)
+                    return@OnInitListener
                 }
-            } else {
-                TextToSpeech(context, { status ->
-                    continuation.resume(if (status == TextToSpeech.SUCCESS) tts else null)
-                }, normalizedEnginePackage)
+                if (status == TextToSpeech.SUCCESS && instance != null) {
+                    if (continuation.isActive) continuation.resume(instance)
+                } else {
+                    runCatching { instance?.shutdown() }
+                    if (continuation.isActive) continuation.resume(null)
+                }
             }
-            tts = instance
+            localInstance = if (normalizedEnginePackage.isNullOrBlank()) {
+                TextToSpeech(context, listener)
+            } else {
+                TextToSpeech(context, listener, normalizedEnginePackage)
+            }
+            tts = localInstance
+            continuation.invokeOnCancellation {
+                if (requestGeneration == generation.get()) {
+                    runCatching { localInstance.shutdown() }
+                    if (tts === localInstance) tts = null
+                }
+            }
         }
+        if (initialized == null || requestGeneration != generation.get()) return
         initializedEnginePackage = normalizedEnginePackage
-        initialized?.setOnUtteranceProgressListener(
+        initialized.setOnUtteranceProgressListener(
             object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String) {
                     progressListener?.onUtteranceStart(utteranceId)
@@ -104,29 +125,33 @@ private class AndroidNovelTtsPlatformEngine(
     }
 
     override fun availableVoices(): List<NovelTtsVoiceDescriptor> {
-        return tts?.voices
-            ?.map { voice ->
-                NovelTtsVoiceDescriptor(
-                    id = voice.name,
-                    name = voice.name,
-                    localeTag = voice.locale?.toLanguageTag().orEmpty(),
-                    requiresNetwork = voice.isNetworkConnectionRequired,
-                    isInstalled = voice.features?.contains(NOT_INSTALLED_FEATURE) != true,
-                )
-            }
-            ?.sortedBy { it.name }
-            .orEmpty()
+        return runCatching {
+            tts?.voices
+                ?.map { voice ->
+                    NovelTtsVoiceDescriptor(
+                        id = voice.name,
+                        name = voice.name,
+                        localeTag = voice.locale?.toLanguageTag().orEmpty(),
+                        requiresNetwork = voice.isNetworkConnectionRequired,
+                        isInstalled = voice.features?.contains(NOT_INSTALLED_FEATURE) != true,
+                    )
+                }
+                ?.sortedBy { it.name }
+                .orEmpty()
+        }.getOrDefault(emptyList())
     }
 
     override fun availableLocales(): List<Locale> {
-        return tts?.voices
-            ?.mapNotNull { it.locale }
-            ?.distinct()
-            .orEmpty()
+        return runCatching {
+            tts?.voices
+                ?.mapNotNull { it.locale }
+                ?.distinct()
+                .orEmpty()
+        }.getOrDefault(emptyList())
     }
 
     override fun capabilities(): NovelTtsEngineCapabilities {
-        val voices = tts?.voices.orEmpty()
+        val voices = runCatching { tts?.voices.orEmpty() }.getOrDefault(emptySet())
         return NovelTtsEngineCapabilities(
             supportsExactWordOffsets = false,
             supportsReliablePauseResume = false,
@@ -136,31 +161,37 @@ private class AndroidNovelTtsPlatformEngine(
     }
 
     override suspend fun setVoice(voiceId: String?) {
-        val targetVoice = tts?.voices?.firstOrNull { it.name == voiceId } ?: return
-        tts?.voice = targetVoice
+        runCatching {
+            val targetVoice = tts?.voices?.firstOrNull { it.name == voiceId } ?: return
+            tts?.voice = targetVoice
+        }
     }
 
     override suspend fun setLocale(localeTag: String?) {
-        val locale = localeTag?.let(Locale::forLanguageTag) ?: return
-        tts?.language = locale
+        runCatching {
+            val locale = localeTag?.let(Locale::forLanguageTag) ?: return
+            tts?.language = locale
+        }
     }
 
     override suspend fun setSpeechRate(rate: Float) {
-        tts?.setSpeechRate(rate)
+        runCatching { tts?.setSpeechRate(rate) }
     }
 
     override suspend fun setPitch(pitch: Float) {
-        tts?.setPitch(pitch)
+        runCatching { tts?.setPitch(pitch) }
     }
 
     override suspend fun speak(utteranceId: String, text: String, flushQueue: Boolean) {
-        val queueMode = if (flushQueue) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-        tts?.speak(
-            text,
-            queueMode,
-            Bundle.EMPTY,
-            utteranceId,
-        )
+        runCatching {
+            val queueMode = if (flushQueue) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+            tts?.speak(
+                text,
+                queueMode,
+                Bundle.EMPTY,
+                utteranceId,
+            )
+        }
     }
 
     override fun stop() {
@@ -170,13 +201,15 @@ private class AndroidNovelTtsPlatformEngine(
     }
 
     override fun shutdown() {
+        generation.incrementAndGet()
+        val instance = tts
         runCatching {
-            tts?.stop()
+            instance?.stop()
         }
         runCatching {
-            tts?.shutdown()
+            instance?.shutdown()
         }.also {
-            tts = null
+            if (tts === instance) tts = null
             initializedEnginePackage = null
         }
     }

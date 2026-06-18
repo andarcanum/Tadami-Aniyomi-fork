@@ -4,6 +4,7 @@ data class ViewerChapters(
     val currChapter: ReaderChapter,
     val prevChapter: ReaderChapter?,
     val nextChapter: ReaderChapter?,
+    val allChapters: List<ReaderChapter> = emptyList(),
 ) {
 
     fun ref() {

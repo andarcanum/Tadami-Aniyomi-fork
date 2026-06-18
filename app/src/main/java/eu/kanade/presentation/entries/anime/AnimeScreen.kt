@@ -166,6 +166,7 @@ fun AnimeScreen(
     onRefresh: () -> Unit,
     onContinueWatching: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
+    onSuggestionClick: (eu.kanade.tachiyomi.data.suggestions.SuggestionItem) -> Unit,
 
     // For cover dialog
     onCoverClicked: () -> Unit,
@@ -253,6 +254,7 @@ fun AnimeScreen(
             onRefresh = onRefresh,
             onContinueWatching = onContinueWatching,
             onSearch = onSearch,
+            onSuggestionClick = onSuggestionClick,
             onCoverClicked = onCoverClicked,
             onShareClicked = onShareClicked,
             onDownloadActionClicked = onDownloadActionClicked,

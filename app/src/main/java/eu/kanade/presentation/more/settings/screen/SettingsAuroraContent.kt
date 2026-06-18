@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.Navigator
 import com.tadami.aurora.BuildConfig
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
@@ -46,6 +48,7 @@ import eu.kanade.presentation.theme.resolveAuroraIconSurfaceColor
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -55,6 +58,8 @@ fun SettingsAuroraContent(
     onBackClick: () -> Unit,
 ) {
     val unlockableManager = remember { Injekt.get<UnlockableManager>() }
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val darkRimLightEnabled by uiPreferences.auroraDarkRimLightEnabled().collectAsState()
     val items = remember {
         mainSettingsNavigationItems().filter { item ->
             if (item.key == "treasury") {
@@ -85,6 +90,7 @@ fun SettingsAuroraContent(
                     subtitle = item.subtitleText().orEmpty(),
                     icon = item.icon,
                     onClick = { navigator.push(item.screen) },
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
             }
         }
@@ -137,8 +143,10 @@ private fun SettingsAuroraItem(
     subtitle: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
+    darkRimLightEnabled: Boolean = true,
 ) {
     val colors = AuroraTheme.colors
+    val showBorder = darkRimLightEnabled || !colors.isDark || colors.isEInk
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -148,10 +156,14 @@ private fun SettingsAuroraItem(
         colors = CardDefaults.cardColors(
             containerColor = resolveAuroraControlContainerColor(colors),
         ),
-        border = androidx.compose.foundation.BorderStroke(
-            width = 1.dp,
-            color = resolveAuroraBorderColor(colors, emphasized = false),
-        ),
+        border = if (showBorder) {
+            androidx.compose.foundation.BorderStroke(
+                width = 1.dp,
+                color = resolveAuroraBorderColor(colors, emphasized = false),
+            )
+        } else {
+            null
+        },
     ) {
         Row(
             modifier = Modifier

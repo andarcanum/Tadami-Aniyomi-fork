@@ -102,9 +102,8 @@ fun AchievementCategoryTabs(
                         label = "tab_text_color",
                     )
 
-                    val isSecret = category == AchievementCategory.SECRET
-                    val tabFontSize = if (isSecret) 10.sp else 12.sp
-                    val tabLetterSpacing = if (isSecret) 0.sp else 1.sp
+                    val tabFontSize = 10.sp
+                    val tabLetterSpacing = 0.5.sp
                     Box(
                         modifier = Modifier
                             .weight(1f)

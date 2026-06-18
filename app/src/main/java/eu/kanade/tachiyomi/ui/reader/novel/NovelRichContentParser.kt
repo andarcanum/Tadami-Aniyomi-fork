@@ -87,13 +87,8 @@ private fun parseBlockElement(
             }
         }
         "hr" -> listOf(NovelRichContentBlock.HorizontalRule)
-        "img" -> {
-            val imageUrl = parseImageUrlFromElement(element)
-            if (imageUrl.isNullOrBlank()) {
-                emptyList()
-            } else {
-                listOf(NovelRichContentBlock.Image(url = imageUrl, alt = element.attr("alt").ifBlank { null }))
-            }
+        "img", "picture", "source" -> {
+            parseImageBlockFromElement(element)?.let(::listOf).orEmpty()
         }
         else -> {
             // Try block-like descendants first (e.g. body/html wrappers), else flatten text.
@@ -152,14 +147,10 @@ private fun parseParagraphLikeOrContainerBlocks(
         when (node) {
             is Element -> {
                 val childTag = node.tagName().lowercase(Locale.US)
-                if (childTag == "img") {
+                if (childTag in richImageBlockTags) {
                     flushParagraph()
-                    val imageUrl = parseImageUrlFromElement(node)
-                    if (!imageUrl.isNullOrBlank()) {
-                        blocks += NovelRichContentBlock.Image(
-                            url = imageUrl,
-                            alt = node.attr("alt").ifBlank { null },
-                        )
+                    parseImageBlockFromElement(node)?.let { image ->
+                        blocks += image
                     }
                     return@forEach
                 }
@@ -373,6 +364,22 @@ private fun resolveTextNodeText(node: TextNode): String {
     return node.text()
 }
 
+private fun parseImageBlockFromElement(element: Element): NovelRichContentBlock.Image? {
+    val tag = element.tagName().lowercase(Locale.US)
+    val imageElement = when (tag) {
+        "picture" -> element.selectFirst("img") ?: element.selectFirst("source")
+        else -> element
+    } ?: return null
+
+    val imageUrl = parseImageUrlFromElement(imageElement) ?: return null
+    return NovelRichContentBlock.Image(
+        url = imageUrl,
+        alt = imageElement.attr("alt")
+            .ifBlank { element.attr("alt") }
+            .ifBlank { null },
+    )
+}
+
 private fun parseImageUrlFromElement(element: Element): String? {
     val candidates = listOf(
         element.attr("src"),
@@ -488,6 +495,13 @@ private val richContainerBlockTags = setOf(
     "h6",
     "blockquote",
     "hr",
+    "picture",
+)
+
+private val richImageBlockTags = setOf(
+    "img",
+    "picture",
+    "source",
 )
 
 private val paragraphLikeStyleTags = setOf(

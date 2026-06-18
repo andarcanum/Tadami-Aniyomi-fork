@@ -55,6 +55,16 @@
       ]
     },
     {
+      "pluginId": "lnori",
+      "version": 1,
+      "chapterFallbackPolicy": {
+        "fillMissingChapterNames": true,
+        "dropDuplicateChapterPaths": true,
+        "chapterNamePrefix": "Chapter",
+        "stripFragmentFromChapterPath": false
+      }
+    },
+    {
       "pluginId": "TL",
       "version": 1,
       "scriptPatches": [

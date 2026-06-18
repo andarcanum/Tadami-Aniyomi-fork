@@ -18,9 +18,11 @@ class NovelPluginPackageFactory {
         customCss: ByteArray?,
     ): Result<NovelPluginPackage> {
         val expected = entry.sha256.lowercase()
-        val actual = eu.kanade.tachiyomi.util.lang.Hash.sha256(script)
-        if (expected != actual) {
-            return Result.failure(NovelPluginChecksumMismatch(expected, actual))
+        if (expected.isNotBlank()) {
+            val actual = eu.kanade.tachiyomi.util.lang.Hash.sha256(script)
+            if (expected != actual) {
+                return Result.failure(NovelPluginChecksumMismatch(expected, actual))
+            }
         }
         return Result.success(
             NovelPluginPackage(

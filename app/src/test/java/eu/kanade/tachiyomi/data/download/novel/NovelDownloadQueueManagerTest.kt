@@ -163,6 +163,25 @@ class NovelDownloadQueueManagerTest {
         }
     }
 
+    @Test
+    fun `recover stale downloading tasks requeues orphaned active tasks without reordering`() {
+        val tasks = listOf(
+            queuedTask(status = NovelQueuedDownloadStatus.QUEUED).copy(taskId = 1L),
+            queuedTask(status = NovelQueuedDownloadStatus.DOWNLOADING).copy(taskId = 2L, errorMessage = "stale"),
+            queuedTask(status = NovelQueuedDownloadStatus.QUEUED).copy(taskId = 3L),
+        )
+
+        val recovered = recoverStaleDownloadingTasks(tasks)
+
+        recovered.map { it.taskId } shouldBe listOf(1L, 2L, 3L)
+        recovered.map { it.status } shouldBe listOf(
+            NovelQueuedDownloadStatus.QUEUED,
+            NovelQueuedDownloadStatus.QUEUED,
+            NovelQueuedDownloadStatus.QUEUED,
+        )
+        recovered[1].errorMessage shouldBe null
+    }
+
     private fun queuedTask(status: NovelQueuedDownloadStatus): NovelQueuedDownload {
         return NovelQueuedDownload(
             taskId = 1L,

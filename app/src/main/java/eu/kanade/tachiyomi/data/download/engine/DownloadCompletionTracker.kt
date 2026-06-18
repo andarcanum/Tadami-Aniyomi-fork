@@ -10,6 +10,7 @@ class DownloadCompletionTracker {
 
     /** Total completions across all sections. */
     val totalCompletions: Int
+        @Synchronized
         get() = completionsBySection.values.sum()
 
     /**
@@ -18,7 +19,13 @@ class DownloadCompletionTracker {
      * Call this when a download item finishes successfully and is
      * about to be removed from its backend queue.
      */
+    @Synchronized
     fun recordCompletion(section: DownloadSection, count: Int = 1) {
         completionsBySection[section] = (completionsBySection[section] ?: 0) + count
+    }
+
+    @Synchronized
+    fun reset() {
+        completionsBySection.clear()
     }
 }

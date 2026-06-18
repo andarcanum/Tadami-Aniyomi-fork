@@ -131,8 +131,11 @@ class NovelJsSource internal constructor(
     private var cachedImageRequestHeaders: Map<String, String>? = null
     private var capabilities: NovelPluginCapabilities? = null
     private var settingsSchema: List<PluginSettingDefinition> = emptyList()
-    private var cachedParseNovelUrl: String? = null
-    private var cachedParseNovelResult: ParsedPluginNovel? = null
+    private val parseNovelCache = object : LinkedHashMap<String, ParsedPluginNovel>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ParsedPluginNovel>?): Boolean {
+            return size > PARSE_NOVEL_CACHE_MAX_ENTRIES
+        }
+    }
     private var settingsDiscoveryAttempted = false
     private var cachedHasSettings = false
 
@@ -774,6 +777,7 @@ class NovelJsSource internal constructor(
                 runtime = null
                 cachedFiltersPayload = null
                 cachedImageRequestHeaders = null
+                parseNovelCache.clear()
                 settingsSchema = emptyList()
                 settingsBridge.clearSettingsSchema()
                 capabilities = null
@@ -891,11 +895,11 @@ class NovelJsSource internal constructor(
      * Must be called inside [mutex.withLock].
      */
     private fun fetchParseNovelLocked(runtime: NovelJsRuntime, url: String): ParsedPluginNovel? {
-        if (cachedParseNovelUrl == url) {
+        parseNovelCache[url]?.let { cached ->
             logcat(LogPriority.DEBUG) {
                 "Novel parseNovel cache hit plugin=${plugin.id} url=$url"
             }
-            return cachedParseNovelResult
+            return cached
         }
         val payload = callPluginWithTimeout(runtime, "parseNovel", PARSE_NOVEL_TIMEOUT_MS, toJsString(url))
         logcat(LogPriority.DEBUG) {
@@ -909,8 +913,9 @@ class NovelJsSource internal constructor(
                 "chapters=${parsed?.chapters?.size ?: 0} " +
                 "totalPages=${parsed?.totalPages?.toString() ?: "null"}"
         }
-        cachedParseNovelUrl = url
-        cachedParseNovelResult = parsed
+        if (parsed != null) {
+            parseNovelCache[url] = parsed
+        }
         return parsed
     }
 
@@ -979,20 +984,30 @@ class NovelJsSource internal constructor(
 
         var cycles = 0
         while (cycles < maxCycles) {
-            runtime.evaluate(
-                "if (typeof __drainJobs === 'function') __drainJobs(1000)",
-                "novel-plugin-drain.js",
-            )
-            val done = runtime.evaluate("globalThis.__d_$token") as? Boolean ?: false
+            val done = runtime.evaluate(
+                """
+                (function() {
+                    if (typeof __drainJobs === 'function') __drainJobs(1000);
+                    return !!globalThis.__d_$token;
+                })();
+                """.trimIndent(),
+                "novel-plugin-drain-check.js",
+            ) as? Boolean ?: false
             if (done) break
             cycles++
-            if (cycles < maxCycles) {
+            if (cycles < maxCycles && cycles >= FAST_POLL_SPIN_CYCLES) {
                 Thread.sleep(10L)
             }
         }
 
-        val error = runtime.evaluate("globalThis.__e_$token") as? String
-        val jsonResult = runtime.evaluate("globalThis.__r_$token") as? String
+        val error = runtime.evaluate(
+            "globalThis.__e_$token == null ? null : String(globalThis.__e_$token)",
+            "novel-plugin-error-read.js",
+        ) as? String
+        val result = runtime.evaluate(
+            "globalThis.__r_$token == null ? null : String(globalThis.__r_$token)",
+            "novel-plugin-result-read.js",
+        ) as? String
 
         runtime.evaluate(
             """
@@ -1000,13 +1015,13 @@ class NovelJsSource internal constructor(
             delete globalThis.__e_$token;
             delete globalThis.__d_$token;
             """.trimIndent(),
-            "novel-plugin-cleanup.js",
+            "novel-plugin-result-cleanup.js",
         )
 
         if (!error.isNullOrEmpty() && error != "null") {
             throw RuntimeException("Plugin error in $functionName: $error")
         }
-        return jsonResult ?: ""
+        return result ?: ""
     }
 
     private fun parseNovelItems(payload: String): List<PluginNovelItem> {
@@ -1864,10 +1879,18 @@ class NovelJsSource internal constructor(
         val cover: String? = null,
     )
 
+    @Serializable
+    private data class PluginCallPollingResult(
+        val error: String? = null,
+        val result: String? = null,
+    )
+
     companion object {
         private const val LOG_TAG = "NovelJsSource"
         private const val FETCH_IMAGE_RUNTIME_TIMEOUT_MS = 15_000L
         private const val PARSE_NOVEL_TIMEOUT_MS = 30_000L
+        private const val PARSE_NOVEL_CACHE_MAX_ENTRIES = 24
+        private const val FAST_POLL_SPIN_CYCLES = 8
         private const val JAOMIX_PARSE_PAGE_MAX_ATTEMPTS = 9
     }
 

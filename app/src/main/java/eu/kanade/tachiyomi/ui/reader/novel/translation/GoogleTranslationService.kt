@@ -100,7 +100,7 @@ class GoogleTranslationService(
             return@withContext GoogleTranslationBatchResponse(emptyMap())
         }
 
-        val translations = linkedMapOf<String, String>()
+        val translations = linkedMapOf<Int, String>()
         val chunks = buildChunks(texts)
 
         coroutineScope {
@@ -150,13 +150,13 @@ class GoogleTranslationService(
                                         targetLanguage = normalizedTarget,
                                     )?.let { fallback ->
                                         synchronized(translations) {
-                                            translations[original] = fallback
+                                            translations[index] = fallback
                                         }
                                         applied += 1
                                     }
                                 } else {
                                     synchronized(translations) {
-                                        translations[original] = result
+                                        translations[index] = result
                                     }
                                     applied += 1
                                 }
@@ -170,7 +170,7 @@ class GoogleTranslationService(
         }
 
         GoogleTranslationBatchResponse(
-            translatedByText = translations,
+            translatedByIndex = translations,
             detectedSourceLanguage = if (normalizedSource == "auto") "auto" else normalizedSource,
         )
     }
@@ -179,16 +179,16 @@ class GoogleTranslationService(
         chunk: List<Pair<Int, String>>,
         sourceLanguage: String,
         targetLanguage: String,
-        translations: MutableMap<String, String>,
+        translations: MutableMap<Int, String>,
     ) {
-        chunk.forEach { (_, original) ->
+        chunk.forEach { (index, original) ->
             translateSingle(
                 text = original,
                 sourceLanguage = sourceLanguage,
                 targetLanguage = targetLanguage,
             )?.let { translated ->
                 synchronized(translations) {
-                    translations[original] = translated
+                    translations[index] = translated
                 }
             }
         }

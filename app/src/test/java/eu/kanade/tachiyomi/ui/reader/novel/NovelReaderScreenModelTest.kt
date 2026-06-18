@@ -1049,6 +1049,59 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `builds mixed content blocks from lnori picture images inside paragraph containers`() {
+        runBlocking {
+            val novel = Novel.create().copy(
+                id = 1L,
+                source = 10L,
+                title = "Novel",
+                url = "https://lnori.com/series/3343/re-zero-starting-life-in-another-world",
+            )
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Cover",
+                url = "https://lnori.com/book/12040/re-zero-starting-life-in-another-world-vol-1#page01",
+            )
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(
+                    sourceId = novel.source,
+                    chapterHtml = """
+                        <p>Intro</p>
+                        <p>
+                          <picture>
+                            <source srcset="https://img.lnori.com/12040-01.jxl" type="image/jxl" />
+                            <img src="https://img.lnori.com/12040-01.jpg" alt="Cover" />
+                          </picture>
+                        </p>
+                        <p>Outro</p>
+                    """.trimIndent(),
+                ),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.contentBlocks[1].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Intro"
+            val image = state.contentBlocks[2].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Image>()
+            image.url shouldBe "https://img.lnori.com/12040-01.jpg"
+            image.alt shouldBe "Cover"
+            state.contentBlocks[3].shouldBeInstanceOf<NovelReaderScreenModel.ContentBlock.Text>().text shouldBe "Outro"
+        }
+    }
+
+    @Test
     fun `html payload keeps normal paragraphs and recovers malformed list fragment`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")

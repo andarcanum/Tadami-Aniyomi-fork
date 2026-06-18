@@ -218,6 +218,7 @@ data object NovelLibraryTab : Tab {
                             showCategoryTabs = state.showCategoryTabs,
                             searchQuery = state.searchQuery,
                         ),
+                        onClearFilters = screenModel::resetFilters,
                         onChangeCurrentPage = { screenModel.activeCategoryIndex = it },
                         onCategoryLongSelected = screenModel::selectAll,
                         onNovelClicked = { item ->

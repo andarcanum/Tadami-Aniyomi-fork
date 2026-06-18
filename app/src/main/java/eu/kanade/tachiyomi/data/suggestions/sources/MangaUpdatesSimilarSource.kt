@@ -76,6 +76,8 @@ class MangaUpdatesSimilarSource(
                         .parseAs<MuSearchResponse>(json)
 
                     allSearchResults.addAll(searchResponse.results)
+                } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logcat { "MangaUpdates search failed for candidate '$candidate': ${e.message}" }
                 }
@@ -138,12 +140,16 @@ class MangaUpdatesSimilarSource(
                         } else {
                             null
                         }
+                    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         logcat { "[MangaUpdates] rec detail fetch failed for series=${rec.seriesId}: ${e.message}" }
                         null
                     }
                 }
             }.mapNotNull { it.await() }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
         } catch (e: Exception) {
             logcat { "[MangaUpdates] ERROR for '${seed.primaryTitle}': ${e.message}" }
             emptyList()

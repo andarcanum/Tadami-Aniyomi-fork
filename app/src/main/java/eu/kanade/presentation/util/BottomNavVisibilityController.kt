@@ -20,6 +20,6 @@ class BottomNavVisibilityController {
     }
 }
 
-val LocalBottomNavVisibilityController = compositionLocalOf<BottomNavVisibilityController> {
-    error("BottomNavVisibilityController was not provided")
+val LocalBottomNavVisibilityController = compositionLocalOf {
+    BottomNavVisibilityController()
 }

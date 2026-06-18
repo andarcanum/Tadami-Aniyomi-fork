@@ -88,8 +88,8 @@ class GoogleTranslationServiceTest {
             params = GoogleTranslationParams(sourceLang = "auto", targetLang = "ru"),
         )
 
-        result.translatedByText shouldContain ("First" to "Первый")
-        result.translatedByText shouldContain ("Second" to "Второй")
+        result.translatedByIndex shouldContain (0 to "Первый")
+        result.translatedByIndex shouldContain (1 to "Второй")
     }
 
     @Test
@@ -114,8 +114,8 @@ class GoogleTranslationServiceTest {
             params = GoogleTranslationParams(sourceLang = "auto", targetLang = "ru"),
         )
 
-        result.translatedByText shouldContain ("First" to "Первый")
-        result.translatedByText shouldContain ("Second" to "Второй")
+        result.translatedByIndex shouldContain (0 to "Первый")
+        result.translatedByIndex shouldContain (1 to "Второй")
         server.requestCount shouldBe 2
     }
 }

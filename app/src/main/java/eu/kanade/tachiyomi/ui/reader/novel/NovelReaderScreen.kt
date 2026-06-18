@@ -40,9 +40,24 @@ import eu.kanade.presentation.reader.novel.resolveReaderBackgroundBackdropColor
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundImageModel
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundSelection
 import eu.kanade.presentation.reader.novel.resolveReaderSystemUiFlag
+import eu.kanade.presentation.reader.novel.safeEnum
+import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnActivationZone
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnIntensity
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnShadowIntensity
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTurnSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackService
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import eu.kanade.tachiyomi.util.system.isNightMode
@@ -207,7 +222,7 @@ class NovelReaderScreen(
                     }
                 }
                 NovelReaderScreen(
-                    state = successState,
+                    rawState = successState,
                     showReaderUi = showReaderUi,
                     onSetShowReaderUi = { showReaderUi = it },
                     onOpenBottomSheet = screenModel::loadFullChapterOrderList,
@@ -396,7 +411,26 @@ class NovelReaderScreen(
 private fun NovelReaderLoadingBackdrop(
     settings: eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings,
 ) {
-    if (settings.appearanceMode != NovelReaderAppearanceMode.BACKGROUND) return
+    val safeSettings = remember(settings) {
+        settings.copy(
+            theme = safeEnum(settings.theme, NovelReaderTheme.SYSTEM),
+            appearanceMode = safeEnum(settings.appearanceMode, NovelReaderAppearanceMode.THEME),
+            backgroundSource = safeEnum(settings.backgroundSource, NovelReaderBackgroundSource.PRESET),
+            backgroundTexture = safeEnum(settings.backgroundTexture, NovelReaderBackgroundTexture.NONE),
+            textAlign = safeEnum(settings.textAlign, TextAlign.SOURCE),
+            pageTransitionStyle = safeEnum(settings.pageTransitionStyle, NovelPageTransitionStyle.SLIDE),
+            bookFlipAnimationSpeed = safeEnum(settings.bookFlipAnimationSpeed, NovelBookFlipAnimationSpeed.SLOW),
+            pageTurnSpeed = safeEnum(settings.pageTurnSpeed, NovelPageTurnSpeed.NORMAL),
+            pageTurnIntensity = safeEnum(settings.pageTurnIntensity, NovelPageTurnIntensity.MEDIUM),
+            pageTurnShadowIntensity = safeEnum(settings.pageTurnShadowIntensity, NovelPageTurnShadowIntensity.MEDIUM),
+            pageTurnActivationZone = safeEnum(settings.pageTurnActivationZone, NovelPageTurnActivationZone.WIDE),
+            translationProvider = safeEnum(settings.translationProvider, NovelTranslationProvider.GEMINI),
+            geminiPromptMode = safeEnum(settings.geminiPromptMode, GeminiPromptMode.ADULT_18),
+            geminiStylePreset = safeEnum(settings.geminiStylePreset, NovelTranslationStylePreset.PROFESSIONAL),
+            ttsHighlightMode = safeEnum(settings.ttsHighlightMode, NovelTtsHighlightMode.AUTO),
+        )
+    }
+    if (safeSettings.appearanceMode != NovelReaderAppearanceMode.BACKGROUND) return
 
     val context = LocalContext.current
     val customBackgroundItems = remember(context) {
@@ -404,30 +438,30 @@ private fun NovelReaderLoadingBackdrop(
     }
 
     val customBackgroundExists = remember(
-        settings.customBackgroundId,
-        settings.customBackgroundPath,
+        safeSettings.customBackgroundId,
+        safeSettings.customBackgroundPath,
         customBackgroundItems,
     ) {
         val selectedPathFromCatalog = customBackgroundItems
-            .firstOrNull { it.id == settings.customBackgroundId }
+            .firstOrNull { it.id == safeSettings.customBackgroundId }
             ?.absolutePath
-        val candidatePath = selectedPathFromCatalog ?: settings.customBackgroundPath
+        val candidatePath = selectedPathFromCatalog ?: safeSettings.customBackgroundPath
         candidatePath.isNotBlank() && File(candidatePath).exists()
     }
     val backgroundSelection = remember(
-        settings.backgroundSource,
-        settings.backgroundPresetId,
-        settings.customBackgroundId,
-        settings.customBackgroundPath,
+        safeSettings.backgroundSource,
+        safeSettings.backgroundPresetId,
+        safeSettings.customBackgroundId,
+        safeSettings.customBackgroundPath,
         customBackgroundItems,
         customBackgroundExists,
     ) {
         resolveReaderBackgroundSelection(
-            backgroundSource = settings.backgroundSource,
-            backgroundPresetId = settings.backgroundPresetId,
-            customBackgroundId = settings.customBackgroundId,
+            backgroundSource = safeSettings.backgroundSource,
+            backgroundPresetId = safeSettings.backgroundPresetId,
+            customBackgroundId = safeSettings.customBackgroundId,
             customBackgroundItems = customBackgroundItems,
-            customBackgroundPath = settings.customBackgroundPath,
+            customBackgroundPath = safeSettings.customBackgroundPath,
             customBackgroundExists = customBackgroundExists,
         )
     }
@@ -441,7 +475,7 @@ private fun NovelReaderLoadingBackdrop(
     NovelAtmosphereBackground(
         backgroundColor = backgroundColor,
         backgroundTexture = NovelReaderBackgroundTexture.NONE,
-        nativeTextureStrengthPercent = settings.nativeTextureStrengthPercent,
+        nativeTextureStrengthPercent = safeSettings.nativeTextureStrengthPercent,
         oledEdgeGradient = false,
         isDarkTheme = backgroundColor.luminance() < 0.5f,
         pageEdgeShadow = false,

@@ -5,6 +5,7 @@ import kotlinx.serialization.protobuf.ProtoNumber
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementProgress
+import tachiyomi.domain.achievement.model.AchievementRarity
 import tachiyomi.domain.achievement.model.AchievementTier
 import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.model.Reward
@@ -36,6 +37,14 @@ data class BackupAchievement(
     @ProtoNumber(20) var maxTier: Int = 0,
     @ProtoNumber(21) var tierProgress: Int = 0,
     @ProtoNumber(22) var tierMaxProgress: Int = 100,
+    // New rarity / metadata fields
+    @ProtoNumber(23) var rarity: Int = 0, // AchievementRarity ordinal
+    @ProtoNumber(24) var tags: List<String> = emptyList(),
+    @ProtoNumber(25) var hint: String? = null,
+    @ProtoNumber(26) var season: String? = null,
+    @ProtoNumber(27) var tierGroup: String? = null,
+    @ProtoNumber(28) var tierLevel: Int? = null,
+    @ProtoNumber(29) var rewardSet: String? = null,
     // Nested lists (using 100+ for convention)
     @ProtoNumber(100) var tiers: List<BackupAchievementTier> = emptyList(),
     @ProtoNumber(101) var rewards: List<BackupReward> = emptyList(),
@@ -58,6 +67,13 @@ data class BackupAchievement(
             tiers = tiers.map { it.toAchievementTier() },
             maxTier = maxTier,
             rewards = rewards.map { it.toReward() },
+            rarity = AchievementRarity.entries.getOrElse(rarity) { AchievementRarity.COMMON },
+            tags = tags,
+            hint = hint,
+            season = season,
+            tierGroup = tierGroup,
+            tierLevel = tierLevel,
+            rewardSet = rewardSet,
         )
     }
 
@@ -104,6 +120,13 @@ data class BackupAchievement(
                 maxTier = progress?.maxTier ?: achievement.maxTier,
                 tierProgress = progress?.tierProgress ?: 0,
                 tierMaxProgress = progress?.tierMaxProgress ?: 100,
+                rarity = achievement.rarity.ordinal,
+                tags = achievement.tags,
+                hint = achievement.hint,
+                season = achievement.season,
+                tierGroup = achievement.tierGroup,
+                tierLevel = achievement.tierLevel,
+                rewardSet = achievement.rewardSet,
                 tiers = achievement.tiers?.map { BackupAchievementTier.fromAchievementTier(it) } ?: emptyList(),
                 rewards = achievement.rewards?.map { BackupReward.fromReward(it) } ?: emptyList(),
             )

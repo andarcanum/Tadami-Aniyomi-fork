@@ -5,6 +5,7 @@ import java.util.concurrent.ConcurrentHashMap
 object SuggestionCache {
     private val cache = ConcurrentHashMap<String, Pair<Long, List<SuggestionItem>>>()
     private const val TTL_MS = 24 * 60 * 60 * 1000L // 24 hours
+    private const val MAX_ENTRIES = 300
 
     fun get(key: String): List<SuggestionItem>? {
         val entry = cache[key] ?: return null
@@ -18,11 +19,33 @@ object SuggestionCache {
     }
 
     fun put(key: String, list: List<SuggestionItem>) {
+        evictExpiredAndOverflow()
         cache[key] = Pair(System.currentTimeMillis(), list)
+    }
+
+    private fun evictExpiredAndOverflow() {
+        val now = System.currentTimeMillis()
+        cache.entries.removeIf { now - it.value.first >= TTL_MS }
+        if (cache.size < MAX_ENTRIES) return
+        val overflow = cache.size - MAX_ENTRIES + 1
+        cache.entries
+            .sortedBy { it.value.first }
+            .take(overflow)
+            .forEach { cache.remove(it.key) }
     }
 
     fun invalidateAll() {
         cache.clear()
+    }
+
+    fun invalidateForSeed(seed: SuggestionSeed, entryUrl: String? = null) {
+        val title = seed.primaryTitle.lowercase().trim()
+        val url = entryUrl?.lowercase()?.trim()
+        cache.keys.forEach { key ->
+            if (key.contains(title) || (url != null && key.contains(url))) {
+                cache.remove(key)
+            }
+        }
     }
 
     /**

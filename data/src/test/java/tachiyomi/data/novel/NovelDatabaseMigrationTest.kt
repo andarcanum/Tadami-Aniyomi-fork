@@ -12,7 +12,7 @@ class NovelDatabaseMigrationTest {
 
     @Test
     fun `schema version increments for narrowed novel triggers`() {
-        NovelDatabase.Schema.version shouldBe 15L
+        NovelDatabase.Schema.version shouldBe 17L
     }
 
     @Test
@@ -198,6 +198,26 @@ class NovelDatabaseMigrationTest {
                   SET last_modified_at = strftime('%s', 'now')
                   WHERE _id = new._id;
                 END
+            """.trimIndent(),
+            parameters = 0,
+        )
+        driver.execute(
+            identifier = null,
+            sql = """
+                CREATE TABLE novel_plugins (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    site TEXT NOT NULL,
+                    lang TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    url TEXT NOT NULL,
+                    icon_url TEXT,
+                    custom_js TEXT,
+                    custom_css TEXT,
+                    has_settings INTEGER NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    repo_url TEXT NOT NULL
+                )
             """.trimIndent(),
             parameters = 0,
         )

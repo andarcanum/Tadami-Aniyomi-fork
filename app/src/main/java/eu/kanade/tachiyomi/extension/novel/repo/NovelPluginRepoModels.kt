@@ -29,7 +29,7 @@ internal data class NovelPluginRepoEntryDto(
     @SerialName("customJS") val customJsUrl: String? = null,
     @SerialName("customCSS") val customCssUrl: String? = null,
     val hasSettings: Boolean = false,
-    val sha256: String,
+    val sha256: String = "",
 ) {
     fun toModel(): NovelPluginRepoEntry = NovelPluginRepoEntry(
         id = id,

@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.more.NewUpdateScreen
+import eu.kanade.presentation.more.UpdatedChangelogScreen
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.data.updater.RELEASE_URL
 import eu.kanade.tachiyomi.util.system.openInBrowser
@@ -35,6 +36,28 @@ class DebugAppUpdatePreviewScreen : Screen() {
             onOpenInBrowser = { context.openInBrowser(RELEASE_URL) },
             onRejectUpdate = { navigator.pop() },
             onAcceptUpdate = { navigator.pop() },
+        )
+    }
+}
+
+class DebugUpdatedChangelogPreviewScreen : Screen() {
+
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        val context = LocalContext.current
+
+        UpdatedChangelogScreen(
+            versionName = "v99.0.0-debug",
+            releaseDate = "2026-04-09",
+            changelogInfo = """
+                ## What's new debug preview
+                - This is the screen shown after the app has been updated.
+                - It reuses the same changelog block as the update prompt.
+                - Use it to test post-update layout without reinstalling the app.
+            """.trimIndent(),
+            onOpenInBrowser = { context.openInBrowser(RELEASE_URL) },
+            onDismiss = { navigator.pop() },
         )
     }
 }

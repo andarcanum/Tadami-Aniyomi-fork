@@ -397,6 +397,52 @@ class AchievementBackupRestoreIntegrationTest {
         }
     }
 
+    @Test
+    fun `restore rehydrates unlockables from merged state`() {
+        runTest {
+            // Local database starts with an unlocked achievement
+            val localAchievement = Achievement(
+                id = "local_unlocked_achievement",
+                type = AchievementType.SECRET,
+                category = AchievementCategory.SECRET,
+                threshold = 1,
+                points = 100,
+                title = "Local Master",
+                rewards = listOf(
+                    Reward(
+                        type = RewardType.THEME,
+                        id = "theme_achievement_gold",
+                        title = "Gold Theme",
+                    ),
+                ),
+            )
+            val localProgress = AchievementProgress(
+                achievementId = "local_unlocked_achievement",
+                progress = 1,
+                maxProgress = 1,
+                isUnlocked = true,
+                unlockedAt = System.currentTimeMillis(),
+                lastUpdated = System.currentTimeMillis(),
+            )
+            achievementRepository.insertAchievement(localAchievement)
+            achievementRepository.insertOrUpdateProgress(localProgress)
+
+            // Preferences (Treasury) start empty
+            assertEquals(false, unlockableManager.isUnlockableUnlocked("theme_achievement_gold"))
+
+            // Restore with an empty backup list (no backup achievements present)
+            restorer.restoreAchievements(
+                backupAchievements = emptyList(),
+                backupUserProfile = null,
+                backupActivityLog = emptyList(),
+                backupStats = null,
+            )
+
+            // Treasury should be rehydrated from the local merged state
+            assertEquals(true, unlockableManager.isUnlockableUnlocked("theme_achievement_gold"))
+        }
+    }
+
     // Helper methods
     private fun createTestAchievement(id: String): Achievement {
         return Achievement(

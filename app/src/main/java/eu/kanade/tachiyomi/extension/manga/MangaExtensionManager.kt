@@ -13,19 +13,23 @@ import eu.kanade.tachiyomi.extension.manga.model.newestByVersion
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstallReceiver
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionInstaller
 import eu.kanade.tachiyomi.extension.manga.util.MangaExtensionLoader
+import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import logcat.LogPriority
+import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.source.manga.model.StubMangaSource
@@ -33,6 +37,16 @@ import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Locale
+import kotlin.time.Duration.Companion.seconds
+
+internal fun String.toInstalledMangaExtensionPkgName(): String {
+    val suffix = substringAfterLast('-', missingDelimiterValue = "")
+    return if (suffix.isNotEmpty() && suffix.all(Char::isDigit)) {
+        substringBeforeLast('-')
+    } else {
+        this
+    }
+}
 
 /**
  * The manager of extensions installed as another apk which extend the available sources. It handles
@@ -64,7 +78,9 @@ class MangaExtensionManager(
      */
     private val installer by lazy { MangaExtensionInstaller(context) }
 
-    private val iconMap = mutableMapOf<String, Drawable>()
+    private val iconMap = mutableMapOf<String, Drawable?>()
+    private val pendingInstallRepos = mutableMapOf<String, InstalledRepo>()
+    private var sourceIdToPackageName = emptyMap<Long, String>()
 
     private val installedExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Installed>())
     val installedExtensionsFlow = installedExtensionsMapFlow.mapExtensions(scope)
@@ -85,10 +101,7 @@ class MangaExtensionManager(
     private var subLanguagesEnabledOnFirstRun = preferences.enabledLanguages().isSet()
 
     fun getExtensionPackage(sourceId: Long): String? {
-        return installedExtensionsFlow.value.find { extension ->
-            extension.sources.any { it.id == sourceId }
-        }
-            ?.pkgName
+        return sourceIdToPackageName[sourceId]
     }
 
     fun getExtensionPackageAsFlow(sourceId: Long): Flow<String?> {
@@ -101,16 +114,12 @@ class MangaExtensionManager(
     }
 
     fun getAppIconForSource(sourceId: Long): Drawable? {
-        val pkgName = installedExtensionsMapFlow.value.values
-            .find { ext ->
-                ext.sources.any { it.id == sourceId }
-            }
-            ?.pkgName
-            ?: return null
+        val pkgName = sourceIdToPackageName[sourceId] ?: return null
 
         return iconMap[pkgName] ?: iconMap.getOrPut(pkgName) {
-            MangaExtensionLoader.getMangaExtensionPackageInfoFromPkgName(context, pkgName)!!.applicationInfo!!
-                .loadIcon(context.packageManager)
+            MangaExtensionLoader.getMangaExtensionPackageInfoFromPkgName(context, pkgName)
+                ?.applicationInfo
+                ?.loadIcon(context.packageManager)
         }
     }
 
@@ -133,7 +142,12 @@ class MangaExtensionManager(
 
         installedExtensionsMapFlow.value = extensions
             .filterIsInstance<MangaLoadResult.Success>()
-            .associate { it.extension.pkgName to it.extension }
+            .associate { result ->
+                val extension = result.extension.withSavedRepo()
+                extension.pkgName to extension
+            }
+        cacheInstalledExtensionIcons()
+        rebuildSourcePackageIndex()
 
         untrustedExtensionsMapFlow.value = extensions
             .filterIsInstance<MangaLoadResult.Untrusted>()
@@ -219,16 +233,19 @@ class MangaExtensionManager(
                 installedExtensionsMap[pkgName] = extension.copy(isObsolete = true)
                 changed = true
             } else if (availableExt != null) {
-                val hasUpdate = extension.updateExists(availableExt)
-                val needsReinstall = hasUpdate &&
-                    variants.size > 1 &&
-                    (extension.repoUrl == null || extension.repoUrl != availableExt.repoUrl)
-                installedExtensionsMap[pkgName] = extension.copy(
-                    hasUpdate = hasUpdate,
-                    needsReinstall = needsReinstall,
-                    repoUrl = extension.repoUrl,
+                val extensionWithRepo = extension.withInferredRepo(variants)
+                val regularUpdate = selectRegularUpdate(extensionWithRepo, variants)
+                val reinstallCandidates = selectReinstallCandidates(extensionWithRepo, variants)
+
+                val updatedExtension = extensionWithRepo.copy(
+                    hasUpdate = regularUpdate != null || reinstallCandidates.isNotEmpty(),
+                    needsReinstall = regularUpdate == null && reinstallCandidates.isNotEmpty(),
                 )
-                changed = true
+                if (updatedExtension != extension) {
+                    installedExtensionsMap[pkgName] = updatedExtension
+                    changed = true
+                }
+                saveInstalledRepo(extensionWithRepo)
             }
         }
         if (changed) {
@@ -245,7 +262,9 @@ class MangaExtensionManager(
      * @param extension The extension to be installed.
      */
     fun installExtension(extension: MangaExtension.Available): Flow<InstallStep> {
-        return installer.downloadAndInstall(api.getApkUrl(extension), extension)
+        val installableExtension = extension.copy(pkgName = extension.pkgName.toInstalledMangaExtensionPkgName())
+        pendingInstallRepos[installableExtension.pkgName] = InstalledRepo(extension.repoUrl, extension.repoName)
+        return installer.downloadAndInstall(api.getApkUrl(extension), installableExtension)
     }
 
     /**
@@ -256,12 +275,31 @@ class MangaExtensionManager(
      * @param extension The extension to be updated.
      */
     fun updateExtension(extension: MangaExtension.Installed): Flow<InstallStep> {
-        val availableExt = availableExtensionsMapFlow.value[extension.pkgName] ?: return emptyFlow()
+        val variants = availableExtensionsStateFlow.value.filter { it.pkgName == extension.pkgName }
+        val availableExt = selectRegularUpdate(extension, variants) ?: return emptyFlow()
         return installExtension(availableExt)
     }
 
+    fun replaceExtensionFromRepo(
+        installedExtension: MangaExtension.Installed,
+        replacementExtension: MangaExtension.Available,
+    ): Flow<InstallStep> = flow {
+        emit(InstallStep.Installing)
+        installer.uninstallApk(installedExtension.pkgName)
+
+        repeat(REPLACE_UNINSTALL_WAIT_SECONDS) {
+            if (!context.isPackageInstalled(installedExtension.pkgName)) {
+                installExtension(replacementExtension).collect { emit(it) }
+                return@flow
+            }
+            delay(1.seconds)
+        }
+
+        emit(InstallStep.Error)
+    }
+
     fun cancelInstallUpdateExtension(extension: MangaExtension) {
-        installer.cancelInstall(extension.pkgName)
+        installer.cancelInstall(extension.pkgName.toInstalledMangaExtensionPkgName())
     }
 
     /**
@@ -310,7 +348,11 @@ class MangaExtensionManager(
      * @param extension The extension to be registered.
      */
     private fun registerNewExtension(extension: MangaExtension.Installed) {
-        installedExtensionsMapFlow.value += extension
+        val extensionWithRepo = extension.withPendingOrSavedRepo().withUpdateCheck()
+        installedExtensionsMapFlow.value += extensionWithRepo
+        saveInstalledRepo(extensionWithRepo)
+        iconMap[extension.pkgName] = extension.icon
+        rebuildSourcePackageIndex()
     }
 
     /**
@@ -320,7 +362,11 @@ class MangaExtensionManager(
      * @param extension The extension to be registered.
      */
     private fun registerUpdatedExtension(extension: MangaExtension.Installed) {
-        installedExtensionsMapFlow.value += extension
+        val extensionWithRepo = extension.withPendingOrSavedRepo().withUpdateCheck()
+        installedExtensionsMapFlow.value += extensionWithRepo
+        saveInstalledRepo(extensionWithRepo)
+        iconMap[extension.pkgName] = extension.icon
+        rebuildSourcePackageIndex()
     }
 
     /**
@@ -334,11 +380,12 @@ class MangaExtensionManager(
         scope.launch {
             when (val result = MangaExtensionLoader.loadMangaExtensionFromPkgName(context, pkgName)) {
                 is MangaLoadResult.Success -> {
-                    registerUpdatedExtension(result.extension.withUpdateCheck())
+                    registerUpdatedExtension(result.extension)
                 }
                 is MangaLoadResult.Untrusted -> {
                     installedExtensionsMapFlow.value -= result.extension.pkgName
                     untrustedExtensionsMapFlow.value += result.extension
+                    rebuildSourcePackageIndex()
                 }
                 else -> return@launch
             }
@@ -353,8 +400,24 @@ class MangaExtensionManager(
      * @param pkgName The package name of the uninstalled application.
      */
     private fun unregisterExtension(pkgName: String) {
+        removeSavedInstalledRepo(pkgName)
+        pendingInstallRepos.remove(pkgName)
         installedExtensionsMapFlow.value -= pkgName
         untrustedExtensionsMapFlow.value -= pkgName
+        iconMap -= pkgName
+        rebuildSourcePackageIndex()
+    }
+
+    private fun cacheInstalledExtensionIcons() {
+        installedExtensionsMapFlow.value.values.forEach { extension ->
+            iconMap[extension.pkgName] = extension.icon
+        }
+    }
+
+    private fun rebuildSourcePackageIndex() {
+        sourceIdToPackageName = installedExtensionsMapFlow.value.values
+            .flatMap { extension -> extension.sources.map { source -> source.id to extension.pkgName } }
+            .toMap()
     }
 
     /**
@@ -363,18 +426,19 @@ class MangaExtensionManager(
     private inner class InstallationListener : MangaExtensionInstallReceiver.Listener {
 
         override fun onExtensionInstalled(extension: MangaExtension.Installed) {
-            registerNewExtension(extension.withUpdateCheck())
+            registerNewExtension(extension)
             updatePendingUpdatesCount()
         }
 
         override fun onExtensionUpdated(extension: MangaExtension.Installed) {
-            registerUpdatedExtension(extension.withUpdateCheck())
+            registerUpdatedExtension(extension)
             updatePendingUpdatesCount()
         }
 
         override fun onExtensionUntrusted(extension: MangaExtension.Untrusted) {
             installedExtensionsMapFlow.value -= extension.pkgName
             untrustedExtensionsMapFlow.value += extension
+            rebuildSourcePackageIndex()
             updatePendingUpdatesCount()
         }
 
@@ -389,11 +453,17 @@ class MangaExtensionManager(
      * Extension method to set the update field of an installed extension.
      */
     private fun MangaExtension.Installed.withUpdateCheck(): MangaExtension.Installed {
-        return if (updateExists()) {
-            copy(hasUpdate = true)
-        } else {
-            this
+        val variants = availableExtensionsStateFlow.value.filter { it.pkgName == pkgName }
+        if (variants.isEmpty()) {
+            return if (updateExists()) copy(hasUpdate = true) else this
         }
+
+        val regularUpdate = selectRegularUpdate(this, variants)
+        val reinstallCandidates = selectReinstallCandidates(this, variants)
+        return copy(
+            hasUpdate = regularUpdate != null || reinstallCandidates.isNotEmpty(),
+            needsReinstall = regularUpdate == null && reinstallCandidates.isNotEmpty(),
+        )
     }
 
     private fun MangaExtension.Installed.updateExists(
@@ -406,6 +476,127 @@ class MangaExtensionManager(
         return (availableExt.versionCode > versionCode || availableExt.libVersion > libVersion)
     }
 
+    private fun selectRegularUpdate(
+        extension: MangaExtension.Installed,
+        variants: List<MangaExtension.Available>,
+    ): MangaExtension.Available? {
+        extension.repoUrl
+            ?.let { repoUrl ->
+                variants
+                    .filter { it.repoUrl == repoUrl && extension.updateExists(it) }
+                    .latestVersionGroup()
+                    .firstOrNull()
+            }
+            ?.let { return it }
+
+        if (extension.repoUrl != null) return null
+
+        val latestVersionGroup = variants
+            .filter { extension.updateExists(it) }
+            .latestVersionGroup()
+
+        if (variants.size == 1) return latestVersionGroup.singleOrNull()
+        return latestVersionGroup.takeIf { it.size > 1 }?.firstOrNull()
+    }
+
+    private fun selectReinstallCandidates(
+        extension: MangaExtension.Installed,
+        variants: List<MangaExtension.Available>,
+    ): List<MangaExtension.Available> {
+        if (selectRegularUpdate(extension, variants) != null) return emptyList()
+
+        return variants
+            .filter { extension.repoUrl == null || it.repoUrl != extension.repoUrl }
+            .filter { extension.updateExists(it) }
+            .latestVersionGroup()
+    }
+
+    private fun List<MangaExtension.Available>.latestVersionGroup(): List<MangaExtension.Available> {
+        val latest = maxWithOrNull(
+            compareBy<MangaExtension.Available> { it.versionCode }
+                .thenBy { it.libVersion },
+        ) ?: return emptyList()
+
+        return filter { it.versionCode == latest.versionCode && it.libVersion == latest.libVersion }
+            .sortedWith(
+                compareBy<MangaExtension.Available> { it.repoName.ifBlank { it.repoUrl } }
+                    .thenBy { it.repoUrl },
+            )
+    }
+
+    private fun MangaExtension.Installed.withInferredRepo(
+        variants: List<MangaExtension.Available>,
+    ): MangaExtension.Installed {
+        if (repoUrl != null || variants.isEmpty()) return this
+
+        val exactVersionMatches = variants.filter {
+            it.versionCode == versionCode && it.libVersion == libVersion
+        }
+        val repoCandidate = exactVersionMatches.singleOrNull()
+            ?: variants.singleOrNull()
+            ?: variants
+                .map { InstalledRepo(url = it.repoUrl, name = it.repoName) }
+                .distinctBy { it.url }
+                .singleOrNull()
+                ?.let { repo -> variants.first { it.repoUrl == repo.url } }
+            ?: return this
+
+        return copy(
+            repoUrl = repoCandidate.repoUrl,
+            repoName = repoCandidate.repoName.takeIf { it.isNotBlank() },
+        )
+    }
+
+    private fun MangaExtension.Installed.withPendingOrSavedRepo(): MangaExtension.Installed {
+        val pendingRepo = pendingInstallRepos.remove(pkgName)
+        return when {
+            pendingRepo != null -> copy(
+                repoUrl = pendingRepo.url,
+                repoName = pendingRepo.name.takeIf {
+                    it.isNotBlank()
+                },
+            )
+            repoUrl != null -> this
+            else -> withSavedRepo()
+        }
+    }
+
+    private fun MangaExtension.Installed.withSavedRepo(): MangaExtension.Installed {
+        if (repoUrl != null) return this
+        val savedRepo = getSavedInstalledRepo(pkgName) ?: return this
+        return copy(repoUrl = savedRepo.url, repoName = savedRepo.name.takeIf { it.isNotBlank() })
+    }
+
+    private fun getSavedInstalledRepo(pkgName: String): InstalledRepo? {
+        return preferences.mangaInstalledExtensionRepos().get()
+            .firstOrNull { it.substringBefore('|') == pkgName }
+            ?.let { entry ->
+                val parts = entry.split('|', limit = 3)
+                val url = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return@let null
+                InstalledRepo(url = url, name = parts.getOrNull(2).orEmpty())
+            }
+    }
+
+    private fun saveInstalledRepo(extension: MangaExtension.Installed) {
+        val repoUrl = extension.repoUrl ?: return
+        val repoName = extension.repoName.orEmpty()
+        preferences.mangaInstalledExtensionRepos().getAndSet { entries ->
+            entries.filterNot { it.substringBefore('|') == extension.pkgName }.toSet() +
+                "${extension.pkgName}|$repoUrl|$repoName"
+        }
+    }
+
+    private fun removeSavedInstalledRepo(pkgName: String) {
+        preferences.mangaInstalledExtensionRepos().getAndSet { entries ->
+            entries.filterNot { it.substringBefore('|') == pkgName }.toSet()
+        }
+    }
+
+    private data class InstalledRepo(
+        val url: String,
+        val name: String,
+    )
+
     private fun updatePendingUpdatesCount() {
         val pendingUpdateCount = installedExtensionsMapFlow.value.values.count { it.hasUpdate }
         preferences.mangaExtensionUpdatesCount().set(pendingUpdateCount)
@@ -415,6 +606,10 @@ class MangaExtensionManager(
     }
 
     private operator fun <T : MangaExtension> Map<String, T>.plus(extension: T) = plus(extension.pkgName to extension)
+
+    private companion object {
+        const val REPLACE_UNINSTALL_WAIT_SECONDS = 120
+    }
 
     private fun <T : MangaExtension> StateFlow<Map<String, T>>.mapExtensions(
         scope: CoroutineScope,

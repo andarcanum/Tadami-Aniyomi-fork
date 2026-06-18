@@ -86,9 +86,17 @@ class MangaRestorer(
     private suspend fun restoreExistingManga(backupManga: BackupManga, manga: Manga, dbManga: Manga): Manga {
         val notes = resolveRestoredText(backupManga.notes, manga.version, dbManga.notes, dbManga.version)
         return if (manga.version > dbManga.version) {
-            updateManga(dbManga.copyFrom(manga).copy(id = dbManga.id, notes = notes))
+            updateManga(
+                dbManga.copyFrom(manga)
+                    .copy(id = dbManga.id, notes = notes)
+                    .markForSourceReinit(),
+            )
         } else {
-            updateManga(manga.copyFrom(dbManga).copy(id = dbManga.id, notes = notes))
+            updateManga(
+                manga.copyFrom(dbManga)
+                    .copy(id = dbManga.id, notes = notes)
+                    .markForSourceReinit(),
+            )
         }
     }
 
@@ -160,11 +168,15 @@ class MangaRestorer(
     private suspend fun restoreNewManga(
         manga: Manga,
     ): Manga {
-        return manga.copy(
-            initialized = manga.description != null,
-            id = insertManga(manga),
+        val restoredManga = manga.markForSourceReinit()
+        return restoredManga.copy(
+            id = insertManga(restoredManga),
             version = manga.version,
         )
+    }
+
+    private fun Manga.markForSourceReinit(): Manga {
+        return copy(initialized = false)
     }
 
     private suspend fun restoreChapters(manga: Manga, backupChapters: List<BackupChapter>) {

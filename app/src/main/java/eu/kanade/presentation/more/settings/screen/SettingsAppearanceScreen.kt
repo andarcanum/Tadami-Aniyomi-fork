@@ -483,7 +483,21 @@ object SettingsAppearanceScreen : SearchableSettings {
                             subtitle = stringResource(AYMR.strings.pref_animated_aurora_background_summary),
                         ),
                     )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.auroraDarkRimLightEnabled(),
+                            title = stringResource(AYMR.strings.pref_aurora_dark_rim_light),
+                            subtitle = stringResource(AYMR.strings.pref_aurora_dark_rim_light_summary),
+                        ),
+                    )
                 }
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.disableHomeHeaderScrollHide(),
+                        title = stringResource(AYMR.strings.pref_disable_home_header_scroll_hide),
+                        subtitle = stringResource(AYMR.strings.pref_disable_home_header_scroll_hide_summary),
+                    ),
+                )
                 add(
                     Preference.PreferenceItem.TextPreference(
                         title = stringResource(AYMR.strings.pref_customize_home_header_layout),

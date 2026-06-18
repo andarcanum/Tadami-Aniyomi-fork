@@ -210,7 +210,7 @@ fun AchievementUnlockBanner(
     ) {
         val achievement = currentAchievement
         if (achievement != null) {
-            val isRare = achievement.points >= 50
+            val isRare = achievement.rarity.isCelebrated || achievement.points >= 50
 
             Box(
                 modifier = Modifier.fillMaxWidth(),

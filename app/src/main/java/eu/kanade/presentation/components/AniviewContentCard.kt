@@ -82,6 +82,26 @@ fun AniviewContentCard(
                                 blurRadius = 14.dp,
                                 alpha = 0.5f,
                             )
+                            "aura_trinity_orbit" -> Modifier.glowEffect(
+                                color = resolveAuraPalette("aura_trinity_orbit")?.accentColor ?: Color(0xFF9C7CFF),
+                                blurRadius = 18.dp,
+                                alpha = 0.62f,
+                            )
+                            "aura_deep_focus" -> Modifier.glowEffect(
+                                color = resolveAuraPalette("aura_deep_focus")?.accentColor ?: Color(0xFF5DE7D8),
+                                blurRadius = 16.dp,
+                                alpha = 0.48f,
+                            )
+                            "aura_shadow_monarch" -> Modifier.glowEffect(
+                                color = resolveAuraPalette("aura_shadow_monarch")?.accentColor ?: Color(0xFFB36BFF),
+                                blurRadius = 20.dp,
+                                alpha = 0.68f,
+                            )
+                            "aura_ascendant_gold" -> Modifier.glowEffect(
+                                color = resolveAuraPalette("aura_ascendant_gold")?.accentColor ?: Color(0xFFFFE08A),
+                                blurRadius = 18.dp,
+                                alpha = 0.58f,
+                            )
                             else -> Modifier.cyanGlow(blurRadius = 12.dp, alpha = 0.4f)
                         },
                     ),

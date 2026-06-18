@@ -71,7 +71,8 @@ fun NovelPlugin.Available.toInstalled(): NovelPlugin.Installed {
         name = name,
         site = site,
         lang = lang,
-        version = version,
+        versionCode = versionCode,
+        versionName = versionName,
         url = url,
         iconUrl = iconUrl,
         customJs = customJs,
@@ -79,5 +80,9 @@ fun NovelPlugin.Available.toInstalled(): NovelPlugin.Installed {
         hasSettings = hasSettings,
         sha256 = sha256,
         repoUrl = repoUrl,
+        repoName = repoName.takeIf { it.isNotBlank() },
+        pkgName = pkgName,
+        apkUrl = apkUrl,
+        isKotlinExtension = isKotlinExtension,
     )
 }

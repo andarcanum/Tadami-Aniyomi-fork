@@ -79,9 +79,7 @@ class NovelJsRuntimeFactory(
                         .mapValues { (_, values) -> values.joinToString(",") }
                     val responseBody = response.body
                     val bodyCharset = responseBody.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
-                    val bodyBytes = responseBody.bytes()
-                    val body = bodyBytes.toString(bodyCharset)
-                    val bodyBase64 = Base64.getEncoder().encodeToString(bodyBytes)
+                    val body = responseBody.bytes().toString(bodyCharset)
                     if (!response.isSuccessful) {
                         logcat(priority = LogPriority.WARN, tag = "NovelFetch") {
                             "Novel plugin fetch $pluginId: HTTP ${response.code} " +
@@ -95,7 +93,7 @@ class NovelJsRuntimeFactory(
                             url = response.request.url.toString(),
                             headers = headers,
                             body = body,
-                            bodyBase64 = bodyBase64,
+                            bodyBase64 = null,
                         ),
                     )
                 }
@@ -111,6 +109,25 @@ class NovelJsRuntimeFactory(
                         body = error.message,
                     ),
                 )
+            }
+        }
+
+        override fun fetchBinary(url: String, optionsJson: String?): String {
+            val resolvedUrl = resolveAlias(url)
+            val request = buildRequest(resolvedUrl, optionsJson)
+            return runCatching {
+                networkHelper.client.newCall(request).execute().use { response ->
+                    syncAndroidWebViewResponseCookies(
+                        url = response.request.url.toString(),
+                        setCookieHeaders = response.headers.values("Set-Cookie"),
+                    )
+                    Base64.getEncoder().encodeToString(response.body.bytes())
+                }
+            }.getOrElse { error ->
+                logcat(LogPriority.WARN, error) {
+                    "Novel plugin binary fetch $pluginId: request failed url=$resolvedUrl"
+                }
+                ""
             }
         }
 
@@ -318,6 +335,8 @@ class NovelJsRuntimeFactory(
         override fun domText(handle: Int): String = domStore.getText(handle)
 
         override fun domAttr(handle: Int, name: String): String? = domStore.getAttr(handle, name)
+
+        override fun domSetAttr(handle: Int, name: String, value: String) = domStore.setAttr(handle, name, value)
 
         override fun domRemoveAttr(handle: Int, name: String) = domStore.removeAttr(handle, name)
 

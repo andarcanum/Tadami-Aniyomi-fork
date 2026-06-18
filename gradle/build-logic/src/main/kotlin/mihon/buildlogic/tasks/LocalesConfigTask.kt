@@ -27,8 +27,11 @@ fun Project.getLocalesConfigTask(
             val locales = stringsFiles
                 .filterNot { it.readText().contains(emptyResourcesElement) }
                 .map {
-                    it.parentFile.name
-                        .replace("base", "en")
+                    val name = it.parentFile.name
+                    if (name == "in") "id" else name
+                }
+                .map {
+                    it.replace("base", "en")
                         .replace("-r", "-")
                         .replace("+", "-")
                 }

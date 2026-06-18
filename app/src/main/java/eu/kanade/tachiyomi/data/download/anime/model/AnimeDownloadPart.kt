@@ -43,9 +43,10 @@ class AnimeDownloadPart(
     var file: UniFile
         get() {
             if (_file == null) {
-                _file = placingDir.createFile("${range.first}.part.tmp")!!
+                _file = placingDir.createFile("${range.first}.part.tmp")
+                    ?: error("Unable to create temporary anime download part: ${range.first}.part.tmp")
             }
-            return _file!!
+            return _file ?: error("Anime download part file was not initialized")
         }
         set(value) {
             _file = value

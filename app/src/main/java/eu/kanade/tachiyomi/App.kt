@@ -102,6 +102,7 @@ import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.security.Security
 import java.util.concurrent.atomic.AtomicLong
+import tachiyomi.core.common.util.system.logcat as systemLogcat
 
 class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factory {
 
@@ -152,11 +153,19 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             ),
         )
 
-        appUpdateFileManager.cleanupIfInstalledVersionReached(
-            isPreview = isPreviewBuildType,
-            installedCommitCount = BuildConfig.COMMIT_COUNT.toInt(),
-            installedVersionName = BuildConfig.VERSION_NAME,
-        )
+        Handler(Looper.getMainLooper()).post {
+            achievementScope.launch {
+                runCatching {
+                    appUpdateFileManager.cleanupIfInstalledVersionReached(
+                        isPreview = isPreviewBuildType,
+                        installedCommitCount = BuildConfig.COMMIT_COUNT.toInt(),
+                        installedVersionName = BuildConfig.VERSION_NAME,
+                    )
+                }.onFailure { error ->
+                    this@App.systemLogcat(LogPriority.ERROR, error) { "App update cleanup failed" }
+                }
+            }
+        }
 
         setupNotificationChannels()
 
@@ -297,9 +306,24 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     private fun initializeMigrator() {
         val preferenceStore = Injekt.get<PreferenceStore>()
         val preference = preferenceStore.getInt(Preference.appStateKey("last_version_code"), 0)
-        logcat { "Migration from ${preference.get()} to ${BuildConfig.VERSION_CODE}" }
+        val oldVersionCode = preference.get()
+        val seenUpdatedChangelogVersionCode = preferenceStore.getInt(
+            Preference.appStateKey("last_seen_updated_changelog_version_code"),
+            0,
+        )
+        val pendingUpdatedChangelogPreviousVersionCode = preferenceStore.getInt(
+            Preference.appStateKey("pending_updated_changelog_previous_version_code"),
+            0,
+        )
+        if (oldVersionCode > 0 &&
+            BuildConfig.VERSION_CODE > oldVersionCode &&
+            seenUpdatedChangelogVersionCode.get() < BuildConfig.VERSION_CODE
+        ) {
+            pendingUpdatedChangelogPreviousVersionCode.set(oldVersionCode)
+        }
+        logcat { "Migration from $oldVersionCode to ${BuildConfig.VERSION_CODE}" }
         Migrator.initialize(
-            old = preference.get(),
+            old = oldVersionCode,
             new = BuildConfig.VERSION_CODE,
             migrations = migrations,
             onMigrationComplete = {

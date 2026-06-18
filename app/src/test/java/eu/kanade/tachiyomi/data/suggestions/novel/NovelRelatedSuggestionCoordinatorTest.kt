@@ -94,6 +94,34 @@ class NovelRelatedSuggestionCoordinatorTest {
     }
 
     @Test
+    fun `fetchRelatedSuggestions fills missing thumbnail from novel details`() = runTest {
+        val novel = Novel.create().copy(id = 123L, title = "Solo Leveling", url = "/solo-related-thumb")
+        val source = FakeNovelCatalogueSource(supportsRelatedNovels = true)
+        val related = SNovel.create().apply {
+            title = "Related Novel"
+            url = "/related-thumb"
+            thumbnail_url = null
+        }
+        val details = related.copy().apply {
+            thumbnail_url = "https://img.example/related.jpg"
+        }
+        source.relatedNovelsToReturn = listOf(related)
+        source.detailsByUrl = mapOf(related.url to details)
+        val seed = SuggestionSeed(
+            mediaType = SuggestionMediaType.NOVEL,
+            primaryTitle = "Solo Leveling",
+            candidateTitles = listOf("Solo Leveling"),
+            description = "",
+        )
+
+        val outcome = NovelRelatedSuggestionCoordinator().fetchRelatedSuggestions(novel, source, seed)
+
+        val success = outcome as NovelFallbackOutcome.Success
+        assertEquals("https://img.example/related.jpg", success.items.single().thumbnailUrl)
+        assertEquals(1, source.getNovelDetailsCallCount)
+    }
+
+    @Test
     fun `fetchRelatedSuggestions can return more than carousel cap when requested`() = runTest {
         val novel = Novel.create().copy(id = 123L, title = "Solo Leveling", url = "/solo-full")
         val source = FakeNovelCatalogueSource(supportsRelatedNovels = true)

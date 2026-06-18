@@ -546,6 +546,7 @@ internal fun shouldShowNovelAtmosphereBackground(
 }
 
 internal enum class NovelPageReaderRendererRoute {
+    NONE,
     COMPOSE_PAGER,
     PAGE_TURN_RENDERER,
 }
@@ -553,8 +554,8 @@ internal enum class NovelPageReaderRendererRoute {
 internal fun resolvePageReaderRendererRoute(
     usePageReader: Boolean,
     activeStyle: NovelPageTransitionStyle,
-): NovelPageReaderRendererRoute? {
-    if (!usePageReader) return null
+): NovelPageReaderRendererRoute {
+    if (!usePageReader) return NovelPageReaderRendererRoute.NONE
     return when (resolvePageTransitionEngine(activeStyle)) {
         NovelPageTransitionEngine.COMPOSE_PAGER -> NovelPageReaderRendererRoute.COMPOSE_PAGER
         NovelPageTransitionEngine.PAGE_TURN_RENDERER -> NovelPageReaderRendererRoute.PAGE_TURN_RENDERER
@@ -562,22 +563,25 @@ internal fun resolvePageReaderRendererRoute(
 }
 
 internal fun resolvePageReaderCurrentPage(
-    pageReaderRendererRoute: NovelPageReaderRendererRoute?,
+    pageReaderRendererRoute: NovelPageReaderRendererRoute,
     pagerCurrentPage: Int,
     pageTurnCurrentPage: Int,
     composePagerContentPageCount: Int,
     composePagerHasPreviousChapter: Boolean,
+    pageTurnContentPageCount: Int = composePagerContentPageCount,
+    pageTurnHasPreviousChapter: Boolean = composePagerHasPreviousChapter,
 ): Int {
     return when (pageReaderRendererRoute) {
+        NovelPageReaderRendererRoute.NONE ->
+            pagerCurrentPage.coerceAtLeast(0)
         NovelPageReaderRendererRoute.PAGE_TURN_RENDERER ->
-            resolvePageTurnRendererProgressPageIndex(pageTurnCurrentPage)
+            pageTurnCurrentPage.coerceAtLeast(0)
         NovelPageReaderRendererRoute.COMPOSE_PAGER ->
             resolveComposePagerActualPageIndex(
                 currentPage = pagerCurrentPage,
                 contentPageCount = composePagerContentPageCount,
                 hasPreviousChapter = composePagerHasPreviousChapter,
             )
-        null -> pagerCurrentPage.coerceAtLeast(0)
     }
 }
 
@@ -585,11 +589,13 @@ internal fun resolveReaderVerticalSeekbarValue(
     showWebView: Boolean,
     webProgressPercent: Int,
     usePageReader: Boolean,
-    pageReaderRendererRoute: NovelPageReaderRendererRoute?,
+    pageReaderRendererRoute: NovelPageReaderRendererRoute,
     pagerCurrentPage: Int,
     pageTurnCurrentPage: Int,
     composePagerContentPageCount: Int,
     composePagerHasPreviousChapter: Boolean,
+    pageTurnContentPageCount: Int = composePagerContentPageCount,
+    pageTurnHasPreviousChapter: Boolean = composePagerHasPreviousChapter,
     seekbarItemsCount: Int,
     readingProgressPercent: Int,
 ): Float {
@@ -608,6 +614,8 @@ internal fun resolveReaderVerticalSeekbarValue(
                 pageTurnCurrentPage = pageTurnCurrentPage,
                 composePagerContentPageCount = composePagerContentPageCount,
                 composePagerHasPreviousChapter = composePagerHasPreviousChapter,
+                pageTurnContentPageCount = pageTurnContentPageCount,
+                pageTurnHasPreviousChapter = pageTurnHasPreviousChapter,
             )
             current.toFloat() / max.toFloat()
         }

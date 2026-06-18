@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
@@ -42,7 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontStyle
@@ -716,6 +716,7 @@ internal fun NovelPageReaderPageContent(
                 contentDescription = imageBlock.contentDescription,
                 contentLayout = contentLayout,
                 bookBottomInset = bookBottomInset,
+                fullPage = true,
             )
             return@Box
         }
@@ -835,6 +836,7 @@ internal fun NovelPageReaderPageContent(
                                     contentDescription = block.contentDescription,
                                     contentLayout = contentLayout,
                                     bookBottomInset = bookBottomInset,
+                                    fullPage = false,
                                 )
                             }
                         }
@@ -851,31 +853,48 @@ private fun NovelPageReaderImageBlock(
     contentDescription: String?,
     contentLayout: NovelPageReaderContentLayout,
     bookBottomInset: Dp,
+    fullPage: Boolean,
 ) {
     val referer = LocalNovelReaderReferer.current
-    val context = LocalContext.current
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(contentLayout.textPadding)
-            .padding(bottom = bookBottomInset),
-        contentAlignment = Alignment.Center,
-    ) {
-        AsyncImage(
-            model = if (NovelPluginImage.isSupported(imageUrl)) {
-                NovelPluginImage(imageUrl)
-            } else if (referer != null) {
-                NovelReaderRefererImage(
-                    url = imageUrl,
-                    referer = referer,
-                )
-            } else {
-                imageUrl
-            },
-            contentDescription = contentDescription,
-            contentScale = ContentScale.Inside,
-            modifier = Modifier.fillMaxSize(),
+    val imageModel = if (NovelPluginImage.isSupported(imageUrl)) {
+        NovelPluginImage(imageUrl)
+    } else if (referer != null) {
+        NovelReaderRefererImage(
+            url = imageUrl,
+            referer = referer,
         )
+    } else {
+        imageUrl
+    }
+    if (fullPage) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentLayout.textPadding)
+                .padding(bottom = bookBottomInset),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Inside,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    } else {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+            )
+        }
     }
 }
 

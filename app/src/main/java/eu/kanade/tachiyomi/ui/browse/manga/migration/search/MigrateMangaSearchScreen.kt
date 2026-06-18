@@ -9,6 +9,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.manga.MigrateMangaSearchScreen
 import eu.kanade.presentation.browse.openSecretHallIfNeeded
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.ui.browse.manga.migration.list.MigrationListScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 
 class MigrateMangaSearchScreen(private val mangaId: Long) : Screen() {
@@ -46,9 +47,18 @@ class MigrateMangaSearchScreen(private val mangaId: Long) : Screen() {
                 )
             },
             onClickItem = {
-                dialogScreenModel.setDialog(
-                    MangaMigrateSearchScreenDialogScreenModel.Dialog.Migrate(it),
-                )
+                val migrationListScreen = navigator.items
+                    .filterIsInstance<MigrationListScreen>()
+                    .lastOrNull()
+
+                if (migrationListScreen != null) {
+                    migrationListScreen.addMatchOverride(current = mangaId, target = it.id)
+                    navigator.popUntil { screen -> screen is MigrationListScreen }
+                } else {
+                    dialogScreenModel.setDialog(
+                        MangaMigrateSearchScreenDialogScreenModel.Dialog.Migrate(it),
+                    )
+                }
             },
             onLongClickItem = { navigator.push(MangaScreen(it.id, true)) },
         )

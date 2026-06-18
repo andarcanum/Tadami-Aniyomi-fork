@@ -47,7 +47,7 @@ import eu.kanade.presentation.browse.manga.BrowseSourceContent
 import eu.kanade.presentation.browse.manga.MissingSourceScreen
 import eu.kanade.presentation.browse.manga.components.BrowseMangaSourceToolbar
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
-import eu.kanade.presentation.entries.manga.DuplicateMangaDialog
+import eu.kanade.presentation.entries.components.DuplicateEntryDialog
 import eu.kanade.presentation.util.AssistContentScreen
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.core.common.Constants
@@ -288,15 +288,16 @@ data class BrowseMangaSourceScreen(
                 )
             }
             is BrowseMangaSourceScreenModel.Dialog.AddDuplicateManga -> {
-                DuplicateMangaDialog(
+                DuplicateEntryDialog(
                     onDismissRequest = onDismissRequest,
                     onConfirm = { screenModel.addFavorite(dialog.manga) },
-                    onOpenManga = { navigator.push(MangaScreen(dialog.duplicate.id)) },
+                    onOpenEntry = { navigator.push(MangaScreen(dialog.duplicate.id)) },
                     onMigrate = {
                         screenModel.setDialog(
                             BrowseMangaSourceScreenModel.Dialog.Migrate(dialog.manga, dialog.duplicate),
                         )
                     },
+                    openEntryLabel = stringResource(AYMR.strings.action_show_manga),
                 )
             }
 

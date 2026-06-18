@@ -2,7 +2,6 @@ package eu.kanade.tachiyomi.extension.anime.installer
 
 import android.app.Service
 import android.content.pm.PackageManager
-import android.os.Process
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.util.system.getUriSize
 import eu.kanade.tachiyomi.util.system.toast
@@ -17,6 +16,8 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import java.io.BufferedReader
 import java.io.InputStream
+import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 class ShizukuInstallerAnime(private val service: Service) : InstallerAnime(service) {
 
@@ -49,21 +50,27 @@ class ShizukuInstallerAnime(private val service: Service) : InstallerAnime(servi
             var sessionId: String? = null
             try {
                 val size = service.getUriSize(entry.uri) ?: throw IllegalStateException()
-                service.contentResolver.openInputStream(entry.uri)!!.use {
-                    val userId = Process.myUserHandle().hashCode()
-                    val createCommand = "pm install-create --user $userId -r -i ${service.packageName} -S $size"
+                val inputStream =
+                    service.contentResolver.openInputStream(entry.uri)
+                        ?: throw IllegalStateException("Unable to open APK input stream")
+                inputStream.use {
+                    val createCommand = "pm install-create -r -i ${service.packageName} -S $size"
                     val createResult = exec(createCommand)
-                    sessionId = SESSION_ID_REGEX.find(createResult.out)?.value
+                    sessionId = SESSION_ID_REGEX.find(createResult.combinedOutput)?.value
                         ?: throw RuntimeException("Failed to create install session")
 
                     val writeResult = exec("pm install-write -S $size $sessionId base -", it)
                     if (writeResult.resultCode != 0) {
-                        throw RuntimeException("Failed to write APK to session $sessionId")
+                        throw RuntimeException(
+                            "Failed to write APK to session $sessionId: ${writeResult.combinedOutput}",
+                        )
                     }
 
                     val commitResult = exec("pm install-commit $sessionId")
                     if (commitResult.resultCode != 0) {
-                        throw RuntimeException("Failed to commit install session $sessionId")
+                        throw RuntimeException(
+                            "Failed to commit install session $sessionId: ${commitResult.combinedOutput}",
+                        )
                     }
 
                     continueQueue(InstallStep.Installed)
@@ -91,15 +98,34 @@ class ShizukuInstallerAnime(private val service: Service) : InstallerAnime(servi
     private fun exec(command: String, stdin: InputStream? = null): ShellResult {
         @Suppress("DEPRECATION")
         val process = Shizuku.newProcess(arrayOf("sh", "-c", command), null, null)
+        var stdout = ""
+        var stderr = ""
+        val stdoutThread = thread(start = true) {
+            stdout = process.inputStream.bufferedReader().use(BufferedReader::readText)
+        }
+        val stderrThread = thread(start = true) {
+            stderr = process.errorStream.bufferedReader().use(BufferedReader::readText)
+        }
         if (stdin != null) {
             process.outputStream.use { stdin.copyTo(it) }
+        } else {
+            process.outputStream.close()
         }
-        val output = process.inputStream.bufferedReader().use(BufferedReader::readText)
-        val resultCode = process.waitFor()
-        return ShellResult(resultCode, output)
+        val finished = process.waitFor(SHELL_COMMAND_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        if (!finished) {
+            process.destroyForcibly()
+            stdoutThread.join(1_000)
+            stderrThread.join(1_000)
+            return ShellResult(-1, stdout, stderr.ifBlank { "Command timed out: $command" })
+        }
+        stdoutThread.join()
+        stderrThread.join()
+        return ShellResult(process.exitValue(), stdout, stderr)
     }
 
-    private data class ShellResult(val resultCode: Int, val out: String)
+    private data class ShellResult(val resultCode: Int, val out: String, val err: String) {
+        val combinedOutput: String get() = listOf(out, err).filter { it.isNotBlank() }.joinToString("\n")
+    }
 
     init {
         Shizuku.addBinderDeadListener(shizukuDeadListener)
@@ -121,4 +147,5 @@ class ShizukuInstallerAnime(private val service: Service) : InstallerAnime(servi
 }
 
 private const val SHIZUKU_PERMISSION_REQUEST_CODE = 14045
+private const val SHELL_COMMAND_TIMEOUT_SECONDS = 120L
 private val SESSION_ID_REGEX = Regex("(?<=\\[).+?(?=])")

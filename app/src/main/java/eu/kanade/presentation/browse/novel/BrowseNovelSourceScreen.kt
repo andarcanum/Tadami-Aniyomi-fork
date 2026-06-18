@@ -40,6 +40,7 @@ import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelCover
+import tachiyomi.domain.items.chapter.model.NoChaptersException
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.i18n.MR
@@ -79,8 +80,11 @@ fun BrowseNovelSourceContent(
         .collectPreferenceAsState()
     val effectiveContentPadding = contentPadding
 
+    val appendErrorState = novels.loadState.append
+        .takeIf { it is LoadState.Error }
+        ?.takeUnless { novels.itemCount > 0 && (it as LoadState.Error).error is NoChaptersException }
     val errorState = novels.loadState.refresh.takeIf { it is LoadState.Error }
-        ?: novels.loadState.append.takeIf { it is LoadState.Error }
+        ?: appendErrorState
 
     val getErrorMessage: (LoadState.Error) -> String = { state ->
         state.error.formattedMessage(context)

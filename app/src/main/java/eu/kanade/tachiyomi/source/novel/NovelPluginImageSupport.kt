@@ -341,9 +341,7 @@ object NovelPluginImageResolver {
             }
         }
 
-        return withTimeoutOrNull(TIMEOUT_MS) {
-            inFlightJob.await()
-        }
+        return inFlightJob.await()
     }
 
     fun resolveBlocking(url: String): NovelPluginImagePayload? {
@@ -358,13 +356,13 @@ object NovelPluginImageResolver {
         val sourceId = NovelPluginId.toSourceId(request.pluginId)
         val source = sourceManager.get(sourceId) as? NovelPluginImageSource
 
-        val payload = withTimeoutOrNull(TIMEOUT_MS) {
-            if (HexNovelImageOnDemandDecoder.canHandle(request)) {
+        val payload = if (HexNovelImageOnDemandDecoder.canHandle(request)) {
+            withTimeoutOrNull(TIMEOUT_MS) {
                 HexNovelImageOnDemandDecoder.decode(request, networkHelper, decodeLimiter)
-            } else {
-                decodeLimiter.withPermit {
-                    source?.fetchImage(request.imageRef)
-                }
+            }
+        } else {
+            decodeLimiter.withPermit {
+                source?.fetchImage(request.imageRef)
             }
         } ?: return null
 

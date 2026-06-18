@@ -754,7 +754,15 @@ data class TrackServiceSearchScreen(
         }
 
         fun registerTracking(item: AnimeTrackSearch) {
-            screenModelScope.launchNonCancellable { tracker.animeService.register(item, animeId) }
+            screenModelScope.launchNonCancellable {
+                try {
+                    tracker.animeService.register(item, animeId)
+                } catch (e: Throwable) {
+                    logcat(LogPriority.ERROR, e) {
+                        "Failed to register anime tracking entry animeId=$animeId serviceId=${tracker.id}"
+                    }
+                }
+            }
         }
 
         fun updateSelection(selected: AnimeTrackSearch) {

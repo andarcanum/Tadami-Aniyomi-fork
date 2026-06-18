@@ -69,6 +69,8 @@ class NovelUpdatesSimilarSource(
                         async {
                             try {
                                 searchSeries(candidate)
+                            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logcat { "[NovelUpdates] search failed for '$candidate': ${e.message}" }
                                 emptyList<NuSeriesStub>()
@@ -112,6 +114,8 @@ class NovelUpdatesSimilarSource(
                     reason = SuggestionReason.EXTERNAL_NU,
                 )
             }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
         } catch (e: Exception) {
             logcat { "[NovelUpdates] ERROR for '${seed.primaryTitle}': ${e.message}" }
             emptyList()

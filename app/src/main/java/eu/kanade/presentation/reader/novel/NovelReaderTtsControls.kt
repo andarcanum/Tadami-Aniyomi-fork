@@ -660,6 +660,13 @@ private fun NovelReaderTtsOptionsDialog(
                         text = stringResource(AYMR.strings.novel_reader_tts_voice),
                         style = MaterialTheme.typography.titleSmall,
                     )
+                    NovelReaderTtsSelectableCard(
+                        title = stringResource(AYMR.strings.novel_reader_tts_default_voice),
+                        subtitle = stringResource(AYMR.strings.novel_reader_tts_system_default_voice_summary),
+                        selected = uiState.selectedVoiceId.isBlank(),
+                        onClick = { onSetVoiceId("") },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     if (languagePicker.voices.isEmpty()) {
                         Text(
                             text = stringResource(AYMR.strings.novel_reader_tts_no_voices_for_selected_language),
@@ -670,7 +677,7 @@ private fun NovelReaderTtsOptionsDialog(
                             NovelReaderTtsSelectableCard(
                                 title = voice.title,
                                 subtitle = voice.subtitle,
-                                selected = voice.selected,
+                                selected = voice.selected && uiState.selectedVoiceId.isNotBlank(),
                                 onClick = { onSetVoiceId(voice.voiceId) },
                                 modifier = Modifier.fillMaxWidth(),
                             )

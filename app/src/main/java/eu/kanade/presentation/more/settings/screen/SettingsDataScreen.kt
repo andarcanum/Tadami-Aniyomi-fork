@@ -96,6 +96,7 @@ import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import logcat.LogPriority
@@ -933,10 +934,12 @@ object SettingsDataScreen : SearchableSettings {
                         scope.launchNonCancellable {
                             try {
                                 val syncManager = SyncManager(context)
-                                syncManager.syncData()
+                                syncManager.syncData(showUserNotification = true, rethrowErrors = true)
                                 withUIContext {
                                     context.toast(AYMR.strings.cloud_sync_successful)
                                 }
+                            } catch (e: CancellationException) {
+                                logcat { "Sync cancelled" }
                             } catch (e: Exception) {
                                 logcat { "Sync error: ${e.message}" }
                                 withUIContext {

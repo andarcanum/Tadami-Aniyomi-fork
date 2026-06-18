@@ -30,6 +30,7 @@ abstract class ViewerConfig(
     var volumeKeysEnabled = false
     var volumeKeysInverted = false
     var alwaysShowChapterTransition = true
+    var preloadNextChapter = true
     var navigationMode = 0
         protected set
 
@@ -80,6 +81,9 @@ abstract class ViewerConfig(
 
         readerPreferences.alwaysShowChapterTransition()
             .register({ alwaysShowChapterTransition = it })
+
+        readerPreferences.preloadNextChapter()
+            .register({ preloadNextChapter = it })
 
         forceNavigationOverlay = readerPreferences.showNavigationOverlayNewUser().get()
         if (forceNavigationOverlay) {

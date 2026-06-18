@@ -16,6 +16,7 @@ import tachiyomi.data.achievement.database.AchievementsDatabase
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.model.AchievementProgress
+import tachiyomi.domain.achievement.model.AchievementRarity
 import tachiyomi.domain.achievement.model.AchievementType
 import tachiyomi.domain.achievement.model.Reward
 import tachiyomi.domain.achievement.repository.AchievementRepository
@@ -63,6 +64,8 @@ class AchievementRepositoryImpl(
     }
 
     override suspend fun insertAchievement(achievement: Achievement) {
+        val rewardsJson = achievement.rewards?.let { json.encodeToString(rewardListSerializer, it) }
+        val tagsJson = encodeTags(achievement.tags)
         database.achievementsQueries.insert(
             id = achievement.id,
             type = achievement.type.name,
@@ -77,7 +80,14 @@ class AchievementRepositoryImpl(
             unlockable_id = achievement.unlockableId,
             version = achievement.version.toLong(),
             created_at = achievement.createdAt,
-            rewards = achievement.rewards?.let { json.encodeToString(rewardListSerializer, it) },
+            rewards = rewardsJson,
+            rarity = achievement.rarity.name.lowercase(),
+            tags = tagsJson,
+            hint = achievement.hint,
+            season = achievement.season,
+            tier_group = achievement.tierGroup,
+            tier_level = achievement.tierLevel?.toLong(),
+            reward_set = achievement.rewardSet,
         )
         database.achievementsQueries.updateMutableFields(
             id = achievement.id,
@@ -91,7 +101,14 @@ class AchievementRepositoryImpl(
             is_hidden = if (achievement.isHidden) 1L else 0L,
             is_secret = if (achievement.isSecret) 1L else 0L,
             unlockable_id = achievement.unlockableId,
-            rewards = achievement.rewards?.let { json.encodeToString(rewardListSerializer, it) },
+            rewards = rewardsJson,
+            rarity = achievement.rarity.name.lowercase(),
+            tags = tagsJson,
+            hint = achievement.hint,
+            season = achievement.season,
+            tier_group = achievement.tierGroup,
+            tier_level = achievement.tierLevel?.toLong(),
+            reward_set = achievement.rewardSet,
         )
     }
 
@@ -149,6 +166,13 @@ class AchievementRepositoryImpl(
             version = version.toInt(),
             createdAt = created_at,
             rewards = rewards?.let { decodeRewards(it) },
+            rarity = AchievementRarity.fromString(rarity),
+            tags = tags?.let { decodeTags(it) } ?: emptyList(),
+            hint = hint,
+            season = season,
+            tierGroup = tier_group,
+            tierLevel = tier_level?.toInt(),
+            rewardSet = reward_set,
         )
     }
 
@@ -157,6 +181,20 @@ class AchievementRepositoryImpl(
         return runCatching { json.decodeFromString(rewardListSerializer, raw) }
             .onFailure { logcat(LogPriority.WARN) { "[ACHIEVEMENTS] Failed to decode rewards: ${it.message}" } }
             .getOrNull()
+    }
+
+    private fun encodeTags(tags: List<String>): String? {
+        if (tags.isEmpty()) return null
+        return json.encodeToString(tags)
+    }
+
+    private fun decodeTags(raw: String): List<String> {
+        if (raw.isBlank()) return emptyList()
+        return try {
+            json.decodeFromString(raw)
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     private fun Achievement_progress.toDomainModel(): AchievementProgress {

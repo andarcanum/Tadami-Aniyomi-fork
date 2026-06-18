@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +49,7 @@ import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.components.material.topSmallPaddingValues
+import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
@@ -58,14 +60,46 @@ internal fun shouldLoadNovelPluginIcon(iconUrl: String?): Boolean {
     return !iconUrl.isNullOrBlank()
 }
 
+internal enum class NovelExtensionRowAction {
+    None,
+    Install,
+    Update,
+    Reinstall,
+    Open,
+}
+
+internal fun resolveNovelExtensionRowAction(item: NovelExtensionItem): NovelExtensionRowAction {
+    val plugin = item.plugin
+    return when (item.installStep) {
+        InstallStep.Pending, InstallStep.Downloading, InstallStep.Installing -> NovelExtensionRowAction.None
+        InstallStep.Error -> when {
+            plugin is NovelPlugin.Available -> NovelExtensionRowAction.Install
+            plugin is NovelPlugin.Installed && item.hasRepoUpdate && !item.hasUpdate -> {
+                NovelExtensionRowAction.Reinstall
+            }
+            plugin is NovelPlugin.Installed && item.hasUpdate -> NovelExtensionRowAction.Update
+            else -> NovelExtensionRowAction.None
+        }
+        else -> when {
+            plugin is NovelPlugin.Available -> NovelExtensionRowAction.Install
+            plugin is NovelPlugin.Installed && item.hasRepoUpdate && !item.hasUpdate -> {
+                NovelExtensionRowAction.Reinstall
+            }
+            plugin is NovelPlugin.Installed && item.hasUpdate -> NovelExtensionRowAction.Update
+            plugin is NovelPlugin.Installed -> NovelExtensionRowAction.Open
+            else -> NovelExtensionRowAction.None
+        }
+    }
+}
+
 @Composable
 fun NovelExtensionScreen(
     state: NovelExtensionsScreenModel.State,
     contentPadding: PaddingValues,
     searchQuery: String?,
     onInstallExtension: (NovelPlugin.Available) -> Unit,
-    onCancelInstall: (NovelPlugin.Available) -> Unit,
     onUpdateExtension: (NovelPlugin.Installed) -> Unit,
+    onReinstallExtension: (NovelPlugin.Installed) -> Unit,
     onOpenExtension: (NovelPlugin.Installed) -> Unit,
     onOpenExtensionSettings: (NovelPlugin.Installed) -> Unit,
     onUninstallExtension: (NovelPlugin.Installed) -> Unit,
@@ -105,8 +139,8 @@ fun NovelExtensionScreen(
                     state = state,
                     contentPadding = contentPadding,
                     onInstallExtension = onInstallExtension,
-                    onCancelInstall = onCancelInstall,
                     onUpdateExtension = onUpdateExtension,
+                    onReinstallExtension = onReinstallExtension,
                     onOpenExtension = onOpenExtension,
                     onOpenExtensionSettings = onOpenExtensionSettings,
                     onUninstallExtension = onUninstallExtension,
@@ -123,8 +157,8 @@ private fun NovelExtensionContent(
     state: NovelExtensionsScreenModel.State,
     contentPadding: PaddingValues,
     onInstallExtension: (NovelPlugin.Available) -> Unit,
-    onCancelInstall: (NovelPlugin.Available) -> Unit,
     onUpdateExtension: (NovelPlugin.Installed) -> Unit,
+    onReinstallExtension: (NovelPlugin.Installed) -> Unit,
     onOpenExtension: (NovelPlugin.Installed) -> Unit,
     onOpenExtensionSettings: (NovelPlugin.Installed) -> Unit,
     onUninstallExtension: (NovelPlugin.Installed) -> Unit,
@@ -143,11 +177,13 @@ private fun NovelExtensionContent(
                 ExtensionHeader(
                     textRes = MR.strings.ext_updates_pending,
                     action = {
-                        IconButton(onClick = onUpdateAll) {
-                            Icon(
-                                imageVector = Icons.Outlined.GetApp,
-                                contentDescription = stringResource(MR.strings.ext_update_all),
-                            )
+                        if (updates.any { it.hasUpdate }) {
+                            IconButton(onClick = onUpdateAll) {
+                                Icon(
+                                    imageVector = Icons.Outlined.GetApp,
+                                    contentDescription = stringResource(MR.strings.ext_update_all),
+                                )
+                            }
                         }
                     },
                 )
@@ -158,8 +194,8 @@ private fun NovelExtensionContent(
             ) { item ->
                 NovelExtensionItemRow(
                     item = item,
-                    onCancelInstall = onCancelInstall,
                     onUpdateExtension = onUpdateExtension,
+                    onReinstallExtension = onReinstallExtension,
                     onOpenExtension = onOpenExtension,
                     onOpenExtensionSettings = onOpenExtensionSettings,
                     onUninstallExtension = onUninstallExtension,
@@ -178,7 +214,6 @@ private fun NovelExtensionContent(
             ) { item ->
                 NovelExtensionItemRow(
                     item = item,
-                    onCancelInstall = onCancelInstall,
                     onOpenExtension = onOpenExtension,
                     onOpenExtensionSettings = onOpenExtensionSettings,
                     onUninstallExtension = onUninstallExtension,
@@ -225,7 +260,6 @@ private fun NovelExtensionContent(
                     NovelExtensionItemRow(
                         item = item,
                         onInstallExtension = onInstallExtension,
-                        onCancelInstall = onCancelInstall,
                     )
                 }
             }
@@ -237,30 +271,24 @@ private fun NovelExtensionContent(
 private fun NovelExtensionItemRow(
     item: NovelExtensionItem,
     onInstallExtension: ((NovelPlugin.Available) -> Unit)? = null,
-    onCancelInstall: ((NovelPlugin.Available) -> Unit)? = null,
     onUpdateExtension: ((NovelPlugin.Installed) -> Unit)? = null,
+    onReinstallExtension: ((NovelPlugin.Installed) -> Unit)? = null,
     onOpenExtension: ((NovelPlugin.Installed) -> Unit)? = null,
     onOpenExtensionSettings: ((NovelPlugin.Installed) -> Unit)? = null,
     onUninstallExtension: ((NovelPlugin.Installed) -> Unit)? = null,
 ) {
     val plugin = item.plugin
     val onItemClick: () -> Unit = {
-        when (item.installStep) {
-            InstallStep.Pending, InstallStep.Downloading, InstallStep.Installing -> Unit
-            InstallStep.Error -> {
-                when {
-                    plugin is NovelPlugin.Available && onInstallExtension != null -> {
-                        onInstallExtension(plugin)
-                    }
-                    plugin is NovelPlugin.Installed && onUpdateExtension != null -> {
-                        onUpdateExtension(plugin)
-                    }
-                }
+        when (resolveNovelExtensionRowAction(item)) {
+            NovelExtensionRowAction.None -> Unit
+            NovelExtensionRowAction.Install -> (plugin as? NovelPlugin.Available)?.let {
+                onInstallExtension?.invoke(it)
             }
-            else -> when {
-                plugin is NovelPlugin.Available && onInstallExtension != null -> onInstallExtension(plugin)
-                plugin is NovelPlugin.Installed && onOpenExtension != null -> onOpenExtension(plugin)
+            NovelExtensionRowAction.Update -> (plugin as? NovelPlugin.Installed)?.let { onUpdateExtension?.invoke(it) }
+            NovelExtensionRowAction.Reinstall -> (plugin as? NovelPlugin.Installed)?.let {
+                onReinstallExtension?.invoke(it)
             }
+            NovelExtensionRowAction.Open -> (plugin as? NovelPlugin.Installed)?.let { onOpenExtension?.invoke(it) }
         }
     }
 
@@ -297,34 +325,15 @@ private fun NovelExtensionItemRow(
         },
         action = {
             when (item.installStep) {
-                InstallStep.Pending, InstallStep.Downloading, InstallStep.Installing -> {
-                    val availablePlugin = plugin as? NovelPlugin.Available
-                    if (availablePlugin != null && onCancelInstall != null) {
-                        IconButton(onClick = { onCancelInstall(availablePlugin) }) {
-                            Icon(
-                                imageVector = Icons.Outlined.Close,
-                                contentDescription = stringResource(MR.strings.action_cancel),
-                            )
-                        }
-                    }
-                }
+                InstallStep.Pending, InstallStep.Downloading, InstallStep.Installing -> Unit
                 InstallStep.Error -> {
-                    when {
-                        plugin is NovelPlugin.Available && onInstallExtension != null -> {
-                            IconButton(onClick = { onInstallExtension(plugin) }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Refresh,
-                                    contentDescription = stringResource(MR.strings.action_retry),
-                                )
-                            }
-                        }
-                        plugin is NovelPlugin.Installed && onUpdateExtension != null -> {
-                            IconButton(onClick = { onUpdateExtension(plugin) }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Refresh,
-                                    contentDescription = stringResource(MR.strings.action_retry),
-                                )
-                            }
+                    val retryAction = resolveNovelExtensionRowAction(item)
+                    if (retryAction != NovelExtensionRowAction.None) {
+                        IconButton(onClick = onItemClick) {
+                            Icon(
+                                imageVector = Icons.Outlined.Refresh,
+                                contentDescription = stringResource(MR.strings.action_retry),
+                            )
                         }
                     }
                 }
@@ -347,11 +356,20 @@ private fun NovelExtensionItemRow(
                                     )
                                 }
                             }
-                            if (onUpdateExtension != null) {
+                            if (onUpdateExtension != null && item.hasUpdate) {
                                 IconButton(onClick = { onUpdateExtension(plugin) }) {
                                     Icon(
                                         imageVector = Icons.Outlined.GetApp,
                                         contentDescription = stringResource(MR.strings.ext_update),
+                                    )
+                                }
+                            }
+                            if (onReinstallExtension != null && item.hasRepoUpdate && !item.hasUpdate) {
+                                IconButton(onClick = { onReinstallExtension(plugin) }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Warning,
+                                        contentDescription = stringResource(MR.strings.ext_repo_update_required),
+                                        tint = MaterialTheme.colorScheme.error,
                                     )
                                 }
                             }
@@ -386,9 +404,38 @@ private fun NovelExtensionItemRow(
                 )
                 Row(modifier = Modifier.padding(start = 8.dp)) {
                     Text(
-                        text = "v${plugin.version}",
+                        text = "v${plugin.versionName}",
                         style = MaterialTheme.typography.bodySmall,
                     )
+                }
+                val repoDisplayName = item.repoDisplayName
+                val repoName = when {
+                    plugin is NovelPlugin.Available && item.repoSourceCount > 1 -> {
+                        pluralStringResource(MR.plurals.num_repos, count = item.repoSourceCount, item.repoSourceCount)
+                    }
+                    repoDisplayName != null -> repoDisplayName.oneWordRepoName()
+                    else -> plugin.repoDisplayName(item.repoSourceCount)
+                }
+                repoName?.takeIf { it.isNotBlank() }?.let { name ->
+                    Row(modifier = Modifier.padding(start = 8.dp)) {
+                        Text(
+                            text = "· $name",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (item.hasRepoUpdate) {
+                    Row(modifier = Modifier.padding(start = 8.dp)) {
+                        Text(
+                            text = stringResource(MR.strings.ext_repo_update_short),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
 
@@ -408,4 +455,59 @@ private fun NovelExtensionItemRow(
             }
         }
     }
+}
+
+private fun NovelPlugin.repoDisplayName(repoSourceCount: Int): String? {
+    if (this is NovelPlugin.Available && repoSourceCount > 1) {
+        return null
+    }
+
+    val rawName = when (this) {
+        is NovelPlugin.Available -> repoName.ifBlank { repoUrl.shortRepoName() }
+        is NovelPlugin.Installed -> repoName?.takeIf { it.isNotBlank() } ?: repoUrl.shortRepoName()
+    }
+
+    return rawName.takeIf { it.isNotBlank() }?.oneWordRepoName()
+}
+
+private fun String.shortRepoName(): String {
+    val withoutScheme = substringAfter("://", this)
+    val host = withoutScheme.substringBefore('/').removePrefix("www.")
+    if (host.equals("github.com", ignoreCase = true) || host.equals("raw.githubusercontent.com", ignoreCase = true)) {
+        val owner = withoutScheme.substringAfter('/', "").substringBefore('/')
+        if (owner.isNotBlank()) return owner
+    }
+    return host.ifBlank { this }
+}
+
+private fun String.oneWordRepoName(maxLength: Int = 14): String {
+    val commonWords = setOf(
+        "novel",
+        "anime",
+        "manga",
+        "extension",
+        "extensions",
+        "plugin",
+        "plugins",
+        "repo",
+        "repos",
+        "repository",
+        "repositories",
+        "source",
+        "sources",
+    )
+    val normalized = trim()
+        .removePrefix("http://")
+        .removePrefix("https://")
+        .substringBefore('/')
+        .removePrefix("www.")
+        .replace('-', ' ')
+        .replace('_', ' ')
+        .replace('.', ' ')
+    val word = normalized
+        .split(' ')
+        .firstOrNull { it.isNotBlank() && it.lowercase() !in commonWords }
+        ?: trim()
+
+    return if (word.length <= maxLength) word else word.take(maxLength - 1).trimEnd() + "…"
 }

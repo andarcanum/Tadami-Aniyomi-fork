@@ -5,7 +5,7 @@ import mihon.core.migration.MigrationContext
 import tachiyomi.core.common.util.lang.withIOContext
 
 class DefaultAnimeExtensionRepoMigration : Migration {
-    override val version = Migration.ALWAYS
+    override val version = 8f
 
     override suspend fun invoke(migrationContext: MigrationContext): Boolean = withIOContext {
         return@withIOContext true

@@ -50,12 +50,24 @@ class ChapterCacheTest {
         cache.getPageListFromCache(createChapter()) shouldBe emptyList()
     }
 
-    private fun createCache(): ChapterCache {
+    @Test
+    fun `applies custom image cache size`() {
+        val cache = createCache(maxSizeBytes = 75L * 1024 * 1024).also { this.cache = it }
+
+        cache.maxSizeBytes shouldBe 75L * 1024 * 1024
+
+        cache.setMaxSizeMb(50)
+
+        cache.maxSizeBytes shouldBe 50L * 1024 * 1024
+    }
+
+    private fun createCache(maxSizeBytes: Long = 100L * 1024 * 1024): ChapterCache {
         val context = mockk<Context>()
         every { context.cacheDir } returns tempDir.toFile()
         return ChapterCache(
             context = context,
             json = Json { encodeDefaults = true },
+            maxSizeBytes = maxSizeBytes,
         )
     }
 

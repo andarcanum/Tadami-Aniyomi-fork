@@ -32,6 +32,7 @@ object MangaMigrationFlags {
     private const val CUSTOM_COVER = 0b01000
     private const val DELETE_DOWNLOADED = 0b10000
     private const val EXTRA = 0b100000
+    private const val NOTES = 0b1000000
 
     private val coverCache: MangaCoverCache by injectLazy()
     private val downloadCache: MangaDownloadCache by injectLazy()
@@ -60,6 +61,10 @@ object MangaMigrationFlags {
         return value and EXTRA != 0
     }
 
+    fun hasNotes(value: Int): Boolean {
+        return value and NOTES != 0
+    }
+
     /** Returns information about applicable flags with default selections. */
     fun getFlags(manga: Manga?, defaultSelectedBitMap: Int): List<MangaMigrationFlag> {
         val flags = mutableListOf<MangaMigrationFlag>()
@@ -67,6 +72,9 @@ object MangaMigrationFlags {
         flags += MangaMigrationFlag.create(CATEGORIES, defaultSelectedBitMap, MR.strings.categories)
         flags += MangaMigrationFlag.create(TRACKING, defaultSelectedBitMap, MR.strings.track)
         flags += MangaMigrationFlag.create(EXTRA, defaultSelectedBitMap, MR.strings.migration_extra)
+        if (manga == null || manga.notes.isNotBlank()) {
+            flags += MangaMigrationFlag.create(NOTES, defaultSelectedBitMap, MR.strings.action_notes)
+        }
 
         if (manga != null) {
             if (manga.hasCustomCover(coverCache)) {

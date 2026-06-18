@@ -27,8 +27,9 @@ class NetworkNovelPluginIndexFetcher(
 
             for (candidate in candidates) {
                 try {
-                    val response = client.newCall(GET(candidate)).awaitSuccess()
-                    return@withContext response.body.string()
+                    client.newCall(GET(candidate)).awaitSuccess().use { response ->
+                        return@withContext response.body.string()
+                    }
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {

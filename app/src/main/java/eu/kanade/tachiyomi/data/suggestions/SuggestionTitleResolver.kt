@@ -188,6 +188,24 @@ object SuggestionTitleResolver {
         return maxOf(charSim, jaccardSim)
     }
 
+    fun normalizeEntryUrl(url: String?): String? {
+        if (url.isNullOrBlank()) return null
+        return url.trim()
+            .substringBefore('#')
+            .substringBefore('?')
+            .trimEnd('/')
+            .lowercase()
+            .ifBlank { null }
+    }
+
+    fun isSameProviderEntry(item: SuggestionItem, entryUrl: String?): Boolean {
+        val normalizedEntry = normalizeEntryUrl(entryUrl) ?: return false
+        val normalizedProviderUrl = normalizeEntryUrl(item.providerUrl)
+        if (normalizedProviderUrl == normalizedEntry) return true
+        val providerSuffix = item.providerId?.substringAfter(':', missingDelimiterValue = item.providerId.orEmpty())
+        return normalizeEntryUrl(providerSuffix) == normalizedEntry
+    }
+
     fun isFranchiseDuplicate(titleA: String, titleB: String): Boolean {
         val cleanA = cleanTitle(titleA)
         val cleanB = cleanTitle(titleB)

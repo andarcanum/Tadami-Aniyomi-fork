@@ -114,6 +114,8 @@ internal object AnimeRatingHtmlParser {
             return null
         }
 
+        parseStructuredFast(html)?.let { return it }
+
         val document = Jsoup.parse(html)
         val candidates = buildList {
             addAll(extractStructuredCandidates(document))
@@ -138,6 +140,19 @@ internal object AnimeRatingHtmlParser {
 
         debugLog("parse: no match")
         return null
+    }
+
+    private fun parseStructuredFast(html: String): Float? {
+        if (!html.contains("rating", ignoreCase = true) && !html.contains("score", ignoreCase = true)) return null
+        val candidates = mutableListOf<RatingCandidate>()
+        addScriptCandidates(
+            data = html,
+            source = CandidateSource.STRUCTURED_JSON_LD,
+            orderOffset = 0,
+            scaleHint = extractBestRatingScale(html),
+            candidates = candidates,
+        )
+        return selectBestCandidate(candidates)?.value
     }
 
     private fun extractStructuredCandidates(document: Document): List<RatingCandidate> {

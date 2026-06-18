@@ -18,6 +18,21 @@ import tachiyomi.domain.extension.novel.repository.NovelPluginRepository
 class DefaultNovelExtensionManagerTest {
 
     @Test
+    fun `remove saved repo entries removes both pkg and id keys`() {
+        val entries = setOf(
+            "pkg.name|https://old.example|Old Repo",
+            "plugin.id|https://old.example|Old Repo",
+            "other.id|https://other.example|Other Repo",
+        )
+
+        removeNovelInstalledRepoEntries(
+            entries = entries,
+            key = "pkg.name",
+            alternateKey = "plugin.id",
+        ) shouldBe setOf("other.id|https://other.example|Other Repo")
+    }
+
+    @Test
     fun `refreshAvailablePlugins updates available flow`() = runTest {
         val repo = FakePluginRepository()
         val api = FakePluginApi(
@@ -27,7 +42,8 @@ class DefaultNovelExtensionManagerTest {
                     name = "One",
                     site = "https://one.example",
                     lang = "en",
-                    version = 1,
+                    versionCode = 1,
+                    versionName = "1.0.0",
                     url = "https://one.example/plugin.js",
                     iconUrl = null,
                     customJs = null,
@@ -63,7 +79,8 @@ class DefaultNovelExtensionManagerTest {
             name = "Two",
             site = "https://two.example",
             lang = "ru",
-            version = 2,
+            versionCode = 2,
+            versionName = "2.0.0",
             url = "https://two.example/plugin.js",
             iconUrl = null,
             customJs = null,
@@ -88,7 +105,8 @@ class DefaultNovelExtensionManagerTest {
                     name = "Three",
                     site = "https://three.example",
                     lang = "en",
-                    version = 1,
+                    versionCode = 1,
+                    versionName = "1.0.0",
                     url = "https://three.example/plugin.js",
                     iconUrl = null,
                     customJs = null,
@@ -106,7 +124,8 @@ class DefaultNovelExtensionManagerTest {
                     name = "Three",
                     site = "https://three.example",
                     lang = "en",
-                    version = 2,
+                    versionCode = 2,
+                    versionName = "2.0.0",
                     url = "https://three.example/plugin.js",
                     iconUrl = null,
                     customJs = null,
@@ -142,7 +161,8 @@ class DefaultNovelExtensionManagerTest {
                 name = "Source One",
                 site = "https://one.example",
                 lang = "en",
-                version = 1,
+                versionCode = 1,
+                versionName = "1.0.0",
                 url = "https://one.example/plugin.js",
                 iconUrl = null,
                 customJs = null,
@@ -171,7 +191,8 @@ class DefaultNovelExtensionManagerTest {
             name = "Source Two",
             site = "https://two.example",
             lang = "ru",
-            version = 1,
+            versionCode = 1,
+            versionName = "1.0.0",
             url = "https://two.example/plugin.js",
             iconUrl = null,
             customJs = null,
@@ -207,7 +228,8 @@ class DefaultNovelExtensionManagerTest {
             name = "Capable Source",
             site = "https://capable.example",
             lang = "en",
-            version = 1,
+            versionCode = 1,
+            versionName = "1.0.0",
             url = "https://capable.example/plugin.js",
             iconUrl = null,
             customJs = null,
@@ -239,7 +261,8 @@ class DefaultNovelExtensionManagerTest {
             name = "Basic Source",
             site = "https://basic.example",
             lang = "en",
-            version = 1,
+            versionCode = 1,
+            versionName = "1.0.0",
             url = "https://basic.example/plugin.js",
             iconUrl = null,
             customJs = null,

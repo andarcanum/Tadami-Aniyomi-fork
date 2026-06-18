@@ -13,7 +13,6 @@ import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilter
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
@@ -35,12 +34,13 @@ class NovelSearchFallbackEngine {
         maxResults: Int = 40,
         onProgress: ((List<SuggestionItem>) -> Unit)? = null,
     ): NovelFallbackOutcome {
+        val boundedMaxResults = maxResults.coerceIn(1, 100)
         if (maxResults <= 0) {
             return NovelFallbackOutcome.Empty(NovelFallbackReason.SEARCH_EMPTY)
         }
 
         val cacheKey = SuggestionCache.makeKey(
-            "search:${source.id}:limit:$maxResults",
+            "search:${source.id}:limit:$boundedMaxResults",
             novel.url,
             "NOVEL",
             seed.candidateTitles,
@@ -183,25 +183,19 @@ class NovelSearchFallbackEngine {
         }
 
         for ((tierName, tierQueries) in queryTiers) {
-            if (synchronized(uniqueResults) { uniqueResults.size >= maxResults }) {
+            if (synchronized(uniqueResults) { uniqueResults.size >= boundedMaxResults }) {
                 logcat {
-                    "[NovelSearchFallbackEngine] Reached target results limit ($maxResults) before processing all tiers. Stopping early."
+                    "[NovelSearchFallbackEngine] Reached target results limit ($boundedMaxResults) before processing all tiers. Stopping early."
                 }
                 break
             }
             if (tierQueries.isEmpty()) continue
             logcat { "[NovelSearchFallbackEngine] Processing $tierName with queries: $tierQueries" }
 
-            val staggerMs = when {
-                tierName.startsWith("Tier 4") -> 3000L
-                tierName.startsWith("Tier 3") -> 1500L
-                else -> 500L
-            }
             coroutineScope {
-                tierQueries.forEachIndexed { index, query ->
+                tierQueries.forEach { query ->
                     launch {
-                        delay(staggerMs * index)
-                        if (synchronized(uniqueResults) { uniqueResults.size >= maxResults }) return@launch
+                        if (synchronized(uniqueResults) { uniqueResults.size >= boundedMaxResults }) return@launch
                         try {
                             logcat { "[NovelSearchFallbackEngine] Searching for query: '$query'" }
                             val page = source.getSearchNovels(1, query, filterList)
@@ -230,6 +224,10 @@ class NovelSearchFallbackEngine {
                                     logcat {
                                         "[NovelSearchFallbackEngine] Excluding franchise duplicate: '${sNovel.title}' against '${novel.title}'"
                                     }
+                                    return@mapNotNull null
+                                }
+
+                                if (synchronized(uniqueResults) { uniqueResults.containsKey(sNovel.url) }) {
                                     return@mapNotNull null
                                 }
 
@@ -262,7 +260,7 @@ class NovelSearchFallbackEngine {
                                     val item = SuggestionItem(
                                         title = sNovel.title,
                                         searchQueries = listOf(sNovel.title),
-                                        thumbnailUrl = sNovel.thumbnail_url,
+                                        thumbnailUrl = resolveThumbnail(source, sNovel),
                                         providerName = source.name,
                                         providerUrl = sNovel.url,
                                         providerId = "${source.id}:${sNovel.url}",
@@ -284,7 +282,7 @@ class NovelSearchFallbackEngine {
                                 if (isAuthorQuery && authorAdded >= maxAuthor) return@launch
                                 scoredItems.sortedByDescending { it.second }.forEach { (item, _) ->
                                     if (!uniqueResults.containsKey(item.providerUrl) &&
-                                        uniqueResults.size < maxResults
+                                        uniqueResults.size < boundedMaxResults
                                     ) {
                                         if ((isGenreQuery && genreAdded >= maxGenre) ||
                                             (isAuthorQuery && authorAdded >= maxAuthor)
@@ -306,6 +304,8 @@ class NovelSearchFallbackEngine {
                             if (currentProgress != null) {
                                 onProgress?.invoke(currentProgress)
                             }
+                        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logcat { "[NovelSearchFallbackEngine] Search failed for query '$query': ${e.message}" }
                         }
@@ -315,24 +315,24 @@ class NovelSearchFallbackEngine {
         }
 
         if (fallbackPolicy.genreFillEnabled &&
-            synchronized(uniqueResults) { uniqueResults.size < maxResults } &&
+            synchronized(uniqueResults) { uniqueResults.size < boundedMaxResults } &&
             genreParts.isNotEmpty()
         ) {
             backfillFromGenreQueries(
                 source = source,
                 novel = novel,
                 selectedGenres = genreParts,
-                maxResults = maxResults,
+                maxResults = boundedMaxResults,
                 uniqueResults = uniqueResults,
                 onProgress = onProgress,
             )
         }
 
-        if (synchronized(uniqueResults) { uniqueResults.size < maxResults }) {
+        if (synchronized(uniqueResults) { uniqueResults.size < boundedMaxResults }) {
             backfillFromPopularNovels(
                 source = source,
                 novel = novel,
-                maxResults = maxResults,
+                maxResults = boundedMaxResults,
                 uniqueResults = uniqueResults,
                 popularBackfillCap = fallbackPolicy.popularBackfillCap,
                 onProgress = onProgress,
@@ -343,7 +343,7 @@ class NovelSearchFallbackEngine {
         // search-fallback output (some plugins return the same novel under
         // a slightly different title or URL).
         val items = uniqueResults.values.toList()
-            .dedupeByCleanTitle()
+            .dedupeByCleanTitle(seed)
             .sortedByDescending { SuggestionSourceWeight.finalScore(it.reason, it.bestMatchScoreFor(seed)) }
         if (items.isEmpty()) {
             logcat {
@@ -429,7 +429,7 @@ class NovelSearchFallbackEngine {
                     candidateMetadata[sNovel.url] = SuggestionItem(
                         title = sNovel.title,
                         searchQueries = listOf(sNovel.title),
-                        thumbnailUrl = sNovel.thumbnail_url,
+                        thumbnailUrl = resolveThumbnail(source, sNovel),
                         providerName = source.name,
                         providerUrl = sNovel.url,
                         providerId = "${source.id}:${sNovel.url}",
@@ -486,27 +486,25 @@ class NovelSearchFallbackEngine {
             if (novelsPage.novels.isEmpty()) return
 
             var addedAny = false
-            val currentProgress = synchronized(uniqueResults) {
-                novelsPage.novels.forEach { sNovel ->
-                    if (uniqueResults.size >= targetCount) return@forEach
-                    if (sNovel.url == novel.url) return@forEach
-                    if (SuggestionTitleResolver.isFranchiseDuplicate(sNovel.title, novel.title)) return@forEach
-                    if (uniqueResults.containsKey(sNovel.url)) return@forEach
+            novelsPage.novels.forEach { sNovel ->
+                if (uniqueResults.size >= targetCount) return@forEach
+                if (sNovel.url == novel.url) return@forEach
+                if (SuggestionTitleResolver.isFranchiseDuplicate(sNovel.title, novel.title)) return@forEach
+                if (uniqueResults.containsKey(sNovel.url)) return@forEach
 
-                    uniqueResults[sNovel.url] = SuggestionItem(
-                        title = sNovel.title,
-                        searchQueries = listOf(sNovel.title),
-                        thumbnailUrl = sNovel.thumbnail_url,
-                        providerName = source.name,
-                        providerUrl = sNovel.url,
-                        providerId = "${source.id}:${sNovel.url}",
-                        mediaType = SuggestionMediaType.NOVEL,
-                        reason = SuggestionReason.POPULAR_BACKFILL,
-                    )
-                    addedAny = true
-                }
-                if (addedAny) uniqueResults.values.toList() else null
+                uniqueResults[sNovel.url] = SuggestionItem(
+                    title = sNovel.title,
+                    searchQueries = listOf(sNovel.title),
+                    thumbnailUrl = resolveThumbnail(source, sNovel),
+                    providerName = source.name,
+                    providerUrl = sNovel.url,
+                    providerId = "${source.id}:${sNovel.url}",
+                    mediaType = SuggestionMediaType.NOVEL,
+                    reason = SuggestionReason.POPULAR_BACKFILL,
+                )
+                addedAny = true
             }
+            val currentProgress = if (addedAny) uniqueResults.values.toList() else null
             if (currentProgress != null) {
                 onProgress?.invoke(currentProgress)
             }
@@ -587,6 +585,15 @@ class NovelSearchFallbackEngine {
         }
 
         traverse(filterList)
+    }
+
+    private suspend fun resolveThumbnail(
+        source: NovelCatalogueSource,
+        novel: eu.kanade.tachiyomi.novelsource.model.SNovel,
+    ): String? {
+        return novel.thumbnail_url?.takeIf { it.isNotBlank() }
+            ?: runCatching { source.getNovelDetails(novel.copy()).thumbnail_url?.takeIf { it.isNotBlank() } }
+                .getOrNull()
     }
 
     private companion object {

@@ -90,6 +90,8 @@ import eu.kanade.tachiyomi.ui.entries.novel.OmniBuilderScreen
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVolumeChapterDisplayData
+import eu.kanade.tachiyomi.ui.entries.novel.shouldGroupNovelChaptersByVolume
 import kotlinx.coroutines.delay
 import me.saket.swipe.SwipeableActionsBox
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -123,6 +125,7 @@ fun NovelScreen(
     onClickEditInfo: (() -> Unit)? = null,
     onRefresh: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
+    onSuggestionClick: (eu.kanade.tachiyomi.data.suggestions.SuggestionItem) -> Unit,
     onPosterLongClicked: (() -> Unit)? = null,
     onToggleAllChaptersRead: () -> Unit,
     onShare: (() -> Unit)?,
@@ -199,6 +202,7 @@ fun NovelScreen(
             onClickEditInfo = onClickEditInfo,
             onRefresh = onRefresh,
             onSearch = onSearch,
+            onSuggestionClick = onSuggestionClick,
             onPosterLongClicked = onPosterLongClicked,
             onShare = onShare,
             onWebView = onWebView,
@@ -254,6 +258,7 @@ fun NovelScreen(
     // Standard implementation (non-Aurora)
     val chapters = state.processedChapters
     val groupedByChapter = false
+    val groupedByVolume = remember(chapters) { shouldGroupNovelChaptersByVolume(chapters) }
     val chapterGroups = remember(chapters, groupedByChapter) {
         if (groupedByChapter) {
             resolveNovelChapterDisplayData(
@@ -265,33 +270,66 @@ fun NovelScreen(
             emptyList()
         }
     }
-    val allGroupKeys = remember(chapterGroups) {
-        chapterGroups.mapTo(mutableSetOf()) { it.groupKey }
-    }
-    val initialExpandedGroupKeys = remember(chapters, selectedScanlator, state.targetChapterIndex) {
-        if (!groupedByChapter) {
-            emptySet()
+    val volumeGroups = remember(chapters, groupedByVolume) {
+        if (groupedByVolume) {
+            resolveNovelVolumeChapterDisplayData(
+                chapters = chapters,
+                expandedVolumeKeys = emptySet(),
+            ).volumeGroups
         } else {
-            chapters.getOrNull(state.targetChapterIndex)
-                ?.chapterNumber
-                ?.toBits()
-                ?.let(::setOf)
-                .orEmpty()
+            emptyList()
         }
     }
-    var expandedGroupKeys by remember(chapters, selectedScanlator) {
+    val allGroupKeys = remember(chapterGroups, volumeGroups, groupedByVolume) {
+        if (groupedByVolume) {
+            volumeGroups.mapTo(mutableSetOf()) { it.groupKey }
+        } else {
+            chapterGroups.mapTo(mutableSetOf()) { it.groupKey }
+        }
+    }
+    val initialExpandedGroupKeys =
+        remember(chapters, selectedScanlator, state.targetChapterIndex, volumeGroups, groupedByVolume) {
+            when {
+                groupedByVolume -> {
+                    val targetChapterId = chapters.getOrNull(state.targetChapterIndex)?.id
+                    volumeGroups.firstOrNull { group -> group.chapters.any { it.id == targetChapterId } }
+                        ?.groupKey
+                        ?.let(::setOf)
+                        .orEmpty()
+                }
+                groupedByChapter -> {
+                    chapters.getOrNull(state.targetChapterIndex)
+                        ?.chapterNumber
+                        ?.toBits()
+                        ?.let(::setOf)
+                        .orEmpty()
+                }
+                else -> emptySet()
+            }
+        }
+    var expandedGroupKeys by remember(chapters, selectedScanlator, groupedByVolume) {
         mutableStateOf(initialExpandedGroupKeys)
     }
-    val chapterDisplayData = remember(chapters, selectedScanlator, expandedGroupKeys, groupedByChapter) {
-        resolveNovelChapterDisplayData(
-            chapters = chapters,
-            groupedByChapter = groupedByChapter,
-            expandedGroupKeys = expandedGroupKeys,
-        )
-    }
+    val chapterDisplayData =
+        remember(chapters, selectedScanlator, expandedGroupKeys, groupedByChapter, groupedByVolume) {
+            if (groupedByVolume) {
+                resolveNovelVolumeChapterDisplayData(
+                    chapters = chapters,
+                    expandedVolumeKeys = expandedGroupKeys,
+                )
+            } else {
+                resolveNovelChapterDisplayData(
+                    chapters = chapters,
+                    groupedByChapter = groupedByChapter,
+                    expandedGroupKeys = expandedGroupKeys,
+                )
+            }
+        }
     val displayRows = chapterDisplayData.displayRows
     val totalChapterCount = if (state.chapterPageEnabled) {
         maxOf(state.chapters.size, state.chapterPageEstimatedTotal)
+    } else if (groupedByVolume) {
+        volumeGroups.size
     } else if (groupedByChapter) {
         chapterGroups.size
     } else {
@@ -302,8 +340,12 @@ fun NovelScreen(
     val isAnySelected = selectedCount > 0
     val selectedChapters = chapters.filter { it.id in selectedIds }
     val downloadedChapterIds = state.downloadedChapterIds
-    val visibleTopLevelCount = if (groupedByChapter) chapterGroups.size else chapters.size
-    var visibleChapterCount by remember(chapters, selectedScanlator) {
+    val visibleTopLevelCount = when {
+        groupedByVolume -> volumeGroups.size
+        groupedByChapter -> chapterGroups.size
+        else -> chapters.size
+    }
+    var visibleChapterCount by remember(chapters, selectedScanlator, groupedByVolume) {
         mutableIntStateOf(
             initialVisibleChapterCount(
                 totalCount = visibleTopLevelCount,
@@ -311,11 +353,11 @@ fun NovelScreen(
             ),
         )
     }
-    val visibleRows = remember(displayRows, visibleChapterCount, groupedByChapter) {
+    val visibleRows = remember(displayRows, visibleChapterCount, groupedByChapter, groupedByVolume) {
         resolveNovelVisibleChapterRows(
             rows = displayRows,
             visibleTopLevelCount = visibleChapterCount,
-            groupedByChapter = groupedByChapter,
+            groupedByChapter = groupedByChapter || groupedByVolume,
         )
     }
     val chapterListState = rememberLazyListState()
@@ -330,7 +372,7 @@ fun NovelScreen(
 
     // Restore saved scroll position or auto-scroll to target chapter
     var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
-    LaunchedEffect(state.scrollIndex, state.targetChapterIndex, expandedGroupKeys, groupedByChapter) {
+    LaunchedEffect(state.scrollIndex, state.targetChapterIndex, expandedGroupKeys, groupedByChapter, groupedByVolume) {
         if (!hasScrolledToTarget) {
             hasScrolledToTarget = true
             val targetChapterId = chapters.getOrNull(state.targetChapterIndex)?.id
@@ -460,7 +502,7 @@ fun NovelScreen(
         VerticalFastScroller(
             listState = chapterListState,
             onThumbDragStarted = {
-                if (groupedByChapter) {
+                if (groupedByChapter || groupedByVolume) {
                     expandedGroupKeys = allGroupKeys
                 }
                 visibleChapterCount = resolveNovelFastScrollVisibleChapterCount(
@@ -817,6 +859,8 @@ fun NovelScreen(
                             is NovelChapterDisplayRow.BranchChapter -> "branch-${row.chapter.id}"
                             is NovelChapterDisplayRow.ChapterGroup -> "group-${row.groupKey}"
                             is NovelChapterDisplayRow.ChapterVariant -> "variant-${row.chapter.id}"
+                            is NovelChapterDisplayRow.VolumeGroup -> "volume-${row.groupKey}"
+                            is NovelChapterDisplayRow.VolumeChapter -> "volume-chapter-${row.chapter.id}"
                         }
                     },
                 ) { row ->
@@ -905,6 +949,70 @@ fun NovelScreen(
                                 selectionMode = isAnySelected,
                                 displayMode = state.novel.displayMode,
                                 titleOverride = chapterTitle,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        start = MaterialTheme.padding.large,
+                                        end = MaterialTheme.padding.medium,
+                                        top = 2.dp,
+                                        bottom = 4.dp,
+                                    ),
+                                onClick = { onChapterClick(chapter.id) },
+                                onLongClick = { onChapterLongClick(chapter.id) },
+                                onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                onTranslateLongClick = { onChapterTranslateLongClick(chapter.id) },
+                                onTranslatedDownloadClick = { onChapterTranslatedDownloadClick(chapter.id) },
+                                onTranslatedDownloadLongClick = { onChapterTranslatedDownloadLongClick(chapter.id) },
+                                onTranslatedDownloadOpenFolder = { onChapterTranslatedDownloadOpenFolder(chapter.id) },
+                                onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                onToggleRead = { onChapterReadToggle(chapter.id) },
+                                chapterSwipeStartAction = chapterSwipeStartAction,
+                                chapterSwipeEndAction = chapterSwipeEndAction,
+                                onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
+                            )
+                        }
+                        is NovelChapterDisplayRow.VolumeGroup -> {
+                            val primaryChapter = row.chapters.first()
+                            val isExpanded = row.groupKey in expandedGroupKeys
+                            NovelClassicChapterGroup(
+                                title = row.title,
+                                count = row.chapters.size,
+                                expanded = isExpanded,
+                                singleItemGroup = row.chapters.size == 1,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = MaterialTheme.padding.medium, vertical = 4.dp),
+                                onClick = {
+                                    if (row.chapters.size == 1) {
+                                        onChapterClick(primaryChapter.id)
+                                    } else {
+                                        expandedGroupKeys = if (isExpanded) {
+                                            expandedGroupKeys - row.groupKey
+                                        } else {
+                                            expandedGroupKeys + row.groupKey
+                                        }
+                                    }
+                                },
+                                onLongClick = {
+                                    if (row.chapters.size == 1) {
+                                        onChapterLongClick(primaryChapter.id)
+                                    }
+                                },
+                            )
+                        }
+                        is NovelChapterDisplayRow.VolumeChapter -> {
+                            val chapter = row.chapter
+                            NovelClassicChapterRow(
+                                chapter = chapter,
+                                displayNumber = row.displayNumber,
+                                selected = chapter.id in selectedIds,
+                                chapterActionState = state.chapterActionStates[chapter.id],
+                                downloaded = chapter.id in state.downloadedChapterIds,
+                                downloading = chapter.id in state.downloadingChapterIds,
+                                selectionMode = isAnySelected,
+                                displayMode = state.novel.displayMode,
+                                titleOverride = row.title,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(

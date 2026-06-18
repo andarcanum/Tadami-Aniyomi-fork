@@ -50,6 +50,8 @@ internal class HomeHubFastCache(context: Context, section: HomeHubSection) {
     }
 
     fun save(state: CachedHomeState) {
+        if (memoryCache == state) return
+
         memoryCache = state
 
         prefs.edit().apply {

@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.updates.novel
 import android.content.Context
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.FlipToBack
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -75,7 +76,13 @@ fun Screen.novelUpdatesTab(
                 ),
             )
         } else {
-            persistentListOf()
+            persistentListOf(
+                AppBar.Action(
+                    title = context.stringResource(MR.strings.action_update_library),
+                    icon = Icons.Outlined.Refresh,
+                    onClick = { screenModel.updateLibrary() },
+                ),
+            )
         },
         navigateUp = navigateUp,
     )

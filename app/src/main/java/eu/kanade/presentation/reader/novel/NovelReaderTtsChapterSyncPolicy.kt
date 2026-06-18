@@ -7,6 +7,5 @@ internal fun resolveTtsAutoAdvancedChapterNavigationTarget(
 ): Long? {
     if (activeTtsChapterId == null) return null
     if (activeTtsChapterId == currentChapterId) return null
-    if (nextChapterId == null) return null
-    return activeTtsChapterId.takeIf { it == nextChapterId }
+    return activeTtsChapterId.takeIf { nextChapterId == null || it == nextChapterId }
 }

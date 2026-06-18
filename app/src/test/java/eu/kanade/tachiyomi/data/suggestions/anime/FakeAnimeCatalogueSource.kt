@@ -14,7 +14,9 @@ open class FakeAnimeCatalogueSource(
 ) : AnimeCatalogueSource {
 
     var searchAnimesToReturn: List<SAnime> = emptyList()
+    var detailsByUrl: Map<String, SAnime> = emptyMap()
     var getSearchAnimeCalledWithQuery: String? = null
+    var getAnimeDetailsCallCount = 0
 
     override suspend fun getSearchAnime(page: Int, query: String, filters: AnimeFilterList): AnimesPage {
         getSearchAnimeCalledWithQuery = query
@@ -30,6 +32,9 @@ open class FakeAnimeCatalogueSource(
         filters: AnimeFilterList,
     ): Observable<AnimesPage> = throw UnsupportedOperationException()
     override fun fetchLatestUpdates(page: Int): Observable<AnimesPage> = throw UnsupportedOperationException()
-    override suspend fun getAnimeDetails(anime: SAnime): SAnime = anime
+    override suspend fun getAnimeDetails(anime: SAnime): SAnime {
+        getAnimeDetailsCallCount++
+        return detailsByUrl[anime.url] ?: anime
+    }
     override suspend fun getSeasonList(anime: SAnime): List<SAnime> = emptyList()
 }

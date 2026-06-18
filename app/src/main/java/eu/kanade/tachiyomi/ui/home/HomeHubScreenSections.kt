@@ -266,10 +266,20 @@ private fun HomeHubScreen(
     onLibraryClick: () -> Unit,
 ) {
     val trimmedQuery = searchQuery?.trim().orEmpty()
-    val isFiltering = trimmedQuery.isNotEmpty()
-    val matchesQuery: (String) -> Boolean = { title ->
-        !isFiltering || title.contains(trimmedQuery, ignoreCase = true)
+    val filteredContent = remember(
+        state.hero,
+        state.history,
+        state.recommendations,
+        trimmedQuery,
+    ) {
+        resolveHomeHubFilteredContent(
+            hero = state.hero,
+            history = state.history,
+            recommendations = state.recommendations,
+            query = trimmedQuery,
+        )
     }
+    val isFiltering = filteredContent.isFiltering
 
     // Home hub should open from the top after app relaunch; avoid saveable scroll restoration.
     val listState = remember(section) { LazyListState() }
@@ -301,9 +311,9 @@ private fun HomeHubScreen(
         }
     }
 
-    val hero = state.hero?.takeIf { matchesQuery(it.title) }
-    val history = state.history.filter { matchesQuery(it.title) }
-    val recommendations = state.recommendations.filter { matchesQuery(it.title) }
+    val hero = filteredContent.hero
+    val history = filteredContent.history
+    val recommendations = filteredContent.recommendations
     val showWelcome = (state.showWelcome || state.showFilteredEmpty) && !isFiltering
     val enableScroll = shouldEnableHomeHubScroll(
         showWelcome = showWelcome,
@@ -326,12 +336,12 @@ private fun HomeHubScreen(
         userScrollEnabled = enableScroll,
     ) {
         if (showWelcome) {
-            item(key = "welcome") {
+            item(key = "welcome", contentType = "home_hub_welcome") {
                 WelcomeSection(onBrowseClick = onBrowseClick, onExtensionClick = onExtensionClick)
             }
         } else {
             if (hero != null || reserveHeroSlot) {
-                item(key = "hero") {
+                item(key = "hero", contentType = "home_hub_hero") {
                     hero?.let { heroData ->
                         HeroSection(
                             hero = heroData,
@@ -344,12 +354,12 @@ private fun HomeHubScreen(
                 }
             }
 
-            item(key = "quick_source") {
+            item(key = "quick_source", contentType = "home_hub_quick_source") {
                 QuickSourceButton(sourceName = lastSourceName, onClick = onSourceClick)
             }
 
             if (history.isNotEmpty()) {
-                item(key = "history") {
+                item(key = "history", contentType = "home_hub_history") {
                     HistoryRow(
                         history = history,
                         recentCardMode = recentCardMode,
@@ -361,9 +371,10 @@ private fun HomeHubScreen(
             }
 
             if (recommendations.isNotEmpty()) {
-                item(key = "recommendations") {
+                item(key = "recommendations", contentType = "home_hub_recommendations") {
                     RecommendationsGrid(
                         recommendations = recommendations,
+                        section = section,
                         recentCardMode = recentCardMode,
                         onEntryClick = onEntryClick,
                         onMoreClick = onLibraryClick,
@@ -372,7 +383,7 @@ private fun HomeHubScreen(
             }
         }
 
-        item { Spacer(Modifier.height(24.dp)) }
+        item(key = "bottom_spacer", contentType = "home_hub_spacer") { Spacer(Modifier.height(24.dp)) }
     }
 }
 
@@ -455,6 +466,36 @@ private fun WelcomeSection(onBrowseClick: () -> Unit, onExtensionClick: () -> Un
             }
         }
     }
+}
+
+internal data class HomeHubFilteredContent(
+    val hero: HomeHubHero?,
+    val history: List<HomeHubHistory>,
+    val recommendations: List<HomeHubRecommendation>,
+    val isFiltering: Boolean,
+)
+
+internal fun resolveHomeHubFilteredContent(
+    hero: HomeHubHero?,
+    history: List<HomeHubHistory>,
+    recommendations: List<HomeHubRecommendation>,
+    query: String,
+): HomeHubFilteredContent {
+    if (query.isEmpty()) {
+        return HomeHubFilteredContent(
+            hero = hero,
+            history = history,
+            recommendations = recommendations,
+            isFiltering = false,
+        )
+    }
+
+    return HomeHubFilteredContent(
+        hero = hero?.takeIf { it.title.contains(query, ignoreCase = true) },
+        history = history.filter { it.title.contains(query, ignoreCase = true) },
+        recommendations = recommendations.filter { it.title.contains(query, ignoreCase = true) },
+        isFiltering = true,
+    )
 }
 
 internal fun shouldReserveHomeHubHeroSlot(

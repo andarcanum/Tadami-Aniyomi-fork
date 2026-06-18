@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.presentation.achievement.utils.AchievementRevealHelper
 import eu.kanade.presentation.components.AdaptiveSheet
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.data.achievement.UnlockableManager
@@ -189,11 +190,7 @@ fun AchievementDetailDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = if (achievement.isHidden && !isUnlocked) {
-                            "???"
-                        } else {
-                            achievement.title
-                        },
+                        text = AchievementRevealHelper.getDisplayName(achievement, progress),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isUnlocked) colors.textPrimary else colors.textSecondary,
@@ -226,22 +223,32 @@ fun AchievementDetailDialog(
                     }
                 }
 
-                // Description with proper spacing
-                if (!achievement.isHidden || isUnlocked) {
-                    val description = achievement.description
-                    if (!description.isNullOrBlank()) {
-                        Text(
-                            text = description,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color.White.copy(alpha = 0.03f))
-                                .padding(12.dp),
-                            color = colors.textSecondary,
-                            lineHeight = 22.sp,
-                        )
-                    }
+                // Description
+                val displayDesc = if (achievement.isHidden && !isUnlocked) {
+                    AchievementRevealHelper.getDisplayDescription(
+                        achievement = achievement,
+                        progress = progress,
+                        vaguePrefix = stringResource(AYMR.strings.achievement_hint_vague_prefix),
+                        directPrefix = stringResource(AYMR.strings.achievement_hint_direct_prefix),
+                        obviousPrefix = stringResource(AYMR.strings.achievement_hint_obvious_prefix),
+                        cluePrefix = stringResource(AYMR.strings.achievement_clue_prefix),
+                    )
+                } else {
+                    achievement.description
+                }
+
+                if (!displayDesc.isNullOrBlank()) {
+                    Text(
+                        text = displayDesc,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.White.copy(alpha = 0.03f))
+                            .padding(12.dp),
+                        color = colors.textSecondary,
+                        lineHeight = 22.sp,
+                    )
                 }
 
                 // Progress Section with animated visualization
@@ -555,7 +562,12 @@ private fun AuroraRewardSection(
         val unlockableId = achievement.unlockableId
         if (unlockableId != null) {
             val isUnlockableUnlocked = unlockableManager.isUnlockableUnlocked(unlockableId)
-            val unlockableName = unlockableManager.getUnlockableName(unlockableId)
+            val unlockableNameRes = unlockableManager.getUnlockableNameRes(unlockableId)
+            val unlockableName = if (unlockableNameRes != null) {
+                stringResource(unlockableNameRes)
+            } else {
+                unlockableManager.getUnlockableName(unlockableId)
+            }
 
             AuroraRewardItem(
                 icon = {

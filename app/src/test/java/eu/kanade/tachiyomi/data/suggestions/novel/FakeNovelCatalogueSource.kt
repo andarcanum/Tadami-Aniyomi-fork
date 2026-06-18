@@ -19,11 +19,13 @@ open class FakeNovelCatalogueSource(
     var searchNovelsByQuery: Map<String, List<SNovel>> = emptyMap()
     var popularNovelsToReturn: List<SNovel> = emptyList()
     var popularNovelsWithFiltersToReturn: List<SNovel>? = null
+    var detailsByUrl: Map<String, SNovel> = emptyMap()
     var getRelatedNovelsCalled = false
     var getSearchNovelsCalledWithQuery: String? = null
     var searchQueriesCalled: MutableList<String> = mutableListOf()
     var getPopularNovelsCalled = false
     var getPopularNovelsCallCount = 0
+    var getNovelDetailsCallCount = 0
 
     override suspend fun getRelatedNovels(novel: SNovel): List<SNovel> {
         getRelatedNovelsCalled = true
@@ -52,6 +54,11 @@ open class FakeNovelCatalogueSource(
     }
 
     override fun getFilterList(): NovelFilterList = NovelFilterList()
+
+    override suspend fun getNovelDetails(novel: SNovel): SNovel {
+        getNovelDetailsCallCount++
+        return detailsByUrl[novel.url] ?: novel
+    }
 
     override fun fetchPopularNovels(page: Int): Observable<NovelsPage> = throw UnsupportedOperationException()
     override fun fetchSearchNovels(

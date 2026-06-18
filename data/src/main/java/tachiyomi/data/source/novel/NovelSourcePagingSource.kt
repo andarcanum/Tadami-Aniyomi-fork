@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
+import kotlinx.coroutines.withTimeout
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.domain.items.chapter.model.NoChaptersException
 import tachiyomi.domain.source.novel.repository.SourcePagingSourceType
@@ -13,9 +14,11 @@ class NovelSourceSearchPagingSource(
     source: NovelCatalogueSource,
     val query: String,
     val filters: NovelFilterList,
+    requestTimeoutMillis: Long = NOVEL_SOURCE_PAGE_REQUEST_TIMEOUT_MS,
 ) :
     NovelSourcePagingSource(
         source,
+        requestTimeoutMillis,
     ) {
     override suspend fun requestNextPage(currentPage: Int): NovelsPage {
         return source.getSearchNovels(currentPage, query, filters)
@@ -25,7 +28,8 @@ class NovelSourceSearchPagingSource(
 class NovelSourcePopularPagingSource(
     source: NovelCatalogueSource,
     private val filters: NovelFilterList,
-) : NovelSourcePagingSource(source) {
+    requestTimeoutMillis: Long = NOVEL_SOURCE_PAGE_REQUEST_TIMEOUT_MS,
+) : NovelSourcePagingSource(source, requestTimeoutMillis) {
     override suspend fun requestNextPage(currentPage: Int): NovelsPage {
         return source.getPopularNovels(currentPage, filters)
     }
@@ -34,7 +38,8 @@ class NovelSourcePopularPagingSource(
 class NovelSourceLatestPagingSource(
     source: NovelCatalogueSource,
     private val filters: NovelFilterList,
-) : NovelSourcePagingSource(source) {
+    requestTimeoutMillis: Long = NOVEL_SOURCE_PAGE_REQUEST_TIMEOUT_MS,
+) : NovelSourcePagingSource(source, requestTimeoutMillis) {
     override suspend fun requestNextPage(currentPage: Int): NovelsPage {
         return source.getLatestUpdates(currentPage, filters)
     }
@@ -42,6 +47,7 @@ class NovelSourceLatestPagingSource(
 
 abstract class NovelSourcePagingSource(
     protected val source: NovelCatalogueSource,
+    private val requestTimeoutMillis: Long = NOVEL_SOURCE_PAGE_REQUEST_TIMEOUT_MS,
 ) : SourcePagingSourceType() {
 
     abstract suspend fun requestNextPage(currentPage: Int): NovelsPage
@@ -51,7 +57,7 @@ abstract class NovelSourcePagingSource(
 
         return try {
             withIOContext {
-                val novelsPage = requestNextPage(page.toInt())
+                val novelsPage = withTimeout(requestTimeoutMillis) { requestNextPage(page.toInt()) }
                 when {
                     novelsPage.novels.isNotEmpty() -> {
                         LoadResult.Page(
@@ -62,8 +68,9 @@ abstract class NovelSourcePagingSource(
                     }
                     page == 1L -> throw NoChaptersException()
                     else -> {
-                        // Some sources may return an empty trailing page while data already exists.
-                        // Treat this as end-of-pagination instead of an append error.
+                        // Some sources incorrectly report that another page exists,
+                        // then return an empty trailing page. Treat that as the end
+                        // of pagination instead of surfacing a false "no results" error.
                         LoadResult.Page(
                             data = emptyList(),
                             prevKey = null,
@@ -84,3 +91,5 @@ abstract class NovelSourcePagingSource(
         }
     }
 }
+
+internal const val NOVEL_SOURCE_PAGE_REQUEST_TIMEOUT_MS = 30_000L

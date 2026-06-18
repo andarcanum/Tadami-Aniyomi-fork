@@ -29,6 +29,7 @@ import java.io.IOException
 class ChapterCache(
     private val context: Context,
     private val json: Json,
+    maxSizeBytes: Long = PARAMETER_CACHE_SIZE,
 ) {
 
     /** Cache class used for cache management. */
@@ -36,7 +37,7 @@ class ChapterCache(
         File(context.cacheDir, "chapter_disk_cache"),
         PARAMETER_APP_VERSION,
         PARAMETER_VALUE_COUNT,
-        PARAMETER_CACHE_SIZE,
+        maxSizeBytes.coerceAtLeast(MINIMUM_CACHE_SIZE_BYTES),
     )
 
     /**
@@ -55,6 +56,9 @@ class ChapterCache(
      */
     val readableSize: String
         get() = Formatter.formatFileSize(context, realSize)
+
+    val maxSizeBytes: Long
+        get() = diskCache.getMaxSize()
 
     /**
      * Get page list from cache.
@@ -165,6 +169,17 @@ class ChapterCache(
         }
     }
 
+    fun setMaxSizeBytes(maxSizeBytes: Long) {
+        val safeSize = maxSizeBytes.coerceAtLeast(MINIMUM_CACHE_SIZE_BYTES)
+        diskCache.setMaxSize(safeSize)
+        runCatching { diskCache.flush() }
+            .onFailure { logcat(LogPriority.WARN, it) { "Failed to apply chapter cache size" } }
+    }
+
+    fun setMaxSizeMb(maxSizeMb: Int) {
+        setMaxSizeBytes(maxSizeMb.toLong() * BYTES_PER_MEGABYTE)
+    }
+
     fun clear(): Int {
         var deletedFiles = 0
         cacheDir.listFiles()?.forEach {
@@ -214,4 +229,6 @@ private const val PARAMETER_APP_VERSION = 1
 private const val PARAMETER_VALUE_COUNT = 1
 
 /** The maximum number of bytes this cache should use to store.  */
-private const val PARAMETER_CACHE_SIZE = 100L * 1024 * 1024
+private const val BYTES_PER_MEGABYTE = 1024L * 1024L
+private const val MINIMUM_CACHE_SIZE_BYTES = 1L * BYTES_PER_MEGABYTE
+private const val PARAMETER_CACHE_SIZE = 100L * BYTES_PER_MEGABYTE

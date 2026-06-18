@@ -82,6 +82,7 @@ fun Modifier.auroraCardStyle(
     shape: Shape = AURORA_SETTINGS_CARD_SHAPE,
     applyShadow: Boolean = false,
     applyModifierBackgroundInDark: Boolean = false,
+    applyDarkRimLight: Boolean = true,
 ): Modifier {
     return if (!colors.isDark && !colors.isEInk) {
         this
@@ -147,7 +148,6 @@ fun Modifier.auroraCardStyle(
                 shape = shape,
             )
     } else if (colors.isDark && !colors.isEInk) {
-        val borderBrush = auroraMenuRimLightBrush(colors)
         val baseModifier = if (applyModifierBackgroundInDark) {
             this.background(
                 color = resolveAuroraMoreCardContainerColor(colors),
@@ -156,11 +156,16 @@ fun Modifier.auroraCardStyle(
         } else {
             this
         }
-        baseModifier.border(
-            width = 1.dp,
-            brush = borderBrush,
-            shape = shape,
-        )
+        if (applyDarkRimLight) {
+            val borderBrush = auroraMenuRimLightBrush(colors)
+            baseModifier.border(
+                width = 1.dp,
+                brush = borderBrush,
+                shape = shape,
+            )
+        } else {
+            baseModifier
+        }
     } else if (applyModifierBackgroundInDark) {
         this.background(
             color = resolveAuroraMoreCardContainerColor(colors),

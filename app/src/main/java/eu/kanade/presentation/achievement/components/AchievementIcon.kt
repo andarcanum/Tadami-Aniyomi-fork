@@ -263,9 +263,18 @@ private fun getIconResourceId(
         return R.drawable.ic_badge_default
     }
 
+    val formattedId = when (iconName) {
+        "cross" -> "ic_badge_cross"
+        "rank" -> "ic_badge_rank"
+        "immersion" -> "ic_badge_immersion"
+        "hybrid" -> "ic_badge_hybrid"
+        "trinity" -> "ic_reward_badge_trinity"
+        else -> iconName
+    }
+
     return try {
         val resourceId = context.resources.getIdentifier(
-            iconName,
+            formattedId,
             "drawable",
             context.packageName,
         )

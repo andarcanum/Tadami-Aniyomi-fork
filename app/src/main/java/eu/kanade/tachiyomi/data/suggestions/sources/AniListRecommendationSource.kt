@@ -143,6 +143,8 @@ class AniListRecommendationSource(
                             ?.get("media")?.jsonArray
                             ?.mapNotNull { it.jsonObject }
                             ?: emptyList()
+                    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         logcat { "AniList query failed for candidate '$candidate' type=$type: ${e.message}" }
                         emptyList()
@@ -371,6 +373,8 @@ class AniListRecommendationSource(
                 ?.get("media")?.jsonArray
                 ?.mapNotNull { it.jsonObject }
                 ?: emptyList()
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
         } catch (e: Exception) {
             logcat { "[AniList] genre search failed for $anilistGenres: ${e.message}" }
             emptyList()

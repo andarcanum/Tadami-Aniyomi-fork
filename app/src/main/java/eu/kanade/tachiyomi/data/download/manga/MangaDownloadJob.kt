@@ -60,9 +60,12 @@ class MangaDownloadJob(context: Context, workerParams: WorkerParameters) : Corou
             applicationContext.activeNetworkState(),
             downloadPreferences.downloadOnlyOverWifi().get(),
         )
-        var active = networkCheck && downloadManager.downloaderStart()
 
-        if (!active) {
+        if (networkCheck && !downloadManager.isRunning) {
+            downloadManager.downloaderStart()
+        }
+
+        if (!downloadManager.isRunning) {
             return Result.failure()
         }
 
@@ -76,9 +79,7 @@ class MangaDownloadJob(context: Context, workerParams: WorkerParameters) : Corou
                 .launchIn(this)
         }
 
-        // Keep the worker running when needed
-        while (active) {
-            active = !isStopped && downloadManager.isRunning && networkCheck
+        while (!isStopped && downloadManager.isRunning && networkCheck) {
         }
 
         return Result.success()
@@ -119,14 +120,14 @@ class MangaDownloadJob(context: Context, workerParams: WorkerParameters) : Corou
             return WorkManager.getInstance(context)
                 .getWorkInfosForUniqueWork(TAG)
                 .get()
-                .let { list -> list.count { it.state == WorkInfo.State.RUNNING } == 1 }
+                .let { list -> list.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED } }
         }
 
         fun isRunningFlow(context: Context): Flow<Boolean> {
             return WorkManager.getInstance(context)
                 .getWorkInfosForUniqueWorkLiveData(TAG)
                 .asFlow()
-                .map { list -> list.count { it.state == WorkInfo.State.RUNNING } == 1 }
+                .map { list -> list.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED } }
         }
     }
 }

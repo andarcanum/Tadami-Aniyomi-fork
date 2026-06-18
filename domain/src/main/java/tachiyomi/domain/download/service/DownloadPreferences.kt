@@ -83,6 +83,14 @@ class DownloadPreferences(
     fun pageDownloadConcurrency() = preferenceStore.getInt("download_page_concurrency", 2)
     fun downloadSpeedLimit() = preferenceStore.getInt("download_speed_limit", 0)
 
+    fun novelDownloadDelayMs() = preferenceStore.getInt("novel_download_delay_ms", 1_200)
+
+    fun novelDownloadJitterMs() = preferenceStore.getInt("novel_download_jitter_ms", 400)
+
+    fun novelDownloadTimeoutMs() = preferenceStore.getInt("novel_download_timeout_ms", 30_000)
+
+    fun novelDownloadFailureCooldownMs() = preferenceStore.getInt("novel_download_failure_cooldown_ms", 60_000)
+
     fun downloadNewUnreadChaptersOnly() = preferenceStore.getBoolean("download_new_unread_chapters_only", false)
     fun downloadNewUnseenEpisodesOnly() = preferenceStore.getBoolean("download_new_unread_episodes_only", false)
     fun downloadNewUnreadNovelChaptersOnly() = preferenceStore.getBoolean(

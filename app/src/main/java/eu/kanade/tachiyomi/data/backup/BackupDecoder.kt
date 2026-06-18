@@ -5,6 +5,7 @@ import android.net.Uri
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.LegacyBackup
 import eu.kanade.tachiyomi.data.backup.models.MihonBackup
+import eu.kanade.tachiyomi.data.backup.models.routeSharedMangaEntriesBySource
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.protobuf.ProtoBuf
 import okio.buffer
@@ -51,6 +52,11 @@ class BackupDecoder(
                         .toBackup()
                 } else {
                     parser.decodeFromByteArray(Backup.serializer(), backupString)
+                        .routeSharedMangaEntriesBySource(
+                            mangaSourceClassifier = ::isMangaSource,
+                            novelSourceClassifier = ::isNovelSource,
+                            animeSourceClassifier = ::isAnimeSource,
+                        )
                 }
             } catch (e: SerializationException) {
                 try {
@@ -61,6 +67,21 @@ class BackupDecoder(
                 }
             }
         }
+    }
+
+    private fun isMangaSource(sourceId: Long): Boolean {
+        return mangaSourceManager.get(sourceId) != null ||
+            mangaSourceManager.getStubSources().any { it.id == sourceId }
+    }
+
+    private fun isNovelSource(sourceId: Long): Boolean {
+        return novelSourceManager.get(sourceId) != null ||
+            novelSourceManager.getStubSources().any { it.id == sourceId }
+    }
+
+    private fun isAnimeSource(sourceId: Long): Boolean {
+        return animeSourceManager.get(sourceId) != null ||
+            animeSourceManager.getStubSources().any { it.id == sourceId }
     }
 
     companion object {

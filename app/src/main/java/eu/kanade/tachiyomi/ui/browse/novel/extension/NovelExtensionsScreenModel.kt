@@ -31,7 +31,6 @@ class NovelExtensionsScreenModel(
 ) : StateScreenModel<NovelExtensionsScreenModel.State>(State()) {
 
     private val currentDownloads = MutableStateFlow<Map<String, InstallStep>>(hashMapOf())
-    private val availablePlugins = MutableStateFlow<List<NovelPlugin.Available>>(emptyList())
     private val allPluginVariants = MutableStateFlow<Map<String, List<NovelPlugin.Available>>>(emptyMap())
 
     init {
@@ -41,14 +40,12 @@ class NovelExtensionsScreenModel(
                 extensionManager.installedPluginsFlow,
                 extensionManager.installedSourcesFlow,
                 extensionManager.availablePluginsFlow,
-                extensionManager.updatesFlow,
-            ) { downloads, installed, installedSources, available, updates ->
+            ) { downloads, installed, installedSources, available ->
                 ListingSourceState(
                     downloads = downloads,
                     installed = installed,
                     installedSources = installedSources,
                     available = available,
-                    updates = updates,
                 )
             }
             val listingFlow = combine(
@@ -61,7 +58,6 @@ class NovelExtensionsScreenModel(
                     installed = sourceState.installed,
                     installedSources = sourceState.installedSources,
                     available = sourceState.available,
-                    updates = sourceState.updates,
                 )
             }
 
@@ -71,10 +67,12 @@ class NovelExtensionsScreenModel(
             ) { enabledLanguages, input ->
                 val variantsMap = input.available.groupBy { it.id }
                 allPluginVariants.value = variantsMap
-                val available = variantsMap.mapNotNull { (_, plugins) ->
-                    plugins.maxByOrNull { it.version }
+                val repoCounts = variantsMap.mapValues { (_, plugins) ->
+                    plugins.map { it.repoUrl }.distinct().size
                 }
-                availablePlugins.value = available
+                val available = variantsMap.mapNotNull { (_, plugins) ->
+                    plugins.maxWithOrNull(NOVEL_AVAILABLE_COMPARATOR)
+                }
                 val installedSettingsPluginIds = input.installedSources
                     .asSequence()
                     .filter { source -> source.hasVisiblePluginSettingsByDiscovery() }
@@ -82,7 +80,15 @@ class NovelExtensionsScreenModel(
                     .toSet()
                 val searchQuery = input.query
 
-                val updateIds = input.updates.map { it.id }.toSet()
+                val updateStatesById = input.installed.associate { plugin ->
+                    plugin.id to NovelPluginUpdateClassifier.classify(
+                        installed = plugin,
+                        variants = variantsMap[plugin.id].orEmpty(),
+                    )
+                }
+                val updateIds = updateStatesById
+                    .filterValues { it.hasAnyUpdate }
+                    .keys
                 val installedIds = input.installed.map { it.id }.toSet()
                 val matches: (NovelPlugin) -> Boolean = { plugin ->
                     if (searchQuery.isEmpty()) {
@@ -99,19 +105,23 @@ class NovelExtensionsScreenModel(
                     .asSequence()
                     .filter { it.id !in installedIds }
                     .filter(matches)
-                    .filter { it.lang.isBlank() || it.lang in enabledLanguages }
-                    .filter { it.lang.isNotBlank() }
+                    .filter { it.lang in enabledLanguages }
                     .groupBy { it.lang }
                     .toSortedMap(LocaleHelper.comparator)
 
                 val items = buildList {
-                    input.updates.filter(matches).forEach { plugin ->
+                    input.installed.filter { it.id in updateIds }.filter(matches).forEach { plugin ->
+                        val updateState = updateStatesById.getValue(plugin.id)
                         add(
                             NovelExtensionItem(
                                 plugin = plugin,
                                 status = NovelExtensionItem.Status.UpdateAvailable,
                                 installStep = input.downloads[plugin.id] ?: InstallStep.Idle,
                                 hasSettings = plugin.hasSettings || plugin.id in installedSettingsPluginIds,
+                                repoSourceCount = repoCounts[plugin.id] ?: 1,
+                                hasUpdate = updateState.hasSameRepoUpdate,
+                                hasRepoUpdate = updateState.hasOtherRepoUpdate,
+                                repoDisplayName = plugin.fallbackRepoDisplayName(variantsMap[plugin.id].orEmpty()),
                             ),
                         )
                     }
@@ -122,6 +132,8 @@ class NovelExtensionsScreenModel(
                                 status = NovelExtensionItem.Status.Installed,
                                 installStep = input.downloads[plugin.id] ?: InstallStep.Idle,
                                 hasSettings = plugin.hasSettings || plugin.id in installedSettingsPluginIds,
+                                repoSourceCount = repoCounts[plugin.id] ?: 1,
+                                repoDisplayName = plugin.fallbackRepoDisplayName(variantsMap[plugin.id].orEmpty()),
                             ),
                         )
                     }
@@ -132,12 +144,13 @@ class NovelExtensionsScreenModel(
                                 status = NovelExtensionItem.Status.Available,
                                 installStep = input.downloads[plugin.id] ?: InstallStep.Idle,
                                 hasSettings = plugin.hasSettings,
+                                repoSourceCount = repoCounts[plugin.id] ?: 1,
                             ),
                         )
                     }
                 }
 
-                Triple(items, input.updates.size, availableByLanguage.keys.toList())
+                Triple(items, updateIds.size, availableByLanguage.keys.toList())
             }
                 .collectLatest { (items, updatesCount, availableLanguages) ->
                     sourcePreferences.novelExtensionUpdatesCount().set(updatesCount)
@@ -194,7 +207,7 @@ class NovelExtensionsScreenModel(
                 mutableState.update {
                     it.copy(
                         repoPickerPluginId = plugin.id,
-                        repoPickerOptions = variants.sortedByDescending { v -> v.version },
+                        repoPickerOptions = variants.sortedByDescending { v -> v.versionCode },
                     )
                 }
             } else {
@@ -209,33 +222,53 @@ class NovelExtensionsScreenModel(
 
     fun updateAllExtensions() {
         screenModelScope.launchIO {
-            val updateIds = state.value.items
-                .filter { it.status == NovelExtensionItem.Status.UpdateAvailable }
+            state.value.items
+                .filter { it.status == NovelExtensionItem.Status.UpdateAvailable && it.hasUpdate }
                 .mapNotNull { it.plugin as? NovelPlugin.Installed }
-                .map { it.id }
-                .toSet()
-            // Auto-pick max version for "Update All"
-            availablePlugins.value
-                .filter { it.id in updateIds }
+                .mapNotNull { plugin -> getSameRepoUpdate(plugin) }
                 .forEach { installExtensionNow(it) }
         }
     }
 
     fun updateExtension(plugin: NovelPlugin.Installed) {
         screenModelScope.launchIO {
-            val variants = allPluginVariants.value[plugin.id].orEmpty()
-            if (variants.size > 1) {
-                mutableState.update {
-                    it.copy(
-                        repoPickerPluginId = plugin.id,
-                        repoPickerOptions = variants.sortedByDescending { v -> v.version },
-                    )
+            val available = getSameRepoUpdate(plugin) ?: return@launchIO
+            installExtensionNow(available)
+        }
+    }
+
+    fun getReinstallCandidates(plugin: NovelPlugin.Installed): List<NovelPlugin.Available> {
+        return NovelPluginUpdateClassifier.classify(
+            installed = plugin,
+            variants = allPluginVariants.value[plugin.id].orEmpty(),
+        ).otherRepoUpdates
+    }
+
+    fun reinstallFromRepo(installed: NovelPlugin.Installed, replacement: NovelPlugin.Available) {
+        dismissRepoPicker()
+        screenModelScope.launchIO {
+            addDownloadState(installed, InstallStep.Installing)
+            try {
+                extensionManager.replacePluginFromRepo(installed, replacement)
+                addDownloadState(installed, InstallStep.Installed)
+                removeDownloadState(installed)
+            } catch (e: CancellationException) {
+                removeDownloadState(installed)
+                throw e
+            } catch (e: Throwable) {
+                logcat(LogPriority.WARN, e) {
+                    "Failed to reinstall novel plugin ${installed.id} from ${replacement.repoUrl}"
                 }
-            } else {
-                val available = availablePlugins.value.firstOrNull { it.id == plugin.id } ?: return@launchIO
-                installExtensionNow(available)
+                addDownloadState(installed, InstallStep.Error)
             }
         }
+    }
+
+    private fun getSameRepoUpdate(plugin: NovelPlugin.Installed): NovelPlugin.Available? {
+        return NovelPluginUpdateClassifier.classify(
+            installed = plugin,
+            variants = allPluginVariants.value[plugin.id].orEmpty(),
+        ).sameRepoUpdate
     }
 
     fun installFromRepo(plugin: NovelPlugin.Available) {
@@ -289,13 +322,18 @@ class NovelExtensionsScreenModel(
         val repoPickerOptions: List<NovelPlugin.Available> = emptyList(),
     )
 
+    private companion object {
+        val NOVEL_AVAILABLE_COMPARATOR = compareBy<NovelPlugin.Available> { it.versionCode }
+            .thenBy { it.repoName.ifBlank { it.repoUrl } }
+            .thenBy { it.repoUrl }
+    }
+
     private data class ListingInput(
         val query: String,
         val downloads: Map<String, InstallStep>,
         val installed: List<NovelPlugin.Installed>,
         val installedSources: List<eu.kanade.tachiyomi.novelsource.NovelSource>,
         val available: List<NovelPlugin.Available>,
-        val updates: List<NovelPlugin.Installed>,
     )
 
     private data class ListingSourceState(
@@ -303,7 +341,6 @@ class NovelExtensionsScreenModel(
         val installed: List<NovelPlugin.Installed>,
         val installedSources: List<eu.kanade.tachiyomi.novelsource.NovelSource>,
         val available: List<NovelPlugin.Available>,
-        val updates: List<NovelPlugin.Installed>,
     )
 }
 
@@ -312,10 +349,29 @@ data class NovelExtensionItem(
     val status: Status,
     val installStep: InstallStep,
     val hasSettings: Boolean,
+    val repoSourceCount: Int = 1,
+    val hasUpdate: Boolean = false,
+    val hasRepoUpdate: Boolean = false,
+    val repoDisplayName: String? = null,
 ) {
     sealed interface Status {
         data object UpdateAvailable : Status
         data object Installed : Status
         data object Available : Status
     }
+}
+
+private fun NovelPlugin.Installed.fallbackRepoDisplayName(
+    variants: List<NovelPlugin.Available>,
+): String? {
+    repoName?.takeIf { it.isNotBlank() }?.let { return it }
+    repoUrl.takeIf { it.isNotBlank() }?.let { return it }
+
+    val exactVersionMatches = variants.filter {
+        it.versionCode == versionCode
+    }
+    val displayCandidate = exactVersionMatches.singleOrNull()
+        ?: variants.singleOrNull()
+
+    return displayCandidate?.repoName?.ifBlank { displayCandidate.repoUrl }
 }

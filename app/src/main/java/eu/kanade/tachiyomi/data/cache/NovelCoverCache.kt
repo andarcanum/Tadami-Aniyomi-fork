@@ -12,6 +12,7 @@ class NovelCoverCache private constructor(
 
     companion object {
         private const val COVERS_DIR = "novelcovers"
+        private const val CUSTOM_COVERS_DIR = "custom"
     }
 
     constructor(context: Context) : this(
@@ -29,17 +30,29 @@ class NovelCoverCache private constructor(
         }
     }
 
+    fun getCustomCoverFile(novelId: Long?): File {
+        return File(File(cacheDir, CUSTOM_COVERS_DIR), "$novelId.jpg")
+    }
+
     fun setCustomCoverToCache(novel: Novel, inputStream: InputStream) {
-        getCoverFile(novel.thumbnailUrl)?.outputStream()?.use {
+        val customCoverFile = getCustomCoverFile(novel.id)
+        customCoverFile.parentFile?.mkdirs()
+        customCoverFile.outputStream().use {
             inputStream.copyTo(it)
         }
     }
 
-    fun deleteFromCache(novel: Novel): Int {
+    fun deleteFromCache(novel: Novel, deleteCustomCover: Boolean = false): Int {
         var deleted = 0
 
         getCoverFile(novel.thumbnailUrl)?.let {
             if (it.exists() && it.delete()) ++deleted
+        }
+
+        if (deleteCustomCover) {
+            getCustomCoverFile(novel.id).let {
+                if (it.exists() && it.delete()) ++deleted
+            }
         }
 
         return deleted

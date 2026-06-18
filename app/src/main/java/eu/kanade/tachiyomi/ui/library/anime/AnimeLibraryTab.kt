@@ -137,6 +137,7 @@ import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearch
 import eu.kanade.tachiyomi.ui.browse.manga.migration.config.MigrationConfigScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
 import eu.kanade.tachiyomi.ui.browse.novel.migration.search.MigrateNovelSearchScreen
+import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
@@ -710,6 +711,9 @@ data object AnimeLibraryTab : Tab {
                                     )
                                 }
                             }
+                        },
+                        onGlobalSearchClicked = {
+                            navigator.push(GlobalNovelSearchScreen(novelState.searchQuery ?: ""))
                         },
                         onContinueReadingClicked = { item: eu.kanade.presentation.library.novel.NovelLibraryItem ->
                             scope.launch {

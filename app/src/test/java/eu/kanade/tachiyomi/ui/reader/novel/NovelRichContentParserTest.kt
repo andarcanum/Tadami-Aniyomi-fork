@@ -86,6 +86,55 @@ class NovelRichContentParserTest {
     }
 
     @Test
+    fun `parser extracts lnori picture fallback image as rich image block`() {
+        val html = """
+            <picture>
+              <source srcset="https://img.lnori.com/12040-01.jxl" type="image/jxl" />
+              <source srcset="https://img.lnori.com/12040-01.avif" type="image/avif" />
+              <img src="https://img.lnori.com/12040-01.jpg" alt="Cover" />
+            </picture>
+        """.trimIndent()
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 1
+        val image = result.blocks.first() as NovelRichContentBlock.Image
+        image.url shouldBe "https://img.lnori.com/12040-01.jpg"
+        image.alt shouldBe "Cover"
+    }
+
+    @Test
+    fun `parser preserves picture images between surrounding paragraphs`() {
+        val html = """
+            <p>Before</p>
+            <picture><img src="https://img.lnori.com/insert.jpg" alt="Insert" /></picture>
+            <p>After</p>
+        """.trimIndent()
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 3
+        (result.blocks[0] as NovelRichContentBlock.Paragraph).segments.single().text shouldBe "Before"
+        (result.blocks[1] as NovelRichContentBlock.Image).url shouldBe "https://img.lnori.com/insert.jpg"
+        (result.blocks[2] as NovelRichContentBlock.Paragraph).segments.single().text shouldBe "After"
+    }
+
+    @Test
+    fun `parser falls back to picture source srcset when img is missing`() {
+        val html = """
+            <picture>
+              <source srcset="https://img.lnori.com/12040-01.webp 1x, https://img.lnori.com/12040-01-large.webp 2x" />
+            </picture>
+        """.trimIndent()
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 1
+        val image = result.blocks.first() as NovelRichContentBlock.Image
+        image.url shouldBe "https://img.lnori.com/12040-01.webp"
+    }
+
+    @Test
     fun `parser preserves block text alignment from inline style`() {
         val html = """
             <p style="text-align: center">Centered text</p>

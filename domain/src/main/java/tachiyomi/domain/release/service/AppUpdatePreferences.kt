@@ -28,4 +28,14 @@ class AppUpdatePreferences(
         Preference.appStateKey("downloaded_app_update_version"),
         "",
     )
+
+    fun lastSeenUpdatedChangelogVersionCode() = preferenceStore.getInt(
+        Preference.appStateKey("last_seen_updated_changelog_version_code"),
+        0,
+    )
+
+    fun pendingUpdatedChangelogPreviousVersionCode() = preferenceStore.getInt(
+        Preference.appStateKey("pending_updated_changelog_previous_version_code"),
+        0,
+    )
 }

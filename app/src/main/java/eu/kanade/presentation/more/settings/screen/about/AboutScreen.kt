@@ -144,6 +144,8 @@ object AboutScreen : Screen() {
             Modifier
         }
         val state = rememberLazyListState()
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val darkRimLightEnabled by uiPreferences.auroraDarkRimLightEnabled().collectAsState()
 
         fun syncEasterEggPhase(block: (AboutEasterEggStateMachine) -> Unit) {
             val machine = easterEggStateMachine ?: return
@@ -336,6 +338,7 @@ object AboutScreen : Screen() {
                         if (uiStyle == SettingsUiStyle.Aurora) {
                             AuroraSettingsCard(
                                 modifier = itemModifier,
+                                darkRimLightEnabled = darkRimLightEnabled,
                             ) {
                                 Row(
                                     modifier = Modifier

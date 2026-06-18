@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.jsonArray
@@ -98,24 +99,16 @@ class BrowseMangaSourceScreenModel(
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
 
     val source = sourceManager.getOrStub(sourceId)
+    private var defaultFiltersSerialized: String? = null
 
     init {
         if (source is CatalogueSource) {
             mutableState.update {
-                var query: String? = null
-                var listing = it.listing
-
-                if (listing is Listing.Search) {
-                    query = listing.query
-                    listing = Listing.Search(query, source.getFilterList())
-                }
-
                 it.copy(
-                    listing = listing,
-                    filters = source.getFilterList(),
-                    toolbarQuery = query,
+                    toolbarQuery = (it.listing as? Listing.Search)?.query,
                 )
             }
+            loadFilters()
         }
 
         if (!getIncognitoState.await(source.id)) {
@@ -127,7 +120,7 @@ class BrowseMangaSourceScreenModel(
         if (savedSearchId != null && source is CatalogueSource) {
             screenModelScope.launch {
                 val savedSearch = getSavedSearchById.await(savedSearchId) ?: return@launch
-                val baseFilters = source.getFilterList()
+                val baseFilters = loadSourceFilters()
                 val filtersJson = savedSearch.filtersJson
                 if (filtersJson != null) {
                     filterSerializer.deserialize(baseFilters, Json.parseToJsonElement(filtersJson).jsonArray)
@@ -141,6 +134,45 @@ class BrowseMangaSourceScreenModel(
                 }
             }
         }
+    }
+
+    private fun loadFilters() {
+        if (source !is CatalogueSource) return
+        screenModelScope.launch {
+            val loadedFilters = loadSourceFilters()
+            mutableState.update { state ->
+                val updatedListing = when (val listing = state.listing) {
+                    is Listing.Search -> if (listing.filters.isEmpty()) {
+                        listing.copy(
+                            filters = loadedFilters,
+                        )
+                    } else {
+                        listing
+                    }
+                    else -> listing
+                }
+                state.copy(
+                    listing = updatedListing,
+                    filters = if (state.filters.isEmpty()) loadedFilters else state.filters,
+                )
+            }
+        }
+    }
+
+    private suspend fun loadSourceFilters(): FilterList {
+        val filters = runCatching {
+            withContext(ioCoroutineScope.coroutineContext) {
+                (source as CatalogueSource).getFilterList()
+            }
+        }.getOrElse { FilterList() }
+        defaultFiltersSerialized = serializeFilters(filters)
+        return filters
+    }
+
+    private fun serializeFilters(filters: FilterList): String? {
+        return runCatching {
+            Json.encodeToString(filterSerializer.serialize(filters))
+        }.getOrNull()
     }
 
     fun loadSavedSearches() {
@@ -188,14 +220,15 @@ class BrowseMangaSourceScreenModel(
     }
 
     fun openSavedSearch(savedSearch: SavedSearch) {
-        val filtersJsonStr = savedSearch.filtersJson
-        val jsonArray = if (filtersJsonStr != null) {
-            Json.parseToJsonElement(filtersJsonStr).jsonArray
-        } else {
-            buildJsonArray { }
-        }
-        if (source is CatalogueSource) {
-            val baseFilters = source.getFilterList()
+        if (source !is CatalogueSource) return
+        screenModelScope.launch {
+            val filtersJsonStr = savedSearch.filtersJson
+            val jsonArray = if (filtersJsonStr != null) {
+                Json.parseToJsonElement(filtersJsonStr).jsonArray
+            } else {
+                buildJsonArray { }
+            }
+            val baseFilters = loadSourceFilters()
             filterSerializer.deserialize(baseFilters, jsonArray)
             mutableState.update {
                 it.copy(
@@ -263,7 +296,9 @@ class BrowseMangaSourceScreenModel(
     fun resetFilters() {
         if (source !is CatalogueSource) return
 
-        mutableState.update { it.copy(filters = source.getFilterList()) }
+        screenModelScope.launch {
+            mutableState.update { it.copy(filters = loadSourceFilters()) }
+        }
     }
 
     fun setListing(listing: Listing) {
@@ -273,19 +308,40 @@ class BrowseMangaSourceScreenModel(
     fun setFilters(filters: FilterList) {
         if (source !is CatalogueSource) return
 
+        val changed = try {
+            kotlinx.serialization.json.Json.encodeToString(filterSerializer.serialize(filters)) !=
+                kotlinx.serialization.json.Json.encodeToString(filterSerializer.serialize(state.value.filters))
+        } catch (e: Exception) {
+            true
+        }
+
         mutableState.update {
             it.copy(
                 filters = filters,
             )
         }
-        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.FILTER)
+        if (changed) {
+            achievementHandler.trackFeatureUsed(AchievementEvent.Feature.FILTER)
+        }
     }
 
     fun search(query: String? = null, filters: FilterList? = null) {
         if (source !is CatalogueSource) return
 
-        val input = state.value.listing as? Listing.Search
-            ?: Listing.Search(query = null, filters = source.getFilterList())
+        val currentState = state.value
+        val input = currentState.listing as? Listing.Search
+            ?: Listing.Search(query = null, filters = currentState.filters)
+
+        val q = query ?: input.query
+        if (!q.isNullOrBlank()) {
+            val f = filters ?: input.filters
+            val hasActiveFilters = serializeFilters(f)?.let { it != defaultFiltersSerialized } ?: f.isNotEmpty()
+            if (hasActiveFilters) {
+                achievementHandler.trackFeatureUsed(AchievementEvent.Feature.ADVANCED_SEARCH)
+            } else {
+                achievementHandler.trackFeatureUsed(AchievementEvent.Feature.SEARCH)
+            }
+        }
 
         mutableState.update {
             it.copy(
@@ -301,45 +357,47 @@ class BrowseMangaSourceScreenModel(
     fun searchGenre(genreName: String) {
         if (source !is CatalogueSource) return
 
-        val defaultFilters = source.getFilterList()
-        var genreExists = false
+        screenModelScope.launch {
+            val defaultFilters = loadSourceFilters()
+            var genreExists = false
 
-        filter@ for (sourceFilter in defaultFilters) {
-            if (sourceFilter is SourceModelFilter.Group<*>) {
-                for (filter in sourceFilter.state) {
-                    if (filter is SourceModelFilter<*> && filter.name.equals(genreName, true)) {
-                        when (filter) {
-                            is SourceModelFilter.TriState -> filter.state = 1
-                            is SourceModelFilter.CheckBox -> filter.state = true
-                            else -> {}
+            filter@ for (sourceFilter in defaultFilters) {
+                if (sourceFilter is SourceModelFilter.Group<*>) {
+                    for (filter in sourceFilter.state) {
+                        if (filter is SourceModelFilter<*> && filter.name.equals(genreName, true)) {
+                            when (filter) {
+                                is SourceModelFilter.TriState -> filter.state = 1
+                                is SourceModelFilter.CheckBox -> filter.state = true
+                                else -> {}
+                            }
+                            genreExists = true
+                            break@filter
                         }
+                    }
+                } else if (sourceFilter is SourceModelFilter.Select<*>) {
+                    val index = sourceFilter.values.filterIsInstance<String>()
+                        .indexOfFirst { it.equals(genreName, true) }
+
+                    if (index != -1) {
+                        sourceFilter.state = index
                         genreExists = true
-                        break@filter
+                        break
                     }
                 }
-            } else if (sourceFilter is SourceModelFilter.Select<*>) {
-                val index = sourceFilter.values.filterIsInstance<String>()
-                    .indexOfFirst { it.equals(genreName, true) }
+            }
 
-                if (index != -1) {
-                    sourceFilter.state = index
-                    genreExists = true
-                    break
+            mutableState.update {
+                val listing = if (genreExists) {
+                    Listing.Search(query = null, filters = defaultFilters)
+                } else {
+                    Listing.Search(query = genreName, filters = defaultFilters)
                 }
+                it.copy(
+                    filters = defaultFilters,
+                    listing = listing,
+                    toolbarQuery = listing.query,
+                )
             }
-        }
-
-        mutableState.update {
-            val listing = if (genreExists) {
-                Listing.Search(query = null, filters = defaultFilters)
-            } else {
-                Listing.Search(query = genreName, filters = defaultFilters)
-            }
-            it.copy(
-                filters = defaultFilters,
-                listing = listing,
-                toolbarQuery = listing.query,
-            )
         }
     }
 

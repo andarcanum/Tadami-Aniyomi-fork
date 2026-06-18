@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.download.engine
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Converts backend byte telemetry into rolling speed samples.
@@ -18,6 +19,7 @@ class DownloadTelemetryCollector(
     private val _version = MutableStateFlow(0L)
     val version = _version.asStateFlow()
 
+    @Synchronized
     override fun record(
         section: DownloadSection,
         downloadKey: String,
@@ -50,7 +52,7 @@ class DownloadTelemetryCollector(
                 timestampMs = timestampMs,
             ),
         )
-        _version.value += 1L
+        _version.update { it + 1L }
 
         if (bytesTotal > 0L && bytesDownloaded >= bytesTotal) {
             lastBytesByKey.remove(telemetryKey)

@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.ui.stats.StatsCalculations
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
@@ -53,7 +54,18 @@ class MangaStatsScreenModel(
             val overviewStatData = StatsData.MangaOverview(
                 libraryMangaCount = distinctLibraryManga.size,
                 completedMangaCount = distinctLibraryManga.count {
-                    it.manga.status.toInt() == SManga.COMPLETED && it.unreadCount == 0L
+                    StatsCalculations.isCompletedByUserConsumption(
+                        sourceStatus = it.manga.status.toInt(),
+                        customStatus = it.manga.customStatus?.toInt(),
+                        completedStatus = SManga.COMPLETED,
+                        terminalFallbackStatuses = setOf(
+                            SManga.PUBLISHING_FINISHED,
+                            SManga.CANCELLED,
+                            SManga.ON_HIATUS,
+                        ),
+                        consumedCount = it.readCount,
+                        totalCount = it.totalChapters,
+                    )
                 },
                 totalReadDuration = getTotalReadDuration.await(),
             )
@@ -136,12 +148,9 @@ class MangaStatsScreenModel(
     }
 
     private fun getTrackMeanScore(scoredMangaTrackMap: Map<Long, List<MangaTrack>>): Double {
-        return scoredMangaTrackMap
-            .map { (_, tracks) ->
-                tracks.map(::get10PointScore).average()
-            }
-            .fastFilter { !it.isNaN() }
-            .average()
+        return StatsCalculations.meanTitleScore(
+            scoredMangaTrackMap.values.map { tracks -> tracks.map(::get10PointScore) },
+        )
     }
 
     private fun get10PointScore(track: MangaTrack): Double {

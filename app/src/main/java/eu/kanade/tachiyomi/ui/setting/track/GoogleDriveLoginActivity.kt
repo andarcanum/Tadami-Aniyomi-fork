@@ -25,14 +25,16 @@ class GoogleDriveLoginActivity : BaseOAuthLoginActivity() {
         }
 
         val code = uri.getQueryParameter("code")
+        val state = uri.getQueryParameter("state")
         val error = uri.getQueryParameter("error")
 
         when {
             code != null -> {
-                // Authorization successful, exchange code for tokens
+                // Authorization successful, exchange code for tokens after validating state/PKCE.
                 lifecycleScope.launchIO {
                     googleDriveService.handleAuthorizationCode(
                         authorizationCode = code,
+                        authorizationState = state,
                         activity = this@GoogleDriveLoginActivity,
                         onSuccess = {
                             Toast.makeText(
@@ -57,7 +59,7 @@ class GoogleDriveLoginActivity : BaseOAuthLoginActivity() {
                 }
             }
             error != null -> {
-                // Authorization failed
+                // Authorization failed.
                 Toast.makeText(
                     this@GoogleDriveLoginActivity,
                     this@GoogleDriveLoginActivity.stringResource(AYMR.strings.google_drive_login_failed, error),
@@ -66,7 +68,7 @@ class GoogleDriveLoginActivity : BaseOAuthLoginActivity() {
                 returnToSettings()
             }
             else -> {
-                // No code or error in URI
+                // No code or error in URI.
                 returnToSettings()
             }
         }

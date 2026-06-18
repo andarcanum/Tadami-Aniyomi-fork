@@ -61,4 +61,21 @@ data class SuggestionItem(
      */
     val searchQuery: String
         get() = searchQueries.firstOrNull { it.isNotBlank() } ?: title
+
+    val nativeSourceTarget: NativeSourceTarget?
+        get() {
+            val id = providerId ?: return null
+            val separatorIndex = id.indexOf(':')
+            if (separatorIndex <= 0 || separatorIndex == id.lastIndex) return null
+
+            val sourceId = id.substring(0, separatorIndex).toLongOrNull() ?: return null
+            val url = id.substring(separatorIndex + 1).takeIf { it.isNotBlank() } ?: return null
+
+            return NativeSourceTarget(sourceId, url)
+        }
 }
+
+data class NativeSourceTarget(
+    val sourceId: Long,
+    val url: String,
+) : Serializable

@@ -29,7 +29,8 @@ class NovelPluginIndexParserTest {
 
         plugins.size shouldBe 1
         plugins[0].id shouldBe "RLIB"
-        plugins[0].version shouldBe 2002001
+        plugins[0].versionCode shouldBe 2002001
+        plugins[0].versionName shouldBe "2.2.1"
         plugins[0].sha256 shouldBe ""
     }
 
@@ -53,7 +54,8 @@ class NovelPluginIndexParserTest {
         val plugins = parser.parse(payload, "https://repo.example/")
 
         plugins.size shouldBe 1
-        plugins[0].version shouldBe 3
+        plugins[0].versionCode shouldBe 3
+        plugins[0].versionName shouldBe "3"
         plugins[0].sha256 shouldBe "abcd"
     }
 }

@@ -160,6 +160,14 @@ class AndroidNovelSourceManagerTest {
 
         override suspend fun uninstallPlugin(plugin: NovelPlugin.Installed) = Unit
 
+        override suspend fun replacePluginFromRepo(
+            installed: NovelPlugin.Installed,
+            replacement: NovelPlugin.Available,
+        ): NovelPlugin.Installed {
+            uninstallPlugin(installed)
+            return installPlugin(replacement)
+        }
+
         override suspend fun getSourceData(id: Long): StubNovelSource? = null
 
         override fun getPluginIconUrlForSource(sourceId: Long): String? = null

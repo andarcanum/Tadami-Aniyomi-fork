@@ -959,9 +959,9 @@ class NovelScreenModelTest {
     }
 
     @Test
-    fun `resume selection follows source order when chapter numbers are out of order`() {
+    fun `resume selection follows chapter number order when chapter numbers are out of order`() {
         runBlocking {
-            val novel = novelForResumeTests(104L)
+            val novel = novelForResumeTests(120L)
             val chapter1 = novelChapter(
                 id = 1L,
                 novelId = novel.id,
@@ -987,7 +987,7 @@ class NovelScreenModelTest {
 
             try {
                 awaitResumeScreenModel(screenModel)
-                screenModel.getResumeOrNextChapter()?.id shouldBe chapter1.id
+                screenModel.getResumeOrNextChapter()?.id shouldBe chapter3.id
             } finally {
                 screenModel.onDispose()
             }

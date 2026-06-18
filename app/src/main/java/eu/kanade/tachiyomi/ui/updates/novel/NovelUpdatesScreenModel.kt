@@ -1,11 +1,13 @@
 package eu.kanade.tachiyomi.ui.updates.novel
 
+import android.app.Application
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.util.addOrRemove
 import eu.kanade.core.util.insertSeparators
 import eu.kanade.presentation.updates.novel.NovelUpdatesUiModel
+import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.util.lang.toLocalDate
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
@@ -127,6 +129,10 @@ class NovelUpdatesScreenModel(
             )
             toggleAllSelection(false)
         }
+    }
+
+    fun updateLibrary(): Boolean {
+        return NovelLibraryUpdateJob.startNow(Injekt.get<Application>())
     }
 
     @Immutable

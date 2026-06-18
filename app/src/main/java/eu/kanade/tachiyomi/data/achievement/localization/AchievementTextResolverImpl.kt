@@ -11,6 +11,9 @@ import tachiyomi.i18n.aniyomi.AYMR
 internal data class AchievementTextResourceRefs(
     val title: StringResource?,
     val description: StringResource?,
+    val hintVague: StringResource? = null,
+    val hintDirect: StringResource? = null,
+    val hintObvious: StringResource? = null,
 )
 
 class AchievementTextResolverImpl(
@@ -22,6 +25,9 @@ class AchievementTextResolverImpl(
         return AchievementLocalizedText(
             title = refs.title?.let(context::stringResource) ?: achievement.title,
             description = refs.description?.let(context::stringResource) ?: achievement.description,
+            hintVague = refs.hintVague?.let(context::stringResource),
+            hintDirect = refs.hintDirect?.let(context::stringResource),
+            hintObvious = refs.hintObvious?.let(context::stringResource),
         )
     }
 }
@@ -172,10 +178,16 @@ internal fun achievementTextResourceRefs(achievementId: String): AchievementText
         "secret_harem_king" -> text(
             AYMR.strings.achievement_secret_harem_king_title,
             AYMR.strings.achievement_secret_harem_king_desc,
+            AYMR.strings.achievement_secret_harem_king_hint_vague,
+            AYMR.strings.achievement_secret_harem_king_hint_direct,
+            AYMR.strings.achievement_secret_harem_king_hint_obvious,
         )
         "secret_isekai_truck" -> text(
             AYMR.strings.achievement_secret_truck_victim_title,
             AYMR.strings.achievement_secret_truck_victim_desc,
+            AYMR.strings.achievement_secret_isekai_truck_hint_vague,
+            AYMR.strings.achievement_secret_isekai_truck_hint_direct,
+            AYMR.strings.achievement_secret_isekai_truck_hint_obvious,
         )
         "secret_chad" -> text(
             AYMR.strings.achievement_secret_chad_reader_title,
@@ -184,6 +196,9 @@ internal fun achievementTextResourceRefs(achievementId: String): AchievementText
         "secret_shonen" -> text(
             AYMR.strings.achievement_secret_power_of_friendship_title,
             AYMR.strings.achievement_secret_power_of_friendship_desc,
+            AYMR.strings.achievement_secret_shonen_hint_vague,
+            AYMR.strings.achievement_secret_shonen_hint_direct,
+            AYMR.strings.achievement_secret_shonen_hint_obvious,
         )
         "secret_deku" -> text(
             AYMR.strings.achievement_secret_plus_ultra_title,
@@ -208,10 +223,149 @@ internal fun achievementTextResourceRefs(achievementId: String): AchievementText
         "secret_onepiece" -> text(
             AYMR.strings.achievement_secret_king_of_pirates_title,
             AYMR.strings.achievement_secret_king_of_pirates_desc,
+            AYMR.strings.achievement_secret_onepiece_hint_vague,
+            AYMR.strings.achievement_secret_onepiece_hint_direct,
+            AYMR.strings.achievement_secret_onepiece_hint_obvious,
         )
         "secret_goku" -> text(
             AYMR.strings.achievement_secret_not_even_my_final_form_title,
             AYMR.strings.achievement_secret_not_even_my_final_form_desc,
+            AYMR.strings.achievement_secret_goku_hint_vague,
+            AYMR.strings.achievement_secret_goku_hint_direct,
+            AYMR.strings.achievement_secret_goku_hint_obvious,
+        )
+
+        "reading_immersion_bronze" -> text(
+            AYMR.strings.achievement_reading_immersion_bronze_title,
+            AYMR.strings.achievement_reading_immersion_bronze_desc,
+        )
+        "reading_immersion_silver" -> text(
+            AYMR.strings.achievement_reading_immersion_silver_title,
+            AYMR.strings.achievement_reading_immersion_silver_desc,
+        )
+        "reading_immersion_gold" -> text(
+            AYMR.strings.achievement_reading_immersion_gold_title,
+            AYMR.strings.achievement_reading_immersion_gold_desc,
+        )
+        "reading_immersion_platinum" -> text(
+            AYMR.strings.achievement_reading_immersion_platinum_title,
+            AYMR.strings.achievement_reading_immersion_platinum_desc,
+        )
+        "anime_novel_hybrid_bronze" -> text(
+            AYMR.strings.achievement_anime_novel_hybrid_bronze_title,
+            AYMR.strings.achievement_anime_novel_hybrid_bronze_desc,
+        )
+        "anime_novel_hybrid_silver" -> text(
+            AYMR.strings.achievement_anime_novel_hybrid_silver_title,
+            AYMR.strings.achievement_anime_novel_hybrid_silver_desc,
+        )
+        "anime_novel_hybrid_gold" -> text(
+            AYMR.strings.achievement_anime_novel_hybrid_gold_title,
+            AYMR.strings.achievement_anime_novel_hybrid_gold_desc,
+        )
+        "rank_up_1" -> text(
+            AYMR.strings.achievement_rank_up_1_title,
+            AYMR.strings.achievement_rank_up_1_desc,
+        )
+        "rank_up_2" -> text(
+            AYMR.strings.achievement_rank_up_2_title,
+            AYMR.strings.achievement_rank_up_2_desc,
+        )
+        "rank_up_3" -> text(
+            AYMR.strings.achievement_rank_up_3_title,
+            AYMR.strings.achievement_rank_up_3_desc,
+        )
+        "rank_up_4" -> text(
+            AYMR.strings.achievement_rank_up_4_title,
+            AYMR.strings.achievement_rank_up_4_desc,
+        )
+        "rank_up_5" -> text(
+            AYMR.strings.achievement_rank_up_5_title,
+            AYMR.strings.achievement_rank_up_5_desc,
+        )
+        "rank_up_6" -> text(
+            AYMR.strings.achievement_rank_up_6_title,
+            AYMR.strings.achievement_rank_up_6_desc,
+        )
+        "rank_up_7" -> text(
+            AYMR.strings.achievement_rank_up_7_title,
+            AYMR.strings.achievement_rank_up_7_desc,
+        )
+        "rank_up_8" -> text(
+            AYMR.strings.achievement_rank_up_8_title,
+            AYMR.strings.achievement_rank_up_8_desc,
+        )
+        "rank_up_9" -> text(
+            AYMR.strings.achievement_rank_up_9_title,
+            AYMR.strings.achievement_rank_up_9_desc,
+        )
+        "rank_up_10" -> text(
+            AYMR.strings.achievement_rank_up_10_title,
+            AYMR.strings.achievement_rank_up_10_desc,
+        )
+
+        "trinity_initiate" -> text(
+            AYMR.strings.achievement_trinity_initiate_title,
+            AYMR.strings.achievement_trinity_initiate_desc,
+        )
+        "trinity_master" -> text(
+            AYMR.strings.achievement_trinity_master_title,
+            AYMR.strings.achievement_trinity_master_desc,
+        )
+        "trinity_legend" -> text(
+            AYMR.strings.achievement_trinity_legend_title,
+            AYMR.strings.achievement_trinity_legend_desc,
+        )
+        "cross_media_champion_bronze" -> text(
+            AYMR.strings.achievement_cross_media_champion_bronze_title,
+            AYMR.strings.achievement_cross_media_champion_bronze_desc,
+        )
+        "cross_media_champion_silver" -> text(
+            AYMR.strings.achievement_cross_media_champion_silver_title,
+            AYMR.strings.achievement_cross_media_champion_silver_desc,
+        )
+        "cross_media_champion_gold" -> text(
+            AYMR.strings.achievement_cross_media_champion_gold_title,
+            AYMR.strings.achievement_cross_media_champion_gold_desc,
+        )
+        "three_realms_collector" -> text(
+            AYMR.strings.achievement_three_realms_collector_title,
+            AYMR.strings.achievement_three_realms_collector_desc,
+        )
+        "the_finisher" -> text(
+            AYMR.strings.achievement_the_finisher_title,
+            AYMR.strings.achievement_the_finisher_desc,
+        )
+        "the_closer" -> text(
+            AYMR.strings.achievement_the_closer_title,
+            AYMR.strings.achievement_the_closer_desc,
+        )
+        "romance_devotee" -> text(
+            AYMR.strings.achievement_romance_devotee_title,
+            AYMR.strings.achievement_romance_devotee_desc,
+        )
+        "horror_aficionado" -> text(
+            AYMR.strings.achievement_horror_aficionado_title,
+            AYMR.strings.achievement_horror_aficionado_desc,
+        )
+        "isekai_addict" -> text(
+            AYMR.strings.achievement_isekai_addict_title,
+            AYMR.strings.achievement_isekai_addict_desc,
+        )
+        "slice_of_life_zen" -> text(
+            AYMR.strings.achievement_slice_of_life_zen_title,
+            AYMR.strings.achievement_slice_of_life_zen_desc,
+        )
+        "secret_shadow_monarch" -> text(
+            AYMR.strings.achievement_secret_shadow_monarch_title,
+            AYMR.strings.achievement_secret_shadow_monarch_desc,
+        )
+        "secret_weeb_awakening" -> text(
+            AYMR.strings.achievement_secret_weeb_awakening_title,
+            AYMR.strings.achievement_secret_weeb_awakening_desc,
+            AYMR.strings.achievement_secret_weeb_awakening_hint_vague,
+            AYMR.strings.achievement_secret_weeb_awakening_hint_direct,
+            AYMR.strings.achievement_secret_weeb_awakening_hint_obvious,
         )
 
         else -> AchievementTextResourceRefs(
@@ -224,10 +378,16 @@ internal fun achievementTextResourceRefs(achievementId: String): AchievementText
 private fun text(
     title: StringResource,
     description: StringResource,
+    hintVague: StringResource? = null,
+    hintDirect: StringResource? = null,
+    hintObvious: StringResource? = null,
 ): AchievementTextResourceRefs {
     return AchievementTextResourceRefs(
         title = title,
         description = description,
+        hintVague = hintVague,
+        hintDirect = hintDirect,
+        hintObvious = hintObvious,
     )
 }
 
@@ -468,6 +628,9 @@ private fun featureResources(achievementId: String): AchievementTextResourceRefs
         "persistent_clicker" -> text(
             AYMR.strings.achievement_persistent_clicker_title,
             AYMR.strings.achievement_persistent_clicker_desc,
+            AYMR.strings.achievement_secret_persistent_clicker_hint_vague,
+            AYMR.strings.achievement_secret_persistent_clicker_hint_direct,
+            AYMR.strings.achievement_secret_persistent_clicker_hint_obvious,
         )
         "secret_hall_unlocked" -> text(
             AYMR.strings.achievement_secret_hall_unlocked_title,

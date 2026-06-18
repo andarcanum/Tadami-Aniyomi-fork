@@ -20,19 +20,24 @@ fun BaseBrowseItem(
     content: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
-        modifier = modifier
-            .combinedClickable(
-                onClick = onClickItem,
-                onLongClick = onLongClickItem,
-            )
-            .padding(
-                horizontal = MaterialTheme.padding.medium,
-                vertical = MaterialTheme.padding.small,
-            ),
+        modifier = modifier.padding(
+            horizontal = MaterialTheme.padding.medium,
+            vertical = MaterialTheme.padding.small,
+        ),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        icon()
-        content()
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .combinedClickable(
+                    onClick = onClickItem,
+                    onLongClick = onLongClickItem,
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            icon()
+            content()
+        }
         action()
     }
 }

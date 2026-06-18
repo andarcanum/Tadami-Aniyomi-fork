@@ -1,0 +1,10 @@
+-- Migration 7 -> 8: add rarity / tags / hint / season / tier grouping / reward_set
+ALTER TABLE achievements ADD COLUMN rarity TEXT NOT NULL DEFAULT 'common';
+ALTER TABLE achievements ADD COLUMN tags TEXT;
+ALTER TABLE achievements ADD COLUMN hint TEXT;
+ALTER TABLE achievements ADD COLUMN season TEXT;
+ALTER TABLE achievements ADD COLUMN tier_group TEXT;
+ALTER TABLE achievements ADD COLUMN tier_level INTEGER;
+ALTER TABLE achievements ADD COLUMN reward_set TEXT;
+CREATE INDEX IF NOT EXISTS achievement_rarity_idx ON achievements(rarity);
+CREATE INDEX IF NOT EXISTS achievement_tier_group_idx ON achievements(tier_group);

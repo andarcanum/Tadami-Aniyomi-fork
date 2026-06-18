@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="option_label_library_update_errors">Ошибки обновлений</string>
+    <string name="label_library_update_errors">Ошибки обновлений</string>
+    <string name="info_empty_library_update_errors">Нет ошибок обновления библиотеки</string>
+    <string name="action_clear_update_errors">Очистить ошибки</string>
+    <string name="library_update_error_manual">Вручную</string>
+    <string name="library_update_error_automatic">Автоматически</string>
+    <string name="library_update_error_tab_manga">Манга</string>
+    <string name="library_update_error_tab_anime">Аниме</string>
+    <string name="library_update_error_tab_novel">Ранобэ</string>
     <string name="confirm_exit">Нажмите кнопку назад ещё раз, чтобы выйти</string>
     <string name="action_filter_started">Начато</string>
     <string name="action_sort_airing_time">По времени выпуска</string>
@@ -50,6 +59,8 @@
     <string name="pref_library_update_show_tab_badge">Показывать количество непросмотренных/непрочитанных на значке обновлений</string>
     <string name="pref_aurora_library_immersive_mode">Режим погружения</string>
     <string name="pref_aurora_library_immersive_mode_summary">Скрывать верхнюю панель и нижнюю навигацию при прокрутке, но оставлять категории видимыми.</string>
+    <string name="pref_disable_home_header_scroll_hide">Закрепить шапку</string>
+    <string name="pref_disable_home_header_scroll_hide_summary">Оставлять шапку с приветствием всегда видимой и не скрывать её при прокрутке.</string>
     <string name="pref_aurora_library_swipe_switches_categories">Свайп переключает категории</string>
     <string name="pref_aurora_library_swipe_switches_categories_summary">Горизонтальные свайпы в библиотеке переключают категории вместо разделов (аниме/манга/ранобэ).</string>
     <string name="label_player_settings">Настройки проигрывателя</string>
@@ -287,9 +298,9 @@
     <string name="theme_aurora">Aurora</string>
     <string name="theme_doom">Doom</string>
     <string name="theme_matrix">Матрица</string>
-    <string name="theme_onyx_gold">Обсидиановое золото</string>
-    <string name="theme_sakura_noir">Сакура Ноир</string>
-    <string name="theme_nebula_tide">Туманность прилива</string>
+    <string name="theme_onyx_gold">Ониксовые регалии</string>
+    <string name="theme_sakura_noir">Затмение сакуры</string>
+    <string name="theme_nebula_tide">Астральный прилив</string>
     <string name="pref_library_rows">Размер списка</string>
     <string name="pref_preserve_reading_position">Сохранение позиции чтения в прочитанных главах</string>
     <string name="pref_download_slots">Максимум загрузок</string>
@@ -481,6 +492,7 @@
     <string name="novel_reader_tts_prefer_translated_text_summary">Использует перевод главы, если он доступен, иначе читает оригинальный текст.</string>
     <string name="novel_reader_tts_read_chapter_title">Сначала читать название главы</string>
     <string name="novel_reader_tts_unknown_language">Неизвестный язык</string>
+    <string name="novel_reader_tts_system_default_voice_summary">Использовать голос по умолчанию выбранного движка для этого языка</string>
     <string name="novel_reader_tts_default_voice">Озвучка по умолчанию</string>
     <string name="novel_reader_tts_voice_number">Озвучка %d</string>
     <string name="novel_reader_tts_voice_hint_network">Сеть</string>
@@ -1539,6 +1551,8 @@
     <string name="aurora_more">Ещё</string>
     <string name="debug_app_update_preview">Предпросмотр обновления</string>
     <string name="debug_app_update_preview_summary">Открыть экран обновления с тестовыми данными</string>
+    <string name="debug_updated_changelog_preview">Предпросмотр списка изменений</string>
+    <string name="debug_updated_changelog_preview_summary">Открыть экран списка изменений после обновления с тестовыми данными</string>
     <string name="aurora_library">Библиотека</string>
     <string name="aurora_categories">Категории</string>
     <string name="aurora_data_storage">Данные и хранилище</string>
@@ -1594,6 +1608,8 @@
     <string name="pref_show_achievement_notifications_summary">Показывать всплывающее окно при получении достижений</string>
     <string name="pref_animated_aurora_background">Анимированный фон Aurora</string>
     <string name="pref_animated_aurora_background_summary">Показывать мягкие анимированные цветовые переливы на экранах Aurora</string>
+    <string name="pref_aurora_dark_rim_light">Обводка rim light в тёмной теме</string>
+    <string name="pref_aurora_dark_rim_light_summary">Показывать свечение по верхнему краю карточек Aurora в тёмной теме</string>
     <string name="pref_e_ink_profile">Профиль E-ink</string>
     <string name="pref_e_ink_profile_monochrome">Монохром</string>
     <string name="pref_e_ink_profile_color">Цвет</string>
@@ -1646,6 +1662,17 @@
     <string name="achievement_empty_description">В этой категории пока нет достижений</string>
     <string name="achievement_progress_label">ПРОГРЕСС</string>
     <string name="achievement_rewards_label">НАГРАДЫ</string>
+    <string name="achievement_bento_rank">РАНГ</string>
+    <string name="achievement_bento_level">LEVEL %d</string>
+    <string name="achievement_bento_xp_points">XP ОЧКИ</string>
+    <string name="achievement_bento_unlocked">ОТКРЫТО</string>
+    <string name="achievement_bento_streak">STREAK</string>
+    <string name="achievement_bento_days">%d ДНЕЙ</string>
+    <string name="achievement_rank_novice_reader">Начинающий</string>
+    <string name="achievement_rank_avid_reader">Любитель</string>
+    <string name="achievement_rank_ranobe_master">Мастер</string>
+    <string name="achievement_rank_grandmaster">Грандмастер</string>
+    <string name="achievement_rank_legendary_scholar">Мудрец</string>
     <string name="achievement_points">%d очков</string>
     <string name="achievement_points_reward">+%d очков</string>
     <string name="achievement_unlocked_at">Разблокировано: %s</string>
@@ -1660,6 +1687,38 @@
     <string name="achievement_list_confirm">Отлично!</string>
     <string name="achievement_banner_rare_title">РЕДКОЕ ДОСТИЖЕНИЕ!</string>
     <string name="achievement_banner_unlocked_title">ДОСТИЖЕНИЕ РАЗБЛОКИРОВАНО!</string>
+    <string name="achievement_hint_vague_prefix">Намек: %s</string>
+    <string name="achievement_hint_direct_prefix">Подсказка: %s</string>
+    <string name="achievement_hint_obvious_prefix">Цель: %s</string>
+    <string name="achievement_clue_prefix">Детали: %s</string>
+
+    <string name="achievement_secret_persistent_clicker_hint_vague">Упрямство иногда вознаграждается.</string>
+    <string name="achievement_secret_persistent_clicker_hint_direct">Некоторые уголки приложения реагируют на многократные нажатия.</string>
+    <string name="achievement_secret_persistent_clicker_hint_obvious">Продолжайте нажимать туда, где ничего не происходит в настройках или на экранах.</string>
+
+    <string name="achievement_secret_harem_king_hint_vague">Собирается толпа поклонников.</string>
+    <string name="achievement_secret_harem_king_hint_direct">Окружите себя определённым популярным аниме-тропом в библиотеке.</string>
+    <string name="achievement_secret_harem_king_hint_obvious">Соберите 20 тайтлов с жанром «Гарем».</string>
+
+    <string name="achievement_secret_isekai_truck_hint_vague">Осторожно, оживлённое движение!</string>
+    <string name="achievement_secret_isekai_truck_hint_direct">Портал в другой мир открывается известным транспортным средством.</string>
+    <string name="achievement_secret_isekai_truck_hint_obvious">Соберите 20 историй о перерождении в другом мире (Исекай).</string>
+
+    <string name="achievement_secret_shonen_hint_vague">Путь воина начинается с одной тренировки.</string>
+    <string name="achievement_secret_shonen_hint_direct">Дружба, усилия и победа направят вашу библиотеку.</string>
+    <string name="achievement_secret_shonen_hint_obvious">Соберите 10 классических приключенческих тайтлов (Сёнен).</string>
+
+    <string name="achievement_secret_onepiece_hint_vague">Отправляйтесь в плавание к горизонту.</string>
+    <string name="achievement_secret_onepiece_hint_direct">Сокровище ждет в конце очень долгого пути из очков.</string>
+    <string name="achievement_secret_onepiece_hint_obvious">Наберите 1 000 очков достижений, чтобы найти Ван-Пис.</string>
+
+    <string name="achievement_secret_goku_hint_vague">Уровень силы стремительно растет.</string>
+    <string name="achievement_secret_goku_hint_direct">Сканер вот-вот сломается от вашего суммарного счета.</string>
+    <string name="achievement_secret_goku_hint_obvious">Достигните более 9 000 очков достижений. Это больше 9000!</string>
+
+    <string name="achievement_secret_weeb_awakening_hint_vague">Примите культуру во всех её проявлениях.</string>
+    <string name="achievement_secret_weeb_awakening_hint_direct">Ваша библиотека должна охватывать мангу, аниме и ранобэ.</string>
+    <string name="achievement_secret_weeb_awakening_hint_obvious">Соберите 50+ тайтлов во всех трёх медиа-форматах (Манга, Аниме, Ранобэ).</string>
 
     <string name="achievement_first_chapter_title">Первые шаги</string>
     <string name="achievement_first_chapter_desc">Прочитайте свою первую главу</string>
@@ -1843,6 +1902,106 @@
     <string name="achievement_secret_it_was_me_dio_desc">Jojo's Bizarre Adventure в библиотеке (отсылка к JoJo)</string>
     <string name="achievement_secret_king_of_pirates_desc">1000+ глав манги (отсылка к One Piece)</string>
     <string name="achievement_secret_not_even_my_final_form_desc">9000+ очков достижений (отсылка к Dragon Ball, OVER 9000!)</string>
+
+    <!-- Achievement Titles - READING IMMERSION -->
+    <string name="achievement_reading_immersion_bronze_title">Бронзовое погружение</string>
+    <string name="achievement_reading_immersion_silver_title">Серебряное погружение</string>
+    <string name="achievement_reading_immersion_gold_title">Золотое погружение</string>
+    <string name="achievement_reading_immersion_platinum_title">Платиновое погружение</string>
+
+    <!-- Achievement Descriptions - READING IMMERSION -->
+    <string name="achievement_reading_immersion_bronze_desc">Читать в течение целого часа за один сеанс</string>
+    <string name="achievement_reading_immersion_silver_desc">Читать в течение 2 часов за один сеанс</string>
+    <string name="achievement_reading_immersion_gold_desc">Читать в течение 5 часов за один сеанс</string>
+    <string name="achievement_reading_immersion_platinum_desc">Читать более 10 часов за один сеанс</string>
+
+    <!-- Achievement Titles - ANIME-NOVEL HYBRID -->
+    <string name="achievement_anime_novel_hybrid_bronze_title">Гибрид: аниме и новеллы</string>
+    <string name="achievement_anime_novel_hybrid_silver_title">Знаток аниме и новелл</string>
+    <string name="achievement_anime_novel_hybrid_gold_title">Мастер аниме и новелл</string>
+
+    <!-- Achievement Descriptions - ANIME-NOVEL HYBRID -->
+    <string name="achievement_anime_novel_hybrid_bronze_desc">Посмотреть 25 серий и прочитать 25 глав новеллы</string>
+    <string name="achievement_anime_novel_hybrid_silver_desc">Посмотреть 100 серий и прочитать 100 глав новеллы</string>
+    <string name="achievement_anime_novel_hybrid_gold_desc">Посмотреть 500 серий и прочитать 500 глав новеллы</string>
+
+    <!-- Achievement Titles - RANK UP -->
+    <string name="achievement_rank_up_1_title">Ранг I: Ученик</string>
+    <string name="achievement_rank_up_2_title">Ранг II: Посвященный</string>
+    <string name="achievement_rank_up_3_title">Ранг III: Адепт</string>
+    <string name="achievement_rank_up_4_title">Ранг IV: Ветеран</string>
+    <string name="achievement_rank_up_5_title">Ранг V: Эксперт</string>
+    <string name="achievement_rank_up_6_title">Ранг VI: Мастер</string>
+    <string name="achievement_rank_up_7_title">Ранг VII: Чемпион</string>
+    <string name="achievement_rank_up_8_title">Ранг VIII: Легенда</string>
+
+    <!-- Achievement Descriptions - RANK UP -->
+    <string name="achievement_rank_up_1_desc">Заработать 100 очков достижений</string>
+    <string name="achievement_rank_up_2_desc">Заработать 500 очков достижений</string>
+    <string name="achievement_rank_up_3_desc">Заработать 1 000 очков достижений</string>
+    <string name="achievement_rank_up_4_desc">Заработать 2 500 очков достижений</string>
+    <string name="achievement_rank_up_5_desc">Заработать 5 000 очков достижений</string>
+    <string name="achievement_rank_up_6_desc">Заработать 10 000 очков достижений</string>
+    <string name="achievement_rank_up_7_desc">Заработать 25 000 очков достижений</string>
+    <string name="achievement_rank_up_8_desc">Заработать 50 000 очков достижений</string>
+    <string name="achievement_rank_up_9_title">Ранг IX: Мифический</string>
+    <string name="achievement_rank_up_9_desc">Заработать 100 000 очков достижений</string>
+    <string name="achievement_rank_up_10_title">Ранг X: Трансцендентный</string>
+    <string name="achievement_rank_up_10_desc">Заработать 250 000 очков достижений</string>
+
+    <!-- Achievement Titles - TRINITY -->
+    <string name="achievement_trinity_initiate_title">Посвященный Триединства</string>
+    <string name="achievement_trinity_master_title">Мастер Триединства</string>
+    <string name="achievement_trinity_legend_title">Легенда Триединства</string>
+
+    <!-- Achievement Descriptions - TRINITY -->
+    <string name="achievement_trinity_initiate_desc">Прочитать или посмотреть 25 глав/серий манги, аниме и новелл</string>
+    <string name="achievement_trinity_master_desc">Достичь отметки в 200 глав/серий суммарно во всех трех категориях</string>
+    <string name="achievement_trinity_legend_desc">Достичь отметки в 1 000 глав/серий суммарно во всех трех категориях</string>
+
+    <!-- Achievement Titles - CROSS-MEDIA CHAMPION -->
+    <string name="achievement_cross_media_champion_bronze_title">Кросс-медиа новичок</string>
+    <string name="achievement_cross_media_champion_silver_title">Кросс-медиа энтузиаст</string>
+    <string name="achievement_cross_media_champion_gold_title">Кросс-медиа чемпион</string>
+
+    <!-- Achievement Descriptions - CROSS-MEDIA CHAMPION -->
+    <string name="achievement_cross_media_champion_bronze_desc">Достичь 50 глав/серий суммарно в манге, аниме и новеллах</string>
+    <string name="achievement_cross_media_champion_silver_desc">Достичь 500 глав/серий суммарно в манге, аниме и новеллах</string>
+    <string name="achievement_cross_media_champion_gold_desc">Достичь 2 000 глав/серий суммарно в манге, аниме и новеллах</string>
+
+
+    <string name="achievement_three_realms_collector_title">Коллекционер Трех Миров</string>
+
+    <!-- Achievement Descriptions - THREE REALMS COLLECTOR -->
+    <string name="achievement_three_realms_collector_desc">Собрать библиотеку, включающую мангу, аниме и новеллы</string>
+
+    <!-- Achievement Titles - COMPLETION RATIO -->
+    <string name="achievement_the_finisher_title">Финишер</string>
+    <string name="achievement_the_closer_title">Завершитель</string>
+
+    <!-- Achievement Descriptions - COMPLETION RATIO -->
+    <string name="achievement_the_finisher_desc">Завершить 50% начатых тайтлов</string>
+    <string name="achievement_the_closer_desc">Завершить 90% начатых тайтлов</string>
+
+    <!-- Achievement Titles - GENRE DEPTH -->
+    <string name="achievement_romance_devotee_title">Адепт романтики</string>
+    <string name="achievement_horror_aficionado_title">Ценитель хорроров</string>
+    <string name="achievement_isekai_addict_title">Исекай-зависимый</string>
+    <string name="achievement_slice_of_life_zen_title">Дзен повседневности</string>
+
+    <!-- Achievement Descriptions - GENRE DEPTH -->
+    <string name="achievement_romance_devotee_desc">Собрать в своей библиотеке 15 тайтлов в жанре романтика</string>
+    <string name="achievement_horror_aficionado_desc">Собрать в своей библиотеке 15 тайтлов в жанре хоррор</string>
+    <string name="achievement_isekai_addict_desc">Собрать в своей библиотеке 20 тайтлов в жанре исекай</string>
+    <string name="achievement_slice_of_life_zen_desc">Собрать в своей библиотеке 15 тайтлов в жанре повседневность</string>
+
+    <!-- Achievement Titles - SECRET (new) -->
+    <string name="achievement_secret_shadow_monarch_title">Повелитель теней</string>
+    <string name="achievement_secret_weeb_awakening_title">Пробуждение виабу</string>
+
+    <!-- Achievement Descriptions - SECRET (new) -->
+    <string name="achievement_secret_shadow_monarch_desc">Восстань — открыто скрытое достижение</string>
+    <string name="achievement_secret_weeb_awakening_desc">Твоя истинная сила пробуждается — скрытое достижение</string>
 
     <!-- Backup Options -->
     <string name="achievements">Достижения</string>
@@ -2089,16 +2248,25 @@
     <string name="label_treasury">Сокровищница</string>
     <string name="pref_treasury_summary">Эксклюзивные награды, разблокированные вашими достижениями</string>
     <string name="treasury_themes">Темы</string>
+    <string name="treasury_themes_subtitle">Эксклюзивные темы. Нажимайте на обложку для применения её атмосферы.</string>
+    <string name="treasury_auras_subtitle">Каждая аура — это уникальный эффект со своей орбитой и пульсацией.</string>
+    <string name="treasury_artifacts_subtitle">Никаких плоских экранов и скучного ритма, каждый фон - уникальное явление.</string>
     <string name="treasury_unlocked_themes">Эксклюзивные темы</string>
     <string name="treasury_auras">Визуальные эффекты и ауры</string>
     <string name="treasury_profile_and_avatar">Профиль и аватар</string>
     <string name="treasury_profile_effects">Эффекты профиля</string>
+    <string name="treasury_profile_effects_subtitle">Уникальные светящиеся и анимированные стили для выделения вашего никнейма.</string>
     <string name="treasury_avatar_frames">Рамки аватара</string>
+    <string name="treasury_avatar_frames_subtitle">Декоративные орбитальные рамки и границы, окружающие ваше изображение аватара.</string>
     <string name="treasury_home_hub_rewards">Награды Home Hub</string>
+    <string name="treasury_home_hub_rewards_subtitle">Специальные орбитальные кольца, короны и значки, окружающие ваш аватар на главном экране.</string>
     <string name="treasury_aura_subtitle">Включить специальные эффекты для обложек и интерфейса</string>
     <string name="treasury_toggle_active">Активно</string>
     <string name="treasury_toggle_inactive">Неактивно</string>
     <string name="treasury_toggle_locked">Заблокировано</string>
+    <string name="treasury_toggle_available">Доступно</string>
+    <string name="treasury_toggle_locked_with_desc">Заблокировано, %1$s</string>
+    <string name="treasury_vault_progress_description">Прогресс сокровищницы: %1$d%%</string>
     <string name="treasury_reward_aurora_crown_description">Роскошный эффект ника с золотой короной и мягким сиянием.</string>
     <string name="treasury_reward_glitch_rune_description">Эффект никнейма с искажённой руной и синтетическим глитч-пульсом.</string>
     <string name="treasury_reward_cipher_description">Шифровой эффект никнейма со скобками и секретной энергией.</string>
@@ -2108,13 +2276,87 @@
     <string name="treasury_reward_orbit_badge_description">Эффект Orbit, обрамляющий никнейм в шапке Home Hub.</string>
     <string name="treasury_reward_crown_badge_description">Эффект Crown для более королевской шапки Home Hub.</string>
     <string name="treasury_reward_shuriken_badge_description">Эффект Shuriken с аркадным характером для профиля Home Hub.</string>
-    <string name="treasury_reward_petal_storm_background_description">Анимированный фон с лепестками сакуры, который скользит по Aurora.</string>
-    <string name="treasury_reward_neon_orbit_background_description">Неоновые орбитальные кольца и частицы, заменяющие стандартное свечение фона.</string>
+    <string name="treasury_reward_petal_storm_background_description">Мимолетный танец лепестков в безмолвной буре.</string>
+    <string name="treasury_reward_neon_orbit_background_description">Светящиеся кольца, хранящие тайны цифровой бездны.</string>
     <string name="treasury_visual_effects">Визуальные эффекты</string>
     <string name="treasury_background_effects">Фоновые эффекты</string>
+    <string name="treasury_background_effects_subtitle">Анимированные обои и наложения для динамического оформления фона интерфейса.</string>
     <string name="treasury_empty_title">Сокровищница пуста</string>
     <string name="treasury_empty_description">Выполняйте редкие или секретные достижения, чтобы разблокировать уникальные награды!</string>
     <string name="treasury_requires_achievement">Требуется достижение: %1$s</string>
+    <string name="treasury_exclusive_rarity_mythic">Мифический</string>
+    <string name="treasury_exclusive_rarity_secret">Секретный</string>
+    <string name="treasury_exclusive_rarity_transcendent">Трансцендентный</string>
+    <string name="treasury_exclusive_active">Активна</string>
+    <string name="treasury_exclusive_unlocked">Разблокирована</string>
+    <string name="treasury_tagline_onyx_gold">Чёрно-бриллиантовые поверхности с королевским золотом и рубиновым акцентом</string>
+    <string name="treasury_tagline_sakura_noir">Полуночный неон сакуры, сливовые тона и нефритовое свечение</string>
+    <string name="treasury_tagline_nebula_tide">Бездонная космическая синева с плазменным цианом, фиолетовой гравитацией и лаймовыми искрами</string>
+    <!-- Treasury Vault hero -->
+    <string name="treasury_vault_group_title">Хранилище Авроры</string>
+    <string name="treasury_vault_header">СОКРОВИЩНИЦА АВРОРЫ</string>
+    <string name="treasury_vault_headline">Хранилище заслуженных реликвий</string>
+    <string name="treasury_vault_progress">%1$d / %2$d наград получено · %3$d%% сила коллекции</string>
+    <string name="treasury_vault_pill_theme">Тема</string>
+    <string name="treasury_vault_pill_aura">Аура</string>
+    <string name="treasury_vault_reward_paths">Пути наград</string>
+    <string name="treasury_path_trinity_title">Путь Тринити</string>
+    <string name="treasury_path_trinity_subtitle">Послушник → Мастер → Легенда</string>
+    <string name="treasury_path_immersion_title">Путь Погружения</string>
+    <string name="treasury_path_immersion_subtitle">Бронза → Серебро → Золото → Платина</string>
+    <string name="treasury_path_ascension_title">Путь Восхождения</string>
+    <string name="treasury_path_ascension_subtitle">Ранг I → Ранг X</string>
+    <!-- Treasury new nickname effects -->
+    <string name="treasury_nickname_trinity_prism_title">Эффект ника «Призма Тринити»</string>
+    <string name="treasury_nickname_trinity_prism_desc">Призматическое мерцание трёх миров для никнейма в Home Hub</string>
+    <string name="treasury_nickname_shadow_crown_title">Эффект ника «Теневая Корона»</string>
+    <string name="treasury_nickname_shadow_crown_desc">Тёмная монаршая корона — подпись для секретных наград</string>
+    <string name="treasury_nickname_rank_sigils_title">Эффект ника «Ранговые Сигилы»</string>
+    <string name="treasury_nickname_rank_sigils_desc">Престижные сигилы для пути восхождения</string>
+    <!-- Treasury profile titles -->
+    <string name="treasury_profile_titles">Титулы профиля</string>
+    <string name="treasury_profile_titles_subtitle">Особые почетные звания, отображаемые прямо под вашим никнеймом на карте профиля.</string>
+    <string name="treasury_title_trinity_initiate_title">Посвящённый Тринити</string>
+    <string name="treasury_title_trinity_initiate_desc">Показывать титул пути трёх миров под никнеймом</string>
+    <string name="treasury_title_finisher_title">Финишер</string>
+    <string name="treasury_title_finisher_desc">Показывать титул завершения под никнеймом</string>
+    <string name="treasury_title_closer_title">Завершитель</string>
+    <string name="treasury_title_closer_desc">Показывать легендарный титул завершения под никнеймом</string>
+    <string name="treasury_title_deep_reader_title">Глубокий читатель</string>
+    <string name="treasury_title_deep_reader_desc">Показывать титул долгих читательских сессий под никнеймом</string>
+    <string name="treasury_title_rank_4_title">Ранг IV: Ветеран</string>
+    <string name="treasury_title_rank_4_desc">Показывать титул ранга «Ветеран» под никнеймом</string>
+    <!-- Treasury new avatar frames -->
+    <string name="treasury_frame_trinity_orbit_title">Рамка «Орбита Тринити»</string>
+    <string name="treasury_frame_trinity_orbit_desc">Три орбитальные дуги для легенд кросс-медиа</string>
+    <string name="treasury_frame_deep_archive_title">Рамка «Глубокий Архив»</string>
+    <string name="treasury_frame_deep_archive_desc">Сине-золотая архивная рамка для долгих сессий чтения</string>
+    <string name="treasury_frame_hybrid_scroll_title">Рамка «Гибридный Свиток»</string>
+    <string name="treasury_frame_hybrid_scroll_desc">Цифровая рукопись для мастеров аниме и новелл</string>
+    <string name="treasury_frame_ascendant_title">Рамка «Восходящий»</string>
+    <string name="treasury_frame_ascendant_desc">Бело-золотая рамка для высших рангов</string>
+    <!-- Treasury new home badges -->
+    <string name="treasury_badge_trinity_title">Значок «Тринити»</string>
+    <string name="treasury_badge_trinity_desc">Знак трёх миров для Home Hub</string>
+    <string name="treasury_badge_finisher_title">Печать «Завершатель»</string>
+    <string name="treasury_badge_finisher_desc">Печать завершения для тех, кто закрывает каждую историю</string>
+    <string name="treasury_badge_immersion_title">Значок «Погружение»</string>
+    <string name="treasury_badge_immersion_desc">Знак фокуса для глубокого чтения за одну сессию</string>
+    <string name="treasury_badge_ascendant_title">Значок «Восходящий»</string>
+    <string name="treasury_badge_ascendant_desc">Престижный знак для пути рангов</string>
+    <!-- Treasury new backgrounds -->
+    <string name="treasury_bg_trinity_constellation_title">Созвездие Тринити</string>
+    <string name="treasury_bg_trinity_constellation_desc">Три сияющих ядра, сплетенных в бесконечном космическом вальсе.</string>
+    <string name="treasury_bg_deep_space_archive_title">Архив Глубокого Космоса</string>
+    <string name="treasury_bg_deep_space_archive_desc">Древние фолианты, безмолвно дрейфующие в космической пустоте.</string>
+    <string name="treasury_bg_shadow_realm_title">Царство Теней</string>
+    <string name="treasury_bg_shadow_realm_desc">Вращающаяся бездна, где свет и время теряют смысл.</string>
+    <!-- Treasury misc -->
+    <string name="treasury_nickname_preview">Предпросмотр ника</string>
+    <string name="treasury_default_user_name">Имя пользователя</string>
+    <string name="treasury_fallback_achievement">Достижение</string>
+    <string name="treasury_cd_locked">Заблокировано</string>
+    <string name="treasury_cd_active">Активно</string>
     <string name="pref_category_debug">Режим отладки</string>
     <string name="pref_debug_bypass_treasury_locks">Обойти блокировки для тестирования</string>
     <string name="pref_debug_bypass_treasury_locks_summary">Временно разблокирует все награды Сокровищницы для визуальной проверки</string>
@@ -2150,4 +2392,54 @@
     <string name="cloud_sync_successful">Синхронизация успешно завершена</string>
     <string name="cloud_sync_error">Ошибка синхронизации: %s</string>
     <string name="never">Никогда</string>
+
+    <!-- High-end download engine reliability / OEM policy -->
+    <string name="download_power_policy_title">Стабильные фоновые загрузки</string>
+    <string name="download_power_policy_android_summary">Android может ограничивать долгие загрузки в фоне. Разрешите приложению работу без оптимизации батареи, чтобы очередь не останавливалась.</string>
+    <string name="download_power_policy_xiaomi_summary">На Xiaomi/Redmi/POCO включите Автозапуск, режим батареи «Нет ограничений» и закрепите приложение в недавних — так MIUI/HyperOS реже прерывает загрузки.</string>
+    <string name="download_power_policy_battery_action">Батарея</string>
+    <string name="download_power_policy_autostart_action">Автозапуск</string>
+
+
+    <!-- Novel download anti-rate-limit controls -->
+    <string name="novel_download_throttle_menu">Настройки запросов</string>
+    <string name="novel_download_throttle_title">Защита от блокировки сайта</string>
+    <string name="novel_download_throttle_summary">Настройте паузу между главами, случайный разброс и timeout. Это снижает риск временной блокировки источником из-за слишком частых запросов.</string>
+    <string name="novel_download_throttle_delay_ms">Пауза, мс</string>
+    <string name="novel_download_throttle_jitter_ms">Разброс, мс</string>
+    <string name="novel_download_throttle_timeout_ms">Timeout, мс</string>
+    <string name="novel_download_throttle_cooldown_ms">Пауза после ошибки, мс</string>
+    <string name="novel_download_throttle_limits">Пауза: %1$d–%2$d мс. Timeout: %3$d–%4$d мс. Рекомендуемо: 1200–3000 мс пауза, 300–1000 мс разброс.</string>
+    <string name="novel_download_throttle_save">Сохранить</string>
+    <string name="novel_download_throttle_cancel">Отмена</string>
+
+    <!-- Subtitle translation -->
+    <string name="player_sheets_translate_subtitles">Перевести субтитры</string>
+    <string name="player_subtitle_translation_added">Переведённые субтитры добавлены</string>
+    <string name="player_subtitle_translation_disabled">Перевод субтитров отключён</string>
+    <string name="player_subtitle_translation_no_external_track">Нет доступной дорожки субтитров для перевода</string>
+    <string name="player_subtitle_translation_ai_requires_opt_in">Для AI-перевода субтитров нужно явно включить разрешение</string>
+    <string name="player_subtitle_translation_failed">Не удалось перевести субтитры</string>
+    <string name="pref_player_subtitle_translation">Перевод субтитров</string>
+    <string name="pref_player_subtitle_translation_summary">Переводит дорожки субтитров и добавляет результат как новую дорожку в проигрыватель. Внешние дорожки поддерживаются сразу; встроенные поддерживаются для локальных/загруженных видео, если поток субтитров удалось сопоставить.</string>
+    <string name="pref_player_subtitle_translation_provider">Переводчик</string>
+    <string name="pref_player_subtitle_translation_provider_summary">Выберите Google для быстрого перевода или AI, чтобы использовать провайдер AI-перевода из настроек читалки новелл.</string>
+    <string name="pref_player_subtitle_translation_google_info">Google: самый простой вариант. Использует встроенный неофициальный переводчик Google и не требует AI-ключей.</string>
+    <string name="pref_player_subtitle_translation_ai_info">AI: использует провайдер AI-перевода новелл и его настройки API-ключа/модели. Включайте только если понимаете риски приватности и возможные расходы.</string>
+    <string name="pref_player_subtitle_translation_source_lang">Исходный язык</string>
+    <string name="pref_player_subtitle_translation_source_lang_summary">Используйте auto для автоматического определения.</string>
+    <string name="pref_player_subtitle_translation_target_lang">Язык перевода</string>
+    <string name="pref_player_subtitle_translation_target_lang_summary">Код языка для переведённых субтитров, например en, ru, es, ja.</string>
+    <string name="pref_player_subtitle_translation_allow_ai">Разрешить AI-перевод субтитров</string>
+    <string name="pref_player_subtitle_translation_allow_ai_summary">Разрешает отправлять текст субтитров выбранному AI-провайдеру перевода новелл. Перед использованием проверьте API-ключи, модель, стоимость и приватность.</string>
+    <string name="pref_player_subtitle_translation_cache">Кэшировать переведённые субтитры</string>
+    <string name="player_subtitle_translation_select_track">Выберите дорожку субтитров</string>
+    <string name="player_subtitle_translation_start">Начать перевод</string>
+    <string name="player_subtitle_translation_cancel">Отменить перевод</string>
+    <string name="player_subtitle_translation_provider_google">Google</string>
+    <string name="player_subtitle_translation_provider_ai">AI</string>
+    <string name="player_subtitle_translation_embedded_unavailable">Перевод встроенных субтитров доступен только для локальных или загруженных видео, если поток субтитров удалось сопоставить.</string>
+    <string name="player_subtitle_translation_progress">%1$d%%, %2$d/%3$d реплик</string>
+    <string name="player_subtitle_translation_from_to">%1$s → %2$s</string>
+
 </resources>

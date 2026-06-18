@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.source.MangaSource
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.entries.manga.model.Manga
+import tachiyomi.domain.items.chapter.model.NoChaptersException
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.i18n.MR
@@ -54,8 +55,11 @@ fun BrowseSourceContent(
 ) {
     val context = LocalContext.current
 
+    val appendErrorState = mangaList.loadState.append
+        .takeIf { it is LoadState.Error }
+        ?.takeUnless { mangaList.itemCount > 0 && (it as LoadState.Error).error is NoChaptersException }
     val errorState = mangaList.loadState.refresh.takeIf { it is LoadState.Error }
-        ?: mangaList.loadState.append.takeIf { it is LoadState.Error }
+        ?: appendErrorState
 
     val getErrorMessage: (LoadState.Error) -> String = { state ->
         state.error.formattedMessage(context)

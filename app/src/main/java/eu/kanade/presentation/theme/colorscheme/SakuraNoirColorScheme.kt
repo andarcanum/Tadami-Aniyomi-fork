@@ -4,37 +4,44 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
+/**
+ * Sakura Noir.
+ *
+ * A secret-hall palette: ink-black paper, neon sakura, plum shadows, and a
+ * jade afterglow. It should feel like a hidden midnight reward, not a pastel
+ * Strawberry variant.
+ */
 internal object SakuraNoirColorScheme : BaseColorScheme() {
 
     override val darkScheme = darkColorScheme(
-        primary = Color(0xFFF6A7C1),
-        onPrimary = Color(0xFF150812),
-        primaryContainer = Color(0xFF5C2B45),
-        onPrimaryContainer = Color(0xFFFFD9E5),
-        inversePrimary = Color(0xFFFFC7D8),
+        primary = Color(0xFFFF78B7),
+        onPrimary = Color(0xFF300018),
+        primaryContainer = Color(0xFF721143),
+        onPrimaryContainer = Color(0xFFFFD8E8),
+        inversePrimary = Color(0xFFAA2B66),
 
-        secondary = Color(0xFFFFD166),
-        onSecondary = Color(0xFF201100),
-        secondaryContainer = Color(0xFF4A3411),
-        onSecondaryContainer = Color(0xFFFFE5A1),
+        secondary = Color(0xFFC774FF),
+        onSecondary = Color(0xFF280045),
+        secondaryContainer = Color(0xFF51305F),
+        onSecondaryContainer = Color(0xFFF4DAFF),
 
-        tertiary = Color(0xFF8AF0D5),
-        onTertiary = Color(0xFF08211A),
-        tertiaryContainer = Color(0xFF1D3D35),
-        onTertiaryContainer = Color(0xFFC7FFF0),
+        tertiary = Color(0xFFFFB3D1),
+        onTertiary = Color(0xFF360022),
+        tertiaryContainer = Color(0xFF601B3A),
+        onTertiaryContainer = Color(0xFFFFD8E8),
 
-        background = Color(0xFF09060B),
-        onBackground = Color(0xFFF5EAF0),
-        surface = Color(0xFF120C14),
-        onSurface = Color(0xFFF5EAF0),
-        surfaceVariant = Color(0xFF231625),
-        onSurfaceVariant = Color(0xFFE0C6D3),
-        surfaceTint = Color(0xFFF6A7C1),
-        inverseSurface = Color(0xFFF2EAF0),
-        inverseOnSurface = Color(0xFF24161F),
+        background = Color(0xFF09050A),
+        onBackground = Color(0xFFF8E8F0),
+        surface = Color(0xFF110912),
+        onSurface = Color(0xFFF8E8F0),
+        surfaceVariant = Color(0xFF281728),
+        onSurfaceVariant = Color(0xFFE2C1D6),
+        surfaceTint = Color(0xFFFF78B7),
+        inverseSurface = Color(0xFFF4E7EE),
+        inverseOnSurface = Color(0xFF2D1A28),
 
-        outline = Color(0xFF7E5E72),
-        outlineVariant = Color(0xFF3A2733),
+        outline = Color(0xFF9D738B),
+        outlineVariant = Color(0xFF4D2B3E),
 
         error = Color(0xFFFFB4AB),
         onError = Color(0xFF690005),
@@ -43,44 +50,44 @@ internal object SakuraNoirColorScheme : BaseColorScheme() {
 
         scrim = Color(0xFF000000),
 
-        surfaceDim = Color(0xFF09060B),
-        surfaceBright = Color(0xFF2B1B26),
-        surfaceContainerLowest = Color(0xFF050308),
-        surfaceContainerLow = Color(0xFF110A13),
-        surfaceContainer = Color(0xFF17101A),
-        surfaceContainerHigh = Color(0xFF1F1522),
-        surfaceContainerHighest = Color(0xFF2A1D2E),
+        surfaceDim = Color(0xFF09050A),
+        surfaceBright = Color(0xFF342035),
+        surfaceContainerLowest = Color(0xFF050206),
+        surfaceContainerLow = Color(0xFF130A14),
+        surfaceContainer = Color(0xFF1A0F1C),
+        surfaceContainerHigh = Color(0xFF241426),
+        surfaceContainerHighest = Color(0xFF301B32),
     )
 
     override val lightScheme = lightColorScheme(
-        primary = Color(0xFF8F4A64),
+        primary = Color(0xFF9B245C),
         onPrimary = Color(0xFFFFFFFF),
-        primaryContainer = Color(0xFFFFD9E5),
-        onPrimaryContainer = Color(0xFF5C2B45),
-        inversePrimary = Color(0xFFF6A7C1),
+        primaryContainer = Color(0xFFFFD8E8),
+        onPrimaryContainer = Color(0xFF3E0020),
+        inversePrimary = Color(0xFFFF78B7),
 
-        secondary = Color(0xFF8B6A10),
+        secondary = Color(0xFF8A47A8),
         onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFFFFEFB3),
-        onSecondaryContainer = Color(0xFF4D3900),
+        secondaryContainer = Color(0xFFF4DAFF),
+        onSecondaryContainer = Color(0xFF280045),
 
-        tertiary = Color(0xFF126B5B),
+        tertiary = Color(0xFFAA3D72),
         onTertiary = Color(0xFFFFFFFF),
-        tertiaryContainer = Color(0xFFB9F7E7),
-        onTertiaryContainer = Color(0xFF004236),
+        tertiaryContainer = Color(0xFFFFD8E8),
+        onTertiaryContainer = Color(0xFF3E0020),
 
-        background = Color(0xFFFFF8FB),
-        onBackground = Color(0xFF25161F),
-        surface = Color(0xFFFFF8FB),
-        onSurface = Color(0xFF25161F),
-        surfaceVariant = Color(0xFFF4E6ED),
-        onSurfaceVariant = Color(0xFF5C4652),
-        surfaceTint = Color(0xFF8F4A64),
-        inverseSurface = Color(0xFF382731),
-        inverseOnSurface = Color(0xFFFFF8FB),
+        background = Color(0xFFFFF7FA),
+        onBackground = Color(0xFF27161F),
+        surface = Color(0xFFFFF7FA),
+        onSurface = Color(0xFF27161F),
+        surfaceVariant = Color(0xFFF2DCE8),
+        onSurfaceVariant = Color(0xFF554252),
+        surfaceTint = Color(0xFF9B245C),
+        inverseSurface = Color(0xFF3C2A34),
+        inverseOnSurface = Color(0xFFFFECF3),
 
-        outline = Color(0xFF8D6C7C),
-        outlineVariant = Color(0xFFE5D4DC),
+        outline = Color(0xFF877080),
+        outlineVariant = Color(0xFFD9C0CF),
 
         error = Color(0xFFBA1A1A),
         onError = Color(0xFFFFFFFF),
@@ -89,12 +96,12 @@ internal object SakuraNoirColorScheme : BaseColorScheme() {
 
         scrim = Color(0xFF000000),
 
-        surfaceDim = Color(0xFFF2E7EB),
-        surfaceBright = Color(0xFFFFFFFF),
+        surfaceDim = Color(0xFFE7D6DE),
+        surfaceBright = Color(0xFFFFF7FA),
         surfaceContainerLowest = Color(0xFFFFFFFF),
-        surfaceContainerLow = Color(0xFFFBF0F4),
-        surfaceContainer = Color(0xFFF5E8ED),
-        surfaceContainerHigh = Color(0xFFEFDEE5),
-        surfaceContainerHighest = Color(0xFFE7D3DB),
+        surfaceContainerLow = Color(0xFFFFEEF5),
+        surfaceContainer = Color(0xFFFBE6F0),
+        surfaceContainerHigh = Color(0xFFF3DDE8),
+        surfaceContainerHighest = Color(0xFFEBD3DF),
     )
 }

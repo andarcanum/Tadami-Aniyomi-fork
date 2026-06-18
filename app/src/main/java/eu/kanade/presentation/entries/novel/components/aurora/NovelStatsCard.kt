@@ -11,10 +11,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.entries.manga.components.aurora.GlassmorphismCard
-import eu.kanade.presentation.entries.manga.components.aurora.QuietMetadataRow
-import eu.kanade.presentation.entries.manga.components.aurora.QuietMetricTile
-import eu.kanade.presentation.entries.manga.components.aurora.QuietSectionDivider
+import eu.kanade.presentation.entries.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.entries.components.aurora.QuietMetadataRow
+import eu.kanade.presentation.entries.components.aurora.QuietMetricTile
+import eu.kanade.presentation.entries.components.aurora.QuietSectionDivider
 import eu.kanade.tachiyomi.source.model.SManga
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR

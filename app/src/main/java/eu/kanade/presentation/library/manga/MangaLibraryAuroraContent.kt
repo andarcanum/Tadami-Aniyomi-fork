@@ -21,7 +21,9 @@ import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.PinnedBadge
 import eu.kanade.presentation.library.components.PinnedSectionHeader
+import eu.kanade.presentation.library.components.containsAtLeastMatches
 import eu.kanade.presentation.library.components.globalSearchItem
+import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
@@ -212,8 +214,8 @@ private fun MangaLibraryAuroraList(
     horizontalPaddingDp: Int,
 ) {
     val colors = AuroraTheme.colors
-    val showPinnedSection = remember(items) { items.count { it.pinned } > 1 }
-    val selectedIds = remember(selection) { selection.map { it.id }.toHashSet() }
+    val showPinnedSection = remember(items) { items.containsAtLeastMatches(requiredCount = 2) { it.pinned } }
+    val selectedIds = remember(selection) { selection.idsToHashSet { it.id } }
 
     FastScrollLazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -399,8 +401,8 @@ private fun MangaLibraryAuroraCardGrid(
     glowDisplayMode: LibraryDisplayMode,
 ) {
     val useGlowContourCards = cardStyle == AuroraLibraryCardStyle.GlowContour
-    val showPinnedSection = items.count { it.pinned } > 1
-    val selectedIds = remember(selection) { selection.map { it.id }.toHashSet() }
+    val showPinnedSection = remember(items) { items.containsAtLeastMatches(requiredCount = 2) { it.pinned } }
+    val selectedIds = remember(selection) { selection.idsToHashSet { it.id } }
 
     LazyLibraryGrid(
         modifier = Modifier

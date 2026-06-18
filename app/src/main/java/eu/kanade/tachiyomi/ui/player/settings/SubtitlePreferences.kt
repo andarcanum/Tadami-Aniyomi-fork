@@ -52,6 +52,13 @@ class SubtitlePreferences(
     fun subtitlesDelay() = preferenceStore.getInt("pref_subtitles_delay", 0)
     fun subtitlesSpeed() = preferenceStore.getFloat("pref_subtitles_speed", 1f)
     fun subtitlesSecondaryDelay() = preferenceStore.getInt("pref_subtitles_secondary_delay", 0)
+
+    fun subtitleTranslationEnabled() = preferenceStore.getBoolean("pref_subtitle_translation_enabled", false)
+    fun subtitleTranslationProvider() = preferenceStore.getString("pref_subtitle_translation_provider", "google")
+    fun subtitleTranslationTargetLanguage() = preferenceStore.getString("pref_subtitle_translation_target_lang", "")
+    fun subtitleTranslationSourceLanguage() = preferenceStore.getString("pref_subtitle_translation_source_lang", "auto")
+    fun subtitleTranslationAllowAiProviders() = preferenceStore.getBoolean("pref_subtitle_translation_allow_ai", false)
+    fun subtitleTranslationCacheEnabled() = preferenceStore.getBoolean("pref_subtitle_translation_cache_enabled", true)
 }
 
 enum class SubtitleJustification(

@@ -426,6 +426,7 @@ class NovelReaderPreferences(
         migrateLegacyParagraphSpacingIfNeeded()
         migrateLegacyBackgroundSelectionIfNeeded()
         migrateLegacyPageTransitionStyleIfNeeded()
+        migrateStaleEnumValuesIfNeeded()
     }
 
     // Display
@@ -859,6 +860,97 @@ class NovelReaderPreferences(
         }
     }
 
+    private fun migrateStaleEnumValuesIfNeeded() {
+        val knownProviders = NovelTranslationProvider.entries.toSet()
+        val knownStylePresets = NovelTranslationStylePreset.entries.toSet()
+        val knownPromptModes = GeminiPromptMode.entries.toSet()
+        val knownThemes = NovelReaderTheme.entries.toSet()
+        val knownAppearanceModes = NovelReaderAppearanceMode.entries.toSet()
+        val knownBackgroundSources = NovelReaderBackgroundSource.entries.toSet()
+        val knownBackgroundTextures = NovelReaderBackgroundTexture.entries.toSet()
+        val knownTextAligns = TextAlign.entries.toSet()
+        val knownTransitionStyles = NovelPageTransitionStyle.entries.toSet()
+        val knownFlipSpeeds = NovelBookFlipAnimationSpeed.entries.toSet()
+        val knownTurnSpeeds = NovelPageTurnSpeed.entries.toSet()
+        val knownTurnIntensities = NovelPageTurnIntensity.entries.toSet()
+        val knownTurnShadowIntensities = NovelPageTurnShadowIntensity.entries.toSet()
+        val knownTurnActivationZones = NovelPageTurnActivationZone.entries.toSet()
+        val knownTtsHighlightModes = NovelTtsHighlightMode.entries.toSet()
+
+        if (translationProvider().get() !in knownProviders) {
+            translationProvider().set(NovelTranslationProvider.GEMINI)
+        }
+        if (geminiStylePreset().get() !in knownStylePresets) {
+            geminiStylePreset().set(NovelTranslationStylePreset.PROFESSIONAL)
+        }
+        if (geminiPromptMode().get() !in knownPromptModes) {
+            geminiPromptMode().set(GeminiPromptMode.ADULT_18)
+        }
+        if (theme().get() !in knownThemes) {
+            theme().set(NovelReaderTheme.SYSTEM)
+        }
+        if (appearanceMode().get() !in knownAppearanceModes) {
+            appearanceMode().set(NovelReaderAppearanceMode.THEME)
+        }
+        if (backgroundSource().get() !in knownBackgroundSources) {
+            backgroundSource().set(NovelReaderBackgroundSource.PRESET)
+        }
+        if (backgroundTexture().get() !in knownBackgroundTextures) {
+            backgroundTexture().set(NovelReaderBackgroundTexture.PAPER_GRAIN)
+        }
+        if (textAlign().get() !in knownTextAligns) {
+            textAlign().set(TextAlign.SOURCE)
+        }
+        if (pageTransitionStyle().get() !in knownTransitionStyles) {
+            pageTransitionStyle().set(NovelPageTransitionStyle.SLIDE)
+        }
+        if (bookFlipAnimationSpeed().get() !in knownFlipSpeeds) {
+            bookFlipAnimationSpeed().set(NovelBookFlipAnimationSpeed.SLOW)
+        }
+        if (pageTurnSpeed().get() !in knownTurnSpeeds) {
+            pageTurnSpeed().set(NovelPageTurnSpeed.NORMAL)
+        }
+        if (pageTurnIntensity().get() !in knownTurnIntensities) {
+            pageTurnIntensity().set(NovelPageTurnIntensity.MEDIUM)
+        }
+        if (pageTurnShadowIntensity().get() !in knownTurnShadowIntensities) {
+            pageTurnShadowIntensity().set(NovelPageTurnShadowIntensity.MEDIUM)
+        }
+        if (pageTurnActivationZone().get() !in knownTurnActivationZones) {
+            pageTurnActivationZone().set(NovelPageTurnActivationZone.WIDE)
+        }
+        if (ttsHighlightMode().get() !in knownTtsHighlightModes) {
+            ttsHighlightMode().set(NovelTtsHighlightMode.AUTO)
+        }
+
+        val overrides = sourceOverrides().get()
+        var hasChanges = false
+        val migrated = overrides.mapValues { (_, value) ->
+            val fixed = value.copy(
+                translationProvider = value.translationProvider?.takeIf { it in knownProviders },
+                geminiStylePreset = value.geminiStylePreset?.takeIf { it in knownStylePresets },
+                geminiPromptMode = value.geminiPromptMode?.takeIf { it in knownPromptModes },
+                theme = value.theme?.takeIf { it in knownThemes },
+                appearanceMode = value.appearanceMode?.takeIf { it in knownAppearanceModes },
+                backgroundSource = value.backgroundSource?.takeIf { it in knownBackgroundSources },
+                backgroundTexture = value.backgroundTexture?.takeIf { it in knownBackgroundTextures },
+                textAlign = value.textAlign?.takeIf { it in knownTextAligns },
+                pageTransitionStyle = value.pageTransitionStyle?.takeIf { it in knownTransitionStyles },
+                bookFlipAnimationSpeed = value.bookFlipAnimationSpeed?.takeIf { it in knownFlipSpeeds },
+                pageTurnSpeed = value.pageTurnSpeed?.takeIf { it in knownTurnSpeeds },
+                pageTurnIntensity = value.pageTurnIntensity?.takeIf { it in knownTurnIntensities },
+                pageTurnShadowIntensity = value.pageTurnShadowIntensity?.takeIf { it in knownTurnShadowIntensities },
+                pageTurnActivationZone = value.pageTurnActivationZone?.takeIf { it in knownTurnActivationZones },
+                ttsHighlightMode = value.ttsHighlightMode?.takeIf { it in knownTtsHighlightModes },
+            )
+            if (fixed != value) hasChanges = true
+            fixed
+        }
+        if (hasChanges) {
+            sourceOverrides().set(migrated)
+        }
+    }
+
     fun enableSourceOverride(sourceId: Long) {
         if (getSourceOverride(sourceId) != null) return
         setSourceOverride(
@@ -1152,7 +1244,7 @@ class NovelReaderPreferences(
                 values[0] as Int,
                 values[1] as Float,
                 values[2] as Int,
-                values[3] as TextAlign,
+                (values[3] as? TextAlign) ?: TextAlign.SOURCE,
                 values[4] as Int,
                 values[5] as Boolean,
                 values[6] as Boolean,
@@ -1184,13 +1276,13 @@ class NovelReaderPreferences(
             customThemes().changes(),
         ) { values: Array<Any?> ->
             ThemeSettings(
-                values[0] as NovelReaderTheme,
+                (values[0] as? NovelReaderTheme) ?: NovelReaderTheme.SYSTEM,
                 values[1] as String,
                 values[2] as String,
-                values[3] as NovelReaderBackgroundTexture,
+                (values[3] as? NovelReaderBackgroundTexture) ?: NovelReaderBackgroundTexture.PAPER_GRAIN,
                 values[4] as Int,
-                values[5] as NovelReaderAppearanceMode,
-                values[6] as NovelReaderBackgroundSource,
+                (values[5] as? NovelReaderAppearanceMode) ?: NovelReaderAppearanceMode.THEME,
+                (values[6] as? NovelReaderBackgroundSource) ?: NovelReaderBackgroundSource.PRESET,
                 values[7] as String,
                 values[8] as String,
                 values[9] as String,
@@ -1229,12 +1321,12 @@ class NovelReaderPreferences(
                 values[3] as Boolean,
                 values[4] as Boolean,
                 values[5] as Boolean,
-                values[6] as NovelPageTransitionStyle,
-                values[7] as NovelBookFlipAnimationSpeed,
-                values[8] as NovelPageTurnSpeed,
-                values[9] as NovelPageTurnIntensity,
-                values[10] as NovelPageTurnShadowIntensity,
-                values[11] as NovelPageTurnActivationZone,
+                (values[6] as? NovelPageTransitionStyle) ?: NovelPageTransitionStyle.SLIDE,
+                (values[7] as? NovelBookFlipAnimationSpeed) ?: NovelBookFlipAnimationSpeed.SLOW,
+                (values[8] as? NovelPageTurnSpeed) ?: NovelPageTurnSpeed.NORMAL,
+                (values[9] as? NovelPageTurnIntensity) ?: NovelPageTurnIntensity.MEDIUM,
+                (values[10] as? NovelPageTurnShadowIntensity) ?: NovelPageTurnShadowIntensity.MEDIUM,
+                (values[11] as? NovelPageTurnActivationZone) ?: NovelPageTurnActivationZone.WIDE,
                 values[12] as Boolean,
                 values[13] as Boolean,
                 values[14] as Boolean,
@@ -1345,16 +1437,16 @@ class NovelReaderPreferences(
                 topK = values[11] as Int,
                 sourceLang = values[12] as String,
                 targetLang = values[13] as String,
-                promptMode = values[14] as GeminiPromptMode,
+                promptMode = (values[14] as? GeminiPromptMode) ?: GeminiPromptMode.ADULT_18,
                 enabledPromptModifiers = values[15] as List<String>,
                 customPromptModifier = values[16] as String,
-                stylePreset = values[17] as NovelTranslationStylePreset,
+                stylePreset = (values[17] as? NovelTranslationStylePreset) ?: NovelTranslationStylePreset.PROFESSIONAL,
                 promptModifiers = values[18] as String,
                 autoTranslateEnglishSource = values[19] as Boolean,
                 prefetchNextChapterTranslation = values[20] as Boolean,
                 privateUnlocked = values[21] as Boolean,
                 privatePythonLikeMode = values[22] as Boolean,
-                translationProvider = values[23] as NovelTranslationProvider,
+                translationProvider = (values[23] as? NovelTranslationProvider) ?: NovelTranslationProvider.GEMINI,
                 openRouterBaseUrl = values[24] as String,
                 openRouterApiKey = values[25] as String,
                 openRouterModel = values[26] as String,
@@ -1400,7 +1492,7 @@ class NovelReaderPreferences(
                 localeTag = values[3] as String,
                 speechRate = values[4] as Float,
                 pitch = values[5] as Float,
-                highlightMode = values[6] as NovelTtsHighlightMode,
+                highlightMode = (values[6] as? NovelTtsHighlightMode) ?: NovelTtsHighlightMode.AUTO,
                 wordHighlightEnabled = values[7] as Boolean,
                 autoAdvanceChapter = values[8] as Boolean,
                 followAlong = values[9] as Boolean,

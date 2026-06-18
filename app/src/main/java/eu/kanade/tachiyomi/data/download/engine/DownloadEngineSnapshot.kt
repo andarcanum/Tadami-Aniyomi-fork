@@ -40,7 +40,7 @@ data class DownloadEngineSnapshot(
     val animeStorageBytes: Long = 0L,
     val mangaStorageBytes: Long = 0L,
     val novelStorageBytes: Long = 0L,
-    val freeSpaceBytes: Long = 0L,
+    val freeSpaceBytes: Long? = null,
 ) {
     /** Whether any of the backends are currently running. */
     val isRunning: Boolean
@@ -67,4 +67,7 @@ data class DownloadEngineSnapshot(
     /** Downloaded storage currently accounted by all backends. */
     val totalStorageBytes: Long
         get() = animeStorageBytes + mangaStorageBytes + novelStorageBytes
+
+    val hasWork: Boolean
+        get() = activeCount + queuedCount + failedCount > 0
 }

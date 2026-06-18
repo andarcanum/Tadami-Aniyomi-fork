@@ -9,9 +9,11 @@ import eu.kanade.tachiyomi.data.suggestions.sources.RecommendationPagingSource
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import eu.kanade.tachiyomi.data.suggestions.util.bestMatchScoreFor
 import eu.kanade.tachiyomi.data.suggestions.util.dedupeByCleanTitle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.api.get
@@ -22,6 +24,10 @@ class SuggestionCoordinator(
     // overwritten by the [Injekt.get()] lookup.
     private val sourcePreferences: SourcePreferences = SourcePreferences(InMemoryPreferenceStore()),
 ) {
+
+    private companion object {
+        const val PROVIDER_TIMEOUT_MS = 10_000L
+    }
 
     /**
      * Build the set of external recommendation sources for [mediaType].
@@ -67,11 +73,12 @@ class SuggestionCoordinator(
     suspend fun fetchSuggestions(
         seed: SuggestionSeed,
         limit: Int = 40,
-    ): SuggestionFetchResult = coroutineScope {
+    ): SuggestionFetchResult = supervisorScope {
+        val boundedLimit = limit.coerceIn(1, 100)
         val sources = createSources(seed.mediaType)
         if (sources.isEmpty()) {
             logcat { "[Coordinator] No sources for mediaType=${seed.mediaType}" }
-            return@coroutineScope SuggestionFetchResult(emptyList(), 0, 0)
+            return@supervisorScope SuggestionFetchResult(emptyList(), 0, 0)
         }
 
         val translatedTitle = eu.kanade.tachiyomi.data.suggestions.MultilingualQueryHelper.translate(seed.primaryTitle)
@@ -93,8 +100,17 @@ class SuggestionCoordinator(
         val jobs = sources.map { source ->
             async(Dispatchers.IO) {
                 try {
-                    val result = source.fetchSuggestions(enrichedSeed)
-                    Pair(result, false)
+                    val result = withTimeoutOrNull(PROVIDER_TIMEOUT_MS) {
+                        source.fetchSuggestions(enrichedSeed)
+                    }
+                    if (result == null) {
+                        logcat { "[Coordinator] ${source.name} TIMEOUT" }
+                        Pair(emptyList<SuggestionItem>(), true)
+                    } else {
+                        Pair(result, false)
+                    }
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logcat { "[Coordinator] ${source.name} FAILED: ${e.message}" }
                     Pair(emptyList<SuggestionItem>(), true)
@@ -106,9 +122,9 @@ class SuggestionCoordinator(
         val attemptedSources = sources.size
         val failedSources = results.count { it.second }
         val items = results.flatMap { it.first }
-            .dedupeByCleanTitle()
+            .dedupeByCleanTitle(enrichedSeed)
             .sortedByDescending { SuggestionSourceWeight.finalScore(it.reason, it.bestMatchScoreFor(enrichedSeed)) }
-            .take(limit) // Cap at requested limit
+            .take(boundedLimit) // Cap at requested limit
 
         val matchedBase = sources.any { it.matchedBase } || results.any { it.first.isNotEmpty() }
 

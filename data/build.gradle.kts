@@ -88,6 +88,7 @@ dependencies {
     implementation(projects.sourceApi)
     implementation(projects.domain)
     implementation(projects.core.common)
+    implementation(projects.i18n)
 
     implementation(libs.bundles.sqldelight)
 

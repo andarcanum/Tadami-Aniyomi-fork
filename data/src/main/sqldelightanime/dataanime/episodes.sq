@@ -63,6 +63,17 @@ SELECT *
 FROM episodes
 WHERE anime_id = :animeId;
 
+getSeenEpisodeCountByAnimeId:
+SELECT COUNT(*)
+FROM episodes
+WHERE anime_id = :animeId
+AND seen = 1;
+
+getTotalSeenEpisodeCount:
+SELECT COUNT(*)
+FROM episodes
+WHERE seen = 1;
+
 getBookmarkedEpisodesByAnimeId:
 SELECT *
 FROM episodes

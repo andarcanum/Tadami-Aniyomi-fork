@@ -36,6 +36,8 @@ import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupPreference
 import eu.kanade.tachiyomi.data.backup.models.BackupSource
 import eu.kanade.tachiyomi.data.backup.models.BackupSourcePreferences
+import eu.kanade.tachiyomi.data.backup.models.MihonBackup
+import eu.kanade.tachiyomi.data.backup.models.toMihonBackup
 import kotlinx.serialization.protobuf.ProtoBuf
 import logcat.LogPriority
 import okio.buffer
@@ -241,7 +243,11 @@ class BackupCreator(
                 backupFeeds = if (options.sisterAppCompatible) emptyList() else backupFeeds,
             )
 
-            val byteArray = parser.encodeToByteArray(Backup.serializer(), backup)
+            val byteArray = if (options.sisterAppCompatible) {
+                parser.encodeToByteArray(MihonBackup.serializer(), backup.toMihonBackup())
+            } else {
+                parser.encodeToByteArray(Backup.serializer(), backup)
+            }
             if (byteArray.isEmpty()) {
                 throw IllegalStateException(context.stringResource(MR.strings.empty_backup_error))
             }

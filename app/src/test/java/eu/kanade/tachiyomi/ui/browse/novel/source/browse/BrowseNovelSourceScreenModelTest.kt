@@ -14,6 +14,9 @@ import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import eu.kanade.tachiyomi.ui.browse.search.SavedSearchFilterSerializer
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
+import io.mockk.clearMocks
+import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -31,6 +34,7 @@ import rx.Observable
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
+import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.domain.entries.novel.model.Novel
@@ -49,11 +53,13 @@ import kotlin.system.measureTimeMillis
 
 class BrowseNovelSourceScreenModelTest {
     private val activeScreenModels = mutableListOf<BrowseNovelSourceScreenModel>()
+    private lateinit var achievementHandler: AchievementHandler
 
     @BeforeEach
     fun setup() {
         Dispatchers.setMain(Dispatchers.Unconfined)
         ensureUiPreferences()
+        ensureAchievementHandler()
     }
 
     @AfterEach
@@ -394,6 +400,14 @@ class BrowseNovelSourceScreenModelTest {
             }
     }
 
+    private fun ensureAchievementHandler() {
+        achievementHandler = mockk(relaxed = true)
+        runCatching { Injekt.get<AchievementHandler>() }
+            .getOrElse {
+                Injekt.addSingleton(fullType<AchievementHandler>(), achievementHandler)
+            }
+    }
+
     private fun track(screenModel: BrowseNovelSourceScreenModel): BrowseNovelSourceScreenModel {
         return screenModel.also(activeScreenModels::add)
     }
@@ -611,6 +625,13 @@ class BrowseNovelSourceScreenModelTest {
         method.invoke(screenModel, novel)
     }
 
+    private fun browseCoverUpdates(screenModel: BrowseNovelSourceScreenModel): Map<Long, Any> {
+        val field = screenModel.javaClass.getDeclaredField("browseNovelCoverUpdates")
+        field.isAccessible = true
+        val state = field.get(screenModel) as MutableStateFlow<Map<Long, Any>>
+        return state.value
+    }
+
     @Test
     fun `novelSourcePreferencesScreenOrNull returns null for source without settings`() {
         val result = novelSourcePreferencesScreenOrNull(sourceId = 1L, isSourceConfigurable = false)
@@ -674,6 +695,8 @@ class BrowseNovelSourceScreenModelTest {
             novelRepository.lastNovelUpdate?.id shouldBe 101L
             novelRepository.lastNovelUpdate?.thumbnailUrl shouldBe "https://cdn.example/novel-cover.jpg"
             novelRepository.lastNovelUpdate?.initialized shouldBe true
+            browseCoverUpdates(screenModel)[101L].toString() shouldBe
+                "BrowseNovelCoverUpdate(thumbnailUrl=https://cdn.example/novel-cover.jpg)"
         }
     }
 
@@ -846,5 +869,186 @@ class BrowseNovelSourceScreenModelTest {
         override fun fetchChapterList(novel: SNovel): Observable<List<SNovelChapter>> =
             Observable.just(emptyList())
         override fun fetchChapterText(chapter: SNovelChapter): Observable<String> = Observable.just("")
+    }
+
+    @Test
+    fun `search with non-empty query and default filters triggers SEARCH event`() {
+        runBlocking {
+            val source = FakeNovelCatalogueSource(id = 1L, name = "Novel", lang = "en")
+            val sourceManager = FakeNovelSourceManager(source)
+            val prefs = SourcePreferences(FakePreferenceStore())
+            val remoteNovel = SNovel.create().apply {
+                url = "/novel"
+                title = "Novel"
+            }
+            val networkToLocal = NetworkToLocalNovel(FakeNovelRepository(insertId = 42L))
+            val getRemoteNovel = GetRemoteNovel(repository = FakeNovelSourceRepository())
+
+            val screenModel = track(
+                BrowseNovelSourceScreenModel(
+                    sourceId = 1L,
+                    listingQuery = null,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                    networkToLocalNovel = networkToLocal,
+                    achievementHandler = achievementHandler,
+                ),
+            )
+
+            // When searching with query and default filters
+            screenModel.search(query = "ranobe", filters = source.getFilterList())
+
+            // Then SEARCH event is tracked, not ADVANCED_SEARCH
+            io.mockk.verify(exactly = 1) {
+                achievementHandler.trackFeatureUsed(tachiyomi.domain.achievement.model.AchievementEvent.Feature.SEARCH)
+            }
+            io.mockk.verify(exactly = 0) {
+                achievementHandler.trackFeatureUsed(
+                    tachiyomi.domain.achievement.model.AchievementEvent.Feature.ADVANCED_SEARCH,
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `search with non-empty query and active filters triggers ADVANCED_SEARCH event`() {
+        runBlocking {
+            val source = FakeNovelCatalogueSourceWithFilters(
+                id = 1L,
+                name = "Novel",
+                lang = "en",
+                filters = NovelFilterList(
+                    TestText("Keyword", ""),
+                ),
+            )
+            val sourceManager = FakeNovelSourceManager(source)
+            val prefs = SourcePreferences(FakePreferenceStore())
+            val networkToLocal = NetworkToLocalNovel(FakeNovelRepository(insertId = 42L))
+            val getRemoteNovel = GetRemoteNovel(repository = FakeNovelSourceRepository())
+
+            val screenModel = track(
+                BrowseNovelSourceScreenModel(
+                    sourceId = 1L,
+                    listingQuery = null,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                    networkToLocalNovel = networkToLocal,
+                    achievementHandler = achievementHandler,
+                ),
+            )
+
+            // Set active (different from default) filters
+            val activeFilters = NovelFilterList(
+                TestText("Keyword", "active-value"),
+            )
+
+            // When searching with query and active filters
+            screenModel.search(query = "ranobe", filters = activeFilters)
+
+            // Then ADVANCED_SEARCH event is tracked, not SEARCH
+            io.mockk.verify(exactly = 1) {
+                achievementHandler.trackFeatureUsed(
+                    tachiyomi.domain.achievement.model.AchievementEvent.Feature.ADVANCED_SEARCH,
+                )
+            }
+            io.mockk.verify(exactly = 0) {
+                achievementHandler.trackFeatureUsed(tachiyomi.domain.achievement.model.AchievementEvent.Feature.SEARCH)
+            }
+        }
+    }
+
+    @Test
+    fun `setFilters with identical filters does not trigger FILTER event`() {
+        runBlocking {
+            val source = FakeNovelCatalogueSourceWithFilters(
+                id = 1L,
+                name = "Novel",
+                lang = "en",
+                filters = NovelFilterList(
+                    TestText("Keyword", "initial"),
+                ),
+            )
+            val sourceManager = FakeNovelSourceManager(source)
+            val prefs = SourcePreferences(FakePreferenceStore())
+            val networkToLocal = NetworkToLocalNovel(FakeNovelRepository(insertId = 42L))
+            val getRemoteNovel = GetRemoteNovel(repository = FakeNovelSourceRepository())
+
+            val screenModel = track(
+                BrowseNovelSourceScreenModel(
+                    sourceId = 1L,
+                    listingQuery = null,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                    networkToLocalNovel = networkToLocal,
+                    achievementHandler = achievementHandler,
+                ),
+            )
+
+            // Initial filters set
+            val initialFilters = NovelFilterList(
+                TestText("Keyword", "initial"),
+            )
+            screenModel.setFilters(initialFilters)
+            io.mockk.clearMocks(achievementHandler)
+
+            // Now apply identical filters again
+            val identicalFilters = NovelFilterList(
+                TestText("Keyword", "initial"),
+            )
+            screenModel.setFilters(identicalFilters)
+
+            // Then FILTER event is NOT tracked
+            io.mockk.verify(exactly = 0) {
+                achievementHandler.trackFeatureUsed(tachiyomi.domain.achievement.model.AchievementEvent.Feature.FILTER)
+            }
+        }
+    }
+
+    @Test
+    fun `setFilters with changed filters triggers FILTER event`() {
+        runBlocking {
+            val source = FakeNovelCatalogueSourceWithFilters(
+                id = 1L,
+                name = "Novel",
+                lang = "en",
+                filters = NovelFilterList(
+                    TestText("Keyword", "initial"),
+                ),
+            )
+            val sourceManager = FakeNovelSourceManager(source)
+            val prefs = SourcePreferences(FakePreferenceStore())
+            val networkToLocal = NetworkToLocalNovel(FakeNovelRepository(insertId = 42L))
+            val getRemoteNovel = GetRemoteNovel(repository = FakeNovelSourceRepository())
+
+            val screenModel = track(
+                BrowseNovelSourceScreenModel(
+                    sourceId = 1L,
+                    listingQuery = null,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                    networkToLocalNovel = networkToLocal,
+                    achievementHandler = achievementHandler,
+                ),
+            )
+
+            // Apply different filters
+            val changedFilters = NovelFilterList(
+                TestText("Keyword", "different"),
+            )
+            screenModel.setFilters(changedFilters)
+
+            // Then FILTER event is tracked
+            io.mockk.verify(exactly = 1) {
+                achievementHandler.trackFeatureUsed(tachiyomi.domain.achievement.model.AchievementEvent.Feature.FILTER)
+            }
+        }
     }
 }

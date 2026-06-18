@@ -244,6 +244,11 @@ class NovelJsDomStore {
         return el.attr(name)
     }
 
+    fun setAttr(handle: Int, name: String, value: String) {
+        val el = elementOrNull(handle) ?: return
+        el.attr(name, value)
+    }
+
     fun removeAttr(handle: Int, name: String) {
         val el = elementOrNull(handle) ?: return
         el.removeAttr(name)

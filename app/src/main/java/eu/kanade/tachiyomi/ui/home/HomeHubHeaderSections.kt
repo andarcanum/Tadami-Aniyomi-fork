@@ -87,6 +87,7 @@ internal fun HomeHubPinnedHeader(
     userAvatar: String,
     avatarFrameStyleKey: String,
     homeBadgeStyleKey: String,
+    profileTitleKey: String,
     nicknameStyle: NicknameStyle,
     greetingStyle: GreetingStyle,
     showGreeting: Boolean,
@@ -142,6 +143,7 @@ internal fun HomeHubPinnedHeader(
                     userAvatar = userAvatar,
                     avatarFrameStyleKey = avatarFrameStyleKey,
                     homeBadgeStyleKey = homeBadgeStyleKey,
+                    profileTitleKey = profileTitleKey,
                     nicknameStyle = nicknameStyle,
                     greetingStyle = greetingStyle,
                     showGreeting = showGreeting,
@@ -213,6 +215,7 @@ private fun HomeHubProfileHeaderCanvas(
     userAvatar: String,
     avatarFrameStyleKey: String,
     homeBadgeStyleKey: String,
+    profileTitleKey: String,
     nicknameStyle: NicknameStyle,
     greetingStyle: GreetingStyle,
     showGreeting: Boolean,
@@ -549,7 +552,7 @@ private fun HomeHubProfileHeaderCanvas(
                             )
                         }
 
-                        Box(
+                        Column(
                             modifier = Modifier.weight(
                                 1f,
                                 fill = if (nicknameAlignRight) {
@@ -558,17 +561,29 @@ private fun HomeHubProfileHeaderCanvas(
                                     shouldFillNicknameRowSpace(showNameEditHint)
                                 },
                             ),
-                            contentAlignment = if (nicknameAlignRight) {
-                                Alignment.CenterEnd
+                            horizontalAlignment = if (nicknameAlignRight) {
+                                Alignment.End
                             } else {
-                                Alignment.CenterStart
+                                Alignment.Start
                             },
+                            verticalArrangement = Arrangement.spacedBy(3.dp),
                         ) {
                             StyledNicknameText(
                                 text = decoratedUserName,
                                 nicknameStyle = nicknameStyle,
                                 badgeStyleKey = homeBadgeStyleKey,
                             )
+                            if (profileTitleKey != "none") {
+                                Text(
+                                    text = homeProfileTitleDisplayName(profileTitleKey),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = colors.accent,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = if (nicknameAlignRight) TextAlign.End else TextAlign.Start,
+                                )
+                            }
                         }
                         if (showNameEditHint) {
                             if (isTabletHeaderLayout) {
@@ -654,18 +669,15 @@ private fun HomeHubProfileHeaderCanvas(
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
+                                .clipToBounds()
                                 .clickable(onClick = onAvatarClick),
                             contentAlignment = Alignment.Center,
                         ) {
-                            AvatarFrameDecorations(
-                                styleKey = avatarFrameStyleKey,
-                                accentColor = colors.accent,
-                            )
                             val avatarModifier = Modifier
                                 .fillMaxSize()
                                 .then(
                                     if (avatarFrameStyleKey != "none") {
-                                        Modifier.padding(2.dp)
+                                        Modifier.padding(3.dp)
                                     } else {
                                         Modifier
                                     },
@@ -704,6 +716,11 @@ private fun HomeHubProfileHeaderCanvas(
                                     )
                                 }
                             }
+
+                            AvatarFrameDecorations(
+                                styleKey = avatarFrameStyleKey,
+                                accentColor = colors.accent,
+                            )
                         }
                     }
                 }
@@ -854,6 +871,7 @@ internal fun HomeHeaderLayoutLivePreview(
         userAvatar = "",
         avatarFrameStyleKey = "none",
         homeBadgeStyleKey = "none",
+        profileTitleKey = "none",
         nicknameStyle = nicknameStyle,
         greetingStyle = greetingStyle,
         showGreeting = showGreeting,
@@ -868,6 +886,20 @@ internal fun HomeHeaderLayoutLivePreview(
         onGreetingClick = {},
         onStreakClick = {},
     )
+}
+
+@Composable
+private fun homeProfileTitleDisplayName(titleId: String): String {
+    return when (titleId) {
+        "title_trinity_initiate" -> stringResource(AYMR.strings.treasury_title_trinity_initiate_title)
+        "title_finisher" -> stringResource(AYMR.strings.treasury_title_finisher_title)
+        "title_closer" -> stringResource(AYMR.strings.treasury_title_closer_title)
+        "title_deep_reader" -> stringResource(AYMR.strings.treasury_title_deep_reader_title)
+        "title_rank_4" -> stringResource(AYMR.strings.treasury_title_rank_4_title)
+        else -> titleId.removePrefix("title_").replace("_", " ").replaceFirstChar {
+            if (it.isLowerCase()) it.titlecase() else it.toString()
+        }
+    }
 }
 
 private fun decorateHomeHubNicknameWithBadge(

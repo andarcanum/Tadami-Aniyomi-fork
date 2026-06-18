@@ -36,7 +36,8 @@ class AchievementRestorer(
             backupActivityLog.isEmpty() &&
             backupStats == null
         ) {
-            logcat { "[BACKUP] No achievement data to restore" }
+            logcat { "[BACKUP] No achievement data to restore; rehydrating derived unlockable state" }
+            rehydrateUnlockables()
             return
         }
 
@@ -45,7 +46,7 @@ class AchievementRestorer(
             restoreUserProfile(backupUserProfile)
             restoreActivityLog(backupActivityLog)
             restoreStats(backupStats)
-            rehydrateUnlockables(backupAchievements)
+            rehydrateUnlockables()
             logcat { "[BACKUP] Achievement data restored successfully" }
         } catch (e: Exception) {
             logcat(throwable = e) { "[BACKUP] Error restoring achievement data" }
@@ -241,20 +242,22 @@ class AchievementRestorer(
      * The canonical definitions in the DB are the source of truth; prefs are
      * just a derived cache.
      */
-    private suspend fun rehydrateUnlockables(backupAchievements: List<BackupAchievement>) {
-        if (backupAchievements.isEmpty()) return
+    private suspend fun rehydrateUnlockables() {
+        val existingAchievements = achievementRepository.getAll().firstOrNull() ?: emptyList()
+        val existingMap = existingAchievements.associateBy { it.id }
+
+        val allProgress = achievementRepository.getAllProgress().firstOrNull() ?: emptyList()
+        val unlockedIds = allProgress.filter { it.isUnlocked }.map { it.achievementId }.toSet()
 
         val rehydrated = mutableListOf<String>()
-        backupAchievements.forEach { backupAchievement ->
-            val progress = backupAchievement.toAchievementProgress()
-            if (!progress.isUnlocked) return@forEach
+        unlockedIds.forEach { id ->
             try {
-                val achievement = backupAchievement.toAchievement()
+                val achievement = existingMap[id] ?: return@forEach
                 unlockableManager.unlockAchievementRewards(achievement)
-                rehydrated += achievement.id
+                rehydrated += id
             } catch (e: Exception) {
                 logcat(throwable = e) {
-                    "[BACKUP] Error rehydrating unlockables for ${backupAchievement.id}"
+                    "[BACKUP] Error rehydrating unlockables for $id"
                 }
             }
         }

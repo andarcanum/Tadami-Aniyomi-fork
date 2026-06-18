@@ -1,8 +1,11 @@
 package eu.kanade.tachiyomi.extension.novel.api
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import logcat.LogPriority
 import mihon.domain.extensionrepo.model.ExtensionRepo
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 
 class NovelPluginApi(
@@ -24,8 +27,15 @@ class NovelPluginApi(
     }
 
     private suspend fun fetchPluginsFromRepo(repo: ExtensionRepo): List<NovelPlugin.Available> {
-        val payload = fetcher.fetch(repo.baseUrl)
-        return parser.parse(payload, repo.baseUrl)
+        return try {
+            val payload = fetcher.fetch(repo.baseUrl)
+            parser.parse(payload, repo.baseUrl)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to fetch novel plugins from ${repo.baseUrl}" }
+            emptyList()
+        }
     }
 }
 

@@ -2,8 +2,12 @@ package eu.kanade.tachiyomi.extension.novel.repo
 
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionUpdateChecker
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.extension.novel.model.NovelPlugin
+import tachiyomi.domain.extension.novel.repository.NovelPluginRepository
 
 class NovelPluginRepoUpdateInteractorTest {
 
@@ -24,23 +28,32 @@ class NovelPluginRepoUpdateInteractorTest {
                 sha256 = "deadbeef",
             )
             val availableEntry = installedEntry.copy(version = 2)
-            val storage = InMemoryNovelPluginStorage().apply {
-                save(
-                    NovelPluginPackage(
-                        entry = installedEntry,
-                        script = "main".toByteArray(),
-                        customJs = null,
-                        customCss = null,
-                    ),
-                )
-            }
+
+            val installedPlugin = NovelPlugin.Installed(
+                id = installedEntry.id,
+                name = installedEntry.name,
+                site = installedEntry.site,
+                lang = installedEntry.lang,
+                versionCode = installedEntry.version,
+                versionName = installedEntry.version.toString(),
+                url = installedEntry.url,
+                iconUrl = installedEntry.iconUrl,
+                customJs = installedEntry.customJsUrl,
+                customCss = installedEntry.customCssUrl,
+                hasSettings = installedEntry.hasSettings,
+                sha256 = installedEntry.sha256,
+                repoUrl = "https://repo.example.org",
+            )
+            val repository = mockk<NovelPluginRepository>()
+            coEvery { repository.getAll() } returns listOf(installedPlugin)
+
             val repoService = FakeRepoService(
                 mapOf("https://repo.example.org/index.json" to listOf(availableEntry)),
             )
 
             val interactor = NovelPluginRepoUpdateInteractor(
                 repoService = repoService,
-                storage = storage,
+                repository = repository,
                 updateChecker = NovelExtensionUpdateChecker(),
             )
 
@@ -53,7 +66,9 @@ class NovelPluginRepoUpdateInteractorTest {
     @Test
     fun `findUpdates ignores entries not installed`() {
         runTest {
-            val storage = InMemoryNovelPluginStorage()
+            val repository = mockk<NovelPluginRepository>()
+            coEvery { repository.getAll() } returns emptyList()
+
             val repoService = FakeRepoService(
                 mapOf(
                     "https://repo.example.org/index.json" to listOf(
@@ -76,7 +91,7 @@ class NovelPluginRepoUpdateInteractorTest {
 
             val interactor = NovelPluginRepoUpdateInteractor(
                 repoService = repoService,
-                storage = storage,
+                repository = repository,
                 updateChecker = NovelExtensionUpdateChecker(),
             )
 
@@ -104,16 +119,25 @@ class NovelPluginRepoUpdateInteractorTest {
             )
             val olderUpdate = installedEntry.copy(version = 2, sha256 = "beadfeed")
             val newerUpdate = installedEntry.copy(version = 3, sha256 = "cafebabe")
-            val storage = InMemoryNovelPluginStorage().apply {
-                save(
-                    NovelPluginPackage(
-                        entry = installedEntry,
-                        script = "main".toByteArray(),
-                        customJs = null,
-                        customCss = null,
-                    ),
-                )
-            }
+
+            val installedPlugin = NovelPlugin.Installed(
+                id = installedEntry.id,
+                name = installedEntry.name,
+                site = installedEntry.site,
+                lang = installedEntry.lang,
+                versionCode = installedEntry.version,
+                versionName = installedEntry.version.toString(),
+                url = installedEntry.url,
+                iconUrl = installedEntry.iconUrl,
+                customJs = installedEntry.customJsUrl,
+                customCss = installedEntry.customCssUrl,
+                hasSettings = installedEntry.hasSettings,
+                sha256 = installedEntry.sha256,
+                repoUrl = "https://repo.example.org",
+            )
+            val repository = mockk<NovelPluginRepository>()
+            coEvery { repository.getAll() } returns listOf(installedPlugin)
+
             val repoService = FakeRepoService(
                 mapOf(
                     "https://repo.example.org/index.min.json" to listOf(olderUpdate),
@@ -123,7 +147,7 @@ class NovelPluginRepoUpdateInteractorTest {
 
             val interactor = NovelPluginRepoUpdateInteractor(
                 repoService = repoService,
-                storage = storage,
+                repository = repository,
                 updateChecker = NovelExtensionUpdateChecker(),
             )
 
@@ -166,16 +190,25 @@ class NovelPluginRepoUpdateInteractorTest {
                 url = "https://repo-two.example/novel.js",
                 sha256 = "repo-two",
             )
-            val storage = InMemoryNovelPluginStorage().apply {
-                save(
-                    NovelPluginPackage(
-                        entry = installedEntry,
-                        script = "main".toByteArray(),
-                        customJs = null,
-                        customCss = null,
-                    ),
-                )
-            }
+
+            val installedPlugin = NovelPlugin.Installed(
+                id = installedEntry.id,
+                name = installedEntry.name,
+                site = installedEntry.site,
+                lang = installedEntry.lang,
+                versionCode = installedEntry.version,
+                versionName = installedEntry.version.toString(),
+                url = installedEntry.url,
+                iconUrl = installedEntry.iconUrl,
+                customJs = installedEntry.customJsUrl,
+                customCss = installedEntry.customCssUrl,
+                hasSettings = installedEntry.hasSettings,
+                sha256 = installedEntry.sha256,
+                repoUrl = "https://repo.example.org",
+            )
+            val repository = mockk<NovelPluginRepository>()
+            coEvery { repository.getAll() } returns listOf(installedPlugin)
+
             val repoService = FakeRepoService(
                 mapOf(
                     "https://repo-one.example/index.min.json" to listOf(repoOneUpdate),
@@ -185,7 +218,7 @@ class NovelPluginRepoUpdateInteractorTest {
 
             val interactor = NovelPluginRepoUpdateInteractor(
                 repoService = repoService,
-                storage = storage,
+                repository = repository,
                 updateChecker = NovelExtensionUpdateChecker(),
             )
 

@@ -27,6 +27,7 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
+import eu.kanade.tachiyomi.ui.library.resolveLibraryRangeSelectionAdditions
 import eu.kanade.tachiyomi.ui.library.sortPinnedSeriesFirst
 import eu.kanade.tachiyomi.util.chapter.getNextUnread
 import eu.kanade.tachiyomi.util.removeCovers
@@ -134,7 +135,7 @@ class MangaLibraryScreenModel(
                 getTracksPerManga.subscribe(),
                 getTrackingFilterFlow(),
                 state.map { it.groupType }.distinctUntilChanged(),
-                downloadCache.changes.conflate(),
+                getDownloadFilterInvalidationFlow(),
             ) { flowsArray ->
                 val searchQuery = flowsArray[0] as String?
 
@@ -160,9 +161,9 @@ class MangaLibraryScreenModel(
                         }
                     }
                     .let { map ->
-                        if (groupType == LibraryGroup.BY_DEFAULT && searchQuery == null) {
-                            // Keep all user-created categories visible even when empty,
-                            // so category tabs don't disappear after creation.
+                        if (groupType == LibraryGroup.BY_DEFAULT || searchQuery != null) {
+                            // Keep categories visible when searching so empty-result pages can
+                            // still show the global search action.
                             map
                         } else {
                             map.filterValues { it.isNotEmpty() }
@@ -230,6 +231,28 @@ class MangaLibraryScreenModel(
                 activeCategoryIndex = 0
             }
             .launchIn(screenModelScope)
+    }
+
+    private fun getDownloadFilterInvalidationFlow(): Flow<Unit> {
+        return getLibraryItemPreferencesFlow()
+            .flatMapLatest { prefs ->
+                if (prefs.globalFilterDownloaded || prefs.filterDownloaded != TriState.DISABLED) {
+                    downloadCache.changes.conflate()
+                } else {
+                    flowOf(Unit)
+                }
+            }
+    }
+
+    private fun getDownloadBadgeInvalidationFlow(): Flow<Unit> {
+        return getLibraryItemPreferencesFlow()
+            .flatMapLatest { prefs ->
+                if (prefs.downloadBadge) {
+                    downloadCache.changes.conflate()
+                } else {
+                    flowOf(Unit)
+                }
+            }
     }
 
     private suspend fun MangaLibraryMap.applyFilters(
@@ -625,7 +648,7 @@ class MangaLibraryScreenModel(
             getLibraryMangaSeries.subscribe(),
             getMangaIdsInAnySeries.subscribe(),
             getLibraryItemPreferencesFlow(),
-            downloadCache.changes,
+            getDownloadBadgeInvalidationFlow(),
         ) { libraryMangaList, librarySeriesList, idsInSeries, prefs, _ ->
             val singleItems = libraryMangaList
                 .filterNot { it.manga.id in idsInSeries }
@@ -919,48 +942,25 @@ class MangaLibraryScreenModel(
     }
 
     /**
-     * Selects all mangas between and including the given manga and the last pressed manga from the
-     * same category as the given manga
+     * Selects all manga between and including the given manga and the last pressed manga from the
+     * same visible library group.
      */
     fun toggleRangeSelection(item: MangaLibraryItem) {
         if (item is MangaLibraryItem.Series) {
             toggleSelection(item)
             return
         }
-        val manga = item.libraryManga
         mutableState.update { state ->
             val newSelection = state.selection.mutate { list ->
-                val lastSelected = list.lastOrNull { it is MangaLibraryItem.Single } as? MangaLibraryItem.Single
-                if (lastSelected?.category != manga.category) {
-                    list.add(item)
-                    return@mutate
+                val visibleGroups = state.library.values.map { items ->
+                    items.filterIsInstance<MangaLibraryItem.Single>()
                 }
-
-                val items = state.getLibraryItemsByCategoryId(manga.category)
-                    ?.filterIsInstance<MangaLibraryItem.Single>()
-                    ?.fastMap { it.libraryManga }
-                    .orEmpty()
-                val lastMangaIndex = items.indexOf(lastSelected.libraryManga)
-                val curMangaIndex = items.indexOf(manga)
-
-                if (lastMangaIndex < 0 || curMangaIndex < 0) {
-                    list.add(item)
-                    return@mutate
-                }
-
-                val selectedIds = list.fastMap { it.id }
-                val selectionRange = when {
-                    lastMangaIndex < curMangaIndex -> IntRange(lastMangaIndex, curMangaIndex)
-                    curMangaIndex < lastMangaIndex -> IntRange(curMangaIndex, lastMangaIndex)
-                    // We shouldn't reach this point
-                    else -> return@mutate
-                }
-                val newSelections = selectionRange.mapNotNull { index ->
-                    MangaLibraryItem.Single(items[index], sourceManager = sourceManager).takeUnless {
-                        it.id in
-                            selectedIds
-                    }
-                }
+                val newSelections = resolveLibraryRangeSelectionAdditions(
+                    selectedItems = list.filterIsInstance<MangaLibraryItem.Single>(),
+                    targetItem = item,
+                    visibleGroups = visibleGroups,
+                    itemId = { it.id },
+                )
                 list.addAll(newSelections)
             }
             state.copy(selection = newSelection)

@@ -1,22 +1,30 @@
 package eu.kanade.tachiyomi.extension.manga.util
 
 import android.app.DownloadManager
+import android.app.ForegroundServiceStartNotAllowedException
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
+import com.tadami.aurora.R
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.manga.installer.InstallerManga
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
+import eu.kanade.tachiyomi.util.system.notificationBuilder
+import eu.kanade.tachiyomi.util.system.notify
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,8 +35,10 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.transformWhile
 import logcat.LogPriority
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -62,6 +72,8 @@ internal class MangaExtensionInstaller(private val context: Context) {
      * after install without relying on the broadcast receiver.
      */
     private val downloadIdToPkgName = hashMapOf<Long, String>()
+
+    private val handledDownloadIds = hashSetOf<Long>()
 
     private val downloadsStateFlows = hashMapOf<Long, MutableStateFlow<InstallStep>>()
 
@@ -105,10 +117,15 @@ internal class MangaExtensionInstaller(private val context: Context) {
 
         // Poll download status
         val pollStatusFlow = downloadStatusFlow(id).mapNotNull { downloadStatus ->
-            // Map to our model
+            // Map to our model and also handle terminal states in case the
+            // DownloadManager completion broadcast is dropped by the OS/OEM ROM.
             when (downloadStatus) {
                 DownloadManager.STATUS_PENDING -> InstallStep.Pending
                 DownloadManager.STATUS_RUNNING -> InstallStep.Downloading
+                DownloadManager.STATUS_SUCCESSFUL, DownloadManager.STATUS_FAILED -> {
+                    handleDownloadCompletion(id)
+                    null
+                }
                 else -> null
             }
         }
@@ -117,11 +134,16 @@ internal class MangaExtensionInstaller(private val context: Context) {
             emit(it)
             // Stop when the application is installed or errors
             !it.isCompleted()
-        }.onCompletion {
-            // Always notify on main thread
-            withUIContext {
-                // Always remove the download when unsubscribed
-                deleteDownload(pkgName)
+        }.onCompletion { cause ->
+            // Do not cancel the underlying DownloadManager request when the UI collection is
+            // cancelled, for example when the screen model is destroyed by navigation or OEM
+            // background restrictions. Explicit user cancellation still goes through
+            // cancelInstall(), which removes the DownloadManager request.
+            if (cause == null) {
+                // Always notify on main thread
+                withUIContext {
+                    deleteDownload(pkgName)
+                }
             }
         }
     }
@@ -163,7 +185,13 @@ internal class MangaExtensionInstaller(private val context: Context) {
      * @param uri The uri of the extension to install.
      */
     fun installApk(downloadId: Long, uri: Uri) {
-        when (val installer = extensionInstaller.get()) {
+        val installer = extensionInstaller.get()
+        if (requiresUnknownAppsPermission(installer)) {
+            requestUnknownAppsPermission(downloadId)
+            return
+        }
+
+        when (installer) {
             BasePreferences.ExtensionInstaller.LEGACY -> {
                 val pkgName = downloadIdToPkgName[downloadId]
                 val intent = Intent(context, MangaExtensionInstallActivity::class.java)
@@ -214,7 +242,31 @@ internal class MangaExtensionInstaller(private val context: Context) {
             else -> {
                 val intent =
                     MangaExtensionInstallService.getIntent(context, downloadId, uri, installer)
-                ContextCompat.startForegroundService(context, intent)
+                try {
+                    ContextCompat.startForegroundService(context, intent)
+                } catch (e: ForegroundServiceStartNotAllowedException) {
+                    val pendingIntent = PendingIntent.getService(
+                        context,
+                        downloadId.toInt(),
+                        intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                    )
+                    val notification = context.notificationBuilder(
+                        Notifications.CHANNEL_EXTENSIONS_UPDATE,
+                    ) {
+                        setSmallIcon(R.drawable.ic_ani)
+                        setContentTitle(
+                            context.stringResource(MR.strings.ext_install_service_notif),
+                        )
+                        setContentIntent(pendingIntent)
+                        setAutoCancel(true)
+                    }.build()
+                    context.notify(
+                        Notifications.ID_EXTENSION_INSTALLER_PENDING,
+                        notification,
+                    )
+                    updateInstallStep(downloadId, InstallStep.Idle)
+                }
             }
         }
     }
@@ -266,9 +318,84 @@ internal class MangaExtensionInstaller(private val context: Context) {
             downloadManager.remove(downloadId)
             downloadsStateFlows.remove(downloadId)
             downloadIdToPkgName.remove(downloadId)
+            handledDownloadIds.remove(downloadId)
         }
         if (activeDownloads.isEmpty()) {
             downloadReceiver.unregister()
+        }
+    }
+
+    private fun requiresUnknownAppsPermission(installer: BasePreferences.ExtensionInstaller): Boolean {
+        return installer.requiresSystemPermission &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !context.packageManager.canRequestPackageInstalls()
+    }
+
+    private fun requestUnknownAppsPermission(downloadId: Long) {
+        val intent = Intent(
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:${context.packageName}"),
+        ).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+        try {
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) { "Failed to open unknown-app-sources settings." }
+            context.startActivity(
+                Intent(Settings.ACTION_SECURITY_SETTINGS).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+        updateInstallStep(downloadId, InstallStep.Idle)
+    }
+
+    private fun handleDownloadCompletion(id: Long) {
+        if (!handledDownloadIds.add(id)) return
+
+        val query = DownloadManager.Query().setFilterById(id)
+        downloadManager.query(query).use { cursor ->
+            if (!cursor.moveToFirst()) {
+                logcat(LogPriority.ERROR) { "Download $id not found in DownloadManager" }
+                updateInstallStep(id, InstallStep.Error)
+                return
+            }
+
+            val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            when (status) {
+                DownloadManager.STATUS_SUCCESSFUL -> {
+                    val uri = getDownloadedApkUri(id, cursor)
+                    if (uri == null) {
+                        updateInstallStep(id, InstallStep.Error)
+                    } else {
+                        installApk(id, uri)
+                    }
+                }
+                DownloadManager.STATUS_FAILED -> {
+                    val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                    logcat(LogPriority.ERROR) { "Download failed for id=$id, reason=$reason" }
+                    updateInstallStep(id, InstallStep.Error)
+                }
+                else -> {
+                    handledDownloadIds.remove(id)
+                    logcat(LogPriority.WARN) { "Ignoring non-terminal download status=$status for id=$id" }
+                }
+            }
+        }
+    }
+
+    private fun getDownloadedApkUri(id: Long, cursor: android.database.Cursor): Uri? {
+        val localUri = cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+        if (localUri.isNullOrBlank()) {
+            return downloadManager.getUriForDownloadedFile(id).also {
+                if (it == null) logcat(LogPriority.ERROR) { "Downloaded APK URI is unavailable for id=$id" }
+            }
+        }
+
+        val parsedUri = localUri.toUri()
+        return when (parsedUri.scheme) {
+            "content" -> parsedUri
+            "file" -> parsedUri.path?.let { File(it).getUriCompat(context) }
+            null -> File(localUri).getUriCompat(context)
+            else -> File(localUri.removePrefix(FILE_SCHEME)).getUriCompat(context)
         }
     }
 
@@ -313,41 +440,7 @@ internal class MangaExtensionInstaller(private val context: Context) {
             // Avoid events for downloads we didn't request
             if (id !in activeDownloads.values) return
 
-            // Query download status and local URI directly.
-            // Note: getUriForDownloadedFile() is unreliable on MIUI/Xiaomi devices — it returns
-            // null even when the download succeeded. Using COLUMN_LOCAL_URI from the cursor is
-            // consistent across all Android versions and OEM ROMs.
-            val query = DownloadManager.Query().setFilterById(id)
-            downloadManager.query(query).use { cursor ->
-                if (!cursor.moveToFirst()) {
-                    logcat(LogPriority.ERROR) { "Download $id not found in DownloadManager" }
-                    updateInstallStep(id, InstallStep.Error)
-                    return
-                }
-
-                val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-
-                if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                    val localUri = cursor.getString(
-                        cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI),
-                    )
-                    // On Android 10+ COLUMN_LOCAL_URI may return a content:// URI instead of
-                    // a file:// path, so we must not blindly strip the scheme and wrap in File.
-                    val uri = if (localUri.startsWith("content://")) {
-                        localUri.toUri()
-                    } else {
-                        File(localUri.removePrefix(FILE_SCHEME)).getUriCompat(context)
-                    }
-                    installApk(id, uri)
-                } else if (status == DownloadManager.STATUS_FAILED) {
-                    val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
-                    logcat(LogPriority.ERROR) { "Download failed for id=$id, reason=$reason" }
-                    updateInstallStep(id, InstallStep.Error)
-                } else {
-                    logcat(LogPriority.ERROR) { "Unexpected download status=$status for id=$id" }
-                    updateInstallStep(id, InstallStep.Error)
-                }
-            }
+            handleDownloadCompletion(id)
         }
     }
 

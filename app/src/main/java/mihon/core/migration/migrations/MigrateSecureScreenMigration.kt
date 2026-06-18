@@ -2,9 +2,7 @@ package mihon.core.migration.migrations
 
 import android.app.Application
 import androidx.preference.PreferenceManager
-import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.core.security.SecurityPreferences
-import eu.kanade.tachiyomi.util.system.DeviceUtil
 import mihon.core.migration.Migration
 import mihon.core.migration.MigrationContext
 
@@ -15,7 +13,6 @@ class MigrateSecureScreenMigration : Migration {
     override suspend fun invoke(migrationContext: MigrationContext): Boolean {
         val context = migrationContext.get<Application>() ?: return false
         val securityPreferences = migrationContext.get<SecurityPreferences>() ?: return false
-        val basePreferences = migrationContext.get<BasePreferences>() ?: return false
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
 
         val oldSecureScreen = prefs.getBoolean("secure_screen", false)
@@ -24,14 +21,6 @@ class MigrateSecureScreenMigration : Migration {
                 SecurityPreferences.SecureScreenMode.ALWAYS,
             )
         }
-        if (DeviceUtil.isMiui &&
-            basePreferences.extensionInstaller().get() == BasePreferences.ExtensionInstaller.PACKAGEINSTALLER
-        ) {
-            basePreferences.extensionInstaller().set(
-                BasePreferences.ExtensionInstaller.LEGACY,
-            )
-        }
-
         return true
     }
 }

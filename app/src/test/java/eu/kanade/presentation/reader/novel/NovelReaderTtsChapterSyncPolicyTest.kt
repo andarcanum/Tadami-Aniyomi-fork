@@ -24,7 +24,16 @@ class NovelReaderTtsChapterSyncPolicyTest {
     }
 
     @Test
-    fun `does not navigate when active tts chapter is unrelated`() {
+    fun `returns active tts chapter when reader has not resolved next chapter yet`() {
+        resolveTtsAutoAdvancedChapterNavigationTarget(
+            currentChapterId = 10L,
+            activeTtsChapterId = 11L,
+            nextChapterId = null,
+        ) shouldBe 11L
+    }
+
+    @Test
+    fun `does not navigate when active tts chapter is unrelated to resolved next chapter`() {
         resolveTtsAutoAdvancedChapterNavigationTarget(
             currentChapterId = 10L,
             activeTtsChapterId = 99L,

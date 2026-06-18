@@ -36,6 +36,7 @@ import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TrailingWidgetBuffer
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
+import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelExtensionDetailsScreenModel
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.copyToClipboard
@@ -181,7 +182,7 @@ private fun DetailsHeader(
                 .clickable {
                     val debugInfo = buildString {
                         append("Plugin name: ${extension.name} (lang: ${extension.lang}; id: ${extension.id})\n")
-                        append("Version: ${extension.version}\n")
+                        append("Version: ${extension.versionName} (${extension.versionCode})\n")
                         append("Site: ${extension.site}\n")
                         append("Repo: ${extension.repoUrl}\n")
                         append("Has settings: ${extension.hasSettings}\n")
@@ -214,7 +215,7 @@ private fun DetailsHeader(
         ) {
             InfoText(
                 modifier = Modifier.weight(1f),
-                primaryText = extension.version.toString(),
+                primaryText = extension.versionName,
                 secondaryText = stringResource(MR.strings.ext_info_version),
             )
             InfoText(
@@ -296,7 +297,7 @@ private fun SourceSwitchPreference(
         },
         widget = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (source.source.hasVisiblePluginSettingsByDiscovery()) {
+                if (source.source is ConfigurableNovelSource || source.source.hasVisiblePluginSettingsByDiscovery()) {
                     IconButton(onClick = { onClickSourcePreferences(source.source.id) }) {
                         Icon(
                             imageVector = Icons.Outlined.Settings,

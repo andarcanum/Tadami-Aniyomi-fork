@@ -92,4 +92,27 @@ class NovelPluginResultNormalizerTest {
             "/read/100/100/",
         )
     }
+
+    @Test
+    fun `preserves fragment anchors when policy disables fragment stripping`() {
+        val normalizer = NovelPluginResultNormalizer()
+        val policy = NovelChapterFallbackPolicy(stripFragmentFromChapterPath = false)
+        val chapters = listOf(
+            ParsedPluginChapter(name = "Volume 1 - Cover", path = "book/12040/re-zero-vol-1#page01"),
+            ParsedPluginChapter(name = "Volume 1 - Prologue", path = "book/12040/re-zero-vol-1#page10"),
+            ParsedPluginChapter(name = "Volume 1 - Chapter 1", path = "book/12040/re-zero-vol-1#page11"),
+        )
+
+        val normalized = normalizer.normalize(
+            pluginId = "lnori",
+            chapters = chapters,
+            policy = policy,
+        )
+
+        normalized.mapNotNull { it.path } shouldContainExactly listOf(
+            "book/12040/re-zero-vol-1#page01",
+            "book/12040/re-zero-vol-1#page10",
+            "book/12040/re-zero-vol-1#page11",
+        )
+    }
 }

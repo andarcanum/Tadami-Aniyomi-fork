@@ -24,11 +24,36 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import tachiyomi.domain.entries.novel.model.NovelCover
 import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicInteger
 
 class NovelCoverFetcherTest {
 
     @TempDir
     lateinit var tempDir: Path
+
+    @Test
+    fun `resolveNovelPluginImagePayload retries transient null results`() {
+        runTest {
+            val calls = AtomicInteger(0)
+
+            val payload = resolveNovelPluginImagePayload(
+                url = "novelimg://plugin-a?ref=cover-a",
+                retryDelayMillis = 0L,
+            ) {
+                if (calls.incrementAndGet() < 2) {
+                    null
+                } else {
+                    NovelPluginImagePayload(
+                        bytes = "fake-image".toByteArray(),
+                        mimeType = "image/png",
+                    )
+                }
+            }
+
+            assertEquals(2, calls.get())
+            assertEquals("image/png", payload?.mimeType)
+        }
+    }
 
     @Test
     fun `fetch resolves plugin image urls through plugin resolver`() {
@@ -60,6 +85,7 @@ class NovelCoverFetcherTest {
                 options = options,
                 sourceSiteUrlLazy = lazy { null },
                 coverFileLazy = lazy { null },
+                customCoverFileLazy = lazy { tempDir.resolve("custom_cover_plugin.jpg").toFile() },
                 diskCacheKeyLazy = lazy { "novel-plugin-image-test" },
                 pluginHeadersProvider = { emptyMap() },
                 callFactoryLazy = lazy {
@@ -82,6 +108,58 @@ class NovelCoverFetcherTest {
             result as SourceFetchResult
             assertEquals(DataSource.NETWORK, result.dataSource)
             assertEquals("image/png", result.mimeType)
+        }
+    }
+
+    @Test
+    fun `fetch uses custom cover even when remote url is missing`() {
+        runTest {
+            val context = mockk<android.content.Context>(relaxed = true)
+            val imageLoader = mockk<ImageLoader>(relaxed = true)
+            val customCoverFile = tempDir.resolve("custom_cover_no_remote.jpg").toFile()
+            customCoverFile.writeText("custom-cover")
+            val data = NovelCover(
+                novelId = 9L,
+                sourceId = 77L,
+                isNovelFavorite = true,
+                url = null,
+                lastModified = 1234L,
+            )
+            val options = Options(
+                context = context,
+                size = Size.ORIGINAL,
+                scale = Scale.FIT,
+                precision = Precision.EXACT,
+                diskCacheKey = "novel-custom-cover-test",
+                fileSystem = FileSystem.SYSTEM,
+                memoryCachePolicy = CachePolicy.ENABLED,
+                diskCachePolicy = CachePolicy.ENABLED,
+                networkCachePolicy = CachePolicy.ENABLED,
+                extras = Extras.EMPTY,
+            )
+
+            val result = NovelCoverFetcher(
+                data = data,
+                options = options,
+                sourceSiteUrlLazy = lazy { "https://example.org" },
+                coverFileLazy = lazy { error("library cover cache should not be queried before custom cover") },
+                customCoverFileLazy = lazy { customCoverFile },
+                diskCacheKeyLazy = lazy { "novel-custom-cover-test" },
+                pluginHeadersProvider = { emptyMap() },
+                callFactoryLazy = lazy {
+                    object : Call.Factory {
+                        override fun newCall(request: Request): Call {
+                            error("network should not be called when custom cover exists")
+                        }
+                    }
+                },
+                imageLoader = imageLoader,
+            ).fetch()
+
+            assertTrue(result is SourceFetchResult)
+            result as SourceFetchResult
+            assertEquals(DataSource.DISK, result.dataSource)
+            assertEquals(customCoverFile.toOkioPath(), result.source.file())
         }
     }
 
@@ -119,6 +197,7 @@ class NovelCoverFetcherTest {
                 options = options,
                 sourceSiteUrlLazy = lazy { "https://example.org" },
                 coverFileLazy = lazy { coverCache.getCoverFile(data.url) },
+                customCoverFileLazy = lazy { tempDir.resolve("custom_cover_library.jpg").toFile() },
                 diskCacheKeyLazy = lazy { "novel-cover-test" },
                 pluginHeadersProvider = { emptyMap() },
                 callFactoryLazy = lazy {

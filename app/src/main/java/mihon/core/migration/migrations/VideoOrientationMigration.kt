@@ -26,7 +26,7 @@ class VideoOrientationMigration : Migration {
                 10,
             )
         } catch (_: ClassCastException) {
-            prefs.edit(commit = true) {
+            prefs.edit {
                 remove(playerPreferences.defaultPlayerOrientationType().key())
             }
             return true
@@ -43,16 +43,14 @@ class VideoOrientationMigration : Migration {
             else -> PlayerOrientation.Free
         }
 
-        prefs.edit(commit = true) {
+        prefs.edit {
             remove(playerPreferences.defaultPlayerOrientationType().key())
         }
 
-        prefs.edit {
-            preferenceStore.getEnum(
-                playerPreferences.defaultPlayerOrientationType().key(),
-                PlayerOrientation.SensorLandscape,
-            ).set(newPref)
-        }
+        preferenceStore.getEnum(
+            playerPreferences.defaultPlayerOrientationType().key(),
+            PlayerOrientation.SensorLandscape,
+        ).set(newPref)
 
         return true
     }

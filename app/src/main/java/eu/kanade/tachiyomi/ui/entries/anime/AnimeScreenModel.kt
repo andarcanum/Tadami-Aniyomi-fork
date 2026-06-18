@@ -369,9 +369,10 @@ class AnimeScreenModel(
 
     fun retrySuggestions() {
         val success = successState ?: return
-        eu.kanade.tachiyomi.data.suggestions.SuggestionCache.invalidateAll()
+        val seed = buildSuggestionSeed(success.anime, success.animeMetadata)
+        eu.kanade.tachiyomi.data.suggestions.SuggestionCache.invalidateForSeed(seed, success.anime.url)
         loadSuggestions(
-            buildSuggestionSeed(success.anime, success.animeMetadata),
+            seed,
             anime = success.anime,
             source = success.anime.toCatalogueSource(),
             force = true,
@@ -381,10 +382,9 @@ class AnimeScreenModel(
     private fun emitProgressiveSuggestions(list: List<SuggestionItem>, currentAnime: Anime?) {
         val seed = suggestionSeedUsed ?: return
         val sorted = synchronized(list) {
-            list.dedupeByCleanTitle()
+            list.dedupeByCleanTitle(seed)
                 .filter { item ->
-                    val isSelf = (currentAnime != null && item.providerUrl == currentAnime.url) ||
-                        (item.providerId?.endsWith(":${currentAnime?.url}") == true)
+                    val isSelf = SuggestionTitleResolver.isSameProviderEntry(item, currentAnime?.url)
                     val isFranchise = SuggestionTitleResolver.isFranchiseDuplicate(item.title, seed.primaryTitle)
                     !isSelf && !isFranchise
                 }
@@ -431,8 +431,7 @@ class AnimeScreenModel(
                             val externalResult = suggestionCoordinator.fetchSuggestions(seed, limit = 40)
                             if (externalResult.items.isNotEmpty()) {
                                 val externalFiltered = externalResult.items.filter { item ->
-                                    val isSelf = (currentAnime != null && item.providerUrl == currentAnime.url) ||
-                                        (item.providerId?.endsWith(":${currentAnime?.url}") == true)
+                                    val isSelf = SuggestionTitleResolver.isSameProviderEntry(item, currentAnime?.url)
                                     val isFranchise = eu.kanade.tachiyomi.data.suggestions
                                         .SuggestionTitleResolver.isFranchiseDuplicate(
                                             item.title,
@@ -447,6 +446,8 @@ class AnimeScreenModel(
                                     emitProgressiveSuggestions(suggestionsList, currentAnime)
                                 }
                             }
+                        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logcat { "[AnimeScreenModel] External suggestions failed: ${e.message}" }
                         }
@@ -478,6 +479,8 @@ class AnimeScreenModel(
                                     }
                                     emitProgressiveSuggestions(suggestionsList, currentAnime)
                                 }
+                            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logcat { "[AnimeScreenModel] Native search fallback failed: ${e.message}" }
                             }
@@ -486,10 +489,9 @@ class AnimeScreenModel(
                 }
 
                 val finalCombined = synchronized(suggestionsList) {
-                    suggestionsList.dedupeByCleanTitle()
+                    suggestionsList.dedupeByCleanTitle(seed)
                         .filter { item ->
-                            val isSelf = (currentAnime != null && item.providerUrl == currentAnime.url) ||
-                                (item.providerId?.endsWith(":${currentAnime?.url}") == true)
+                            val isSelf = SuggestionTitleResolver.isSameProviderEntry(item, currentAnime?.url)
                             val isFranchise = eu.kanade.tachiyomi.data.suggestions
                                 .SuggestionTitleResolver.isFranchiseDuplicate(
                                     item.title,
@@ -497,6 +499,7 @@ class AnimeScreenModel(
                                 )
                             !isSelf && !isFranchise
                         }
+                        .sortedByDescending { SuggestionSourceWeight.finalScore(it.reason, it.bestMatchScoreFor(seed)) }
                         .take(20)
                 }
 
@@ -731,15 +734,11 @@ class AnimeScreenModel(
         try {
             withIOContext {
                 val networkAnime = state.source.getAnimeDetails(state.anime.toSAnime())
-                val sourceRating = animeRatingFetcher.await(
-                    source = state.source,
-                    anime = state.anime,
+                updateAnime.awaitUpdateFromSource(state.anime, networkAnime, manualFetch)
+                refreshAnimeSourceRating(
+                    state = state,
                     forceRefresh = manualFetch,
                 )
-                updateAnime.awaitUpdateFromSource(state.anime, networkAnime, manualFetch)
-                updateSuccessState {
-                    it.copy(sourceRating = sourceRating)
-                }
             }
         } catch (e: Throwable) {
             // Ignore early hints "errors" that aren't handled by OkHttp
@@ -752,17 +751,32 @@ class AnimeScreenModel(
         }
     }
 
-    private suspend fun restoreAnimeSourceRating() {
+    private fun restoreAnimeSourceRating() {
         val state = successState ?: return
-        val sourceRating = animeRatingFetcher.await(
-            source = state.source,
-            anime = state.anime,
-            forceRefresh = false,
-        )
+        refreshAnimeSourceRating(state, forceRefresh = false)
+    }
 
-        if (sourceRating != null || state.sourceRating != null) {
-            updateSuccessState {
-                it.copy(sourceRating = sourceRating ?: it.sourceRating)
+    private fun refreshAnimeSourceRating(
+        state: State.Success,
+        forceRefresh: Boolean,
+    ) {
+        screenModelScope.launchIO {
+            val sourceRating = animeRatingFetcher.await(
+                source = state.source,
+                anime = state.anime,
+                forceRefresh = forceRefresh,
+            )
+
+            if (sourceRating != null || state.sourceRating != null) {
+                updateSuccessState { current ->
+                    if (current.anime.id !=
+                        state.anime.id
+                    ) {
+                        current
+                    } else {
+                        current.copy(sourceRating = sourceRating ?: current.sourceRating)
+                    }
+                }
             }
         }
     }

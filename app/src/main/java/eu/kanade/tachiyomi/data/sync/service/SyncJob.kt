@@ -11,6 +11,7 @@ import androidx.work.WorkerParameters
 import eu.kanade.domain.sync.SyncPreferences
 import eu.kanade.tachiyomi.data.sync.SyncManager
 import eu.kanade.tachiyomi.util.system.workManager
+import kotlinx.coroutines.CancellationException
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.Injekt
@@ -28,8 +29,11 @@ class SyncJob(private val context: Context, workerParams: WorkerParameters) :
 
         return try {
             val syncManager = SyncManager(context)
-            syncManager.syncData()
+            syncManager.syncData(showUserNotification = false, rethrowErrors = true)
             Result.success()
+        } catch (e: CancellationException) {
+            logcat { "Background sync job was cancelled" }
+            throw e
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Background sync job failed" }
             Result.retry()

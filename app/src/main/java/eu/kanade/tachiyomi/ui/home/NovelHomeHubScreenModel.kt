@@ -125,13 +125,16 @@ internal class NovelHomeHubScreenModel(
             ) { name, avatar, categories, historyList, novelList ->
                 LiveData(name, avatar, categories, historyList, novelList)
             }.collectLatest { data ->
-                val hiddenCategoryIds = data.categories
-                    .filter { it.hiddenFromHomeHub }
-                    .map { it.id }
-                    .toSet()
-                val novelCategoryIdsByNovelId = data.novelList
-                    .groupBy { it.novel.id }
-                    .mapValues { (_, items) -> items.map { it.category } }
+                val hiddenCategoryIds = hiddenHomeHubCategoryIds(
+                    categories = data.categories,
+                    isHiddenFromHomeHub = { it.hiddenFromHomeHub },
+                    idSelector = { it.id },
+                )
+                val novelCategoryIdsByNovelId = homeHubCategoryIdsByEntryId(
+                    items = data.novelList,
+                    entryIdSelector = { it.novel.id },
+                    categoryIdSelector = { it.category },
+                )
 
                 val filteredHistory = filterHomeHubEntriesBy(
                     items = data.historyList,
@@ -140,17 +143,20 @@ internal class NovelHomeHubScreenModel(
                     hiddenCategoryIds = hiddenCategoryIds,
                 )
 
-                val filteredNovel = filterHomeHubEntriesBy(
+                val filteredNovel = filterHomeHubEntriesByDistinct(
                     items = data.novelList,
                     keySelector = { it.novel.id },
                     entryCategoryIds = novelCategoryIdsByNovelId,
                     hiddenCategoryIds = hiddenCategoryIds,
-                ).distinctBy { it.novel.id }
+                )
 
                 val hero = filteredHistory.firstOrNull()
-                val history = filteredHistory
-                    .filter { hero == null || it.novelId != hero.novelId }
-                    .take(6)
+                val history = takeHomeHubHistoryExcluding(
+                    items = filteredHistory,
+                    limit = 6,
+                    excludedEntryId = hero?.novelId,
+                    entryIdSelector = { it.novelId },
+                )
 
                 val hasData = hero != null || history.isNotEmpty() || filteredNovel.isNotEmpty()
                 val isInitialized = hasData ||

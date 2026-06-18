@@ -153,6 +153,65 @@ class NovelTtsSessionControllerTest {
     }
 
     @Test
+    fun `translated auto-next keeps pending handoff visible after loading next chapter`() {
+        runBlocking {
+            val speaker = FakeSpeaker()
+            val controller = NovelTtsSessionController(
+                chapterSource = FakeChapterSource(
+                    listOf(
+                        chapter(chapterId = 1L, nextChapterId = 2L),
+                        chapter(chapterId = 2L),
+                    ),
+                ),
+                speaker = speaker,
+                sessionStore = InMemoryNovelTtsSessionStore(),
+            )
+
+            controller.startFromCurrentPosition(
+                chapterId = 1L,
+                utteranceId = "chapter-1-utterance-1",
+                preferTranslatedText = true,
+                autoAdvanceChapter = true,
+            )
+            controller.onUtteranceCompleted("chapter-1-utterance-1")
+
+            controller.state.value.pendingChapterHandoffId shouldBe 2L
+            controller.state.value.session.shouldNotBeNull().chapterId shouldBe 2L
+            controller.state.value.session.shouldNotBeNull().textSource shouldBe NovelTtsTextSource.TRANSLATED
+        }
+    }
+
+    @Test
+    fun `enabling auto advance while playback is active affects current session`() {
+        runBlocking {
+            val speaker = FakeSpeaker()
+            val store = InMemoryNovelTtsSessionStore()
+            val controller = NovelTtsSessionController(
+                chapterSource = FakeChapterSource(
+                    listOf(
+                        chapter(chapterId = 1L, nextChapterId = 2L),
+                        chapter(chapterId = 2L),
+                    ),
+                ),
+                speaker = speaker,
+                sessionStore = store,
+            )
+
+            controller.startFromCurrentPosition(
+                chapterId = 1L,
+                utteranceId = "chapter-1-utterance-1",
+                preferTranslatedText = false,
+                autoAdvanceChapter = false,
+            )
+            controller.setAutoAdvanceChapter(true)
+            controller.onUtteranceCompleted("chapter-1-utterance-1")
+
+            controller.state.value.session.shouldNotBeNull().chapterId shouldBe 2L
+            store.loadCheckpoint().shouldNotBeNull().autoAdvanceChapter shouldBe true
+        }
+    }
+
+    @Test
     fun `translated-text preference falls back to original text when translation is missing`() {
         runBlocking {
             val speaker = FakeSpeaker()
@@ -178,6 +237,70 @@ class NovelTtsSessionControllerTest {
 
             controller.state.value.session.shouldNotBeNull().textSource shouldBe NovelTtsTextSource.ORIGINAL
             speaker.spokenTexts shouldContainExactly listOf("Original first")
+        }
+    }
+
+    @Test
+    fun `switching to translated text reloads stale cached chapter when translation appears later`() {
+        runBlocking {
+            val speaker = FakeSpeaker()
+            val chapterSource = MutableChapterSource(
+                chapter(
+                    chapterId = 1L,
+                    translatedModel = null,
+                ),
+            )
+            val controller = NovelTtsSessionController(
+                chapterSource = chapterSource,
+                speaker = speaker,
+                sessionStore = InMemoryNovelTtsSessionStore(),
+            )
+
+            controller.startFromCurrentPosition(
+                chapterId = 1L,
+                utteranceId = "chapter-1-utterance-0",
+                preferTranslatedText = false,
+                autoAdvanceChapter = true,
+            )
+            chapterSource.chapter = chapter(chapterId = 1L)
+
+            controller.switchToPreferredTextSource(true)
+
+            chapterSource.loadCallCount shouldBe 2
+            controller.state.value.session.shouldNotBeNull().textSource shouldBe NovelTtsTextSource.TRANSLATED
+            speaker.spokenTexts shouldContainExactly listOf(
+                "Original first",
+                "Translated first",
+            )
+        }
+    }
+
+    @Test
+    fun `checkpoint with empty utterance starts restored chapter from beginning`() {
+        runBlocking {
+            val store = InMemoryNovelTtsSessionStore()
+            store.saveCheckpoint(
+                NovelTtsSessionCheckpoint(
+                    chapterId = 2L,
+                    utteranceId = "",
+                    segmentId = "",
+                    wordIndex = 0,
+                    textSource = NovelTtsTextSource.ORIGINAL,
+                    autoAdvanceChapter = true,
+                ),
+            )
+            val speaker = FakeSpeaker()
+            val controller = NovelTtsSessionController(
+                chapterSource = FakeChapterSource(listOf(chapter(chapterId = 2L))),
+                speaker = speaker,
+                sessionStore = store,
+            )
+
+            controller.restoreFromCheckpoint()
+
+            controller.state.value.session.shouldNotBeNull().chapterId shouldBe 2L
+            controller.state.value.session.shouldNotBeNull().utteranceIndex shouldBe 0
+            speaker.spokenUtteranceIds shouldContainExactly listOf("chapter-2-utterance-0")
         }
     }
 
@@ -210,8 +333,9 @@ class NovelTtsSessionControllerTest {
 
             restoredController.restoreFromCheckpoint()
 
-            restoredController.state.value.session.shouldNotBeNull().wordIndex shouldBe 3
+            restoredController.state.value.session.shouldNotBeNull().wordIndex shouldBe 1
             restoredSpeaker.spokenUtteranceIds shouldContainExactly listOf("chapter-1-utterance-1")
+            restoredSpeaker.spokenStartWordIndexes shouldContainExactly listOf(1)
         }
     }
 
@@ -241,6 +365,56 @@ class NovelTtsSessionControllerTest {
             // resume() -> restartFromCurrentPosition() must use the cache, not call loadChapter() again
             chapterSource.loadCallCount shouldBe loadCallsAfterStart
             controller.state.value.session.shouldNotBeNull().textSource shouldBe NovelTtsTextSource.TRANSLATED
+        }
+    }
+
+    @Test
+    fun `stale utterance completion is ignored after skipping to another utterance`() {
+        runBlocking {
+            val speaker = FakeSpeaker()
+            val controller = NovelTtsSessionController(
+                chapterSource = FakeChapterSource(listOf(chapter(chapterId = 1L))),
+                speaker = speaker,
+                sessionStore = InMemoryNovelTtsSessionStore(),
+            )
+
+            controller.startFromCurrentPosition(
+                chapterId = 1L,
+                utteranceId = "chapter-1-utterance-0",
+                preferTranslatedText = false,
+                autoAdvanceChapter = true,
+            )
+            controller.skipNext()
+            controller.onUtteranceCompleted("chapter-1-utterance-0")
+
+            controller.state.value.session.shouldNotBeNull().utterance.id shouldBe "chapter-1-utterance-1"
+            speaker.spokenUtteranceIds shouldContainExactly listOf(
+                "chapter-1-utterance-0",
+                "chapter-1-utterance-1",
+            )
+        }
+    }
+
+    @Test
+    fun `word progress clamps to valid range`() {
+        runBlocking {
+            val controller = NovelTtsSessionController(
+                chapterSource = FakeChapterSource(listOf(chapter(chapterId = 1L))),
+                speaker = FakeSpeaker(),
+                sessionStore = InMemoryNovelTtsSessionStore(),
+            )
+
+            controller.startFromCurrentPosition(
+                chapterId = 1L,
+                utteranceId = "chapter-1-utterance-0",
+                preferTranslatedText = false,
+                autoAdvanceChapter = true,
+            )
+            controller.updateWordProgress(-5)
+            controller.state.value.session.shouldNotBeNull().wordIndex shouldBe 0
+
+            controller.updateWordProgress(999)
+            controller.state.value.session.shouldNotBeNull().wordIndex shouldBe 1
         }
     }
 
@@ -309,6 +483,18 @@ class NovelTtsSessionControllerTest {
         override suspend fun loadChapter(chapterId: Long): NovelTtsResolvedChapter? {
             loadCallCount++
             return chaptersById[chapterId]
+        }
+    }
+
+    private class MutableChapterSource(
+        var chapter: NovelTtsResolvedChapter,
+    ) : NovelTtsChapterSource {
+        var loadCallCount = 0
+            private set
+
+        override suspend fun loadChapter(chapterId: Long): NovelTtsResolvedChapter? {
+            loadCallCount++
+            return chapter.takeIf { it.chapterId == chapterId }
         }
     }
 

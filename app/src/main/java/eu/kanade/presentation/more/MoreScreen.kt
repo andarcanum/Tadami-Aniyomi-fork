@@ -11,6 +11,7 @@ import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.QueryStats
+import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.VideoSettings
@@ -44,6 +45,7 @@ fun MoreScreen(
     onClickDownloadQueue: () -> Unit,
     onClickCategories: () -> Unit,
     onClickStats: () -> Unit,
+    onClickLibraryUpdateErrors: () -> Unit,
     onClickStorage: () -> Unit,
     onClickDataAndStorage: () -> Unit,
     onClickPlayerSettings: () -> Unit,
@@ -53,6 +55,7 @@ fun MoreScreen(
     onClickAbout: () -> Unit,
     onClickHelp: () -> Unit,
     onClickDebugAppUpdatePreview: () -> Unit,
+    onClickDebugUpdatedChangelogPreview: () -> Unit,
 ) {
     Scaffold { contentPadding ->
         ScrollbarLazyColumn(
@@ -91,6 +94,34 @@ fun MoreScreen(
             }
 
             item {
+                TextPreferenceWidget(
+                    title = stringResource(AYMR.strings.general_categories),
+                    icon = Icons.AutoMirrored.Outlined.Label,
+                    onPreferenceClick = onClickCategories,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.label_stats),
+                    icon = Icons.Outlined.QueryStats,
+                    onPreferenceClick = onClickStats,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(MR.strings.label_data_storage),
+                    icon = Icons.Outlined.Storage,
+                    onPreferenceClick = onClickDataAndStorage,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(AYMR.strings.option_label_library_update_errors),
+                    icon = Icons.Outlined.ReportProblem,
+                    onPreferenceClick = onClickLibraryUpdateErrors,
+                )
+            }
+            item {
                 val downloadQueueState = downloadQueueStateProvider()
                 TextPreferenceWidget(
                     title = stringResource(MR.strings.label_download_queue),
@@ -122,27 +153,6 @@ fun MoreScreen(
                     },
                     icon = Icons.Outlined.GetApp,
                     onPreferenceClick = onClickDownloadQueue,
-                )
-            }
-            item {
-                TextPreferenceWidget(
-                    title = stringResource(AYMR.strings.general_categories),
-                    icon = Icons.AutoMirrored.Outlined.Label,
-                    onPreferenceClick = onClickCategories,
-                )
-            }
-            item {
-                TextPreferenceWidget(
-                    title = stringResource(MR.strings.label_stats),
-                    icon = Icons.Outlined.QueryStats,
-                    onPreferenceClick = onClickStats,
-                )
-            }
-            item {
-                TextPreferenceWidget(
-                    title = stringResource(MR.strings.label_data_storage),
-                    icon = Icons.Outlined.Storage,
-                    onPreferenceClick = onClickDataAndStorage,
                 )
             }
 
@@ -192,6 +202,14 @@ fun MoreScreen(
                         subtitle = stringResource(AYMR.strings.debug_app_update_preview_summary),
                         icon = Icons.Outlined.NewReleases,
                         onPreferenceClick = onClickDebugAppUpdatePreview,
+                    )
+                }
+                item {
+                    TextPreferenceWidget(
+                        title = stringResource(AYMR.strings.debug_updated_changelog_preview),
+                        subtitle = stringResource(AYMR.strings.debug_updated_changelog_preview_summary),
+                        icon = Icons.Outlined.NewReleases,
+                        onPreferenceClick = onClickDebugUpdatedChangelogPreview,
                     )
                 }
             }

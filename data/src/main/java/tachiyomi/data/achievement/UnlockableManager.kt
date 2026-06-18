@@ -1,6 +1,7 @@
 package tachiyomi.data.achievement
 
 import android.content.SharedPreferences
+import dev.icerock.moko.resources.StringResource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -9,6 +10,7 @@ import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import logcat.logcat
 import tachiyomi.domain.achievement.model.Achievement
+import tachiyomi.i18n.MR
 
 /**
  * Manages unlockable content that is unlocked via achievements.
@@ -37,7 +39,7 @@ class UnlockableManager(
      * Mark an unlockable as unlocked
      */
     fun setUnlockableUnlocked(unlockableId: String) {
-        preferences.edit {
+        preferences.edit(commit = true) {
             putBoolean("$PREFIX$unlockableId", true)
         }
         logcat(LogPriority.INFO) { "Unlockable unlocked: $unlockableId" }
@@ -80,62 +82,55 @@ class UnlockableManager(
      */
     private suspend fun applyUnlockable(unlockableId: String) = withContext(Dispatchers.Default) {
         when {
-            // Theme unlockables
+            // Theme unlockables are also mirrored into UserProfile because the
+            // theme picker reads profile themes in addition to Treasury prefs.
             unlockableId.startsWith("theme_") -> {
                 val themeId = unlockableId.removePrefix("theme_")
-                scope.launch {
-                    try {
-                        userProfileManager.unlockTheme(themeId)
-                    } catch (e: Exception) {
-                        logcat(LogPriority.ERROR) { "Failed to unlock theme $themeId: ${e.message}" }
-                    }
+                try {
+                    userProfileManager.unlockTheme(themeId)
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR) { "Failed to unlock theme $themeId: ${e.message}" }
                 }
             }
 
+            // Badges are also mirrored into UserProfile for profile screens.
             unlockableId.startsWith("badge_") -> {
                 val badgeName = unlockableId.removePrefix("badge_")
-                scope.launch {
-                    try {
-                        userProfileManager.addBadge(badgeName)
-                    } catch (e: Exception) {
-                        logcat(LogPriority.ERROR) { "Failed to add badge $badgeName: ${e.message}" }
-                    }
+                try {
+                    userProfileManager.addBadge(badgeName)
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR) { "Failed to add badge $badgeName: ${e.message}" }
                 }
             }
 
-            // Aura unlockables
             unlockableId.startsWith("aura_") -> {
                 logcat(LogPriority.INFO) { "Aura unlocked: $unlockableId" }
             }
 
-            // Display preference unlockables
-            unlockableId.startsWith("display_") -> {
-                logcat(LogPriority.INFO) { "Display preference unlocked: $unlockableId" }
-                // TODO: Unlock display options (grid sizes, layouts, etc.)
-                // Example: display_grid_large, display_list_compact
+            unlockableId.startsWith("title_") -> {
+                logcat(LogPriority.INFO) { "Profile title unlocked: $unlockableId" }
             }
 
-            // Profile cosmetic unlockables
+            unlockableId.startsWith("display_") -> {
+                logcat(LogPriority.INFO) { "Display preference unlocked: $unlockableId" }
+            }
+
             unlockableId.startsWith("profile_") -> {
                 logcat(LogPriority.INFO) { "Profile reward unlocked: $unlockableId" }
             }
 
-            // Avatar cosmetic unlockables
             unlockableId.startsWith("avatar_") -> {
                 logcat(LogPriority.INFO) { "Avatar reward unlocked: $unlockableId" }
             }
 
-            // Reader preset unlockables
             unlockableId.startsWith("reader_") -> {
                 logcat(LogPriority.INFO) { "Reader preset unlocked: $unlockableId" }
             }
 
-            // Home/Aurora preset unlockables
             unlockableId.startsWith("home_") -> {
                 logcat(LogPriority.INFO) { "Home preset unlocked: $unlockableId" }
             }
 
-            // Special visual unlockables
             unlockableId.startsWith("special_") -> {
                 logcat(LogPriority.INFO) { "Special visual reward unlocked: $unlockableId" }
             }
@@ -151,13 +146,14 @@ class UnlockableManager(
      */
     fun isThemeAvailable(themeId: String): Boolean {
         val normalizedThemeId = themeId.removePrefix("theme_")
-        if (!EXCLUSIVE_THEME_IDS.contains(normalizedThemeId.uppercase())) return true
-
-        val bypass = preferences.getBoolean("debug_bypass_treasury_locks", false)
-        if (bypass) return true
-
         val canonicalThemeId = normalizedThemeId.uppercase()
-        return isUnlockableUnlocked("theme_$canonicalThemeId") ||
+        val unlockableId = "theme_$normalizedThemeId"
+
+        if (isDefaultUnlockable(unlockableId)) return true
+        if (preferences.getBoolean("debug_bypass_treasury_locks", false)) return true
+
+        return isUnlockableUnlocked(unlockableId) ||
+            isUnlockableUnlocked("theme_$canonicalThemeId") ||
             isUnlockableUnlocked("theme_${canonicalThemeId.lowercase()}")
     }
 
@@ -165,82 +161,109 @@ class UnlockableManager(
      * Check if a badge is available (unlocked)
      */
     fun isBadgeAvailable(badgeId: String): Boolean {
-        return when {
-            // Default badges are always available
-            badgeId.startsWith("default_") -> true
-            // Achievement badges need to be unlocked
-            badgeId.startsWith("achievement_") -> isUnlockableUnlocked("badge_$badgeId")
-            else -> true
-        }
+        val unlockableId = if (badgeId.startsWith("badge_")) badgeId else "badge_$badgeId"
+        if (isDefaultUnlockable(unlockableId)) return true
+        if (preferences.getBoolean("debug_bypass_treasury_locks", false)) return true
+        return isUnlockableUnlocked(unlockableId)
     }
 
     /**
      * Check if a display preference is available (unlocked)
      */
     fun isDisplayPreferenceAvailable(prefId: String): Boolean {
-        return when {
-            // Default preferences are always available
-            prefId.startsWith("default_") -> true
-            // Achievement preferences need to be unlocked
-            prefId.startsWith("achievement_") -> isUnlockableUnlocked("display_$prefId")
-            else -> true
+        val unlockableId = if (prefId.startsWith("display_")) prefId else "display_$prefId"
+        if (isDefaultUnlockable(unlockableId)) return true
+        if (preferences.getBoolean("debug_bypass_treasury_locks", false)) return true
+        return isUnlockableUnlocked(unlockableId)
+    }
+
+    /**
+     * Generic availability check for Treasury cosmetics. UI should prefer this
+     * method for aura/profile/avatar/home/special unlockables so all reward
+     * types use the same source of truth.
+     */
+    fun isUnlockableAvailable(unlockableId: String): Boolean {
+        if (isDefaultUnlockable(unlockableId)) return true
+        if (preferences.getBoolean("debug_bypass_treasury_locks", false)) return true
+        return isUnlockableUnlocked(unlockableId)
+    }
+
+    private fun isDefaultUnlockable(unlockableId: String): Boolean {
+        return unlockableId.startsWith("default_") ||
+            unlockableId.startsWith("theme_default_") ||
+            unlockableId.startsWith("badge_default_") ||
+            unlockableId.startsWith("display_default_")
+    }
+
+    /**
+     * Get unlockable display name (localized) as a StringResource.
+     */
+    fun getUnlockableNameRes(unlockableId: String): StringResource? {
+        return when (unlockableId) {
+            // Themes
+            "theme_achievement_gold" -> MR.strings.unlockable_theme_achievement_gold
+            "theme_achievement_sapphire" -> MR.strings.unlockable_theme_achievement_sapphire
+            "theme_master" -> MR.strings.unlockable_theme_master
+            "theme_ONYX_GOLD" -> MR.strings.unlockable_theme_ONYX_GOLD
+            "theme_SAKURA_NOIR" -> MR.strings.unlockable_theme_SAKURA_NOIR
+            "theme_NEBULA_TIDE" -> MR.strings.unlockable_theme_NEBULA_TIDE
+
+            // Badges
+            "badge_achievement_master" -> MR.strings.unlockable_badge_achievement_master
+            "badge_week_warrior" -> MR.strings.unlockable_badge_week_warrior
+
+            // Display preferences
+            "display_grid_large" -> MR.strings.unlockable_display_grid_large
+            "display_list_compact" -> MR.strings.unlockable_display_list_compact
+            "display_grid_extra_large" -> MR.strings.unlockable_display_grid_extra_large
+
+            // Auras
+            "aura_harem" -> MR.strings.unlockable_aura_harem
+            "aura_level_up" -> MR.strings.unlockable_aura_level_up
+            "aura_matrix" -> MR.strings.unlockable_aura_matrix
+            "aura_trinity_orbit" -> MR.strings.unlockable_aura_trinity_orbit
+            "aura_deep_focus" -> MR.strings.unlockable_aura_deep_focus
+            "aura_shadow_monarch" -> MR.strings.unlockable_aura_shadow_monarch
+            "aura_ascendant_gold" -> MR.strings.unlockable_aura_ascendant_gold
+
+            // Profile presets
+            "profile_nickname_effect_aurora_crown" -> MR.strings.unlockable_profile_nickname_effect_aurora_crown
+            "profile_nickname_effect_glitch_rune" -> MR.strings.unlockable_profile_nickname_effect_glitch_rune
+            "profile_nickname_effect_cipher" -> MR.strings.unlockable_profile_nickname_effect_cipher
+
+            // Avatar presets
+            "avatar_frame_neon" -> MR.strings.unlockable_avatar_frame_neon
+            "avatar_frame_hologram" -> MR.strings.unlockable_avatar_frame_hologram
+            "avatar_frame_prismatic" -> MR.strings.unlockable_avatar_frame_prismatic
+
+            // Home presets
+            "home_badge_orbit" -> MR.strings.unlockable_home_badge_orbit
+            "home_badge_crown" -> MR.strings.unlockable_home_badge_crown
+            "home_badge_shuriken" -> MR.strings.unlockable_home_badge_shuriken
+
+            // Special visual rewards
+            "special_background_petal_storm" -> MR.strings.unlockable_special_background_petal_storm
+            "special_background_neon_orbit" -> MR.strings.unlockable_special_background_neon_orbit
+
+            else -> null
         }
     }
 
     /**
-     * Get unlockable display name (localized)
+     * Get unlockable display name fallback string.
      */
     fun getUnlockableName(unlockableId: String): String {
-        return when (unlockableId) {
-            // Themes
-            "theme_achievement_gold" -> "Золотая тема достижений"
-            "theme_achievement_sapphire" -> "Сапфировая тема достижений"
-            "theme_master" -> "Тема мастера контента"
-            "theme_ONYX_GOLD" -> "Обсидиановое золото"
-            "theme_SAKURA_NOIR" -> "Сакура Ноир"
-            "theme_NEBULA_TIDE" -> "Туманность прилива"
-
-            // Badges
-            "badge_achievement_master" -> "Бейдж мастера достижений"
-            "badge_week_warrior" -> "Бейдж воина недели"
-
-            // Display preferences
-            "display_grid_large" -> "Большая сетка библиотеки"
-            "display_list_compact" -> "Компактный список"
-            "display_grid_extra_large" -> "Очень большая сетка"
-
-            // Auras
-            "aura_harem" -> "Гаремная аура"
-            "aura_level_up" -> "Аура мастера достижений"
-            "aura_matrix" -> "Цифровой дождь"
-
-            // Profile presets
-            "profile_nickname_effect_aurora_crown" -> "Никнейм-эффект «Aurora Crown»"
-            "profile_nickname_effect_glitch_rune" -> "Никнейм-эффект «Glitch Rune»"
-            "profile_nickname_effect_cipher" -> "Никнейм-эффект «Cipher Sigil»"
-
-            // Avatar presets
-            "avatar_frame_neon" -> "Неоновая рамка аватара"
-            "avatar_frame_hologram" -> "Голографическая рамка аватара"
-            "avatar_frame_prismatic" -> "Призматическая рамка аватара"
-
-            // Home presets
-            "home_badge_orbit" -> "Эффект Home Hub «Orbit»"
-            "home_badge_crown" -> "Эффект Home Hub «Crown»"
-            "home_badge_shuriken" -> "Эффект Home Hub «Shuriken»"
-
-            // Special visual rewards
-            "special_background_petal_storm" -> "Фон «Лепестковый шторм»"
-            "special_background_neon_orbit" -> "Фон «Неоновая орбита»"
-
-            else ->
-                unlockableId
-                    .removePrefix("theme_")
-                    .removePrefix("aura_")
-                    .removePrefix("special_")
-                    .replace("_", " ")
-                    .capitalize()
-        }
+        return unlockableId
+            .removePrefix("theme_")
+            .removePrefix("aura_")
+            .removePrefix("title_")
+            .removePrefix("special_background_")
+            .removePrefix("special_")
+            .removePrefix("profile_nickname_effect_")
+            .removePrefix("avatar_frame_")
+            .removePrefix("home_badge_")
+            .replace("_", " ")
+            .capitalize()
     }
 
     /**
@@ -250,6 +273,7 @@ class UnlockableManager(
         return when {
             unlockableId.startsWith("theme_") -> UnlockableType.THEME
             unlockableId.startsWith("aura_") -> UnlockableType.AURA
+            unlockableId.startsWith("title_") -> UnlockableType.TITLE
             unlockableId.startsWith("badge_") -> UnlockableType.BADGE
             unlockableId.startsWith("display_") -> UnlockableType.DISPLAY
             unlockableId.startsWith("profile_") -> UnlockableType.PROFILE
@@ -333,6 +357,7 @@ class UnlockableManager(
 enum class UnlockableType {
     THEME,
     AURA,
+    TITLE,
     BADGE,
     DISPLAY,
     PROFILE,

@@ -12,6 +12,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.entries.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.entries.components.aurora.QuietMetadataRow
+import eu.kanade.presentation.entries.components.aurora.QuietMetricTile
+import eu.kanade.presentation.entries.components.aurora.QuietSectionDivider
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource

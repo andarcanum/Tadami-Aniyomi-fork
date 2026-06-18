@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.storage.extension
@@ -91,11 +90,10 @@ class MangaDownloadManager(
     fun startDownloads() {
         if (downloader.isRunning) return
 
-        if (MangaDownloadJob.isRunning(context)) {
-            downloader.start()
-        } else {
+        if (!MangaDownloadJob.isRunning(context)) {
             MangaDownloadJob.start(context)
         }
+        downloader.start()
     }
 
     /**
@@ -129,15 +127,17 @@ class MangaDownloadManager(
     }
 
     fun startDownloadNow(chapterId: Long) {
-        val existingDownload = getQueuedDownloadOrNull(chapterId)
-        // If not in queue try to start a new download
-        val toAdd = existingDownload ?: runBlocking { MangaDownload.fromChapterId(chapterId) } ?: return
-        queueState.value.toMutableList().apply {
-            existingDownload?.let { remove(it) }
-            add(0, toAdd)
-            reorderQueue(this)
+        launchIO {
+            val existingDownload = getQueuedDownloadOrNull(chapterId)
+            // If not in queue try to start a new download
+            val toAdd = existingDownload ?: MangaDownload.fromChapterId(chapterId) ?: return@launchIO
+            queueState.value.toMutableList().apply {
+                existingDownload?.let { remove(it) }
+                add(0, toAdd)
+                reorderQueue(this)
+            }
+            startDownloads()
         }
-        startDownloads()
     }
 
     /**

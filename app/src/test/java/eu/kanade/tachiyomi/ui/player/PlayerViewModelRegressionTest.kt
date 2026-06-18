@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutRegion
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutSlot
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
+import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.every
@@ -156,6 +157,11 @@ class PlayerViewModelRegressionTest {
             every { autoDownloadWhileWatching() } returns intPreference(0)
         }
 
+        val subtitlePreferences = mockk<SubtitlePreferences> {
+            every { preferredSubLanguages() } returns stringPreference("")
+            every { subtitleTranslationEnabled() } returns booleanPreference(false)
+        }
+
         val uiPreferences = mockk<UiPreferences> {
             every { relativeTime() } returns booleanPreference(true)
             every { dateFormat() } returns stringFlowPreference(MutableStateFlow(""))
@@ -193,6 +199,9 @@ class PlayerViewModelRegressionTest {
             setAnimeViewerFlags = mockk(relaxed = true),
             playerPreferences = playerPreferences,
             gesturePreferences = gesturePreferences,
+            subtitlePreferences = subtitlePreferences,
+            subtitleTranslationCoordinator = mockk(relaxed = true),
+            networkHelper = mockk(relaxed = true),
             basePreferences = mockk(relaxed = true),
             getCustomButtons = getCustomButtons,
             trackSelect = mockk(relaxed = true),
@@ -237,6 +246,10 @@ class PlayerViewModelRegressionTest {
     }
 
     private fun intPreference(value: Int): Preference<Int> = mockk {
+        every { get() } returns value
+    }
+
+    private fun stringPreference(value: String): Preference<String> = mockk {
         every { get() } returns value
     }
 

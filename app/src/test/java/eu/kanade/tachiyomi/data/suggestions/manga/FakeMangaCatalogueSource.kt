@@ -14,7 +14,9 @@ open class FakeMangaCatalogueSource(
 ) : CatalogueSource {
 
     var searchMangasToReturn: List<SManga> = emptyList()
+    var detailsByUrl: Map<String, SManga> = emptyMap()
     var getSearchMangaCalledWithQuery: String? = null
+    var getMangaDetailsCallCount = 0
 
     override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
         getSearchMangaCalledWithQuery = query
@@ -30,5 +32,8 @@ open class FakeMangaCatalogueSource(
         filters: FilterList,
     ): Observable<MangasPage> = throw UnsupportedOperationException()
     override fun fetchLatestUpdates(page: Int): Observable<MangasPage> = throw UnsupportedOperationException()
-    override suspend fun getMangaDetails(manga: SManga): SManga = manga
+    override suspend fun getMangaDetails(manga: SManga): SManga {
+        getMangaDetailsCallCount++
+        return detailsByUrl[manga.url] ?: manga
+    }
 }

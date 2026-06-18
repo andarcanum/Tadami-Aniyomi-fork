@@ -1,6 +1,15 @@
 package eu.kanade.tachiyomi.ui.browse.novel.extension
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -8,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -23,6 +33,7 @@ import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
@@ -32,6 +43,7 @@ fun novelExtensionsTab(
     val navigator = LocalNavigator.currentOrThrow
     val state by extensionsScreenModel.state.collectAsStateWithLifecycle()
     var pluginToUninstall by remember { mutableStateOf<NovelPlugin.Installed?>(null) }
+    var pluginToReinstall by remember { mutableStateOf<NovelPlugin.Installed?>(null) }
 
     return TabContent(
         titleRes = AYMR.strings.label_novel_extensions,
@@ -53,8 +65,8 @@ fun novelExtensionsTab(
                 contentPadding = contentPadding,
                 searchQuery = state.searchQuery,
                 onInstallExtension = extensionsScreenModel::installExtension,
-                onCancelInstall = extensionsScreenModel::cancelInstall,
                 onUpdateExtension = extensionsScreenModel::updateExtension,
+                onReinstallExtension = { pluginToReinstall = it },
                 onOpenExtension = { navigator.push(novelExtensionDetailsScreen(it.id)) },
                 onOpenExtensionSettings = { navigator.push(novelExtensionSettingsScreen(it.id)) },
                 onUninstallExtension = { pluginToUninstall = it },
@@ -86,6 +98,18 @@ fun novelExtensionsTab(
                 )
             }
 
+            pluginToReinstall?.let { plugin ->
+                NovelRepoReinstallDialog(
+                    plugin = plugin,
+                    candidates = extensionsScreenModel.getReinstallCandidates(plugin),
+                    onClickCandidate = { candidate ->
+                        extensionsScreenModel.reinstallFromRepo(plugin, candidate)
+                        pluginToReinstall = null
+                    },
+                    onDismissRequest = { pluginToReinstall = null },
+                )
+            }
+
             if (state.repoPickerOptions.isNotEmpty()) {
                 NovelRepoPickerDialog(
                     pluginName = state.repoPickerOptions.first().name,
@@ -95,6 +119,62 @@ fun novelExtensionsTab(
                 )
             }
         },
+    )
+}
+
+@Composable
+private fun NovelRepoReinstallDialog(
+    plugin: NovelPlugin.Installed,
+    candidates: List<NovelPlugin.Available>,
+    onClickCandidate: (NovelPlugin.Available) -> Unit,
+    onDismissRequest: () -> Unit,
+) {
+    AlertDialog(
+        icon = {
+            Icon(
+                imageVector = Icons.Outlined.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+            )
+        },
+        title = { Text(text = stringResource(MR.strings.ext_repo_update_dialog_title)) },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.medium),
+            ) {
+                Text(
+                    text = stringResource(MR.strings.ext_repo_update_dialog_message, plugin.name),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                HorizontalDivider()
+                if (candidates.isEmpty()) {
+                    Text(
+                        text = stringResource(MR.strings.ext_repo_update_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else {
+                    candidates.forEach { candidate ->
+                        val repoName = candidate.repoName
+                            .ifBlank { candidate.repoUrl.substringAfter("://", candidate.repoUrl).substringBefore('/') }
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { onClickCandidate(candidate) },
+                        ) {
+                            Text(text = stringResource(MR.strings.ext_repo_update_action, repoName))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(text = stringResource(MR.strings.action_cancel))
+            }
+        },
+        onDismissRequest = onDismissRequest,
     )
 }
 

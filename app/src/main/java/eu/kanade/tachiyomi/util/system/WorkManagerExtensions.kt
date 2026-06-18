@@ -20,6 +20,11 @@ fun WorkManager.isRunning(tag: String): Boolean {
     return list.any { it.state == WorkInfo.State.RUNNING }
 }
 
+fun WorkManager.isRunningOrEnqueued(tag: String): Boolean {
+    val list = this.getWorkInfosByTag(tag).get()
+    return list.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
+}
+
 fun WorkManager.isRunningFlow(tag: String): Flow<Boolean> {
     return this.getWorkInfosByTagLiveData(tag).asFlow()
         .map { list -> list.any { it.state == WorkInfo.State.RUNNING } }

@@ -39,6 +39,9 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionIconState
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
+import eu.kanade.tachiyomi.ui.reader.novel.decodeNativeScrollProgress
+import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.decodeWebScrollProgressPercent
 import me.saket.swipe.SwipeableActionsBox
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -77,6 +80,10 @@ object NovelChapterCardCompactUi {
     ) {
         val colors = AuroraTheme.colors
         val chapterDisplayNumber = displayNumber?.toDouble() ?: chapter.chapterNumber
+        val chapterProgressFraction = resolveNovelChapterProgressFraction(
+            read = chapter.read,
+            lastPageRead = chapter.lastPageRead,
+        )
         val title = titleOverride ?: when (novel.displayMode) {
             Novel.CHAPTER_DISPLAY_NUMBER -> stringResource(
                 MR.strings.display_mode_chapter,
@@ -144,6 +151,24 @@ object NovelChapterCardCompactUi {
                                 fontSize = 12.sp,
                                 maxLines = 1,
                             )
+                        }
+
+                        if (chapterProgressFraction != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(3.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.divider),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth(chapterProgressFraction)
+                                        .height(3.dp)
+                                        .background(colors.accent),
+                                )
+                            }
                         }
                     }
 
@@ -279,5 +304,34 @@ object NovelChapterCardCompactUi {
         } else {
             chapterCard()
         }
+    }
+
+    private fun resolveNovelChapterProgressFraction(
+        read: Boolean,
+        lastPageRead: Long,
+    ): Float? {
+        if (read) return 1f
+
+        decodePageReaderProgress(lastPageRead)?.let { progress ->
+            return ((progress.index + 1).toFloat() / progress.totalItems.toFloat())
+                .coerceIn(0f, 1f)
+                .takeIf { it > 0f }
+        }
+
+        decodeWebScrollProgressPercent(lastPageRead)?.let { percent ->
+            return (percent.toFloat() / 100f)
+                .coerceIn(0f, 1f)
+                .takeIf { it > 0f }
+        }
+
+        val nativeProgress = decodeNativeScrollProgress(lastPageRead)
+        val nativeTotalItems = nativeProgress?.totalItems
+        if (nativeProgress != null && nativeTotalItems != null && nativeTotalItems > 0) {
+            return ((nativeProgress.index + 1).toFloat() / nativeTotalItems.toFloat())
+                .coerceIn(0f, 1f)
+                .takeIf { it > 0f }
+        }
+
+        return null
     }
 }

@@ -66,12 +66,15 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.library.components.EntryCompactGridItem
+import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.PinnedBadge
 import eu.kanade.presentation.library.components.PinnedSectionHeader
 import eu.kanade.presentation.library.components.UnviewedBadge
+import eu.kanade.presentation.library.components.containsAtLeastMatches
+import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.presentation.library.components.resolveGlowContourCornerIndicatorState
 import eu.kanade.presentation.library.components.resolveGlowContourLibraryTextSpec
 import eu.kanade.presentation.library.novel.components.SeriesStackedCoverCard
@@ -94,6 +97,7 @@ import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import tachiyomi.presentation.core.util.plus
@@ -117,6 +121,7 @@ fun NovelLibraryAuroraContent(
     onRefresh: () -> Unit,
     onGlobalUpdate: () -> Unit,
     onOpenRandomEntry: () -> Unit,
+    onGlobalSearchClicked: () -> Unit,
     onImportEpub: () -> Unit = {},
     onLongClickNovel: ((NovelLibraryItem) -> Unit)? = null,
     onContinueReadingClicked: ((NovelLibraryItem) -> Unit)? = null,
@@ -158,29 +163,39 @@ fun NovelLibraryAuroraContent(
     val showDownloadBadge by libraryPreferences.downloadBadge().collectAsStateWithLifecycle()
     val showUnreadBadge by libraryPreferences.unreadBadge().collectAsStateWithLifecycle()
     val showLanguageBadge by libraryPreferences.languageBadge().collectAsStateWithLifecycle()
-    val downloadCacheSignal by downloadCache.changes.collectAsStateWithLifecycle(initialValue = Unit)
-    val downloadedNovelIds = remember(items, showDownloadBadge, downloadCacheSignal) {
+    val downloadedIds by downloadCache.downloadedIds.collectAsStateWithLifecycle()
+    val downloadedNovelIds = remember(items, showDownloadBadge, downloadedIds) {
         if (!showDownloadBadge) return@remember emptySet()
 
-        items.asSequence()
-            .mapNotNull { item ->
-                val novel = item.coverNovel ?: return@mapNotNull null
-                item.id.takeIf { downloadCache.hasAnyDownloadedChapter(novel) }
+        buildSet(capacity = items.size) {
+            items.forEach { item ->
+                val novel = item.coverNovel ?: return@forEach
+                if (novel.id in downloadedIds) {
+                    add(item.id)
+                }
             }
-            .toSet()
+        }
     }
-    val sourceLanguageByNovelId = remember(items, showLanguageBadge) {
+    val sourceLanguageByNovelId = remember(items, showLanguageBadge, sourceManager) {
         if (!showLanguageBadge) return@remember emptyMap()
 
-        items.mapNotNull { item ->
-            val source = item.coverNovel?.source ?: return@mapNotNull null
-            item.id to sourceManager.getOrStub(source).lang
-        }.toMap()
+        val languageBySourceId = HashMap<Long, String>()
+        buildMap(capacity = items.size) {
+            items.forEach { item ->
+                val sourceId = item.coverNovel?.source ?: return@forEach
+                put(
+                    item.id,
+                    languageBySourceId.getOrPut(sourceId) {
+                        sourceManager.getOrStub(sourceId).lang
+                    },
+                )
+            }
+        }
     }
     val isSearchActive = searchQuery != null
-    val showPinnedSection = remember(items) { items.count { it.pinned } > 1 }
+    val showPinnedSection = remember(items) { items.containsAtLeastMatches(requiredCount = 2) { it.pinned } }
     val isSelectionMode = selection.isNotEmpty() && onToggleSelection != null
-    val selectedIds = remember(selection) { selection.map { it.id }.toHashSet() }
+    val selectedIds = remember(selection) { selection.idsToHashSet { it.id } }
     val onClickNovelItem: (NovelLibraryItem) -> Unit = { libraryItem ->
         if (isSelectionMode) {
             onToggleSelection(libraryItem)
@@ -192,6 +207,55 @@ fun NovelLibraryAuroraContent(
         onToggleRangeSelection != null -> onToggleRangeSelection
         onLongClickNovel != null -> onLongClickNovel
         else -> null
+    }
+
+    if (items.isEmpty()) {
+        val message = when {
+            !searchQuery.isNullOrEmpty() -> MR.strings.no_results_found
+            hasActiveFilters -> MR.strings.error_no_match
+            else -> MR.strings.information_no_manga_category
+        }
+
+        Column(
+            modifier = Modifier
+                .padding(contentPadding + PaddingValues(8.dp))
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (showInlineHeader) {
+                InlineNovelLibraryHeader(
+                    isSearchActive = isSearchActive,
+                    searchQuery = searchQuery.orEmpty(),
+                    onSearchQueryChange = onSearchQueryChange,
+                    onSearchClick = { onSearchQueryChange(searchQuery ?: "") },
+                    onSearchClose = { onSearchQueryChange(null) },
+                    hasActiveFilters = hasActiveFilters,
+                    onFilterClicked = onFilterClicked,
+                    onRefresh = onRefresh,
+                    onGlobalUpdate = onGlobalUpdate,
+                    onOpenRandomEntry = onOpenRandomEntry,
+                    onImportEpub = onImportEpub,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                )
+            }
+            if (!searchQuery.isNullOrEmpty()) {
+                GlobalSearchItem(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.CenterHorizontally)
+                        .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                    searchQuery = searchQuery,
+                    onClick = onGlobalSearchClicked,
+                )
+            }
+            EmptyScreen(
+                stringRes = message,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        return
     }
 
     Box(
@@ -228,6 +292,18 @@ fun NovelLibraryAuroraContent(
                     }
                 }
 
+                if (!searchQuery.isNullOrEmpty()) {
+                    item {
+                        GlobalSearchItem(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                            searchQuery = searchQuery,
+                            onClick = onGlobalSearchClicked,
+                        )
+                    }
+                }
+
                 if (showPinnedSection) {
                     item {
                         PinnedSectionHeader(
@@ -238,7 +314,11 @@ fun NovelLibraryAuroraContent(
                     }
                 }
 
-                listItems(items, key = { it.id }) { item ->
+                listItems(
+                    items = items,
+                    key = { it.id },
+                    contentType = { "novel_library_aurora_list_item" },
+                ) { item ->
                     val badgeState = resolveNovelLibraryBadgeState(
                         item = item,
                         showDownloadBadge = showDownloadBadge,
@@ -298,6 +378,18 @@ fun NovelLibraryAuroraContent(
                     }
                 }
 
+                if (!searchQuery.isNullOrEmpty()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        GlobalSearchItem(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
+                            searchQuery = searchQuery,
+                            onClick = onGlobalSearchClicked,
+                        )
+                    }
+                }
+
                 if (showPinnedSection) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         PinnedSectionHeader(
@@ -308,7 +400,19 @@ fun NovelLibraryAuroraContent(
                     }
                 }
 
-                gridItems(items, key = { it.id }) { item ->
+                gridItems(
+                    items = items,
+                    key = { it.id },
+                    contentType = {
+                        when {
+                            displaySpec.useCompactGridEntryStyle && !useGlowContourCards -> {
+                                "novel_library_compact_grid_item"
+                            }
+                            displaySpec.showMetadata -> "novel_library_aurora_comfortable_grid_item"
+                            else -> "novel_library_aurora_cover_only_grid_item"
+                        }
+                    },
+                ) { item ->
                     val badgeState = resolveNovelLibraryBadgeState(
                         item = item,
                         showDownloadBadge = showDownloadBadge,

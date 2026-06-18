@@ -36,11 +36,16 @@ class MovePlayerPreferencesMigration : Migration {
                 }
                 val trackingQueuePref =
                     context.getSharedPreferences("tracking_queue", Context.MODE_PRIVATE)
-                trackingQueuePref.all.forEach {
-                    val (_, lastChapterRead) = it.value.toString().split(":")
+                trackingQueuePref.all.forEach { entry ->
+                    val lastChapterRead = entry.value
+                        ?.toString()
+                        ?.split(":")
+                        ?.getOrNull(1)
+                        ?.toFloatOrNull()
+                        ?: return@forEach
                     trackingQueuePref.edit {
-                        remove(it.key)
-                        putFloat(it.key, lastChapterRead.toFloat())
+                        remove(entry.key)
+                        putFloat(entry.key, lastChapterRead)
                     }
                 }
             }

@@ -222,8 +222,8 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
         // Page is transition page - preload allowed
         page ?: return true
 
-        // Initial opening - preload allowed
-        currentPage ?: return true
+        // Initial opening is a programmatic selection. Do not pull another chapter until the user scrolls.
+        currentPage ?: return false
 
         val nextItem = adapter.items.getOrNull(adapter.items.size - 1)
         val nextChapter = (nextItem as? ChapterTransition.Next)?.to ?: (nextItem as? ReaderPage)?.chapter
@@ -324,7 +324,7 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
 
         // Preload next chapter once we're within the last 5 pages of the current chapter
         val inPreloadRange = pages.size - page.number < 5
-        if (inPreloadRange && allowPreload && page.chapter == adapter.currentChapter) {
+        if (config.preloadNextChapter && inPreloadRange && allowPreload && page.chapter == adapter.currentChapter) {
             logcat { "Request preload next chapter because we're at page ${page.number} of ${pages.size}" }
             val nextItem = adapter.items.getOrNull(adapter.items.size - 1)
             val transitionChapter = (nextItem as? ChapterTransition.Next)?.to ?: (nextItem as?ReaderPage)?.chapter

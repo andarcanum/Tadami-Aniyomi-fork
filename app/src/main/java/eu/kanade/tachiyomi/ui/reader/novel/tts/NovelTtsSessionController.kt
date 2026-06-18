@@ -48,6 +48,7 @@ data class NovelTtsSession(
 data class NovelTtsSessionUiState(
     val playbackState: NovelTtsPlaybackState = NovelTtsPlaybackState.IDLE,
     val session: NovelTtsSession? = null,
+    val pendingChapterHandoffId: Long? = null,
 )
 
 interface NovelTtsChapterSource {
@@ -106,6 +107,7 @@ class NovelTtsSessionController(
             autoAdvanceChapter = autoAdvanceChapter,
             restoredWordIndex = 0,
         ) ?: return
+        clearPendingChapterHandoff()
         updateState(session, NovelTtsPlaybackState.PLAYING)
         persistCheckpoint(session)
         speaker.speak(session.utterance, flushQueue = true, startWordIndex = session.wordIndex)
@@ -171,6 +173,11 @@ class NovelTtsSessionController(
         }
 
         if (session.autoAdvanceChapter && session.nextChapterId != null) {
+            persistChapterHandoffCheckpoint(session)
+            mutableState.value = mutableState.value.copy(
+                playbackState = NovelTtsPlaybackState.PLAYING,
+                pendingChapterHandoffId = session.nextChapterId,
+            )
             val nextChapter = chapterSource.loadChapter(session.nextChapterId) ?: run {
                 completeSession()
                 return
@@ -178,7 +185,7 @@ class NovelTtsSessionController(
             val nextSession = buildSession(
                 resolvedChapter = nextChapter,
                 utteranceId = null,
-                preferTranslatedText = session.textSource == NovelTtsTextSource.TRANSLATED,
+                preferTranslatedText = preferredTranslatedText,
                 autoAdvanceChapter = session.autoAdvanceChapter,
                 restoredWordIndex = 0,
             ) ?: run {
@@ -196,7 +203,12 @@ class NovelTtsSessionController(
 
     suspend fun updateWordProgress(wordIndex: Int) {
         val session = mutableState.value.session ?: return
-        val updatedSession = session.copy(wordIndex = wordIndex.coerceAtLeast(0))
+        val lastWordIndex = session.utterance.wordRanges.lastIndex
+        val safeWordIndex = when {
+            lastWordIndex < 0 -> 0
+            else -> wordIndex.coerceIn(0, lastWordIndex)
+        }
+        val updatedSession = session.copy(wordIndex = safeWordIndex)
         updateState(updatedSession, mutableState.value.playbackState)
         persistCheckpoint(updatedSession)
     }
@@ -221,11 +233,29 @@ class NovelTtsSessionController(
         preferredTranslatedText = preferTranslatedText
     }
 
+    suspend fun setAutoAdvanceChapter(autoAdvanceChapter: Boolean) {
+        val session = mutableState.value.session ?: return
+        if (session.autoAdvanceChapter == autoAdvanceChapter) return
+        val updatedSession = session.copy(autoAdvanceChapter = autoAdvanceChapter)
+        updateState(updatedSession, mutableState.value.playbackState)
+        persistCheckpoint(updatedSession)
+    }
+
+    suspend fun switchToPreferredTextSource(preferTranslatedText: Boolean) {
+        preferredTranslatedText = preferTranslatedText
+        val session = mutableState.value.session ?: return
+        val wantsTranslated = preferTranslatedText
+        val isTranslated = session.textSource == NovelTtsTextSource.TRANSLATED
+        if (wantsTranslated == isTranslated) return
+        restartFromCurrentPosition(preferTranslatedText)
+    }
+
     private suspend fun completeSession() {
         sessionStore.clearCheckpoint()
         mutableState.value = mutableState.value.copy(
             playbackState = NovelTtsPlaybackState.COMPLETED,
             session = null,
+            pendingChapterHandoffId = null,
         )
     }
 
@@ -246,9 +276,11 @@ class NovelTtsSessionController(
             NovelTtsTextSource.TRANSLATED -> resolvedChapter.translatedModel ?: resolvedChapter.originalModel
         }
         if (model.utterances.isEmpty()) return null
-        val utteranceIndex = utteranceId?.let { requestedId ->
-            model.utterances.indexOfFirst { it.id == requestedId }.takeIf { it >= 0 }
-        } ?: 0
+        val utteranceIndex = utteranceId
+            ?.takeIf { it.isNotBlank() }
+            ?.let { requestedId ->
+                model.utterances.indexOfFirst { it.id == requestedId }.takeIf { it >= 0 }
+            } ?: 0
         if (utteranceIndex !in model.utterances.indices) return null
         return NovelTtsSession(
             chapterId = resolvedChapter.chapterId,
@@ -268,7 +300,14 @@ class NovelTtsSessionController(
         mutableState.value = NovelTtsSessionUiState(
             playbackState = playbackState,
             session = session,
+            pendingChapterHandoffId = mutableState.value.pendingChapterHandoffId,
         )
+    }
+
+    private fun clearPendingChapterHandoff() {
+        val state = mutableState.value
+        if (state.pendingChapterHandoffId == null) return
+        mutableState.value = state.copy(pendingChapterHandoffId = null)
     }
 
     private suspend fun persistCheckpoint(session: NovelTtsSession) {
@@ -284,14 +323,32 @@ class NovelTtsSessionController(
         )
     }
 
+    private suspend fun persistChapterHandoffCheckpoint(session: NovelTtsSession) {
+        val nextChapterId = session.nextChapterId ?: return
+        sessionStore.saveCheckpoint(
+            NovelTtsSessionCheckpoint(
+                chapterId = nextChapterId,
+                utteranceId = "",
+                segmentId = "",
+                wordIndex = 0,
+                textSource = if (preferredTranslatedText) {
+                    NovelTtsTextSource.TRANSLATED
+                } else {
+                    NovelTtsTextSource.ORIGINAL
+                },
+                autoAdvanceChapter = session.autoAdvanceChapter,
+            ),
+        )
+    }
+
     private suspend fun restartFromCurrentPosition(preferTranslatedText: Boolean) {
         val session = mutableState.value.session ?: return
-        // Use cached chapter to avoid redundant IO — resolvedChapter already carries both
-        // originalModel and translatedModel, so switching text source needs no reload.
-        val resolvedChapter = cachedResolvedChapter
-            ?.takeIf { it.chapterId == session.chapterId }
-            ?: loadChapterCached(session.chapterId)
-            ?: return
+        val cachedChapter = cachedResolvedChapter?.takeIf { it.chapterId == session.chapterId }
+        val resolvedChapter = when {
+            preferTranslatedText && cachedChapter?.translatedModel == null -> loadChapterCached(session.chapterId)
+            cachedChapter != null -> cachedChapter
+            else -> loadChapterCached(session.chapterId)
+        } ?: return
         val rebuiltSession = buildSession(
             resolvedChapter = resolvedChapter,
             utteranceId = session.utterance.id,

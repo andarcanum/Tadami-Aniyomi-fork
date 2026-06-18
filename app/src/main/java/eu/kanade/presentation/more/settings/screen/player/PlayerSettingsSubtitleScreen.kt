@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.screen.SearchableSettings
 import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
+import kotlinx.collections.immutable.persistentMapOf
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
@@ -27,6 +28,12 @@ object PlayerSettingsSubtitleScreen : SearchableSettings {
         val exactMatchPref = subtitlePreferences.preferExactSubtitleMatch()
         val whitelist = subtitlePreferences.subtitleWhitelist()
         val blacklist = subtitlePreferences.subtitleBlacklist()
+        val subtitleTranslationEnabled = subtitlePreferences.subtitleTranslationEnabled()
+        val subtitleTranslationProvider = subtitlePreferences.subtitleTranslationProvider()
+        val subtitleTranslationSourceLanguage = subtitlePreferences.subtitleTranslationSourceLanguage()
+        val subtitleTranslationTargetLanguage = subtitlePreferences.subtitleTranslationTargetLanguage()
+        val subtitleTranslationAllowAi = subtitlePreferences.subtitleTranslationAllowAiProviders()
+        val subtitleTranslationCache = subtitlePreferences.subtitleTranslationCacheEnabled()
 
         return listOf(
             Preference.PreferenceItem.EditTextInfoPreference(
@@ -84,6 +91,48 @@ object PlayerSettingsSubtitleScreen : SearchableSettings {
                 preference = blacklist,
                 dialogSubtitle = stringResource(AYMR.strings.pref_player_subtitle_blacklist_info),
                 title = stringResource(AYMR.strings.pref_player_subtitle_blacklist),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = subtitleTranslationEnabled,
+                title = stringResource(AYMR.strings.pref_player_subtitle_translation),
+                subtitle = stringResource(AYMR.strings.pref_player_subtitle_translation_summary),
+            ),
+            Preference.PreferenceItem.ListPreference(
+                preference = subtitleTranslationProvider,
+                entries = persistentMapOf(
+                    "google" to stringResource(AYMR.strings.player_subtitle_translation_provider_google),
+                    "ai" to stringResource(AYMR.strings.player_subtitle_translation_provider_ai),
+                ),
+                title = stringResource(AYMR.strings.pref_player_subtitle_translation_provider),
+                subtitle = "%s",
+                onValueChanged = { value ->
+                    value == "google" || value == "ai"
+                },
+            ),
+            Preference.PreferenceItem.InfoPreference(
+                title = stringResource(AYMR.strings.pref_player_subtitle_translation_google_info),
+            ),
+            Preference.PreferenceItem.InfoPreference(
+                title = stringResource(AYMR.strings.pref_player_subtitle_translation_ai_info),
+            ),
+            Preference.PreferenceItem.EditTextInfoPreference(
+                preference = subtitleTranslationSourceLanguage,
+                dialogSubtitle = stringResource(AYMR.strings.pref_player_subtitle_translation_source_lang_summary),
+                title = stringResource(AYMR.strings.pref_player_subtitle_translation_source_lang),
+            ),
+            Preference.PreferenceItem.EditTextInfoPreference(
+                preference = subtitleTranslationTargetLanguage,
+                dialogSubtitle = stringResource(AYMR.strings.pref_player_subtitle_translation_target_lang_summary),
+                title = stringResource(AYMR.strings.pref_player_subtitle_translation_target_lang),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = subtitleTranslationAllowAi,
+                title = stringResource(AYMR.strings.pref_player_subtitle_translation_allow_ai),
+                subtitle = stringResource(AYMR.strings.pref_player_subtitle_translation_allow_ai_summary),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
+                preference = subtitleTranslationCache,
+                title = stringResource(AYMR.strings.pref_player_subtitle_translation_cache),
             ),
         )
     }

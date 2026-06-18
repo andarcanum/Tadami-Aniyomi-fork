@@ -1,9 +1,11 @@
 package eu.kanade.tachiyomi.source.novel
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 
 class NovelPluginImageWarmupTest {
 
@@ -40,25 +42,49 @@ class NovelPluginImageWarmupTest {
     }
 
     @Test
-    fun `warmup resolves filtered urls only once`() = runBlocking {
-        val resolved = Collections.synchronizedList(mutableListOf<String>())
-        val urls = listOf(
-            "https://example.com/cover.png",
-            "novelimg://plugin-a?ref=cover-a",
-            "novelimg://plugin-a?ref=cover-a",
-            "novelimg://plugin-b?ref=cover-b",
-            "novelimg://plugin-c?ref=cover-c",
-        )
+    fun `warmup resolves filtered urls only once`() {
+        runBlocking {
+            val resolved = Collections.synchronizedList(mutableListOf<String>())
+            val urls = listOf(
+                "https://example.com/cover.png",
+                "novelimg://plugin-a?ref=cover-a",
+                "novelimg://plugin-a?ref=cover-a",
+                "novelimg://plugin-b?ref=cover-b",
+                "novelimg://plugin-c?ref=cover-c",
+            )
 
-        NovelPluginImageWarmup.warmup(urls) { url ->
-            resolved.add(url)
+            NovelPluginImageWarmup.warmup(urls) { url ->
+                resolved.add(url)
+            }
+
+            resolved.toSet() shouldBe setOf(
+                "novelimg://plugin-a?ref=cover-a",
+                "novelimg://plugin-b?ref=cover-b",
+                "novelimg://plugin-c?ref=cover-c",
+            )
+            resolved.size shouldBe 3
         }
+    }
 
-        resolved.toSet() shouldBe setOf(
-            "novelimg://plugin-a?ref=cover-a",
-            "novelimg://plugin-b?ref=cover-b",
-            "novelimg://plugin-c?ref=cover-c",
-        )
-        resolved.size shouldBe 3
+    @Test
+    fun `warmup resolves plugin images sequentially to avoid starving visible covers`() {
+        runBlocking {
+            val activeResolvers = AtomicInteger(0)
+            var maxActiveResolvers = 0
+            val urls = listOf(
+                "novelimg://plugin-a?ref=cover-a",
+                "novelimg://plugin-b?ref=cover-b",
+                "novelimg://plugin-c?ref=cover-c",
+            )
+
+            NovelPluginImageWarmup.warmup(urls) {
+                val active = activeResolvers.incrementAndGet()
+                maxActiveResolvers = maxOf(maxActiveResolvers, active)
+                delay(10)
+                activeResolvers.decrementAndGet()
+            }
+
+            maxActiveResolvers shouldBe 1
+        }
     }
 }

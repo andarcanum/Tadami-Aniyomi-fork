@@ -6,24 +6,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TrendingDown
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -33,8 +21,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -57,126 +45,104 @@ fun AchievementStatsComparison(
     val colors = AuroraTheme.colors
     val timeStrings = achievementTimeStrings()
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.Transparent,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        // Header
+        Text(
+            text = stringResource(MR.strings.achievement_comparison_title).uppercase(),
+            color = colors.textPrimary,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+
+        // Bento Shell Box
         Box(
             modifier = Modifier
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            colors.surface.copy(alpha = 0.4f),
-                            colors.surface.copy(alpha = 0.2f),
-                        ),
-                    ),
-                )
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(colors.surface.copy(alpha = 0.15f))
                 .border(
                     width = 1.dp,
-                    color = colors.accent.copy(alpha = 0.15f),
+                    color = Color.White.copy(alpha = 0.05f),
                     shape = RoundedCornerShape(20.dp),
                 )
-                .drawBehind {
-                    // Тонкая акцентная линия сверху
-                    drawRect(
-                        brush = Brush.horizontalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                colors.accent.copy(alpha = 0.3f),
-                                Color.Transparent,
-                            ),
-                        ),
-                        size = androidx.compose.ui.geometry.Size(width = size.width, height = 2f),
-                    )
-
-                    // Subtle glow effect at top
-                    drawRect(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                colors.accent.copy(alpha = 0.08f),
-                                Color.Transparent,
-                            ),
-                            center = Offset(size.width * 0.5f, 0f),
-                            radius = size.width * 0.8f,
-                        ),
-                    )
-                }
-                .padding(12.dp),
+                .padding(4.dp),
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                colors.surface.copy(alpha = 0.5f),
+                                colors.surface.copy(alpha = 0.3f),
+                            ),
+                        ),
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(16.dp),
+                    ),
             ) {
-                // Header
-                Text(
-                    text = stringResource(MR.strings.achievement_comparison_title),
-                    color = colors.textPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.3.sp,
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Stats Grid (2x2)
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                // Draw grid dividers on the background
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .drawBehind {
+                            // Horizontal divider
+                            drawLine(
+                                color = Color.White.copy(alpha = 0.06f),
+                                start = Offset(0f, size.height * 0.5f),
+                                end = Offset(size.width, size.height * 0.5f),
+                                strokeWidth = 1.dp.toPx(),
+                            )
+                            // Vertical divider
+                            drawLine(
+                                color = Color.White.copy(alpha = 0.06f),
+                                start = Offset(size.width * 0.5f, 0f),
+                                end = Offset(size.width * 0.5f, size.height),
+                                strokeWidth = 1.dp.toPx(),
+                            )
+                        }
+                        .padding(8.dp),
                 ) {
-                    // Row 1: Chapters and Episodes
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        StatItem(
-                            icon = Icons.Default.Book,
-                            iconBackground = colors.accent.copy(alpha = 0.15f),
-                            iconTint = colors.accent,
-                            label = stringResource(MR.strings.achievement_stat_chapters_read),
-                            currentValue = currentMonth.chaptersRead,
-                            previousValue = previousMonth.chaptersRead,
-                            modifier = Modifier.weight(1f),
-                        )
-                        StatItem(
-                            icon = Icons.Default.Movie,
-                            iconBackground = colors.accent.copy(alpha = 0.15f),
-                            iconTint = colors.accent,
-                            label = stringResource(MR.strings.achievement_stat_episodes_watched),
-                            currentValue = currentMonth.episodesWatched,
-                            previousValue = previousMonth.episodesWatched,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-
-                    // Row 2: Time and Achievements
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
-                        StatItem(
-                            icon = Icons.Default.AccessTime,
-                            iconBackground = colors.accent.copy(alpha = 0.15f),
-                            iconTint = colors.accent,
-                            label = stringResource(MR.strings.achievement_stat_app_time),
-                            currentValue = currentMonth.timeInAppMinutes,
-                            previousValue = previousMonth.timeInAppMinutes,
-                            isTimeValue = true,
-                            timeStrings = timeStrings,
-                            modifier = Modifier.weight(1f),
-                        )
-                        StatItem(
-                            icon = Icons.Default.EmojiEvents,
-                            iconBackground = colors.accent.copy(alpha = 0.15f),
-                            iconTint = colors.accent,
-                            label = stringResource(MR.strings.achievement_stat_unlocked),
-                            currentValue = currentMonth.achievementsUnlocked,
-                            previousValue = previousMonth.achievementsUnlocked,
-                            modifier = Modifier.weight(1f),
-                        )
+                    Column {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            StatItem(
+                                label = stringResource(MR.strings.achievement_stat_chapters_read),
+                                currentValue = currentMonth.chaptersRead,
+                                previousValue = previousMonth.chaptersRead,
+                                modifier = Modifier.weight(1f),
+                            )
+                            StatItem(
+                                label = stringResource(MR.strings.achievement_stat_episodes_watched),
+                                currentValue = currentMonth.episodesWatched,
+                                previousValue = previousMonth.episodesWatched,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            StatItem(
+                                label = stringResource(MR.strings.achievement_stat_app_time),
+                                currentValue = currentMonth.timeInAppMinutes,
+                                previousValue = previousMonth.timeInAppMinutes,
+                                isTimeValue = true,
+                                timeStrings = timeStrings,
+                                modifier = Modifier.weight(1f),
+                            )
+                            StatItem(
+                                label = stringResource(MR.strings.achievement_stat_unlocked),
+                                currentValue = currentMonth.achievementsUnlocked,
+                                previousValue = previousMonth.achievementsUnlocked,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
             }
@@ -189,9 +155,6 @@ fun AchievementStatsComparison(
  */
 @Composable
 private fun StatItem(
-    icon: ImageVector,
-    iconBackground: Color,
-    iconTint: Color,
     label: String,
     currentValue: Int,
     previousValue: Int,
@@ -211,108 +174,60 @@ private fun StatItem(
 
     val isIncrease = currentValue >= previousValue
     val changeColor = if (isIncrease) colors.success else colors.error
-    val changeIcon = if (isIncrease) Icons.AutoMirrored.Filled.TrendingUp else Icons.AutoMirrored.Filled.TrendingDown
+
+    val valueString = if (isTimeValue) {
+        val strings = requireNotNull(timeStrings) {
+            "timeStrings must be provided for time-based stats"
+        }
+        val hours = currentValue / 60
+        val minutes = currentValue % 60
+        formatAchievementTimeMinutes(
+            currentValue,
+            hoursMinutesText = stringResource(strings.hoursMinutes, hours, minutes),
+            hoursText = stringResource(strings.hours, hours),
+            minutesText = stringResource(strings.minutes, minutes),
+        )
+    } else {
+        currentValue.toString()
+    }
 
     Column(
-        modifier = modifier
-            .height(120.dp)
-            .background(
-                color = colors.surface.copy(alpha = 0.7f),
-                shape = RoundedCornerShape(16.dp),
-            )
-            .border(
-                width = 1.dp,
-                color = colors.accent.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(16.dp),
-            )
-            .padding(12.dp),
+        modifier = modifier.padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // Icon
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(iconBackground),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Value
         Text(
-            text = if (isTimeValue) {
-                val strings = requireNotNull(timeStrings) {
-                    "timeStrings must be provided for time-based stats"
-                }
-                val hours = currentValue / 60
-                val minutes = currentValue % 60
-                formatAchievementTimeMinutes(
-                    currentValue,
-                    hoursMinutesText = stringResource(strings.hoursMinutes, hours, minutes),
-                    hoursText = stringResource(strings.hours, hours),
-                    minutesText = stringResource(strings.minutes, minutes),
-                )
-            } else {
-                currentValue.toString()
-            },
-            color = colors.textPrimary,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.ExtraBold,
+            text = label.uppercase(),
+            fontSize = 8.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textSecondary.copy(alpha = 0.4f),
             letterSpacing = 0.5.sp,
-        )
-
-        Spacer(modifier = Modifier.height(2.dp))
-
-        // Label
-        Text(
-            text = label,
-            color = colors.textSecondary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
             maxLines = 1,
-            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = valueString,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+            )
 
-        // Change indicator
-        if (previousValue > 0 || currentValue > 0) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(
-                    imageVector = changeIcon,
-                    contentDescription = null,
-                    tint = changeColor,
-                    modifier = Modifier.size(14.dp),
-                )
-                Spacer(modifier = Modifier.width(4.dp))
+            if (previousValue > 0 || currentValue > 0) {
+                val prefix = if (isIncrease) "+" else "-"
                 Text(
-                    text = "${kotlin.math.abs(percentageChange)}%",
+                    text = "$prefix${kotlin.math.abs(percentageChange)}%",
                     color = changeColor,
-                    fontSize = 13.sp,
+                    fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = stringResource(MR.strings.achievement_vs_last_month),
-                    color = colors.textSecondary.copy(alpha = 0.7f),
-                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .background(changeColor.copy(alpha = 0.1f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
                 )
             }
-        } else {
-            Text(
-                text = stringResource(MR.strings.achievement_no_data),
-                color = colors.textSecondary.copy(alpha = 0.5f),
-                fontSize = 11.sp,
-            )
         }
     }
 }

@@ -20,7 +20,7 @@ fun NovelRepoPickerDialog(
         onSelectOption = onSelectPlugin,
         onDismiss = onDismiss,
         optionLabel = { plugin -> plugin.repoName.ifBlank { plugin.repoUrl } },
-        optionVersionText = { plugin -> "v${plugin.version}" },
-        comparator = compareBy<NovelPlugin.Available> { it.version },
+        optionVersionText = { plugin -> "v${plugin.versionName}" },
+        comparator = compareBy<NovelPlugin.Available> { it.versionCode },
     )
 }

@@ -49,9 +49,19 @@ class AnimeExtensionsScreenModel(
 
     init {
         val context = Injekt.get<Application>()
-        val extensionMapper: (Map<String, InstallStep>) -> ((AnimeExtension) -> AnimeExtensionUiModel.Item) = { map ->
-            {
-                AnimeExtensionUiModel.Item(it, map[it.pkgName] ?: InstallStep.Idle)
+        val extensionMapper: (
+            Map<String, InstallStep>,
+            Map<String, Int>,
+            Map<String, List<AnimeExtension.Available>>,
+        ) -> ((AnimeExtension) -> AnimeExtensionUiModel.Item) = { map, repoCounts, variantsByPkgName ->
+            { extension ->
+                AnimeExtensionUiModel.Item(
+                    extension = extension,
+                    installStep = map[extension.pkgName] ?: InstallStep.Idle,
+                    repoSourceCount = repoCounts[extension.pkgName] ?: 1,
+                    repoDisplayName = (extension as? AnimeExtension.Installed)
+                        ?.fallbackRepoDisplayName(variantsByPkgName[extension.pkgName].orEmpty()),
+                )
             }
         }
         val queryFilter: (String) -> ((AnimeExtension) -> Boolean) = { query ->
@@ -106,6 +116,13 @@ class AnimeExtensionsScreenModel(
                 val itemsGroups: ItemGroups = mutableMapOf()
                 availableExtensionVariants.value = _available.groupBy { it.pkgName }
                 updateExtensionVariants.value = rawAvailable.groupBy { it.pkgName }
+                val availableRepoCounts = _available
+                    .groupBy { it.pkgName }
+                    .mapValues { (_, variants) -> variants.map { it.repoUrl }.distinct().size }
+                val updateRepoCounts = rawAvailable
+                    .groupBy { it.pkgName }
+                    .mapValues { (_, variants) -> variants.map { it.repoUrl }.distinct().size }
+                val repoCounts = availableRepoCounts + updateRepoCounts
                 val displayAvailable = _available
                     .filter(queryFilter(searchQuery))
                     .groupBy { it.pkgName }
@@ -113,17 +130,17 @@ class AnimeExtensionsScreenModel(
                     .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
 
                 val updates = _updates.filter(queryFilter(searchQuery)).map(
-                    extensionMapper(downloads),
+                    extensionMapper(downloads, repoCounts, updateExtensionVariants.value),
                 )
                 if (updates.isNotEmpty()) {
                     itemsGroups[AnimeExtensionUiModel.Header.Resource(MR.strings.ext_updates_pending)] = updates
                 }
 
                 val installed = _installed.filter(queryFilter(searchQuery)).map(
-                    extensionMapper(downloads),
+                    extensionMapper(downloads, repoCounts, updateExtensionVariants.value),
                 )
                 val untrusted = _untrusted.filter(queryFilter(searchQuery)).map(
-                    extensionMapper(downloads),
+                    extensionMapper(downloads, repoCounts, emptyMap()),
                 )
                 if (installed.isNotEmpty() || untrusted.isNotEmpty()) {
                     itemsGroups[AnimeExtensionUiModel.Header.Resource(MR.strings.ext_installed)] = installed + untrusted
@@ -142,7 +159,7 @@ class AnimeExtensionsScreenModel(
                         val items = if (header.text in _collapsedLanguages && searchQuery.isEmpty()) {
                             emptyList()
                         } else {
-                            exts.map(extensionMapper(downloads))
+                            exts.map(extensionMapper(downloads, repoCounts, availableExtensionVariants.value))
                         }
                         header to items
                     }
@@ -213,21 +230,42 @@ class AnimeExtensionsScreenModel(
 
     fun updateExtension(extension: AnimeExtension.Installed) {
         screenModelScope.launchIO {
-            if (extension.needsReinstall) {
+            if (extension.needsReinstall || getRegularUpdate(extension) == null) {
                 return@launchIO
             }
-            val variants = updateExtensionVariants.value[extension.pkgName].orEmpty()
-            if (variants.size > 1) {
-                showRepoPicker(extension.pkgName, variants)
-            } else {
-                updateExtensionNow(extension)
-            }
+            updateExtensionNow(extension)
         }
     }
 
     fun installFromRepo(extension: AnimeExtension.Available) {
         dismissRepoPicker()
         screenModelScope.launchIO { installExtensionNow(extension) }
+    }
+
+    fun getReinstallCandidates(extension: AnimeExtension.Installed): List<AnimeExtension.Available> {
+        return selectAnimeReinstallCandidates(
+            extension = extension,
+            variants = updateExtensionVariants.value[extension.pkgName].orEmpty(),
+        )
+    }
+
+    private fun getRegularUpdate(extension: AnimeExtension.Installed): AnimeExtension.Available? {
+        return selectAnimeRegularUpdate(
+            extension = extension,
+            variants = updateExtensionVariants.value[extension.pkgName].orEmpty(),
+        )
+    }
+
+    fun reinstallFromRepo(
+        installedExtension: AnimeExtension.Installed,
+        replacementExtension: AnimeExtension.Available,
+    ) {
+        dismissRepoPicker()
+        screenModelScope.launchIO {
+            extensionManager
+                .replaceExtensionFromRepo(installedExtension, replacementExtension)
+                .collectToInstallUpdate(installedExtension)
+        }
     }
 
     fun dismissRepoPicker() {
@@ -287,12 +325,14 @@ class AnimeExtensionsScreenModel(
     fun findAvailableExtensions() {
         screenModelScope.launchIO {
             mutableState.update { it.copy(isRefreshing = true) }
-            extensionManager.findAvailableExtensions()
+            try {
+                extensionManager.findAvailableExtensions()
 
-            // Fake slower refresh so it doesn't seem like it's not doing anything
-            delay(1.seconds)
-
-            mutableState.update { it.copy(isRefreshing = false) }
+                // Fake slower refresh so it doesn't seem like it's not doing anything
+                delay(1.seconds)
+            } finally {
+                mutableState.update { it.copy(isRefreshing = false) }
+            }
         }
     }
 
@@ -328,5 +368,112 @@ object AnimeExtensionUiModel {
     data class Item(
         val extension: AnimeExtension,
         val installStep: InstallStep,
+        val repoSourceCount: Int = 1,
+        val repoDisplayName: String? = null,
     )
+}
+
+internal fun selectAnimeInstalledRepoDisplayName(
+    extension: AnimeExtension.Installed,
+    variants: List<AnimeExtension.Available>,
+): String? {
+    extension.repoUrl?.let { repoUrl ->
+        return extension.repoName?.takeIf { it.isNotBlank() } ?: repoUrl
+    }
+
+    val exactVersionMatches = variants.filter {
+        it.versionCode == extension.versionCode && it.libVersion == extension.libVersion
+    }
+    val displayCandidate = exactVersionMatches.singleOrNull()
+        ?: variants.singleOrNull()
+
+    return displayCandidate?.repoName?.ifBlank { displayCandidate.repoUrl }
+}
+
+private fun inferAnimeInstalledRepo(
+    extension: AnimeExtension.Installed,
+    variants: List<AnimeExtension.Available>,
+): AnimeExtension.Available? {
+    extension.repoUrl?.let { repoUrl ->
+        return variants.firstOrNull { it.repoUrl == repoUrl }
+    }
+
+    val exactVersionMatches = variants.filter {
+        it.versionCode == extension.versionCode && it.libVersion == extension.libVersion
+    }
+
+    return exactVersionMatches.singleOrNull()
+        ?: variants.singleOrNull()
+        ?: variants
+            .map { it.repoUrl }
+            .distinct()
+            .singleOrNull()
+            ?.let { repoUrl -> variants.first { it.repoUrl == repoUrl } }
+}
+
+internal fun selectAnimeSameRepoUpdate(
+    extension: AnimeExtension.Installed,
+    variants: List<AnimeExtension.Available>,
+): AnimeExtension.Available? {
+    val repoUrl = inferAnimeInstalledRepo(extension, variants)?.repoUrl ?: return null
+    return variants
+        .filter { it.repoUrl == repoUrl && isNewer(extension, it) }
+        .latestVersionGroup()
+        .firstOrNull()
+}
+
+internal fun selectAnimeRegularUpdate(
+    extension: AnimeExtension.Installed,
+    variants: List<AnimeExtension.Available>,
+): AnimeExtension.Available? {
+    selectAnimeSameRepoUpdate(extension, variants)?.let { return it }
+
+    if (inferAnimeInstalledRepo(extension, variants) != null) return null
+
+    val latestVersionGroup = variants
+        .filter { isNewer(extension, it) }
+        .latestVersionGroup()
+
+    if (variants.size == 1) return latestVersionGroup.singleOrNull()
+    return latestVersionGroup.takeIf { it.size > 1 }?.firstOrNull()
+}
+
+internal fun selectAnimeReinstallCandidates(
+    extension: AnimeExtension.Installed,
+    variants: List<AnimeExtension.Available>,
+): List<AnimeExtension.Available> {
+    if (selectAnimeRegularUpdate(extension, variants) != null) return emptyList()
+
+    val installedRepoUrl = inferAnimeInstalledRepo(extension, variants)?.repoUrl
+
+    return variants
+        .filter { installedRepoUrl == null || it.repoUrl != installedRepoUrl }
+        .filter { isNewer(extension, it) }
+        .latestVersionGroup()
+}
+
+private fun List<AnimeExtension.Available>.latestVersionGroup(): List<AnimeExtension.Available> {
+    val latest = maxWithOrNull(
+        compareBy<AnimeExtension.Available> { it.versionCode }
+            .thenBy { it.libVersion },
+    ) ?: return emptyList()
+
+    return filter { it.versionCode == latest.versionCode && it.libVersion == latest.libVersion }
+        .sortedWith(
+            compareBy<AnimeExtension.Available> { it.repoName.ifBlank { it.repoUrl } }
+                .thenBy { it.repoUrl },
+        )
+}
+
+private fun isNewer(
+    extension: AnimeExtension.Installed,
+    candidate: AnimeExtension.Available,
+): Boolean {
+    return candidate.versionCode > extension.versionCode || candidate.libVersion > extension.libVersion
+}
+
+private fun AnimeExtension.Installed.fallbackRepoDisplayName(
+    variants: List<AnimeExtension.Available>,
+): String? {
+    return selectAnimeInstalledRepoDisplayName(this, variants)
 }

@@ -265,6 +265,99 @@ class SecretRulesTest {
         rule.evaluateFull(context) shouldBe 1
     }
 
+    @Test
+    fun `CrybabyRule triggers when completed title has Russian Drama genre`() = runTest {
+        val mangaRepo = mockk<MangaRepository>()
+        val animeRepo = mockk<AnimeRepository>()
+        val novelRepo = mockk<NovelRepository>()
+        val rule = CrybabyRule(mangaRepo, animeRepo, novelRepo)
+
+        val manga = mockk<Manga> {
+            coEvery { genre } returns listOf("Драма")
+        }
+        coEvery { mangaRepo.getMangaById(1L) } returns manga
+
+        val event = AchievementEvent.MangaCompleted(1L)
+        rule.evaluateDelta(event, 0, context) shouldBe RuleResult.Update(1)
+    }
+
+    @Test
+    fun `CrybabyRule triggers when completed title has Russian Tragedy genre`() = runTest {
+        val mangaRepo = mockk<MangaRepository>()
+        val animeRepo = mockk<AnimeRepository>()
+        val novelRepo = mockk<NovelRepository>()
+        val rule = CrybabyRule(mangaRepo, animeRepo, novelRepo)
+
+        val completedManga = manga(
+            id = 1L,
+            status = SManga.COMPLETED.toLong(),
+            genre = listOf("Трагедия"),
+        )
+        coEvery { mangaRepo.getLibraryManga() } returns listOf(
+            libraryManga(completedManga, totalChapters = 100, readCount = 100),
+        )
+        coEvery { animeRepo.getLibraryAnime() } returns emptyList()
+        coEvery { novelRepo.getLibraryNovel() } returns emptyList()
+
+        rule.evaluateFull(context) shouldBe 1
+    }
+
+    @Test
+    fun `DekuRule triggers when completed title has Russian Super Power genre`() = runTest {
+        val mangaRepo = mockk<MangaRepository>()
+        val animeRepo = mockk<AnimeRepository>()
+        val novelRepo = mockk<NovelRepository>()
+        val rule = DekuRule(mangaRepo, animeRepo, novelRepo)
+
+        val anime = mockk<Anime> {
+            coEvery { genre } returns listOf("Суперсила")
+        }
+        coEvery { animeRepo.getAnimeById(2L) } returns anime
+
+        val event = AchievementEvent.AnimeCompleted(2L)
+        rule.evaluateDelta(event, 0, context) shouldBe RuleResult.Update(1)
+    }
+
+    @Test
+    fun `ErenRule triggers when completed title has Russian Military genre`() = runTest {
+        val mangaRepo = mockk<MangaRepository>()
+        val animeRepo = mockk<AnimeRepository>()
+        val novelRepo = mockk<NovelRepository>()
+        val rule = ErenRule(mangaRepo, animeRepo, novelRepo)
+
+        val novel = mockk<Novel> {
+            coEvery { genre } returns listOf("Военное")
+        }
+        coEvery { novelRepo.getNovelById(3L) } returns novel
+
+        val event = AchievementEvent.NovelCompleted(3L)
+        rule.evaluateDelta(event, 0, context) shouldBe RuleResult.Update(1)
+    }
+
+    @Test
+    fun `LelouchRule triggers when completed title has Russian Psychological genre`() = runTest {
+        val mangaRepo = mockk<MangaRepository>()
+        val animeRepo = mockk<AnimeRepository>()
+        val novelRepo = mockk<NovelRepository>()
+        val rule = LelouchRule(mangaRepo, animeRepo, novelRepo)
+
+        val manga = mockk<Manga> {
+            coEvery { genre } returns listOf("Психологическое")
+        }
+        coEvery { mangaRepo.getMangaById(4L) } returns manga
+
+        val event = AchievementEvent.MangaCompleted(4L)
+        rule.evaluateDelta(event, 0, context) shouldBe RuleResult.Update(1)
+    }
+
+    @Test
+    fun `JojoRule triggers when library title contains Russian djodzho`() = runTest {
+        val rule = JojoRule()
+        coEvery { context.hasLibraryTitleLike("jojo") } returns true
+
+        rule.evaluateFull(context) shouldBe 1
+    }
+
     private fun manga(
         id: Long,
         status: Long,

@@ -42,6 +42,12 @@ class ReaderPreferences(
 
     fun showBottomBarSettings() = preferenceStore.getBoolean("pref_bottom_bar_settings", true)
 
+    // ponytail: comma-separated string is simpler than JSON serialization for 5 items
+    fun bottomBarButtonsOrder() = preferenceStore.getString(
+        "pref_bottom_bar_buttons_order",
+        "reading_mode,orientation,crop_borders,chapter_list,settings",
+    )
+
     // endregion
 
     fun useAutoWebtoon() = preferenceStore.getBoolean("reader_use_auto_webtoon", true)
@@ -116,6 +122,14 @@ class ReaderPreferences(
         preferenceStore.getBoolean("pref_show_auto_scroll_floating_button", false)
 
     fun saveLongPagePosition() = preferenceStore.getBoolean("pref_save_long_page_position", true)
+
+    fun preloadPagesBefore() = preferenceStore.getInt("pref_reader_preload_pages_before", 1)
+
+    fun preloadPagesAfter() = preferenceStore.getInt("pref_reader_preload_pages_after", 4)
+
+    fun preloadNextChapter() = preferenceStore.getBoolean("pref_reader_preload_next_chapter", true)
+
+    fun imageCacheSizeMb() = preferenceStore.getInt("pref_reader_image_cache_size_mb", DEFAULT_IMAGE_CACHE_SIZE_MB)
 
     fun pageActionButtonColor() = preferenceStore.getInt("reader_page_action_button_color", 0)
 
@@ -356,6 +370,11 @@ class ReaderPreferences(
     companion object {
         const val WEBTOON_PADDING_MIN = 0
         const val WEBTOON_PADDING_MAX = 25
+        const val PRELOAD_PAGES_MIN = 0
+        const val PRELOAD_PAGES_MAX = 8
+        const val DEFAULT_IMAGE_CACHE_SIZE_MB = 100
+        const val MIN_IMAGE_CACHE_SIZE_MB = 50
+        const val MAX_IMAGE_CACHE_SIZE_MB = 1_024
 
         const val MILLI_CONVERSION = 100
         private const val LONG_PAGE_PROGRESS_CACHE_LIMIT = 1_000

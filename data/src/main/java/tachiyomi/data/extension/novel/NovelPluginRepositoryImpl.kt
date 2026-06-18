@@ -27,7 +27,7 @@ class NovelPluginRepositoryImpl(
                 name = plugin.name,
                 site = plugin.site,
                 lang = plugin.lang,
-                version = plugin.version.toLong(),
+                version = plugin.versionCode.toLong(),
                 url = plugin.url,
                 icon_url = plugin.iconUrl,
                 custom_js = plugin.customJs,
@@ -35,6 +35,8 @@ class NovelPluginRepositoryImpl(
                 has_settings = if (plugin.hasSettings) 1L else 0L,
                 sha256 = plugin.sha256,
                 repo_url = plugin.repoUrl,
+                repo_name = plugin.repoName,
+                version_name = plugin.versionName,
             )
         }
     }
@@ -56,13 +58,16 @@ class NovelPluginRepositoryImpl(
         has_settings: Long,
         sha256: String,
         repo_url: String,
+        repo_name: String?,
+        version_name: String?,
     ): NovelPlugin.Installed {
         return NovelPlugin.Installed(
             id = id,
             name = name,
             site = site,
             lang = lang,
-            version = version.toInt(),
+            versionCode = version.toInt(),
+            versionName = version_name ?: version.toString(),
             url = url,
             iconUrl = icon_url,
             customJs = custom_js,
@@ -70,6 +75,7 @@ class NovelPluginRepositoryImpl(
             hasSettings = has_settings != 0L,
             sha256 = sha256,
             repoUrl = repo_url,
+            repoName = repo_name,
         )
     }
 }

@@ -12,11 +12,21 @@ CREATE TABLE achievements (
     unlockable_id TEXT,
     version INTEGER NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL,
-    rewards TEXT
+    rewards TEXT,
+    -- Refactor additions (v8)
+    rarity TEXT NOT NULL DEFAULT 'common',
+    tags TEXT,            -- JSON array of strings
+    hint TEXT,
+    season TEXT,
+    tier_group TEXT,
+    tier_level INTEGER,
+    reward_set TEXT
 );
 
 CREATE INDEX achievement_category_idx ON achievements(category);
 CREATE INDEX achievement_type_idx ON achievements(type);
+CREATE INDEX achievement_rarity_idx ON achievements(rarity);
+CREATE INDEX achievement_tier_group_idx ON achievements(tier_group);
 
 selectAll:
 SELECT * FROM achievements;
@@ -35,12 +45,14 @@ INSERT OR IGNORE INTO achievements(
     id, type, category, threshold, points,
     title, description, badge_icon,
     is_hidden, is_secret, unlockable_id,
-    version, created_at, rewards
+    version, created_at, rewards,
+    rarity, tags, hint, season, tier_group, tier_level, reward_set
 ) VALUES (
     :id, :type, :category, :threshold, :points,
     :title, :description, :badge_icon,
     :is_hidden, :is_secret, :unlockable_id,
-    :version, :created_at, :rewards
+    :version, :created_at, :rewards,
+    :rarity, :tags, :hint, :season, :tier_group, :tier_level, :reward_set
 );
 
 updateMutableFields:
@@ -56,7 +68,14 @@ SET
     is_hidden = :is_hidden,
     is_secret = :is_secret,
     unlockable_id = :unlockable_id,
-    rewards = :rewards
+    rewards = :rewards,
+    rarity = :rarity,
+    tags = :tags,
+    hint = :hint,
+    season = :season,
+    tier_group = :tier_group,
+    tier_level = :tier_level,
+    reward_set = :reward_set
 WHERE id = :id;
 
 deleteById:

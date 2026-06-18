@@ -58,6 +58,20 @@ internal fun shouldIncludeMigrationEntry(
     }
 }
 
+internal fun visibleMigrationItems(
+    items: List<MigrationListScreenModel.MigratingManga>,
+    hideNotFound: Boolean,
+    onlyNewChapters: Boolean,
+): List<MigrationListScreenModel.MigratingManga> {
+    return items.filter { shouldIncludeMigrationEntry(it, hideNotFound, onlyNewChapters) }
+}
+
+internal fun migrationSkippedCount(
+    items: List<MigrationListScreenModel.MigratingManga>,
+): Int {
+    return items.count { it.searchResult !is MigrationListScreenModel.SearchResult.Success }
+}
+
 internal fun isMigrationSearchComplete(
     items: List<MigrationListScreenModel.MigratingManga>,
 ): Boolean {

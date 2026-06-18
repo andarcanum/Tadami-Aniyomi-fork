@@ -22,21 +22,30 @@ class NovelChapterResumeResolverTest {
     }
 
     @Test
-    fun `next unread chapter follows source order instead of chapter number order`() {
+    fun `new novel starts from the lowest recognized chapter even when source lists newest first`() {
+        val chapter1 = novelChapter(id = 1L, sourceOrder = 2L, chapterNumber = 1.0, read = false)
+        val chapter2 = novelChapter(id = 2L, sourceOrder = 1L, chapterNumber = 2.0, read = false)
+        val chapter3 = novelChapter(id = 3L, sourceOrder = 0L, chapterNumber = 3.0, read = false)
+
+        resolveNovelResumeChapter(listOf(chapter3, chapter2, chapter1))?.id shouldBe chapter1.id
+    }
+
+    @Test
+    fun `next unread chapter follows chapter number order instead of source order`() {
         val chapter1 = novelChapter(id = 1L, sourceOrder = 2L, chapterNumber = 1.0, read = true)
         val chapter2 = novelChapter(id = 2L, sourceOrder = 0L, chapterNumber = 10.0, read = true)
         val chapter3 = novelChapter(id = 3L, sourceOrder = 1L, chapterNumber = 20.0, read = false)
 
-        resolveNovelResumeChapter(listOf(chapter1, chapter2, chapter3))?.id shouldBe chapter1.id
+        resolveNovelResumeChapter(listOf(chapter1, chapter2, chapter3))?.id shouldBe chapter3.id
     }
 
     @Test
-    fun `fully read novel resumes the last touched chapter`() {
+    fun `fully read novel resumes the latest chapter in reading order`() {
         val chapter1 = novelChapter(id = 1L, sourceOrder = 2L, chapterNumber = 1.0, read = true)
         val chapter2 = novelChapter(id = 2L, sourceOrder = 0L, chapterNumber = 10.0, read = true)
         val chapter3 = novelChapter(id = 3L, sourceOrder = 1L, chapterNumber = 20.0, read = true)
 
-        resolveNovelResumeChapter(listOf(chapter1, chapter2, chapter3))?.id shouldBe chapter1.id
+        resolveNovelResumeChapter(listOf(chapter1, chapter2, chapter3))?.id shouldBe chapter3.id
     }
 
     @Test

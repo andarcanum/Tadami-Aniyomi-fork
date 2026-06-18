@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +27,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,13 +65,11 @@ import eu.kanade.tachiyomi.data.suggestions.util.bestMatchScoreFor
 import eu.kanade.tachiyomi.data.suggestions.util.dedupeByCleanTitle
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.source.CatalogueSource
-import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
-import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
-import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.domain.source.manga.service.MangaSourceManager
@@ -80,16 +78,22 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.Serializable
 
 class EntrySuggestionsScreen(
     val seed: SuggestionSeed,
     val sourceId: Long? = null,
     val entryUrl: String? = null,
-) : Screen() {
+) : Screen(), Serializable {
+
+    companion object {
+        private const val serialVersionUID = 1L
+    }
 
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
+        val scope = rememberCoroutineScope()
 
         val screenModel = rememberScreenModel {
             EntrySuggestionsScreenModel(
@@ -105,11 +109,8 @@ class EntrySuggestionsScreen(
             primaryTitle = seed.primaryTitle,
             navigateUp = navigator::pop,
             onSuggestionClick = { item ->
-                val query = item.searchQueries.firstOrNull { it.isNotBlank() } ?: item.title
-                when (item.mediaType) {
-                    SuggestionMediaType.ANIME -> navigator.push(GlobalAnimeSearchScreen(query))
-                    SuggestionMediaType.MANGA -> navigator.push(GlobalMangaSearchScreen(query))
-                    SuggestionMediaType.NOVEL -> navigator.push(GlobalNovelSearchScreen(query))
+                scope.launch {
+                    navigator.push(item.toDirectEntryScreenOrNull() ?: item.toGlobalSearchScreen())
                 }
             },
             onRetryClick = screenModel::fetchSuggestions,
@@ -132,16 +133,43 @@ class EntrySuggestionsScreenModel(
     private var allItems: List<SuggestionItem> = emptyList()
     private var showAll: Boolean = false
 
+    private companion object {
+        const val INITIAL_LIMIT = 24
+        const val FULL_SCREEN_LIMIT = 80
+        const val PROVIDER_LIMIT = 40
+    }
+
     init {
         fetchSuggestions()
     }
 
     fun showMore() {
         showAll = true
-        mutableState.value = SuggestionState.Success(
-            items = allItems,
-            hasMore = false,
-        )
+        publishItems()
+    }
+
+    private fun publishItems() {
+        val visibleItems = if (showAll) allItems else allItems.take(INITIAL_LIMIT)
+        mutableState.value = when {
+            allItems.isEmpty() -> SuggestionState.Empty()
+            else -> SuggestionState.Success(
+                items = visibleItems,
+                hasMore = !showAll && allItems.size > INITIAL_LIMIT,
+            )
+        }
+    }
+
+    private fun mergeAndPublish(seed: SuggestionSeed, primaryTitle: String, incoming: List<SuggestionItem>) {
+        allItems = (allItems + incoming)
+            .dedupeByCleanTitle(seed)
+            .filter { item ->
+                val isSelf = SuggestionTitleResolver.isSameProviderEntry(item, entryUrl)
+                val isFranchise = SuggestionTitleResolver.isFranchiseDuplicate(item.title, primaryTitle)
+                !isSelf && !isFranchise
+            }
+            .sortedByDescending { SuggestionSourceWeight.finalScore(it.reason, it.bestMatchScoreFor(seed)) }
+            .take(FULL_SCREEN_LIMIT)
+        publishItems()
     }
 
     fun fetchSuggestions() {
@@ -150,49 +178,45 @@ class EntrySuggestionsScreenModel(
             try {
                 val primaryTitle = seed.primaryTitle
 
-                // External and native fetch in parallel for faster results
-                val (externalItems, pluginItems) = coroutineScope {
+                allItems = emptyList()
+                showAll = false
+
+                // External and native fetch in parallel, but publish each result as soon as it arrives.
+                coroutineScope {
                     val externalDeferred = async(Dispatchers.IO) {
-                        coordinator.fetchSuggestions(seed, limit = Int.MAX_VALUE).items
+                        coordinator.fetchSuggestions(seed, limit = PROVIDER_LIMIT).items
                     }
                     val nativeDeferred = async(Dispatchers.IO) {
-                        fetchNativeFallback()
+                        fetchNativeFallback(PROVIDER_LIMIT)
                     }
-                    Pair(externalDeferred.await(), nativeDeferred.await())
-                }
 
-                val externalFiltered = externalItems.filter { item ->
-                    val isSelf = (entryUrl != null && item.providerUrl == entryUrl) ||
-                        (item.providerId?.endsWith(":$entryUrl") == true)
-                    val isFranchise = SuggestionTitleResolver.isFranchiseDuplicate(item.title, primaryTitle)
-                    !isSelf && !isFranchise
-                }
-
-                if (externalFiltered.isNotEmpty()) {
-                    allItems = externalFiltered
-                    mutableState.value = SuggestionState.Success(
-                        items = allItems,
-                        hasMore = false,
-                    )
-                }
-
-                val combined = (externalItems + pluginItems)
-                    .dedupeByCleanTitle()
-                    .filter { item ->
-                        val isSelf = (entryUrl != null && item.providerUrl == entryUrl) ||
-                            (item.providerId?.endsWith(":$entryUrl") == true)
-                        val isFranchise = SuggestionTitleResolver.isFranchiseDuplicate(item.title, primaryTitle)
-                        !isSelf && !isFranchise
+                    try {
+                        val externalItems = externalDeferred.await()
+                        if (externalItems.isNotEmpty()) {
+                            mergeAndPublish(seed, primaryTitle, externalItems)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // Keep the screen usable when one provider group fails.
                     }
-                    .sortedByDescending { SuggestionSourceWeight.finalScore(it.reason, it.bestMatchScoreFor(seed)) }
 
-                allItems = combined
-                mutableState.value = when {
-                    combined.isEmpty() -> SuggestionState.Empty()
-                    else -> SuggestionState.Success(
-                        items = combined,
-                        hasMore = false,
-                    )
+                    try {
+                        val pluginItems = nativeDeferred.await()
+                        if (pluginItems.isNotEmpty()) {
+                            mergeAndPublish(seed, primaryTitle, pluginItems)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // Keep partial external results visible.
+                    }
+                }
+
+                if (allItems.isEmpty()) {
+                    mutableState.value = SuggestionState.Empty()
+                } else {
+                    publishItems()
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -203,7 +227,7 @@ class EntrySuggestionsScreenModel(
     }
 
     @Suppress("ReturnCount")
-    private suspend fun fetchNativeFallback(): List<SuggestionItem> {
+    private suspend fun fetchNativeFallback(maxResults: Int): List<SuggestionItem> {
         if (sourceId == null || entryUrl == null) return emptyList()
         return when (seed.mediaType) {
             SuggestionMediaType.NOVEL -> {
@@ -220,7 +244,7 @@ class EntrySuggestionsScreenModel(
                     novel = dummyNovel,
                     source = source,
                     seed = seed,
-                    maxResults = Int.MAX_VALUE,
+                    maxResults = maxResults,
                 )
                 val relatedList = if (relatedOutcome is NovelFallbackOutcome.Success) {
                     relatedOutcome.items
@@ -231,7 +255,7 @@ class EntrySuggestionsScreenModel(
                     novel = dummyNovel,
                     source = source,
                     seed = seed,
-                    maxResults = Int.MAX_VALUE,
+                    maxResults = maxResults,
                 )
                 val searchList = if (searchOutcome is NovelFallbackOutcome.Success) {
                     searchOutcome.items
@@ -254,7 +278,7 @@ class EntrySuggestionsScreenModel(
                     manga = dummyManga,
                     source = source,
                     seed = seed,
-                    maxResults = 40,
+                    maxResults = maxResults,
                 )
                 if (searchOutcome is MangaFallbackOutcome.Success) {
                     searchOutcome.items
@@ -276,7 +300,7 @@ class EntrySuggestionsScreenModel(
                     anime = dummyAnime,
                     source = source,
                     seed = seed,
-                    maxResults = 40,
+                    maxResults = maxResults,
                 )
                 if (searchOutcome is AnimeFallbackOutcome.Success) {
                     searchOutcome.items
@@ -342,71 +366,30 @@ fun EntrySuggestionsContent(
         ) {
             when (state) {
                 is SuggestionState.Loading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color(0xFF64B5F6))
-                    }
+                    EntrySuggestionsSkeletonGrid()
                 }
                 is SuggestionState.Success -> {
-                    val items = state.items
+                    val groups = state.items.groupForFullScreen(
+                        topPicksTitle = stringResource(MR.strings.suggestions_group_top_picks),
+                        databasesTitle = stringResource(MR.strings.suggestions_group_recommendation_databases),
+                        currentSourceTitle = stringResource(MR.strings.suggestions_group_from_this_source),
+                        discoveryTitle = stringResource(MR.strings.suggestions_group_more_discoveries),
+                    )
                     LazyVerticalGrid(
-                        columns = GridCells.Adaptive(100.dp),
+                        columns = GridCells.Adaptive(104.dp),
                         contentPadding = PaddingValues(16.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(items, key = { it.providerId ?: it.providerUrl }) { item ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onSuggestionClick(item) },
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(150.dp)
-                                        .clip(RoundedCornerShape(8.dp)),
-                                ) {
-                                    AsyncImage(
-                                        model = getCoverModel(item),
-                                        contentDescription = item.title,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .background(
-                                                Brush.verticalGradient(
-                                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)),
-                                                    startY = 80f,
-                                                ),
-                                            ),
-                                    )
-                                    // Provider chip
-                                    Text(
-                                        text = item.providerName,
-                                        color = Color.White.copy(alpha = 0.6f),
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(4.dp)
-                                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = item.title,
-                                    color = Color.White,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    lineHeight = 14.sp,
-                                    modifier = Modifier.padding(horizontal = 2.dp),
+                        groups.forEach { group ->
+                            item(span = { GridItemSpan(maxLineSpan) }, key = "section_${group.title}") {
+                                EntrySuggestionsSectionHeader(group.title)
+                            }
+                            items(group.items, key = { it.providerId ?: it.providerUrl }) { item ->
+                                EntrySuggestionGridCard(
+                                    item = item,
+                                    onClick = { onSuggestionClick(item) },
                                 )
                             }
                         }
@@ -425,10 +408,10 @@ fun EntrySuggestionsContent(
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp,
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
+                                            .clip(RoundedCornerShape(999.dp))
+                                            .background(Color.White.copy(alpha = 0.1f))
                                             .clickable(onClick = onShowMoreClick)
-                                            .padding(horizontal = 24.dp, vertical = 12.dp)
-                                            .background(Color.White.copy(alpha = 0.1f)),
+                                            .padding(horizontal = 24.dp, vertical = 12.dp),
                                     )
                                 }
                             }
@@ -501,6 +484,198 @@ fun EntrySuggestionsContent(
             }
         }
     }
+}
+
+private data class SuggestionUiGroup(
+    val title: String,
+    val items: List<SuggestionItem>,
+)
+
+private fun List<SuggestionItem>.groupForFullScreen(
+    topPicksTitle: String,
+    databasesTitle: String,
+    currentSourceTitle: String,
+    discoveryTitle: String,
+): List<SuggestionUiGroup> {
+    if (isEmpty()) return emptyList()
+    val topPicks = take(8)
+    val topIds = topPicks.map { it.providerId ?: it.providerUrl }.toSet()
+
+    val databases = filter {
+        (it.providerId ?: it.providerUrl) !in topIds &&
+            it.reason in setOf(
+                eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_ANILIST,
+                eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_MAL,
+                eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_MU,
+                eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_NU,
+            )
+    }
+    val databaseIds = databases.map { it.providerId ?: it.providerUrl }.toSet()
+
+    val currentSource = filter {
+        val id = it.providerId ?: it.providerUrl
+        id !in topIds &&
+            id !in databaseIds &&
+            it.reason in setOf(
+                eu.kanade.tachiyomi.data.suggestions.SuggestionReason.RELATED,
+                eu.kanade.tachiyomi.data.suggestions.SuggestionReason.SEARCH_TITLE,
+                eu.kanade.tachiyomi.data.suggestions.SuggestionReason.SEARCH_AUTHOR,
+            )
+    }
+    val sourceIds = currentSource.map { it.providerId ?: it.providerUrl }.toSet()
+
+    val discovery = filter {
+        val id = it.providerId ?: it.providerUrl
+        id !in topIds && id !in databaseIds && id !in sourceIds
+    }
+
+    return buildList {
+        if (topPicks.isNotEmpty()) add(SuggestionUiGroup(topPicksTitle, topPicks))
+        if (databases.isNotEmpty()) add(SuggestionUiGroup(databasesTitle, databases))
+        if (currentSource.isNotEmpty()) add(SuggestionUiGroup(currentSourceTitle, currentSource))
+        if (discovery.isNotEmpty()) add(SuggestionUiGroup(discoveryTitle, discovery))
+    }
+}
+
+@Composable
+private fun EntrySuggestionsSectionHeader(title: String) {
+    Text(
+        text = title,
+        color = Color.White.copy(alpha = 0.82f),
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun EntrySuggestionGridCard(
+    item: SuggestionItem,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(154.dp)
+                .clip(RoundedCornerShape(10.dp)),
+        ) {
+            AsyncImage(
+                model = getCoverModel(item),
+                contentDescription = item.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.25f),
+                                Color.Black.copy(alpha = 0.82f),
+                            ),
+                            startY = 55f,
+                        ),
+                    ),
+            )
+            Text(
+                text = item.providerBadgeLabel(),
+                color = Color.White.copy(alpha = 0.92f),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(5.dp)
+                    .background(Color.Black.copy(alpha = 0.58f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+            Text(
+                text = item.reasonBadgeLabel(),
+                color = Color.White.copy(alpha = 0.88f),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 6.dp, end = 6.dp, bottom = 6.dp)
+                    .background(item.reasonAccentColor().copy(alpha = 0.74f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+        Spacer(modifier = Modifier.height(5.dp))
+        Text(
+            text = item.title,
+            color = Color.White,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            lineHeight = 14.sp,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        )
+    }
+}
+
+@Composable
+private fun EntrySuggestionsSkeletonGrid() {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(104.dp),
+        contentPadding = PaddingValues(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        items(12) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(154.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.White.copy(alpha = 0.08f)),
+            )
+        }
+    }
+}
+
+private fun SuggestionItem.providerBadgeLabel(): String = when (providerName) {
+    "MyAnimeList" -> "MAL"
+    else -> providerName
+}
+
+private fun SuggestionItem.reasonBadgeLabel(): String = when (reason) {
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.RELATED -> "Related"
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_ANILIST,
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_MAL,
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_MU,
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_NU,
+    -> "Recommended"
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.SEARCH_TITLE -> "Title match"
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.SEARCH_AUTHOR -> "Same author"
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.SEARCH_GENRE -> "Similar genre"
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.POPULAR_BACKFILL -> "Discovery"
+}
+
+private fun SuggestionItem.reasonAccentColor(): Color = when (reason) {
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.RELATED -> Color(0xFF7E57C2)
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_ANILIST,
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_MAL,
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_MU,
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.EXTERNAL_NU,
+    -> Color(0xFF1976D2)
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.SEARCH_TITLE -> Color(0xFF00897B)
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.SEARCH_AUTHOR -> Color(0xFF5E35B1)
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.SEARCH_GENRE -> Color(0xFFF57C00)
+    eu.kanade.tachiyomi.data.suggestions.SuggestionReason.POPULAR_BACKFILL -> Color(0xFF546E7A)
 }
 
 private fun getCoverModel(item: SuggestionItem): Any? {

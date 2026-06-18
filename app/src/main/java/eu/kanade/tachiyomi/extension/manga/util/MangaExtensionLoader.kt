@@ -97,8 +97,14 @@ internal object MangaExtensionLoader {
             }
         }
 
+        val privateExtensionDir = getPrivateExtensionDir(context)
+        if (!privateExtensionDir.exists() && !privateExtensionDir.mkdirs()) {
+            logcat(LogPriority.ERROR) { "Failed to create private extension directory." }
+            return false
+        }
+
         val target = File(
-            getPrivateExtensionDir(context),
+            privateExtensionDir,
             "${extension.packageName}.$PRIVATE_EXTENSION_EXTENSION",
         )
         return try {
@@ -158,15 +164,16 @@ internal object MangaExtensionLoader {
             }
             ?.filter { isPackageAnExtension(it) }
             ?.map { MangaExtensionInfo(packageInfo = it, isShared = false) }
-            ?: emptySequence()
+            ?.toList()
+            .orEmpty()
+        val privateExtPkgsByPkgName = privateExtPkgs.associateBy { it.packageInfo.packageName }
 
-        val extPkgs = (sharedExtPkgs + privateExtPkgs)
+        val extPkgs = (sharedExtPkgs + privateExtPkgs.asSequence())
             // Remove duplicates. Shared takes priority than private by default
             .distinctBy { it.packageInfo.packageName }
             // Compare version number
             .mapNotNull { sharedPkg ->
-                val privatePkg = privateExtPkgs
-                    .singleOrNull { it.packageInfo.packageName == sharedPkg.packageInfo.packageName }
+                val privatePkg = privateExtPkgsByPkgName[sharedPkg.packageInfo.packageName]
                 selectExtensionPackage(sharedPkg, privatePkg)
             }
             .toList()

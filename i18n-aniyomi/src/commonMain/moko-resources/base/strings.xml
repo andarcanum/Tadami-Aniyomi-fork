@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Generic strings -->
+    <string name="option_label_library_update_errors">Library update errors</string>
+    <string name="label_library_update_errors">Library update errors</string>
+    <string name="info_empty_library_update_errors">No library update errors</string>
+    <string name="action_clear_update_errors">Clear errors</string>
+    <string name="library_update_error_manual">Manual</string>
+    <string name="library_update_error_automatic">Automatic</string>
+    <string name="library_update_error_tab_manga">Manga</string>
+    <string name="library_update_error_tab_anime">Anime</string>
+    <string name="library_update_error_tab_novel">Novel</string>
+
     <string name="confirm_exit">Enable Horizontal Seek</string>
     <string name="action_filter_started">Started</string>
     <string name="action_sort_airing_time">Airing time</string>
@@ -56,6 +66,8 @@
     <string name="pref_library_update_show_tab_badge">Show unseen/unread count on Updates icon</string>
     <string name="pref_aurora_library_immersive_mode">Immersive mode</string>
     <string name="pref_aurora_library_immersive_mode_summary">Hide the top chrome and bottom navigation while scrolling, but keep categories visible.</string>
+    <string name="pref_disable_home_header_scroll_hide">Pin home header</string>
+    <string name="pref_disable_home_header_scroll_hide_summary">Keep the home screen greeting header always visible and prevent it from hiding when scrolling.</string>
     <string name="pref_aurora_library_swipe_switches_categories">Swipe switches categories</string>
     <string name="pref_aurora_library_swipe_switches_categories_summary">Use horizontal swipes on the library to switch between categories instead of sections (anime/manga/novels).</string>
     <string name="pref_category_delete_chapters">Delete chapters/episodes</string>
@@ -440,9 +452,9 @@
     <string name="theme_aurora">Aurora</string>
     <string name="theme_doom">Doom</string>
     <string name="theme_matrix">Matrix</string>
-    <string name="theme_onyx_gold">Obsidian Gold</string>
-    <string name="theme_sakura_noir">Sakura Noir</string>
-    <string name="theme_nebula_tide">Nebula Tide</string>
+    <string name="theme_onyx_gold">Onyx Regalia</string>
+    <string name="theme_sakura_noir">Sakura Eclipse</string>
+    <string name="theme_nebula_tide">Astral Tide</string>
     <string name="pref_library_rows">List size</string>
     <!-- Reader section -->
     <string name="pref_preserve_reading_position">Preserve reading position on read chapters</string>
@@ -733,6 +745,7 @@
     <string name="novel_reader_tts_read_chapter_title">Read chapter title first</string>
     <string name="novel_reader_tts_unknown_language">Unknown language</string>
     <string name="novel_reader_tts_default_voice">Default voice</string>
+    <string name="novel_reader_tts_system_default_voice_summary">Use the engine's default voice for the selected language</string>
     <string name="novel_reader_tts_voice_number">Voice %d</string>
     <string name="novel_reader_tts_voice_hint_network">Network</string>
     <string name="novel_reader_tts_voice_hint_offline">Offline</string>
@@ -1744,6 +1757,8 @@
     <string name="aurora_more">More</string>
     <string name="debug_app_update_preview">App update preview</string>
     <string name="debug_app_update_preview_summary">Open the update sheet with mock release data</string>
+    <string name="debug_updated_changelog_preview">Updated changelog preview</string>
+    <string name="debug_updated_changelog_preview_summary">Open the post-update changelog sheet with mock release data</string>
     <string name="aurora_library">Library</string>
     <string name="aurora_categories">Categories</string>
     <string name="aurora_data_storage">Data &amp; Storage</string>
@@ -1803,6 +1818,8 @@
     <string name="pref_show_achievement_notifications_summary">Show popup when unlocking achievements</string>
     <string name="pref_animated_aurora_background">Animated Aurora background</string>
     <string name="pref_animated_aurora_background_summary">Show soft animated color glows on Aurora screens</string>
+    <string name="pref_aurora_dark_rim_light">Rim light border in dark theme</string>
+    <string name="pref_aurora_dark_rim_light_summary">Show the glowing top-edge border on Aurora cards in dark theme</string>
     <string name="pref_e_ink_profile">E-ink profile</string>
     <string name="pref_e_ink_profile_monochrome">Monochrome</string>
     <string name="pref_e_ink_profile_color">Color</string>
@@ -1839,16 +1856,25 @@
     <string name="pref_achievements_summary">Track your progress and rewards</string>
     <string name="pref_treasury_summary">Exclusive rewards unlocked by your deeds</string>
     <string name="treasury_themes">Themes</string>
+    <string name="treasury_themes_subtitle">Exclusive themes. Tap the cover to apply its atmosphere.</string>
+    <string name="treasury_auras_subtitle">Each aura is a unique effect with its own orbit and pulse.</string>
+    <string name="treasury_artifacts_subtitle">No flat screens or dull rhythm — each background is a unique phenomenon.</string>
     <string name="treasury_unlocked_themes">Unlocked Themes</string>
     <string name="treasury_auras">Visual Effects &amp; Auras</string>
     <string name="treasury_profile_and_avatar">Profile and Avatar</string>
     <string name="treasury_profile_effects">Profile Effects</string>
+    <string name="treasury_profile_effects_subtitle">Unique glowing and animated styles to highlight your nickname.</string>
     <string name="treasury_avatar_frames">Avatar Frames</string>
+    <string name="treasury_avatar_frames_subtitle">Decorative orbital frames and borders surrounding your avatar picture.</string>
     <string name="treasury_home_hub_rewards">Home Hub Rewards</string>
+    <string name="treasury_home_hub_rewards_subtitle">Special orbit rings, crowns, and badges surrounding your avatar on the Home Hub.</string>
     <string name="treasury_aura_subtitle">Enable special effects for covers and UI</string>
     <string name="treasury_toggle_active">Active</string>
     <string name="treasury_toggle_inactive">Inactive</string>
     <string name="treasury_toggle_locked">Locked</string>
+    <string name="treasury_toggle_available">Available</string>
+    <string name="treasury_toggle_locked_with_desc">Locked, %1$s</string>
+    <string name="treasury_vault_progress_description">Treasury progress: %1$d%%</string>
     <string name="treasury_reward_aurora_crown_description">Royal nickname styling with a bright gold crown accent.</string>
     <string name="treasury_reward_glitch_rune_description">Corrupted rune nickname effect with a synthetic glitch pulse.</string>
     <string name="treasury_reward_cipher_description">Cipher-style nickname effect with bracketed secret energy.</string>
@@ -1858,12 +1884,86 @@
     <string name="treasury_reward_orbit_badge_description">Orbit effect that wraps the Home Hub nickname.</string>
     <string name="treasury_reward_crown_badge_description">Crown effect for a more regal Home Hub header.</string>
     <string name="treasury_reward_shuriken_badge_description">Sharp-edged effect with an arcade-like profile vibe.</string>
-    <string name="treasury_reward_petal_storm_background_description">Animated sakura petals drifting across the Aurora background.</string>
-    <string name="treasury_reward_neon_orbit_background_description">Neon orbital rings and particles that replace the default ambient bloom.</string>
+    <string name="treasury_reward_petal_storm_background_description">A fleeting dance of petals in a silent storm.</string>
+    <string name="treasury_reward_neon_orbit_background_description">Luminous rings guarding the core of the digital abyss.</string>
     <string name="treasury_visual_effects">Visual effects</string>
     <string name="treasury_background_effects">Background effects</string>
+    <string name="treasury_background_effects_subtitle">Animated wallpapers and overlays to dynamic up-style your interface background.</string>
     <string name="treasury_empty_title">The Treasury is Empty</string>
     <string name="treasury_empty_description">Complete rare or secret achievements to unlock exclusive rewards!</string>
+    <string name="treasury_exclusive_rarity_mythic">Mythic</string>
+    <string name="treasury_exclusive_rarity_secret">Secret</string>
+    <string name="treasury_exclusive_rarity_transcendent">Transcendent</string>
+    <string name="treasury_exclusive_active">Active exclusive</string>
+    <string name="treasury_exclusive_unlocked">Unlocked exclusive</string>
+    <string name="treasury_tagline_onyx_gold">Black-diamond surfaces with royal gold and a ruby trophy accent</string>
+    <string name="treasury_tagline_sakura_noir">Midnight sakura neon, plum noir cards, and jade hidden-hall glow</string>
+    <string name="treasury_tagline_nebula_tide">Abyssal space blue with plasma cyan, violet gravity, and alien-lime sparks</string>
+    <!-- Treasury Vault hero -->
+    <string name="treasury_vault_group_title">Aurora Vault</string>
+    <string name="treasury_vault_header">AURORA TREASURY</string>
+    <string name="treasury_vault_headline">Vault of earned relics</string>
+    <string name="treasury_vault_progress">%1$d / %2$d rewards unlocked · %3$d%% collection power</string>
+    <string name="treasury_vault_pill_theme">Theme</string>
+    <string name="treasury_vault_pill_aura">Aura</string>
+    <string name="treasury_vault_reward_paths">Reward paths</string>
+    <string name="treasury_path_trinity_title">Trinity Path</string>
+    <string name="treasury_path_trinity_subtitle">Initiate → Master → Legend</string>
+    <string name="treasury_path_immersion_title">Immersion Path</string>
+    <string name="treasury_path_immersion_subtitle">Bronze → Silver → Gold → Platinum</string>
+    <string name="treasury_path_ascension_title">Ascension Path</string>
+    <string name="treasury_path_ascension_subtitle">Rank I → Rank X</string>
+    <!-- Treasury profile titles -->
+    <string name="treasury_profile_titles">Profile titles</string>
+    <string name="treasury_profile_titles_subtitle">Special honor titles displayed directly under your nickname on the profile card.</string>
+    <string name="treasury_title_trinity_initiate_title">Trinity Initiate</string>
+    <string name="treasury_title_trinity_initiate_desc">Display the three-path initiate title under your nickname</string>
+    <string name="treasury_title_finisher_title">The Finisher</string>
+    <string name="treasury_title_finisher_desc">Display a completion title under your nickname</string>
+    <string name="treasury_title_closer_title">The Closer</string>
+    <string name="treasury_title_closer_desc">Display a legendary completion title under your nickname</string>
+    <string name="treasury_title_deep_reader_title">Deep Reader</string>
+    <string name="treasury_title_deep_reader_desc">Display a deep-session reading title under your nickname</string>
+    <string name="treasury_title_rank_4_title">Rank IV: Veteran</string>
+    <string name="treasury_title_rank_4_desc">Display your Veteran rank title under your nickname</string>
+    <!-- Treasury new nickname effects -->
+    <string name="treasury_nickname_trinity_prism_title">Trinity Prism Nickname Effect</string>
+    <string name="treasury_nickname_trinity_prism_desc">Prismatic three-realm shimmer for the Home Hub nickname</string>
+    <string name="treasury_nickname_shadow_crown_title">Shadow Crown Nickname Effect</string>
+    <string name="treasury_nickname_shadow_crown_desc">A dark monarch crown signature for secret rewards</string>
+    <string name="treasury_nickname_rank_sigils_title">Rank Sigils Nickname Effect</string>
+    <string name="treasury_nickname_rank_sigils_desc">Prestige sigils for the ascension path</string>
+    <!-- Treasury new avatar frames -->
+    <string name="treasury_frame_trinity_orbit_title">Trinity Orbit Frame</string>
+    <string name="treasury_frame_trinity_orbit_desc">Three orbital arcs for cross-media legends</string>
+    <string name="treasury_frame_deep_archive_title">Deep Archive Frame</string>
+    <string name="treasury_frame_deep_archive_desc">Blue-gold archive frame for long reading sessions</string>
+    <string name="treasury_frame_hybrid_scroll_title">Hybrid Scroll Frame</string>
+    <string name="treasury_frame_hybrid_scroll_desc">A digital manuscript frame for anime-novel mastery</string>
+    <string name="treasury_frame_ascendant_title">Ascendant Frame</string>
+    <string name="treasury_frame_ascendant_desc">White-gold frame for the highest ranks</string>
+    <!-- Treasury new home badges -->
+    <string name="treasury_badge_trinity_title">Trinity Badge</string>
+    <string name="treasury_badge_trinity_desc">Three-realm mark for the Home Hub</string>
+    <string name="treasury_badge_finisher_title">Finisher Seal</string>
+    <string name="treasury_badge_finisher_desc">A completion seal for users who close every story</string>
+    <string name="treasury_badge_immersion_title">Immersion Badge</string>
+    <string name="treasury_badge_immersion_desc">Focus mark for deep single-session reading</string>
+    <string name="treasury_badge_ascendant_title">Ascendant Badge</string>
+    <string name="treasury_badge_ascendant_desc">Prestige mark for the rank path</string>
+    <!-- Treasury new backgrounds -->
+    <string name="treasury_bg_trinity_constellation_title">Trinity Constellation</string>
+    <string name="treasury_bg_trinity_constellation_desc">Three radiant cores bound in an endless cosmic waltz.</string>
+    <string name="treasury_bg_deep_space_archive_title">Deep Space Archive</string>
+    <string name="treasury_bg_deep_space_archive_desc">Ancient folios drifting silently through the cosmic void.</string>
+    <string name="treasury_bg_shadow_realm_title">Shadow Realm</string>
+    <string name="treasury_bg_shadow_realm_desc">A swirling abyss where light and time lose their meaning.</string>
+    <!-- Treasury misc -->
+    <string name="treasury_nickname_preview">Nickname Preview</string>
+    <string name="treasury_default_user_name">User Name</string>
+    <string name="treasury_fallback_achievement">Achievement</string>
+    <string name="treasury_cd_locked">Locked</string>
+    <string name="treasury_cd_active">Active</string>
     <string name="achievement_stats_points">Points • %d%%</string>
     <string name="achievement_stats_unlocked">Unlocked • %d%%</string>
     <string name="achievement_back">Back</string>
@@ -1877,6 +1977,17 @@
     <string name="achievement_empty_description">There are no achievements in this category yet</string>
     <string name="achievement_progress_label">PROGRESS</string>
     <string name="achievement_rewards_label">REWARDS</string>
+    <string name="achievement_bento_rank">RANK</string>
+    <string name="achievement_bento_level">LEVEL %d</string>
+    <string name="achievement_bento_xp_points">XP POINTS</string>
+    <string name="achievement_bento_unlocked">UNLOCKED</string>
+    <string name="achievement_bento_streak">STREAK</string>
+    <string name="achievement_bento_days">%d DAYS</string>
+    <string name="achievement_rank_novice_reader">Novice Reader</string>
+    <string name="achievement_rank_avid_reader">Avid Reader</string>
+    <string name="achievement_rank_ranobe_master">Ranobe Master</string>
+    <string name="achievement_rank_grandmaster">Grandmaster</string>
+    <string name="achievement_rank_legendary_scholar">Legendary Scholar</string>
     <string name="achievement_points">%d points</string>
     <string name="achievement_points_reward">+%d points</string>
     <string name="achievement_unlocked_at">Unlocked: %s</string>
@@ -1891,6 +2002,38 @@
     <string name="achievement_list_confirm">Awesome!</string>
     <string name="achievement_banner_rare_title">RARE ACHIEVEMENT!</string>
     <string name="achievement_banner_unlocked_title">ACHIEVEMENT UNLOCKED!</string>
+    <string name="achievement_hint_vague_prefix">Clue: %s</string>
+    <string name="achievement_hint_direct_prefix">Hint: %s</string>
+    <string name="achievement_hint_obvious_prefix">Target: %s</string>
+    <string name="achievement_clue_prefix">Details: %s</string>
+
+    <string name="achievement_secret_persistent_clicker_hint_vague">Stubbornness is sometimes rewarded.</string>
+    <string name="achievement_secret_persistent_clicker_hint_direct">Some corners of the app respond to repetitive touch.</string>
+    <string name="achievement_secret_persistent_clicker_hint_obvious">Keep tapping where nothing seems to happen in settings or screens.</string>
+
+    <string name="achievement_secret_harem_king_hint_vague">A crowd of admirers is gathering.</string>
+    <string name="achievement_secret_harem_king_hint_direct">Surround yourself with a certain popular anime trope in library.</string>
+    <string name="achievement_secret_harem_king_hint_obvious">Collect 20 titles with the \'Harem\' genre.</string>
+
+    <string name="achievement_secret_isekai_truck_hint_vague">Watch out for heavy traffic!</string>
+    <string name="achievement_secret_isekai_truck_hint_direct">A portal to another world is opened by a famous vehicle.</string>
+    <string name="achievement_secret_isekai_truck_hint_obvious">Collect 20 stories about reincarnation in another world (Isekai).</string>
+
+    <string name="achievement_secret_shonen_hint_vague">A warrior\'s path starts with a single training session.</string>
+    <string name="achievement_secret_shonen_hint_direct">Friendship, effort, and victory will guide your library.</string>
+    <string name="achievement_secret_shonen_hint_obvious">Collect 10 classic action/adventure titles (Shonen).</string>
+
+    <string name="achievement_secret_onepiece_hint_vague">Set sail towards the horizon.</string>
+    <string name="achievement_secret_onepiece_hint_direct">The treasure lies at the end of a very long journey of points.</string>
+    <string name="achievement_secret_onepiece_hint_obvious">Earn 1,000 points of achievements to find the One Piece.</string>
+
+    <string name="achievement_secret_goku_hint_vague">Power levels are rising rapidly.</string>
+    <string name="achievement_secret_goku_hint_direct">The scanner is about to break from your total score.</string>
+    <string name="achievement_secret_goku_hint_obvious">Reach over 9,000 total achievement points. It\'s over 9,000!</string>
+
+    <string name="achievement_secret_weeb_awakening_hint_vague">Embrace the culture in all its forms.</string>
+    <string name="achievement_secret_weeb_awakening_hint_direct">Your library should span across manga, anime, and novels.</string>
+    <string name="achievement_secret_weeb_awakening_hint_obvious">Collect 50+ titles across all three media formats (Manga, Anime, Novels).</string>
     <string name="achievement_first_chapter_title">First Steps</string>
     <string name="achievement_first_chapter_desc">Read your first chapter</string>
     <string name="achievement_read_10_chapters_title">Novice</string>
@@ -2044,7 +2187,71 @@
     <string name="achievement_secret_king_of_pirates_title">King of Pirates</string>
     <string name="achievement_secret_king_of_pirates_desc">1000+ manga chapters (One Piece reference)</string>
     <string name="achievement_secret_not_even_my_final_form_title">Not Even My Final Form!</string>
-    <string name="achievement_secret_not_even_my_final_form_desc">9000+ achievement points (Dragon Ball's "OVER 9000!" reference)</string>
+    <string name="achievement_secret_not_even_my_final_form_desc">9000+ achievement points (Dragon Ball\'s "OVER 9000!" reference)</string>
+    <string name="achievement_reading_immersion_bronze_title">Bronze Immersion</string>
+    <string name="achievement_reading_immersion_bronze_desc">Read for a full hour in a single session</string>
+    <string name="achievement_reading_immersion_silver_title">Silver Immersion</string>
+    <string name="achievement_reading_immersion_silver_desc">Read for 2 hours in a single session</string>
+    <string name="achievement_reading_immersion_gold_title">Gold Immersion</string>
+    <string name="achievement_reading_immersion_gold_desc">Read for 5 hours in a single session</string>
+    <string name="achievement_reading_immersion_platinum_title">Platinum Immersion</string>
+    <string name="achievement_reading_immersion_platinum_desc">Read for 10+ hours in a single session</string>
+    <string name="achievement_anime_novel_hybrid_bronze_title">Anime-Novel Hybrid</string>
+    <string name="achievement_anime_novel_hybrid_bronze_desc">Watch 25 episodes and read 25 novel chapters</string>
+    <string name="achievement_anime_novel_hybrid_silver_title">Anime-Novel Connoisseur</string>
+    <string name="achievement_anime_novel_hybrid_silver_desc">Watch 100 episodes and read 100 novel chapters</string>
+    <string name="achievement_anime_novel_hybrid_gold_title">Anime-Novel Master</string>
+    <string name="achievement_anime_novel_hybrid_gold_desc">Watch 500 episodes and read 500 novel chapters</string>
+    <string name="achievement_rank_up_1_title">Rank I: Apprentice</string>
+    <string name="achievement_rank_up_1_desc">Earn 100 achievement points</string>
+    <string name="achievement_rank_up_2_title">Rank II: Initiate</string>
+    <string name="achievement_rank_up_2_desc">Earn 500 achievement points</string>
+    <string name="achievement_rank_up_3_title">Rank III: Adept</string>
+    <string name="achievement_rank_up_3_desc">Earn 1,000 achievement points</string>
+    <string name="achievement_rank_up_4_title">Rank IV: Veteran</string>
+    <string name="achievement_rank_up_4_desc">Earn 2,500 achievement points</string>
+    <string name="achievement_rank_up_5_title">Rank V: Expert</string>
+    <string name="achievement_rank_up_5_desc">Earn 5,000 achievement points</string>
+    <string name="achievement_rank_up_6_title">Rank VI: Master</string>
+    <string name="achievement_rank_up_6_desc">Earn 10,000 achievement points</string>
+    <string name="achievement_rank_up_7_title">Rank VII: Champion</string>
+    <string name="achievement_rank_up_7_desc">Earn 25,000 achievement points</string>
+    <string name="achievement_rank_up_8_title">Rank VIII: Legend</string>
+    <string name="achievement_rank_up_8_desc">Earn 50,000 achievement points</string>
+    <string name="achievement_rank_up_9_title">Rank IX: Mythic</string>
+    <string name="achievement_rank_up_9_desc">Earn 100,000 achievement points</string>
+    <string name="achievement_rank_up_10_title">Rank X: Transcendent</string>
+    <string name="achievement_rank_up_10_desc">Earn 250,000 achievement points</string>
+    <string name="achievement_trinity_initiate_title">Trinity Initiate</string>
+    <string name="achievement_trinity_initiate_desc">Read 25 chapters/episodes across manga, anime and novels</string>
+    <string name="achievement_trinity_master_title">Trinity Master</string>
+    <string name="achievement_trinity_master_desc">Reach 200 across all three media</string>
+    <string name="achievement_trinity_legend_title">Trinity Legend</string>
+    <string name="achievement_trinity_legend_desc">Reach 1,000 across all three media</string>
+    <string name="achievement_cross_media_champion_bronze_title">Cross-Media Beginner</string>
+    <string name="achievement_cross_media_champion_bronze_desc">Reach 50 chapters across manga, anime and novels</string>
+    <string name="achievement_cross_media_champion_silver_title">Cross-Media Enthusiast</string>
+    <string name="achievement_cross_media_champion_silver_desc">Reach 500 chapters across manga, anime and novels</string>
+    <string name="achievement_cross_media_champion_gold_title">Cross-Media Champion</string>
+    <string name="achievement_cross_media_champion_gold_desc">Reach 2,000 chapters across manga, anime and novels</string>
+    <string name="achievement_three_realms_collector_title">Three Realms Collector</string>
+    <string name="achievement_three_realms_collector_desc">Build a library spanning manga, anime and novels</string>
+    <string name="achievement_the_finisher_title">The Finisher</string>
+    <string name="achievement_the_finisher_desc">Complete 50% of the titles you start</string>
+    <string name="achievement_the_closer_title">The Closer</string>
+    <string name="achievement_the_closer_desc">Complete 90% of the titles you start</string>
+    <string name="achievement_romance_devotee_title">Romance Devotee</string>
+    <string name="achievement_romance_devotee_desc">Collect 15 romance titles in your library</string>
+    <string name="achievement_horror_aficionado_title">Horror Aficionado</string>
+    <string name="achievement_horror_aficionado_desc">Collect 15 horror titles in your library</string>
+    <string name="achievement_isekai_addict_title">Isekai Addict</string>
+    <string name="achievement_isekai_addict_desc">Collect 20 isekai titles in your library</string>
+    <string name="achievement_slice_of_life_zen_title">Slice of Life Zen</string>
+    <string name="achievement_slice_of_life_zen_desc">Collect 15 slice of life titles in your library</string>
+    <string name="achievement_secret_shadow_monarch_title">Shadow Monarch</string>
+    <string name="achievement_secret_shadow_monarch_desc">Arise — a hidden achievement unlocked</string>
+    <string name="achievement_secret_weeb_awakening_title">Weeb Awakening</string>
+    <string name="achievement_secret_weeb_awakening_desc">Your true power awakens — a hidden achievement</string>
     <string name="reader_navigator_preview">Preview:</string>
     <string name="reader_navigator_slider_color_theme">Theme</string>
     <string name="reader_navigator_slider_color_pink">Pink</string>
@@ -2146,4 +2353,53 @@
     <string name="pref_category_debug">Debug</string>
     <string name="pref_debug_bypass_treasury_locks">Bypass locks for testing</string>
     <string name="pref_debug_bypass_treasury_locks_summary">Temporarily unlocks all Treasury rewards for visual validation</string>
+
+    <!-- High-end download engine reliability / OEM policy -->
+    <string name="download_power_policy_title">Stable background downloads</string>
+    <string name="download_power_policy_android_summary">Android may limit long background downloads. Allow the app to work without battery optimization so the queue doesn't stop.</string>
+    <string name="download_power_policy_xiaomi_summary">On Xiaomi/Redmi/POCO enable Auto-start, battery mode "No restrictions" and pin the app in recent apps — this way MIUI/HyperOS interrupts downloads less often.</string>
+    <string name="download_power_policy_battery_action">Battery</string>
+    <string name="download_power_policy_autostart_action">Auto-start</string>
+
+    <!-- Novel download anti-rate-limit controls -->
+    <string name="novel_download_throttle_menu">Request settings</string>
+    <string name="novel_download_throttle_title">Anti-blocking protection</string>
+    <string name="novel_download_throttle_summary">Configure pause between chapters, random jitter and timeout. This reduces the risk of temporary blocking by the source due to too frequent requests.</string>
+    <string name="novel_download_throttle_delay_ms">Pause, ms</string>
+    <string name="novel_download_throttle_jitter_ms">Jitter, ms</string>
+    <string name="novel_download_throttle_timeout_ms">Timeout, ms</string>
+    <string name="novel_download_throttle_cooldown_ms">Pause after error, ms</string>
+    <string name="novel_download_throttle_limits">Pause: %1$d–%2$d ms. Timeout: %3$d–%4$d ms. Recommended: 1200–3000 ms pause, 300–1000 ms jitter.</string>
+    <string name="novel_download_throttle_save">Save</string>
+    <string name="novel_download_throttle_cancel">Cancel</string>
+    <!-- Subtitle translation -->
+    <string name="player_sheets_translate_subtitles">Translate subtitles</string>
+    <string name="player_subtitle_translation_added">Translated subtitles added</string>
+    <string name="player_subtitle_translation_disabled">Subtitle translation is disabled</string>
+    <string name="player_subtitle_translation_no_external_track">No external subtitle track available to translate</string>
+    <string name="player_subtitle_translation_ai_requires_opt_in">AI subtitle translation requires explicit opt-in</string>
+    <string name="player_subtitle_translation_failed">Subtitle translation failed</string>
+    <string name="pref_player_subtitle_translation">Subtitle translation</string>
+    <string name="pref_player_subtitle_translation_summary">Translate subtitle tracks and add the result as a new subtitle track in the player. External tracks are supported; embedded tracks are supported for local/downloaded videos.</string>
+    <string name="pref_player_subtitle_translation_provider">Translation provider</string>
+    <string name="pref_player_subtitle_translation_provider_summary">Choose Google for quick translation, or AI to use the Novel AI translation provider configured in the reader settings.</string>
+    <string name="pref_player_subtitle_translation_google_info">Google: fastest setup. Uses the built-in unofficial Google translator and does not require AI keys.</string>
+    <string name="pref_player_subtitle_translation_ai_info">AI: uses the Novel AI translation provider and its API key/model settings. Enable AI subtitle translation only if you accept privacy and cost implications.</string>
+    <string name="pref_player_subtitle_translation_source_lang">Source language</string>
+    <string name="pref_player_subtitle_translation_source_lang_summary">Use auto for automatic detection.</string>
+    <string name="pref_player_subtitle_translation_target_lang">Target language</string>
+    <string name="pref_player_subtitle_translation_target_lang_summary">Language code for translated subtitles, for example en, ru, es, ja.</string>
+    <string name="pref_player_subtitle_translation_allow_ai">Allow AI subtitle translation</string>
+    <string name="pref_player_subtitle_translation_allow_ai_summary">Allows sending subtitle text to the configured Novel AI translation provider. Check API keys, model, cost, and privacy before using it.</string>
+    <string name="pref_player_subtitle_translation_cache">Cache translated subtitles</string>
+
+    <string name="player_subtitle_translation_select_track">Select subtitle track</string>
+    <string name="player_subtitle_translation_start">Start translation</string>
+    <string name="player_subtitle_translation_cancel">Cancel translation</string>
+    <string name="player_subtitle_translation_provider_google">Google</string>
+    <string name="player_subtitle_translation_provider_ai">AI</string>
+    <string name="player_subtitle_translation_embedded_unavailable">Embedded subtitle translation is available only for local or downloaded videos when a subtitle stream can be matched.</string>
+    <string name="player_subtitle_translation_progress">%1$d%%, %2$d/%3$d cues</string>
+    <string name="player_subtitle_translation_from_to">%1$s → %2$s</string>
+
 </resources>

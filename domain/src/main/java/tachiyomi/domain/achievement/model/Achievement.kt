@@ -22,6 +22,17 @@ data class Achievement(
     val maxTier: Int = tiers?.size ?: 0,
     // Система наград (Rewards)
     val rewards: List<Reward>? = null,
+    // ---- Refactor additions (all optional / backwards-compatible) ----
+    val rarity: AchievementRarity = AchievementRarity.COMMON,
+    val tags: List<String> = emptyList(),
+    val hint: String? = null,
+    val hintVague: String? = null,
+    val hintDirect: String? = null,
+    val hintObvious: String? = null,
+    val season: String? = null,
+    val tierGroup: String? = null,
+    val tierLevel: Int? = null,
+    val rewardSet: String? = null,
 ) {
     /**
      * Является ли это достижением с уровнями
@@ -46,11 +57,20 @@ data class Achievement(
 
     /**
      * Получить следующий уровень для достижения
+     *
+     * Returns the next tier whose threshold exceeds [currentProgress].
+     * Returns `null` when:
+     * - the achievement is not tiered, or
+     * - [currentProgress] already meets or exceeds all tier thresholds (i.e. max tier reached).
+     *
+     * **Contract change (v8):** previously threw [NoSuchElementException] via `first {}`
+     * when no higher tier existed. Now uses `firstOrNull {}` and returns `null` instead.
+     *
      * @return Следующий Tier или null если уже максимальный уровень
      */
     fun getNextTier(currentProgress: Int): AchievementTier? {
         if (!isTiered) return null
-        return tiers?.first { currentProgress < it.threshold }
+        return tiers?.firstOrNull { currentProgress < it.threshold }
     }
 
     /**

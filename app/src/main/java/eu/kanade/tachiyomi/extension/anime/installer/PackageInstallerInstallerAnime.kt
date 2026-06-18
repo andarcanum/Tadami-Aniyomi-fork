@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.extension.anime.installer
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -22,11 +23,20 @@ class PackageInstallerInstallerAnime(private val service: Service) : InstallerAn
 
     private val packageActionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+            val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+            if (sessionId != activeSession?.second) {
+                logcat(LogPriority.WARN) { "Ignoring PackageInstaller callback for unexpected session=$sessionId" }
+                return
+            }
+
+            val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+            val statusMessage = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+            val legacyStatus = intent.getIntExtra(EXTRA_LEGACY_STATUS, 0)
+            when (status) {
                 PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                     val userAction = intent.getParcelableExtraCompat<Intent>(Intent.EXTRA_INTENT)
                     if (userAction == null) {
-                        logcat(LogPriority.ERROR) { "Fatal error for $intent" }
+                        logcat(LogPriority.ERROR) { "PackageInstaller requested user action without intent: $intent" }
                         continueQueue(InstallStep.Error)
                         return
                     }
@@ -34,10 +44,16 @@ class PackageInstallerInstallerAnime(private val service: Service) : InstallerAn
                     service.startActivity(userAction)
                 }
                 PackageInstaller.STATUS_FAILURE_ABORTED -> {
+                    logcat(LogPriority.INFO) { "Package install aborted: $statusMessage legacy=$legacyStatus" }
                     continueQueue(InstallStep.Idle)
                 }
                 PackageInstaller.STATUS_SUCCESS -> continueQueue(InstallStep.Installed)
-                else -> continueQueue(InstallStep.Error)
+                else -> {
+                    logcat(LogPriority.ERROR) {
+                        "Package install failed: status=$status legacy=$legacyStatus message=$statusMessage"
+                    }
+                    continueQueue(InstallStep.Error)
+                }
             }
         }
     }
@@ -47,6 +63,7 @@ class PackageInstallerInstallerAnime(private val service: Service) : InstallerAn
     // Always ready
     override var ready = true
 
+    @SuppressLint("RequestInstallPackagesPolicy")
     override fun processEntry(entry: Entry) {
         super.processEntry(entry)
         activeSession = null
@@ -109,9 +126,10 @@ class PackageInstallerInstallerAnime(private val service: Service) : InstallerAn
             service,
             packageActionReceiver,
             IntentFilter(INSTALL_ACTION),
-            ContextCompat.RECEIVER_EXPORTED,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
     }
 }
 
-private const val INSTALL_ACTION = "PackageInstallerInstaller.INSTALL_ACTION"
+private const val INSTALL_ACTION = "eu.kanade.tachiyomi.extension.anime.PackageInstallerInstaller.INSTALL_ACTION"
+private const val EXTRA_LEGACY_STATUS = "android.content.pm.extra.LEGACY_STATUS"

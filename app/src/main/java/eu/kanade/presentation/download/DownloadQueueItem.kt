@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -32,14 +33,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +69,13 @@ import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle as preferenceCollectAsState
+
+/**
+ * Feature flag for the themed Naruto runner used in queue progress bars.
+ * Keep it enabled by default for the current design, but expose one switch so
+ * product/build variants can disable it without touching the row implementation.
+ */
+val LocalDownloadQueueNarutoRunnerEnabled = staticCompositionLocalOf { true }
 
 @Composable
 fun DownloadQueueItem(
@@ -112,16 +126,30 @@ fun DownloadQueueItem(
         item.status == DownloadQueueUiModel.QueueStatus.DOWNLOADED
     val progressBarValue = when (item.status) {
         DownloadQueueUiModel.QueueStatus.DOWNLOADED -> 1f
-        DownloadQueueUiModel.QueueStatus.DOWNLOADING,
-        DownloadQueueUiModel.QueueStatus.QUEUED,
-        -> item.progressFraction.coerceIn(0f, 1f).coerceAtLeast(0.01f)
+        DownloadQueueUiModel.QueueStatus.DOWNLOADING -> item.progressFraction.coerceIn(0f, 1f).coerceAtLeast(0.01f)
+        DownloadQueueUiModel.QueueStatus.QUEUED -> 0f
         else -> item.progressFraction.coerceIn(0f, 1f)
+    }
+    val statusDescription = when (item.status) {
+        DownloadQueueUiModel.QueueStatus.QUEUED -> stringResource(AYMR.strings.download_queue_status_queued)
+        DownloadQueueUiModel.QueueStatus.DOWNLOADING -> stringResource(AYMR.strings.download_queue_status_downloading)
+        DownloadQueueUiModel.QueueStatus.DOWNLOADED -> stringResource(AYMR.strings.download_queue_status_downloaded)
+        DownloadQueueUiModel.QueueStatus.FAILED -> stringResource(AYMR.strings.download_queue_status_failed)
+        DownloadQueueUiModel.QueueStatus.IDLE -> ""
     }
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = buildString {
+                    append(item.title)
+                    if (item.subtitle.isNotBlank()) append(", ").append(item.subtitle)
+                    if (statusDescription.isNotBlank()) append(", ").append(statusDescription)
+                    if (item.progressText.isNotBlank()) append(", ").append(item.progressText)
+                }
+            },
         shape = cardShape,
         color = cardContainerColor,
         border = cardBorder,
@@ -246,7 +274,7 @@ fun DownloadQueueItem(
                             .clip(CircleShape)
                             .background(statusColor.copy(alpha = 0.08f))
                             .border(BorderStroke(1.5.dp, statusColor.copy(alpha = 0.28f)), CircleShape)
-                            .clickable { menuExpanded = true },
+                            .clickableNoRipple { menuExpanded = true },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -287,9 +315,11 @@ private fun NarutoProgressBar(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
+    val runnerEnabled = LocalDownloadQueueNarutoRunnerEnabled.current
 
     // Configure ImageLoader with GifDecoder / AnimatedImageDecoder for Coil 3
-    val animatedImageLoader = remember(context) {
+    val animatedImageLoader: ImageLoader? = remember(context, runnerEnabled) {
+        if (!runnerEnabled) return@remember null
         ImageLoader.Builder(context)
             .components {
                 if (android.os.Build.VERSION.SDK_INT >= 28) {
@@ -301,13 +331,18 @@ private fun NarutoProgressBar(
             .build()
     }
 
-    val showRunner = status == DownloadQueueUiModel.QueueStatus.DOWNLOADING ||
-        status == DownloadQueueUiModel.QueueStatus.QUEUED
+    val showRunner = runnerEnabled &&
+        animatedImageLoader != null &&
+        status == DownloadQueueUiModel.QueueStatus.DOWNLOADING &&
+        progress > 0f
 
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .height(28.dp),
+            .height(if (showRunner) 28.dp else 8.dp)
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(progress.coerceIn(0f, 1f), 0f..1f)
+            },
         contentAlignment = Alignment.BottomStart,
     ) {
         LinearProgressIndicator(
@@ -335,18 +370,28 @@ private fun NarutoProgressBar(
                 }
             }
 
-            AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(com.tadami.aurora.R.drawable.naruto_run)
-                    .build(),
-                imageLoader = animatedImageLoader,
-                contentDescription = null,
-                modifier = Modifier
-                    .size(runnerSize)
-                    .graphicsLayer {
-                        this.translationX = translationX.value
-                    },
-            )
+            animatedImageLoader?.let { loader ->
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(com.tadami.aurora.R.drawable.naruto_run)
+                        .build(),
+                    imageLoader = loader,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(runnerSize)
+                        .graphicsLayer {
+                            this.translationX = translationX.value
+                        },
+                )
+            }
         }
     }
+}
+
+private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier = composed {
+    clickable(
+        interactionSource = remember { MutableInteractionSource() },
+        indication = null,
+        onClick = onClick,
+    )
 }

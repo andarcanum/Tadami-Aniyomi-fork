@@ -98,7 +98,7 @@ class AchievementRuleEngineTest {
     }
 
     @Test
-    fun `two-phase engine evaluates meta rules only if standard rule unlocks`() = runTest {
+    fun `engine evaluates meta rules on every event`() = runTest {
         val standardAch = mockk<Achievement> {
             every { id } returns "standard_1"
             every { type } returns AchievementType.QUANTITY
@@ -136,12 +136,13 @@ class AchievementRuleEngineTest {
 
         // Case 1: Standard rule does NOT unlock
         coEvery { standardRule.evaluateDelta(any(), any(), any()) } returns RuleResult.Update(0)
+        coEvery { metaRule.evaluateDelta(any(), any(), any()) } returns RuleResult.Update(0)
 
         val event = AchievementEvent.ChapterRead(1L, 1)
         handler.processEvent(event)
 
         coVerify(exactly = 1) { standardRule.evaluateDelta(any(), any(), any()) }
-        coVerify(exactly = 0) { metaRule.evaluateDelta(any(), any(), any()) }
+        coVerify(exactly = 1) { metaRule.evaluateDelta(any(), any(), any()) }
 
         // Case 2: Standard rule unlocks (returns progress = 1, matching threshold)
         coEvery { standardRule.evaluateDelta(any(), any(), any()) } returns RuleResult.Update(1)
@@ -150,6 +151,6 @@ class AchievementRuleEngineTest {
         handler.processEvent(event)
 
         coVerify(exactly = 2) { standardRule.evaluateDelta(any(), any(), any()) }
-        coVerify(exactly = 1) { metaRule.evaluateDelta(any(), any(), any()) }
+        coVerify(exactly = 2) { metaRule.evaluateDelta(any(), any(), any()) }
     }
 }

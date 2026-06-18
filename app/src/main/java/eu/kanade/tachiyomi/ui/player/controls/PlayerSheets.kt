@@ -34,7 +34,10 @@ import eu.kanade.tachiyomi.ui.player.controls.components.sheets.MoreSheet
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.PlaybackSpeedSheet
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.QualitySheet
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.ScreenshotSheet
+import eu.kanade.tachiyomi.ui.player.controls.components.sheets.SubtitleTranslationSheet
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.SubtitlesSheet
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.PlayerSubtitleTranslationUiState
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationProviderId
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import tachiyomi.domain.custombuttons.model.CustomButton
@@ -48,6 +51,15 @@ fun PlayerSheets(
     subtitles: ImmutableList<VideoTrack>,
     selectedSubtitles: ImmutableList<Int>,
     onAddSubtitle: (Uri) -> Unit,
+    onTranslateSubtitle: () -> Unit,
+    subtitleTranslationUiState: PlayerSubtitleTranslationUiState,
+    onSelectSubtitleTranslationTrack: (Int) -> Unit,
+    onSelectSubtitleTranslationProvider: (SubtitleTranslationProviderId) -> Unit,
+    onSubtitleTranslationSourceLanguageChange: (String) -> Unit,
+    onSubtitleTranslationTargetLanguageChange: (String) -> Unit,
+    onToggleSubtitleTranslationCache: (Boolean) -> Unit,
+    onStartSubtitleTranslation: () -> Unit,
+    onCancelSubtitleTranslation: () -> Unit,
     onSelectSubtitle: (Int) -> Unit,
 
     // audio sheet
@@ -112,8 +124,23 @@ fun PlayerSheets(
                 selectedTracks = selectedSubtitles,
                 onSelect = onSelectSubtitle,
                 onAddSubtitle = { subtitlesPicker.launch(arrayOf("*/*")) },
+                onTranslateSubtitle = onTranslateSubtitle,
                 onOpenSubtitleSettings = { onOpenPanel(Panels.SubtitleSettings) },
                 onOpenSubtitleDelay = { onOpenPanel(Panels.SubtitleDelay) },
+                onDismissRequest = onDismissRequest,
+            )
+        }
+
+        Sheets.SubtitleTranslation -> {
+            SubtitleTranslationSheet(
+                state = subtitleTranslationUiState,
+                onSelectTrack = onSelectSubtitleTranslationTrack,
+                onSelectProvider = onSelectSubtitleTranslationProvider,
+                onSourceLanguageChange = onSubtitleTranslationSourceLanguageChange,
+                onTargetLanguageChange = onSubtitleTranslationTargetLanguageChange,
+                onToggleCache = onToggleSubtitleTranslationCache,
+                onStart = onStartSubtitleTranslation,
+                onCancel = onCancelSubtitleTranslation,
                 onDismissRequest = onDismissRequest,
             )
         }

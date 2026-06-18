@@ -38,6 +38,34 @@ class ExternalMetadataUiTest {
     }
 
     @Test
+    fun `resolveExternalMetadataCover keeps cached metadata cover while refresh is loading`() {
+        val metadata = ExternalMetadata(
+            contentType = MetadataContentType.MANGA,
+            source = MetadataSource.SHIKIMORI,
+            mediaId = 1L,
+            remoteId = 2L,
+            score = 8.4,
+            format = "manga",
+            status = "ongoing",
+            coverUrl = "https://example.org/metadata-cover.jpg",
+            coverUrlFallback = null,
+            searchQuery = "Test title",
+            updatedAt = 0L,
+        )
+
+        val resolved = resolveExternalMetadataCover(
+            baseCoverUrl = "https://example.org/source-cover.jpg",
+            metadata = metadata,
+            isMetadataLoading = true,
+            metadataError = null,
+            useMetadataCovers = true,
+        )
+
+        resolved.coverUrl shouldBe "https://example.org/metadata-cover.jpg"
+        resolved.coverUrlFallback shouldBe "https://example.org/source-cover.jpg"
+    }
+
+    @Test
     fun `resolveExternalMetadataCover keeps source cover while metadata is loading`() {
         val resolved = resolveExternalMetadataCover(
             baseCoverUrl = "https://example.org/source-cover.jpg",

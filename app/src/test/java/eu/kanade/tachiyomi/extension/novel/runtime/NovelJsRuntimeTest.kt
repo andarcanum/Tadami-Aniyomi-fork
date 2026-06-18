@@ -329,6 +329,14 @@ class NovelJsRuntimeTest {
     }
 
     @Test
+    fun `cheerio attr supports setter for LNReader plugins that rewrite media urls`() {
+        val script = NovelJsModuleRegistry().modules().first { it.name == "cheerio.js" }.script
+        script.shouldContain("attr: function(name, value)")
+        script.shouldContain("__native.domSetAttr")
+        script.shouldContain("return api")
+    }
+
+    @Test
     fun `types constants module requires novelStatus`() {
         val script = NovelJsModuleRegistry().modules().first { it.name == "typesConstants.js" }.script
         script.shouldContain("require(\"@libs/novelStatus\")")

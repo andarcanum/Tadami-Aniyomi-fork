@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -65,6 +66,11 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabNavigator
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.BottomNavAppearance
@@ -144,6 +150,7 @@ object HomeScreen : Screen() {
         val useAuroraBottomNav = bottomNavAppearance == BottomNavAppearance.Aurora
         val navigator = LocalNavigator.currentOrThrow
         val bottomNavVisibilityController = remember { BottomNavVisibilityController() }
+        val hazeState = remember { HazeState() }
         TabNavigator(
             tab = defaultTab,
             key = TAB_NAVIGATOR_KEY,
@@ -182,18 +189,14 @@ object HomeScreen : Screen() {
                             }
                             val navContainerColor = if (useAuroraBottomNav) {
                                 if (auroraColors!!.isDark) {
-                                    auroraColors.surface.copy(alpha = 0.99f)
+                                    Color.Transparent
                                 } else {
                                     Color.Transparent
                                 }
                             } else {
                                 MaterialTheme.colorScheme.surfaceContainer
                             }
-                            val navShadowElevation = if (useAuroraBottomNav) {
-                                if (auroraColors!!.isDark) 20.dp else 0.dp
-                            } else {
-                                0.dp
-                            }
+                            val navShadowElevation = 0.dp
                             val navTonalElevation = if (useAuroraBottomNav) {
                                 if (auroraColors!!.isDark) 0.dp else 0.dp
                             } else {
@@ -217,6 +220,16 @@ object HomeScreen : Screen() {
                                             ambientColor = Color.White.copy(alpha = 0.18f),
                                             spotColor = Color.White.copy(alpha = 0.12f),
                                         )
+                                        .clip(navBarShape)
+                                        .hazeEffect(
+                                            state = hazeState,
+                                            style = HazeStyle(
+                                                backgroundColor = auroraColors.background,
+                                                tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
+                                                blurRadius = 24.dp,
+                                                noiseFactor = 0.12f,
+                                            ),
+                                        )
                                         .border(
                                             BorderStroke(
                                                 width = 1.dp,
@@ -227,17 +240,18 @@ object HomeScreen : Screen() {
                                 } else {
                                     baseModifier
                                         .shadow(
-                                            elevation = 16.dp,
+                                            elevation = 8.dp,
                                             shape = navBarShape,
                                         )
-                                        .background(
-                                            brush = Brush.verticalGradient(
-                                                listOf(
-                                                    Color.White.copy(alpha = 0.98f),
-                                                    Color.White.copy(alpha = 0.94f),
-                                                ),
+                                        .clip(navBarShape)
+                                        .hazeEffect(
+                                            state = hazeState,
+                                            style = HazeStyle(
+                                                backgroundColor = auroraColors.background,
+                                                tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
+                                                blurRadius = 24.dp,
+                                                noiseFactor = 0.12f,
                                             ),
-                                            shape = navBarShape,
                                         )
                                         .border(
                                             BorderStroke(
@@ -314,7 +328,8 @@ object HomeScreen : Screen() {
                     Box(
                         modifier = Modifier
                             .padding(top = contentPadding.calculateTopPadding())
-                            .consumeWindowInsets(contentPadding),
+                            .consumeWindowInsets(contentPadding)
+                            .hazeSource(hazeState),
                     ) {
                         CompositionLocalProvider(
                             LocalHostScaffoldContentPadding provides contentPadding,

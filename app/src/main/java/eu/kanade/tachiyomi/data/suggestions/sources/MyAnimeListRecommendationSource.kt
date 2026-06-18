@@ -52,6 +52,8 @@ class MyAnimeListRecommendationSource(
                         .parseAs<JikanSearchResponse>(json)
 
                     allSearchEntries.addAll(searchResponse.data)
+                } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     logcat { "MAL search failed for candidate '$candidate': ${e.message}" }
                 }
@@ -98,6 +100,8 @@ class MyAnimeListRecommendationSource(
                         reason = SuggestionReason.EXTERNAL_MAL,
                     )
                 }
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
         } catch (e: Exception) {
             logcat { "[MAL] ERROR for '${seed.primaryTitle}': ${e.message}" }
             emptyList()

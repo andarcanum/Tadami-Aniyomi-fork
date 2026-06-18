@@ -33,10 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -77,6 +74,7 @@ import eu.kanade.presentation.components.AppStateBanners
 import eu.kanade.presentation.components.DownloadedOnlyBannerBackgroundColor
 import eu.kanade.presentation.components.IncognitoModeBannerBackgroundColor
 import eu.kanade.presentation.components.IndexingBannerBackgroundColor
+import eu.kanade.presentation.more.UpdatedChangelogScreen
 import eu.kanade.presentation.more.settings.screen.browse.AnimeExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.browse.MangaExtensionReposScreen
 import eu.kanade.presentation.more.settings.screen.data.RestoreBackupScreen
@@ -92,7 +90,9 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadCache
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.updater.AppUpdateChecker
 import eu.kanade.tachiyomi.data.updater.AppUpdateJob
+import eu.kanade.tachiyomi.data.updater.GITHUB_REPO
 import eu.kanade.tachiyomi.data.updater.RELEASE_URL
+import eu.kanade.tachiyomi.data.updater.resolveUpdatedChangelogPrompt
 import eu.kanade.tachiyomi.extension.anime.api.AnimeExtensionApi
 import eu.kanade.tachiyomi.extension.manga.api.MangaExtensionApi
 import eu.kanade.tachiyomi.ui.base.activity.BaseActivity
@@ -115,10 +115,12 @@ import eu.kanade.tachiyomi.ui.player.PlayerActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
+import eu.kanade.tachiyomi.util.system.isPreviewBuildType
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.system.updaterEnabled
 import eu.kanade.tachiyomi.util.view.setComposeContent
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -128,9 +130,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import logcat.LogPriority
 import mihon.core.migration.Migrator
-import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
@@ -138,8 +141,8 @@ import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.release.interactor.GetApplicationRelease
+import tachiyomi.domain.release.model.Release
 import tachiyomi.domain.release.service.AppUpdatePreferences
-import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.util.AppHapticsProvider
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
@@ -186,13 +189,27 @@ class MainActivity : BaseActivity() {
         )
 
         // Await preference migrations without blocking the main thread.
-        // The splash screen will keep showing (ready = false) until this completes,
-        // giving migrations time to finish without triggering an ANR.
-        val didMigration = mutableStateOf(false)
+        // Keep splash up until migrations are either complete or the startup timeout is reached.
+        // Always release the migrator so a failed migration cannot leave startup state stuck.
         val migrationReady = mutableStateOf(false)
         lifecycleScope.launch {
-            didMigration.value = Migrator.await()
-            Migrator.release()
+            val migrationStart = System.currentTimeMillis()
+            val result = runCatching {
+                withTimeout(MIGRATION_STARTUP_TIMEOUT) {
+                    Migrator.await()
+                }
+            }
+
+            result.exceptionOrNull()?.let { error ->
+                logcat(LogPriority.ERROR, error) {
+                    "Preference migration failed or timed out after ${System.currentTimeMillis() - migrationStart}ms"
+                }
+            }
+
+            runCatching { Migrator.release() }
+                .onFailure { error ->
+                    logcat(LogPriority.ERROR, error) { "Failed to release preference migrator" }
+                }
             migrationReady.value = true
         }
 
@@ -205,8 +222,12 @@ class MainActivity : BaseActivity() {
         setComposeContent {
             val context = LocalContext.current
 
-            var incognito by remember { mutableStateOf(getMangaIncognitoState.await(null)) }
-            var incognitoAnime by remember { mutableStateOf(getAnimeIncognitoState.await(null)) }
+            var incognito by remember { mutableStateOf(false) }
+            var incognitoAnime by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                incognito = withContext(Dispatchers.IO) { getMangaIncognitoState.await(null) }
+                incognitoAnime = withContext(Dispatchers.IO) { getAnimeIncognitoState.await(null) }
+            }
             val downloadOnly by preferences.downloadedOnly().collectAsStateWithLifecycle()
             val indexing by downloadCache.isInitializing.collectAsStateWithLifecycle()
             val indexingAnime by animeDownloadCache.isInitializing.collectAsStateWithLifecycle()
@@ -403,29 +424,57 @@ class MainActivity : BaseActivity() {
             }
 
             var showChangelog by remember { mutableStateOf(false) }
+            var installedRelease by remember { mutableStateOf<Release?>(null) }
             LaunchedEffect(migrationReady.value) {
-                if (migrationReady.value && didMigration.value && !BuildConfig.DEBUG) {
-                    showChangelog = true
+                if (migrationReady.value) {
+                    val shouldShowChangelog = withContext(Dispatchers.IO) {
+                        val appUpdatePreferences = Injekt.get<AppUpdatePreferences>()
+                        val seenVersionPreference = appUpdatePreferences.lastSeenUpdatedChangelogVersionCode()
+                        val pendingPreviousVersionPreference =
+                            appUpdatePreferences.pendingUpdatedChangelogPreviousVersionCode()
+                        val decision = resolveUpdatedChangelogPrompt(
+                            currentVersionCode = BuildConfig.VERSION_CODE,
+                            lastSeenVersionCode = seenVersionPreference.get(),
+                            pendingPreviousVersionCode = pendingPreviousVersionPreference.get(),
+                            isDebug = BuildConfig.DEBUG,
+                        )
+
+                        if (decision.nextSeenVersionCode != seenVersionPreference.get()) {
+                            seenVersionPreference.set(decision.nextSeenVersionCode)
+                        }
+                        if (decision.nextPendingPreviousVersionCode != pendingPreviousVersionPreference.get()) {
+                            pendingPreviousVersionPreference.set(decision.nextPendingPreviousVersionCode)
+                        }
+
+                        decision.shouldPrompt
+                    }
+
+                    if (shouldShowChangelog) {
+                        installedRelease = withContext(Dispatchers.IO) {
+                            runCatching {
+                                Injekt.get<GetApplicationRelease>().awaitCurrent(
+                                    GetApplicationRelease.Arguments(
+                                        isPreview = isPreviewBuildType,
+                                        commitCount = BuildConfig.COMMIT_COUNT.toInt(),
+                                        versionName = BuildConfig.VERSION_NAME,
+                                        repository = GITHUB_REPO,
+                                        forceCheck = true,
+                                    ),
+                                )
+                            }.getOrNull()
+                        }
+                        showChangelog = true
+                    }
                 }
             }
             if (showChangelog) {
-                AlertDialog(
-                    onDismissRequest = { showChangelog = false },
-                    title = {
-                        Text(
-                            text = stringResource(MR.strings.updated_version, BuildConfig.VERSION_NAME),
-                        )
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { openInBrowser(RELEASE_URL) }) {
-                            Text(text = stringResource(MR.strings.whats_new))
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showChangelog = false }) {
-                            Text(text = stringResource(MR.strings.action_ok))
-                        }
-                    },
+                val release = installedRelease
+                UpdatedChangelogScreen(
+                    versionName = release?.version ?: "v${BuildConfig.VERSION_NAME}",
+                    releaseDate = release?.releaseDate.orEmpty(),
+                    changelogInfo = release?.info.orEmpty(),
+                    onOpenInBrowser = { openInBrowser(release?.releaseLink ?: RELEASE_URL) },
+                    onDismiss = { showChangelog = false },
                 )
             }
         }
@@ -433,7 +482,7 @@ class MainActivity : BaseActivity() {
         val startTime = System.currentTimeMillis()
         splashScreen?.setKeepOnScreenCondition {
             val elapsed = System.currentTimeMillis() - startTime
-            elapsed <= SPLASH_MIN_DURATION || !ready && elapsed <= SPLASH_MAX_DURATION
+            elapsed <= SPLASH_MIN_DURATION || (!ready || !migrationReady.value) && elapsed <= SPLASH_MAX_DURATION
         }
         setSplashScreenExitAnimation(splashScreen)
 
@@ -467,7 +516,7 @@ class MainActivity : BaseActivity() {
             requestedOrientation = orientation
             restoreOrientationAfterPlayerExit = null
         }
-        lifecycleScope.launch {
+        lifecycleScope.launchIO {
             val todayLevel = activityDataRepository
                 .getActivityData(days = 1)
                 .first()
@@ -533,26 +582,30 @@ class MainActivity : BaseActivity() {
         LaunchedEffect(Unit) {
             if (updaterEnabled) {
                 try {
-                    val appUpdatePreferences = Injekt.get<AppUpdatePreferences>()
-                    val interval = appUpdatePreferences.appUpdateInterval().get()
+                    val updateScreen = withContext(Dispatchers.IO) {
+                        val appUpdatePreferences = Injekt.get<AppUpdatePreferences>()
+                        val interval = appUpdatePreferences.appUpdateInterval().get()
 
-                    // Check on startup only if interval == -1 (on app start)
-                    if (interval == -1) {
-                        val result = AppUpdateChecker().checkForUpdate(context)
-                        if (result is GetApplicationRelease.Result.NewUpdate) {
-                            val updateScreen = NewUpdateScreen(
-                                versionName = result.release.version,
-                                releaseDate = result.release.releaseDate,
-                                changelogInfo = result.release.info,
-                                releaseLink = result.release.releaseLink,
-                                downloadLink = result.release.downloadLink,
-                            )
-                            navigator.push(updateScreen)
+                        val screen = if (interval == -1) {
+                            when (val result = AppUpdateChecker().checkForUpdate(context)) {
+                                is GetApplicationRelease.Result.NewUpdate -> NewUpdateScreen(
+                                    versionName = result.release.version,
+                                    releaseDate = result.release.releaseDate,
+                                    changelogInfo = result.release.info,
+                                    releaseLink = result.release.releaseLink,
+                                    downloadLink = result.release.downloadLink,
+                                )
+                                else -> null
+                            }
+                        } else {
+                            null
                         }
-                    }
 
-                    // Set up periodic check (will cancel if interval <= 0)
-                    AppUpdateJob.setupTask(context)
+                        // Set up periodic check (will cancel if interval <= 0)
+                        AppUpdateJob.setupTask(context)
+                        screen
+                    }
+                    updateScreen?.let(navigator::push)
                 } catch (e: Exception) {
                     logcat(LogPriority.ERROR, e)
                 }
@@ -561,14 +614,16 @@ class MainActivity : BaseActivity() {
 
         // Extensions updates
         LaunchedEffect(Unit) {
-            runCatching { AnimeExtensionApi().checkForUpdatesIfDue(context) }
-                .onFailure { error ->
-                    logcat(LogPriority.WARN, error) { "Anime extension update check failed" }
-                }
-            runCatching { MangaExtensionApi().checkForUpdatesIfDue(context) }
-                .onFailure { error ->
-                    logcat(LogPriority.WARN, error) { "Manga extension update check failed" }
-                }
+            withContext(Dispatchers.IO) {
+                runCatching { AnimeExtensionApi().checkForUpdatesIfDue(context) }
+                    .onFailure { error ->
+                        logcat(LogPriority.WARN, error) { "Anime extension update check failed" }
+                    }
+                runCatching { MangaExtensionApi().checkForUpdatesIfDue(context) }
+                    .onFailure { error ->
+                        logcat(LogPriority.WARN, error) { "Manga extension update check failed" }
+                    }
+            }
         }
     }
 
@@ -679,9 +734,11 @@ class MainActivity : BaseActivity() {
                 if (!query.isNullOrEmpty()) {
                     navigator.popUntilRoot()
 
-                    val screenType = intent.getStringExtra(INTENT_SEARCH_TYPE).orEmpty()
-                        .ifBlank { "ANIME" }
-                        .let(DeepLinkScreenType::valueOf)
+                    val screenType = runCatching {
+                        intent.getStringExtra(INTENT_SEARCH_TYPE).orEmpty()
+                            .ifBlank { "ANIME" }
+                            .let(DeepLinkScreenType::valueOf)
+                    }.getOrDefault(DeepLinkScreenType.ANIME)
 
                     when (screenType) {
                         DeepLinkScreenType.MANGA -> {
@@ -747,7 +804,7 @@ class MainActivity : BaseActivity() {
                         navigator.push(AnimeExtensionReposScreen(repoUrl))
                     }
                 } // Deep link to add extension repo
-                else if (intent.scheme == "tachiyomi" && intent.data?.host == "add-repo") {
+                else if (intent.scheme in setOf("tachiyomi", "tadami") && intent.data?.host == "add-repo") {
                     intent.data?.getQueryParameter("url")?.let { repoUrl ->
                         navigator.popUntilRoot()
                         navigator.push(MangaExtensionReposScreen(repoUrl))
@@ -891,3 +948,4 @@ internal fun resolveMainActivityWindowBackgroundArgb(
 private const val SPLASH_MIN_DURATION = 500 // ms
 private const val SPLASH_MAX_DURATION = 5000 // ms
 private const val SPLASH_EXIT_ANIM_DURATION = 400L // ms
+private const val MIGRATION_STARTUP_TIMEOUT = 15_000L // ms

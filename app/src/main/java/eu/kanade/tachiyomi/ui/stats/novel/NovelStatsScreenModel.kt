@@ -10,6 +10,7 @@ import eu.kanade.presentation.more.stats.StatsScreenState
 import eu.kanade.presentation.more.stats.data.StatsData
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.ui.stats.StatsCalculations
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
@@ -38,7 +39,18 @@ class NovelStatsScreenModel(
             val overviewStatData = StatsData.NovelOverview(
                 libraryNovelCount = distinctLibraryNovels.size,
                 completedNovelCount = distinctLibraryNovels.count {
-                    it.novel.status.toInt() == SManga.COMPLETED && it.unreadCount == 0L
+                    StatsCalculations.isCompletedByUserConsumption(
+                        sourceStatus = it.novel.status.toInt(),
+                        customStatus = it.novel.customStatus?.toInt(),
+                        completedStatus = SManga.COMPLETED,
+                        terminalFallbackStatuses = setOf(
+                            SManga.PUBLISHING_FINISHED,
+                            SManga.CANCELLED,
+                            SManga.ON_HIATUS,
+                        ),
+                        consumedCount = it.readCount,
+                        totalCount = it.totalChapters,
+                    )
                 },
                 totalReadDuration = getTotalNovelReadDuration.await(),
             )

@@ -66,9 +66,17 @@ class NovelRestorer(
     private suspend fun restoreExistingNovel(backupNovel: BackupNovel, novel: Novel, dbNovel: Novel): Novel {
         val notes = resolveRestoredText(backupNovel.notes, novel.version, dbNovel.notes, dbNovel.version)
         return if (novel.version > dbNovel.version) {
-            updateNovel(dbNovel.copyFrom(novel).copy(id = dbNovel.id, notes = notes))
+            updateNovel(
+                dbNovel.copyFrom(novel)
+                    .copy(id = dbNovel.id, notes = notes)
+                    .markForSourceReinit(),
+            )
         } else {
-            updateNovel(novel.copyFrom(dbNovel).copy(id = dbNovel.id, notes = notes))
+            updateNovel(
+                novel.copyFrom(dbNovel)
+                    .copy(id = dbNovel.id, notes = notes)
+                    .markForSourceReinit(),
+            )
         }
     }
 
@@ -131,11 +139,15 @@ class NovelRestorer(
     }
 
     private suspend fun restoreNewNovel(novel: Novel): Novel {
-        return novel.copy(
-            initialized = novel.description != null,
-            id = insertNovel(novel),
+        val restoredNovel = novel.markForSourceReinit()
+        return restoredNovel.copy(
+            id = insertNovel(restoredNovel),
             version = novel.version,
         )
+    }
+
+    private fun Novel.markForSourceReinit(): Novel {
+        return copy(initialized = false)
     }
 
     private suspend fun restoreChapters(novel: Novel, backupChapters: List<BackupChapter>) {

@@ -1711,6 +1711,45 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `mixed rich pagination keeps short heading with following image`() {
+        val heading = NovelRichContentBlock.Heading(
+            level = 1,
+            segments = listOf(NovelRichTextSegment(text = "Cover")),
+        )
+        val image = NovelRichContentBlock.Image(
+            url = "https://img.lnori.com/12040-01.jpg",
+            alt = "Cover art",
+        )
+
+        val pagination = paginateMixedRichPageBlocks(
+            richBlocks = listOf(IndexedValue(0, heading), IndexedValue(1, image)),
+            paragraphSpacingPx = 12,
+            widthPx = 360,
+            heightPx = 720,
+            textSizePx = 18f,
+            lineHeightMultiplier = 1.4f,
+            typeface = null,
+            textAlign = ReaderTextAlign.LEFT,
+            forceParagraphIndent = false,
+            chapterTitle = null,
+        )
+        val contentPages = normalizePageReaderContentPages(
+            useRichPageReader = true,
+            plainPages = emptyList(),
+            richPages = pagination.pages,
+            plainTextBlocks = emptyList(),
+            richBlockTexts = pagination.blockTexts,
+            paragraphSpacingPx = 12,
+            forceParagraphIndent = false,
+            chapterTitle = null,
+        )
+
+        assertEquals(1, contentPages.size)
+        assertTrue(contentPages.single().blocks[0] is NovelPageContentBlock.Rich)
+        assertTrue(contentPages.single().blocks[1] is NovelPageContentBlock.Image)
+    }
+
+    @Test
     fun `normalized page content preserves image pages between rich text pages`() {
         val richBlockTexts = listOf(
             buildRichPageReaderBlockText(

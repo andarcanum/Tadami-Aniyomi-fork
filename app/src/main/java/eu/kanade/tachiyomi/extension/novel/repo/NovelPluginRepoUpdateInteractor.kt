@@ -2,10 +2,12 @@ package eu.kanade.tachiyomi.extension.novel.repo
 
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionUpdateChecker
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.extension.novel.model.NovelPlugin
+import tachiyomi.domain.extension.novel.repository.NovelPluginRepository
 
 class NovelPluginRepoUpdateInteractor(
     private val repoService: NovelPluginRepoServiceContract,
-    private val storage: NovelPluginStorage,
+    private val repository: NovelPluginRepository,
     private val updateChecker: NovelExtensionUpdateChecker,
 ) {
     suspend fun findUpdates(repoUrls: List<String>): List<NovelPluginRepoEntry> {
@@ -22,7 +24,7 @@ class NovelPluginRepoUpdateInteractor(
                 .mapNotNull { (_, entries) ->
                     entries.maxByOrNull { it.version }
                 }
-            val installed = storage.getAll().map { it.entry }
+            val installed = repository.getAll().map { it.toRepoEntry() }
             updateChecker.findUpdates(installed, available)
         }
     }
@@ -38,4 +40,20 @@ class NovelPluginRepoUpdateInteractor(
             else -> withoutQuery
         }
     }
+}
+
+private fun NovelPlugin.Installed.toRepoEntry(): NovelPluginRepoEntry {
+    return NovelPluginRepoEntry(
+        id = id,
+        name = name,
+        site = site,
+        lang = lang,
+        version = versionCode,
+        url = url,
+        iconUrl = iconUrl,
+        customJsUrl = customJs,
+        customCssUrl = customCss,
+        hasSettings = hasSettings,
+        sha256 = sha256,
+    )
 }

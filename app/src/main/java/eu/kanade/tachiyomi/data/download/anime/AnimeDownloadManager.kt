@@ -15,7 +15,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
-import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
@@ -89,17 +88,17 @@ class AnimeDownloadManager(
     fun startDownloads() {
         if (downloader.isRunning) return
 
-        if (AnimeDownloadJob.isRunning(context)) {
-            downloader.start()
-        } else {
+        if (!AnimeDownloadJob.isRunning(context)) {
             AnimeDownloadJob.start(context)
         }
+        downloader.start()
     }
 
     /**
      * Tells the downloader to pause downloads.
      */
     fun pauseDownloads() {
+        downloader.pause()
         downloader.stop()
     }
 
@@ -126,15 +125,17 @@ class AnimeDownloadManager(
     }
 
     fun startDownloadNow(episodeId: Long) {
-        val existingDownload = getQueuedDownloadOrNull(episodeId)
-        // If not in queue try to start a new download
-        val toAdd = existingDownload ?: runBlocking { AnimeDownload.fromEpisodeId(episodeId) } ?: return
-        queueState.value.toMutableList().apply {
-            existingDownload?.let { remove(it) }
-            add(0, toAdd)
-            reorderQueue(this)
+        launchIO {
+            val existingDownload = getQueuedDownloadOrNull(episodeId)
+            // If not in queue try to start a new download
+            val toAdd = existingDownload ?: AnimeDownload.fromEpisodeId(episodeId) ?: return@launchIO
+            queueState.value.toMutableList().apply {
+                existingDownload?.let { remove(it) }
+                add(0, toAdd)
+                reorderQueue(this)
+            }
+            startDownloads()
         }
-        startDownloads()
     }
 
     /**

@@ -63,7 +63,10 @@ class NovelExtensionsScreenModelTest {
         runBlocking {
             val installed = pluginInstalled("id-1", 1)
             val updates = listOf(installed)
-            val available = listOf(pluginAvailable("id-2", 1))
+            val available = listOf(
+                pluginAvailable("id-1", 2),
+                pluginAvailable("id-2", 1),
+            )
 
             val screenModel = NovelExtensionsScreenModel(
                 extensionManager = FakeNovelExtensionManager(
@@ -122,11 +125,15 @@ class NovelExtensionsScreenModelTest {
                 pluginInstalled("id-1", 1),
                 pluginInstalled("id-2", 1),
             )
+            val available = listOf(
+                pluginAvailable("id-1", 2),
+                pluginAvailable("id-2", 2),
+            )
 
             val screenModel = NovelExtensionsScreenModel(
                 extensionManager = FakeNovelExtensionManager(
                     installed = updates,
-                    available = emptyList(),
+                    available = available,
                     updates = updates,
                 ),
                 sourcePreferences = sourcePreferences,
@@ -338,7 +345,8 @@ class NovelExtensionsScreenModelTest {
         name = "Source $id",
         site = "Example",
         lang = "en",
-        version = version,
+        versionCode = version,
+        versionName = version.toString(),
         url = "https://example.org/$id.js",
         iconUrl = null,
         customJs = null,
@@ -353,7 +361,8 @@ class NovelExtensionsScreenModelTest {
         name = "Source $id",
         site = "Example",
         lang = "en",
-        version = version,
+        versionCode = version,
+        versionName = version.toString(),
         url = "https://example.org/$id.js",
         iconUrl = null,
         customJs = null,
@@ -387,6 +396,14 @@ class NovelExtensionsScreenModelTest {
         }
 
         override suspend fun uninstallPlugin(plugin: NovelPlugin.Installed) = Unit
+
+        override suspend fun replacePluginFromRepo(
+            installed: NovelPlugin.Installed,
+            replacement: NovelPlugin.Available,
+        ): NovelPlugin.Installed {
+            uninstallPlugin(installed)
+            return installPlugin(replacement)
+        }
 
         override suspend fun getSourceData(id: Long): StubNovelSource? = null
 

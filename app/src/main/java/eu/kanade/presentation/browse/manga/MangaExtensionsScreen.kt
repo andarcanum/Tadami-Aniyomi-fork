@@ -1,6 +1,5 @@
-﻿package eu.kanade.presentation.browse.manga
+package eu.kanade.presentation.browse.manga
 
-import android.widget.Toast
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -66,6 +65,7 @@ import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.components.material.topSmallPaddingValues
+import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
 import tachiyomi.presentation.core.screens.EmptyScreenAction
@@ -85,6 +85,7 @@ fun MangaExtensionScreen(
     onInstallExtension: (MangaExtension.Available) -> Unit,
     onUninstallExtension: (MangaExtension) -> Unit,
     onUpdateExtension: (MangaExtension.Installed) -> Unit,
+    onReinstallExtension: (MangaExtension.Installed) -> Unit,
     onTrustExtension: (MangaExtension.Untrusted) -> Unit,
     onOpenExtension: (MangaExtension.Installed) -> Unit,
     onClickUpdateAll: () -> Unit,
@@ -128,6 +129,7 @@ fun MangaExtensionScreen(
                     onInstallExtension = onInstallExtension,
                     onUninstallExtension = onUninstallExtension,
                     onUpdateExtension = onUpdateExtension,
+                    onReinstallExtension = onReinstallExtension,
                     onTrustExtension = onTrustExtension,
                     onOpenExtension = onOpenExtension,
                     onClickUpdateAll = onClickUpdateAll,
@@ -148,13 +150,13 @@ private fun ExtensionContent(
     onInstallExtension: (MangaExtension.Available) -> Unit,
     onUninstallExtension: (MangaExtension) -> Unit,
     onUpdateExtension: (MangaExtension.Installed) -> Unit,
+    onReinstallExtension: (MangaExtension.Installed) -> Unit,
     onTrustExtension: (MangaExtension.Untrusted) -> Unit,
     onOpenExtension: (MangaExtension.Installed) -> Unit,
     onClickUpdateAll: () -> Unit,
     onToggleSection: (MangaExtensionUiModel.Header.Text) -> Unit,
 ) {
     val context = LocalContext.current
-    val reinstallRequiredHint = stringResource(MR.strings.ext_reinstall_required_hint)
     var trustState by remember { mutableStateOf<MangaExtension.Untrusted?>(null) }
     val installGranted = rememberRequestPackageInstallsPermissionState(initialValue = true)
 
@@ -180,7 +182,14 @@ private fun ExtensionContent(
                 when (header) {
                     is MangaExtensionUiModel.Header.Resource -> {
                         val action: @Composable RowScope.() -> Unit =
-                            if (header.textRes == MR.strings.ext_updates_pending) {
+                            if (header.textRes == MR.strings.ext_updates_pending &&
+                                items.any { item ->
+                                    val extension = item.extension
+                                    extension is MangaExtension.Installed &&
+                                        extension.hasUpdate &&
+                                        !extension.needsReinstall
+                                }
+                            ) {
                                 {
                                     Button(onClick = { onClickUpdateAll() }) {
                                         Text(
@@ -255,11 +264,7 @@ private fun ExtensionContent(
                             is MangaExtension.Available -> onInstallExtension(it)
                             is MangaExtension.Installed -> {
                                 if (it.needsReinstall) {
-                                    Toast.makeText(
-                                        context,
-                                        reinstallRequiredHint,
-                                        Toast.LENGTH_LONG,
-                                    ).show()
+                                    onReinstallExtension(it)
                                 } else if (it.hasUpdate) {
                                     onUpdateExtension(it)
                                 } else {
@@ -303,7 +308,7 @@ private fun ExtensionItem(
     onClickItemSecondaryAction: (MangaExtension) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val (extension, installStep) = item
+    val (extension, installStep, repoSourceCount) = item
     BaseBrowseItem(
         modifier = modifier
             .combinedClickable(
@@ -351,6 +356,8 @@ private fun ExtensionItem(
         ExtensionItemContent(
             extension = extension,
             installStep = installStep,
+            repoSourceCount = repoSourceCount,
+            repoDisplayName = item.repoDisplayName,
             modifier = Modifier.weight(1f),
         )
     }
@@ -360,6 +367,8 @@ private fun ExtensionItem(
 private fun ExtensionItemContent(
     extension: MangaExtension,
     installStep: InstallStep,
+    repoSourceCount: Int,
+    repoDisplayName: String?,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -392,6 +401,21 @@ private fun ExtensionItemContent(
                     )
                 }
 
+                val repoName = when {
+                    extension is MangaExtension.Available && repoSourceCount > 1 -> {
+                        pluralStringResource(MR.plurals.num_repos, count = repoSourceCount, repoSourceCount)
+                    }
+                    repoDisplayName != null -> repoDisplayName.oneWordRepoName()
+                    else -> extension.repoDisplayName(repoSourceCount)
+                }
+                repoName?.let { name ->
+                    Text(
+                        text = "· $name",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
                 val warning = when {
                     extension is MangaExtension.Untrusted -> MR.strings.ext_untrusted
                     extension is MangaExtension.Installed && extension.isObsolete -> MR.strings.ext_obsolete
@@ -421,6 +445,59 @@ private fun ExtensionItemContent(
             }
         }
     }
+}
+
+private fun MangaExtension.repoDisplayName(repoSourceCount: Int): String? {
+    if (this is MangaExtension.Available && repoSourceCount > 1) {
+        return null
+    }
+
+    val rawName = when (this) {
+        is MangaExtension.Available -> repoName.ifBlank { repoUrl.shortRepoName() }
+        is MangaExtension.Installed -> repoName?.takeIf { it.isNotBlank() } ?: repoUrl?.shortRepoName()
+        is MangaExtension.Untrusted -> null
+    } ?: return null
+
+    return rawName.oneWordRepoName()
+}
+
+private fun String.shortRepoName(): String {
+    val withoutScheme = substringAfter("://", this)
+    val host = withoutScheme.substringBefore('/').removePrefix("www.")
+    if (host.equals("github.com", ignoreCase = true) || host.equals("raw.githubusercontent.com", ignoreCase = true)) {
+        val owner = withoutScheme.substringAfter('/', "").substringBefore('/')
+        if (owner.isNotBlank()) return owner
+    }
+    return host.ifBlank { this }
+}
+
+private fun String.oneWordRepoName(maxLength: Int = 14): String {
+    val commonWords = setOf(
+        "anime",
+        "manga",
+        "extension",
+        "extensions",
+        "repo",
+        "repos",
+        "repository",
+        "repositories",
+        "source",
+        "sources",
+    )
+    val normalized = trim()
+        .removePrefix("http://")
+        .removePrefix("https://")
+        .substringBefore('/')
+        .removePrefix("www.")
+        .replace('-', ' ')
+        .replace('_', ' ')
+        .replace('.', ' ')
+    val word = normalized
+        .split(' ')
+        .firstOrNull { it.isNotBlank() && it.lowercase() !in commonWords }
+        ?: trim()
+
+    return if (word.length <= maxLength) word else word.take(maxLength - 1).trimEnd() + "…"
 }
 
 @Composable

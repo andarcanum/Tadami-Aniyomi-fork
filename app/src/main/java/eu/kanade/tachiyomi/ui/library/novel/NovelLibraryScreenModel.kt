@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
+import eu.kanade.tachiyomi.ui.library.resolveLibraryRangeSelectionAdditions
 import eu.kanade.tachiyomi.ui.library.sortPinnedSeriesFirst
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import kotlinx.collections.immutable.ImmutableList
@@ -45,6 +46,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import mihon.core.archive.epubReader
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.compareToWithCollator
@@ -186,9 +188,9 @@ class NovelLibraryScreenModel(
                         }
                     }
                     .let { map ->
-                        if (groupType == LibraryGroup.BY_DEFAULT && searchQuery == null) {
-                            // Keep all user-created categories visible even when empty,
-                            // so category tabs don't disappear after creation.
+                        if (groupType == LibraryGroup.BY_DEFAULT || searchQuery != null) {
+                            // Keep categories visible when searching so empty-result pages can
+                            // still show the global search action.
                             map
                         } else {
                             map.filterValues { it.isNotEmpty() }
@@ -216,6 +218,33 @@ class NovelLibraryScreenModel(
                         showCategoryTabs = showCategoryTabs,
                         showNovelCount = showNovelCount,
                         showNovelContinueButton = showNovelContinueButton,
+                    )
+                }
+            }
+            .launchIn(screenModelScope)
+
+        getFilterPreferencesFlow()
+            .onEach { filterPrefs ->
+                mutableState.update { state ->
+                    state.copy(
+                        downloadedOnly = filterPrefs.downloadedOnly,
+                        downloadedFilter = filterPrefs.downloadedFilter,
+                        unreadFilter = filterPrefs.unreadFilter,
+                        startedFilter = filterPrefs.startedFilter,
+                        bookmarkedFilter = filterPrefs.bookmarkedFilter,
+                        completedFilter = filterPrefs.completedFilter,
+                        filterIntervalCustom = filterPrefs.filterIntervalCustom,
+                    )
+                }
+            }
+            .launchIn(screenModelScope)
+
+        getSortPreferencesFlow()
+            .onEach { sortPrefs ->
+                mutableState.update { state ->
+                    state.copy(
+                        sort = sortPrefs.sortMode,
+                        randomSortSeed = sortPrefs.randomSortSeed,
                     )
                 }
             }
@@ -289,32 +318,12 @@ class NovelLibraryScreenModel(
     fun toggleRangeSelection(novel: NovelLibraryItem) {
         mutableState.update { current ->
             val mutable = current.selection.toMutableList()
-            val lastSelected = mutable.lastOrNull()
-            if (lastSelected?.category != novel.category) {
-                val existingIndex = mutable.indexOfFirst { it.id == novel.id }
-                if (existingIndex >= 0) {
-                    mutable.removeAt(existingIndex)
-                } else {
-                    mutable.add(novel)
-                }
-                return@update current.copy(selection = persistentListOf<NovelLibraryItem>().addAll(mutable))
-            }
-
-            val items = current.library.entries.firstNotNullOfOrNull { entry ->
-                entry.value.takeIf { entry.key.id == novel.category }
-            }.orEmpty()
-            val lastIndex = items.indexOfFirst { it.id == lastSelected.id }
-            val currentIndex = items.indexOfFirst { it.id == novel.id }
-            if (lastIndex < 0 || currentIndex < 0 || lastIndex == currentIndex) {
-                return@update current
-            }
-
-            val selectedIds = mutable.map { it.id }.toSet()
-            val start = minOf(lastIndex, currentIndex)
-            val end = maxOf(lastIndex, currentIndex)
-            val toAdd = items
-                .subList(start, end + 1)
-                .filterNot { it.id in selectedIds }
+            val toAdd = resolveLibraryRangeSelectionAdditions(
+                selectedItems = mutable,
+                targetItem = novel,
+                visibleGroups = current.library.values,
+                itemId = { it.id },
+            )
             mutable.addAll(toAdd)
             current.copy(selection = persistentListOf<NovelLibraryItem>().addAll(mutable))
         }
@@ -592,6 +601,16 @@ class NovelLibraryScreenModel(
         )
         clearSelection()
         return added
+    }
+
+    fun resetFilters() {
+        basePreferences.downloadedOnly().set(false)
+        libraryPreferences.filterDownloadedNovel().set(TriState.DISABLED)
+        libraryPreferences.filterUnreadNovel().set(TriState.DISABLED)
+        libraryPreferences.filterStartedNovel().set(TriState.DISABLED)
+        libraryPreferences.filterBookmarkedNovel().set(TriState.DISABLED)
+        libraryPreferences.filterCompletedNovel().set(TriState.DISABLED)
+        libraryPreferences.filterIntervalCustom().set(TriState.DISABLED)
     }
 
     fun toggleDownloadedFilter() {
@@ -1191,11 +1210,49 @@ class NovelLibraryScreenModel(
                 }
             }
 
+            var epubTitle: String? = null
+            var epubAuthor: String? = null
+            var epubDescription: String? = null
+            try {
+                targetFile.epubReader(context).use { epub ->
+                    val ref = epub.getPackageHref()
+                    val doc = epub.getPackageDocument(ref)
+
+                    // Multiple title fallbacks
+                    var title = doc.getElementsByTag("dc:title").firstOrNull()?.text()
+                    if (title.isNullOrBlank()) {
+                        title = doc.select("docTitle").firstOrNull()?.text()
+                    }
+                    if (title.isNullOrBlank()) {
+                        title = doc.select("meta[name=title]").firstOrNull()?.attr("content")
+                    }
+
+                    // Collection name
+                    val collection = doc.select("meta[property=belongs-to-collection]").firstOrNull()?.text()
+
+                    epubTitle = collection.takeIf { !it.isNullOrBlank() } ?: title
+                    epubAuthor = doc.getElementsByTag("dc:creator").firstOrNull()?.text()
+
+                    var desc = doc.getElementsByTag("dc:description").firstOrNull()?.text()
+                    if (desc.isNullOrBlank()) {
+                        desc = doc.select("dc\\:description").firstOrNull()?.text()
+                    }
+                    epubDescription = desc
+                }
+            } catch (e: Exception) {
+                // Ignore parsing errors, fallback to file name
+            }
+
+            val finalTitle = epubTitle?.takeIf { it.isNotBlank() }
+                ?: sanitizedName.removeSuffix(".epub").removeSuffix(".EPUB")
+
             val addToLibrary = sourcePreferences.importEpubAddToLibrary().get()
             val novel = Novel.create().copy(
                 source = LocalNovelSource.ID,
                 url = sanitizedName,
-                title = sanitizedName.removeSuffix(".epub").removeSuffix(".EPUB"),
+                title = finalTitle,
+                author = epubAuthor,
+                description = epubDescription,
                 favorite = addToLibrary,
                 dateAdded = if (addToLibrary) System.currentTimeMillis() else 0L,
                 initialized = true,

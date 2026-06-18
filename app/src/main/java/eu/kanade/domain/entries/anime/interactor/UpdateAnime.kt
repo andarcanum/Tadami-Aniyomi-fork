@@ -64,14 +64,17 @@ class UpdateAnime(
         // if the anime isn't a favorite, set its title from source and update in db
         val title = if (remoteTitle.isEmpty() || localAnime.favorite) null else remoteTitle
 
+        val shouldUpdateCover = manualFetch || localAnime.thumbnailUrl.isNullOrEmpty() || !localAnime.initialized
+        val shouldUpdateBackground = manualFetch || localAnime.backgroundUrl.isNullOrEmpty() || !localAnime.initialized
+
         val coverLastModified =
             when {
                 // Never refresh covers if the url is empty to avoid "losing" existing covers
                 remoteAnime.thumbnail_url.isNullOrEmpty() -> null
-                !manualFetch && localAnime.thumbnailUrl == remoteAnime.thumbnail_url -> null
+                // Don't update cover during automatic refresh if we already have one
+                !shouldUpdateCover -> null
                 localAnime.isLocal() -> Instant.now().toEpochMilli()
                 localAnime.hasCustomCover(coverCache) -> {
-                    coverCache.deleteFromCache(localAnime, false)
                     null
                 }
                 else -> {
@@ -84,10 +87,9 @@ class UpdateAnime(
             when {
                 // Never refresh backgrounds if the url is empty to avoid "losing" existing backgrounds
                 remoteAnime.background_url.isNullOrEmpty() -> null
-                !manualFetch && localAnime.backgroundUrl == remoteAnime.background_url -> null
+                !shouldUpdateBackground -> null
                 localAnime.isLocal() -> Instant.now().toEpochMilli()
                 localAnime.hasCustomBackground(backgroundCache) -> {
-                    backgroundCache.deleteFromCache(localAnime, false)
                     null
                 }
                 else -> {
@@ -96,9 +98,17 @@ class UpdateAnime(
                 }
             }
 
-        val thumbnailUrl = remoteAnime.thumbnail_url?.takeIf { it.isNotEmpty() }
+        val thumbnailUrl = if (shouldUpdateCover) {
+            remoteAnime.thumbnail_url?.takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
 
-        val backgroundUrl = remoteAnime.background_url?.takeIf { it.isNotEmpty() }
+        val backgroundUrl = if (shouldUpdateBackground) {
+            remoteAnime.background_url?.takeIf { it.isNotEmpty() }
+        } else {
+            null
+        }
 
         return animeRepository.updateAnime(
             AnimeUpdate(

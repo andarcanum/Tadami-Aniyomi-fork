@@ -31,8 +31,10 @@ class EnumsMigration : Migration {
             remove("pref_player_view_mode")
             remove("gpu_next")
 
-            val videoDebanding = Debanding.entries.first { it.ordinal == deband.get() }
-            val aspectState = VideoAspect.entries.first { it.ordinal == playerViewMode.get() }
+            val videoDebanding = Debanding.entries.firstOrNull { it.ordinal == deband.get() }
+                ?: Debanding.None
+            val aspectState = VideoAspect.entries.firstOrNull { it.ordinal == playerViewMode.get() }
+                ?: VideoAspect.Fit
 
             preferenceStore.getEnum("pref_video_debanding", Debanding.None).set(videoDebanding)
             preferenceStore.getEnum("pref_player_aspect_state", VideoAspect.Fit).set(aspectState)

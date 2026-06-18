@@ -261,4 +261,43 @@ class HomeHubHeaderBehaviorTest {
             selectedSection = HomeHubSection.Anime,
         ) shouldBe HomeHubSection.Manga
     }
+
+    @Test
+    fun `resolveHomeHubSectionIndex returns selected index`() {
+        resolveHomeHubSectionIndex(
+            sections = listOf(HomeHubSection.Anime, HomeHubSection.Manga, HomeHubSection.Novel),
+            section = HomeHubSection.Manga,
+        ) shouldBe 1
+    }
+
+    @Test
+    fun `resolveHomeHubSectionIndex falls back to first index when selected is missing`() {
+        resolveHomeHubSectionIndex(
+            sections = listOf(HomeHubSection.Manga, HomeHubSection.Novel),
+            section = HomeHubSection.Anime,
+        ) shouldBe 0
+    }
+
+    @Test
+    fun `shouldSwitchHomeHubSection returns true for valid different index`() {
+        shouldSwitchHomeHubSection(
+            currentIndex = 0,
+            targetIndex = 2,
+            lastIndex = 2,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `shouldSwitchHomeHubSection returns false for same or invalid index`() {
+        shouldSwitchHomeHubSection(
+            currentIndex = 1,
+            targetIndex = 1,
+            lastIndex = 2,
+        ) shouldBe false
+        shouldSwitchHomeHubSection(
+            currentIndex = 1,
+            targetIndex = 3,
+            lastIndex = 2,
+        ) shouldBe false
+    }
 }

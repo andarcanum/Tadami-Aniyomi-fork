@@ -10,6 +10,8 @@ import kotlinx.coroutines.test.runTest
 import mihon.domain.extensionrepo.model.ExtensionRepo
 import mihon.domain.extensionrepo.novel.interactor.GetNovelExtensionRepo
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.extension.novel.model.NovelPlugin
+import tachiyomi.domain.extension.novel.repository.NovelPluginRepository
 
 class NovelExtensionListingInteractorTest {
 
@@ -18,7 +20,7 @@ class NovelExtensionListingInteractorTest {
         runTest {
             val getRepos = mockk<GetNovelExtensionRepo>()
             val repoService = mockk<NovelPluginRepoServiceContract>()
-            val storage = mockk<NovelPluginStorage>()
+            val repository = mockk<NovelPluginRepository>()
 
             val repo = ExtensionRepo(
                 baseUrl = "https://example.org",
@@ -72,19 +74,27 @@ class NovelExtensionListingInteractorTest {
                 hasSettings = false,
                 sha256 = "old",
             )
-            coEvery { storage.getAll() } returns listOf(
-                NovelPluginPackage(
-                    entry = installed,
-                    script = byteArrayOf(),
-                    customJs = null,
-                    customCss = null,
-                ),
+            val installedPlugin = NovelPlugin.Installed(
+                id = installed.id,
+                name = installed.name,
+                site = installed.site,
+                lang = installed.lang,
+                versionCode = installed.version,
+                versionName = installed.version.toString(),
+                url = installed.url,
+                iconUrl = installed.iconUrl,
+                customJs = installed.customJsUrl,
+                customCss = installed.customCssUrl,
+                hasSettings = installed.hasSettings,
+                sha256 = installed.sha256,
+                repoUrl = "https://repo.example",
             )
+            coEvery { repository.getAll() } returns listOf(installedPlugin)
 
             val interactor = NovelExtensionListingInteractor(
                 getExtensionRepo = getRepos,
                 repoService = repoService,
-                storage = storage,
+                repository = repository,
                 updateChecker = NovelExtensionUpdateChecker(),
             )
 
@@ -104,7 +114,7 @@ class NovelExtensionListingInteractorTest {
         runTest {
             val getRepos = mockk<GetNovelExtensionRepo>()
             val repoService = mockk<NovelPluginRepoServiceContract>()
-            val storage = mockk<NovelPluginStorage>()
+            val repository = mockk<NovelPluginRepository>()
 
             val repo = ExtensionRepo(
                 baseUrl = "https://example.org",
@@ -159,12 +169,12 @@ class NovelExtensionListingInteractorTest {
                 listOf(duplicateFromIndex, unique)
             coEvery { repoService.fetch("https://example.org/plugins.min.json") } returns listOf(duplicateFromPlugins)
             coEvery { repoService.fetch("https://example.org/plugins.json") } returns emptyList()
-            coEvery { storage.getAll() } returns emptyList()
+            coEvery { repository.getAll() } returns emptyList()
 
             val interactor = NovelExtensionListingInteractor(
                 getExtensionRepo = getRepos,
                 repoService = repoService,
-                storage = storage,
+                repository = repository,
                 updateChecker = NovelExtensionUpdateChecker(),
             )
 
@@ -181,7 +191,7 @@ class NovelExtensionListingInteractorTest {
         runTest {
             val getRepos = mockk<GetNovelExtensionRepo>()
             val repoService = mockk<NovelPluginRepoServiceContract>()
-            val storage = mockk<NovelPluginStorage>()
+            val repository = mockk<NovelPluginRepository>()
 
             val firstRepo = ExtensionRepo(
                 baseUrl = "https://repo-one.example",
@@ -232,12 +242,12 @@ class NovelExtensionListingInteractorTest {
             coEvery { repoService.fetch("https://repo-two.example/index.min.json") } returns listOf(fromSecondRepo)
             coEvery { repoService.fetch("https://repo-two.example/plugins.min.json") } returns emptyList()
             coEvery { repoService.fetch("https://repo-two.example/plugins.json") } returns emptyList()
-            coEvery { storage.getAll() } returns emptyList()
+            coEvery { repository.getAll() } returns emptyList()
 
             val interactor = NovelExtensionListingInteractor(
                 getExtensionRepo = getRepos,
                 repoService = repoService,
-                storage = storage,
+                repository = repository,
                 updateChecker = NovelExtensionUpdateChecker(),
             )
 
@@ -254,15 +264,15 @@ class NovelExtensionListingInteractorTest {
         runTest {
             val getRepos = mockk<GetNovelExtensionRepo>()
             val repoService = mockk<NovelPluginRepoServiceContract>()
-            val storage = mockk<NovelPluginStorage>()
+            val repository = mockk<NovelPluginRepository>()
 
             coEvery { getRepos.getAll() } returns emptyList()
-            coEvery { storage.getAll() } returns emptyList()
+            coEvery { repository.getAll() } returns emptyList()
 
             val interactor = NovelExtensionListingInteractor(
                 getExtensionRepo = getRepos,
                 repoService = repoService,
-                storage = storage,
+                repository = repository,
                 updateChecker = NovelExtensionUpdateChecker(),
             )
 
@@ -280,7 +290,7 @@ class NovelExtensionListingInteractorTest {
         runTest {
             val getRepos = mockk<GetNovelExtensionRepo>()
             val repoService = mockk<NovelPluginRepoServiceContract>()
-            val storage = mockk<NovelPluginStorage>()
+            val repository = mockk<NovelPluginRepository>()
 
             val repo = ExtensionRepo(
                 baseUrl = "https://example.org/index.min.json",
@@ -291,12 +301,12 @@ class NovelExtensionListingInteractorTest {
             )
             coEvery { getRepos.getAll() } returns listOf(repo)
             coEvery { repoService.fetch("https://example.org/index.min.json") } returns emptyList()
-            coEvery { storage.getAll() } returns emptyList()
+            coEvery { repository.getAll() } returns emptyList()
 
             val interactor = NovelExtensionListingInteractor(
                 getExtensionRepo = getRepos,
                 repoService = repoService,
-                storage = storage,
+                repository = repository,
                 updateChecker = NovelExtensionUpdateChecker(),
             )
 

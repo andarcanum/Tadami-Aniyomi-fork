@@ -99,6 +99,56 @@ class MigrationListHelpersTest {
     }
 
     @Test
+    fun `visibleMigrationItems can recover entries when filters are relaxed`() {
+        val notFound = migratingManga(
+            latestChapter = 10.0,
+            searchResult = MigrationListScreenModel.SearchResult.NotFound,
+        )
+        val unchanged = migratingManga(
+            latestChapter = 10.0,
+            searchResult = MigrationListScreenModel.SearchResult.Success(
+                manga = manga(title = "Target"),
+                source = "Source",
+                chapterCount = 10,
+                latestChapter = 10.0,
+            ),
+        )
+        val allItems = listOf(notFound, unchanged)
+
+        assertEquals(
+            emptyList(),
+            visibleMigrationItems(allItems, hideNotFound = true, onlyNewChapters = true),
+        )
+        assertEquals(
+            allItems,
+            visibleMigrationItems(allItems, hideNotFound = false, onlyNewChapters = false),
+        )
+    }
+
+    @Test
+    fun `migrationSkippedCount counts all non-success entries`() {
+        val searching = migratingManga(
+            latestChapter = 10.0,
+            searchResult = MigrationListScreenModel.SearchResult.Searching,
+        )
+        val notFound = migratingManga(
+            latestChapter = 10.0,
+            searchResult = MigrationListScreenModel.SearchResult.NotFound,
+        )
+        val success = migratingManga(
+            latestChapter = 10.0,
+            searchResult = MigrationListScreenModel.SearchResult.Success(
+                manga = manga(title = "Target"),
+                source = "Source",
+                chapterCount = 10,
+                latestChapter = 10.0,
+            ),
+        )
+
+        assertEquals(2, migrationSkippedCount(listOf(searching, notFound, success)))
+    }
+
+    @Test
     fun `isMigrationSearchComplete returns true when all visible items are resolved`() {
         val unresolved = migratingManga(
             latestChapter = 10.0,

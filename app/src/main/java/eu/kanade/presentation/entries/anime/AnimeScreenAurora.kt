@@ -95,6 +95,7 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
+import eu.kanade.presentation.entries.components.MissingItemCountListItem
 import eu.kanade.presentation.entries.components.ResolvedCover
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
@@ -164,6 +165,7 @@ fun AnimeScreenAuroraImpl(
     onRefresh: () -> Unit,
     onContinueWatching: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
+    onSuggestionClick: (eu.kanade.tachiyomi.data.suggestions.SuggestionItem) -> Unit,
     onCoverClicked: () -> Unit,
     onPosterLongClicked: (() -> Unit)? = onCoverClicked,
     onShareClicked: (() -> Unit)?,
@@ -328,10 +330,17 @@ fun AnimeScreenAuroraImpl(
             episodes.filter { item ->
                 when (item) {
                     is EpisodeList.Item -> episodeIdToVirtualSeason[item.episode.id] == selectedVirtualSeason
-                    else -> false
+                    is EpisodeList.MissingCount -> true
                 }
             }
         }
+    }
+
+    val realEpisodeCount = remember(filteredEpisodes) {
+        filteredEpisodes.count { it is EpisodeList.Item }
+    }
+    val missingEpisodesCount = remember(filteredEpisodes) {
+        filteredEpisodes.filterIsInstance<EpisodeList.MissingCount>().sumOf { it.count }
     }
 
     val colors = AuroraTheme.colors
@@ -447,7 +456,22 @@ fun AnimeScreenAuroraImpl(
             .distinctUntilChanged()
             .collect { isReverseScrollingOverlay = it }
     }
-    val episodesToShow = if (episodesExpanded) filteredEpisodes else filteredEpisodes.take(5)
+    val episodesToShow = remember(filteredEpisodes, episodesExpanded) {
+        if (episodesExpanded) {
+            filteredEpisodes
+        } else {
+            val result = mutableListOf<EpisodeList>()
+            var visibleEpisodes = 0
+            for (item in filteredEpisodes) {
+                if (item is EpisodeList.Item) {
+                    if (visibleEpisodes >= 5) break
+                    visibleEpisodes++
+                }
+                result += item
+            }
+            result
+        }
+    }
     val haptic = LocalHapticFeedback.current
     val showAnimeOverlayChrome by remember {
         derivedStateOf {
@@ -771,7 +795,13 @@ fun AnimeScreenAuroraImpl(
                                         )
                                     }
                                 } else {
-                                    if (filteredEpisodes.isEmpty()) {
+                                    if (missingEpisodesCount > 0) {
+                                        item(key = "missing-episodes-warning") {
+                                            MissingItemCountListItem(count = missingEpisodesCount)
+                                        }
+                                    }
+
+                                    if (realEpisodeCount == 0) {
                                         item {
                                             Box(
                                                 modifier = Modifier
@@ -791,66 +821,76 @@ fun AnimeScreenAuroraImpl(
                                     items(
                                         items = episodesToShow,
                                         key = { (it as? EpisodeList.Item)?.episode?.id ?: it.hashCode() },
-                                        contentType = { "episode" },
+                                        contentType = {
+                                            when (it) {
+                                                is EpisodeList.Item -> "episode"
+                                                is EpisodeList.MissingCount -> "missing-count"
+                                            }
+                                        },
                                     ) { item ->
-                                        if (item is EpisodeList.Item) {
-                                            AnimeEpisodeCardCompact(
-                                                anime = anime,
-                                                item = item,
-                                                selected = item.selected,
-                                                isNew = item.episode.id in state.newEpisodeIds,
-                                                isAnyEpisodeSelected = isAnyEpisodeSelected,
-                                                episodeSwipeStartAction = episodeSwipeStartAction,
-                                                episodeSwipeEndAction = episodeSwipeEndAction,
-                                                showPreviews = state.showPreviews,
-                                                showSummaries = state.showSummaries,
-                                                onClick = {
-                                                    when (
-                                                        resolveAuroraEpisodeClickAction(
-                                                            isEpisodeSelected = item.selected,
-                                                            isAnyEpisodeSelected = isAnyEpisodeSelected,
-                                                        )
-                                                    ) {
-                                                        AuroraEpisodeClickAction.OpenEpisode -> {
-                                                            onEpisodeClicked(item.episode, false)
-                                                        }
-                                                        AuroraEpisodeClickAction.SelectEpisode -> {
-                                                            onEpisodeSelected(item, true, true, false)
-                                                            if (shouldAutoExpandAuroraEpisodesList(
-                                                                    episodesExpanded,
-                                                                    episodes.size,
-                                                                )
-                                                            ) {
-                                                                episodesExpanded = true
+                                        when (item) {
+                                            is EpisodeList.Item -> {
+                                                AnimeEpisodeCardCompact(
+                                                    anime = anime,
+                                                    item = item,
+                                                    selected = item.selected,
+                                                    isNew = item.episode.id in state.newEpisodeIds,
+                                                    isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                                    episodeSwipeStartAction = episodeSwipeStartAction,
+                                                    episodeSwipeEndAction = episodeSwipeEndAction,
+                                                    showPreviews = state.showPreviews,
+                                                    showSummaries = state.showSummaries,
+                                                    onClick = {
+                                                        when (
+                                                            resolveAuroraEpisodeClickAction(
+                                                                isEpisodeSelected = item.selected,
+                                                                isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                                            )
+                                                        ) {
+                                                            AuroraEpisodeClickAction.OpenEpisode -> {
+                                                                onEpisodeClicked(item.episode, false)
+                                                            }
+                                                            AuroraEpisodeClickAction.SelectEpisode -> {
+                                                                onEpisodeSelected(item, true, true, false)
+                                                                if (shouldAutoExpandAuroraEpisodesList(
+                                                                        episodesExpanded,
+                                                                        episodes.size,
+                                                                    )
+                                                                ) {
+                                                                    episodesExpanded = true
+                                                                }
+                                                            }
+                                                            AuroraEpisodeClickAction.UnselectEpisode -> {
+                                                                onEpisodeSelected(item, false, true, false)
                                                             }
                                                         }
-                                                        AuroraEpisodeClickAction.UnselectEpisode -> {
-                                                            onEpisodeSelected(item, false, true, false)
+                                                    },
+                                                    onLongClick = {
+                                                        onEpisodeSelected(item, !item.selected, true, true)
+                                                        val shouldExpand = shouldAutoExpandAuroraEpisodesList(
+                                                            episodesExpanded,
+                                                            episodes.size,
+                                                        )
+                                                        if (!item.selected && shouldExpand) {
+                                                            episodesExpanded = true
                                                         }
-                                                    }
-                                                },
-                                                onLongClick = {
-                                                    onEpisodeSelected(item, !item.selected, true, true)
-                                                    val shouldExpand = shouldAutoExpandAuroraEpisodesList(
-                                                        episodesExpanded,
-                                                        episodes.size,
-                                                    )
-                                                    if (!item.selected && shouldExpand) {
-                                                        episodesExpanded = true
-                                                    }
-                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                },
-                                                onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
-                                                onDownloadEpisode = onDownloadEpisode,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                                            )
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    },
+                                                    onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
+                                                    onDownloadEpisode = onDownloadEpisode,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                )
+                                            }
+                                            is EpisodeList.MissingCount -> {
+                                                MissingItemCountListItem(count = item.count)
+                                            }
                                         }
                                     }
                                 }
 
-                                if (filteredEpisodes.size > 5) {
+                                if (realEpisodeCount > 5) {
                                     item {
                                         Box(
                                             modifier = Modifier
@@ -864,7 +904,7 @@ fun AnimeScreenAuroraImpl(
                                                 } else {
                                                     stringResource(
                                                         AYMR.strings.action_show_all_episodes,
-                                                        filteredEpisodes.size,
+                                                        realEpisodeCount,
                                                     )
                                                 },
                                                 onClick = { episodesExpanded = !episodesExpanded },
@@ -992,12 +1032,7 @@ fun AnimeScreenAuroraImpl(
                                 item(key = "suggestions_row") {
                                     eu.kanade.presentation.entries.components.aurora.AuroraSuggestionsRow(
                                         state = state.suggestions,
-                                        onSuggestionClick = { item ->
-                                            onSearch(
-                                                item.searchQueries.firstOrNull { it.isNotBlank() } ?: item.title,
-                                                true,
-                                            )
-                                        },
+                                        onSuggestionClick = onSuggestionClick,
                                         onOpenSuggestions = onOpenSuggestions,
                                         onRetryClick = onRetrySuggestions,
                                         modifier = Modifier
@@ -1109,8 +1144,14 @@ fun AnimeScreenAuroraImpl(
                                 )
                             }
                         } else {
+                            if (missingEpisodesCount > 0) {
+                                item(key = "missing-episodes-warning") {
+                                    MissingItemCountListItem(count = missingEpisodesCount)
+                                }
+                            }
+
                             // Empty state for episodes
-                            if (filteredEpisodes.isEmpty()) {
+                            if (realEpisodeCount == 0) {
                                 item {
                                     Box(
                                         modifier = Modifier
@@ -1132,69 +1173,79 @@ fun AnimeScreenAuroraImpl(
                             items(
                                 items = episodesToShow,
                                 key = { (it as? EpisodeList.Item)?.episode?.id ?: it.hashCode() },
-                                contentType = { "episode" },
+                                contentType = {
+                                    when (it) {
+                                        is EpisodeList.Item -> "episode"
+                                        is EpisodeList.MissingCount -> "missing-count"
+                                    }
+                                },
                             ) { item ->
-                                if (item is EpisodeList.Item) {
-                                    AnimeEpisodeCardCompact(
-                                        anime = anime,
-                                        item = item,
-                                        selected = item.selected,
-                                        isNew = item.episode.id in state.newEpisodeIds,
-                                        isAnyEpisodeSelected = isAnyEpisodeSelected,
-                                        episodeSwipeStartAction = episodeSwipeStartAction,
-                                        episodeSwipeEndAction = episodeSwipeEndAction,
-                                        showPreviews = state.showPreviews,
-                                        showSummaries = state.showSummaries,
-                                        onClick = {
-                                            when (
-                                                resolveAuroraEpisodeClickAction(
-                                                    isEpisodeSelected = item.selected,
-                                                    isAnyEpisodeSelected = isAnyEpisodeSelected,
-                                                )
-                                            ) {
-                                                AuroraEpisodeClickAction.OpenEpisode -> {
-                                                    onEpisodeClicked(item.episode, false)
-                                                }
-                                                AuroraEpisodeClickAction.SelectEpisode -> {
-                                                    onEpisodeSelected(item, true, true, false)
-                                                    val shouldExpand = shouldAutoExpandAuroraEpisodesList(
-                                                        episodesExpanded,
-                                                        filteredEpisodes.size,
+                                when (item) {
+                                    is EpisodeList.Item -> {
+                                        AnimeEpisodeCardCompact(
+                                            anime = anime,
+                                            item = item,
+                                            selected = item.selected,
+                                            isNew = item.episode.id in state.newEpisodeIds,
+                                            isAnyEpisodeSelected = isAnyEpisodeSelected,
+                                            episodeSwipeStartAction = episodeSwipeStartAction,
+                                            episodeSwipeEndAction = episodeSwipeEndAction,
+                                            showPreviews = state.showPreviews,
+                                            showSummaries = state.showSummaries,
+                                            onClick = {
+                                                when (
+                                                    resolveAuroraEpisodeClickAction(
+                                                        isEpisodeSelected = item.selected,
+                                                        isAnyEpisodeSelected = isAnyEpisodeSelected,
                                                     )
-                                                    if (shouldExpand) {
-                                                        episodesExpanded = true
+                                                ) {
+                                                    AuroraEpisodeClickAction.OpenEpisode -> {
+                                                        onEpisodeClicked(item.episode, false)
+                                                    }
+                                                    AuroraEpisodeClickAction.SelectEpisode -> {
+                                                        onEpisodeSelected(item, true, true, false)
+                                                        val shouldExpand = shouldAutoExpandAuroraEpisodesList(
+                                                            episodesExpanded,
+                                                            episodes.size,
+                                                        )
+                                                        if (shouldExpand) {
+                                                            episodesExpanded = true
+                                                        }
+                                                    }
+                                                    AuroraEpisodeClickAction.UnselectEpisode -> {
+                                                        onEpisodeSelected(item, false, true, false)
                                                     }
                                                 }
-                                                AuroraEpisodeClickAction.UnselectEpisode -> {
-                                                    onEpisodeSelected(item, false, true, false)
+                                            },
+                                            onLongClick = {
+                                                onEpisodeSelected(item, !item.selected, true, true)
+                                                if (!item.selected &&
+                                                    shouldAutoExpandAuroraEpisodesList(
+                                                        episodesExpanded,
+                                                        episodes.size,
+                                                    )
+                                                ) {
+                                                    episodesExpanded = true
                                                 }
-                                            }
-                                        },
-                                        onLongClick = {
-                                            onEpisodeSelected(item, !item.selected, true, true)
-                                            if (!item.selected &&
-                                                shouldAutoExpandAuroraEpisodesList(
-                                                    episodesExpanded,
-                                                    filteredEpisodes.size,
-                                                )
-                                            ) {
-                                                episodesExpanded = true
-                                            }
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        },
-                                        onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
-                                        onDownloadEpisode = onDownloadEpisode,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                                    )
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            },
+                                            onEpisodeSwipe = { action -> onEpisodeSwipe(item, action) },
+                                            onDownloadEpisode = onDownloadEpisode,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                        )
+                                    }
+                                    is EpisodeList.MissingCount -> {
+                                        MissingItemCountListItem(count = item.count)
+                                    }
                                 }
                             }
                         }
 
                         // Show More button if there are more than 5 episodes
-                        if (filteredEpisodes.size > 5) {
+                        if (realEpisodeCount > 5) {
                             item {
                                 Box(
                                     modifier = Modifier
@@ -1209,7 +1260,7 @@ fun AnimeScreenAuroraImpl(
                                         } else {
                                             stringResource(
                                                 AYMR.strings.action_show_all_episodes,
-                                                filteredEpisodes.size,
+                                                realEpisodeCount,
                                             )
                                         },
                                         onClick = { episodesExpanded = !episodesExpanded },

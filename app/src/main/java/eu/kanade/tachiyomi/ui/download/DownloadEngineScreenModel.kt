@@ -19,4 +19,8 @@ class DownloadEngineScreenModel(
     fun pauseAll() = facade.pauseAll()
     fun resumeAll() = facade.resumeAll()
     fun cancelAll() = facade.cancelAll()
+
+    override fun onDispose() {
+        facade.close()
+    }
 }

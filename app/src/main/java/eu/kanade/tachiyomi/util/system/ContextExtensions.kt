@@ -169,14 +169,20 @@ fun Context.isPackageInstalled(packageName: String): Boolean {
     }
 }
 
-val Context.hasMiuiPackageInstaller get() = isPackageInstalled("com.miui.packageinstaller")
+val Context.hasMiuiPackageInstaller get() = DeviceUtil.isMiui || isPackageInstalled("com.miui.packageinstaller")
 
 val Context.isShizukuInstalled get() = isPackageInstalled("moe.shizuku.privileged.api") || Sui.isSui()
 
 fun Context.launchRequestPackageInstallsPermission() {
-    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
         data = "package:$packageName".toUri()
-        startActivity(this)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    try {
+        startActivity(intent)
+    } catch (e: Exception) {
+        logcat(LogPriority.ERROR, e) { "Failed to open unknown-app-sources settings." }
+        startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
 

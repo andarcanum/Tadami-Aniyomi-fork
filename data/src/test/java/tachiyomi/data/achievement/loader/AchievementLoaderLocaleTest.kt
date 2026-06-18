@@ -82,6 +82,26 @@ class AchievementLoaderLocaleTest {
         shouldBackfillRewards(db, json) shouldBe true
     }
 
+    @Test
+    fun `progress rule version requires recalculation even when json version is already calculated`() {
+        shouldRecalculateAchievementProgress(
+            calculationVersion = 10,
+            jsonVersion = 10,
+            progressRuleVersion = 1,
+            currentProgressRuleVersion = 2,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `progress recalculation is skipped when json and rule versions are current`() {
+        shouldRecalculateAchievementProgress(
+            calculationVersion = 10,
+            jsonVersion = 10,
+            progressRuleVersion = 2,
+            currentProgressRuleVersion = 2,
+        ) shouldBe false
+    }
+
     private fun simpleAchievement(
         id: String,
         rewards: List<Reward>?,

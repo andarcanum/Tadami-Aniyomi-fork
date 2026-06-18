@@ -15,9 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -463,6 +465,7 @@ private fun Size.endEdge(): Edge {
 @Composable
 internal fun PageTurnPageRenderer(
     pagerState: PagerState,
+    chapterId: Long,
     contentPages: List<NovelPageContentPage>,
     transitionStyle: NovelPageTransitionStyle,
     readerSettings: NovelReaderSettings,
@@ -649,7 +652,10 @@ internal fun PageTurnPageRenderer(
         pageCurlConfig.tapInteraction = tapInteraction
     }
 
-    LaunchedEffect(pagerCurrentPage, actualPageCount, hasPreviousChapter) {
+    // Fix: include chapterId so pageCurlState always resets when the chapter
+    // changes, even if pagerCurrentPage / actualPageCount / hasPreviousChapter
+    // happen to be the same values as the previous chapter.
+    LaunchedEffect(chapterId, pagerCurrentPage, actualPageCount, hasPreviousChapter) {
         val targetVirtualPage = resolvePageTurnRendererVirtualPageIndex(
             actualPageIndex = pagerCurrentPage,
             hasPreviousChapter = hasPreviousChapter,
@@ -659,16 +665,16 @@ internal fun PageTurnPageRenderer(
         }
     }
 
-    LaunchedEffect(pageCurlState, pagerState, actualPageCount, hasPreviousChapter, hasNextChapter) {
+    // Fix: one-shot guard – reset when chapter, pageCount or chapter-neighbour
+    // availability changes so stale boundary state from the previous chapter
+    // cannot re-trigger a chapter transition before Compose finishes rebuilding.
+    var consumedBoundaryNavigation by remember(chapterId, actualPageCount, hasPreviousChapter, hasNextChapter) {
+        mutableStateOf<HorizontalChapterSwipeAction?>(null)
+    }
+    LaunchedEffect(pageCurlState, actualPageCount, hasPreviousChapter, hasNextChapter) {
         snapshotFlow { pageCurlState.current.coerceIn(0, virtualPageCount - 1) to pageCurlState.progress }
             .distinctUntilChanged()
             .collectLatest { (targetVirtualPage, progress) ->
-                val boundaryTarget = resolvePageTurnRendererBoundaryChapterTarget(
-                    currentPage = targetVirtualPage,
-                    contentPageCount = actualPageCount,
-                    hasPreviousChapter = hasPreviousChapter,
-                    hasNextChapter = hasNextChapter,
-                )
                 when (
                     resolvePageTurnRendererSettledBoundaryChapterTarget(
                         currentPage = targetVirtualPage,
@@ -678,18 +684,42 @@ internal fun PageTurnPageRenderer(
                         hasNextChapter = hasNextChapter,
                     )
                 ) {
-                    HorizontalChapterSwipeAction.PREVIOUS -> latestOpenPreviousChapter()
-                    HorizontalChapterSwipeAction.NEXT -> latestOpenNextChapter()
-                    HorizontalChapterSwipeAction.NONE -> if (boundaryTarget == HorizontalChapterSwipeAction.NONE) {
-                        val targetPage = resolvePageTurnRendererProgressPageIndex(
-                            currentPage = targetVirtualPage,
-                            contentPageCount = actualPageCount,
-                            hasPreviousChapter = hasPreviousChapter,
-                        )
-                        latestCurrentPageChange(targetPage)
-                        if (targetPage != pagerState.currentPage) {
-                            pagerState.scrollToPage(targetPage)
+                    HorizontalChapterSwipeAction.PREVIOUS -> {
+                        if (consumedBoundaryNavigation != HorizontalChapterSwipeAction.PREVIOUS) {
+                            consumedBoundaryNavigation = HorizontalChapterSwipeAction.PREVIOUS
+                            latestOpenPreviousChapter()
                         }
+                    }
+                    HorizontalChapterSwipeAction.NEXT -> {
+                        if (consumedBoundaryNavigation != HorizontalChapterSwipeAction.NEXT) {
+                            consumedBoundaryNavigation = HorizontalChapterSwipeAction.NEXT
+                            latestOpenNextChapter()
+                        }
+                    }
+                    HorizontalChapterSwipeAction.NONE -> {}
+                }
+            }
+    }
+
+    LaunchedEffect(pageCurlState, pagerState, actualPageCount, hasPreviousChapter, hasNextChapter) {
+        snapshotFlow { pageCurlState.current.coerceIn(0, virtualPageCount - 1) }
+            .distinctUntilChanged()
+            .collectLatest { targetVirtualPage ->
+                val boundaryTarget = resolvePageTurnRendererBoundaryChapterTarget(
+                    currentPage = targetVirtualPage,
+                    contentPageCount = actualPageCount,
+                    hasPreviousChapter = hasPreviousChapter,
+                    hasNextChapter = hasNextChapter,
+                )
+                if (boundaryTarget == HorizontalChapterSwipeAction.NONE) {
+                    val targetPage = resolvePageTurnRendererProgressPageIndex(
+                        currentPage = targetVirtualPage,
+                        contentPageCount = actualPageCount,
+                        hasPreviousChapter = hasPreviousChapter,
+                    )
+                    latestCurrentPageChange(targetPage)
+                    if (targetPage != pagerState.currentPage) {
+                        pagerState.scrollToPage(targetPage)
                     }
                 }
             }

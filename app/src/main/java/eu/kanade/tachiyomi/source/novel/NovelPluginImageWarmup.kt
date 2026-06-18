@@ -3,9 +3,7 @@ package eu.kanade.tachiyomi.source.novel
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 
 internal object NovelPluginImageWarmup {
     private const val MAX_FIRST_WINDOW = 12
@@ -31,14 +29,10 @@ internal object NovelPluginImageWarmup {
         val targets = collectTargets(urls)
         if (targets.isEmpty()) return
 
-        coroutineScope {
-            targets
-                .map { url ->
-                    async(Dispatchers.IO) {
-                        resolve(url)
-                    }
-                }
-                .awaitAll()
+        withContext(Dispatchers.IO) {
+            targets.forEach { url ->
+                resolve(url)
+            }
         }
     }
 }

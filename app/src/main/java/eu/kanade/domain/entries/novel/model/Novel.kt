@@ -1,5 +1,6 @@
 package eu.kanade.domain.entries.novel.model
 
+import eu.kanade.tachiyomi.data.cache.NovelCoverCache
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.domain.entries.novel.model.Novel
@@ -67,4 +68,8 @@ fun SNovel.toDomainNovel(sourceId: Long): Novel {
         initialized = initialized,
         source = sourceId,
     )
+}
+
+fun Novel.hasCustomCover(coverCache: NovelCoverCache): Boolean {
+    return coverCache.getCustomCoverFile(id).exists()
 }

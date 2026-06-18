@@ -47,7 +47,7 @@ import eu.kanade.presentation.browse.anime.BrowseAnimeSourceContent
 import eu.kanade.presentation.browse.anime.MissingSourceScreen
 import eu.kanade.presentation.browse.anime.components.BrowseAnimeSourceToolbar
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
-import eu.kanade.presentation.entries.anime.DuplicateAnimeDialog
+import eu.kanade.presentation.entries.components.DuplicateEntryDialog
 import eu.kanade.presentation.util.AssistContentScreen
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
@@ -286,15 +286,16 @@ data class BrowseAnimeSourceScreen(
                 )
             }
             is BrowseAnimeSourceScreenModel.Dialog.AddDuplicateAnime -> {
-                DuplicateAnimeDialog(
+                DuplicateEntryDialog(
                     onDismissRequest = onDismissRequest,
                     onConfirm = { screenModel.addFavorite(dialog.anime) },
-                    onOpenAnime = { navigator.push(AnimeScreen(dialog.duplicate.id)) },
+                    onOpenEntry = { navigator.push(AnimeScreen(dialog.duplicate.id)) },
                     onMigrate = {
                         screenModel.setDialog(
                             BrowseAnimeSourceScreenModel.Dialog.Migrate(dialog.anime, dialog.duplicate),
                         )
                     },
+                    openEntryLabel = stringResource(AYMR.strings.action_show_anime),
                 )
             }
 

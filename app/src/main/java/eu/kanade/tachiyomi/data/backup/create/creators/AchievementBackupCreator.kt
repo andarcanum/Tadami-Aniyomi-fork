@@ -12,6 +12,8 @@ import eu.kanade.tachiyomi.data.track.AnimeTracker
 import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.ui.stats.StatsCalculations
+import eu.kanade.tachiyomi.ui.stats.WatchProgress
 import kotlinx.coroutines.flow.first
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.UserProfileManager
@@ -19,6 +21,12 @@ import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
 import tachiyomi.domain.history.manga.interactor.GetTotalReadDuration
 import tachiyomi.domain.items.episode.interactor.GetEpisodesByAnimeId
+import tachiyomi.domain.library.anime.LibraryAnime
+import tachiyomi.domain.library.manga.LibraryManga
+import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_HAS_UNVIEWED
+import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_COMPLETED
+import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_VIEWED
 import tachiyomi.domain.track.anime.interactor.GetAnimeTracks
 import tachiyomi.domain.track.manga.interactor.GetMangaTracks
 import tachiyomi.source.local.entries.anime.isLocal
@@ -41,6 +49,7 @@ class AchievementBackupCreator(
     private val animeDownloadManager: AnimeDownloadManager = Injekt.get(),
     private val getEpisodesByAnimeId: GetEpisodesByAnimeId = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
+    private val preferences: LibraryPreferences = Injekt.get(),
 ) {
 
     /**
@@ -221,25 +230,32 @@ class AchievementBackupCreator(
                 manga.id to tracks
             }
 
-            // Calculate mean score
-            val scoredTracks = mangaTrackMap.mapNotNull { (_, tracks) ->
-                tracks.mapNotNull { track -> track.takeIf { it.score > 0.0 } }
-                    .takeIf { it.isNotEmpty() }
-            }.flatten()
-
-            val meanScore = if (scoredTracks.isNotEmpty()) {
-                scoredTracks.map { track ->
-                    val service = trackerManager.get(track.trackerId) as? MangaTracker
-                    service?.get10PointScore(track) ?: track.score
-                }.average()
-            } else {
-                0.0
-            }
+            val meanScore = StatsCalculations.meanTitleScore(
+                mangaTrackMap.values.map { tracks ->
+                    tracks.mapNotNull { track ->
+                        track.takeIf { it.score > 0.0 }?.let {
+                            val service = trackerManager.get(track.trackerId) as? MangaTracker
+                            service?.get10PointScore(track) ?: track.score
+                        }
+                    }
+                },
+            ).takeUnless { it.isNaN() } ?: 0.0
 
             MangaStatsData(
                 libraryCount = distinctManga.size,
                 completedCount = distinctManga.count {
-                    it.manga.status.toInt() == SManga.COMPLETED && it.unreadCount == 0L
+                    StatsCalculations.isCompletedByUserConsumption(
+                        sourceStatus = it.manga.status.toInt(),
+                        customStatus = it.manga.customStatus?.toInt(),
+                        completedStatus = SManga.COMPLETED,
+                        terminalFallbackStatuses = setOf(
+                            SManga.PUBLISHING_FINISHED,
+                            SManga.CANCELLED,
+                            SManga.ON_HIATUS,
+                        ),
+                        consumedCount = it.readCount,
+                        totalCount = it.totalChapters,
+                    )
                 },
                 totalReadDuration = getTotalReadDuration.await(),
                 startedCount = distinctManga.count { it.hasStarted },
@@ -247,7 +263,7 @@ class AchievementBackupCreator(
                 totalChapters = distinctManga.sumOf { it.totalChapters }.toInt(),
                 readChapters = distinctManga.sumOf { it.readCount }.toInt(),
                 downloadedChapters = mangaDownloadManager.getDownloadCount(),
-                globalUpdateCount = distinctManga.size, // Simplified
+                globalUpdateCount = getMangaGlobalUpdateItemCount(libraryManga),
                 trackedCount = mangaTrackMap.count { it.value.isNotEmpty() },
                 meanScore = meanScore,
             )
@@ -272,37 +288,44 @@ class AchievementBackupCreator(
                 anime.id to tracks
             }
 
-            // Calculate mean score
-            val scoredTracks = animeTrackMap.mapNotNull { (_, tracks) ->
-                tracks.mapNotNull { track -> track.takeIf { it.score > 0.0 } }
-                    .takeIf { it.isNotEmpty() }
-            }.flatten()
-
-            val meanScore = if (scoredTracks.isNotEmpty()) {
-                scoredTracks.map { track ->
-                    val service = trackerManager.get(track.trackerId) as? AnimeTracker
-                    service?.get10PointScore(track) ?: track.score
-                }.average()
-            } else {
-                0.0
-            }
-
-            // Calculate total watch time
-            var totalWatchTime = 0L
-            distinctAnime.forEach { libraryAnime ->
-                getEpisodesByAnimeId.await(libraryAnime.anime.id).forEach { episode ->
-                    totalWatchTime += if (episode.seen) {
-                        episode.totalSeconds
-                    } else {
-                        episode.lastSecondSeen
+            val meanScore = StatsCalculations.meanTitleScore(
+                animeTrackMap.values.map { tracks ->
+                    tracks.mapNotNull { track ->
+                        track.takeIf { it.score > 0.0 }?.let {
+                            val service = trackerManager.get(track.trackerId) as? AnimeTracker
+                            service?.get10PointScore(track) ?: track.score
+                        }
                     }
-                }
-            }
+                },
+            ).takeUnless { it.isNaN() } ?: 0.0
+
+            val totalWatchTime = StatsCalculations.watchDurationMillis(
+                distinctAnime.flatMap { libraryAnime ->
+                    getEpisodesByAnimeId.await(libraryAnime.anime.id).map { episode ->
+                        WatchProgress(
+                            seen = episode.seen,
+                            lastSeenMillis = episode.lastSecondSeen,
+                            totalMillis = episode.totalSeconds,
+                        )
+                    }
+                },
+            )
 
             AnimeStatsData(
                 libraryCount = distinctAnime.size,
                 completedCount = distinctAnime.count {
-                    it.anime.status.toInt() == AnimeStatus.COMPLETED && it.unseenCount == 0L
+                    StatsCalculations.isCompletedByUserConsumption(
+                        sourceStatus = it.anime.status.toInt(),
+                        customStatus = it.anime.customStatus?.toInt(),
+                        completedStatus = AnimeStatus.COMPLETED,
+                        terminalFallbackStatuses = setOf(
+                            AnimeStatus.PUBLISHING_FINISHED,
+                            AnimeStatus.CANCELLED,
+                            AnimeStatus.ON_HIATUS,
+                        ),
+                        consumedCount = it.seenCount,
+                        totalCount = it.totalCount,
+                    )
                 },
                 totalSeenDuration = totalWatchTime,
                 startedCount = distinctAnime.count { it.hasStarted },
@@ -310,7 +333,7 @@ class AchievementBackupCreator(
                 totalEpisodes = distinctAnime.sumOf { it.totalCount }.toInt(),
                 watchedEpisodes = distinctAnime.sumOf { it.seenCount }.toInt(),
                 downloadedEpisodes = animeDownloadManager.getDownloadCount(),
-                globalUpdateCount = distinctAnime.size, // Simplified
+                globalUpdateCount = getAnimeGlobalUpdateItemCount(libraryAnime),
                 trackedCount = animeTrackMap.count { it.value.isNotEmpty() },
                 meanScore = meanScore,
             )
@@ -318,6 +341,66 @@ class AchievementBackupCreator(
             logcat(throwable = e) { "[BACKUP] Error backing up anime stats" }
             AnimeStatsData()
         }
+    }
+
+    private fun getMangaGlobalUpdateItemCount(libraryManga: List<LibraryManga>): Int {
+        val includedCategories = preferences.mangaUpdateCategories().get().map { it.toLong() }
+        val includedManga = if (includedCategories.isNotEmpty()) {
+            libraryManga.filter { it.category in includedCategories }
+        } else {
+            libraryManga
+        }
+
+        val excludedCategories = preferences.mangaUpdateCategoriesExclude().get().map { it.toLong() }
+        val excludedMangaIds = if (excludedCategories.isNotEmpty()) {
+            libraryManga.mapNotNull { manga ->
+                manga.id.takeIf { manga.category in excludedCategories }
+            }
+        } else {
+            emptyList()
+        }
+
+        val updateRestrictions = preferences.autoUpdateItemRestrictions().get()
+        return includedManga
+            .filterNot { it.manga.id in excludedMangaIds }
+            .distinctBy { it.manga.id }
+            .count {
+                !(
+                    (ENTRY_NON_COMPLETED in updateRestrictions && it.manga.status.toInt() == SManga.COMPLETED) ||
+                        (ENTRY_HAS_UNVIEWED in updateRestrictions && it.unreadCount != 0L) ||
+                        (ENTRY_NON_VIEWED in updateRestrictions && it.totalChapters > 0 && !it.hasStarted)
+                    )
+            }
+    }
+
+    private fun getAnimeGlobalUpdateItemCount(libraryAnime: List<LibraryAnime>): Int {
+        val includedCategories = preferences.animeUpdateCategories().get().map { it.toLong() }
+        val includedAnime = if (includedCategories.isNotEmpty()) {
+            libraryAnime.filter { it.category in includedCategories }
+        } else {
+            libraryAnime
+        }
+
+        val excludedCategories = preferences.animeUpdateCategoriesExclude().get().map { it.toLong() }
+        val excludedAnimeIds = if (excludedCategories.isNotEmpty()) {
+            libraryAnime.mapNotNull { anime ->
+                anime.id.takeIf { anime.category in excludedCategories }
+            }
+        } else {
+            emptyList()
+        }
+
+        val updateRestrictions = preferences.autoUpdateItemRestrictions().get()
+        return includedAnime
+            .filterNot { it.anime.id in excludedAnimeIds }
+            .distinctBy { it.anime.id }
+            .count {
+                !(
+                    (ENTRY_NON_COMPLETED in updateRestrictions && it.anime.status.toInt() == AnimeStatus.COMPLETED) ||
+                        (ENTRY_HAS_UNVIEWED in updateRestrictions && it.unseenCount != 0L) ||
+                        (ENTRY_NON_VIEWED in updateRestrictions && it.totalCount > 0 && !it.hasStarted)
+                    )
+            }
     }
 
     private fun calculateCombinedMeanScore(mangaMean: Double, animeMean: Double): Double {

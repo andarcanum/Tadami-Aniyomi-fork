@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.extension.novel.repo
 
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
+import kotlinx.coroutines.CancellationException
 import logcat.LogPriority
 import okhttp3.OkHttpClient
 import tachiyomi.core.common.util.lang.withIOContext
@@ -29,11 +30,17 @@ class NovelPluginRepoService(
                         if (payload.isBlank()) {
                             emptyList()
                         } else {
-                            parser.parse(payload)
+                            runCatching { parser.parse(payload) }
+                                .onFailure { error ->
+                                    logcat(LogPriority.ERROR, error) { "Failed to parse novel plugin repo url=$url" }
+                                }
+                                .getOrDefault(emptyList())
                         }
                     }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                logcat(LogPriority.ERROR, e) { "Failed to fetch novel plugin repo" }
+                logcat(LogPriority.ERROR, e) { "Failed to fetch novel plugin repo url=$url" }
                 emptyList()
             }
         }

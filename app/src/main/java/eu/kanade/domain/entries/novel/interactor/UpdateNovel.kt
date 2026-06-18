@@ -1,10 +1,14 @@
 package eu.kanade.domain.entries.novel.interactor
 
+import eu.kanade.domain.entries.novel.model.hasCustomCover
 import eu.kanade.domain.entries.novel.model.normalizeNovelDescription
+import eu.kanade.tachiyomi.data.cache.NovelCoverCache
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.entries.novel.repository.NovelRepository
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.time.Instant
 
 class UpdateNovel(
@@ -50,6 +54,7 @@ class UpdateNovel(
         localNovel: Novel,
         remoteNovel: SNovel,
         manualFetch: Boolean,
+        coverCache: NovelCoverCache? = null,
     ): Boolean {
         val remoteTitle = try {
             remoteNovel.title
@@ -59,16 +64,23 @@ class UpdateNovel(
 
         val title = if (remoteTitle.isEmpty() || localNovel.favorite) null else remoteTitle
         val shouldUpdateCover = manualFetch || localNovel.thumbnailUrl.isNullOrEmpty() || !localNovel.initialized
+        val remoteThumbnailUrl = remoteNovel.thumbnail_url?.takeIf { it.isNotEmpty() }
+        val hasCustomCover = if (remoteThumbnailUrl != null && shouldUpdateCover) {
+            localNovel.hasCustomCover(coverCache ?: Injekt.get())
+        } else {
+            false
+        }
 
         val coverLastModified =
             when {
-                remoteNovel.thumbnail_url.isNullOrEmpty() -> null
+                remoteThumbnailUrl == null -> null
                 !shouldUpdateCover -> null
+                hasCustomCover -> null
                 else -> Instant.now().toEpochMilli()
             }
 
-        val thumbnailUrl = if (shouldUpdateCover) {
-            remoteNovel.thumbnail_url?.takeIf { it.isNotEmpty() }
+        val thumbnailUrl = if (shouldUpdateCover && !hasCustomCover) {
+            remoteThumbnailUrl
         } else {
             null
         }

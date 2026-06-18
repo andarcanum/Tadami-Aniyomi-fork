@@ -20,7 +20,7 @@ fun resolveNovelTtsVoiceSelection(
     val normalizedPreferredVoiceId = preferredVoiceId.takeIf { it.isNotBlank() }
     val normalizedPreferredLocaleTag = preferredLocaleTag.takeIf { it.isNotBlank() }
 
-    val selectedVoice = if (showLocaleFallback) {
+    val selectedVoice = if (showLocaleFallback || normalizedPreferredVoiceId == null) {
         null
     } else {
         availableVoices.firstOrNull { it.id == normalizedPreferredVoiceId }
@@ -33,8 +33,9 @@ fun resolveNovelTtsVoiceSelection(
         normalizedPreferredLocaleTag != null && availableLocales.contains(normalizedPreferredLocaleTag) -> {
             normalizedPreferredLocaleTag
         }
-        availableLocales.isNotEmpty() -> availableLocales.first()
         normalizedPreferredLocaleTag != null -> normalizedPreferredLocaleTag
+        availableLocales.isNotEmpty() -> availableLocales.first()
+        availableVoices.isNotEmpty() -> availableVoices.first().localeTag
         else -> ""
     }
 

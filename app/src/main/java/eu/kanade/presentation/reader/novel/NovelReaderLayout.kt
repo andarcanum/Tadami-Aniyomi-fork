@@ -119,6 +119,7 @@ internal fun resolveWebViewPaddingBottomPx(
 
 internal const val AUTO_SCROLL_COOLDOWN_MS = 2000L
 internal const val AUTO_SCROLL_SPEED_FACTOR_DELTA = 0.02f
+private const val MAX_INLINE_IMAGE_PRECEDING_TEXT_CHARS = 180
 
 internal fun intervalToAutoScrollSpeed(intervalSeconds: Int): Int {
     val clamped = intervalSeconds.coerceIn(1, 60)
@@ -564,6 +565,7 @@ internal sealed interface RichPageSlice {
         val sourceBlockIndex: Int,
         val imageUrl: String,
         val contentDescription: String?,
+        val spacingBeforePx: Int = 0,
     ) : RichPageSlice
 }
 
@@ -631,8 +633,8 @@ internal sealed interface NovelPageContentBlock {
     data class Image(
         val imageUrl: String,
         val contentDescription: String?,
+        override val spacingBeforePx: Int = 0,
     ) : NovelPageContentBlock {
-        override val spacingBeforePx: Int = 0
         override val firstLineIndentEm: Float? = null
         override val isChapterTitle: Boolean = false
     }
@@ -1108,13 +1110,28 @@ internal fun paginateMixedRichPageBlocks(
         currentChunkCanUseChapterTitle = false
     }
 
+    fun appendImagePage(image: RichPageSlice.Image) {
+        val lastPage = pages.lastOrNull()
+        if (lastPage != null && shouldAttachImageToPreviousRichPage(lastPage)) {
+            pages[pages.lastIndex] = lastPage + image.copy(
+                spacingBeforePx = resolvePageReaderInterBlockSpacingPx(
+                    paragraphSpacingPx = paragraphSpacingPx,
+                    textSizePx = textSizePx,
+                    lineHeightMultiplier = lineHeightMultiplier,
+                ),
+            )
+        } else {
+            pages += listOf(image)
+        }
+    }
+
     richBlocks.forEach { indexedBlock ->
         val sourceBlockIndex = indexedBlock.index
         val block = indexedBlock.value
         when (block) {
             is NovelRichContentBlock.Image -> {
                 flushCurrentChunk()
-                pages += listOf(
+                appendImagePage(
                     RichPageSlice.Image(
                         sourceBlockIndex = sourceBlockIndex,
                         imageUrl = block.url,
@@ -1147,6 +1164,15 @@ internal fun paginateMixedRichPageBlocks(
         blockTexts = allBlockTexts,
         pages = pages,
     )
+}
+
+private fun shouldAttachImageToPreviousRichPage(page: List<RichPageSlice>): Boolean {
+    if (page.isEmpty()) return false
+    if (page.any { it is RichPageSlice.Image }) return false
+    val textLength = page
+        .filterIsInstance<RichPageSlice.Text>()
+        .sumOf { slice -> slice.range.endExclusive - slice.range.start }
+    return textLength in 1..MAX_INLINE_IMAGE_PRECEDING_TEXT_CHARS
 }
 
 internal fun buildPlainPageRenderBlocks(
@@ -1223,6 +1249,42 @@ internal fun buildRichPageRenderBlocks(
     }
 }
 
+private fun buildMixedRichPageContentBlocks(
+    page: List<RichPageSlice>,
+    blockTexts: List<RichPageBlockText>,
+    paragraphSpacingPx: Int,
+    chapterTitle: String? = null,
+): List<NovelPageContentBlock> {
+    val textBlocks = buildRichPageRenderBlocks(
+        page = page.filterIsInstance<RichPageSlice.Text>(),
+        blockTexts = blockTexts,
+        paragraphSpacingPx = paragraphSpacingPx,
+        chapterTitle = chapterTitle,
+    ).map { block ->
+        NovelPageContentBlock.Rich(
+            sourceBlockIndex = block.sourceBlockIndex,
+            text = block.text,
+            sourceTextStart = block.sourceTextStart,
+            sourceTextEndExclusive = block.sourceTextEndExclusive,
+            spacingBeforePx = block.spacingBeforePx,
+            firstLineIndentEm = block.firstLineIndentEm,
+            sourceTextAlign = block.sourceTextAlign,
+            isChapterTitle = block.isChapterTitle,
+        )
+    }.iterator()
+
+    return page.mapNotNull { slice ->
+        when (slice) {
+            is RichPageSlice.Text -> if (textBlocks.hasNext()) textBlocks.next() else null
+            is RichPageSlice.Image -> NovelPageContentBlock.Image(
+                imageUrl = slice.imageUrl,
+                contentDescription = slice.contentDescription,
+                spacingBeforePx = slice.spacingBeforePx,
+            )
+        }
+    }
+}
+
 internal fun normalizePageReaderContentPages(
     useRichPageReader: Boolean,
     plainPages: List<List<PlainPageSlice>>,
@@ -1247,25 +1309,13 @@ internal fun normalizePageReaderContentPages(
                     pageIndex = pageIndex,
                 )
             } else {
-                val textPage = page.filterIsInstance<RichPageSlice.Text>()
                 NovelPageContentPage(
-                    blocks = buildRichPageRenderBlocks(
-                        page = textPage,
+                    blocks = buildMixedRichPageContentBlocks(
+                        page = page,
                         blockTexts = richBlockTexts,
                         paragraphSpacingPx = paragraphSpacingPx,
                         chapterTitle = chapterTitle,
-                    ).map { block ->
-                        NovelPageContentBlock.Rich(
-                            sourceBlockIndex = block.sourceBlockIndex,
-                            text = block.text,
-                            sourceTextStart = block.sourceTextStart,
-                            sourceTextEndExclusive = block.sourceTextEndExclusive,
-                            spacingBeforePx = block.spacingBeforePx,
-                            firstLineIndentEm = block.firstLineIndentEm,
-                            sourceTextAlign = block.sourceTextAlign,
-                            isChapterTitle = block.isChapterTitle,
-                        )
-                    },
+                    ),
                     pageIndex = pageIndex,
                 )
             }

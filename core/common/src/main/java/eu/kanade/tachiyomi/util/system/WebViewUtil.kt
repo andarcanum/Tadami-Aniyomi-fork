@@ -99,7 +99,10 @@ fun WebView.setDefaultSettings() {
         }
     }
 
-    CookieManager.getInstance().acceptThirdPartyCookies(this)
+    CookieManager.getInstance().apply {
+        setAcceptCookie(true)
+        setAcceptThirdPartyCookies(this@setDefaultSettings, true)
+    }
 }
 
 private fun WebView.getWebViewMajorVersion(): Int {

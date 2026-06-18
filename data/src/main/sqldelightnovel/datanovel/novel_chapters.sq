@@ -78,6 +78,11 @@ FROM novel_chapters
 WHERE novel_id = :novelId
 AND read = 1;
 
+getTotalReadChapterCount:
+SELECT COUNT(*)
+FROM novel_chapters
+WHERE read = 1;
+
 getBookmarkedChaptersByNovelId:
 SELECT *
 FROM novel_chapters

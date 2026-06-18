@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.library.components.LibraryTabs
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.domain.category.model.Category
@@ -48,6 +51,7 @@ import tachiyomi.presentation.core.components.BadgeGroup
 import tachiyomi.presentation.core.components.material.PullRefresh
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.screens.EmptyScreen
+import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.util.plus
 import kotlin.time.Duration.Companion.seconds
 
@@ -60,6 +64,7 @@ fun NovelLibraryContent(
     currentPage: () -> Int,
     hasActiveFilters: Boolean,
     showPageTabs: Boolean,
+    onClearFilters: () -> Unit,
     onChangeCurrentPage: (Int) -> Unit,
     onCategoryLongSelected: ((Int) -> Unit)? = null,
     onNovelClicked: (NovelLibraryItem) -> Unit,
@@ -146,6 +151,17 @@ fun NovelLibraryContent(
                         modifier = Modifier
                             .padding(contentPadding + PaddingValues(bottom = contentPadding.calculateBottomPadding()))
                             .fillMaxSize(),
+                        actions = if (hasActiveFilters && searchQuery.isNullOrEmpty()) {
+                            persistentListOf(
+                                EmptyScreenAction(
+                                    stringRes = MR.strings.action_reset,
+                                    icon = Icons.Default.Refresh,
+                                    onClick = onClearFilters,
+                                ),
+                            )
+                        } else {
+                            null
+                        },
                     )
                     return@HorizontalPager
                 }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,11 +26,15 @@ import androidx.compose.material.icons.outlined.CopyAll
 import androidx.compose.material.icons.outlined.Done
 import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -76,11 +81,13 @@ fun MigrationListScreenContent(
     migrationProgress: Float,
     onItemClick: (Manga) -> Unit,
     onSearchManually: (MigrationListScreenModel.MigratingManga) -> Unit,
+    onCancelSearch: (Long) -> Unit,
     onSkip: (Long) -> Unit,
     onMigrateNow: (Long) -> Unit,
     onCopyNow: (Long) -> Unit,
-    onBulkMigrate: () -> Unit,
-    onBulkCopy: () -> Unit,
+    onOpenBulkMigrateDialog: () -> Unit,
+    onOpenBulkCopyDialog: () -> Unit,
+    onOpenOptions: () -> Unit,
 ) {
     Scaffold(
         topBar = { scrollBehavior ->
@@ -97,15 +104,21 @@ fun MigrationListScreenContent(
                     AppBarActions(
                         persistentListOf(
                             AppBar.Action(
+                                title = stringResource(MR.strings.action_settings),
+                                icon = Icons.Outlined.Settings,
+                                onClick = onOpenOptions,
+                                enabled = !isMigrating,
+                            ),
+                            AppBar.Action(
                                 title = stringResource(MR.strings.action_migrate),
                                 icon = migrateIcon,
-                                onClick = onBulkMigrate,
+                                onClick = onOpenBulkMigrateDialog,
                                 enabled = migrationComplete && !isMigrating,
                             ),
                             AppBar.Action(
                                 title = stringResource(MR.strings.copy),
                                 icon = copyIcon,
-                                onClick = onBulkCopy,
+                                onClick = onOpenBulkCopyDialog,
                                 enabled = migrationComplete && !isMigrating,
                             ),
                         ),
@@ -115,26 +128,40 @@ fun MigrationListScreenContent(
             )
         },
     ) { contentPadding ->
-        Column {
-            if (isMigrating) {
-                androidx.compose.material3.LinearProgressIndicator(
-                    progress = { migrationProgress.coerceIn(0f, 1f) },
+        FastScrollLazyColumn(contentPadding = contentPadding + topSmallPaddingValues) {
+            item(key = "migration-progress") {
+                MigrationProgressHeader(
+                    totalCount = items.size,
+                    finishedCount = finishedCount,
+                    migrationComplete = migrationComplete,
+                    isMigrating = isMigrating,
+                    migrationProgress = migrationProgress,
                     modifier = Modifier
+                        .fillMaxWidth()
                         .padding(horizontal = MaterialTheme.padding.medium)
-                        .padding(top = MaterialTheme.padding.small)
-                        .fillMaxWidth(),
+                        .padding(bottom = MaterialTheme.padding.small),
                 )
             }
 
-            FastScrollLazyColumn(contentPadding = contentPadding + topSmallPaddingValues) {
-                items(items, key = { it.manga.id }) { item ->
+            items(items, key = { it.manga.id }) { item ->
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateItemFastScroll(this)
+                        .padding(horizontal = MaterialTheme.padding.medium)
+                        .padding(bottom = MaterialTheme.padding.medium),
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .animateItemFastScroll(this)
                             .padding(
-                                start = MaterialTheme.padding.medium,
-                                end = MaterialTheme.padding.small,
+                                start = MaterialTheme.padding.small,
+                                end = MaterialTheme.padding.extraSmall,
+                                top = MaterialTheme.padding.small,
+                                bottom = MaterialTheme.padding.small,
                             )
                             .height(IntrinsicSize.Min),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -155,7 +182,8 @@ fun MigrationListScreenContent(
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
                             contentDescription = null,
-                            modifier = Modifier.weight(0.2f),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.weight(0.18f),
                         )
 
                         val result = item.searchResult
@@ -165,13 +193,15 @@ fun MigrationListScreenContent(
                                 .align(Alignment.Top)
                                 .fillMaxHeight(),
                             result = result,
+                            searchLabel = item.searchLabel,
                             onItemClick = onItemClick,
                         )
 
                         MigrationListItemAction(
-                            modifier = Modifier.weight(0.2f),
+                            modifier = Modifier.weight(0.18f),
                             result = result,
                             onSearchManually = { onSearchManually(item) },
+                            onCancelSearch = { onCancelSearch(item.manga.id) },
                             onSkip = { onSkip(item.manga.id) },
                             onMigrateNow = { onMigrateNow(item.manga.id) },
                             onCopyNow = { onCopyNow(item.manga.id) },
@@ -179,6 +209,70 @@ fun MigrationListScreenContent(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MigrationProgressHeader(
+    totalCount: Int,
+    finishedCount: Int,
+    migrationComplete: Boolean,
+    isMigrating: Boolean,
+    migrationProgress: Float,
+    modifier: Modifier = Modifier,
+) {
+    val searchProgress = if (totalCount == 0) {
+        0f
+    } else {
+        finishedCount.toFloat() / totalCount.toFloat()
+    }.coerceIn(0f, 1f)
+    val progress = if (isMigrating) migrationProgress.coerceIn(0f, 1f) else searchProgress
+    val statusText = when {
+        isMigrating -> stringResource(MR.strings.action_migrate)
+        migrationComplete -> stringResource(MR.strings.download_engine_done)
+        else -> stringResource(MR.strings.action_search)
+    }
+
+    ElevatedCard(
+        modifier = modifier,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MaterialTheme.padding.medium),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(MR.strings.action_migrate),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "$statusText · ${finishedCount.coerceAtMost(totalCount)}/$totalCount",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                Spacer(modifier = Modifier.padding(MaterialTheme.padding.extraSmall))
+                Text(
+                    text = "${(progress * 100).toInt()}%",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
@@ -250,7 +344,10 @@ private fun MigrationListItem(
                 latestChapter?.let(::formatChapterNumber)
             }
             Text(
-                text = "Latest chapter: ${formattedLatestChapter ?: "?"}",
+                text = stringResource(
+                    MR.strings.migration_latest_chapter,
+                    formattedLatestChapter ?: stringResource(MR.strings.migration_unknown_latest_chapter),
+                ),
                 overflow = TextOverflow.Ellipsis,
                 maxLines = 1,
                 style = MaterialTheme.typography.bodyMedium,
@@ -263,19 +360,32 @@ private fun MigrationListItem(
 private fun MigrationListItemResult(
     modifier: Modifier,
     result: MigrationListScreenModel.SearchResult,
+    searchLabel: String?,
     onItemClick: (Manga) -> Unit,
 ) {
     Box(modifier.height(IntrinsicSize.Min)) {
         when (result) {
             MigrationListScreenModel.SearchResult.Searching -> {
-                Box(
+                Column(
                     modifier = Modifier
                         .widthIn(max = 150.dp)
                         .fillMaxSize()
-                        .aspectRatio(2f / 3f),
-                    contentAlignment = Alignment.Center,
+                        .aspectRatio(2f / 3f)
+                        .padding(MaterialTheme.padding.small),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                 ) {
                     CircularProgressIndicator()
+                    searchLabel?.let {
+                        Text(
+                            text = stringResource(MR.strings.migration_checking_source, it),
+                            modifier = Modifier.padding(top = MaterialTheme.padding.small),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 2,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
 
@@ -296,7 +406,7 @@ private fun MigrationListItemResult(
                         contentScale = ContentScale.Crop,
                     )
                     Text(
-                        text = stringResource(MR.strings.information_no_entries_found),
+                        text = stringResource(MR.strings.migration_no_match_found),
                         modifier = Modifier.padding(MaterialTheme.padding.extraSmall),
                         style = MaterialTheme.typography.titleSmall,
                     )
@@ -322,6 +432,7 @@ private fun MigrationListItemAction(
     modifier: Modifier,
     result: MigrationListScreenModel.SearchResult,
     onSearchManually: () -> Unit,
+    onCancelSearch: () -> Unit,
     onSkip: () -> Unit,
     onMigrateNow: () -> Unit,
     onCopyNow: () -> Unit,
@@ -332,7 +443,7 @@ private fun MigrationListItemAction(
     Box(modifier) {
         when (result) {
             MigrationListScreenModel.SearchResult.Searching -> {
-                IconButton(onClick = onSkip) {
+                IconButton(onClick = onCancelSearch) {
                     Icon(imageVector = Icons.Outlined.Close, contentDescription = null)
                 }
             }
@@ -349,14 +460,14 @@ private fun MigrationListItemAction(
                     offset = DpOffset(8.dp, (-56).dp),
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Search manually") },
+                        text = { Text(stringResource(MR.strings.migration_search_manually)) },
                         onClick = {
                             closeMenu()
                             onSearchManually()
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text("Skip") },
+                        text = { Text(stringResource(MR.strings.migration_skip_entry)) },
                         onClick = {
                             closeMenu()
                             onSkip()
@@ -364,14 +475,14 @@ private fun MigrationListItemAction(
                     )
                     if (result is MigrationListScreenModel.SearchResult.Success) {
                         DropdownMenuItem(
-                            text = { Text("Migrate now") },
+                            text = { Text(stringResource(MR.strings.migration_migrate_now)) },
                             onClick = {
                                 closeMenu()
                                 onMigrateNow()
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Copy now") },
+                            text = { Text(stringResource(MR.strings.migration_copy_now)) },
                             onClick = {
                                 closeMenu()
                                 onCopyNow()

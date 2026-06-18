@@ -76,6 +76,7 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
+import eu.kanade.presentation.entries.components.MissingItemCountListItem
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
 import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
@@ -151,6 +152,7 @@ fun MangaScreenAuroraImpl(
     onRefresh: () -> Unit,
     onContinueReading: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
+    onSuggestionClick: (eu.kanade.tachiyomi.data.suggestions.SuggestionItem) -> Unit,
     onCoverClicked: () -> Unit,
     onPosterLongClicked: (() -> Unit)? = onCoverClicked,
     onShareClicked: (() -> Unit)?,
@@ -183,6 +185,12 @@ fun MangaScreenAuroraImpl(
     val entrySuggestionsInOverflow by uiPreferences.entrySuggestionsInOverflow().collectAsState()
     val globalSearchQuery = remember(manga.displayTitle) { normalizeAuroraGlobalSearchQuery(manga.displayTitle) }
     val chapters = state.chapterListItems
+    val realChapterCount = remember(chapters) {
+        chapters.count { it is ChapterList.Item }
+    }
+    val missingChaptersCount = remember(chapters) {
+        chapters.filterIsInstance<ChapterList.MissingCount>().sumOf { it.count }
+    }
     val selectedChapters = remember(chapters) {
         chapters.filterIsInstance<ChapterList.Item>().filter { it.selected }
     }
@@ -319,7 +327,22 @@ fun MangaScreenAuroraImpl(
             .distinctUntilChanged()
             .collect { isReverseScrollingOverlay = it }
     }
-    val chaptersToShow = if (chaptersExpanded) chapters else chapters.take(5)
+    val chaptersToShow = remember(chapters, chaptersExpanded) {
+        if (chaptersExpanded) {
+            chapters
+        } else {
+            val result = mutableListOf<ChapterList>()
+            var visibleChapters = 0
+            for (item in chapters) {
+                if (item is ChapterList.Item) {
+                    if (visibleChapters >= 5) break
+                    visibleChapters++
+                }
+                result += item
+            }
+            result
+        }
+    }
 
     // Auto-scroll to target chapter on initial load
     var hasScrolledToTarget: Boolean by remember { mutableStateOf(false) }
@@ -520,7 +543,13 @@ fun MangaScreenAuroraImpl(
                                     .padding(start = 6.dp, end = 12.dp),
                             ) {
                                 item {
-                                    ChaptersHeader(chapterCount = chapters.size)
+                                    ChaptersHeader(chapterCount = realChapterCount)
+                                }
+
+                                if (missingChaptersCount > 0) {
+                                    item(key = "missing-chapters-warning") {
+                                        MissingItemCountListItem(count = missingChaptersCount)
+                                    }
                                 }
 
                                 if (showScanlatorSelector) {
@@ -536,7 +565,7 @@ fun MangaScreenAuroraImpl(
                                     }
                                 }
 
-                                if (chapters.isEmpty()) {
+                                if (realChapterCount == 0) {
                                     item {
                                         Box(
                                             modifier = Modifier
@@ -556,63 +585,73 @@ fun MangaScreenAuroraImpl(
                                 items(
                                     items = chaptersToShow,
                                     key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
-                                    contentType = { "chapter" },
+                                    contentType = {
+                                        when (it) {
+                                            is ChapterList.Item -> "chapter"
+                                            is ChapterList.MissingCount -> "missing-count"
+                                        }
+                                    },
                                 ) { item ->
-                                    if (item is ChapterList.Item) {
-                                        MangaChapterCardCompact(
-                                            manga = manga,
-                                            item = item,
-                                            selected = item.selected,
-                                            isNew = item.chapter.id in state.newChapterIds,
-                                            isAnyChapterSelected = isAnyChapterSelected,
-                                            chapterSwipeStartAction = chapterSwipeStartAction,
-                                            chapterSwipeEndAction = chapterSwipeEndAction,
-                                            onChapterClicked = {
-                                                when (
-                                                    resolveAuroraChapterClickAction(
-                                                        isChapterSelected = item.selected,
-                                                        isAnyChapterSelected = isAnyChapterSelected,
-                                                    )
-                                                ) {
-                                                    AuroraChapterClickAction.OpenChapter -> {
-                                                        onChapterClicked(item.chapter)
-                                                    }
-                                                    AuroraChapterClickAction.SelectChapter -> {
-                                                        onChapterSelected(item, true, true, false)
-                                                        if (shouldAutoExpandAuroraChaptersList(
-                                                                chaptersExpanded,
-                                                                chapters.size,
-                                                            )
-                                                        ) {
-                                                            chaptersExpanded = true
+                                    when (item) {
+                                        is ChapterList.Item -> {
+                                            MangaChapterCardCompact(
+                                                manga = manga,
+                                                item = item,
+                                                selected = item.selected,
+                                                isNew = item.chapter.id in state.newChapterIds,
+                                                isAnyChapterSelected = isAnyChapterSelected,
+                                                chapterSwipeStartAction = chapterSwipeStartAction,
+                                                chapterSwipeEndAction = chapterSwipeEndAction,
+                                                onChapterClicked = {
+                                                    when (
+                                                        resolveAuroraChapterClickAction(
+                                                            isChapterSelected = item.selected,
+                                                            isAnyChapterSelected = isAnyChapterSelected,
+                                                        )
+                                                    ) {
+                                                        AuroraChapterClickAction.OpenChapter -> {
+                                                            onChapterClicked(item.chapter)
+                                                        }
+                                                        AuroraChapterClickAction.SelectChapter -> {
+                                                            onChapterSelected(item, true, true, false)
+                                                            if (shouldAutoExpandAuroraChaptersList(
+                                                                    chaptersExpanded,
+                                                                    chapters.size,
+                                                                )
+                                                            ) {
+                                                                chaptersExpanded = true
+                                                            }
+                                                        }
+                                                        AuroraChapterClickAction.UnselectChapter -> {
+                                                            onChapterSelected(item, false, true, false)
                                                         }
                                                     }
-                                                    AuroraChapterClickAction.UnselectChapter -> {
-                                                        onChapterSelected(item, false, true, false)
+                                                },
+                                                onLongClick = {
+                                                    onChapterSelected(item, !item.selected, true, true)
+                                                    val shouldExpand = shouldAutoExpandAuroraChaptersList(
+                                                        chaptersExpanded,
+                                                        chapters.size,
+                                                    )
+                                                    if (!item.selected && shouldExpand) {
+                                                        chaptersExpanded = true
                                                     }
-                                                }
-                                            },
-                                            onLongClick = {
-                                                onChapterSelected(item, !item.selected, true, true)
-                                                val shouldExpand = shouldAutoExpandAuroraChaptersList(
-                                                    chaptersExpanded,
-                                                    chapters.size,
-                                                )
-                                                if (!item.selected && shouldExpand) {
-                                                    chaptersExpanded = true
-                                                }
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            },
-                                            onChapterSwipe = { action -> onChapterSwipe(item, action) },
-                                            onDownloadChapter = onDownloadChapter,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 4.dp),
-                                        )
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                },
+                                                onChapterSwipe = { action -> onChapterSwipe(item, action) },
+                                                onDownloadChapter = onDownloadChapter,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            )
+                                        }
+                                        is ChapterList.MissingCount -> {
+                                            MissingItemCountListItem(count = item.count)
+                                        }
                                     }
                                 }
 
-                                if (chapters.size > 5) {
+                                if (realChapterCount > 5) {
                                     item {
                                         Box(
                                             modifier = Modifier
@@ -626,7 +665,7 @@ fun MangaScreenAuroraImpl(
                                                 } else {
                                                     stringResource(
                                                         AYMR.strings.action_show_all_chapters,
-                                                        chapters.size,
+                                                        realChapterCount,
                                                     )
                                                 },
                                                 onClick = { chaptersExpanded = !chaptersExpanded },
@@ -734,12 +773,7 @@ fun MangaScreenAuroraImpl(
                                 item(key = "suggestions_row") {
                                     eu.kanade.presentation.entries.components.aurora.AuroraSuggestionsRow(
                                         state = state.suggestions,
-                                        onSuggestionClick = { item ->
-                                            onSearch(
-                                                item.searchQueries.firstOrNull { it.isNotBlank() } ?: item.title,
-                                                true,
-                                            )
-                                        },
+                                        onSuggestionClick = onSuggestionClick,
                                         onOpenSuggestions = onOpenSuggestions,
                                         onRetryClick = onRetrySuggestions,
                                         modifier = Modifier
@@ -792,7 +826,7 @@ fun MangaScreenAuroraImpl(
                         ) {
                             Spacer(modifier = Modifier.height(20.dp))
                             ChaptersHeader(
-                                chapterCount = chapters.size,
+                                chapterCount = realChapterCount,
                                 modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
                             )
                         }
@@ -811,8 +845,14 @@ fun MangaScreenAuroraImpl(
                             }
                         }
 
+                        if (missingChaptersCount > 0) {
+                            item(key = "missing-chapters-warning") {
+                                MissingItemCountListItem(count = missingChaptersCount)
+                            }
+                        }
+
                         // Empty state for chapters
-                        if (chapters.isEmpty()) {
+                        if (realChapterCount == 0) {
                             item {
                                 Box(
                                     modifier = Modifier
@@ -834,63 +874,73 @@ fun MangaScreenAuroraImpl(
                         items(
                             items = chaptersToShow,
                             key = { (it as? ChapterList.Item)?.chapter?.id ?: it.hashCode() },
-                            contentType = { "chapter" },
+                            contentType = {
+                                when (it) {
+                                    is ChapterList.Item -> "chapter"
+                                    is ChapterList.MissingCount -> "missing-count"
+                                }
+                            },
                         ) { item ->
-                            if (item is ChapterList.Item) {
-                                MangaChapterCardCompact(
-                                    manga = manga,
-                                    item = item,
-                                    selected = item.selected,
-                                    isNew = item.chapter.id in state.newChapterIds,
-                                    isAnyChapterSelected = isAnyChapterSelected,
-                                    chapterSwipeStartAction = chapterSwipeStartAction,
-                                    chapterSwipeEndAction = chapterSwipeEndAction,
-                                    onChapterClicked = {
-                                        when (
-                                            resolveAuroraChapterClickAction(
-                                                isChapterSelected = item.selected,
-                                                isAnyChapterSelected = isAnyChapterSelected,
-                                            )
-                                        ) {
-                                            AuroraChapterClickAction.OpenChapter -> {
-                                                onChapterClicked(item.chapter)
-                                            }
-                                            AuroraChapterClickAction.SelectChapter -> {
-                                                onChapterSelected(item, true, true, false)
-                                                val shouldExpand = shouldAutoExpandAuroraChaptersList(
-                                                    chaptersExpanded,
-                                                    chapters.size,
+                            when (item) {
+                                is ChapterList.Item -> {
+                                    MangaChapterCardCompact(
+                                        manga = manga,
+                                        item = item,
+                                        selected = item.selected,
+                                        isNew = item.chapter.id in state.newChapterIds,
+                                        isAnyChapterSelected = isAnyChapterSelected,
+                                        chapterSwipeStartAction = chapterSwipeStartAction,
+                                        chapterSwipeEndAction = chapterSwipeEndAction,
+                                        onChapterClicked = {
+                                            when (
+                                                resolveAuroraChapterClickAction(
+                                                    isChapterSelected = item.selected,
+                                                    isAnyChapterSelected = isAnyChapterSelected,
                                                 )
-                                                if (shouldExpand) {
-                                                    chaptersExpanded = true
+                                            ) {
+                                                AuroraChapterClickAction.OpenChapter -> {
+                                                    onChapterClicked(item.chapter)
+                                                }
+                                                AuroraChapterClickAction.SelectChapter -> {
+                                                    onChapterSelected(item, true, true, false)
+                                                    val shouldExpand = shouldAutoExpandAuroraChaptersList(
+                                                        chaptersExpanded,
+                                                        chapters.size,
+                                                    )
+                                                    if (shouldExpand) {
+                                                        chaptersExpanded = true
+                                                    }
+                                                }
+                                                AuroraChapterClickAction.UnselectChapter -> {
+                                                    onChapterSelected(item, false, true, false)
                                                 }
                                             }
-                                            AuroraChapterClickAction.UnselectChapter -> {
-                                                onChapterSelected(item, false, true, false)
+                                        },
+                                        onLongClick = {
+                                            onChapterSelected(item, !item.selected, true, true)
+                                            if (!item.selected &&
+                                                shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)
+                                            ) {
+                                                chaptersExpanded = true
                                             }
-                                        }
-                                    },
-                                    onLongClick = {
-                                        onChapterSelected(item, !item.selected, true, true)
-                                        if (!item.selected &&
-                                            shouldAutoExpandAuroraChaptersList(chaptersExpanded, chapters.size)
-                                        ) {
-                                            chaptersExpanded = true
-                                        }
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    },
-                                    onChapterSwipe = { action -> onChapterSwipe(item, action) },
-                                    onDownloadChapter = onDownloadChapter,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                                )
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        },
+                                        onChapterSwipe = { action -> onChapterSwipe(item, action) },
+                                        onDownloadChapter = onDownloadChapter,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    )
+                                }
+                                is ChapterList.MissingCount -> {
+                                    MissingItemCountListItem(count = item.count)
+                                }
                             }
                         }
 
                         // Show More button if there are more than 5 chapters
-                        if (chapters.size > 5) {
+                        if (realChapterCount > 5) {
                             item {
                                 Box(
                                     modifier = Modifier
@@ -903,7 +953,7 @@ fun MangaScreenAuroraImpl(
                                         text = if (chaptersExpanded) {
                                             stringResource(AYMR.strings.action_show_less)
                                         } else {
-                                            stringResource(AYMR.strings.action_show_all_chapters, chapters.size)
+                                            stringResource(AYMR.strings.action_show_all_chapters, realChapterCount)
                                         },
                                         onClick = { chaptersExpanded = !chaptersExpanded },
                                     )

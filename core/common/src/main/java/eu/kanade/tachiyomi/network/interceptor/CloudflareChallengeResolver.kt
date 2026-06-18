@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.network.interceptor
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.webkit.CookieManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -12,6 +13,7 @@ import eu.kanade.tachiyomi.network.AndroidCookieJar
 import eu.kanade.tachiyomi.util.system.toast
 import okhttp3.Cookie
 import okhttp3.Headers
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import tachiyomi.i18n.MR
@@ -52,18 +54,21 @@ internal class WebViewCloudflareChallengeResolver(
 
             createdWebView.webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String) {
-                    fun isCloudFlareBypassed(): Boolean {
-                        return cookieManager.get(originalRequest.url)
-                            .firstOrNull { it.name == "cf_clearance" }
-                            .let { it != null && it != oldCookie }
-                    }
-
-                    if (isCloudFlareBypassed()) {
+                    if (hasNewCloudflareClearance(originalRequest, url, oldCookie)) {
                         cloudflareBypassed = true
+                        CookieManager.getInstance().flush()
                         latch.countDown()
+                        return
                     }
 
-                    if (url == origRequestUrl && !challengeFound) {
+                    if (challengeFound) {
+                        detectInteractiveWidget(view) { detected ->
+                            if (detected && !cloudflareBypassed) {
+                                hasInteractiveWidget = true
+                                latch.countDown()
+                            }
+                        }
+                    } else if (url == origRequestUrl || url.toHttpUrlOrNull()?.host != originalRequest.url.host) {
                         latch.countDown()
                     }
                 }
@@ -118,6 +123,25 @@ internal class WebViewCloudflareChallengeResolver(
             }
 
             throw CloudflareBypassException()
+        }
+    }
+
+    private fun hasNewCloudflareClearance(originalRequest: Request, currentUrl: String, oldCookie: Cookie?): Boolean {
+        return listOfNotNull(originalRequest.url, currentUrl.toHttpUrlOrNull())
+            .distinctBy { it.host }
+            .any { url ->
+                val cookie = cookieManager.get(url).firstOrNull { it.name == "cf_clearance" }
+                cookie != null && (url.host != originalRequest.url.host || cookie != oldCookie)
+            }
+    }
+
+    private fun detectInteractiveWidget(webview: WebView, onResult: (Boolean) -> Unit) {
+        try {
+            webview.evaluateJavascript(INTERACTIVE_WIDGET_PROBE) { result ->
+                onResult(result == "true")
+            }
+        } catch (_: Throwable) {
+            onResult(false)
         }
     }
 

@@ -16,6 +16,7 @@ import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import mihon.core.archive.archiveReader
 import mihon.core.archive.epubReader
+import org.jsoup.nodes.Entities
 import rx.Observable
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.storage.extension
@@ -23,7 +24,6 @@ import tachiyomi.core.common.storage.nameWithoutExtension
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
-import tachiyomi.domain.items.chapter.service.ChapterRecognition
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.source.local.filter.novel.NovelOrderBy
 import tachiyomi.source.local.image.novel.LocalNovelCoverManager
@@ -152,9 +152,11 @@ actual class LocalNovelSource(
 
                 if (firstEpub != null) {
                     fillNovelMetadataFromEpub(firstEpub, novel)
+                    extractEmbeddedCoverIfMissing(novel, firstEpub)
                 }
             } else if (novelEntry.extension?.equals("epub", ignoreCase = true) == true) {
                 fillNovelMetadataFromEpub(novelEntry, novel)
+                extractEmbeddedCoverIfMissing(novel, novelEntry)
             }
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e) {
@@ -170,52 +172,63 @@ actual class LocalNovelSource(
             val ref = epub.getPackageHref()
             val doc = epub.getPackageDocument(ref)
 
-            // Multiple title fallbacks
-            var title = doc.getElementsByTag("dc:title").firstOrNull()?.text()
-            if (title.isNullOrBlank()) {
-                title = doc.select("docTitle").firstOrNull()?.text()
+            val title = firstNonBlank(
+                doc.getElementsByTag("dc:title").firstOrNull()?.text(),
+                doc.select("dc\\:title").firstOrNull()?.text(),
+                doc.select("docTitle").firstOrNull()?.text(),
+                doc.select("meta[name=title]").firstOrNull()?.attr("content"),
+                doc.select("meta[property=title]").firstOrNull()?.attr("content"),
+            )
+
+            val creators = (doc.getElementsByTag("dc:creator") + doc.select("dc\\:creator"))
+                .map { it.text().trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            val description = firstNonBlank(
+                doc.getElementsByTag("dc:description").firstOrNull()?.text(),
+                doc.select("dc\\:description").firstOrNull()?.text(),
+                doc.select("meta[name=description]").firstOrNull()?.attr("content"),
+                doc.select("meta[property=description]").firstOrNull()?.attr("content"),
+            )
+
+            val subjects = (doc.getElementsByTag("dc:subject") + doc.select("dc\\:subject"))
+                .flatMap { it.text().split(',', ';') }
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            title?.let { novel.title = it }
+            if (creators.isNotEmpty()) {
+                novel.author = creators.joinToString(", ")
             }
-            if (title.isNullOrBlank()) {
-                title = doc.select("meta[name=title]").firstOrNull()?.attr("content")
-            }
-
-            val creator = doc.getElementsByTag("dc:creator").firstOrNull()
-
-            // Description with fallback
-            var description = doc.getElementsByTag("dc:description").firstOrNull()?.text()
-            if (description.isNullOrBlank()) {
-                description = doc.select("dc\\:description").firstOrNull()?.text()
-            }
-
-            // Genres from dc:subject
-            val subjects = doc.getElementsByTag("dc:subject").map { it.text() }
-            val mappedSubjects = if (subjects.isEmpty()) {
-                doc.select("dc\\:subject").map { it.text() }
-            } else {
-                subjects
-            }
-
-            // Collection name
-            val collection = doc.select("meta[property=belongs-to-collection]").firstOrNull()?.text()
-
-            // Set title: prefer collection if novel title is blank
-            val currentTitle = runCatching { novel.title }.getOrNull()
-            if (currentTitle.isNullOrBlank() && !collection.isNullOrBlank()) {
-                novel.title = collection
-            } else if (currentTitle.isNullOrBlank() && !title.isNullOrBlank()) {
-                novel.title = title
-            }
-
-            creator?.text()?.let { novel.author = it }
             description?.let { novel.description = it }
 
-            // Merge genres
-            if (mappedSubjects.isNotEmpty()) {
+            if (subjects.isNotEmpty()) {
                 val currentGenres =
                     novel.genre?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() } ?: emptyList()
-                val allGenres = (currentGenres + mappedSubjects).distinct()
+                val allGenres = (currentGenres + subjects).distinct()
                 novel.genre = allGenres.joinToString(", ")
             }
+        }
+    }
+
+    private fun firstNonBlank(vararg values: String?): String? {
+        return values.firstOrNull { !it.isNullOrBlank() }?.trim()
+    }
+
+    private fun extractEmbeddedCoverIfMissing(novel: SNovel, epubFile: UniFile) {
+        if (coverManager.find(novel.url) != null) return
+
+        runCatching {
+            epubFile.epubReader(context).use { epub ->
+                val cover = epub.getCoverImage() ?: return
+                epub.getInputStream(cover)?.use { stream ->
+                    coverManager.update(novel, stream)
+                }
+            }
+        }.onFailure { e ->
+            logcat(LogPriority.WARN, e) { "Unable to extract embedded cover from ${epubFile.name}" }
         }
     }
 
@@ -225,36 +238,17 @@ actual class LocalNovelSource(
 
         val novelEntry = resolveNovelEntry(novel.url) ?: return@withIOContext emptyList()
 
-        val chapterFiles = if (novelEntry.isDirectory) {
-            fileSystem.getFilesInNovelDirectory(novel.url)
-                .filterNot { it.name.orEmpty().startsWith('.') }
-                .filter { isChapterSupported(it) }
-                .sortedWith { f1, f2 ->
-                    f1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(f2.name.orEmpty())
-                }
-        } else {
-            listOf(novelEntry)
-        }
+        val chapterFiles = collectChapterFiles(novelEntry)
 
-        val hasMultipleEpubFiles = chapterFiles.count { it.extension?.equals("epub", ignoreCase = true) == true } > 1
+        val hasMultipleEpubFiles = chapterFiles
+            .count { it.file.extension?.equals("epub", ignoreCase = true) == true } > 1
 
-        chapterFiles.forEach { chapterFile ->
+        chapterFiles.forEachIndexed { index, chapterEntry ->
+            val chapterFile = chapterEntry.file
             if (chapterFile.extension?.equals("epub", ignoreCase = true) == true) {
                 try {
                     chapterFile.epubReader(context).use { epub ->
-                        // Extract cover from first epub if not set
-                        if (coverManager.find(novel.url) == null) {
-                            try {
-                                val cover = epub.getCoverImage()
-                                if (cover != null) {
-                                    epub.getInputStream(cover)?.use { stream ->
-                                        coverManager.update(novel, stream)
-                                    }
-                                }
-                            } catch (_: Exception) {
-                                // Ignore cover extraction errors
-                            }
-                        }
+                        extractEmbeddedCoverIfMissing(novel, chapterFile)
 
                         val tocChapters = epub.getNormalizedTableOfContents()
                         val spinePages = epub.getSpinePageHrefs()
@@ -263,24 +257,25 @@ actual class LocalNovelSource(
                             allChapters.addAll(
                                 buildEpubChaptersFromToc(
                                     mangaUrl = novel.url,
-                                    chapterFileName = chapterFile.name,
-                                    chapterFileNameWithoutExtension = chapterFile.nameWithoutExtension.orEmpty(),
+                                    chapterFileName = chapterEntry.relativePath,
+                                    chapterFileNameWithoutExtension = chapterEntry.displayName,
                                     chapterLastModified = chapterFile.lastModified(),
                                     tocChapters = tocChapters,
                                     spinePageHrefs = spinePages,
                                     hasMultipleEpubFiles = hasMultipleEpubFiles,
+                                    chapterNumberOffset = allChapters.size.toFloat(),
                                 ),
                             )
                         } else {
-                            allChapters.add(createSimpleChapter(novel, chapterFile))
+                            allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
                         }
                     }
                 } catch (e: Throwable) {
                     logcat(LogPriority.ERROR, e) { "Error reading epub ${chapterFile.name}" }
-                    allChapters.add(createSimpleChapter(novel, chapterFile))
+                    allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
                 }
             } else {
-                allChapters.add(createSimpleChapter(novel, chapterFile))
+                allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
             }
         }
 
@@ -292,18 +287,16 @@ actual class LocalNovelSource(
         }
     }
 
-    private fun createSimpleChapter(novel: SNovel, chapterFile: UniFile): SNovelChapter {
+    private fun createSimpleChapter(
+        novel: SNovel,
+        chapterEntry: LocalChapterFile,
+        fallbackChapterNumber: Int,
+    ): SNovelChapter {
         return SNovelChapter.create().apply {
-            url = "${novel.url}/${chapterFile.name}"
-            name = if (chapterFile.isDirectory) {
-                chapterFile.name
-            } else {
-                chapterFile.nameWithoutExtension
-            }.orEmpty()
-            date_upload = chapterFile.lastModified()
-            chapter_number = ChapterRecognition
-                .parseChapterNumber(novel.title, this.name, this.chapter_number.toDouble())
-                .toFloat()
+            url = "${novel.url}/${chapterEntry.relativePath}"
+            name = chapterEntry.displayName
+            date_upload = chapterEntry.file.lastModified()
+            chapter_number = fallbackChapterNumber.toFloat()
         }
     }
 
@@ -316,19 +309,23 @@ actual class LocalNovelSource(
 
             val parts = filePath.split('/', limit = 2)
             val novelDir = parts[0]
-            val chapterName = parts[1]
+            val chapterName = parts.getOrNull(1)
 
-            val chapterFile = fileSystem.getNovelDirectory(novelDir)
-                ?.findFile(chapterName)
-                ?: return@withIOContext EMPTY_CHAPTER_HTML
+            val chapterFile = if (chapterName != null) {
+                fileSystem.getNovelDirectory(novelDir)?.let { resolveRelativeFile(it, chapterName) }
+                    ?: fileSystem.getBaseDirectory()?.findFile(novelDir)?.takeIf {
+                        !it.isDirectory &&
+                            it.name == chapterName
+                    }
+            } else {
+                fileSystem.getBaseDirectory()?.findFile(novelDir)?.takeIf { !it.isDirectory }
+            } ?: return@withIOContext EMPTY_CHAPTER_HTML
 
             when {
                 chapterFile.isDirectory -> {
-                    chapterFile.listFiles()
-                        ?.filter { isTextFile(it) }
-                        ?.sortedBy { it.name }
-                        ?.joinToString("\n\n") { it.openInputStream().bufferedReader().readText() }
-                        ?: EMPTY_CHAPTER_HTML
+                    collectTextFiles(chapterFile)
+                        .joinToString("\n\n") { readTextFileContent(it) }
+                        .ifBlank { EMPTY_CHAPTER_HTML }
                 }
                 chapterFile.extension.equals("epub", true) -> {
                     chapterFile.epubReader(context).use { epub ->
@@ -343,15 +340,20 @@ actual class LocalNovelSource(
                     chapterFile.archiveReader(context).use { reader ->
                         reader.useEntries { entries ->
                             entries.filter { it.isFile && isTextFileName(it.name) }
-                                .sortedBy { it.name }
                                 .toList()
+                                .sortedWith { e1, e2 ->
+                                    e1.name.compareToCaseInsensitiveNaturalOrder(e2.name)
+                                }
                         }.joinToString("\n\n") { entry ->
-                            reader.getInputStream(entry.name)?.bufferedReader()?.readText() ?: ""
+                            reader.getInputStream(entry.name)?.use { stream ->
+                                val rawText = stream.bufferedReader().readText()
+                                if (isHtmlFileName(entry.name)) rawText else plainTextToHtml(rawText)
+                            } ?: ""
                         }
                     }
                 }
                 isTextFile(chapterFile) -> {
-                    chapterFile.openInputStream().bufferedReader().readText()
+                    readTextFileContent(chapterFile)
                 }
                 else -> EMPTY_CHAPTER_HTML
             }
@@ -390,6 +392,102 @@ actual class LocalNovelSource(
         if (file.isDirectory) return true
         val ext = file.extension?.lowercase() ?: return false
         return ext in SUPPORTED_EXTENSIONS
+    }
+
+    private data class LocalChapterFile(
+        val file: UniFile,
+        val relativePath: String,
+        val displayName: String,
+    )
+
+    private fun collectChapterFiles(novelEntry: UniFile): List<LocalChapterFile> {
+        if (!novelEntry.isDirectory) {
+            return listOf(
+                LocalChapterFile(
+                    file = novelEntry,
+                    relativePath = novelEntry.name.orEmpty(),
+                    displayName = novelEntry.nameWithoutExtension.orEmpty(),
+                ),
+            )
+        }
+
+        return collectSupportedFilesRecursively(novelEntry)
+            .sortedWith { c1, c2 ->
+                c1.relativePath.compareToCaseInsensitiveNaturalOrder(c2.relativePath)
+            }
+    }
+
+    private fun collectSupportedFilesRecursively(
+        directory: UniFile,
+        relativePrefix: String = "",
+    ): List<LocalChapterFile> {
+        return directory.listFiles().orEmpty()
+            .filterNot { it.name.orEmpty().startsWith('.') }
+            .flatMap { child ->
+                val childName = child.name.orEmpty()
+                val relativePath = if (relativePrefix.isBlank()) {
+                    childName
+                } else {
+                    "$relativePrefix/$childName"
+                }
+
+                when {
+                    child.isDirectory -> collectSupportedFilesRecursively(child, relativePath)
+                    isChapterSupported(child) -> listOf(
+                        LocalChapterFile(
+                            file = child,
+                            relativePath = relativePath,
+                            displayName = relativePath.substringBeforeLast('.')
+                                .replace('/', ' ')
+                                .replace('\\', ' ')
+                                .replace('_', ' ')
+                                .trim(),
+                        ),
+                    )
+                    else -> emptyList()
+                }
+            }
+    }
+
+    private fun resolveRelativeFile(root: UniFile, relativePath: String): UniFile? {
+        return relativePath.split('/')
+            .filter { it.isNotBlank() }
+            .fold(root as UniFile?) { current, segment -> current?.findFile(segment) }
+    }
+
+    private fun collectTextFiles(directory: UniFile): List<UniFile> {
+        return directory.listFiles().orEmpty()
+            .filterNot { it.name.orEmpty().startsWith('.') }
+            .flatMap { child ->
+                when {
+                    child.isDirectory -> collectTextFiles(child)
+                    isTextFile(child) -> listOf(child)
+                    else -> emptyList()
+                }
+            }
+            .sortedWith { f1, f2 ->
+                f1.name.orEmpty().compareToCaseInsensitiveNaturalOrder(f2.name.orEmpty())
+            }
+    }
+
+    private fun readTextFileContent(file: UniFile): String {
+        val rawText = file.openInputStream().bufferedReader().readText()
+        return if (isHtmlFileName(file.name.orEmpty())) {
+            rawText
+        } else {
+            plainTextToHtml(rawText)
+        }
+    }
+
+    private fun plainTextToHtml(text: String): String {
+        return "<html><body><pre style=\"white-space: pre-wrap; font-family: inherit;\">" +
+            Entities.escape(text) +
+            "</pre></body></html>"
+    }
+
+    private fun isHtmlFileName(name: String): Boolean {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        return ext in HTML_EXTENSIONS
     }
 
     private fun isTextFile(file: UniFile): Boolean {
@@ -431,6 +529,12 @@ actual class LocalNovelSource(
             "text",
             "md",
             "markdown",
+            "html",
+            "htm",
+            "xhtml",
+        )
+
+        private val HTML_EXTENSIONS = setOf(
             "html",
             "htm",
             "xhtml",

@@ -15,12 +15,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.withTimeout
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.random.Random
 import kotlin.system.measureTimeMillis
 
 enum class NovelQueuedDownloadType {
@@ -219,6 +222,7 @@ object NovelDownloadQueueManager {
     private val queueScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val downloadManager = NovelDownloadManager()
     private val translatedDownloadManager = NovelTranslatedDownloadManager()
+    private val downloadPreferences: DownloadPreferences by lazy { Injekt.get() }
     private val _state = MutableStateFlow(NovelDownloadQueueState())
     val state = _state.asStateFlow()
     private val notifier = runCatching {
@@ -228,6 +232,7 @@ object NovelDownloadQueueManager {
     private val runtimeState = NovelDownloadQueueRuntimeState()
     private var previousNotifiedSummary = QueueNotifySummary()
     private var notifyJob: kotlinx.coroutines.Job? = null
+    private var lastNovelRequestStartedAtMs = 0L
 
     fun getDownloadSize(): Long = downloadManager.getDownloadSize() + translatedDownloadManager.getDownloadSize()
 
@@ -245,6 +250,7 @@ object NovelDownloadQueueManager {
             .filter { it.status == NovelQueuedDownloadStatus.DOWNLOADING }
             .mapTo(mutableSetOf()) { it.taskId }
         runtimeState.markCanceled(runningTaskIds)
+        runningTaskIds.forEach(runtimeState::cancelActiveDownload)
         updateState {
             it.copy(
                 tasks = it.tasks.filter { task -> task.status == NovelQueuedDownloadStatus.DOWNLOADING },
@@ -357,6 +363,9 @@ object NovelDownloadQueueManager {
 
     private fun startWorkerIfNeeded() {
         if (!runtimeState.tryStartWorker()) return
+        updateState { queueState ->
+            queueState.copy(tasks = recoverStaleDownloadingTasks(queueState.tasks))
+        }
         logcat(LogPriority.DEBUG) { "Novel queue worker starting" }
         queueScope.launch {
             try {
@@ -381,26 +390,33 @@ object NovelDownloadQueueManager {
 
             val nextTask = snapshot.tasks.firstOrNull { it.status == NovelQueuedDownloadStatus.QUEUED } ?: break
             try {
+                val throttleConfig = NovelDownloadThrottleConfig.from(downloadPreferences)
+                if (!waitForNovelThrottleWindow(throttleConfig, nextTask.taskId)) {
+                    removeTask(nextTask.taskId)
+                    continue
+                }
                 markTaskStatus(nextTask.taskId, NovelQueuedDownloadStatus.DOWNLOADING)
                 logcat(LogPriority.DEBUG) {
-                    "Novel queue task starting: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, type=${nextTask.type}"
+                    "Novel queue task starting: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, type=${nextTask.type}, throttle=$throttleConfig"
                 }
 
                 val result = supervisorScope {
                     val downloadJob = async {
-                        when (nextTask.type) {
-                            NovelQueuedDownloadType.ORIGINAL -> {
-                                downloadManager.downloadChapter(nextTask.novel, nextTask.chapter)
-                            }
-                            NovelQueuedDownloadType.TRANSLATED -> {
-                                val format = when (nextTask.format) {
-                                    NovelQueuedDownloadFormat.TXT -> NovelTranslatedDownloadFormat.TXT
-                                    NovelQueuedDownloadFormat.DOCX -> NovelTranslatedDownloadFormat.DOCX
-                                    NovelQueuedDownloadFormat.HTML -> NovelTranslatedDownloadFormat.TXT
+                        withTimeout(throttleConfig.timeoutMs) {
+                            when (nextTask.type) {
+                                NovelQueuedDownloadType.ORIGINAL -> {
+                                    downloadManager.downloadChapter(nextTask.novel, nextTask.chapter)
                                 }
-                                translatedDownloadManager
-                                    .exportTranslatedChapter(nextTask.novel, nextTask.chapter, format)
-                                    .isSuccess
+                                NovelQueuedDownloadType.TRANSLATED -> {
+                                    val format = when (nextTask.format) {
+                                        NovelQueuedDownloadFormat.TXT -> NovelTranslatedDownloadFormat.TXT
+                                        NovelQueuedDownloadFormat.DOCX -> NovelTranslatedDownloadFormat.DOCX
+                                        NovelQueuedDownloadFormat.HTML -> NovelTranslatedDownloadFormat.TXT
+                                    }
+                                    translatedDownloadManager
+                                        .exportTranslatedChapter(nextTask.novel, nextTask.chapter, format)
+                                        .isSuccess
+                                }
                             }
                         }
                     }
@@ -445,6 +461,7 @@ object NovelDownloadQueueManager {
                     logcat(LogPriority.WARN) {
                         "Novel queue task failed: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, error=${message ?: "Download failed"}"
                     }
+                    applyFailureCooldown(throttleConfig, nextTask.taskId)
                 }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) {
@@ -456,6 +473,43 @@ object NovelDownloadQueueManager {
                 markTaskFailed(nextTask.taskId, e.message ?: "Critical download failure")
             }
         }
+    }
+
+    private suspend fun waitForNovelThrottleWindow(
+        config: NovelDownloadThrottleConfig,
+        taskId: Long,
+    ): Boolean {
+        val now = System.currentTimeMillis()
+        val jitter = if (config.jitterMs > 0L) Random.nextLong(config.jitterMs + 1L) else 0L
+        val requiredGap = config.delayBetweenRequestsMs + jitter
+        val waitMs = (lastNovelRequestStartedAtMs + requiredGap - now).coerceAtLeast(0L)
+        if (waitMs > 0L) {
+            logcat(LogPriority.DEBUG) { "Novel queue throttling taskId=$taskId for ${waitMs}ms" }
+            if (!delayWhileQueueAllows(taskId, waitMs)) return false
+        }
+        lastNovelRequestStartedAtMs = System.currentTimeMillis()
+        return true
+    }
+
+    private suspend fun applyFailureCooldown(
+        config: NovelDownloadThrottleConfig,
+        taskId: Long,
+    ) {
+        if (config.failureCooldownMs <= 0L) return
+        logcat(LogPriority.DEBUG) { "Novel queue failure cooldown taskId=$taskId for ${config.failureCooldownMs}ms" }
+        delayWhileQueueAllows(taskId, config.failureCooldownMs)
+    }
+
+    private suspend fun delayWhileQueueAllows(taskId: Long, delayMs: Long): Boolean {
+        var remainingMs = delayMs
+        while (remainingMs > 0L) {
+            if (runtimeState.consumeCanceled(taskId)) return false
+            if (!state.value.isRunning) return true
+            val stepMs = remainingMs.coerceAtMost(250L)
+            delay(stepMs)
+            remainingMs -= stepMs
+        }
+        return true
     }
 
     private fun markTaskStatus(
@@ -569,6 +623,23 @@ internal fun shouldWaitForNovelQueueWhilePaused(
     return !state.isRunning && state.tasks.any { it.status == NovelQueuedDownloadStatus.DOWNLOADING }
 }
 
+internal fun recoverStaleDownloadingTasks(
+    tasks: List<NovelQueuedDownload>,
+): List<NovelQueuedDownload> {
+    if (tasks.none { it.status == NovelQueuedDownloadStatus.DOWNLOADING }) return tasks
+
+    return tasks.map { task ->
+        if (task.status == NovelQueuedDownloadStatus.DOWNLOADING) {
+            task.copy(
+                status = NovelQueuedDownloadStatus.QUEUED,
+                errorMessage = null,
+            )
+        } else {
+            task
+        }
+    }
+}
+
 /**
  * Removes the oldest FAILED tasks when the count exceeds [maxFailed].
  *
@@ -593,4 +664,39 @@ internal fun pruneFailedTasks(
 
     val removeIndices = failedIndices.take(failedToRemove).toSet()
     return tasks.filterIndexed { index, _ -> index !in removeIndices }
+}
+
+data class NovelDownloadThrottleConfig(
+    val delayBetweenRequestsMs: Long,
+    val jitterMs: Long,
+    val timeoutMs: Long,
+    val failureCooldownMs: Long,
+) {
+    companion object {
+        private const val MIN_DELAY_MS = 0
+        private const val MAX_DELAY_MS = 30_000
+        private const val MIN_JITTER_MS = 0
+        private const val MAX_JITTER_MS = 10_000
+        private const val MIN_TIMEOUT_MS = 5_000
+        private const val MAX_TIMEOUT_MS = 180_000
+        private const val MIN_FAILURE_COOLDOWN_MS = 0
+        private const val MAX_FAILURE_COOLDOWN_MS = 300_000
+
+        fun from(preferences: DownloadPreferences): NovelDownloadThrottleConfig {
+            return NovelDownloadThrottleConfig(
+                delayBetweenRequestsMs = preferences.novelDownloadDelayMs().get()
+                    .coerceIn(MIN_DELAY_MS, MAX_DELAY_MS)
+                    .toLong(),
+                jitterMs = preferences.novelDownloadJitterMs().get()
+                    .coerceIn(MIN_JITTER_MS, MAX_JITTER_MS)
+                    .toLong(),
+                timeoutMs = preferences.novelDownloadTimeoutMs().get()
+                    .coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
+                    .toLong(),
+                failureCooldownMs = preferences.novelDownloadFailureCooldownMs().get()
+                    .coerceIn(MIN_FAILURE_COOLDOWN_MS, MAX_FAILURE_COOLDOWN_MS)
+                    .toLong(),
+            )
+        }
+    }
 }

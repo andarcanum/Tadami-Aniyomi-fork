@@ -28,6 +28,7 @@ import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.ui.library.resolveLibraryRangeSelectionAdditions
 import eu.kanade.tachiyomi.ui.library.sortPinnedFirst
 import eu.kanade.tachiyomi.util.episode.getNextUnseen
 import eu.kanade.tachiyomi.util.removeBackgrounds
@@ -40,6 +41,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -124,7 +126,7 @@ class AnimeLibraryScreenModel(
                 getTracksPerAnime.subscribe(),
                 getTrackingFilterFlow(),
                 state.map { it.groupType }.distinctUntilChanged(),
-                downloadCache.changes,
+                getDownloadFilterInvalidationFlow(),
             ) { flowsArray ->
                 val searchQuery = flowsArray[0] as String?
 
@@ -150,9 +152,9 @@ class AnimeLibraryScreenModel(
                         }
                     }
                     .let { map ->
-                        if (groupType == LibraryGroup.BY_DEFAULT && searchQuery == null) {
-                            // Keep all user-created categories visible even when empty,
-                            // so category tabs don't disappear after creation.
+                        if (groupType == LibraryGroup.BY_DEFAULT || searchQuery != null) {
+                            // Keep categories visible when searching so empty-result pages can
+                            // still show the global search action.
                             map
                         } else {
                             map.filterValues { it.isNotEmpty() }
@@ -220,6 +222,28 @@ class AnimeLibraryScreenModel(
                 activeCategoryIndex = 0
             }
             .launchIn(screenModelScope)
+    }
+
+    private fun getDownloadFilterInvalidationFlow(): Flow<Unit> {
+        return getAnimelibItemPreferencesFlow()
+            .flatMapLatest { prefs ->
+                if (prefs.globalFilterDownloaded || prefs.filterDownloaded != TriState.DISABLED) {
+                    downloadCache.changes.conflate()
+                } else {
+                    flowOf(Unit)
+                }
+            }
+    }
+
+    private fun getDownloadBadgeInvalidationFlow(): Flow<Unit> {
+        return getAnimelibItemPreferencesFlow()
+            .flatMapLatest { prefs ->
+                if (prefs.downloadBadge) {
+                    downloadCache.changes.conflate()
+                } else {
+                    flowOf(Unit)
+                }
+            }
     }
 
     private suspend fun AnimeLibraryMap.applyFilters(
@@ -553,7 +577,7 @@ class AnimeLibraryScreenModel(
         val animelibAnimesFlow = combine(
             getLibraryAnime.subscribe(),
             getAnimelibItemPreferencesFlow(),
-            downloadCache.changes,
+            getDownloadBadgeInvalidationFlow(),
         ) { animelibAnimeList, prefs, _ ->
             animelibAnimeList
                 .map { animelibAnime ->
@@ -823,38 +847,21 @@ class AnimeLibraryScreenModel(
     }
 
     /**
-     * Selects all nimes between and including the given anime and the last pressed anime from the
-     * same category as the given anime
+     * Selects all anime between and including the given anime and the last pressed anime from the
+     * same visible library group.
      */
     fun toggleRangeSelection(anime: LibraryAnime) {
         mutableState.update { state ->
             val newSelection = state.selection.mutate { list ->
-                val lastSelected = list.lastOrNull()
-                if (lastSelected?.category != anime.category) {
-                    list.add(anime)
-                    return@mutate
+                val visibleGroups = state.library.values.map { items ->
+                    items.fastMap { it.libraryAnime }
                 }
-
-                val items = state.getAnimelibItemsByCategoryId(anime.category)
-                    ?.fastMap { it.libraryAnime }.orEmpty()
-                val lastAnimeIndex = items.indexOf(lastSelected)
-                val curAnimeIndex = items.indexOf(anime)
-
-                if (lastAnimeIndex < 0 || curAnimeIndex < 0) {
-                    list.add(anime)
-                    return@mutate
-                }
-
-                val selectedIds = list.fastMap { it.id }
-                val selectionRange = when {
-                    lastAnimeIndex < curAnimeIndex -> IntRange(lastAnimeIndex, curAnimeIndex)
-                    curAnimeIndex < lastAnimeIndex -> IntRange(curAnimeIndex, lastAnimeIndex)
-                    // We shouldn't reach this point
-                    else -> return@mutate
-                }
-                val newSelections = selectionRange.mapNotNull { index ->
-                    items[index].takeUnless { it.id in selectedIds }
-                }
+                val newSelections = resolveLibraryRangeSelectionAdditions(
+                    selectedItems = list,
+                    targetItem = anime,
+                    visibleGroups = visibleGroups,
+                    itemId = { it.id },
+                )
                 list.addAll(newSelections)
             }
             state.copy(selection = newSelection)

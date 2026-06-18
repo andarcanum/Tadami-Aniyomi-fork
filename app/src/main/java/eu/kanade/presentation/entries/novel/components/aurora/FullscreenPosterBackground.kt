@@ -35,6 +35,7 @@ import eu.kanade.presentation.entries.components.aurora.auroraPosterBlur
 import eu.kanade.presentation.entries.components.aurora.buildAuroraPosterBackgroundRequest
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterBackgroundPainter
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraPosterScrimBrush
+import eu.kanade.presentation.entries.components.aurora.shouldDrawAuroraPosterBlurOverlay
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.util.debugTitleCoverFlow
@@ -215,16 +216,18 @@ fun FullscreenPosterBackground(
                 modifier = Modifier.fillMaxSize(),
             )
 
-            Image(
-                painter = backgroundPainter,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                colorFilter = posterColorFilter,
-                alpha = blurOverlayAlpha,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .auroraPosterBlur(if (colors.isDark) 20.dp else 32.dp),
-            )
+            if (shouldDrawAuroraPosterBlurOverlay(blurOverlayAlpha)) {
+                Image(
+                    painter = backgroundPainter,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = posterColorFilter,
+                    alpha = blurOverlayAlpha,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .auroraPosterBlur(if (colors.isDark) 20.dp else 32.dp),
+                )
+            }
         } else {
             Image(
                 painter = placeholderPainter,

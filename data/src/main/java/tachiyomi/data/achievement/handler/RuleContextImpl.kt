@@ -3,6 +3,7 @@ package tachiyomi.data.achievement.handler
 import kotlinx.coroutines.flow.first
 import tachiyomi.data.achievement.handler.checkers.DiversityAchievementChecker
 import tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker
+import tachiyomi.data.achievement.rules.GenreAliases
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
@@ -31,18 +32,19 @@ class RuleContextImpl(
     override suspend fun getChaptersRead(category: AchievementCategory): Int {
         return when (category) {
             AchievementCategory.MANGA -> {
-                mangaHandler.awaitOneOrNull { db -> db.historyQueries.getTotalChaptersRead() }?.toInt() ?: 0
+                mangaHandler.awaitOneOrNull { db -> db.chaptersQueries.getTotalReadChapterCount() }?.toInt() ?: 0
             }
             AchievementCategory.ANIME -> {
-                animeHandler.awaitOneOrNull { db -> db.animehistoryQueries.getTotalEpisodesWatched() }?.toInt() ?: 0
+                animeHandler.awaitOneOrNull { db -> db.episodesQueries.getTotalSeenEpisodeCount() }?.toInt() ?: 0
             }
             AchievementCategory.NOVEL -> {
-                novelHandler.awaitOneOrNull { db -> db.novel_historyQueries.getTotalChaptersRead() }?.toInt() ?: 0
+                novelHandler.awaitOneOrNull { db -> db.novel_chaptersQueries.getTotalReadChapterCount() }?.toInt() ?: 0
             }
             AchievementCategory.BOTH, AchievementCategory.SECRET -> {
-                val manga = mangaHandler.awaitOneOrNull { db -> db.historyQueries.getTotalChaptersRead() } ?: 0L
-                val anime = animeHandler.awaitOneOrNull { db -> db.animehistoryQueries.getTotalEpisodesWatched() } ?: 0L
-                val novel = novelHandler.awaitOneOrNull { db -> db.novel_historyQueries.getTotalChaptersRead() } ?: 0L
+                val manga = mangaHandler.awaitOneOrNull { db -> db.chaptersQueries.getTotalReadChapterCount() } ?: 0L
+                val anime = animeHandler.awaitOneOrNull { db -> db.episodesQueries.getTotalSeenEpisodeCount() } ?: 0L
+                val novel =
+                    novelHandler.awaitOneOrNull { db -> db.novel_chaptersQueries.getTotalReadChapterCount() } ?: 0L
                 (manga + anime + novel).toInt()
             }
         }
@@ -143,17 +145,21 @@ class RuleContextImpl(
     }
 
     override suspend fun hasLibraryGenre(genre: String): Int {
-        val manga = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryGenreCount(genre) } ?: 0L
-        val anime = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryGenreCount(genre) } ?: 0L
-        val novel = novelHandler.awaitOneOrNull { db -> db.novelsQueries.getLibraryGenreCount(genre) } ?: 0L
-        return (manga + anime + novel).toInt()
+        return GenreAliases.allGenreSearchTerms(genre).sumOf { term ->
+            val manga = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.getLibraryGenreCount(term) } ?: 0L
+            val anime = animeHandler.awaitOneOrNull { db -> db.animesQueries.getLibraryGenreCount(term) } ?: 0L
+            val novel = novelHandler.awaitOneOrNull { db -> db.novelsQueries.getLibraryGenreCount(term) } ?: 0L
+            (manga + anime + novel).toInt()
+        }
     }
 
     override suspend fun hasLibraryTitleLike(pattern: String): Boolean {
-        val manga = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.hasLibraryTitleLike(pattern) } ?: false
-        val anime = animeHandler.awaitOneOrNull { db -> db.animesQueries.hasLibraryTitleLike(pattern) } ?: false
-        val novel = novelHandler.awaitOneOrNull { db -> db.novelsQueries.hasLibraryTitleLike(pattern) } ?: false
-        return manga || anime || novel
+        return GenreAliases.allTitleSearchTerms(pattern).any { term ->
+            val manga = mangaHandler.awaitOneOrNull { db -> db.mangasQueries.hasLibraryTitleLike(term) } ?: false
+            val anime = animeHandler.awaitOneOrNull { db -> db.animesQueries.hasLibraryTitleLike(term) } ?: false
+            val novel = novelHandler.awaitOneOrNull { db -> db.novelsQueries.hasLibraryTitleLike(term) } ?: false
+            manga || anime || novel
+        }
     }
 
     override suspend fun getCurrentStreak(): Int {

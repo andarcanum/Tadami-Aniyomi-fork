@@ -1,1054 +1,2834 @@
 {
-    "version": 7,
-    "achievements": [
-        {
-            "id": "first_chapter",
-            "type": "event",
-            "category": "manga",
-            "threshold": 1,
-            "points": 10,
-            "title": "Первые шаги",
-            "description": "Прочитайте свою первую главу",
-            "badge_icon": "ic_badge_first_chapter",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_10_chapters",
-            "type": "quantity",
-            "category": "manga",
-            "threshold": 10,
-            "points": 25,
-            "title": "Новичок",
-            "description": "Прочитайте 10 глав",
-            "badge_icon": "ic_badge_10_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_50_chapters",
-            "type": "quantity",
-            "category": "manga",
-            "threshold": 50,
-            "points": 75,
-            "title": "Читатель",
-            "description": "Прочитайте 50 глав",
-            "badge_icon": "ic_badge_50_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_100_chapters",
-            "type": "quantity",
-            "category": "manga",
-            "threshold": 100,
-            "points": 100,
-            "title": "Любитель манги",
-            "description": "Прочитайте 100 глав",
-            "badge_icon": "ic_badge_100_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_500_chapters",
-            "type": "quantity",
-            "category": "manga",
-            "threshold": 500,
-            "points": 250,
-            "title": "Мангака-фанат",
-            "description": "Прочитайте 500 глав",
-            "badge_icon": "ic_badge_500_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_1000_chapters",
-            "type": "quantity",
-            "category": "manga",
-            "threshold": 1000,
-            "points": 500,
-            "title": "Манга-легенда",
-            "description": "Прочитайте 1000 глав",
-            "badge_icon": "ic_badge_1000_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "complete_1_manga",
-            "type": "event",
-            "category": "manga",
-            "threshold": 1,
-            "points": 25,
-            "title": "Финишёр",
-            "description": "Завершите свою первую мангу",
-            "badge_icon": "ic_badge_complete_1_manga",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "complete_10_manga",
-            "type": "quantity",
-            "category": "manga",
-            "threshold": 10,
-            "points": 75,
-            "title": "Коллекционер историй",
-            "description": "Завершите 10 манг",
-            "badge_icon": "ic_badge_complete_10_manga",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "complete_50_manga",
-            "type": "quantity",
-            "category": "manga",
-            "threshold": 50,
-            "points": 200,
-            "title": "Искатель финалов",
-            "description": "Завершите 50 манг",
-            "badge_icon": "ic_badge_complete_50_manga",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_long_manga",
-            "type": "event",
-            "category": "manga",
-            "threshold": 1,
-            "points": 100,
-            "title": "Долгостройщик",
-            "description": "Дочитать мангу с 200+ главами",
-            "badge_icon": "ic_badge_long_manga",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "first_novel_chapter",
-            "type": "event",
-            "category": "novel",
-            "threshold": 1,
-            "points": 10,
-            "title": "Первые строки",
-            "description": "Прочитайте первую главу ранобэ",
-            "badge_icon": "ic_badge_first_chapter",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_10_novel_chapters",
-            "type": "quantity",
-            "category": "novel",
-            "threshold": 10,
-            "points": 25,
-            "title": "Новичок ранобэ",
-            "description": "Прочитайте 10 глав ранобэ",
-            "badge_icon": "ic_badge_10_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_50_novel_chapters",
-            "type": "quantity",
-            "category": "novel",
-            "threshold": 50,
-            "points": 75,
-            "title": "Читатель ранобэ",
-            "description": "Прочитайте 50 глав ранобэ",
-            "badge_icon": "ic_badge_50_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_100_novel_chapters",
-            "type": "quantity",
-            "category": "novel",
-            "threshold": 100,
-            "points": 100,
-            "title": "Любитель ранобэ",
-            "description": "Прочитайте 100 глав ранобэ",
-            "badge_icon": "ic_badge_100_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_500_novel_chapters",
-            "type": "quantity",
-            "category": "novel",
-            "threshold": 500,
-            "points": 250,
-            "title": "Фанат ранобэ",
-            "description": "Прочитайте 500 глав ранобэ",
-            "badge_icon": "ic_badge_500_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_1000_novel_chapters",
-            "type": "quantity",
-            "category": "novel",
-            "threshold": 1000,
-            "points": 500,
-            "title": "Легенда ранобэ",
-            "description": "Прочитайте 1000 глав ранобэ",
-            "badge_icon": "ic_badge_1000_chapters",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "complete_1_novel",
-            "type": "event",
-            "category": "novel",
-            "threshold": 1,
-            "points": 25,
-            "title": "Первый финал ранобэ",
-            "description": "Завершите своё первое ранобэ",
-            "badge_icon": "ic_badge_complete_1_manga",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "complete_10_novel",
-            "type": "quantity",
-            "category": "novel",
-            "threshold": 10,
-            "points": 75,
-            "title": "Коллекционер историй",
-            "description": "Завершите 10 ранобэ",
-            "badge_icon": "ic_badge_complete_10_manga",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "complete_50_novel",
-            "type": "quantity",
-            "category": "novel",
-            "threshold": 50,
-            "points": 200,
-            "title": "Искатель концовок",
-            "description": "Завершите 50 ранобэ",
-            "badge_icon": "ic_badge_complete_50_manga",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "read_long_novel",
-            "type": "event",
-            "category": "novel",
-            "threshold": 1,
-            "points": 100,
-            "title": "Марафон ранобэ",
-            "description": "Завершите ранобэ, прочитав 200+ глав",
-            "badge_icon": "ic_badge_long_manga",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "first_episode",
-            "type": "event",
-            "category": "anime",
-            "threshold": 1,
-            "points": 10,
-            "title": "Первый взгляд",
-            "description": "Посмотрите свою первую серию",
-            "badge_icon": "ic_badge_first_episode",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "watch_10_episodes",
-            "type": "quantity",
-            "category": "anime",
-            "threshold": 10,
-            "points": 25,
-            "title": "Марафонец-новичок",
-            "description": "Посмотрите 10 серий",
-            "badge_icon": "ic_badge_10_episodes",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "watch_50_episodes",
-            "type": "quantity",
-            "category": "anime",
-            "threshold": 50,
-            "points": 75,
-            "title": "Бингер",
-            "description": "Посмотрите 50 серий",
-            "badge_icon": "ic_badge_50_episodes",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "watch_100_episodes",
-            "type": "quantity",
-            "category": "anime",
-            "threshold": 100,
-            "points": 100,
-            "title": "Любитель аниме",
-            "description": "Посмотрите 100 серий",
-            "badge_icon": "ic_badge_100_episodes",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "watch_500_episodes",
-            "type": "quantity",
-            "category": "anime",
-            "threshold": 500,
-            "points": 250,
-            "title": "Заядлый отаку",
-            "description": "Посмотрите 500 серий",
-            "badge_icon": "ic_badge_500_episodes",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "watch_1000_episodes",
-            "type": "quantity",
-            "category": "anime",
-            "threshold": 1000,
-            "points": 500,
-            "title": "Аниме-легенда",
-            "description": "Посмотрите 1000 серий",
-            "badge_icon": "ic_badge_1000_episodes",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "complete_1_anime",
-            "type": "event",
-            "category": "anime",
-            "threshold": 1,
-            "points": 25,
-            "title": "Финалист",
-            "description": "Завершите своё первое аниме",
-            "badge_icon": "ic_badge_complete_1_anime",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "complete_10_anime",
-            "type": "quantity",
-            "category": "anime",
-            "threshold": 10,
-            "points": 75,
-            "title": "Искатель историй",
-            "description": "Завершите 10 аниме",
-            "badge_icon": "ic_badge_complete_10_anime",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "complete_50_anime",
-            "type": "quantity",
-            "category": "anime",
-            "threshold": 50,
-            "points": 200,
-            "title": "Покоритель сезонов",
-            "description": "Завершите 50 аниме",
-            "badge_icon": "ic_badge_complete_50_anime",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "genre_explorer",
-            "type": "diversity",
-            "category": "both",
-            "threshold": 5,
-            "points": 150,
-            "title": "Исследователь жанров",
-            "description": "Читайте 5 разных жанров",
-            "badge_icon": "ic_badge_genres",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "genre_explorer_complete",
-            "type": "diversity",
-            "category": "both",
-            "threshold": 10,
-            "points": 300,
-            "title": "Мастер жанров",
-            "description": "Читайте 10 разных жанров",
-            "badge_icon": "ic_badge_genre_master",
-            "unlockable_id": "theme_achievement_sapphire",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "genre_explorer_ultimate",
-            "type": "diversity",
-            "category": "both",
-            "threshold": 20,
-            "points": 500,
-            "title": "Жанровый бог",
-            "description": "Прочитайте тайтлы из 20 разных жанров",
-            "badge_icon": "ic_badge_genre_god",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "week_warrior",
-            "type": "streak",
-            "category": "both",
-            "threshold": 7,
-            "points": 200,
-            "title": "Воин недели",
-            "description": "Используйте приложение 7 дней подряд",
-            "badge_icon": "ic_badge_week_warrior",
-            "unlockable_id": "badge_week_warrior",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "month_master",
-            "type": "streak",
-            "category": "both",
-            "threshold": 30,
-            "points": 500,
-            "title": "Мастер месяца",
-            "description": "Используйте приложение 30 дней подряд",
-            "badge_icon": "ic_badge_month_master",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "season_champion",
-            "type": "streak",
-            "category": "both",
-            "threshold": 90,
-            "points": 1000,
-            "title": "Чемпион сезона",
-            "description": "Используйте приложение 90 дней подряд",
-            "badge_icon": "ic_badge_season_champion",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "yearly_devotee",
-            "type": "streak",
-            "category": "both",
-            "threshold": 365,
-            "points": 2500,
-            "title": "Годовой преданный",
-            "description": "Используйте приложение 365 дней подряд",
-            "badge_icon": "ic_badge_yearly_devotee",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "library_collector",
-            "type": "library",
-            "category": "both",
-            "threshold": 100,
-            "points": 150,
-            "title": "Коллекционер библиотеки",
-            "description": "Добавьте 100 тайтлов в библиотеку",
-            "badge_icon": "ic_badge_collector",
-            "unlockable_id": "display_grid_large",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "library_hoarder",
-            "type": "library",
-            "category": "both",
-            "threshold": 500,
-            "points": 400,
-            "title": "Библиотечный хранитель",
-            "description": "Добавьте 500 тайтлов в библиотеку",
-            "badge_icon": "ic_badge_hoarder",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "library_titan",
-            "type": "library",
-            "category": "both",
-            "threshold": 1000,
-            "points": 800,
-            "title": "Титан библиотеки",
-            "description": "Добавьте 1000 тайтлов в библиотеку",
-            "badge_icon": "ic_badge_titan",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "library_god",
-            "type": "library",
-            "category": "both",
-            "threshold": 5000,
-            "points": 1500,
-            "title": "Божество библиотеки",
-            "description": "Добавьте 5000 тайтлов в библиотеку",
-            "badge_icon": "ic_badge_library_god",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "content_master",
-            "type": "quantity",
-            "category": "both",
-            "threshold": 1000,
-            "points": 500,
-            "title": "Мастер контента",
-            "description": "Прочитайте/Посмотрите 1000 единиц контента",
-            "badge_icon": "ic_badge_master",
-            "unlockable_id": "theme_achievement_gold",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "content_god",
-            "type": "quantity",
-            "category": "both",
-            "threshold": 5000,
-            "points": 1000,
-            "title": "Божество контента",
-            "description": "Прочитайте/посмотрите 5000 единиц контента",
-            "badge_icon": "ic_badge_content_god",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "content_overlord",
-            "type": "quantity",
-            "category": "both",
-            "threshold": 10000,
-            "points": 2000,
-            "title": "Повелитель вселенной",
-            "description": "Прочитайте/посмотрите 10000 единиц контента",
-            "badge_icon": "ic_badge_overlord",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "master_achiever",
-            "type": "meta",
-            "category": "both",
-            "threshold": 10,
-            "points": 500,
-            "title": "Мастер достижений",
-            "description": "Разблокируйте 10 достижений",
-            "badge_icon": "ic_badge_master_achiever",
-            "unlockable_id": "badge_achievement_master",
-            "is_hidden": false,
-            "is_secret": false,
-            "rewards": [
-                {
-                    "type": "AURA",
-                    "id": "aura_level_up",
-                    "title": "Master Achiever Aura",
-                    "description": "Золотое сияние превосходства"
-                },
-                {
-                    "type": "SPECIAL",
-                    "id": "profile_nickname_effect_aurora_crown",
-                    "title": "Aurora Crown Nickname Effect",
-                    "description": "Radial aurora corona around the Home Hub nickname"
-                }
-            ]
-        },
-        {
-            "id": "achievement_hunter",
-            "type": "meta",
-            "category": "both",
-            "threshold": 25,
-            "points": 1000,
-            "title": "Охотник за достижениями",
-            "description": "Разблокируйте 25 достижений",
-            "badge_icon": "ic_badge_hunter",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "achievement_collector",
-            "type": "meta",
-            "category": "both",
-            "threshold": 50,
-            "points": 2000,
-            "title": "Коллекционер достижений",
-            "description": "Разблокируйте 50 достижений",
-            "badge_icon": "ic_badge_collector_achievements",
-            "is_hidden": false,
-            "is_secret": false,
-            "rewards": [
-                {
-                    "type": "SPECIAL",
-                    "id": "home_badge_shuriken",
-                    "title": "Shuriken Home Badge",
-                    "description": "Shuriken glyph wrapping the Home Hub nickname"
-                }
-            ]
-        },
-        {
-            "id": "achievement_completionist",
-            "type": "meta",
-            "category": "both",
-            "threshold": 100,
-            "points": 5000,
-            "title": "Комплишионист",
-            "description": "Разблокируйте 100 достижений",
-            "badge_icon": "ic_badge_completionist",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "balanced_fan",
-            "type": "balanced",
-            "category": "both",
-            "threshold": 50,
-            "points": 200,
-            "title": "Сбалансированный фанат",
-            "description": "Прочитайте 50 глав и посмотрите 50 серий",
-            "badge_icon": "ic_badge_balanced_fan",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "hybrid_connoisseur",
-            "type": "balanced",
-            "category": "both",
-            "threshold": 500,
-            "points": 500,
-            "title": "Гибридный ценитель",
-            "description": "Прочитайте 500 глав и посмотрите 500 серий",
-            "badge_icon": "ic_badge_hybrid",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "perfect_balance",
-            "type": "balanced",
-            "category": "both",
-            "threshold": 1000,
-            "points": 1000,
-            "title": "Идеальный баланс",
-            "description": "Прочитайте 1000 глав и посмотрите 1000 серий",
-            "badge_icon": "ic_badge_perfect_balance",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "night_owl",
-            "type": "time_based",
-            "category": "both",
-            "threshold": 1,
-            "points": 50,
-            "title": "Сова",
-            "description": "Читайте мангу между 02:00 и 05:00",
-            "badge_icon": "ic_badge_night_owl",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "early_bird",
-            "type": "time_based",
-            "category": "both",
-            "threshold": 1,
-            "points": 50,
-            "title": "Жаворонок",
-            "description": "Читайте утром между 06:00 и 09:00",
-            "badge_icon": "ic_badge_early_bird",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "marathon_reader",
-            "type": "time_based",
-            "category": "both",
-            "threshold": 1,
-            "points": 100,
-            "title": "Марафонец",
-            "description": "Непрерывная сессия чтения более 2 часов",
-            "badge_icon": "ic_badge_marathon",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "download_starter",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 10,
-            "points": 25,
-            "title": "Загрузчик",
-            "description": "Скачайте 10 глав",
-            "badge_icon": "ic_badge_download_starter",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "chapter_collector",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 100,
-            "points": 100,
-            "title": "Коллекционер",
-            "description": "Скачайте 100 глав",
-            "badge_icon": "ic_badge_chapter_collector",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "trophy_hunter",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 500,
-            "points": 300,
-            "title": "Охотник за трофеями",
-            "description": "Скачайте 500 глав",
-            "badge_icon": "ic_badge_trophy_hunter",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "search_user",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 25,
-            "points": 50,
-            "title": "Поисковик",
-            "description": "Используйте поиск 25 раз",
-            "badge_icon": "ic_badge_search_user",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "advanced_explorer",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 50,
-            "points": 150,
-            "title": "Исследователь",
-            "description": "Используйте расширенный поиск 50 раз",
-            "badge_icon": "ic_badge_advanced_explorer",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "filter_master",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 20,
-            "points": 50,
-            "title": "Фильтровщик",
-            "description": "Примените фильтры 20 раз",
-            "badge_icon": "ic_badge_filter_master",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "backup_master",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 1,
-            "points": 100,
-            "title": "Бэкапер",
-            "description": "Создайте резервную копию",
-            "badge_icon": "ic_badge_backup_master",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "settings_explorer",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 15,
-            "points": 25,
-            "title": "Настройщик",
-            "description": "Зайдите в настройки 15 раз",
-            "badge_icon": "ic_badge_settings_explorer",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "stats_viewer",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 5,
-            "points": 25,
-            "title": "Любитель статистики",
-            "description": "Откройте экран статистики 5 раз",
-            "badge_icon": "ic_badge_stats_viewer",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "theme_changer",
-            "type": "feature_based",
-            "category": "both",
-            "threshold": 10,
-            "points": 50,
-            "title": "Сменщик тем",
-            "description": "Смените тему 10 раз",
-            "badge_icon": "ic_badge_theme_changer",
-            "is_hidden": false,
-            "is_secret": false
-        },
-        {
-            "id": "persistent_clicker",
-            "type": "feature_based",
-            "category": "secret",
-            "threshold": 10,
-            "points": 50,
-            "title": "Исекайнутый через меню",
-            "description": "Открыть секретный пролог вместо того, чтобы наконец заняться делами.",
-            "badge_icon": "ic_badge_persistent",
-            "is_hidden": true,
-            "is_secret": true,
-            "rewards": [
-                {
-                    "type": "SPECIAL",
-                    "id": "profile_nickname_effect_glitch_rune",
-                    "title": "Glitch Rune Nickname Effect",
-                    "description": "Secret corrupted-rune signature for nickname rendering"
-                },
-                {
-                    "type": "SPECIAL",
-                    "id": "avatar_frame_hologram",
-                    "title": "Hologram Avatar Frame",
-                    "description": "Holographic frame shimmering around the profile avatar"
-                },
-                {
-                    "type": "SPECIAL",
-                    "id": "home_badge_orbit",
-                    "title": "Orbit Home Badge",
-                    "description": "Orbit glyph wrapping the Home Hub nickname"
-                }
-            ]
-        },
-        {
-            "id": "secret_hall_unlocked",
-            "type": "feature_based",
-            "category": "secret",
-            "threshold": 1,
-            "points": 125,
-            "title": "Зал ранга S",
-            "description": "Расшифруйте скрытый сигнал и откройте секретный зал славы.",
-            "badge_icon": "ic_badge_secret_eren",
-            "is_hidden": true,
-            "is_secret": true,
-            "rewards": [
-                {
-                    "type": "THEME",
-                    "id": "theme_SAKURA_NOIR",
-                    "title": "Sakura Noir",
-                    "description": "Exclusive moody sakura theme with a cinematic noir palette"
-                },
-                {
-                    "type": "SPECIAL",
-                    "id": "home_badge_crown",
-                    "title": "Crown Home Badge",
-                    "description": "Crown glyph wrapping the Home Hub nickname"
-                }
-            ]
-        },
-        {
-            "id": "secret_crybaby",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 1,
-            "points": 100,
-            "title": "Плакса",
-            "description": "Дочитайте тайтл с жанром Трагедия",
-            "badge_icon": "ic_badge_secret_crybaby",
-            "is_hidden": true,
-            "is_secret": true,
-            "rewards": [
-                {
-                    "type": "SPECIAL",
-                    "id": "special_background_petal_storm",
-                    "title": "Petal Storm Background",
-                    "description": "Animated sakura petals drifting across the Aurora background"
-                }
-            ]
-        },
-        {
-            "id": "secret_harem_king",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 20,
-            "points": 150,
-            "title": "Король гарема",
-            "description": "20+ тайтлов с жанром Harem",
-            "badge_icon": "ic_badge_secret_harem",
-            "is_hidden": true,
-            "is_secret": true,
-            "rewards": [
-                {
-                    "type": "AURA",
-                    "id": "aura_harem",
-                    "title": "Harem Aura",
-                    "description": "Особое свечение вокруг обложек ваших любимых тайтлов"
-                }
-            ]
-        },
-        {
-            "id": "secret_isekai_truck",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 20,
-            "points": 150,
-            "title": "Жертва грузовика",
-            "description": "20+ тайтлов с жанром Isekai",
-            "badge_icon": "ic_badge_secret_isekai",
-            "is_hidden": true,
-            "is_secret": true
-        },
-        {
-            "id": "secret_chad",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 1,
-            "points": 200,
-            "title": "Чад-читатель",
-            "description": "10+ завершённых манг, 0 онгоингов",
-            "badge_icon": "ic_badge_secret_chad",
-            "is_hidden": true,
-            "is_secret": true
-        },
-        {
-            "id": "secret_shonen",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 10,
-            "points": 300,
-            "title": "Сила дружбы!",
-            "description": "10+ завершённых сёнэн-тайтлов",
-            "badge_icon": "ic_badge_secret_shonen",
-            "is_hidden": true,
-            "is_secret": true
-        },
-        {
-            "id": "secret_deku",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 1,
-            "points": 150,
-            "title": "Плюс ультра!",
-            "description": "Завершите тайтл с жанром Super Power",
-            "badge_icon": "ic_badge_secret_deku",
-            "is_hidden": true,
-            "is_secret": true
-        },
-        {
-            "id": "secret_eren",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 1,
-            "points": 200,
-            "title": "Тatakae!",
-            "description": "Завершите тайтл с жанром Military",
-            "badge_icon": "ic_badge_secret_eren",
-            "is_hidden": true,
-            "is_secret": true
-        },
-        {
-            "id": "secret_lelouch",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 1,
-            "points": 200,
-            "title": "Всё идёт по плану",
-            "description": "Завершите тайтл с жанром Psychological",
-            "badge_icon": "ic_badge_secret_lelouch",
-            "is_hidden": true,
-            "is_secret": true
-        },
-        {
-            "id": "secret_saitama",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 1,
-            "points": 150,
-            "title": "Обычный любитель",
-            "description": "Ровно 1 аниме и 1 манга в библиотеке",
-            "badge_icon": "ic_badge_secret_saitama",
-            "is_hidden": true,
-            "is_secret": true
-        },
-        {
-            "id": "secret_jojo",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 1,
-            "points": 200,
-            "title": "Это была я, Дио!",
-            "description": "Добавьте «JoJo's Bizarre Adventure» в библиотеку",
-            "badge_icon": "ic_badge_secret_jojo",
-            "is_hidden": true,
-            "is_secret": true,
-            "rewards": [
-                {
-                    "type": "SPECIAL",
-                    "id": "profile_nickname_effect_cipher",
-                    "title": "Cipher Sigil Nickname Effect",
-                    "description": "Mystic cipher sigils around the Home Hub nickname"
-                },
-                {
-                    "type": "SPECIAL",
-                    "id": "avatar_frame_neon",
-                    "title": "Neon Avatar Frame",
-                    "description": "Animated neon frame around the profile avatar"
-                },
-                {
-                    "type": "SPECIAL",
-                    "id": "special_background_neon_orbit",
-                    "title": "Neon Orbit Background",
-                    "description": "Rotating neon orbital rings and particles behind the app background"
-                }
-            ]
-        },
-        {
-            "id": "secret_onepiece",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 1000,
-            "points": 500,
-            "title": "Король пиратов",
-            "description": "Прочитайте 1000+ глав манги",
-            "badge_icon": "ic_badge_secret_onepiece",
-            "is_hidden": true,
-            "is_secret": true,
-            "rewards": [
-                {
-                    "type": "THEME",
-                    "id": "theme_ONYX_GOLD",
-                    "title": "Обсидиановое золото",
-                    "description": "Эксклюзивная тема с роскошным тёмным золотым оттенком"
-                },
-                {
-                    "type": "SPECIAL",
-                    "id": "avatar_frame_prismatic",
-                    "title": "Prismatic Avatar Frame",
-                    "description": "Prismatic holographic frame around the profile avatar"
-                }
-            ]
-        },
-        {
-            "id": "secret_goku",
-            "type": "secret",
-            "category": "secret",
-            "threshold": 9000,
-            "points": 500,
-            "title": "Ещё не предел!",
-            "description": "9000+ очков достижений",
-            "badge_icon": "ic_badge_secret_goku",
-            "is_hidden": true,
-            "is_secret": true,
-            "rewards": [
-                {
-                    "type": "AURA",
-                    "id": "aura_matrix",
-                    "title": "Matrix Aura",
-                    "description": "Зеленый цифровой дождь вокруг обложек"
-                },
-                {
-                    "type": "THEME",
-                    "id": "theme_NEBULA_TIDE",
-                    "title": "Nebula Tide",
-                    "description": "Exclusive cosmic theme with deep cyan and violet tides"
-                }
-            ]
+  "version": 10,
+  "achievements": [
+    {
+      "id": "first_chapter",
+      "type": "event",
+      "category": "manga",
+      "threshold": 1,
+      "points": 10,
+      "title": "First steps",
+      "description": "Read your first manga chapter",
+      "badge_icon": "ic_badge_first_chapter",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "manga",
+        "event"
+      ],
+      "season": null
+    },
+    {
+      "id": "read_10_chapters",
+      "type": "quantity",
+      "category": "manga",
+      "threshold": 10,
+      "points": 25,
+      "title": "Rookie reader",
+      "description": "Read 10 manga chapters",
+      "badge_icon": "ic_badge_10_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "manga",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "manga_chapters",
+      "tier_level": 1
+    },
+    {
+      "id": "read_50_chapters",
+      "type": "quantity",
+      "category": "manga",
+      "threshold": 50,
+      "points": 75,
+      "title": "Manga reader",
+      "description": "Read 50 manga chapters",
+      "badge_icon": "ic_badge_50_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "manga",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "manga_chapters",
+      "tier_level": 2
+    },
+    {
+      "id": "read_100_chapters",
+      "type": "quantity",
+      "category": "manga",
+      "threshold": 100,
+      "points": 100,
+      "title": "Manga enthusiast",
+      "description": "Read 100 manga chapters",
+      "badge_icon": "ic_badge_100_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "manga",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "manga_chapters",
+      "tier_level": 3
+    },
+    {
+      "id": "read_500_chapters",
+      "type": "quantity",
+      "category": "manga",
+      "threshold": 500,
+      "points": 250,
+      "title": "Manga fan",
+      "description": "Read 500 manga chapters",
+      "badge_icon": "ic_badge_500_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "manga",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "manga_chapters",
+      "tier_level": 4
+    },
+    {
+      "id": "read_1000_chapters",
+      "type": "quantity",
+      "category": "manga",
+      "threshold": 1000,
+      "points": 500,
+      "title": "Manga legend",
+      "description": "Read 1,000 manga chapters",
+      "badge_icon": "ic_badge_1000_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "manga",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "manga_chapters",
+      "tier_level": 5
+    },
+    {
+      "id": "complete_1_manga",
+      "type": "event",
+      "category": "manga",
+      "threshold": 1,
+      "points": 25,
+      "title": "Finisher",
+      "description": "Complete your first manga",
+      "badge_icon": "ic_badge_complete_1_manga",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "manga",
+        "event",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "manga_completed",
+      "tier_level": 1
+    },
+    {
+      "id": "complete_10_manga",
+      "type": "quantity",
+      "category": "manga",
+      "threshold": 10,
+      "points": 75,
+      "title": "Story collector",
+      "description": "Complete 10 manga",
+      "badge_icon": "ic_badge_complete_10_manga",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "manga",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "manga_completed",
+      "tier_level": 2
+    },
+    {
+      "id": "complete_50_manga",
+      "type": "quantity",
+      "category": "manga",
+      "threshold": 50,
+      "points": 200,
+      "title": "Finale seeker",
+      "description": "Complete 50 manga",
+      "badge_icon": "ic_badge_complete_50_manga",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "manga",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "manga_completed",
+      "tier_level": 3
+    },
+    {
+      "id": "read_long_manga",
+      "type": "event",
+      "category": "manga",
+      "threshold": 1,
+      "points": 100,
+      "title": "Long-haul reader",
+      "description": "Finish a manga with 200+ chapters read",
+      "badge_icon": "ic_badge_long_manga",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "manga",
+        "event"
+      ],
+      "season": null
+    },
+    {
+      "id": "first_novel_chapter",
+      "type": "event",
+      "category": "novel",
+      "threshold": 1,
+      "points": 10,
+      "title": "First lines",
+      "description": "Read your first novel chapter",
+      "badge_icon": "ic_badge_first_chapter",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "novel",
+        "event"
+      ],
+      "season": null
+    },
+    {
+      "id": "read_10_novel_chapters",
+      "type": "quantity",
+      "category": "novel",
+      "threshold": 10,
+      "points": 25,
+      "title": "Novel rookie",
+      "description": "Read 10 novel chapters",
+      "badge_icon": "ic_badge_10_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "novel",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "novel_chapters",
+      "tier_level": 1
+    },
+    {
+      "id": "read_50_novel_chapters",
+      "type": "quantity",
+      "category": "novel",
+      "threshold": 50,
+      "points": 75,
+      "title": "Novel reader",
+      "description": "Read 50 novel chapters",
+      "badge_icon": "ic_badge_50_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "novel",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "novel_chapters",
+      "tier_level": 2
+    },
+    {
+      "id": "read_100_novel_chapters",
+      "type": "quantity",
+      "category": "novel",
+      "threshold": 100,
+      "points": 100,
+      "title": "Novel enthusiast",
+      "description": "Read 100 novel chapters",
+      "badge_icon": "ic_badge_100_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "novel",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "novel_chapters",
+      "tier_level": 3
+    },
+    {
+      "id": "read_500_novel_chapters",
+      "type": "quantity",
+      "category": "novel",
+      "threshold": 500,
+      "points": 250,
+      "title": "Novel fan",
+      "description": "Read 500 novel chapters",
+      "badge_icon": "ic_badge_500_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "novel",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "novel_chapters",
+      "tier_level": 4
+    },
+    {
+      "id": "read_1000_novel_chapters",
+      "type": "quantity",
+      "category": "novel",
+      "threshold": 1000,
+      "points": 500,
+      "title": "Novel legend",
+      "description": "Read 1,000 novel chapters",
+      "badge_icon": "ic_badge_1000_chapters",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "novel",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "novel_chapters",
+      "tier_level": 5
+    },
+    {
+      "id": "complete_1_novel",
+      "type": "event",
+      "category": "novel",
+      "threshold": 1,
+      "points": 25,
+      "title": "First novel finale",
+      "description": "Complete your first novel",
+      "badge_icon": "ic_badge_complete_1_manga",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "novel",
+        "event",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "novel_completed",
+      "tier_level": 1
+    },
+    {
+      "id": "complete_10_novel",
+      "type": "quantity",
+      "category": "novel",
+      "threshold": 10,
+      "points": 75,
+      "title": "Novel story collector",
+      "description": "Complete 10 novels",
+      "badge_icon": "ic_badge_complete_10_manga",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "novel",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "novel_completed",
+      "tier_level": 2
+    },
+    {
+      "id": "complete_50_novel",
+      "type": "quantity",
+      "category": "novel",
+      "threshold": 50,
+      "points": 200,
+      "title": "Ending seeker",
+      "description": "Complete 50 novels",
+      "badge_icon": "ic_badge_complete_50_manga",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "novel",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "novel_completed",
+      "tier_level": 3
+    },
+    {
+      "id": "read_long_novel",
+      "type": "event",
+      "category": "novel",
+      "threshold": 1,
+      "points": 100,
+      "title": "Novel marathon",
+      "description": "Finish a novel with 200+ chapters read",
+      "badge_icon": "ic_badge_long_manga",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "novel",
+        "event"
+      ],
+      "season": null
+    },
+    {
+      "id": "first_episode",
+      "type": "event",
+      "category": "anime",
+      "threshold": 1,
+      "points": 10,
+      "title": "First watch",
+      "description": "Watch your first episode",
+      "badge_icon": "ic_badge_first_episode",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "anime",
+        "event"
+      ],
+      "season": null
+    },
+    {
+      "id": "watch_10_episodes",
+      "type": "quantity",
+      "category": "anime",
+      "threshold": 10,
+      "points": 25,
+      "title": "Beginner marathoner",
+      "description": "Watch 10 episodes",
+      "badge_icon": "ic_badge_10_episodes",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "anime",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_episodes",
+      "tier_level": 1
+    },
+    {
+      "id": "watch_50_episodes",
+      "type": "quantity",
+      "category": "anime",
+      "threshold": 50,
+      "points": 75,
+      "title": "Binger",
+      "description": "Watch 50 episodes",
+      "badge_icon": "ic_badge_50_episodes",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "anime",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_episodes",
+      "tier_level": 2
+    },
+    {
+      "id": "watch_100_episodes",
+      "type": "quantity",
+      "category": "anime",
+      "threshold": 100,
+      "points": 100,
+      "title": "Anime enthusiast",
+      "description": "Watch 100 episodes",
+      "badge_icon": "ic_badge_100_episodes",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "anime",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_episodes",
+      "tier_level": 3
+    },
+    {
+      "id": "watch_500_episodes",
+      "type": "quantity",
+      "category": "anime",
+      "threshold": 500,
+      "points": 250,
+      "title": "Dedicated otaku",
+      "description": "Watch 500 episodes",
+      "badge_icon": "ic_badge_500_episodes",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "anime",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_episodes",
+      "tier_level": 4
+    },
+    {
+      "id": "watch_1000_episodes",
+      "type": "quantity",
+      "category": "anime",
+      "threshold": 1000,
+      "points": 500,
+      "title": "Anime legend",
+      "description": "Watch 1,000 episodes",
+      "badge_icon": "ic_badge_1000_episodes",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "anime",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_episodes",
+      "tier_level": 5
+    },
+    {
+      "id": "complete_1_anime",
+      "type": "event",
+      "category": "anime",
+      "threshold": 1,
+      "points": 25,
+      "title": "Finalist",
+      "description": "Complete your first anime",
+      "badge_icon": "ic_badge_complete_1_anime",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "anime",
+        "event",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_completed",
+      "tier_level": 1
+    },
+    {
+      "id": "complete_10_anime",
+      "type": "quantity",
+      "category": "anime",
+      "threshold": 10,
+      "points": 75,
+      "title": "Story seeker",
+      "description": "Complete 10 anime",
+      "badge_icon": "ic_badge_complete_10_anime",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "anime",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_completed",
+      "tier_level": 2
+    },
+    {
+      "id": "complete_50_anime",
+      "type": "quantity",
+      "category": "anime",
+      "threshold": 50,
+      "points": 200,
+      "title": "Season conqueror",
+      "description": "Complete 50 anime",
+      "badge_icon": "ic_badge_complete_50_anime",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "anime",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_completed",
+      "tier_level": 3
+    },
+    {
+      "id": "genre_explorer",
+      "type": "diversity",
+      "category": "both",
+      "threshold": 5,
+      "points": 150,
+      "title": "Genre explorer",
+      "description": "Read or watch titles from 5 different genres",
+      "badge_icon": "ic_badge_genres",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "diversity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "genre_explorer",
+      "tier_level": 1
+    },
+    {
+      "id": "genre_explorer_complete",
+      "type": "diversity",
+      "category": "both",
+      "threshold": 10,
+      "points": 300,
+      "title": "Genre master",
+      "description": "Read or watch titles from 10 different genres",
+      "badge_icon": "ic_badge_genre_master",
+      "unlockable_id": "theme_achievement_sapphire",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "diversity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "genre_explorer",
+      "tier_level": 2
+    },
+    {
+      "id": "genre_explorer_ultimate",
+      "type": "diversity",
+      "category": "both",
+      "threshold": 20,
+      "points": 500,
+      "title": "Genre deity",
+      "description": "Read or watch titles from 20 different genres",
+      "badge_icon": "ic_badge_genre_god",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "diversity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "genre_explorer",
+      "tier_level": 3
+    },
+    {
+      "id": "week_warrior",
+      "type": "streak",
+      "category": "both",
+      "threshold": 7,
+      "points": 200,
+      "title": "Week warrior",
+      "description": "Read or watch 7 days in a row",
+      "badge_icon": "ic_badge_week_warrior",
+      "unlockable_id": "badge_week_warrior",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "streak",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "streak",
+      "tier_level": 1
+    },
+    {
+      "id": "month_master",
+      "type": "streak",
+      "category": "both",
+      "threshold": 30,
+      "points": 500,
+      "title": "Month master",
+      "description": "Read or watch 30 days in a row",
+      "badge_icon": "ic_badge_month_master",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "streak",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "streak",
+      "tier_level": 2
+    },
+    {
+      "id": "season_champion",
+      "type": "streak",
+      "category": "both",
+      "threshold": 90,
+      "points": 1000,
+      "title": "Season champion",
+      "description": "Read or watch 90 days in a row",
+      "badge_icon": "ic_badge_season_champion",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "legendary",
+      "tags": [
+        "both",
+        "streak",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "streak",
+      "tier_level": 3
+    },
+    {
+      "id": "yearly_devotee",
+      "type": "streak",
+      "category": "both",
+      "threshold": 365,
+      "points": 2500,
+      "title": "Yearly devotee",
+      "description": "Read or watch 365 days in a row",
+      "badge_icon": "ic_badge_yearly_devotee",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "mythic",
+      "tags": [
+        "both",
+        "streak",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "streak",
+      "tier_level": 4
+    },
+    {
+      "id": "library_collector",
+      "type": "library",
+      "category": "both",
+      "threshold": 100,
+      "points": 150,
+      "title": "Library collector",
+      "description": "Add 100 titles to your library",
+      "badge_icon": "ic_badge_collector",
+      "unlockable_id": "display_grid_large",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "library",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "library_size",
+      "tier_level": 1
+    },
+    {
+      "id": "library_hoarder",
+      "type": "library",
+      "category": "both",
+      "threshold": 500,
+      "points": 400,
+      "title": "Library keeper",
+      "description": "Add 500 titles to your library",
+      "badge_icon": "ic_badge_hoarder",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "library",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "library_size",
+      "tier_level": 2
+    },
+    {
+      "id": "library_titan",
+      "type": "library",
+      "category": "both",
+      "threshold": 1000,
+      "points": 800,
+      "title": "Library titan",
+      "description": "Add 1,000 titles to your library",
+      "badge_icon": "ic_badge_titan",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "library",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "library_size",
+      "tier_level": 3
+    },
+    {
+      "id": "library_god",
+      "type": "library",
+      "category": "both",
+      "threshold": 5000,
+      "points": 1500,
+      "title": "Library deity",
+      "description": "Add 5,000 titles to your library",
+      "badge_icon": "ic_badge_library_god",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "legendary",
+      "tags": [
+        "both",
+        "library",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "library_size",
+      "tier_level": 4
+    },
+    {
+      "id": "content_master",
+      "type": "quantity",
+      "category": "both",
+      "threshold": 1000,
+      "points": 500,
+      "title": "Content master",
+      "description": "Read or watch 1,000 content units",
+      "badge_icon": "ic_badge_master",
+      "unlockable_id": "theme_achievement_gold",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "content_volume",
+      "tier_level": 1
+    },
+    {
+      "id": "content_god",
+      "type": "quantity",
+      "category": "both",
+      "threshold": 5000,
+      "points": 1000,
+      "title": "Content deity",
+      "description": "Read or watch 5,000 content units",
+      "badge_icon": "ic_badge_content_god",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "legendary",
+      "tags": [
+        "both",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "content_volume",
+      "tier_level": 2
+    },
+    {
+      "id": "content_overlord",
+      "type": "quantity",
+      "category": "both",
+      "threshold": 10000,
+      "points": 2000,
+      "title": "Universe overlord",
+      "description": "Read or watch 10,000 content units",
+      "badge_icon": "ic_badge_overlord",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "mythic",
+      "tags": [
+        "both",
+        "quantity",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "content_volume",
+      "tier_level": 3
+    },
+    {
+      "id": "master_achiever",
+      "type": "meta",
+      "category": "both",
+      "threshold": 10,
+      "points": 500,
+      "title": "Master achiever",
+      "description": "Unlock 10 achievements",
+      "badge_icon": "ic_badge_master_achiever",
+      "unlockable_id": "badge_achievement_master",
+      "is_hidden": false,
+      "is_secret": false,
+      "rewards": [
+        {
+          "type": "AURA",
+          "id": "aura_level_up",
+          "title": "Master Achiever Aura",
+          "description": "Golden glow of achievement excellence"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "profile_nickname_effect_aurora_crown",
+          "title": "Aurora Crown Nickname Effect",
+          "description": "Radial aurora corona around the Home Hub nickname"
         }
-    ]
+      ],
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "meta_unlocks",
+      "tier_level": 1
+    },
+    {
+      "id": "achievement_hunter",
+      "type": "meta",
+      "category": "both",
+      "threshold": 25,
+      "points": 1000,
+      "title": "Achievement hunter",
+      "description": "Unlock 25 achievements",
+      "badge_icon": "ic_badge_hunter",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "legendary",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "meta_unlocks",
+      "tier_level": 2
+    },
+    {
+      "id": "achievement_collector",
+      "type": "meta",
+      "category": "both",
+      "threshold": 50,
+      "points": 2000,
+      "title": "Achievement collector",
+      "description": "Unlock 50 achievements",
+      "badge_icon": "ic_badge_collector_achievements",
+      "is_hidden": false,
+      "is_secret": false,
+      "rewards": [
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_shuriken",
+          "title": "Shuriken Home Badge",
+          "description": "Shuriken glyph wrapping the Home Hub nickname"
+        }
+      ],
+      "rarity": "mythic",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "meta_unlocks",
+      "tier_level": 3
+    },
+    {
+      "id": "achievement_completionist",
+      "type": "meta",
+      "category": "both",
+      "threshold": 75,
+      "points": 5000,
+      "title": "Completionist",
+      "description": "Unlock 75 achievements",
+      "badge_icon": "ic_badge_completionist",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "mythic",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "meta_unlocks",
+      "tier_level": 4
+    },
+    {
+      "id": "balanced_fan",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 50,
+      "points": 200,
+      "title": "Balanced fan",
+      "description": "Read 50 chapters and watch 50 episodes",
+      "badge_icon": "ic_badge_balanced_fan",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "balanced",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "hybrid_balance",
+      "tier_level": 1
+    },
+    {
+      "id": "hybrid_connoisseur",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 500,
+      "points": 500,
+      "title": "Hybrid connoisseur",
+      "description": "Read 500 chapters and watch 500 episodes",
+      "badge_icon": "ic_badge_hybrid",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "balanced",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "hybrid_balance",
+      "tier_level": 2
+    },
+    {
+      "id": "perfect_balance",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 1000,
+      "points": 1000,
+      "title": "Perfect balance",
+      "description": "Read 1,000 chapters and watch 1,000 episodes",
+      "badge_icon": "ic_badge_perfect_balance",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "legendary",
+      "tags": [
+        "both",
+        "balanced",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "hybrid_balance",
+      "tier_level": 3
+    },
+    {
+      "id": "night_owl",
+      "type": "time_based",
+      "category": "both",
+      "threshold": 1,
+      "points": 50,
+      "title": "Night owl",
+      "description": "Read between 02:00 and 05:00",
+      "badge_icon": "ic_badge_night_owl",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "time_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "early_bird",
+      "type": "time_based",
+      "category": "both",
+      "threshold": 1,
+      "points": 50,
+      "title": "Early bird",
+      "description": "Read between 06:00 and 09:00",
+      "badge_icon": "ic_badge_early_bird",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "time_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "marathon_reader",
+      "type": "time_based",
+      "category": "both",
+      "threshold": 1,
+      "points": 100,
+      "title": "Marathon reader",
+      "description": "Read continuously for more than 2 hours",
+      "badge_icon": "ic_badge_marathon",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "time_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "download_starter",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 10,
+      "points": 25,
+      "title": "Download starter",
+      "description": "Download 10 chapters or episodes",
+      "badge_icon": "ic_badge_download_starter",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "chapter_collector",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 100,
+      "points": 100,
+      "title": "Chapter collector",
+      "description": "Download 100 chapters or episodes",
+      "badge_icon": "ic_badge_chapter_collector",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "trophy_hunter",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 500,
+      "points": 300,
+      "title": "Trophy hunter",
+      "description": "Download 500 chapters or episodes",
+      "badge_icon": "ic_badge_trophy_hunter",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "search_user",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 25,
+      "points": 50,
+      "title": "Search user",
+      "description": "Use search 25 times",
+      "badge_icon": "ic_badge_search_user",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "advanced_explorer",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 50,
+      "points": 150,
+      "title": "Advanced explorer",
+      "description": "Use advanced search 50 times",
+      "badge_icon": "ic_badge_advanced_explorer",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "filter_master",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 20,
+      "points": 50,
+      "title": "Filter master",
+      "description": "Use filters 20 times",
+      "badge_icon": "ic_badge_filter_master",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "backup_master",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 1,
+      "points": 100,
+      "title": "Backup master",
+      "description": "Create a backup",
+      "badge_icon": "ic_badge_backup_master",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "settings_explorer",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 15,
+      "points": 25,
+      "title": "Settings explorer",
+      "description": "Open settings 15 times",
+      "badge_icon": "ic_badge_settings_explorer",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "stats_viewer",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 5,
+      "points": 25,
+      "title": "Stats viewer",
+      "description": "Open stats 5 times",
+      "badge_icon": "ic_badge_stats_viewer",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "theme_changer",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 10,
+      "points": 50,
+      "title": "Theme changer",
+      "description": "Change the app theme 10 times",
+      "badge_icon": "ic_badge_theme_changer",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "feature_based"
+      ],
+      "season": null
+    },
+    {
+      "id": "persistent_clicker",
+      "type": "feature_based",
+      "category": "secret",
+      "threshold": 10,
+      "points": 50,
+      "title": "Persistent clicker",
+      "description": "Find the secret by clicking persistently",
+      "badge_icon": "ic_badge_persistent",
+      "is_hidden": true,
+      "is_secret": true,
+      "rewards": [
+        {
+          "type": "SPECIAL",
+          "id": "profile_nickname_effect_glitch_rune",
+          "title": "Glitch Rune Nickname Effect",
+          "description": "Secret corrupted-rune signature for nickname rendering"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_hologram",
+          "title": "Hologram Avatar Frame",
+          "description": "Holographic frame shimmering around the profile avatar"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_orbit",
+          "title": "Orbit Home Badge",
+          "description": "Orbit glyph wrapping the Home Hub nickname"
+        }
+      ],
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "feature_based",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Some things reward the stubborn. Keep tapping where nothing seems to happen."
+    },
+    {
+      "id": "secret_hall_unlocked",
+      "type": "feature_based",
+      "category": "secret",
+      "threshold": 1,
+      "points": 125,
+      "title": "Secret hall unlocked",
+      "description": "Open the secret achievement hall",
+      "badge_icon": "ic_badge_secret_eren",
+      "is_hidden": true,
+      "is_secret": true,
+      "rewards": [
+        {
+          "type": "THEME",
+          "id": "theme_SAKURA_NOIR",
+          "title": "Sakura Eclipse",
+          "description": "Secret midnight-sakura theme with neon petals, plum noir surfaces, and jade glow"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_crown",
+          "title": "Crown Home Badge",
+          "description": "Crown glyph wrapping the Home Hub nickname"
+        }
+      ],
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "feature_based",
+        "secret"
+      ],
+      "season": null,
+      "hint": "A hidden hall opens for those who know the way."
+    },
+    {
+      "id": "secret_crybaby",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 1,
+      "points": 100,
+      "title": "Crybaby",
+      "description": "Read or watch an unusually emotional title",
+      "badge_icon": "ic_badge_secret_crybaby",
+      "is_hidden": true,
+      "is_secret": true,
+      "rewards": [
+        {
+          "type": "SPECIAL",
+          "id": "special_background_petal_storm",
+          "title": "Petal Storm",
+          "description": "A fleeting dance of petals in a silent storm."
+        }
+      ],
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Stories that make you cry leave a mark on your library."
+    },
+    {
+      "id": "secret_harem_king",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 20,
+      "points": 150,
+      "title": "Harem king",
+      "description": "Collect 20 harem titles",
+      "badge_icon": "ic_badge_secret_harem",
+      "is_hidden": true,
+      "is_secret": true,
+      "rewards": [
+        {
+          "type": "AURA",
+          "id": "aura_harem",
+          "title": "Harem Aura",
+          "description": "A special glow around covers of your favorite titles"
+        }
+      ],
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Surround yourself with a certain kind of cast."
+    },
+    {
+      "id": "secret_isekai_truck",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 20,
+      "points": 150,
+      "title": "Truck victim",
+      "description": "Collect 20 isekai titles",
+      "badge_icon": "ic_badge_secret_isekai",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Get hit by the most famous vehicle in anime."
+    },
+    {
+      "id": "secret_chad",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 1,
+      "points": 200,
+      "title": "Chad reader",
+      "description": "Reach a legendary reading milestone",
+      "badge_icon": "ic_badge_secret_chad",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Real power needs no explanation."
+    },
+    {
+      "id": "secret_shonen",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 10,
+      "points": 300,
+      "title": "Power of friendship",
+      "description": "Collect 10 shonen titles",
+      "badge_icon": "ic_badge_secret_shonen",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Train hard. Power up. Repeat."
+    },
+    {
+      "id": "secret_deku",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 1,
+      "points": 150,
+      "title": "Plus ultra",
+      "description": "Collect a heroic title",
+      "badge_icon": "ic_badge_secret_deku",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "A quirk for heroes in the making."
+    },
+    {
+      "id": "secret_eren",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 1,
+      "points": 200,
+      "title": "Tatakae",
+      "description": "Collect a titan-themed title",
+      "badge_icon": "ic_badge_secret_eren",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Fight. For freedom beyond the walls."
+    },
+    {
+      "id": "secret_lelouch",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 1,
+      "points": 200,
+      "title": "All according to plan",
+      "description": "Collect a strategy-themed title",
+      "badge_icon": "ic_badge_secret_lelouch",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Everything is proceeding according to plan."
+    },
+    {
+      "id": "secret_saitama",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 1,
+      "points": 150,
+      "title": "Average enjoyer",
+      "description": "Find the one-punch secret",
+      "badge_icon": "ic_badge_secret_saitama",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "One punch is all it takes."
+    },
+    {
+      "id": "secret_jojo",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 1,
+      "points": 200,
+      "title": "It was me, Dio!",
+      "description": "Find the bizarre secret",
+      "badge_icon": "ic_badge_secret_jojo",
+      "is_hidden": true,
+      "is_secret": true,
+      "rewards": [
+        {
+          "type": "SPECIAL",
+          "id": "profile_nickname_effect_cipher",
+          "title": "Cipher Sigil Nickname Effect",
+          "description": "Mystic cipher sigils around the Home Hub nickname"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_neon",
+          "title": "Neon Avatar Frame",
+          "description": "Animated neon frame around the profile avatar"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "special_background_neon_orbit",
+          "title": "Neon Orbit",
+          "description": "Luminous rings guarding the core of the digital abyss."
+        }
+      ],
+      "rarity": "rare",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "A bizarre journey with a menacing aura."
+    },
+    {
+      "id": "secret_onepiece",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 1000,
+      "points": 500,
+      "title": "King of pirates",
+      "description": "Reach the grand line of 1,000 points",
+      "badge_icon": "ic_badge_secret_onepiece",
+      "is_hidden": true,
+      "is_secret": true,
+      "rewards": [
+        {
+          "type": "THEME",
+          "id": "theme_ONYX_GOLD",
+          "title": "Onyx Regalia",
+          "description": "Mythic black-diamond theme with royal gold hierarchy and a restrained ruby trophy accent"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_prismatic",
+          "title": "Prismatic Avatar Frame",
+          "description": "Prismatic holographic frame around the profile avatar"
+        }
+      ],
+      "rarity": "epic",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Set sail and gather a fortune of points."
+    },
+    {
+      "id": "secret_goku",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 9000,
+      "points": 500,
+      "title": "Not even my final form!",
+      "description": "Reach over 9,000 achievement points",
+      "badge_icon": "ic_badge_secret_goku",
+      "is_hidden": true,
+      "is_secret": true,
+      "rewards": [
+        {
+          "type": "AURA",
+          "id": "aura_matrix",
+          "title": "Matrix Aura",
+          "description": "Green digital rain around covers"
+        },
+        {
+          "type": "THEME",
+          "id": "theme_NEBULA_TIDE",
+          "title": "Astral Tide",
+          "description": "Transcendent cosmic theme with plasma cyan, violet gravity wells, and alien-lime highlights"
+        }
+      ],
+      "rarity": "epic",
+      "tags": [
+        "secret",
+        "secret",
+        "secret"
+      ],
+      "season": null,
+      "hint": "Push your power level beyond all limits."
+    },
+    {
+      "id": "trinity_initiate",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 25,
+      "points": 150,
+      "title": "Trinity initiate",
+      "description": "Read 25 manga chapters, watch 25 episodes and read 25 novel chapters",
+      "badge_icon": "trinity",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "balanced",
+        "trinity",
+        "tiered"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_trinity_initiate",
+          "title": "Trinity Initiate",
+          "description": "Walks all three paths"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_trinity",
+          "title": "Trinity Home Badge",
+          "description": "Three-realm mark for the Home Hub"
+        }
+      ],
+      "tier_group": "trinity",
+      "tier_level": 1
+    },
+    {
+      "id": "trinity_master",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 200,
+      "points": 500,
+      "title": "Trinity master",
+      "description": "Reach 200 in manga, anime and novels alike",
+      "badge_icon": "trinity",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "balanced",
+        "trinity",
+        "tiered"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_trinity_master",
+          "title": "Trinity Master",
+          "description": "Master of all three realms"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "profile_nickname_effect_trinity_prism",
+          "title": "Trinity Prism Nickname Effect",
+          "description": "Prismatic three-realm nickname shimmer"
+        }
+      ],
+      "tier_group": "trinity",
+      "tier_level": 2
+    },
+    {
+      "id": "trinity_legend",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 1000,
+      "points": 1500,
+      "title": "Trinity legend",
+      "description": "Reach 1,000 in manga, anime and novels",
+      "badge_icon": "trinity",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "legendary",
+      "tags": [
+        "both",
+        "balanced",
+        "trinity",
+        "tiered"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_trinity_legend",
+          "title": "Trinity Legend",
+          "description": "Legend across every medium"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_trinity_orbit",
+          "title": "Trinity Orbit Aura",
+          "description": "Three-colour orbital glow"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_trinity_orbit",
+          "title": "Trinity Orbit Avatar Frame",
+          "description": "Three orbital arcs around the avatar"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "special_background_trinity_constellation",
+          "title": "Trinity Constellation",
+          "description": "Three radiant cores bound in an endless cosmic waltz."
+        }
+      ],
+      "tier_group": "trinity",
+      "tier_level": 3
+    },
+    {
+      "id": "three_realms_collector",
+      "type": "library",
+      "category": "both",
+      "threshold": 10,
+      "points": 300,
+      "title": "Three realms collector",
+      "description": "Keep at least 10 titles each of manga, anime and novels in your library",
+      "badge_icon": "three_realms",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "library",
+        "trinity"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_three_realms_collector",
+          "title": "Three Realms Collector",
+          "description": "Collector of every world"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_trinity",
+          "title": "Trinity Home Badge",
+          "description": "Three-realm mark for the Home Hub"
+        }
+      ]
+    },
+    {
+      "id": "the_finisher",
+      "type": "library",
+      "category": "both",
+      "threshold": 50,
+      "points": 250,
+      "title": "The finisher",
+      "description": "Complete at least 50% of your library (min. 10 titles)",
+      "badge_icon": "finisher",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "completion"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_finisher",
+          "title": "The Finisher",
+          "description": "Leaves nothing unfinished"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_finisher",
+          "title": "Finisher Seal",
+          "description": "Completion seal for Home Hub"
+        }
+      ]
+    },
+    {
+      "id": "the_closer",
+      "type": "library",
+      "category": "both",
+      "threshold": 90,
+      "points": 800,
+      "title": "The closer",
+      "description": "Complete at least 90% of your library (min. 25 titles)",
+      "badge_icon": "closer",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "legendary",
+      "tags": [
+        "both",
+        "completion"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_closer",
+          "title": "The Closer",
+          "description": "Closes every story"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_ascendant_gold",
+          "title": "Ascendant Gold Aura",
+          "description": "Prestige gold completion glow"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_finisher",
+          "title": "Finisher Seal",
+          "description": "Completion seal for Home Hub"
+        }
+      ]
+    },
+    {
+      "id": "romance_devotee",
+      "type": "diversity",
+      "category": "both",
+      "threshold": 15,
+      "points": 150,
+      "title": "Hopeless romantic",
+      "description": "Have 15 romance titles in your library",
+      "badge_icon": "romance",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "diversity",
+        "genre"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_romance",
+          "title": "Hopeless Romantic",
+          "description": "Lives for the feels"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "special_background_petal_storm",
+          "title": "Petal Storm",
+          "description": "A fleeting dance of petals in a silent storm."
+        }
+      ]
+    },
+    {
+      "id": "horror_aficionado",
+      "type": "diversity",
+      "category": "both",
+      "threshold": 15,
+      "points": 150,
+      "title": "Night terrors",
+      "description": "Have 15 horror titles in your library",
+      "badge_icon": "horror",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "diversity",
+        "genre"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_horror",
+          "title": "Night Terrors",
+          "description": "Sleeps with the lights on"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "profile_nickname_effect_glitch_rune",
+          "title": "Glitch Rune Nickname Effect",
+          "description": "Corrupted runic nickname signature"
+        }
+      ]
+    },
+    {
+      "id": "isekai_addict",
+      "type": "diversity",
+      "category": "both",
+      "threshold": 20,
+      "points": 200,
+      "title": "Truck-kun survivor",
+      "description": "Have 20 isekai/fantasy titles in your library",
+      "badge_icon": "isekai",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "diversity",
+        "genre"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_isekai",
+          "title": "Truck-kun Survivor",
+          "description": "Reincarnated one too many times"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_trinity_orbit",
+          "title": "Trinity Orbit Avatar Frame",
+          "description": "Portal-like orbital frame"
+        }
+      ]
+    },
+    {
+      "id": "slice_of_life_zen",
+      "type": "diversity",
+      "category": "both",
+      "threshold": 15,
+      "points": 150,
+      "title": "Slice of zen",
+      "description": "Have 15 slice-of-life titles in your library",
+      "badge_icon": "sliceoflife",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "diversity",
+        "genre"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_sol",
+          "title": "Slice of Zen",
+          "description": "Finds peace in the everyday"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_deep_focus",
+          "title": "Deep Focus Aura",
+          "description": "Calm teal-blue immersion glow"
+        }
+      ]
+    },
+    {
+      "id": "secret_shadow_monarch",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 1,
+      "points": 250,
+      "title": "Arise",
+      "description": "Build a dark fantasy army in your library",
+      "badge_icon": "shadow",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "mythic",
+      "tags": [
+        "secret"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_shadow_monarch",
+          "title": "Shadow Monarch",
+          "description": "Commands an army of shadows"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_shadow_monarch",
+          "title": "Shadow Monarch Aura",
+          "description": "Creeping violet-black darkness"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "profile_nickname_effect_shadow_crown",
+          "title": "Shadow Crown Nickname Effect",
+          "description": "Dark monarch crown signature"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "special_background_shadow_realm",
+          "title": "Shadow Realm",
+          "description": "A swirling abyss where light and time lose their meaning."
+        }
+      ],
+      "hint": "Command the shadows. Collect enough dark fantasy."
+    },
+    {
+      "id": "secret_weeb_awakening",
+      "type": "secret",
+      "category": "secret",
+      "threshold": 50,
+      "points": 200,
+      "title": "Weeb awakening",
+      "description": "Keep a library of 50+ titles spanning every medium",
+      "badge_icon": "weeb",
+      "is_hidden": true,
+      "is_secret": true,
+      "rarity": "epic",
+      "tags": [
+        "secret"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_weeb",
+          "title": "Certified Weeb",
+          "description": "Embraced the culture fully"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_trinity_orbit",
+          "title": "Trinity Orbit Aura",
+          "description": "A chaotic three-realm awakening"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "profile_nickname_effect_rank_sigils",
+          "title": "Rank Sigils Nickname Effect",
+          "description": "Prestige sigils around the nickname"
+        }
+      ],
+      "hint": "True culture knows no single medium."
+    },
+    {
+      "id": "reading_immersion_bronze",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 60,
+      "points": 150,
+      "title": "Bronze immersion",
+      "description": "Read for a full hour in a single session",
+      "badge_icon": "immersion",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "both",
+        "feature_based",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "reading_immersion",
+      "tier_level": 1,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_focus_reader",
+          "title": "Focus Reader",
+          "description": "Entered the immersion path"
+        }
+      ]
+    },
+    {
+      "id": "reading_immersion_silver",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 120,
+      "points": 300,
+      "title": "Silver immersion",
+      "description": "Read for 2 hours in a single session",
+      "badge_icon": "immersion",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "feature_based",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "reading_immersion",
+      "tier_level": 2,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_deep_reader",
+          "title": "Deep Reader",
+          "description": "Can disappear into a session"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_immersion",
+          "title": "Immersion Home Badge",
+          "description": "Focus mark for the Home Hub"
+        }
+      ]
+    },
+    {
+      "id": "reading_immersion_gold",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 300,
+      "points": 500,
+      "title": "Gold immersion",
+      "description": "Read for 5 hours in a single session",
+      "badge_icon": "immersion",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "feature_based",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "reading_immersion",
+      "tier_level": 3,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_immersion_adept",
+          "title": "Immersion Adept",
+          "description": "Reads beyond the clock"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_deep_focus",
+          "title": "Deep Focus Aura",
+          "description": "Calm teal-blue immersion glow"
+        }
+      ]
+    },
+    {
+      "id": "reading_immersion_platinum",
+      "type": "feature_based",
+      "category": "both",
+      "threshold": 600,
+      "points": 1000,
+      "title": "Platinum immersion",
+      "description": "Read for 10+ hours in a single session",
+      "badge_icon": "immersion",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "feature_based",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "reading_immersion",
+      "tier_level": 4,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_immersion_master",
+          "title": "Immersion Master",
+          "description": "A full-session legend"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_deep_focus",
+          "title": "Deep Focus Aura",
+          "description": "Calm teal-blue immersion glow"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_deep_archive",
+          "title": "Deep Archive Avatar Frame",
+          "description": "Archive-grade blue and gold frame"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "special_background_deep_space_archive",
+          "title": "Deep Space Archive",
+          "description": "Ancient folios drifting silently through the cosmic void."
+        }
+      ]
+    },
+    {
+      "id": "anime_novel_hybrid_bronze",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 25,
+      "points": 200,
+      "title": "Anime-novel hybrid",
+      "description": "Watch 25 episodes and read 25 novel chapters",
+      "badge_icon": "hybrid",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "balanced",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_novel_hybrid",
+      "tier_level": 1,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_hybrid_reader",
+          "title": "Hybrid Reader",
+          "description": "Walks between screen and page"
+        }
+      ]
+    },
+    {
+      "id": "anime_novel_hybrid_silver",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 100,
+      "points": 500,
+      "title": "Anime-novel connoisseur",
+      "description": "Watch 100 episodes and read 100 novel chapters",
+      "badge_icon": "hybrid",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "balanced",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_novel_hybrid",
+      "tier_level": 2,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_cross_format_scholar",
+          "title": "Cross Format Scholar",
+          "description": "Studies stories in multiple forms"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "profile_nickname_effect_trinity_prism",
+          "title": "Trinity Prism Nickname Effect",
+          "description": "Prismatic hybrid nickname shimmer"
+        }
+      ]
+    },
+    {
+      "id": "anime_novel_hybrid_gold",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 500,
+      "points": 1000,
+      "title": "Anime-novel master",
+      "description": "Watch 500 episodes and read 500 novel chapters",
+      "badge_icon": "hybrid",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "balanced",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "anime_novel_hybrid",
+      "tier_level": 3,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_anime_novel_master",
+          "title": "Anime-Novel Master",
+          "description": "Master of screen and page"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_hybrid_scroll",
+          "title": "Hybrid Scroll Avatar Frame",
+          "description": "Digital manuscript avatar frame"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "special_background_deep_space_archive",
+          "title": "Deep Space Archive",
+          "description": "Ancient folios drifting silently through the cosmic void."
+        }
+      ]
+    },
+    {
+      "id": "cross_media_champion_bronze",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 50,
+      "points": 300,
+      "title": "Cross-media beginner",
+      "description": "Reach 50 chapters across manga, anime and novels",
+      "badge_icon": "cross",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "balanced",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "cross_media_champion",
+      "tier_level": 1,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_cross_media_beginner",
+          "title": "Cross-Media Beginner",
+          "description": "The path across formats begins"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_trinity",
+          "title": "Trinity Home Badge",
+          "description": "Three-realm mark for the Home Hub"
+        }
+      ]
+    },
+    {
+      "id": "cross_media_champion_silver",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 500,
+      "points": 800,
+      "title": "Cross-media enthusiast",
+      "description": "Reach 500 chapters across manga, anime and novels",
+      "badge_icon": "cross",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "balanced",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "cross_media_champion",
+      "tier_level": 2,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_cross_media_enthusiast",
+          "title": "Cross-Media Enthusiast",
+          "description": "Thrives across every format"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_trinity_orbit",
+          "title": "Trinity Orbit Aura",
+          "description": "Three-colour orbital glow"
+        }
+      ]
+    },
+    {
+      "id": "cross_media_champion_gold",
+      "type": "balanced",
+      "category": "both",
+      "threshold": 2000,
+      "points": 1500,
+      "title": "Cross-media champion",
+      "description": "Reach 2,000 chapters across manga, anime and novels",
+      "badge_icon": "cross",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "legendary",
+      "tags": [
+        "both",
+        "balanced",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "cross_media_champion",
+      "tier_level": 3,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_cross_media_champion",
+          "title": "Cross-Media Champion",
+          "description": "Champion of every medium"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_trinity_orbit",
+          "title": "Trinity Orbit Aura",
+          "description": "Three-colour orbital glow"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_trinity_orbit",
+          "title": "Trinity Orbit Avatar Frame",
+          "description": "Three orbital arcs around the avatar"
+        },
+        {
+          "type": "THEME",
+          "id": "theme_NEBULA_TIDE",
+          "title": "Nebula Tide Theme",
+          "description": "Transcendent cross-media theme"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_1",
+      "type": "meta",
+      "category": "both",
+      "threshold": 100,
+      "points": 0,
+      "title": "Rank I: Apprentice",
+      "description": "Earn 100 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 1,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_1",
+          "title": "Rank I: Apprentice",
+          "description": "Prestige title: Rank I: Apprentice"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_2",
+      "type": "meta",
+      "category": "both",
+      "threshold": 500,
+      "points": 0,
+      "title": "Rank II: Initiate",
+      "description": "Earn 500 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "common",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 2,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_2",
+          "title": "Rank II: Initiate",
+          "description": "Prestige title: Rank II: Initiate"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_3",
+      "type": "meta",
+      "category": "both",
+      "threshold": 1000,
+      "points": 0,
+      "title": "Rank III: Adept",
+      "description": "Earn 1,000 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 3,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_3",
+          "title": "Rank III: Adept",
+          "description": "Prestige title: Rank III: Adept"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_4",
+      "type": "meta",
+      "category": "both",
+      "threshold": 2500,
+      "points": 0,
+      "title": "Rank IV: Veteran",
+      "description": "Earn 2,500 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "uncommon",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 4,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_4",
+          "title": "Rank IV: Veteran",
+          "description": "Prestige title: Rank IV: Veteran"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "home_badge_ascendant",
+          "title": "Ascendant Home Badge",
+          "description": "Prestige mark for Home Hub"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_5",
+      "type": "meta",
+      "category": "both",
+      "threshold": 5000,
+      "points": 0,
+      "title": "Rank V: Expert",
+      "description": "Earn 5,000 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 5,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_5",
+          "title": "Rank V: Expert",
+          "description": "Prestige title: Rank V: Expert"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_neon",
+          "title": "Neon Avatar Frame",
+          "description": "Bright rank frame"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_6",
+      "type": "meta",
+      "category": "both",
+      "threshold": 10000,
+      "points": 0,
+      "title": "Rank VI: Master",
+      "description": "Earn 10,000 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 6,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_6",
+          "title": "Rank VI: Master",
+          "description": "Prestige title: Rank VI: Master"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "profile_nickname_effect_rank_sigils",
+          "title": "Rank Sigils Nickname Effect",
+          "description": "Prestige sigils around the nickname"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_7",
+      "type": "meta",
+      "category": "both",
+      "threshold": 25000,
+      "points": 0,
+      "title": "Rank VII: Champion",
+      "description": "Earn 25,000 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 7,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_7",
+          "title": "Rank VII: Champion",
+          "description": "Prestige title: Rank VII: Champion"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_ascendant_gold",
+          "title": "Ascendant Gold Aura",
+          "description": "Prestige gold aura"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_8",
+      "type": "meta",
+      "category": "both",
+      "threshold": 50000,
+      "points": 0,
+      "title": "Rank VIII: Legend",
+      "description": "Earn 50,000 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "epic",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 8,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_8",
+          "title": "Rank VIII: Legend",
+          "description": "Prestige title: Rank VIII: Legend"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_prismatic",
+          "title": "Prismatic Avatar Frame",
+          "description": "Legendary rank frame"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_9",
+      "type": "meta",
+      "category": "both",
+      "threshold": 100000,
+      "points": 0,
+      "title": "Rank IX: Mythic",
+      "description": "Earn 100,000 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "legendary",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 9,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_9",
+          "title": "Rank IX: Mythic",
+          "description": "Prestige title: Rank IX: Mythic"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_ascendant_gold",
+          "title": "Ascendant Gold Aura",
+          "description": "Prestige gold aura"
+        },
+        {
+          "type": "THEME",
+          "id": "theme_ONYX_GOLD",
+          "title": "Onyx Gold Theme",
+          "description": "Mythic rank theme"
+        }
+      ]
+    },
+    {
+      "id": "rank_up_10",
+      "type": "meta",
+      "category": "both",
+      "threshold": 250000,
+      "points": 0,
+      "title": "Rank X: Transcendent",
+      "description": "Earn 250,000 achievement points",
+      "badge_icon": "rank",
+      "is_hidden": false,
+      "is_secret": false,
+      "rarity": "mythic",
+      "tags": [
+        "both",
+        "meta",
+        "tiered"
+      ],
+      "season": null,
+      "tier_group": "rank",
+      "tier_level": 10,
+      "rewards": [
+        {
+          "type": "TITLE",
+          "id": "title_rank_10",
+          "title": "Rank X: Transcendent",
+          "description": "Prestige title: Rank X: Transcendent"
+        },
+        {
+          "type": "AURA",
+          "id": "aura_ascendant_gold",
+          "title": "Ascendant Gold Aura",
+          "description": "Prestige gold aura"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "avatar_frame_ascendant",
+          "title": "Ascendant Avatar Frame",
+          "description": "Transcendent white-gold avatar frame"
+        },
+        {
+          "type": "THEME",
+          "id": "theme_ONYX_GOLD",
+          "title": "Onyx Gold Theme",
+          "description": "Transcendent rank theme"
+        }
+      ]
+    }
+  ]
 }

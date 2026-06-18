@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +38,7 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.tadami.aurora.BuildConfig
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.auroraPrimaryMenuTitleTextStyle
@@ -64,6 +66,7 @@ import tachiyomi.domain.achievement.model.AchievementEvent
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
+import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import cafe.adriel.voyager.core.screen.Screen as VoyagerScreen
@@ -79,6 +82,8 @@ object SettingsMainScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val backPress = LocalBackPress.currentOrThrow
         val uiStyle = rememberResolvedSettingsUiStyle()
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val darkRimLightEnabled by uiPreferences.auroraDarkRimLightEnabled().collectAsState()
         val unlockableManager = remember { Injekt.get<tachiyomi.data.achievement.UnlockableManager>() }
         val items = remember {
             mainSettingsNavigationItems().filter { item ->
@@ -186,6 +191,7 @@ object SettingsMainScreen : Screen() {
                                 subtitle = item.subtitleText(),
                                 icon = item.icon,
                                 onClick = { navigator.navigate(item.screen, twoPane) },
+                                darkRimLightEnabled = darkRimLightEnabled,
                             )
                         } else {
                             TextPreferenceWidget(
@@ -214,6 +220,7 @@ private fun AuroraMainSettingsItem(
     icon: ImageVector,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    darkRimLightEnabled: Boolean = true,
 ) {
     val colors = AuroraTheme.colors
     val useMediumWeight = LocalIsDefaultAppUiFont.current
@@ -227,7 +234,7 @@ private fun AuroraMainSettingsItem(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = AURORA_SETTINGS_CARD_VERTICAL_PADDING)
-            .auroraCardStyle(colors, AURORA_SETTINGS_CARD_SHAPE),
+            .auroraCardStyle(colors, AURORA_SETTINGS_CARD_SHAPE, applyDarkRimLight = darkRimLightEnabled),
         shape = AURORA_SETTINGS_CARD_SHAPE,
         colors = CardDefaults.cardColors(
             containerColor = if (!colors.isDark && !colors.isEInk) {

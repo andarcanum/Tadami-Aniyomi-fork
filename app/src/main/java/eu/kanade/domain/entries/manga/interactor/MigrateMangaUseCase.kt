@@ -11,8 +11,12 @@ import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.model.SChapter
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
+import tachiyomi.domain.entries.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaUpdate
+import tachiyomi.domain.history.manga.interactor.GetMangaHistory
+import tachiyomi.domain.history.manga.interactor.UpsertMangaHistory
+import tachiyomi.domain.history.manga.model.MangaHistoryUpdate
 import tachiyomi.domain.items.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.items.chapter.interactor.UpdateChapter
 import tachiyomi.domain.items.chapter.model.toChapterUpdate
@@ -27,6 +31,7 @@ class MigrateMangaUseCase(
     private val sourceManager: MangaSourceManager = Injekt.get(),
     private val downloadManager: MangaDownloadManager = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
+    private val networkToLocalManga: NetworkToLocalManga = Injekt.get(),
     private val getChaptersByMangaId: GetChaptersByMangaId = Injekt.get(),
     private val syncChaptersWithSource: SyncChaptersWithSource = Injekt.get(),
     private val updateChapter: UpdateChapter = Injekt.get(),
@@ -36,6 +41,8 @@ class MigrateMangaUseCase(
     private val insertTrack: InsertMangaTrack = Injekt.get(),
     private val coverCache: MangaCoverCache = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
+    private val getHistory: GetMangaHistory = Injekt.get(),
+    private val upsertHistory: UpsertMangaHistory = Injekt.get(),
 ) {
 
     private val enhancedServices by lazy {
@@ -50,14 +57,16 @@ class MigrateMangaUseCase(
     ) {
         val source = sourceManager.get(newManga.source) ?: return
         val prevSource = sourceManager.get(oldManga.source)
+        val localNewManga = networkToLocalManga.await(newManga)
+        if (oldManga.id == localNewManga.id) return
 
-        val chapters = source.getChapterList(newManga.toSManga())
+        val chapters = source.getChapterList(localNewManga.toSManga())
 
         migrateMangaInternal(
             oldSource = prevSource,
             newSource = source,
             oldManga = oldManga,
-            newManga = newManga,
+            newManga = localNewManga,
             sourceChapters = chapters,
             replace = replace,
             flags = flags,
@@ -77,11 +86,11 @@ class MigrateMangaUseCase(
         val migrateCategories = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasCategories(flags)
         val migrateTracking = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasTracking(flags)
         val migrateExtra = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasExtra(flags)
+        val migrateNotes = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasNotes(flags)
         val migrateCustomCover = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasCustomCover(flags)
         val deleteDownloaded = eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags.hasDeleteDownloaded(
             flags,
         )
-        var matchedChapters = 0
 
         try {
             syncChaptersWithSource.await(sourceChapters, newManga, newSource)
@@ -96,6 +105,8 @@ class MigrateMangaUseCase(
             val maxChapterRead = prevMangaChapters
                 .filter { it.read }
                 .maxOfOrNull { it.chapterNumber }
+            val prevHistoryByChapterId = getHistory.await(oldManga.id).associateBy { it.chapterId }
+            val historyUpdates = mutableListOf<MangaHistoryUpdate>()
 
             val updatedMangaChapters = mangaChapters.map { mangaChapter ->
                 var updatedChapter = mangaChapter
@@ -104,14 +115,20 @@ class MigrateMangaUseCase(
                         .find { it.isRecognizedNumber && it.chapterNumber == updatedChapter.chapterNumber }
 
                     if (prevChapter != null) {
-                        matchedChapters++
                         updatedChapter = updatedChapter.copy(
+                            read = prevChapter.read,
                             dateFetch = prevChapter.dateFetch,
                             bookmark = prevChapter.bookmark,
+                            lastPageRead = prevChapter.lastPageRead,
                         )
-                    }
-
-                    if (maxChapterRead != null && updatedChapter.chapterNumber <= maxChapterRead) {
+                        prevHistoryByChapterId[prevChapter.id]?.let { prevHistory ->
+                            historyUpdates += MangaHistoryUpdate(
+                                chapterId = mangaChapter.id,
+                                readAt = prevHistory.readAt ?: return@let,
+                                sessionReadDuration = prevHistory.readDuration,
+                            )
+                        }
+                    } else if (maxChapterRead != null && updatedChapter.chapterNumber <= maxChapterRead) {
                         updatedChapter = updatedChapter.copy(read = true)
                     }
                 }
@@ -120,6 +137,7 @@ class MigrateMangaUseCase(
             }
 
             updateChapter.awaitAll(updatedMangaChapters.map { it.toChapterUpdate() })
+            historyUpdates.forEach { upsertHistory.await(it) }
         }
 
         if (migrateCategories) {
@@ -142,12 +160,8 @@ class MigrateMangaUseCase(
                 ?.let { insertTrack.awaitAll(it) }
         }
 
-        if (deleteDownloaded && migrateChapters && matchedChapters > 0 && oldSource != null) {
+        if (deleteDownloaded && oldSource != null) {
             downloadManager.deleteManga(oldManga, oldSource)
-        }
-
-        if (replace) {
-            updateManga.awaitUpdateFavorite(oldManga.id, favorite = false)
         }
 
         if (migrateCustomCover && oldManga.hasCustomCover(coverCache)) {
@@ -164,7 +178,12 @@ class MigrateMangaUseCase(
                 chapterFlags = if (migrateExtra) oldManga.chapterFlags else null,
                 viewerFlags = if (migrateExtra) oldManga.viewerFlags else null,
                 dateAdded = if (replace) oldManga.dateAdded else Instant.now().toEpochMilli(),
+                notes = if (migrateNotes) oldManga.notes else null,
             ),
         )
+
+        if (replace) {
+            updateManga.awaitUpdateFavorite(oldManga.id, favorite = false)
+        }
     }
 }

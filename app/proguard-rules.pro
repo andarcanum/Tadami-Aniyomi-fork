@@ -57,6 +57,72 @@
 -dontwarn org.jspecify.annotations.NullMarked
 -dontwarn java.lang.Module
 
+# Google OAuth models are populated from JSON via @Key reflection.
+# In release builds, R8 was removing constructors/fields used by the
+# Google Drive auth flow, which makes sign-in fail before the browser opens.
+-keep class com.google.api.client.auth.oauth2.TokenResponse { *; }
+-keep class com.google.api.client.auth.oauth2.TokenErrorResponse { *; }
+-keep class com.google.api.client.auth.oauth2.TokenRequest { *; }
+-keep class com.google.api.client.auth.oauth2.AuthorizationRequestUrl { *; }
+-keep class com.google.api.client.auth.oauth2.AuthorizationCodeRequestUrl { *; }
+-keep class com.google.api.client.auth.oauth2.AuthorizationCodeTokenRequest { *; }
+-keep class com.google.api.client.auth.oauth2.RefreshTokenRequest { *; }
+-keep class com.google.api.client.googleapis.auth.oauth2.GoogleTokenResponse { *; }
+-keep class com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets { *; }
+-keep class com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets$Details { *; }
+-keep class com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeRequestUrl { *; }
+-keep class com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeTokenRequest { *; }
+-keep class com.google.api.client.googleapis.auth.oauth2.GoogleRefreshTokenRequest { *; }
+
+# Google Drive sync also builds request/query payloads and file metadata via
+# @Key-backed reflection. Release shrinking was stripping request/model fields
+# used by appDataFolder list/get/create/update calls, which can surface as
+# generic "key error" sync failures after sign-in succeeds.
+-keep class com.google.api.services.drive.model.File { *; }
+-keep class com.google.api.services.drive.model.FileList { *; }
+-keep class com.google.api.services.drive.Drive$Files$Get { *; }
+-keep class com.google.api.services.drive.Drive$Files$List { *; }
+-keep class com.google.api.services.drive.Drive$Files$Create { *; }
+-keep class com.google.api.services.drive.Drive$Files$Update { *; }
+
+# Google API client models are populated through reflection on @Key fields.
+# In release builds, R8 can strip members or whole classes that are only
+# referenced reflectively, which breaks OAuth, Drive metadata parsing, and
+# sync error decoding.
+-keepclassmembers class * {
+  @com.google.api.client.util.Key <fields>;
+}
+-keep class com.google.api.client.** { *; }
+-keep class com.google.api.client.googleapis.** { *; }
+-keep class com.google.api.client.json.** { *; }
+-keep class com.google.api.client.auth.** { *; }
+-keep class com.google.api.services.drive.** { *; }
+
+# Jackson2 backend used by google-http-client-jackson2.
+-keep class com.fasterxml.jackson.** { *; }
+-keepclassmembers class com.fasterxml.jackson.** { *; }
+-dontwarn com.fasterxml.jackson.**
+-dontwarn com.google.api.client.**
+-dontwarn com.google.api.services.**
+-dontwarn com.google.api.client.extensions.android.**
+-dontwarn com.google.api.client.googleapis.extensions.android.**
+
+# Apache HTTP transitives referenced from Google client internals can mention
+# desktop/JVM-only JNDI and GSS APIs that do not exist on Android and are not
+# used by our Google Drive appDataFolder flow.
+-dontwarn javax.naming.InvalidNameException
+-dontwarn javax.naming.NamingException
+-dontwarn javax.naming.directory.Attribute
+-dontwarn javax.naming.directory.Attributes
+-dontwarn javax.naming.ldap.LdapName
+-dontwarn javax.naming.ldap.Rdn
+-dontwarn org.ietf.jgss.GSSContext
+-dontwarn org.ietf.jgss.GSSCredential
+-dontwarn org.ietf.jgss.GSSException
+-dontwarn org.ietf.jgss.GSSManager
+-dontwarn org.ietf.jgss.GSSName
+-dontwarn org.ietf.jgss.Oid
+
 ##---------------Begin: proguard configuration for RxJava 1.x  ----------
 -dontwarn sun.misc.**
 
@@ -114,3 +180,25 @@
 -keep class eu.kanade.presentation.browse.local.SecretHallOfFameScreen { *; }
 -keep class eu.kanade.presentation.browse.local.SecretHallSceneConfig { *; }
 -keep class eu.kanade.presentation.browse.SecretHallGate { *; }
+
+# Novel reader release stability
+# Reader settings and source overrides are persisted and may be restored through
+# preference/serialization layers. Keep these models/enums non-optimized so R8
+# cannot enum-unbox/merge/specialize them in a way that changes nullable runtime
+# behavior in release builds.
+-keep class eu.kanade.tachiyomi.ui.reader.novel.setting.** { *; }
+-keepclassmembers enum eu.kanade.tachiyomi.ui.reader.novel.setting.** {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+# The novel reader screen contains Compose state machines for page reader,
+# page-curl renderer, WebView, TTS, translations, and chapter handoff. Keep it
+# non-optimized in release to avoid R8 lambda/enum switch specialization around
+# nullable preference-derived enum values.
+-keep class eu.kanade.presentation.reader.novel.NovelReaderScreenKt { *; }
+-keep class eu.kanade.presentation.reader.novel.NovelReaderScreenKt$* { *; }
+-keep class eu.kanade.presentation.reader.novel.PageTurnPageRendererKt { *; }
+-keep class eu.kanade.presentation.reader.novel.PageTurnPageRendererKt$* { *; }
+-keep class eu.kanade.presentation.reader.novel.NovelReaderSystemUiPolicyKt { *; }
+-keep class eu.kanade.presentation.reader.novel.NovelReaderSystemUiPolicyKt$* { *; }

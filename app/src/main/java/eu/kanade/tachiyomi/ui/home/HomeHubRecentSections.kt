@@ -126,7 +126,11 @@ internal fun HistoryRow(
                 contentPadding = PaddingValues(horizontal = sectionHorizontalPadding),
                 horizontalArrangement = Arrangement.spacedBy(rowSpacing),
             ) {
-                items(history, key = { it.entryId }) { item ->
+                items(
+                    items = history,
+                    key = { it.entryId },
+                    contentType = { "home_hub_history_card" },
+                ) { item ->
                     HomeHubRecentCard(
                         mode = cardRenderMode,
                         modifier = Modifier.width(cardWidth),
@@ -149,6 +153,7 @@ internal fun HistoryRow(
 @Composable
 internal fun RecommendationsGrid(
     recommendations: List<HomeHubRecommendation>,
+    section: HomeHubSection,
     recentCardMode: HomeHubRecentCardMode,
     onEntryClick: (Long) -> Unit,
     onMoreClick: () -> Unit,
@@ -175,6 +180,12 @@ internal fun RecommendationsGrid(
     val useWrappedSections = shouldUseHomeHubWrappedSections(auroraAdaptiveSpec.deviceClass)
     val cardRenderMode = remember(recentCardMode) {
         resolveHomeHubRecentCardRenderMode(recentCardMode)
+    }
+    val recommendationFormat = remember(section) {
+        when (section) {
+            HomeHubSection.Anime -> AYMR.strings.aurora_episode_progress_format
+            HomeHubSection.Manga, HomeHubSection.Novel -> AYMR.strings.aurora_chapter_progress_format
+        }
     }
 
     Column(modifier = Modifier.padding(top = 32.dp)) {
@@ -215,10 +226,6 @@ internal fun RecommendationsGrid(
                 verticalArrangement = Arrangement.spacedBy(rowSpacing),
             ) {
                 recommendations.forEach { item ->
-                    val recommendationFormat = when (item.section) {
-                        HomeHubSection.Anime -> AYMR.strings.aurora_episode_progress_format
-                        HomeHubSection.Manga, HomeHubSection.Novel -> AYMR.strings.aurora_chapter_progress_format
-                    }
                     val recommendationSubtitle = if (item.subtitle != null) {
                         item.subtitle
                     } else {
@@ -247,11 +254,11 @@ internal fun RecommendationsGrid(
                 contentPadding = PaddingValues(horizontal = sectionHorizontalPadding),
                 horizontalArrangement = Arrangement.spacedBy(rowSpacing),
             ) {
-                items(recommendations, key = { it.entryId }) { item ->
-                    val recommendationFormat = when (item.section) {
-                        HomeHubSection.Anime -> AYMR.strings.aurora_episode_progress_format
-                        HomeHubSection.Manga, HomeHubSection.Novel -> AYMR.strings.aurora_chapter_progress_format
-                    }
+                items(
+                    items = recommendations,
+                    key = { it.entryId },
+                    contentType = { "home_hub_recommendation_card" },
+                ) { item ->
                     val recommendationSubtitle = if (item.subtitle != null) {
                         item.subtitle
                     } else {

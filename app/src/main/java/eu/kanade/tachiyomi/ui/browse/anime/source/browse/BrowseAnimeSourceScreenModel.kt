@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.mapAsCheckboxState
 import tachiyomi.core.common.util.lang.launchIO
@@ -97,24 +98,16 @@ class BrowseAnimeSourceScreenModel(
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
 
     val source = sourceManager.getOrStub(sourceId)
+    private var defaultFiltersSerialized: String? = null
 
     init {
         if (source is AnimeCatalogueSource) {
             mutableState.update {
-                var query: String? = null
-                var listing = it.listing
-
-                if (listing is Listing.Search) {
-                    query = listing.query
-                    listing = Listing.Search(query, source.getFilterList())
-                }
-
                 it.copy(
-                    listing = listing,
-                    filters = source.getFilterList(),
-                    toolbarQuery = query,
+                    toolbarQuery = (it.listing as? Listing.Search)?.query,
                 )
             }
+            loadFilters()
         }
 
         if (!getIncognitoState.await(source.id)) {
@@ -126,7 +119,7 @@ class BrowseAnimeSourceScreenModel(
         if (savedSearchId != null && source is AnimeCatalogueSource) {
             screenModelScope.launch {
                 val savedSearch = getSavedSearchById.await(savedSearchId) ?: return@launch
-                val baseFilters = source.getFilterList()
+                val baseFilters = loadSourceFilters()
                 val filtersJson = savedSearch.filtersJson
                 if (filtersJson != null) {
                     SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
@@ -140,6 +133,43 @@ class BrowseAnimeSourceScreenModel(
                 }
             }
         }
+    }
+
+    private fun loadFilters() {
+        if (source !is AnimeCatalogueSource) return
+        screenModelScope.launch {
+            val loadedFilters = loadSourceFilters()
+            mutableState.update { state ->
+                val updatedListing = when (val listing = state.listing) {
+                    is Listing.Search -> if (listing.filters.isEmpty()) {
+                        listing.copy(
+                            filters = loadedFilters,
+                        )
+                    } else {
+                        listing
+                    }
+                    else -> listing
+                }
+                state.copy(
+                    listing = updatedListing,
+                    filters = if (state.filters.isEmpty()) loadedFilters else state.filters,
+                )
+            }
+        }
+    }
+
+    private suspend fun loadSourceFilters(): AnimeFilterList {
+        val filters = runCatching {
+            withContext(ioCoroutineScope.coroutineContext) {
+                (source as AnimeCatalogueSource).getFilterList()
+            }
+        }.getOrElse { AnimeFilterList() }
+        defaultFiltersSerialized = serializeFilters(filters)
+        return filters
+    }
+
+    private fun serializeFilters(filters: AnimeFilterList): String? {
+        return runCatching { SavedSearchFilterSerializer.serialize(filters) }.getOrNull()
     }
 
     fun loadSavedSearches() {
@@ -187,8 +217,9 @@ class BrowseAnimeSourceScreenModel(
     }
 
     fun openSavedSearch(savedSearch: SavedSearch) {
-        if (source is AnimeCatalogueSource) {
-            val baseFilters = source.getFilterList()
+        if (source !is AnimeCatalogueSource) return
+        screenModelScope.launch {
+            val baseFilters = loadSourceFilters()
             val filtersJson = savedSearch.filtersJson
             if (filtersJson != null) {
                 SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
@@ -259,7 +290,9 @@ class BrowseAnimeSourceScreenModel(
     fun resetFilters() {
         if (source !is AnimeCatalogueSource) return
 
-        mutableState.update { it.copy(filters = source.getFilterList()) }
+        screenModelScope.launch {
+            mutableState.update { it.copy(filters = loadSourceFilters()) }
+        }
     }
 
     fun setListing(listing: Listing) {
@@ -269,19 +302,39 @@ class BrowseAnimeSourceScreenModel(
     fun setFilters(filters: AnimeFilterList) {
         if (source !is AnimeCatalogueSource) return
 
+        val changed = try {
+            SavedSearchFilterSerializer.serialize(filters) != SavedSearchFilterSerializer.serialize(state.value.filters)
+        } catch (e: Exception) {
+            true
+        }
+
         mutableState.update {
             it.copy(
                 filters = filters,
             )
         }
-        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.FILTER)
+        if (changed) {
+            achievementHandler.trackFeatureUsed(AchievementEvent.Feature.FILTER)
+        }
     }
 
     fun search(query: String? = null, filters: AnimeFilterList? = null) {
         if (source !is AnimeCatalogueSource) return
 
-        val input = state.value.listing as? Listing.Search
-            ?: Listing.Search(query = null, filters = source.getFilterList())
+        val currentState = state.value
+        val input = currentState.listing as? Listing.Search
+            ?: Listing.Search(query = null, filters = currentState.filters)
+
+        val q = query ?: input.query
+        if (!q.isNullOrBlank()) {
+            val f = filters ?: input.filters
+            val hasActiveFilters = serializeFilters(f)?.let { it != defaultFiltersSerialized } ?: f.isNotEmpty()
+            if (hasActiveFilters) {
+                achievementHandler.trackFeatureUsed(AchievementEvent.Feature.ADVANCED_SEARCH)
+            } else {
+                achievementHandler.trackFeatureUsed(AchievementEvent.Feature.SEARCH)
+            }
+        }
 
         mutableState.update {
             it.copy(
@@ -297,44 +350,46 @@ class BrowseAnimeSourceScreenModel(
     fun searchGenre(genreName: String) {
         if (source !is AnimeCatalogueSource) return
 
-        val defaultFilters = source.getFilterList()
-        var genreExists = false
+        screenModelScope.launch {
+            val defaultFilters = loadSourceFilters()
+            var genreExists = false
 
-        filter@ for (sourceFilter in defaultFilters) {
-            if (sourceFilter is AnimeSourceModelFilter.Group<*>) {
-                for (filter in sourceFilter.state) {
-                    if (filter is AnimeSourceModelFilter<*> && filter.name.equals(genreName, true)) {
-                        when (filter) {
-                            is AnimeSourceModelFilter.TriState -> filter.state = 1
-                            is AnimeSourceModelFilter.CheckBox -> filter.state = true
-                            else -> {}
+            filter@ for (sourceFilter in defaultFilters) {
+                if (sourceFilter is AnimeSourceModelFilter.Group<*>) {
+                    for (filter in sourceFilter.state) {
+                        if (filter is AnimeSourceModelFilter<*> && filter.name.equals(genreName, true)) {
+                            when (filter) {
+                                is AnimeSourceModelFilter.TriState -> filter.state = 1
+                                is AnimeSourceModelFilter.CheckBox -> filter.state = true
+                                else -> {}
+                            }
+                            genreExists = true
+                            break@filter
                         }
+                    }
+                } else if (sourceFilter is AnimeSourceModelFilter.Select<*>) {
+                    val index = sourceFilter.values.filterIsInstance<String>()
+                        .indexOfFirst { it.equals(genreName, true) }
+
+                    if (index != -1) {
+                        sourceFilter.state = index
                         genreExists = true
-                        break@filter
+                        break
                     }
                 }
-            } else if (sourceFilter is AnimeSourceModelFilter.Select<*>) {
-                val index = sourceFilter.values.filterIsInstance<String>()
-                    .indexOfFirst { it.equals(genreName, true) }
-
-                if (index != -1) {
-                    sourceFilter.state = index
-                    genreExists = true
-                    break
+            }
+            mutableState.update {
+                val listing = if (genreExists) {
+                    Listing.Search(query = null, filters = defaultFilters)
+                } else {
+                    Listing.Search(query = genreName, filters = defaultFilters)
                 }
+                it.copy(
+                    filters = defaultFilters,
+                    listing = listing,
+                    toolbarQuery = listing.query,
+                )
             }
-        }
-        mutableState.update {
-            val listing = if (genreExists) {
-                Listing.Search(query = null, filters = defaultFilters)
-            } else {
-                Listing.Search(query = genreName, filters = defaultFilters)
-            }
-            it.copy(
-                filters = defaultFilters,
-                listing = listing,
-                toolbarQuery = listing.query,
-            )
         }
     }
 

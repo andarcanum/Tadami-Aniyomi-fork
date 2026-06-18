@@ -450,6 +450,14 @@ class NovelJsDomStoreTest {
         }
 
         @Test
+        fun `setAttr updates attribute on element`() {
+            val root = store.loadDocument("<img src='/cover.jpg'>")
+            val image = store.select(root, "img")[0]
+            store.setAttr(image, "src", "https://lnori.com/cover.jpg")
+            store.getAttr(image, "src") shouldBe "https://lnori.com/cover.jpg"
+        }
+
+        @Test
         fun `before inserts html before element`() {
             val root = store.loadDocument("<ul><li id='me'>me</li></ul>")
             val me = store.select(root, "#me")[0]

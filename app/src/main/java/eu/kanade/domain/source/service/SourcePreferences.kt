@@ -89,6 +89,12 @@ class SourcePreferences(
 
     fun mangaExtensionRepos() = preferenceStore.getStringSet("extension_repos", emptySet())
 
+    fun animeInstalledExtensionRepos() = preferenceStore.getStringSet("anime_installed_extension_repos", emptySet())
+
+    fun mangaInstalledExtensionRepos() = preferenceStore.getStringSet("manga_installed_extension_repos", emptySet())
+
+    fun novelInstalledExtensionRepos() = preferenceStore.getStringSet("novel_installed_extension_repos", emptySet())
+
     fun trustedExtensions() = preferenceStore.getStringSet(
         Preference.appStateKey("trusted_extensions"),
         emptySet(),

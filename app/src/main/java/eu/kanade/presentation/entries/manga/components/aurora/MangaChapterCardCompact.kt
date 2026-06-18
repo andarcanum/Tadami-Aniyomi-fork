@@ -44,6 +44,8 @@ import eu.kanade.presentation.entries.manga.components.ChapterDownloadIndicator
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
+import eu.kanade.tachiyomi.ui.reader.decodePagedChapterProgress
+import eu.kanade.tachiyomi.ui.reader.decodeWebtoonScrollProgress
 import me.saket.swipe.SwipeableActionsBox
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.model.Chapter
@@ -70,6 +72,10 @@ fun MangaChapterCardCompact(
     val colors = AuroraTheme.colors
     val chapter = item.chapter
     val scanlator = chapter.scanlator?.trim()?.takeIf(String::isNotEmpty)
+    val chapterProgressFraction = resolveMangaChapterProgressFraction(
+        read = chapter.read,
+        lastPageRead = chapter.lastPageRead,
+    )
     val startSwipeAction = auroraMangaSwipeAction(
         action = chapterSwipeStartAction,
         read = chapter.read,
@@ -186,8 +192,8 @@ fun MangaChapterCardCompact(
                         }
                     }
 
-                    // Progress bar for read chapters
-                    if (chapter.read) {
+                    // Progress bar for read/in-progress chapters.
+                    if (chapterProgressFraction != null) {
                         Spacer(modifier = Modifier.height(2.dp))
                         Box(
                             modifier = Modifier
@@ -198,7 +204,7 @@ fun MangaChapterCardCompact(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
+                                    .fillMaxWidth(chapterProgressFraction)
                                     .height(3.dp)
                                     .background(colors.accent),
                             )
@@ -239,6 +245,32 @@ fun MangaChapterCardCompact(
             chapterCard()
         }
     }
+}
+
+private fun resolveMangaChapterProgressFraction(
+    read: Boolean,
+    lastPageRead: Long,
+): Float? {
+    if (read) return 1f
+    decodePagedChapterProgress(lastPageRead)?.let { progress ->
+        if (progress.totalPages <= 0) return null
+        return ((progress.index + 1).toFloat() / progress.totalPages.toFloat())
+            .coerceIn(0f, 1f)
+            .takeIf { it > 0f }
+    }
+
+    val webtoonProgress = decodeWebtoonScrollProgress(lastPageRead)
+    val totalPages = webtoonProgress?.totalPages
+    if (webtoonProgress != null && totalPages != null && totalPages > 0) {
+        val currentPageProgress = webtoonProgress.offsetRatioPpm
+            ?.let { ratio -> ratio.toFloat() / 1_000_000f }
+            ?: 1f
+        return ((webtoonProgress.index.toFloat() + currentPageProgress) / totalPages.toFloat())
+            .coerceIn(0f, 1f)
+            .takeIf { it > 0f }
+    }
+
+    return null
 }
 
 @Composable

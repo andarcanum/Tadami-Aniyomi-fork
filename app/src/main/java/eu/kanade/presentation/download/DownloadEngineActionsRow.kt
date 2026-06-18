@@ -22,10 +22,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import tachiyomi.i18n.aniyomi.AYMR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 internal fun DownloadEngineActionsRow(
@@ -36,9 +37,13 @@ internal fun DownloadEngineActionsRow(
     onResumeAll: () -> Unit,
     onCancelAll: () -> Unit,
 ) {
-    val isRussian = LocalContext.current.resources.configuration.locales.get(0).language == "ru"
     val isPaused = !isRunning && queuedCount > 0
     val isIdle = !isRunning && queuedCount == 0
+    val pauseResumeLabel = if (isRunning) {
+        stringResource(AYMR.strings.download_engine_pause_all)
+    } else {
+        stringResource(AYMR.strings.download_engine_resume_all)
+    }
 
     // Bound to dynamic theme colors for custom-tailored branding
     val activeAccent = MaterialTheme.colorScheme.primary
@@ -79,16 +84,12 @@ internal fun DownloadEngineActionsRow(
             ) {
                 Icon(
                     imageVector = if (isRunning) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                    contentDescription = null,
+                    contentDescription = pauseResumeLabel,
                     modifier = Modifier.size(18.dp),
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (isRunning) {
-                        if (isRussian) "Пауза всех" else "Pause all"
-                    } else {
-                        if (isRussian) "Продолжить" else "Resume all"
-                    },
+                    text = pauseResumeLabel,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp, letterSpacing = (-0.01).sp),
                 )
@@ -117,13 +118,13 @@ internal fun DownloadEngineActionsRow(
             ) {
                 Icon(
                     imageVector = Icons.Outlined.DeleteOutline,
-                    contentDescription = null,
+                    contentDescription = stringResource(AYMR.strings.download_engine_clear),
                     modifier = Modifier.size(18.dp),
                     tint = cancelColor,
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (isRussian) "Очистить" else "Clear",
+                    text = stringResource(AYMR.strings.download_engine_clear),
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp, letterSpacing = (-0.01).sp),
                 )

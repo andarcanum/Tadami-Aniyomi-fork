@@ -268,6 +268,8 @@ object MultilingualQueryHelper {
                 sourceLanguage = "auto",
                 targetLanguage = targetLang,
             )
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
         } catch (e: Exception) {
             logcat { "[MultilingualQueryHelper] Translation failed for '$text': ${e.message}" }
             null

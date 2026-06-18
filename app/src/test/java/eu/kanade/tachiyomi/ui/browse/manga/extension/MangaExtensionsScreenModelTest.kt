@@ -178,45 +178,6 @@ class MangaExtensionsScreenModelTest {
         }
     }
 
-    @Test
-    fun `updating duplicated package opens repo picker`() {
-        runBlocking {
-            val source = mangaSource()
-            val installed = mangaInstalled(
-                pkgName = "pkg.example",
-                versionCode = 9,
-            )
-            val lowerVariant = mangaAvailable(
-                pkgName = "pkg.example",
-                versionCode = 10,
-                repoName = "Alpha Repo",
-                repoUrl = "https://alpha.example",
-                source = source,
-            )
-            val newestVariant = mangaAvailable(
-                pkgName = "pkg.example",
-                versionCode = 11,
-                repoName = "Beta Repo",
-                repoUrl = "https://beta.example",
-                source = source,
-            )
-
-            val screenModel = createScreenModel(
-                installed = listOf(installed),
-                available = emptyList<MangaExtension.Available>(),
-                rawAvailable = listOf(lowerVariant, newestVariant),
-            )
-
-            waitUntilLoaded(screenModel)
-
-            screenModel.updateExtension(installed)
-            waitUntilRepoPickerShown(screenModel)
-
-            screenModel.state.value.repoPickerPluginId shouldBe "pkg.example"
-            screenModel.state.value.repoPickerOptions.map { it.versionCode } shouldBe listOf(11L, 10L)
-        }
-    }
-
     private fun createScreenModel(
         installed: List<MangaExtension.Installed>,
         available: List<MangaExtension.Available>,

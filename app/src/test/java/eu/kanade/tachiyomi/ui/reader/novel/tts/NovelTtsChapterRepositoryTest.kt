@@ -42,16 +42,29 @@ class NovelTtsChapterRepositoryTest {
     fun `loads chapter snapshot without reader ui state`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel", url = "/novel")
-            val previous = NovelChapter.create().copy(id = 4L, novelId = 1L, name = "Prev", sourceOrder = 1L)
+            val previous = NovelChapter.create().copy(
+                id = 4L,
+                novelId = 1L,
+                name = "Prev",
+                sourceOrder = 2L,
+                chapterNumber = 1.0,
+            )
             val current = NovelChapter.create().copy(
                 id = 5L,
                 novelId = 1L,
                 name = "Chapter 1",
                 url = "/ch1",
-                sourceOrder = 2L,
+                sourceOrder = 1L,
+                chapterNumber = 2.0,
                 lastPageRead = 42L,
             )
-            val next = NovelChapter.create().copy(id = 6L, novelId = 1L, name = "Next", sourceOrder = 3L)
+            val next = NovelChapter.create().copy(
+                id = 6L,
+                novelId = 1L,
+                name = "Next",
+                sourceOrder = 0L,
+                chapterNumber = 3.0,
+            )
 
             val repository = NovelTtsChapterRepository(
                 novelChapterRepository = FakeNovelChapterRepository(current, listOf(previous, current, next)),

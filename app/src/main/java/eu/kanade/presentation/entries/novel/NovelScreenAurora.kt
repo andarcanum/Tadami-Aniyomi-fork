@@ -110,6 +110,8 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterDisplayData
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelChapterRowIndex
 import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVisibleChapterRows
+import eu.kanade.tachiyomi.ui.entries.novel.resolveNovelVolumeChapterDisplayData
+import eu.kanade.tachiyomi.ui.entries.novel.shouldGroupNovelChaptersByVolume
 import eu.kanade.tachiyomi.util.debugTitleCoverFlow
 import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import kotlinx.coroutines.flow.conflate
@@ -142,6 +144,7 @@ fun NovelScreenAuroraImpl(
     onEditNotesClicked: (() -> Unit)? = null,
     onRefresh: () -> Unit,
     onSearch: (query: String, global: Boolean) -> Unit,
+    onSuggestionClick: (eu.kanade.tachiyomi.data.suggestions.SuggestionItem) -> Unit,
     onPosterLongClicked: (() -> Unit)? = null,
     onShare: (() -> Unit)?,
     onWebView: (() -> Unit)?,
@@ -206,6 +209,7 @@ fun NovelScreenAuroraImpl(
     val chapters = state.processedChapters
     val readChapterCount = remember(state.chapters) { state.chapters.count { it.read } }
     val groupedByChapter = false
+    val groupedByVolume = remember(chapters) { shouldGroupNovelChaptersByVolume(chapters) }
     val chapterGroups = remember(chapters, groupedByChapter) {
         if (groupedByChapter) {
             resolveNovelChapterDisplayData(
@@ -217,32 +221,67 @@ fun NovelScreenAuroraImpl(
             emptyList()
         }
     }
-    val allGroupKeys = remember(chapterGroups) {
-        chapterGroups.mapTo(mutableSetOf()) { it.groupKey }
-    }
-    val initialExpandedGroupKeys = remember(chapters, selectedScanlator, state.targetChapterIndex) {
-        if (!groupedByChapter) {
-            emptySet()
+    val volumeGroups = remember(chapters, groupedByVolume) {
+        if (groupedByVolume) {
+            resolveNovelVolumeChapterDisplayData(
+                chapters = chapters,
+                expandedVolumeKeys = emptySet(),
+            ).volumeGroups
         } else {
-            chapters.getOrNull(state.targetChapterIndex)
-                ?.chapterNumber
-                ?.toBits()
-                ?.let(::setOf)
-                .orEmpty()
+            emptyList()
         }
     }
-    var expandedGroupKeys by remember(chapters, selectedScanlator) {
+    val allGroupKeys = remember(chapterGroups, volumeGroups, groupedByVolume) {
+        if (groupedByVolume) {
+            volumeGroups.mapTo(mutableSetOf()) { it.groupKey }
+        } else {
+            chapterGroups.mapTo(mutableSetOf()) { it.groupKey }
+        }
+    }
+    val initialExpandedGroupKeys =
+        remember(chapters, selectedScanlator, state.targetChapterIndex, volumeGroups, groupedByVolume) {
+            when {
+                groupedByVolume -> {
+                    val targetChapterId = chapters.getOrNull(state.targetChapterIndex)?.id
+                    volumeGroups.firstOrNull { group -> group.chapters.any { it.id == targetChapterId } }
+                        ?.groupKey
+                        ?.let(::setOf)
+                        .orEmpty()
+                }
+                groupedByChapter -> {
+                    chapters.getOrNull(state.targetChapterIndex)
+                        ?.chapterNumber
+                        ?.toBits()
+                        ?.let(::setOf)
+                        .orEmpty()
+                }
+                else -> emptySet()
+            }
+        }
+    var expandedGroupKeys by remember(chapters, selectedScanlator, groupedByVolume) {
         mutableStateOf(initialExpandedGroupKeys)
     }
-    val chapterDisplayData = remember(chapters, selectedScanlator, expandedGroupKeys, groupedByChapter) {
-        resolveNovelChapterDisplayData(
-            chapters = chapters,
-            groupedByChapter = groupedByChapter,
-            expandedGroupKeys = expandedGroupKeys,
-        )
-    }
+    val chapterDisplayData =
+        remember(chapters, selectedScanlator, expandedGroupKeys, groupedByChapter, groupedByVolume) {
+            if (groupedByVolume) {
+                resolveNovelVolumeChapterDisplayData(
+                    chapters = chapters,
+                    expandedVolumeKeys = expandedGroupKeys,
+                )
+            } else {
+                resolveNovelChapterDisplayData(
+                    chapters = chapters,
+                    groupedByChapter = groupedByChapter,
+                    expandedGroupKeys = expandedGroupKeys,
+                )
+            }
+        }
     val displayRows = chapterDisplayData.displayRows
-    val listChapterCount = if (groupedByChapter) chapterGroups.size else chapters.size
+    val listChapterCount = when {
+        groupedByVolume -> volumeGroups.size
+        groupedByChapter -> chapterGroups.size
+        else -> chapters.size
+    }
     val totalChapterCount = if (state.chapterPageEnabled) {
         maxOf(state.chapters.size, state.chapterPageEstimatedTotal)
     } else {
@@ -312,24 +351,23 @@ fun NovelScreenAuroraImpl(
             .distinctUntilChanged()
             .collect { isReverseScrollingOverlay = it }
     }
-    val visibleRows = remember(displayRows, chaptersExpanded, listChapterCount, groupedByChapter) {
+    val visibleRows = remember(displayRows, chaptersExpanded, listChapterCount, groupedByChapter, groupedByVolume) {
         if (chaptersExpanded) {
             displayRows
         } else {
             resolveNovelVisibleChapterRows(
                 rows = displayRows,
                 visibleTopLevelCount = minOf(NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT, listChapterCount),
-                groupedByChapter = groupedByChapter,
+                groupedByChapter = groupedByChapter || groupedByVolume,
             )
         }
     }
 
     LaunchedEffect(state.targetChapterIndex, isAutoJumpToNextEnabled) {
         val targetIndex = resolveNovelAuroraTargetScrollIndex(
+            displayRows = displayRows,
             chapters = chapters,
             targetChapterIndex = state.targetChapterIndex,
-            expandedGroupKeys = expandedGroupKeys,
-            groupedByChapter = groupedByChapter,
             isAutoJumpToNextEnabled = isAutoJumpToNextEnabled,
             restoredScrollIndex = state.scrollIndex,
         )
@@ -495,7 +533,7 @@ fun NovelScreenAuroraImpl(
                         VerticalFastScroller(
                             listState = lazyListState,
                             onThumbDragStarted = {
-                                if (groupedByChapter) {
+                                if (groupedByChapter || groupedByVolume) {
                                     expandedGroupKeys = allGroupKeys
                                 }
                                 if (shouldAutoExpandAuroraNovelChaptersListForFastScroll(
@@ -577,6 +615,9 @@ fun NovelScreenAuroraImpl(
                                                 is NovelChapterDisplayRow.BranchChapter -> "branch-${row.chapter.id}"
                                                 is NovelChapterDisplayRow.ChapterGroup -> "group-${row.groupKey}"
                                                 is NovelChapterDisplayRow.ChapterVariant -> "variant-${row.chapter.id}"
+                                                is NovelChapterDisplayRow.VolumeGroup -> "volume-${row.groupKey}"
+                                                is NovelChapterDisplayRow.VolumeChapter ->
+                                                    "volume-chapter-${row.chapter.id}"
                                             }
                                         },
                                         contentType = { row ->
@@ -584,6 +625,8 @@ fun NovelScreenAuroraImpl(
                                                 is NovelChapterDisplayRow.BranchChapter -> "branch"
                                                 is NovelChapterDisplayRow.ChapterGroup -> "group"
                                                 is NovelChapterDisplayRow.ChapterVariant -> "variant"
+                                                is NovelChapterDisplayRow.VolumeGroup -> "volume"
+                                                is NovelChapterDisplayRow.VolumeChapter -> "volume-chapter"
                                             }
                                         },
                                     ) { row ->
@@ -700,6 +743,75 @@ fun NovelScreenAuroraImpl(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .padding(start = 20.dp, top = 2.dp, end = 16.dp, bottom = 2.dp),
+                                                )
+                                            }
+                                            is NovelChapterDisplayRow.VolumeGroup -> {
+                                                NovelAuroraChapterGroupCard(
+                                                    title = row.title,
+                                                    count = row.chapters.size,
+                                                    expanded = row.groupKey in expandedGroupKeys,
+                                                    singleItemGroup = row.chapters.size == 1,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                    onClick = {
+                                                        if (row.chapters.size == 1) {
+                                                            onChapterClick(row.chapters.first().id)
+                                                        } else {
+                                                            expandedGroupKeys = if (row.groupKey in expandedGroupKeys) {
+                                                                expandedGroupKeys - row.groupKey
+                                                            } else {
+                                                                expandedGroupKeys + row.groupKey
+                                                            }
+                                                        }
+                                                    },
+                                                    onLongClick = {
+                                                        if (row.chapters.size == 1) {
+                                                            onChapterLongClick(row.chapters.first().id)
+                                                        }
+                                                    },
+                                                )
+                                            }
+                                            is NovelChapterDisplayRow.VolumeChapter -> {
+                                                val chapter = row.chapter
+                                                NovelChapterCardCompactUi.Render(
+                                                    novel = novel,
+                                                    chapter = chapter,
+                                                    displayNumber = row.displayNumber,
+                                                    titleOverride = row.title,
+                                                    selected = chapter.id in selectedIds,
+                                                    chapterActionState = state.chapterActionStates[chapter.id],
+                                                    isNew = chapter.id in state.newChapterIds,
+                                                    selectionMode = isSelectionMode,
+                                                    onClick = { onChapterClick(chapter.id) },
+                                                    onLongClick = { onChapterLongClick(chapter.id) },
+                                                    onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                                    onTranslateLongClick = { onChapterTranslateLongClick(chapter.id) },
+                                                    onTranslatedDownloadClick = {
+                                                        onChapterTranslatedDownloadClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadLongClick = {
+                                                        onChapterTranslatedDownloadLongClick(chapter.id)
+                                                    },
+                                                    onTranslatedDownloadOpenFolder = {
+                                                        onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                                    },
+                                                    onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                                    onToggleRead = { onChapterReadToggle(chapter.id) },
+                                                    onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                                    chapterSwipeStartAction = chapterSwipeStartAction,
+                                                    chapterSwipeEndAction = chapterSwipeEndAction,
+                                                    onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
+                                                    downloaded = chapter.id in state.downloadedChapterIds,
+                                                    downloading = chapter.id in state.downloadingChapterIds,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(
+                                                            start = 20.dp,
+                                                            top = 2.dp,
+                                                            end = 16.dp,
+                                                            bottom = 2.dp,
+                                                        ),
                                                 )
                                             }
                                         }
@@ -1003,7 +1115,7 @@ fun NovelScreenAuroraImpl(
             VerticalFastScroller(
                 listState = lazyListState,
                 onThumbDragStarted = {
-                    if (groupedByChapter) {
+                    if (groupedByChapter || groupedByVolume) {
                         expandedGroupKeys = allGroupKeys
                     }
                     if (shouldAutoExpandAuroraNovelChaptersListForFastScroll(chaptersExpanded, listChapterCount)) {
@@ -1071,12 +1183,7 @@ fun NovelScreenAuroraImpl(
                             item(key = "suggestions_row") {
                                 eu.kanade.presentation.entries.components.aurora.AuroraSuggestionsRow(
                                     state = state.suggestions,
-                                    onSuggestionClick = { item ->
-                                        onSearch(
-                                            item.searchQueries.firstOrNull { it.isNotBlank() } ?: item.title,
-                                            true,
-                                        )
-                                    },
+                                    onSuggestionClick = onSuggestionClick,
                                     onOpenSuggestions = onOpenSuggestions,
                                     onRetryClick = onRetrySuggestions,
                                     modifier = Modifier
@@ -1184,6 +1291,8 @@ fun NovelScreenAuroraImpl(
                                     is NovelChapterDisplayRow.BranchChapter -> "branch-${row.chapter.id}"
                                     is NovelChapterDisplayRow.ChapterGroup -> "group-${row.groupKey}"
                                     is NovelChapterDisplayRow.ChapterVariant -> "variant-${row.chapter.id}"
+                                    is NovelChapterDisplayRow.VolumeGroup -> "volume-${row.groupKey}"
+                                    is NovelChapterDisplayRow.VolumeChapter -> "volume-chapter-${row.chapter.id}"
                                 }
                             },
                             contentType = { row ->
@@ -1191,6 +1300,8 @@ fun NovelScreenAuroraImpl(
                                     is NovelChapterDisplayRow.BranchChapter -> "branch"
                                     is NovelChapterDisplayRow.ChapterGroup -> "group"
                                     is NovelChapterDisplayRow.ChapterVariant -> "variant"
+                                    is NovelChapterDisplayRow.VolumeGroup -> "volume"
+                                    is NovelChapterDisplayRow.VolumeChapter -> "volume-chapter"
                                 }
                             },
                         ) { row ->
@@ -1281,6 +1392,72 @@ fun NovelScreenAuroraImpl(
                                         chapter = chapter,
                                         displayNumber = row.displayNumber,
                                         titleOverride = variantTitle,
+                                        selected = chapter.id in selectedIds,
+                                        chapterActionState = state.chapterActionStates[chapter.id],
+                                        isNew = chapter.id in state.newChapterIds,
+                                        selectionMode = isSelectionMode,
+                                        onClick = { onChapterClick(chapter.id) },
+                                        onLongClick = { onChapterLongClick(chapter.id) },
+                                        onTranslateClick = { onChapterTranslateClick(chapter.id) },
+                                        onTranslateLongClick = { onChapterTranslateLongClick(chapter.id) },
+                                        onTranslatedDownloadClick = {
+                                            onChapterTranslatedDownloadClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadLongClick = {
+                                            onChapterTranslatedDownloadLongClick(chapter.id)
+                                        },
+                                        onTranslatedDownloadOpenFolder = {
+                                            onChapterTranslatedDownloadOpenFolder(chapter.id)
+                                        },
+                                        onToggleBookmark = { onChapterBookmarkToggle(chapter.id) },
+                                        onToggleRead = { onChapterReadToggle(chapter.id) },
+                                        onToggleDownload = { onChapterDownloadToggle(chapter.id) },
+                                        chapterSwipeStartAction = chapterSwipeStartAction,
+                                        chapterSwipeEndAction = chapterSwipeEndAction,
+                                        onChapterSwipe = { action -> onChapterSwipe(chapter.id, action) },
+                                        downloaded = chapter.id in state.downloadedChapterIds,
+                                        downloading = chapter.id in state.downloadingChapterIds,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                            .padding(start = 20.dp, top = 2.dp, end = 16.dp, bottom = 2.dp),
+                                    )
+                                }
+                                is NovelChapterDisplayRow.VolumeGroup -> {
+                                    NovelAuroraChapterGroupCard(
+                                        title = row.title,
+                                        count = row.chapters.size,
+                                        expanded = row.groupKey in expandedGroupKeys,
+                                        singleItemGroup = row.chapters.size == 1,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                        onClick = {
+                                            if (row.chapters.size == 1) {
+                                                onChapterClick(row.chapters.first().id)
+                                            } else {
+                                                expandedGroupKeys = if (row.groupKey in expandedGroupKeys) {
+                                                    expandedGroupKeys - row.groupKey
+                                                } else {
+                                                    expandedGroupKeys + row.groupKey
+                                                }
+                                            }
+                                        },
+                                        onLongClick = {
+                                            if (row.chapters.size == 1) {
+                                                onChapterLongClick(row.chapters.first().id)
+                                            }
+                                        },
+                                    )
+                                }
+                                is NovelChapterDisplayRow.VolumeChapter -> {
+                                    val chapter = row.chapter
+                                    NovelChapterCardCompactUi.Render(
+                                        novel = novel,
+                                        chapter = chapter,
+                                        displayNumber = row.displayNumber,
+                                        titleOverride = row.title,
                                         selected = chapter.id in selectedIds,
                                         chapterActionState = state.chapterActionStates[chapter.id],
                                         isNew = chapter.id in state.newChapterIds,

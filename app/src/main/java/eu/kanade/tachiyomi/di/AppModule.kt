@@ -15,6 +15,7 @@ import dataanime.Animehistory
 import dataanime.Animes
 import datanovel.Novel_history
 import datanovel.Novels
+import eu.kanade.domain.extension.novel.interactor.TrustNovelExtension
 import eu.kanade.domain.sync.SyncPreferences
 import eu.kanade.domain.track.anime.store.DelayedAnimeTrackingStore
 import eu.kanade.domain.track.manga.store.DelayedMangaTrackingStore
@@ -49,6 +50,7 @@ import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApiFacade
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginIndexFetcher
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginIndexParser
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginRepoProvider
+import eu.kanade.tachiyomi.extension.novel.kotlin.KotlinNovelExtensionInstaller
 import eu.kanade.tachiyomi.extension.novel.repo.InMemoryNovelPluginStorage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoParser
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoService
@@ -66,6 +68,13 @@ import eu.kanade.tachiyomi.source.anime.AndroidAnimeSourceManager
 import eu.kanade.tachiyomi.source.manga.AndroidMangaSourceManager
 import eu.kanade.tachiyomi.source.novel.AndroidNovelSourceManager
 import eu.kanade.tachiyomi.ui.player.ExternalIntents
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.AiSubtitleTranslationProvider
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.GoogleSubtitleTranslationProvider
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.NovelReaderAiSubtitleTranslationClient
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationCoordinator
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationDiskCache
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationProviderId
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.protobuf.ProtoBuf
@@ -536,7 +545,14 @@ class AppModule(val app: Application) : InjektModule {
             ProtoBuf
         }
 
-        addSingletonFactory { ChapterCache(app, get()) }
+        addSingletonFactory {
+            val readerPreferences = get<ReaderPreferences>()
+            ChapterCache(
+                context = app,
+                json = get(),
+                maxSizeBytes = readerPreferences.imageCacheSizeMb().get().toLong() * 1024L * 1024L,
+            )
+        }
 
         addSingletonFactory { MangaCoverCache(app) }
         addSingletonFactory { AnimeCoverCache(app) }
@@ -549,11 +565,104 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { tachiyomi.data.anilist.AnilistMetadataCache(get()) }
         addSingletonFactory { tachiyomi.data.metadata.AnimeExternalMetadataCache(get(), get()) }
         addSingletonFactory { tachiyomi.data.metadata.MangaExternalMetadataCache(get()) }
+        addSingletonFactory { eu.kanade.tachiyomi.data.coil.MetadataCoverResolver(get(), get(), get()) }
 
         addSingletonFactory { NetworkHelper(app, get()) }
         addSingletonFactory { JavaScriptEngine(app) }
         addSingletonFactory {
             eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService(get<NetworkHelper>().client)
+        }
+        addSingletonFactory {
+            eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService(
+                client = get<NetworkHelper>().client.newBuilder()
+                    .callTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                    .build(),
+                json = get(),
+                promptResolver = eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver(app),
+            )
+        }
+        addSingletonFactory {
+            eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService(
+                client = get<NetworkHelper>().client.newBuilder()
+                    .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                    .build(),
+                json = get(),
+            )
+        }
+        addSingletonFactory {
+            eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService(
+                client = get<NetworkHelper>().client.newBuilder()
+                    .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                    .build(),
+                json = get(),
+                resolveSystemPrompt = { mode, family ->
+                    eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekPromptResolver(app)
+                        .resolveSystemPrompt(mode, family)
+                },
+            )
+        }
+        addSingletonFactory {
+            eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService(
+                client = get<NetworkHelper>().client.newBuilder()
+                    .callTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                    .build(),
+                json = get(),
+                resolveSystemPrompt = { mode, family ->
+                    eu.kanade.tachiyomi.ui.reader.novel.translation.MistralPromptResolver(app)
+                        .resolveSystemPrompt(mode, family)
+                },
+            )
+        }
+        addSingletonFactory {
+            eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService(
+                client = get<NetworkHelper>().client.newBuilder()
+                    .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                    .build(),
+                json = get(),
+            )
+        }
+        addSingletonFactory {
+            eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationService(
+                client = get<NetworkHelper>().client.newBuilder()
+                    .readTimeout(180, java.util.concurrent.TimeUnit.SECONDS)
+                    .build(),
+                json = get(),
+            )
+        }
+        addSingletonFactory {
+            NovelReaderAiSubtitleTranslationClient(
+                preferences = get(),
+                geminiTranslationService = get(),
+                openRouterTranslationService = get(),
+                deepSeekTranslationService = get(),
+                mistralTranslationService = get(),
+                nvidiaTranslationService = get(),
+                ollamaCloudTranslationService = get(),
+            )
+        }
+        addSingletonFactory {
+            GoogleSubtitleTranslationProvider(get())
+        }
+        addSingletonFactory {
+            AiSubtitleTranslationProvider(
+                client = get<NovelReaderAiSubtitleTranslationClient>(),
+            )
+        }
+        addSingletonFactory {
+            SubtitleTranslationDiskCache(
+                File(app.cacheDir, "subtitle_translations"),
+            )
+        }
+        addSingletonFactory {
+            SubtitleTranslationCoordinator(
+                providers = mapOf(
+                    SubtitleTranslationProviderId.Google to get<GoogleSubtitleTranslationProvider>(),
+                    SubtitleTranslationProviderId.Ai to get<AiSubtitleTranslationProvider>(),
+                ),
+                cache = get(),
+            )
         }
         addSingletonFactory { eu.kanade.tachiyomi.data.suggestions.SuggestionCoordinator() }
         addSingletonFactory { eu.kanade.tachiyomi.data.suggestions.novel.NovelRelatedSuggestionCoordinator() }
@@ -587,8 +696,12 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { NovelPluginAssetBindings(get()) }
         addSingletonFactory { NovelPluginWebViewCoordinator(get()) }
         addSingletonFactory<NovelPluginSourceFactory> { NovelJsSourceFactory(get(), get(), get(), get(), get(), get()) }
+        addSingletonFactory { TrustNovelExtension(get(), get()) }
+        addSingletonFactory { KotlinNovelExtensionInstaller(app, get<NetworkHelper>().client) }
 
-        addSingletonFactory<NovelExtensionManager> { DefaultNovelExtensionManager(get(), get(), get(), get()) }
+        addSingletonFactory<NovelExtensionManager> {
+            DefaultNovelExtensionManager(app, get(), get(), get(), get(), get())
+        }
         addSingletonFactory { NovelExtensionUpdateChecker() }
         addSingletonFactory { NovelPluginRepoParser(get()) }
         addSingletonFactory<NovelRepoPluginStorage> { InMemoryNovelPluginStorage() }

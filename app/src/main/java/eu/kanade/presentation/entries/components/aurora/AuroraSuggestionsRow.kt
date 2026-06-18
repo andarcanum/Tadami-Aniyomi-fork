@@ -231,23 +231,6 @@ private fun AuroraSuggestionCard(
                     ),
                 ),
         )
-        // F3.3 — Provider badge: small text in the top-right corner
-        // showing which source produced this suggestion.
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(4.dp)
-                .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
-                .padding(horizontal = 5.dp, vertical = 2.dp),
-        ) {
-            Text(
-                text = item.providerBadgeLabel(),
-                color = Color.White.copy(alpha = 0.92f),
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-            )
-        }
         Text(
             text = item.title,
             color = Color.White,
@@ -259,26 +242,6 @@ private fun AuroraSuggestionCard(
                 .align(Alignment.BottomStart)
                 .padding(horizontal = 6.dp, vertical = 5.dp),
         )
-    }
-}
-
-/**
- * F3.3 — Localized provider name for the suggestion card badge.
- *
- * We keep this purely text-based and derive the label from [SuggestionItem.providerName]
- * which the source is required to set (e.g. "AniList", "MangaUpdates", "NovelUpdates",
- * or a plugin name like "ranobeLIB"). For the three canonical external sources we
- * return the name verbatim; for everything else we trust the provider's name as
- * already-localized source title.
- */
-private fun SuggestionItem.providerBadgeLabel(): String {
-    return when (providerName) {
-        "AniList" -> "AniList"
-        "MangaUpdates" -> "MangaUpdates"
-        "NovelUpdates" -> "NovelUpdates"
-        "MyAnimeList" -> "MAL"
-        // Plugin names (e.g. "ranobeLIB") get a localized "From" prefix.
-        else -> providerName
     }
 }
 

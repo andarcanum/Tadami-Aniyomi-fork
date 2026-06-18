@@ -9,19 +9,19 @@ import rx.Observable
 /**
  * A basic interface for creating a source. It could be an online source, a local source, etc.
  */
-interface MangaSource {
+interface MangaSource : Source {
 
     /**
      * ID for the source. Must be unique.
      */
-    val id: Long
+    override val id: Long
 
     /**
      * Name of the source.
      */
-    val name: String
+    override val name: String
 
-    val lang: String
+    override val lang: String
         get() = ""
 
     /**
@@ -32,7 +32,7 @@ interface MangaSource {
      * @return the updated manga.
      */
     @Suppress("DEPRECATION")
-    suspend fun getMangaDetails(manga: SManga): SManga {
+    override suspend fun getMangaDetails(manga: SManga): SManga {
         return fetchMangaDetails(manga).awaitSingle()
     }
 
@@ -44,7 +44,7 @@ interface MangaSource {
      * @return the chapters for the manga.
      */
     @Suppress("DEPRECATION")
-    suspend fun getChapterList(manga: SManga): List<SChapter> {
+    override suspend fun getChapterList(manga: SManga): List<SChapter> {
         return fetchChapterList(manga).awaitSingle()
     }
 
@@ -57,7 +57,7 @@ interface MangaSource {
      * @return the pages for the chapter.
      */
     @Suppress("DEPRECATION")
-    suspend fun getPageList(chapter: SChapter): List<Page> {
+    override suspend fun getPageList(chapter: SChapter): List<Page> {
         return fetchPageList(chapter).awaitSingle()
     }
 
@@ -65,20 +65,20 @@ interface MangaSource {
         "Use the non-RxJava API instead",
         ReplaceWith("getMangaDetails"),
     )
-    fun fetchMangaDetails(manga: SManga): Observable<SManga> =
+    override fun fetchMangaDetails(manga: SManga): Observable<SManga> =
         throw IllegalStateException("Not used")
 
     @Deprecated(
         "Use the non-RxJava API instead",
         ReplaceWith("getChapterList"),
     )
-    fun fetchChapterList(manga: SManga): Observable<List<SChapter>> =
+    override fun fetchChapterList(manga: SManga): Observable<List<SChapter>> =
         throw IllegalStateException("Not used")
 
     @Deprecated(
         "Use the non-RxJava API instead",
         ReplaceWith("getPageList"),
     )
-    fun fetchPageList(chapter: SChapter): Observable<List<Page>> =
+    override fun fetchPageList(chapter: SChapter): Observable<List<Page>> =
         throw IllegalStateException("Not used")
 }

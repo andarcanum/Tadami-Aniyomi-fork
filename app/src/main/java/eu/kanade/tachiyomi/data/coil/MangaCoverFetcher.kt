@@ -51,40 +51,39 @@ class MangaCoverFetcher(
     private val url: String?,
     private val isLibraryManga: Boolean,
     private val options: Options,
-    private val coverFileLazy: Lazy<File?>,
+    private val coverFileProvider: (String?) -> File?,
     private val customCoverFileLazy: Lazy<File>,
-    private val diskCacheKeyLazy: Lazy<String>,
+    private val diskCacheKeyProvider: (String?) -> String,
+    private val metadataCoverUrlProvider: suspend () -> String? = { null },
     private val sourceLazy: Lazy<HttpSource?>,
     private val callFactoryLazy: Lazy<Call.Factory>,
     private val imageLoader: ImageLoader,
 ) : Fetcher {
 
-    private val diskCacheKey: String
-        get() = diskCacheKeyLazy.value
-
     override suspend fun fetch(): FetchResult {
         // Use custom cover if exists
         val useCustomCover = options.extras.getOrDefault(USE_CUSTOM_COVER_KEY)
-        debugTitleCoverFlow(
-            scope = "manga-fetcher",
-            message = "fetch url=${previewTitleCoverUrl(
-                url,
-            )} diskCacheKey=$diskCacheKey useCustomCover=$useCustomCover isLibrary=$isLibraryManga",
-        )
         if (useCustomCover) {
             val customCoverFile = customCoverFileLazy.value
             if (customCoverFile.exists()) {
+                val diskCacheKey = diskCacheKeyProvider(url)
                 debugTitleCoverFlow(scope = "manga-fetcher", message = "custom-cover-hit file=${customCoverFile.name}")
-                return fileLoader(customCoverFile)
+                return fileLoader(customCoverFile, diskCacheKey)
             }
         }
 
-        // diskCacheKey is thumbnail_url
-        if (url == null) error("No cover specified")
-        return when (getResourceType(url)) {
-            Type.URL -> httpLoader()
-            Type.File -> fileLoader(File(url.substringAfter("file://")))
-            Type.URI -> uniFileLoader(url)
+        val effectiveUrl = metadataCoverUrlProvider()?.takeIf { it.isNotBlank() } ?: url
+        val diskCacheKey = diskCacheKeyProvider(effectiveUrl)
+        debugTitleCoverFlow(scope = "manga-fetcher") {
+            "fetch url=${previewTitleCoverUrl(url)} effectiveUrl=${previewTitleCoverUrl(effectiveUrl)} " +
+                "diskCacheKey=$diskCacheKey useCustomCover=$useCustomCover isLibrary=$isLibraryManga"
+        }
+
+        if (effectiveUrl == null) error("No cover specified")
+        return when (getResourceType(effectiveUrl)) {
+            Type.URL -> httpLoader(effectiveUrl, diskCacheKey)
+            Type.File -> fileLoader(File(effectiveUrl.substringAfter("file://")), diskCacheKey)
+            Type.URI -> uniFileLoader(effectiveUrl)
             null -> error("Invalid image")
         }
     }
@@ -99,7 +98,7 @@ class MangaCoverFetcher(
         )
     }
 
-    private fun fileLoader(file: File): FetchResult {
+    private fun fileLoader(file: File, diskCacheKey: String): FetchResult {
         return SourceFetchResult(
             source = ImageSource(
                 file = file.toOkioPath(),
@@ -111,10 +110,10 @@ class MangaCoverFetcher(
         )
     }
 
-    private suspend fun httpLoader(): FetchResult {
+    private suspend fun httpLoader(url: String, diskCacheKey: String): FetchResult {
         // Only cache separately if it's a library item
         val libraryCoverCacheFile = if (isLibraryManga) {
-            coverFileLazy.value ?: error("No cover specified")
+            coverFileProvider(url) ?: error("No cover specified")
         } else {
             null
         }
@@ -123,27 +122,27 @@ class MangaCoverFetcher(
                 scope = "manga-fetcher",
                 message = "library-cache-hit file=${libraryCoverCacheFile.name}",
             )
-            return fileLoader(libraryCoverCacheFile)
+            return fileLoader(libraryCoverCacheFile, diskCacheKey)
         }
 
-        var snapshot = readFromDiskCache()
+        var snapshot = readFromDiskCache(diskCacheKey)
         try {
             // Fetch from disk cache
             if (snapshot != null) {
                 debugTitleCoverFlow(scope = "manga-fetcher", message = "disk-cache-hit key=$diskCacheKey")
-                val snapshotCoverCache = moveSnapshotToCoverCache(snapshot, libraryCoverCacheFile)
+                val snapshotCoverCache = moveSnapshotToCoverCache(snapshot, libraryCoverCacheFile, diskCacheKey)
                 if (snapshotCoverCache != null) {
                     // Read from cover cache after added to library
                     debugTitleCoverFlow(
                         scope = "manga-fetcher",
                         message = "snapshot-moved-to-library-cache file=${snapshotCoverCache.name}",
                     )
-                    return fileLoader(snapshotCoverCache)
+                    return fileLoader(snapshotCoverCache, diskCacheKey)
                 }
 
                 // Read from snapshot
                 return SourceFetchResult(
-                    source = snapshot.toImageSource(),
+                    source = snapshot.toImageSource(diskCacheKey),
                     mimeType = "image/*",
                     dataSource = DataSource.DISK,
                 )
@@ -154,7 +153,7 @@ class MangaCoverFetcher(
                 scope = "manga-fetcher",
                 message = "network-fetch url=${previewTitleCoverUrl(url)} key=$diskCacheKey",
             )
-            val response = executeNetworkRequest()
+            val response = executeNetworkRequest(url)
             val responseBody = checkNotNull(response.body) { "Null response source" }
             try {
                 // Read from cover cache after library manga cover updated
@@ -164,18 +163,18 @@ class MangaCoverFetcher(
                         scope = "manga-fetcher",
                         message = "network-response-written-to-library-cache file=${responseCoverCache.name}",
                     )
-                    return fileLoader(responseCoverCache)
+                    return fileLoader(responseCoverCache, diskCacheKey)
                 }
 
                 // Read from disk cache
-                snapshot = writeToDiskCache(response)
+                snapshot = writeToDiskCache(response, diskCacheKey)
                 if (snapshot != null) {
                     debugTitleCoverFlow(
                         scope = "manga-fetcher",
                         message = "network-response-written-to-disk-cache key=$diskCacheKey",
                     )
                     return SourceFetchResult(
-                        source = snapshot.toImageSource(),
+                        source = snapshot.toImageSource(diskCacheKey),
                         mimeType = "image/*",
                         dataSource = DataSource.NETWORK,
                     )
@@ -197,9 +196,9 @@ class MangaCoverFetcher(
         }
     }
 
-    private suspend fun executeNetworkRequest(): Response {
+    private suspend fun executeNetworkRequest(url: String): Response {
         val client = sourceLazy.value?.client ?: callFactoryLazy.value
-        val response = client.newCall(newRequest()).await()
+        val response = client.newCall(newRequest(url)).await()
         if (!response.isSuccessful && response.code != HTTP_NOT_MODIFIED) {
             response.close()
             throw IOException(response.message)
@@ -207,9 +206,9 @@ class MangaCoverFetcher(
         return response
     }
 
-    private fun newRequest(): Request {
+    private fun newRequest(url: String): Request {
         val request = Request.Builder().apply {
-            url(url!!)
+            url(url)
 
             val source = sourceLazy.value
             val sourceHeaders = source?.headers
@@ -235,7 +234,7 @@ class MangaCoverFetcher(
         return request.build()
     }
 
-    private fun moveSnapshotToCoverCache(snapshot: DiskCache.Snapshot, cacheFile: File?): File? {
+    private fun moveSnapshotToCoverCache(snapshot: DiskCache.Snapshot, cacheFile: File?, diskCacheKey: String): File? {
         if (cacheFile == null) return null
         return try {
             imageLoader.diskCache?.run {
@@ -277,7 +276,7 @@ class MangaCoverFetcher(
         }
     }
 
-    private fun readFromDiskCache(): DiskCache.Snapshot? {
+    private fun readFromDiskCache(diskCacheKey: String): DiskCache.Snapshot? {
         return if (options.diskCachePolicy.readEnabled) {
             imageLoader.diskCache?.openSnapshot(diskCacheKey)
         } else {
@@ -287,6 +286,7 @@ class MangaCoverFetcher(
 
     private fun writeToDiskCache(
         response: Response,
+        diskCacheKey: String,
     ): DiskCache.Snapshot? {
         val diskCache = imageLoader.diskCache
         val editor = diskCache?.openEditor(diskCacheKey) ?: return null
@@ -304,7 +304,7 @@ class MangaCoverFetcher(
         }
     }
 
-    private fun DiskCache.Snapshot.toImageSource(): ImageSource {
+    private fun DiskCache.Snapshot.toImageSource(diskCacheKey: String): ImageSource {
         return ImageSource(
             file = data,
             fileSystem = FileSystem.SYSTEM,
@@ -335,15 +335,17 @@ class MangaCoverFetcher(
 
         private val coverCache: MangaCoverCache by injectLazy()
         private val sourceManager: MangaSourceManager by injectLazy()
+        private val metadataCoverResolver: MetadataCoverResolver by injectLazy()
 
         override fun create(data: Manga, options: Options, imageLoader: ImageLoader): Fetcher {
             return MangaCoverFetcher(
                 url = data.thumbnailUrl,
                 isLibraryManga = data.favorite,
                 options = options,
-                coverFileLazy = lazy { coverCache.getCoverFile(data.thumbnailUrl) },
+                coverFileProvider = coverCache::getCoverFile,
                 customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.id) },
-                diskCacheKeyLazy = lazy { imageLoader.components.key(data, options)!! },
+                diskCacheKeyProvider = { effectiveUrl -> "manga;${data.id};$effectiveUrl;${data.coverLastModified}" },
+                metadataCoverUrlProvider = { metadataCoverResolver.resolveMangaCoverUrl(data.id) },
                 sourceLazy = lazy { sourceManager.get(data.source) as? HttpSource },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,
@@ -357,15 +359,17 @@ class MangaCoverFetcher(
 
         private val coverCache: MangaCoverCache by injectLazy()
         private val sourceManager: MangaSourceManager by injectLazy()
+        private val metadataCoverResolver: MetadataCoverResolver by injectLazy()
 
         override fun create(data: MangaCover, options: Options, imageLoader: ImageLoader): Fetcher {
             return MangaCoverFetcher(
                 url = data.url,
                 isLibraryManga = data.isMangaFavorite,
                 options = options,
-                coverFileLazy = lazy { coverCache.getCoverFile(data.url) },
+                coverFileProvider = coverCache::getCoverFile,
                 customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.mangaId) },
-                diskCacheKeyLazy = lazy { imageLoader.components.key(data, options)!! },
+                diskCacheKeyProvider = { effectiveUrl -> "manga;${data.mangaId};$effectiveUrl;${data.lastModified}" },
+                metadataCoverUrlProvider = { metadataCoverResolver.resolveMangaCoverUrl(data.mangaId) },
                 sourceLazy = lazy { sourceManager.get(data.sourceId) as? HttpSource },
                 callFactoryLazy = callFactoryLazy,
                 imageLoader = imageLoader,

@@ -16,6 +16,13 @@ class GetApplicationRelease(
         preferenceStore.getLong(Preference.appStateKey("last_app_check"), 0)
     }
 
+    suspend fun awaitCurrent(arguments: Arguments): Release? {
+        return service.byTag(
+            repository = arguments.repository,
+            versionTag = currentVersionTag(arguments),
+        )
+    }
+
     suspend fun await(arguments: Arguments): Result {
         val now = Instant.now()
 
@@ -42,6 +49,14 @@ class GetApplicationRelease(
         return when {
             isNewVersion -> Result.NewUpdate(release)
             else -> Result.NoNewUpdate
+        }
+    }
+
+    private fun currentVersionTag(arguments: Arguments): String {
+        return if (arguments.isPreview) {
+            "r${arguments.commitCount}"
+        } else {
+            arguments.versionName.takeIf { it.startsWith("v") } ?: "v${arguments.versionName}"
         }
     }
 

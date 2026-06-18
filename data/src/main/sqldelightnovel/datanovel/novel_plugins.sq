@@ -10,7 +10,9 @@ CREATE TABLE novel_plugins (
     custom_css TEXT,
     has_settings INTEGER NOT NULL,
     sha256 TEXT NOT NULL,
-    repo_url TEXT NOT NULL
+    repo_url TEXT NOT NULL,
+    repo_name TEXT,
+    version_name TEXT
 );
 
 findOne:
@@ -36,7 +38,9 @@ INSERT INTO novel_plugins(
     custom_css,
     has_settings,
     sha256,
-    repo_url
+    repo_url,
+    repo_name,
+    version_name
 )
 VALUES (
     :id,
@@ -50,7 +54,9 @@ VALUES (
     :custom_css,
     :has_settings,
     :sha256,
-    :repo_url
+    :repo_url,
+    :repo_name,
+    :version_name
 );
 
 upsert:
@@ -66,7 +72,9 @@ INSERT INTO novel_plugins(
     custom_css,
     has_settings,
     sha256,
-    repo_url
+    repo_url,
+    repo_name,
+    version_name
 )
 VALUES (
     :id,
@@ -80,7 +88,9 @@ VALUES (
     :custom_css,
     :has_settings,
     :sha256,
-    :repo_url
+    :repo_url,
+    :repo_name,
+    :version_name
 )
 ON CONFLICT(id)
 DO UPDATE SET
@@ -94,7 +104,9 @@ DO UPDATE SET
     custom_css = :custom_css,
     has_settings = :has_settings,
     sha256 = :sha256,
-    repo_url = :repo_url
+    repo_url = :repo_url,
+    repo_name = :repo_name,
+    version_name = :version_name
 WHERE id = id;
 
 delete:

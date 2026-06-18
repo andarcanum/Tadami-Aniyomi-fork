@@ -34,8 +34,16 @@ class NoAppStateMigration : Migration {
             newKey = { Preference.appStateKey(it) },
         )
 
-        // Deleting old download cache index files, but might as well clear it all out
-        context.cacheDir.deleteRecursively()
+        // Only remove known legacy download/cache index directories. Deleting the whole cacheDir
+        // during startup can be very slow and can race with components that initialize their own caches.
+        listOf(
+            "chapter_disk_cache",
+            "cover_disk_cache",
+            "download_cache",
+            "download_cache_index",
+        ).forEach { legacyCacheName ->
+            context.cacheDir.resolve(legacyCacheName).deleteRecursively()
+        }
 
         return true
     }

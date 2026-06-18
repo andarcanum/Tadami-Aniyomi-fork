@@ -50,6 +50,7 @@ fun SubtitlesSheet(
     selectedTracks: ImmutableList<Int>,
     onSelect: (Int) -> Unit,
     onAddSubtitle: () -> Unit,
+    onTranslateSubtitle: () -> Unit,
     onOpenSubtitleSettings: () -> Unit,
     onOpenSubtitleDelay: () -> Unit,
     onDismissRequest: () -> Unit,
@@ -85,6 +86,10 @@ fun SubtitlesSheet(
             AddTrackRow(
                 title = stringResource(AYMR.strings.player_sheets_add_ext_sub),
                 onClick = onAddSubtitle,
+            )
+            AddTrackRow(
+                title = stringResource(AYMR.strings.player_sheets_translate_subtitles),
+                onClick = onTranslateSubtitle,
             )
         },
         track = { track ->

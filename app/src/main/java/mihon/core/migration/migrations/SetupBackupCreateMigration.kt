@@ -6,7 +6,7 @@ import mihon.core.migration.Migration
 import mihon.core.migration.MigrationContext
 
 class SetupBackupCreateMigration : Migration {
-    override val version: Float = Migration.ALWAYS
+    override val version: Float = 5f
 
     override suspend fun invoke(migrationContext: MigrationContext): Boolean {
         val context = migrationContext.get<Application>() ?: return false

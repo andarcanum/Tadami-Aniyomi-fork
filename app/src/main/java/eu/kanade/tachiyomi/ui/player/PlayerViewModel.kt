@@ -53,6 +53,7 @@ import eu.kanade.tachiyomi.animesource.model.ChapterType
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SerializableHoster.Companion.toHosterList
 import eu.kanade.tachiyomi.animesource.model.TimeStamp
+import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.data.database.models.anime.Episode
@@ -67,6 +68,7 @@ import eu.kanade.tachiyomi.data.saver.Location
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.data.track.anilist.Anilist
 import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeList
+import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.player.controls.components.IndexedSegment
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.HosterState
 import eu.kanade.tachiyomi.ui.player.controls.components.sheets.getChangedAt
@@ -75,6 +77,18 @@ import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
 import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
+import eu.kanade.tachiyomi.ui.player.settings.SubtitlePreferences
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.FFmpegEmbeddedSubtitleExtractor
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.FFprobeEmbeddedSubtitleStreamResolver
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.LocalEmbeddedSubtitleExtractionRequest
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.PlayerSubtitleTranslationTrack
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.PlayerSubtitleTranslationTrackKind
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.PlayerSubtitleTranslationUiState
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleFormat
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationCoordinator
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationPlayerBridge
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationProgress
+import eu.kanade.tachiyomi.ui.player.subtitle.translation.SubtitleTranslationProviderId
 import eu.kanade.tachiyomi.ui.player.utils.AniSkipApi
 import eu.kanade.tachiyomi.ui.player.utils.ChapterUtils.Companion.getStringRes
 import eu.kanade.tachiyomi.ui.player.utils.TrackSelect
@@ -173,6 +187,9 @@ class PlayerViewModel @JvmOverloads constructor(
     private val setAnimeViewerFlags: SetAnimeViewerFlags = Injekt.get(),
     internal val playerPreferences: PlayerPreferences = Injekt.get(),
     internal val gesturePreferences: GesturePreferences = Injekt.get(),
+    private val subtitlePreferences: SubtitlePreferences = Injekt.get(),
+    private val subtitleTranslationCoordinator: SubtitleTranslationCoordinator = Injekt.get(),
+    private val networkHelper: NetworkHelper = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
     private val getCustomButtons: GetCustomButtons = Injekt.get(),
     private val trackSelect: TrackSelect = Injekt.get(),
@@ -225,6 +242,11 @@ class PlayerViewModel @JvmOverloads constructor(
     val subtitleTracks = _subtitleTracks.asStateFlow()
     private val _selectedSubtitles = MutableStateFlow(Pair(-1, -1))
     val selectedSubtitles = _selectedSubtitles.asStateFlow()
+    private val _subtitleTranslationProgress = MutableStateFlow<SubtitleTranslationProgress?>(null)
+    val subtitleTranslationProgress = _subtitleTranslationProgress.asStateFlow()
+    private val _subtitleTranslationUiState = MutableStateFlow(PlayerSubtitleTranslationUiState())
+    val subtitleTranslationUiState = _subtitleTranslationUiState.asStateFlow()
+    private var subtitleTranslationJob: Job? = null
 
     private val _audioTracks = MutableStateFlow<List<VideoTrack>>(emptyList())
     val audioTracks = _audioTracks.asStateFlow()
@@ -591,6 +613,281 @@ class PlayerViewModel @JvmOverloads constructor(
         } else {
             MPVLib.command(arrayOf("sub-add", path, "cached", name))
         }
+    }
+
+    fun translatePreferredSubtitle() {
+        openSubtitleTranslationSheet()
+    }
+
+    fun openSubtitleTranslationSheet() {
+        if (!subtitlePreferences.subtitleTranslationEnabled().get()) {
+            activity.toast(activity.stringResource(AYMR.strings.player_subtitle_translation_disabled))
+            return
+        }
+        val tracks = buildSubtitleTranslationTracks()
+        if (tracks.none { it.enabled }) {
+            activity.toast(activity.stringResource(AYMR.strings.player_subtitle_translation_no_external_track))
+        }
+        val preferred = pickSubtitleTrackForTranslation(currentVideo.value?.subtitleTracks.orEmpty())
+        _subtitleTranslationUiState.value = PlayerSubtitleTranslationUiState(
+            tracks = tracks,
+            selectedTrackId =
+            tracks.firstOrNull { it.url == preferred?.url }?.id ?: tracks.firstOrNull { it.enabled }?.id,
+            providerId = when (subtitlePreferences.subtitleTranslationProvider().get().lowercase()) {
+                "ai" -> SubtitleTranslationProviderId.Ai
+                else -> SubtitleTranslationProviderId.Google
+            },
+            sourceLanguage = subtitlePreferences.subtitleTranslationSourceLanguage().get().ifBlank { "auto" },
+            targetLanguage = subtitlePreferences.subtitleTranslationTargetLanguage().get().ifBlank {
+                java.util.Locale.getDefault().language
+            },
+            useCache = subtitlePreferences.subtitleTranslationCacheEnabled().get(),
+            allowAi = subtitlePreferences.subtitleTranslationAllowAiProviders().get(),
+            progress = null,
+            isTranslating = false,
+            error = null,
+        )
+        sheetShown.value = Sheets.SubtitleTranslation
+        refreshEmbeddedSubtitleTranslationTracks()
+    }
+
+    fun selectSubtitleTranslationTrack(id: Int) {
+        _subtitleTranslationUiState.update { state ->
+            if (state.isTranslating) state else state.copy(selectedTrackId = id, error = null)
+        }
+    }
+
+    fun selectSubtitleTranslationProvider(providerId: SubtitleTranslationProviderId) {
+        _subtitleTranslationUiState.update { state ->
+            if (state.isTranslating) return@update state
+            if (providerId == SubtitleTranslationProviderId.Ai && !state.allowAi) {
+                state.copy(error = activity.stringResource(AYMR.strings.player_subtitle_translation_ai_requires_opt_in))
+            } else {
+                subtitlePreferences.subtitleTranslationProvider().set(
+                    when (providerId) {
+                        SubtitleTranslationProviderId.Google -> "google"
+                        SubtitleTranslationProviderId.Ai -> "ai"
+                    },
+                )
+                state.copy(providerId = providerId, error = null)
+            }
+        }
+    }
+
+    fun toggleSubtitleTranslationCache(enabled: Boolean) {
+        subtitlePreferences.subtitleTranslationCacheEnabled().set(enabled)
+        _subtitleTranslationUiState.update { state ->
+            if (state.isTranslating) state else state.copy(useCache = enabled)
+        }
+    }
+
+    fun setSubtitleTranslationSourceLanguage(language: String) {
+        subtitlePreferences.subtitleTranslationSourceLanguage().set(language)
+        _subtitleTranslationUiState.update { state ->
+            if (state.isTranslating) state else state.copy(sourceLanguage = language, error = null)
+        }
+    }
+
+    fun setSubtitleTranslationTargetLanguage(language: String) {
+        subtitlePreferences.subtitleTranslationTargetLanguage().set(language)
+        _subtitleTranslationUiState.update { state ->
+            if (state.isTranslating) state else state.copy(targetLanguage = language, error = null)
+        }
+    }
+
+    fun cancelSubtitleTranslation() {
+        subtitleTranslationJob?.cancel()
+        subtitleTranslationJob = null
+        _subtitleTranslationProgress.value = null
+        _subtitleTranslationUiState.update { it.copy(isTranslating = false, progress = null) }
+    }
+
+    fun startSubtitleTranslation() {
+        val state = subtitleTranslationUiState.value
+        if (state.isTranslating) return
+        val selectedTrack = state.selectedTrack
+        if (selectedTrack == null || !selectedTrack.enabled) {
+            _subtitleTranslationUiState.update {
+                it.copy(error = activity.stringResource(AYMR.strings.player_subtitle_translation_no_external_track))
+            }
+            return
+        }
+        val externalTrack = selectedTrack.toExternalTrack()
+        val canTranslateEmbedded = selectedTrack.kind == PlayerSubtitleTranslationTrackKind.Embedded &&
+            selectedTrack.streamSpecifier != null
+        if (externalTrack == null && !canTranslateEmbedded) {
+            _subtitleTranslationUiState.update {
+                it.copy(
+                    error =
+                    selectedTrack.disabledReason
+                        ?: activity.stringResource(AYMR.strings.player_subtitle_translation_embedded_unavailable),
+                )
+            }
+            return
+        }
+        if (state.targetLanguage.isBlank()) {
+            _subtitleTranslationUiState.update {
+                it.copy(
+                    error = activity.stringResource(AYMR.strings.pref_player_subtitle_translation_target_lang_summary),
+                )
+            }
+            return
+        }
+        if (state.providerId == SubtitleTranslationProviderId.Ai && !state.allowAi) {
+            _subtitleTranslationUiState.update {
+                it.copy(error = activity.stringResource(AYMR.strings.player_subtitle_translation_ai_requires_opt_in))
+            }
+            return
+        }
+        subtitleTranslationJob?.cancel()
+        subtitleTranslationJob = viewModelScope.launchIO {
+            _subtitleTranslationUiState.update { it.copy(isTranslating = true, progress = null, error = null) }
+            runCatching {
+                val bridge = SubtitleTranslationPlayerBridge(
+                    networkHelper = networkHelper,
+                    contentResolver = activity.contentResolver,
+                    cacheDir = activity.cacheDir,
+                    coordinator = subtitleTranslationCoordinator,
+                )
+                val translatedFile = if (externalTrack != null) {
+                    bridge.translateExternalTrack(
+                        track = externalTrack,
+                        sourceLanguage = state.sourceLanguage,
+                        targetLanguage = state.targetLanguage,
+                        providerId = state.providerId,
+                        useCache = state.useCache,
+                    ) { progress ->
+                        _subtitleTranslationProgress.value = progress
+                        _subtitleTranslationUiState.update { it.copy(progress = progress) }
+                    }
+                } else {
+                    val videoUri = currentVideo.value?.videoUrl?.let(Uri::parse)
+                        ?: error(activity.stringResource(AYMR.strings.player_subtitle_translation_embedded_unavailable))
+                    val extracted = FFmpegEmbeddedSubtitleExtractor(
+                        context = activity,
+                        outputDir = File(activity.cacheDir, "subtitle_translations/embedded"),
+                    ).extract(
+                        LocalEmbeddedSubtitleExtractionRequest(
+                            videoUri = videoUri,
+                            streamSpecifier = requireNotNull(selectedTrack.streamSpecifier),
+                            outputFormat = SubtitleFormat.Ass,
+                            sourceIdentity = currentVideo.value?.videoUrl.orEmpty(),
+                        ),
+                    )
+                    bridge.translateRawSubtitle(
+                        raw = extracted.rawText,
+                        formatHint = extracted.formatHint,
+                        sourceLanguage = state.sourceLanguage,
+                        targetLanguage = state.targetLanguage,
+                        providerId = state.providerId,
+                        sourceIdentity = extracted.sourceIdentity,
+                        useCache = state.useCache,
+                    ) { progress ->
+                        _subtitleTranslationProgress.value = progress
+                        _subtitleTranslationUiState.update { it.copy(progress = progress) }
+                    }
+                }
+                MPVLib.command(
+                    arrayOf(
+                        "sub-add",
+                        translatedFile.absolutePath,
+                        "cached",
+                        "Translated ${state.targetLanguage.ifBlank { java.util.Locale.getDefault().language }}",
+                    ),
+                )
+                withUIContext {
+                    activity.toast(activity.stringResource(AYMR.strings.player_subtitle_translation_added))
+                }
+                _subtitleTranslationUiState.update { it.copy(isTranslating = false, progress = null, error = null) }
+                _subtitleTranslationProgress.value = null
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                logcat(LogPriority.ERROR, error) { "Subtitle translation failed" }
+                _subtitleTranslationUiState.update {
+                    it.copy(
+                        isTranslating = false,
+                        progress = null,
+                        error =
+                        error.message ?: activity.stringResource(AYMR.strings.player_subtitle_translation_failed),
+                    )
+                }
+                _subtitleTranslationProgress.value = null
+                withUIContext {
+                    activity.toast(
+                        error.message ?: activity.stringResource(AYMR.strings.player_subtitle_translation_failed),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun refreshEmbeddedSubtitleTranslationTracks() {
+        val rawVideoUrl = currentVideo.value?.videoUrl ?: return
+        if (rawVideoUrl.startsWith("http://", ignoreCase = true) ||
+            rawVideoUrl.startsWith("https://", ignoreCase = true)
+        ) {
+            return
+        }
+        val videoUri = Uri.parse(rawVideoUrl)
+        viewModelScope.launchIO {
+            runCatching {
+                FFprobeEmbeddedSubtitleStreamResolver(activity).resolve(videoUri)
+            }.onSuccess { streams ->
+                if (streams.isEmpty()) return@onSuccess
+                _subtitleTranslationUiState.update { state ->
+                    val updatedTracks = state.tracks.map { track ->
+                        if (track.kind != PlayerSubtitleTranslationTrackKind.Embedded) return@map track
+                        val embeddedOrder = track.id - 10_000
+                        val stream = streams.getOrNull(embeddedOrder) ?: return@map track
+                        track.copy(
+                            language = track.language.ifBlank { stream.language.orEmpty() },
+                            streamSpecifier = stream.ffmpegSpecifier,
+                            enabled = true,
+                            disabledReason = null,
+                        )
+                    }
+                    state.copy(tracks = updatedTracks)
+                }
+            }.onFailure { error ->
+                logcat(LogPriority.DEBUG, error) { "Embedded subtitle probing failed" }
+            }
+        }
+    }
+
+    private fun buildSubtitleTranslationTracks(): List<PlayerSubtitleTranslationTrack> {
+        val external = currentVideo.value?.subtitleTracks.orEmpty().mapIndexed { index, track ->
+            PlayerSubtitleTranslationTrack(
+                id = index,
+                title = track.lang.ifBlank { "External subtitle ${index + 1}" },
+                language = track.lang,
+                url = track.url,
+                kind = PlayerSubtitleTranslationTrackKind.External,
+                enabled = true,
+            )
+        }
+        val embedded = subtitleTracks.value.mapIndexed { index, track ->
+            PlayerSubtitleTranslationTrack(
+                id = 10_000 + index,
+                title = track.name,
+                language = track.language.orEmpty(),
+                url = null,
+                kind = PlayerSubtitleTranslationTrackKind.Embedded,
+                enabled = false,
+                disabledReason = activity.stringResource(AYMR.strings.player_subtitle_translation_embedded_unavailable),
+            )
+        }
+        return external + embedded
+    }
+
+    private fun pickSubtitleTrackForTranslation(tracks: List<Track>): Track? {
+        if (tracks.isEmpty()) return null
+        val preferredLanguages = subtitlePreferences.preferredSubLanguages().get()
+            .split(',')
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+        return preferredLanguages.firstNotNullOfOrNull { preferred ->
+            tracks.firstOrNull { track -> track.lang.lowercase().startsWith(preferred) }
+        } ?: tracks.first()
     }
 
     fun selectSub(id: Int) {
@@ -1884,9 +2181,14 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     private suspend fun updateEpisodeProgressOnComplete(currentEp: Episode) {
+        if (currentEp.seen) return
+
         currentEp.seen = true
 
-        // Emit EpisodeWatched event for achievement tracking
+        // Emit EpisodeWatched event for achievement tracking only once, when the episode
+        // actually transitions from unseen to seen. This method is called every second after
+        // the configured completion threshold, so recording unconditionally here inflates the
+        // "episodes watched" stats on the achievements screen.
         val animeId = currentAnime.value?.id ?: 0L
         eventBus.tryEmit(
             AchievementEvent.EpisodeWatched(

@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.auroraPrimaryMenuTitleTextStyle
 import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
 import eu.kanade.presentation.more.resolveAuroraMoreCardContainerColor
@@ -49,12 +50,16 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
 import kotlinx.coroutines.delay
 import tachiyomi.presentation.core.util.LocalAppHaptics
+import tachiyomi.presentation.core.util.collectAsState
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
 internal fun AuroraSettingsCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    darkRimLightEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val colors = AuroraTheme.colors
@@ -69,7 +74,7 @@ internal fun AuroraSettingsCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = AURORA_SETTINGS_CARD_VERTICAL_PADDING)
-            .auroraCardStyle(colors, AURORA_SETTINGS_CARD_SHAPE),
+            .auroraCardStyle(colors, AURORA_SETTINGS_CARD_SHAPE, applyDarkRimLight = darkRimLightEnabled),
         shape = AURORA_SETTINGS_CARD_SHAPE,
         colors = CardDefaults.cardColors(
             containerColor = if (!colors.isDark && !colors.isEInk) {
@@ -111,6 +116,8 @@ internal fun BasePreferenceWidget(
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
     val useMediumWeight = LocalIsDefaultAppUiFont.current
     val appHaptics = LocalAppHaptics.current
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val darkRimLightEnabled by uiPreferences.auroraDarkRimLightEnabled().collectAsState()
 
     val rowContent: @Composable () -> Unit = {
         Row(
@@ -192,6 +199,7 @@ internal fun BasePreferenceWidget(
         AuroraSettingsCard(
             modifier = modifier,
             onClick = if (onLongClick == null) onClick else null,
+            darkRimLightEnabled = darkRimLightEnabled,
         ) {
             rowContent()
         }

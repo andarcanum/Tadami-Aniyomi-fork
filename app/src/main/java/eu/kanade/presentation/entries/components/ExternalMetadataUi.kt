@@ -93,7 +93,7 @@ internal fun resolveExternalMetadataCover(
     metadataError: MetadataLoadError?,
     useMetadataCovers: Boolean,
 ): ResolvedCover {
-    if (!useMetadataCovers || isMetadataLoading) {
+    if (!useMetadataCovers) {
         val resolved = ResolvedCover(baseCoverUrl, null)
         debugTitleCoverFlow(
             scope = "metadata-cover",

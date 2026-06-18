@@ -100,7 +100,7 @@ class NovelCoverScreenModel(
         val novel = state.value ?: return
         screenModelScope.launchIO {
             try {
-                if (coverCache.deleteFromCache(novel) > 0) {
+                if (coverCache.deleteFromCache(novel, deleteCustomCover = true) > 0) {
                     updateNovel.awaitUpdateCoverLastModified(novel.id)
                 }
                 notifyCoverUpdated(context)

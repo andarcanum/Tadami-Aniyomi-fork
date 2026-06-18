@@ -13,6 +13,8 @@ import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.track.AnimeTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
+import eu.kanade.tachiyomi.ui.stats.StatsCalculations
+import eu.kanade.tachiyomi.ui.stats.WatchProgress
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
@@ -53,7 +55,18 @@ class AnimeStatsScreenModel(
             val overviewStatData = StatsData.AnimeOverview(
                 libraryAnimeCount = distinctLibraryAnime.size,
                 completedAnimeCount = distinctLibraryAnime.count {
-                    it.anime.status.toInt() == SAnime.COMPLETED && it.unseenCount == 0L
+                    StatsCalculations.isCompletedByUserConsumption(
+                        sourceStatus = it.anime.status.toInt(),
+                        customStatus = it.anime.customStatus?.toInt(),
+                        completedStatus = SAnime.COMPLETED,
+                        terminalFallbackStatuses = setOf(
+                            SAnime.PUBLISHING_FINISHED,
+                            SAnime.CANCELLED,
+                            SAnime.ON_HIATUS,
+                        ),
+                        consumedCount = it.seenCount,
+                        totalCount = it.totalCount,
+                    )
                 },
                 totalSeenDuration = getWatchTime(distinctLibraryAnime),
             )
@@ -126,18 +139,17 @@ class AnimeStatsScreenModel(
     }
 
     private suspend fun getWatchTime(libraryAnimeList: List<LibraryAnime>): Long {
-        var watchTime = 0L
-        libraryAnimeList.forEach { libraryAnime ->
-            getEpisodesByAnimeId.await(libraryAnime.anime.id).forEach { episode ->
-                watchTime += if (episode.seen) {
-                    episode.totalSeconds
-                } else {
-                    episode.lastSecondSeen
+        return StatsCalculations.watchDurationMillis(
+            libraryAnimeList.flatMap { libraryAnime ->
+                getEpisodesByAnimeId.await(libraryAnime.anime.id).map { episode ->
+                    WatchProgress(
+                        seen = episode.seen,
+                        lastSeenMillis = episode.lastSecondSeen,
+                        totalMillis = episode.totalSeconds,
+                    )
                 }
-            }
-        }
-
-        return watchTime
+            },
+        )
     }
 
     private fun getScoredAnimeTrackMap(animeTrackMap: Map<Long, List<AnimeTrack>>): Map<Long, List<AnimeTrack>> {
@@ -151,12 +163,9 @@ class AnimeStatsScreenModel(
     }
 
     private fun getTrackMeanScore(scoredAnimeTrackMap: Map<Long, List<AnimeTrack>>): Double {
-        return scoredAnimeTrackMap
-            .map { (_, tracks) ->
-                tracks.map(::get10PointScore).average()
-            }
-            .fastFilter { !it.isNaN() }
-            .average()
+        return StatsCalculations.meanTitleScore(
+            scoredAnimeTrackMap.values.map { tracks -> tracks.map(::get10PointScore) },
+        )
     }
 
     private fun get10PointScore(track: AnimeTrack): Double {

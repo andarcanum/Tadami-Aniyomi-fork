@@ -1,5 +1,9 @@
 package eu.kanade.tachiyomi.data.download.engine
 
+import android.app.Application
+import android.app.usage.StorageStatsManager
+import android.os.Build
+import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
@@ -8,18 +12,24 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.io.Closeable
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
+import android.os.storage.StorageManager as AndroidStorageManager
 
 /**
  * Combines anime, manga, and novel backend queue states into one aggregated
@@ -30,14 +40,26 @@ class DownloadEngineFacade(
     private val mangaManager: MangaDownloadManager,
     private val speedTracker: DownloadSpeedTracker = DownloadSpeedTracker(),
     private val completionTracker: DownloadCompletionTracker = DownloadCompletionTracker(),
-) {
+) : Closeable {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val facadeJob = SupervisorJob()
+    private val scope = CoroutineScope(facadeJob + Dispatchers.IO)
     private val telemetryCollector = DownloadTelemetryCollector(speedTracker)
     private val storageManager: StorageManager = Injekt.get()
+    private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull()
+    private val storageStatsManager: StorageStatsManager? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        application?.getSystemService(StorageStatsManager::class.java)
+    } else {
+        null
+    }
+    private val storageStatsRefreshMs = 5_000L
+    private var lastStorageStatsAtMs = 0L
+    private var storageStatsJob: Job? = null
+    private val storageStats = AtomicReference(DownloadEngineStorageStats.EMPTY)
 
     private val _state = MutableStateFlow(DownloadEngineSnapshot())
     val state: StateFlow<DownloadEngineSnapshot> = _state.asStateFlow()
+    private var collectJob: Job? = null
 
     init {
         animeManager.telemetryEmitter = telemetryCollector
@@ -63,23 +85,18 @@ class DownloadEngineFacade(
             }
         }
 
-        scope.launch {
-            combine(
-                animeQueueFlow,
-                mangaQueueFlow,
-                NovelDownloadQueueManager.state,
-                animeManager.isDownloaderRunning,
-                mangaManager.isDownloaderRunning,
-                telemetryCollector.version,
-            ) { array ->
-                @Suppress("UNCHECKED_CAST")
-                val animeQueue = array[0] as List<AnimeDownload>
-
-                @Suppress("UNCHECKED_CAST")
-                val mangaQueue = array[1] as List<MangaDownload>
-                val novelState = array[2] as NovelDownloadQueueState
-                buildSnapshot(animeQueue, mangaQueue, novelState)
-            }.collect { snapshot -> _state.update { snapshot } }
+        collectJob = scope.launch {
+            combineDownloadEngineInputs(
+                animeQueueFlow = animeQueueFlow,
+                mangaQueueFlow = mangaQueueFlow,
+                novelStateFlow = NovelDownloadQueueManager.state,
+                animeRunningFlow = animeManager.isDownloaderRunning,
+                mangaRunningFlow = mangaManager.isDownloaderRunning,
+                telemetryVersionFlow = telemetryCollector.version,
+                buildSnapshot = ::buildSnapshot,
+            ).collect { snapshot ->
+                _state.update { snapshot.withStorageStats(storageStats.get()) }
+            }
         }
     }
 
@@ -95,9 +112,17 @@ class DownloadEngineFacade(
         val mangaActive = mangaQueue.count { it.status == MangaDownload.State.DOWNLOADING }
         val mangaQueued = mangaQueue.count { it.status == MangaDownload.State.QUEUE }
         val mangaFailed = mangaQueue.count { it.status == MangaDownload.State.ERROR }
-        val speedSnapshot = speedTracker.snapshot()
-        val downloadsDir = storageManager.getDownloadsDirectory()?.filePath
-        val freeSpaceBytes = downloadsDir?.let { File(it).freeSpace } ?: 0L
+        requestStorageStatsRefreshIfNeeded()
+        val hasWork = animeQueue.isNotEmpty() || mangaQueue.isNotEmpty() || novelState.queueCount > 0
+        if (!hasWork) {
+            speedTracker.reset()
+            completionTracker.reset()
+        }
+
+        // ETA stays hidden until every backend exposes reliable total bytes.
+        // This is intentionally honest: no fake estimate is better than a polished lie.
+        val speedSnapshot = speedTracker.snapshot(remainingBytes = null)
+        val stats = storageStats.get()
 
         return DownloadEngineSnapshot(
             animeItems = animeQueue.size,
@@ -119,11 +144,49 @@ class DownloadEngineFacade(
             averageSpeedBps = speedSnapshot.averageSpeedBps,
             etaMillis = speedSnapshot.etaMillis,
             speedHistoryBps = speedSnapshot.speedHistoryBps,
-            animeStorageBytes = animeManager.getDownloadSize(),
-            mangaStorageBytes = mangaManager.getDownloadSize(),
-            novelStorageBytes = NovelDownloadQueueManager.getDownloadSize(),
-            freeSpaceBytes = freeSpaceBytes,
+            animeStorageBytes = stats.animeStorageBytes,
+            mangaStorageBytes = stats.mangaStorageBytes,
+            novelStorageBytes = stats.novelStorageBytes,
+            freeSpaceBytes = stats.freeSpaceBytes,
         )
+    }
+
+    private fun requestStorageStatsRefreshIfNeeded(nowMs: Long = System.currentTimeMillis()) {
+        if (!shouldStartStorageStatsRefresh(
+                nowMs = nowMs,
+                lastRefreshMs = lastStorageStatsAtMs,
+                refreshIntervalMs = storageStatsRefreshMs,
+                isRefreshRunning = storageStatsJob?.isActive == true,
+            )
+        ) {
+            return
+        }
+
+        lastStorageStatsAtMs = nowMs
+        storageStatsJob = scope.launch {
+            val stats = loadStorageStats()
+            storageStats.set(stats)
+            _state.update { current -> current.withStorageStats(stats) }
+        }
+    }
+
+    private fun loadStorageStats(): DownloadEngineStorageStats {
+        val downloadsDir = runCatching { storageManager.getDownloadsDirectory() }.getOrNull()
+        return DownloadEngineStorageStats(
+            animeStorageBytes = runCatching { animeManager.getDownloadSize() }.getOrDefault(0L),
+            mangaStorageBytes = runCatching { mangaManager.getDownloadSize() }.getOrDefault(0L),
+            novelStorageBytes = runCatching { NovelDownloadQueueManager.getDownloadSize() }.getOrDefault(0L),
+            freeSpaceBytes = resolveDownloadFreeSpaceBytes(downloadsDir),
+        )
+    }
+
+    private fun resolveDownloadFreeSpaceBytes(downloadsDir: UniFile?): Long? {
+        val filePathFreeSpace = runCatching { freeSpaceFromFilePath(downloadsDir?.filePath) }.getOrNull()
+        if (filePathFreeSpace != null) return filePathFreeSpace
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+        val manager = storageStatsManager ?: return null
+        return runCatching { manager.getFreeBytes(AndroidStorageManager.UUID_DEFAULT) }.getOrNull()
     }
 
     fun pauseAll() {
@@ -142,5 +205,79 @@ class DownloadEngineFacade(
         animeManager.clearQueue()
         mangaManager.clearQueue()
         NovelDownloadQueueManager.clearQueue()
+    }
+
+    override fun close() {
+        collectJob?.cancel()
+        storageStatsJob?.cancel()
+        facadeJob.cancel()
+    }
+}
+
+private data class DownloadEngineStorageStats(
+    val animeStorageBytes: Long,
+    val mangaStorageBytes: Long,
+    val novelStorageBytes: Long,
+    val freeSpaceBytes: Long?,
+) {
+    companion object {
+        val EMPTY = DownloadEngineStorageStats(
+            animeStorageBytes = 0L,
+            mangaStorageBytes = 0L,
+            novelStorageBytes = 0L,
+            freeSpaceBytes = null,
+        )
+    }
+}
+
+private fun DownloadEngineSnapshot.withStorageStats(stats: DownloadEngineStorageStats): DownloadEngineSnapshot {
+    return copy(
+        animeStorageBytes = stats.animeStorageBytes,
+        mangaStorageBytes = stats.mangaStorageBytes,
+        novelStorageBytes = stats.novelStorageBytes,
+        freeSpaceBytes = stats.freeSpaceBytes,
+    )
+}
+
+internal fun shouldStartStorageStatsRefresh(
+    nowMs: Long,
+    lastRefreshMs: Long,
+    refreshIntervalMs: Long,
+    isRefreshRunning: Boolean,
+): Boolean {
+    return !isRefreshRunning && nowMs - lastRefreshMs >= refreshIntervalMs
+}
+
+internal fun freeSpaceFromFilePath(path: String?): Long? {
+    return path
+        ?.let(::File)
+        ?.takeIf { it.exists() }
+        ?.freeSpace
+}
+
+internal fun combineDownloadEngineInputs(
+    animeQueueFlow: Flow<List<AnimeDownload>>,
+    mangaQueueFlow: Flow<List<MangaDownload>>,
+    novelStateFlow: Flow<NovelDownloadQueueState>,
+    animeRunningFlow: Flow<Boolean>,
+    mangaRunningFlow: Flow<Boolean>,
+    telemetryVersionFlow: Flow<Long>,
+    buildSnapshot: (List<AnimeDownload>, List<MangaDownload>, NovelDownloadQueueState) -> DownloadEngineSnapshot,
+): Flow<DownloadEngineSnapshot> {
+    return combine(
+        animeQueueFlow,
+        mangaQueueFlow,
+        novelStateFlow,
+        animeRunningFlow.onStart { emit(false) },
+        mangaRunningFlow.onStart { emit(false) },
+        telemetryVersionFlow.onStart { emit(0L) },
+    ) { array ->
+        @Suppress("UNCHECKED_CAST")
+        val animeQueue = array[0] as List<AnimeDownload>
+
+        @Suppress("UNCHECKED_CAST")
+        val mangaQueue = array[1] as List<MangaDownload>
+        val novelState = array[2] as NovelDownloadQueueState
+        buildSnapshot(animeQueue, mangaQueue, novelState)
     }
 }

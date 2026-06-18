@@ -235,9 +235,10 @@ class MangaScreenModel(
 
     fun retrySuggestions() {
         val success = successState ?: return
-        eu.kanade.tachiyomi.data.suggestions.SuggestionCache.invalidateAll()
+        val seed = buildSuggestionSeed(success.manga, success.mangaMetadata)
+        eu.kanade.tachiyomi.data.suggestions.SuggestionCache.invalidateForSeed(seed, success.manga.url)
         loadSuggestions(
-            buildSuggestionSeed(success.manga, success.mangaMetadata),
+            seed,
             manga = success.manga,
             source = success.manga.toCatalogueSource(),
             force = true,
@@ -247,10 +248,9 @@ class MangaScreenModel(
     private fun emitProgressiveSuggestions(list: List<SuggestionItem>, currentManga: Manga?) {
         val seed = suggestionSeedUsed ?: return
         val sorted = synchronized(list) {
-            list.dedupeByCleanTitle()
+            list.dedupeByCleanTitle(seed)
                 .filter { item ->
-                    val isSelf = (currentManga != null && item.providerUrl == currentManga.url) ||
-                        (item.providerId?.endsWith(":${currentManga?.url}") == true)
+                    val isSelf = SuggestionTitleResolver.isSameProviderEntry(item, currentManga?.url)
                     val isFranchise = SuggestionTitleResolver.isFranchiseDuplicate(item.title, seed.primaryTitle)
                     !isSelf && !isFranchise
                 }
@@ -299,8 +299,7 @@ class MangaScreenModel(
                             val externalResult = suggestionCoordinator.fetchSuggestions(seed, limit = 40)
                             if (externalResult.items.isNotEmpty()) {
                                 val externalFiltered = externalResult.items.filter { item ->
-                                    val isSelf = (currentManga != null && item.providerUrl == currentManga.url) ||
-                                        (item.providerId?.endsWith(":${currentManga?.url}") == true)
+                                    val isSelf = SuggestionTitleResolver.isSameProviderEntry(item, currentManga?.url)
                                     val isFranchise = eu.kanade.tachiyomi.data.suggestions
                                         .SuggestionTitleResolver.isFranchiseDuplicate(
                                             item.title,
@@ -315,6 +314,8 @@ class MangaScreenModel(
                                     emitProgressiveSuggestions(suggestionsList, currentManga)
                                 }
                             }
+                        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logcat { "[MangaScreenModel] External suggestions failed: ${e.message}" }
                         }
@@ -346,6 +347,8 @@ class MangaScreenModel(
                                     }
                                     emitProgressiveSuggestions(suggestionsList, currentManga)
                                 }
+                            } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                                throw e
                             } catch (e: Exception) {
                                 logcat { "[MangaScreenModel] Native search fallback failed: ${e.message}" }
                             }
@@ -354,10 +357,9 @@ class MangaScreenModel(
                 }
 
                 val finalCombined = synchronized(suggestionsList) {
-                    suggestionsList.dedupeByCleanTitle()
+                    suggestionsList.dedupeByCleanTitle(seed)
                         .filter { item ->
-                            val isSelf = (currentManga != null && item.providerUrl == currentManga.url) ||
-                                (item.providerId?.endsWith(":${currentManga?.url}") == true)
+                            val isSelf = SuggestionTitleResolver.isSameProviderEntry(item, currentManga?.url)
                             val isFranchise = eu.kanade.tachiyomi.data.suggestions
                                 .SuggestionTitleResolver.isFranchiseDuplicate(
                                     item.title,
@@ -467,11 +469,7 @@ class MangaScreenModel(
                 setMangaDefaultChapterFlags.await(manga)
             }
 
-            val availableScanlators = getAvailableScanlators.await(mangaId)
-            val scanlatorChapterCounts = getScanlatorChapterCounts.await(mangaId)
-            val storedExcludedScanlators = getExcludedScanlators.await(mangaId)
-            val initialExcludedScanlators = storedExcludedScanlators
-
+            val source = Injekt.get<MangaSourceManager>().getOrStub(manga.source)
             val chapters = getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
                 .toChapterListItems(manga)
 
@@ -486,12 +484,12 @@ class MangaScreenModel(
             mutableState.update {
                 State.Success(
                     manga = manga,
-                    source = Injekt.get<MangaSourceManager>().getOrStub(manga.source),
+                    source = source,
                     isFromSource = isFromSource,
                     chapters = chapters,
-                    availableScanlators = availableScanlators,
-                    scanlatorChapterCounts = scanlatorChapterCounts,
-                    excludedScanlators = initialExcludedScanlators,
+                    availableScanlators = emptySet(),
+                    scanlatorChapterCounts = emptyMap(),
+                    excludedScanlators = emptySet(),
                     downloadedOnly = basePreferences.downloadedOnly().get(),
                     isRefreshingData = needRefreshInfo || needRefreshChapter,
                     dialog = null,
@@ -504,6 +502,31 @@ class MangaScreenModel(
                     },
                 )
             }
+            val fetchFromSourceTasks = if (screenModelScope.isActive) {
+                listOf(
+                    async { if (needRefreshInfo) fetchMangaFromSource() },
+                    async { if (needRefreshChapter) fetchChaptersFromSource() },
+                )
+            } else {
+                emptyList()
+            }
+
+            screenModelScope.launchIO {
+                val availableScanlators = getAvailableScanlators.await(mangaId)
+                val scanlatorChapterCounts = getScanlatorChapterCounts.await(mangaId)
+                val excludedScanlators = getExcludedScanlators.await(mangaId)
+                updateSuccessState { current ->
+                    if (current.manga.id != manga.id) {
+                        current
+                    } else {
+                        current.copy(
+                            availableScanlators = availableScanlators,
+                            scanlatorChapterCounts = scanlatorChapterCounts,
+                            excludedScanlators = excludedScanlators,
+                        )
+                    }
+                }
+            }
             screenModelScope.launchIO {
                 basePreferences.downloadedOnly().changes()
                     .collectLatest { downloadedOnly ->
@@ -511,7 +534,7 @@ class MangaScreenModel(
                     }
             }
 
-            // Fetch suggestions asynchronously
+            // Fetch suggestions asynchronously after source refresh has been started.
             loadSuggestions(
                 buildSuggestionSeed(manga, cachedMetadata),
                 manga = manga,
@@ -521,14 +544,7 @@ class MangaScreenModel(
             // Start observe tracking since it only needs mangaId
             observeTrackers()
 
-            // Fetch info-chapters when needed
-            if (screenModelScope.isActive) {
-                val fetchFromSourceTasks = listOf(
-                    async { if (needRefreshInfo) fetchMangaFromSource() },
-                    async { if (needRefreshChapter) fetchChaptersFromSource() },
-                )
-                fetchFromSourceTasks.awaitAll()
-            }
+            fetchFromSourceTasks.awaitAll()
 
             loadMangaMetadata(mangaId)
 
@@ -614,19 +630,15 @@ class MangaScreenModel(
             withIOContext {
                 val networkManga = state.source.getMangaDetails(state.manga.toSManga())
                 val sourceRating = networkManga.rating.takeIf { it > 0f }
-                val fetchedRating = sourceMangaRatingFetcher.await(
-                    source = state.source,
-                    manga = state.manga,
-                    sourceRating = sourceRating,
-                    forceRefresh = manualFetch,
-                )
-                if (networkManga.rating <= 0f && fetchedRating != null) {
-                    networkManga.rating = fetchedRating
-                }
                 debugLog(
                     "fetchMangaFromSource: source=${state.source.name} title=${networkManga.safeTitle().previewForLog()} rating=${networkManga.rating} desc=${networkManga.description.previewForLog()}",
                 )
                 updateManga.awaitUpdateFromSource(state.manga, networkManga, manualFetch)
+                refreshMangaSourceRating(
+                    state = state,
+                    sourceRating = sourceRating,
+                    forceRefresh = manualFetch,
+                )
             }
         } catch (e: Throwable) {
             // Ignore early hints "errors" that aren't handled by OkHttp
@@ -652,6 +664,22 @@ class MangaScreenModel(
             screenModelScope.launch {
                 snackbarHostState.showSnackbar(message = formattedMessage)
             }
+        }
+    }
+
+    private fun refreshMangaSourceRating(
+        state: State.Success,
+        sourceRating: Float?,
+        forceRefresh: Boolean,
+    ) {
+        screenModelScope.launchIO {
+            val fetchedRating = sourceMangaRatingFetcher.await(
+                source = state.source,
+                manga = state.manga,
+                sourceRating = sourceRating,
+                forceRefresh = forceRefresh,
+            ) ?: return@launchIO
+            updateManga.awaitUpdateSourceRating(state.manga, fetchedRating)
         }
     }
 

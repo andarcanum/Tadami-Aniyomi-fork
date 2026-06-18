@@ -79,7 +79,6 @@ fun DownloadEngineCard(
     val textPrimary = if (isAurora) auroraColors.textPrimary else MaterialTheme.colorScheme.onSurface
     val textSecondary = if (isAurora) auroraColors.textSecondary else MaterialTheme.colorScheme.onSurfaceVariant
     val engineState = snapshot.engineState()
-    val isRussian = LocalContext.current.resources.configuration.locales.get(0).language == "ru"
 
     // Sleek Calibrated Palette (Theme primary accent, slate/zinc neutrals)
     val accentColor = if (isAurora) auroraColors.textPrimary else MaterialTheme.colorScheme.primary
@@ -130,7 +129,7 @@ fun DownloadEngineCard(
                 ) {
                     androidx.compose.material3.Icon(
                         imageVector = Icons.Outlined.Download,
-                        contentDescription = null,
+                        contentDescription = stringResource(AYMR.strings.download_engine_title),
                         tint = if (engineState == EngineState.ACTIVE) Color(0xFF10B981) else accentColor,
                         modifier = Modifier.size(20.dp),
                     )
@@ -148,7 +147,7 @@ fun DownloadEngineCard(
                 }
 
                 Text(
-                    text = if (isRussian) "Диспетчер" else stringResource(AYMR.strings.download_engine_title),
+                    text = stringResource(AYMR.strings.download_engine_title),
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontSize = 17.sp, // Decreased size to prevent awkward wrapping
                         fontWeight = FontWeight.Bold,
@@ -162,10 +161,10 @@ fun DownloadEngineCard(
 
                 DownloadEngineStatePill(
                     label = when (engineState) {
-                        EngineState.ACTIVE -> if (isRussian) "Скачивание" else "Downloading"
-                        EngineState.WAITING -> if (isRussian) "В очереди" else "Waiting"
-                        EngineState.STOPPED -> if (isRussian) "Приостановлено" else "Paused"
-                        EngineState.IDLE -> if (isRussian) "Ожидание" else "Idle"
+                        EngineState.ACTIVE -> stringResource(AYMR.strings.download_engine_active_state)
+                        EngineState.WAITING -> stringResource(AYMR.strings.download_engine_waiting)
+                        EngineState.STOPPED -> stringResource(AYMR.strings.download_engine_stopped)
+                        EngineState.IDLE -> stringResource(AYMR.strings.download_engine_idle)
                     },
                     color = engineStateColor,
                 )
@@ -201,7 +200,7 @@ fun DownloadEngineCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (isRussian) "Активно" else "Active",
+                        text = stringResource(AYMR.strings.download_engine_active),
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = textMuted,
                     )
@@ -229,7 +228,7 @@ fun DownloadEngineCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (isRussian) "В очереди" else "Queued",
+                        text = stringResource(AYMR.strings.download_engine_queued),
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = textMuted,
                     )
@@ -257,7 +256,7 @@ fun DownloadEngineCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (isRussian) "Завершено" else "Done",
+                        text = stringResource(AYMR.strings.download_engine_done),
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = textMuted,
                     )
@@ -278,7 +277,7 @@ fun DownloadEngineCard(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = Formatter.formatFileSize(context, snapshot.freeSpaceBytes),
+                        text = snapshot.freeSpaceBytes?.let { Formatter.formatFileSize(context, it) } ?: "—",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontSize = 15.sp,
                             fontFamily = FontFamily.Monospace,
@@ -288,7 +287,7 @@ fun DownloadEngineCard(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (isRussian) "Свободно" else "Free",
+                        text = stringResource(AYMR.strings.download_engine_free_label, "").trim(),
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = textMuted,
                     )

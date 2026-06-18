@@ -18,6 +18,11 @@ interface NovelExtensionManager {
 
     suspend fun uninstallPlugin(plugin: NovelPlugin.Installed)
 
+    suspend fun replacePluginFromRepo(
+        installed: NovelPlugin.Installed,
+        replacement: NovelPlugin.Available,
+    ): NovelPlugin.Installed
+
     suspend fun getSourceData(id: Long): StubNovelSource?
 
     fun getPluginIconUrlForSource(sourceId: Long): String?

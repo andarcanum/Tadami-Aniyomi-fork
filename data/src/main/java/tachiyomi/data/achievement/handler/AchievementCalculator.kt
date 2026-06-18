@@ -50,6 +50,7 @@ class AchievementCalculator(
 
         try {
             logcat(LogPriority.INFO) { "Starting initial achievement calculation..." }
+            diversityChecker.clearCache()
 
             val allAchievements = repository.getAll().first()
             val achievementsById = allAchievements.associateBy { it.id }
@@ -110,6 +111,22 @@ class AchievementCalculator(
             newlyUnlocked.forEach { progress ->
                 val achievement = achievementsById[progress.achievementId] ?: return@forEach
                 replayUnlockSideEffects(achievement)
+            }
+
+            // Keep the Treasury/Preferences state in sync with the authoritative
+            // achievement progress table. This fixes cases where achievements were
+            // already marked as unlocked, but their cosmetic rewards were lost after
+            // a restore, migration, preferences reset, or an earlier side-effect
+            // failure. Recomputing unlockables is idempotent and does not replay XP.
+            val unlockedAchievements = allProgressUpdates.mapNotNull { progress ->
+                if (progress.isUnlocked) achievementsById[progress.achievementId] else null
+            }
+            try {
+                unlockableManager.recomputeUnlockablesFromUnlockedAchievements(unlockedAchievements)
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) {
+                    "Failed to synchronize treasury rewards: ${e.message}"
+                }
             }
 
             val totalPoints = allProgressUpdates

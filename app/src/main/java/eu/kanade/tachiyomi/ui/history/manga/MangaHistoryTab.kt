@@ -16,7 +16,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
-import eu.kanade.presentation.entries.manga.DuplicateMangaDialog
+import eu.kanade.presentation.entries.components.DuplicateEntryDialog
 import eu.kanade.presentation.history.HistoryDeleteAllDialog
 import eu.kanade.presentation.history.HistoryDeleteDialog
 import eu.kanade.presentation.history.manga.MangaHistoryScreen
@@ -110,15 +110,16 @@ fun Screen.mangaHistoryTab(
                     )
                 }
                 is MangaHistoryScreenModel.Dialog.DuplicateManga -> {
-                    DuplicateMangaDialog(
+                    DuplicateEntryDialog(
                         onDismissRequest = onDismissRequest,
                         onConfirm = {
                             screenModel.addFavorite(dialog.manga)
                         },
-                        onOpenManga = { navigator.push(MangaScreen(dialog.duplicate.id)) },
+                        onOpenEntry = { navigator.push(MangaScreen(dialog.duplicate.id)) },
                         onMigrate = {
                             screenModel.showMigrateDialog(dialog.manga, dialog.duplicate)
                         },
+                        openEntryLabel = stringResource(AYMR.strings.action_show_manga),
                     )
                 }
                 is MangaHistoryScreenModel.Dialog.ChangeCategory -> {

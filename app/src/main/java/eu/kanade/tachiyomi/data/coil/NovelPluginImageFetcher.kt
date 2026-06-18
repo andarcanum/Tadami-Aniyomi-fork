@@ -8,9 +8,26 @@ import coil3.fetch.Fetcher
 import coil3.fetch.SourceFetchResult
 import coil3.request.Options
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
+import eu.kanade.tachiyomi.source.novel.NovelPluginImagePayload
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageResolver
+import kotlinx.coroutines.delay
 import okio.Buffer
 import java.io.IOException
+
+internal suspend fun resolveNovelPluginImagePayload(
+    url: String,
+    attempts: Int = 3,
+    retryDelayMillis: Long = 150L,
+    resolver: suspend (String) -> NovelPluginImagePayload? = NovelPluginImageResolver::resolve,
+): NovelPluginImagePayload? {
+    repeat(attempts.coerceAtLeast(1)) { attemptIndex ->
+        resolver(url)?.let { return it }
+        if (attemptIndex < attempts - 1) {
+            delay(retryDelayMillis)
+        }
+    }
+    return null
+}
 
 class NovelPluginImageFetcher(
     private val data: NovelPluginImage,
@@ -18,7 +35,7 @@ class NovelPluginImageFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult {
-        val resolved = NovelPluginImageResolver.resolve(data.url)
+        val resolved = resolveNovelPluginImagePayload(data.url)
             ?: throw IOException("Failed to resolve plugin image: ${data.url}")
         return SourceFetchResult(
             source = ImageSource(

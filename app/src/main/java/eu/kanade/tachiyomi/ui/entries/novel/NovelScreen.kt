@@ -86,6 +86,7 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
+import eu.kanade.domain.entries.novel.model.hasCustomCover
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.components.NavigatorAdaptiveSheet
 import eu.kanade.presentation.entries.EditCoverAction
@@ -109,6 +110,8 @@ import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.manga.track.MangaTrackInfoDialogHomeScreen
+import eu.kanade.tachiyomi.ui.entries.suggestions.toDirectEntryScreenOrNull
+import eu.kanade.tachiyomi.ui.entries.suggestions.toGlobalSearchScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryTab
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
@@ -398,6 +401,11 @@ class NovelScreen(
                         query = query,
                         global = global,
                     )
+                }
+            },
+            onSuggestionClick = { item ->
+                coroutineScope.launch {
+                    navigator.push(item.toDirectEntryScreenOrNull() ?: item.toGlobalSearchScreen())
                 }
             },
             onPosterLongClicked = screenModel::showCoverDialog,
@@ -845,7 +853,7 @@ class NovelScreen(
                         novel = coverNovel,
                         snackbarHostState = sm.snackbarHostState,
                         isCustomCover = remember(coverNovel) {
-                            coverNovel.thumbnailUrl?.let { sm.coverCache.getCoverFile(it)?.exists() } == true
+                            coverNovel.hasCustomCover(sm.coverCache)
                         },
                         onShareClick = { sm.shareCover(context) },
                         onSaveClick = { sm.saveCover(context) },

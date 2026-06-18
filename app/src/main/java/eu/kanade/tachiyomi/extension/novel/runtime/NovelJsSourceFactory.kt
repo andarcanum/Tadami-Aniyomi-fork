@@ -9,6 +9,7 @@ import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 import tachiyomi.data.extension.novel.NovelPluginStorage
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import java.lang.ref.WeakReference
+import java.util.concurrent.ConcurrentHashMap
 
 class NovelJsSourceFactory(
     private val runtimeFactory: NovelJsRuntimeFactory,
@@ -23,23 +24,32 @@ class NovelJsSourceFactory(
     private val filterMapper = NovelPluginFilterMapper(json)
     private val scriptOverridesApplier = NovelPluginScriptOverridesApplier(runtimeOverrides)
     private val resultNormalizer = NovelPluginResultNormalizer()
+    private val processedScriptCache = ConcurrentHashMap<ProcessedScriptCacheKey, String>()
     private val sources = mutableListOf<WeakReference<NovelJsSource>>()
 
     override fun create(plugin: NovelPlugin.Installed): NovelSource? {
-        val scriptBytes = pluginStorage.readPluginScript(plugin.id)
-        if (scriptBytes == null) {
-            logcat(LogPriority.WARN) { "Novel plugin source missing script id=${plugin.id}" }
-            return null
-        }
         val runtimeOverride = runtimeOverrides.forPlugin(plugin.id)
-        val rawScript = NovelPluginScriptSanitizer.sanitize(scriptBytes.toString(Charsets.UTF_8))
-        val script = if (runtimeOverride.disableScriptPatches) {
-            rawScript
-        } else {
-            scriptOverridesApplier.apply(
+        val script = processedScriptCache.getOrPut(
+            ProcessedScriptCacheKey(
                 pluginId = plugin.id,
-                script = rawScript,
-            )
+                versionCode = plugin.versionCode,
+                runtimeOverrideVersion = runtimeOverride.version,
+                disableScriptPatches = runtimeOverride.disableScriptPatches,
+            ),
+        ) {
+            val scriptBytes = pluginStorage.readPluginScript(plugin.id)
+                ?: return null.also {
+                    logcat(LogPriority.WARN) { "Novel plugin source missing script id=${plugin.id}" }
+                }
+            val rawScript = NovelPluginScriptSanitizer.sanitize(scriptBytes.toString(Charsets.UTF_8))
+            if (runtimeOverride.disableScriptPatches) {
+                rawScript
+            } else {
+                scriptOverridesApplier.apply(
+                    pluginId = plugin.id,
+                    script = rawScript,
+                )
+            }
         }
         val settingsBridge = NovelPluginSettingsBridge(
             pluginId = plugin.id,
@@ -77,6 +87,14 @@ class NovelJsSourceFactory(
                 }
             }
         }
+        processedScriptCache.clear()
         assetBindings.clearAllCaches()
     }
+
+    private data class ProcessedScriptCacheKey(
+        val pluginId: String,
+        val versionCode: Int,
+        val runtimeOverrideVersion: Int,
+        val disableScriptPatches: Boolean,
+    )
 }

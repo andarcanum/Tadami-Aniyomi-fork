@@ -97,11 +97,94 @@ class NovelChapterDisplayRowTest {
         ) shouldBe 0
     }
 
+    @Test
+    fun `volume display data groups lnori book anchors by volume`() {
+        val displayData = resolveNovelVolumeChapterDisplayData(
+            chapters = listOf(
+                chapter(
+                    id = 1L,
+                    chapterNumber = 1.0,
+                    sourceOrder = 10,
+                    name = "Re Zero Starting Life In Another World Vol 1 - Cover",
+                    url = "book/12040/re-zero-starting-life-in-another-world-vol-1#page01",
+                ),
+                chapter(
+                    id = 2L,
+                    chapterNumber = 2.0,
+                    sourceOrder = 20,
+                    name = "Re Zero Starting Life In Another World Vol 1 - Chapter 1: The End of the Beginning",
+                    url = "book/12040/re-zero-starting-life-in-another-world-vol-1#page11",
+                ),
+                chapter(
+                    id = 3L,
+                    chapterNumber = 3.0,
+                    sourceOrder = 30,
+                    name = "Volume 2 - Cover",
+                    url = "book/12156/re-zero-starting-life-in-another-world-vol-2#page01",
+                ),
+                chapter(
+                    id = 4L,
+                    chapterNumber = 4.0,
+                    sourceOrder = 40,
+                    name = "Volume 2 - Prologue: The Road to Redemption Begins",
+                    url = "book/12156/re-zero-starting-life-in-another-world-vol-2#page08",
+                ),
+            ),
+            expandedVolumeKeys = emptySet(),
+        )
+
+        displayData.volumeGroups.map { it.title } shouldBe listOf("Volume 1", "Volume 2")
+        displayData.displayRows.filterIsInstance<NovelChapterDisplayRow.VolumeGroup>().map { it.chapters.size } shouldBe
+            listOf(2, 2)
+    }
+
+    @Test
+    fun `expanded volume display rows strip volume prefix from child chapter titles`() {
+        val chapters = listOf(
+            chapter(
+                id = 1L,
+                chapterNumber = 1.0,
+                sourceOrder = 10,
+                name = "Re Zero Starting Life In Another World Vol 1 - Cover",
+                url = "book/12040/re-zero-starting-life-in-another-world-vol-1#page01",
+            ),
+            chapter(
+                id = 2L,
+                chapterNumber = 2.0,
+                sourceOrder = 20,
+                name = "Re Zero Starting Life In Another World Vol 1 - Chapter 1: The End of the Beginning",
+                url = "book/12040/re-zero-starting-life-in-another-world-vol-1#page11",
+            ),
+        )
+        val collapsed = resolveNovelVolumeChapterDisplayData(chapters, expandedVolumeKeys = emptySet())
+        val group = collapsed.volumeGroups.single()
+
+        val expanded = resolveNovelVolumeChapterDisplayData(chapters, expandedVolumeKeys = setOf(group.groupKey))
+
+        expanded.displayRows.filterIsInstance<NovelChapterDisplayRow.VolumeChapter>().map { it.title } shouldBe listOf(
+            "Cover",
+            "Chapter 1: The End of the Beginning",
+        )
+        resolveNovelChapterRowIndex(expanded.displayRows, targetChapterId = 2L) shouldBe 2
+    }
+
+    @Test
+    fun `volume grouping stays disabled for plain flat chapter lists`() {
+        shouldGroupNovelChaptersByVolume(
+            listOf(
+                chapter(id = 1L, chapterNumber = 1.0, sourceOrder = 10, name = "Chapter 1", url = "/chapter-1"),
+                chapter(id = 2L, chapterNumber = 2.0, sourceOrder = 20, name = "Chapter 2", url = "/chapter-2"),
+            ),
+        ) shouldBe false
+    }
+
     private fun chapter(
         id: Long,
         chapterNumber: Double,
         sourceOrder: Long,
         scanlator: String? = null,
+        name: String = "Chapter $id",
+        url: String = "/chapter-$id",
     ): NovelChapter {
         return NovelChapter.create().copy(
             id = id,
@@ -109,8 +192,8 @@ class NovelChapterDisplayRowTest {
             chapterNumber = chapterNumber,
             sourceOrder = sourceOrder,
             scanlator = scanlator,
-            url = "/chapter-$id",
-            name = "Chapter $id",
+            url = url,
+            name = name,
         )
     }
 }

@@ -19,13 +19,13 @@ import java.io.IOException
 class CloudflareInterceptorTest {
 
     @Test
-    fun `intercept removes stale cookies and delegates resolution`() {
+    fun `intercept preserves pre solved cookies and delegates resolution`() {
         val request = Request.Builder()
             .url("https://novel.tl/images/4/4c/cover.jpg")
             .build()
-        val staleCookie = Cookie.Builder()
+        val solvedCookie = Cookie.Builder()
             .name("cf_clearance")
-            .value("stale")
+            .value("solved")
             .domain(request.url.host)
             .path("/")
             .build()
@@ -51,11 +51,11 @@ class CloudflareInterceptorTest {
         )
 
         val cookieJar = mockk<AndroidCookieJar>()
-        every { cookieJar.get(request.url) } returns listOf(staleCookie)
+        every { cookieJar.get(request.url) } returns listOf(solvedCookie)
         every { cookieJar.remove(request.url, listOf("cf_clearance"), 0) } returns 1
 
         val challengeResolver = mockk<CloudflareChallengeResolver>()
-        justRun { challengeResolver.resolve(request, staleCookie) }
+        justRun { challengeResolver.resolve(request, solvedCookie) }
 
         val chain = mockk<Interceptor.Chain>()
         every { chain.proceed(request) } returnsMany listOf(challengeStillUp, finalResponse)
@@ -70,9 +70,9 @@ class CloudflareInterceptorTest {
         val result = interceptor.intercept(chain, request, initialResponse)
 
         assertEquals(200, result.code)
-        verify(exactly = 1) { cookieJar.remove(request.url, listOf("cf_clearance"), 0) }
+        verify(exactly = 0) { cookieJar.remove(request.url, listOf("cf_clearance"), 0) }
         verify(exactly = 1) { cookieJar.get(request.url) }
-        verify(exactly = 1) { challengeResolver.resolve(request, staleCookie) }
+        verify(exactly = 1) { challengeResolver.resolve(request, solvedCookie) }
         verify(exactly = 2) { chain.proceed(request) }
     }
 

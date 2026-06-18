@@ -156,6 +156,7 @@ private fun AppThemesList(
                             onItemClick(appTheme)
                             (context as? Activity)?.let { ActivityCompat.recreate(it) }
                         },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
 
@@ -187,6 +188,7 @@ private fun AppThemesList(
 fun AppThemePreviewItem(
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val appHaptics = LocalAppHaptics.current
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
@@ -223,8 +225,7 @@ fun AppThemePreviewItem(
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .aspectRatio(9f / 16f)
             .graphicsLayer {
                 scaleX = scale

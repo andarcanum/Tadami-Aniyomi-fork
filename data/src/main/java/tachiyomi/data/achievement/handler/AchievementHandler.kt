@@ -165,6 +165,8 @@ class AchievementHandler(
             is AchievementEvent.NovelChapterRead -> streakChecker.logChapterRead()
             is AchievementEvent.EpisodeWatched -> streakChecker.logEpisodeWatched()
             is AchievementEvent.FeatureUsed -> featureCollector.onFeatureUsed(event.feature, event.count)
+            is AchievementEvent.LibraryAdded -> diversityChecker.clearCache()
+            is AchievementEvent.LibraryRemoved -> diversityChecker.clearCache()
             else -> {}
         }
 
@@ -205,49 +207,48 @@ class AchievementHandler(
             }
         }
 
-        // Meta-rules and GokuRule are evaluated only if at least one standard rule unlocked
-        if (anyUnlockHappened) {
-            val metaAchievements = allAchievements.filter { it.type == AchievementType.META || it.id == "secret_goku" }
-            for (achievement in metaAchievements) {
-                val rule = ruleRegistry.getRule(achievement.id) ?: continue
-                val currentProgress = repository.getProgress(achievement.id).first()
-                if (currentProgress?.isUnlocked == true) continue
+        // Meta-rules and GokuRule are cheap and derived from global state. Evaluate
+        // them on every event instead of only when a standard rule unlocks, so
+        // restored/migrated progress and delayed point updates cannot leave meta
+        // achievements permanently stale.
+        val metaAchievements = allAchievements.filter { it.type == AchievementType.META || it.id == "secret_goku" }
+        for (achievement in metaAchievements) {
+            val rule = ruleRegistry.getRule(achievement.id) ?: continue
+            val currentProgress = repository.getProgress(achievement.id).first()
+            if (currentProgress?.isUnlocked == true) continue
 
-                val result = rule.evaluateDelta(event, currentProgress?.progress ?: 0, context)
-                if (result is RuleResult.Update) {
-                    applyProgressUpdate(achievement, currentProgress, result.newProgress)
-                }
+            val result = rule.evaluateDelta(event, currentProgress?.progress ?: 0, context)
+            if (result is RuleResult.Update) {
+                applyProgressUpdate(achievement, currentProgress, result.newProgress)
             }
         }
     }
 
-    private fun onAchievementUnlocked(achievement: Achievement) {
+    private suspend fun onAchievementUnlocked(achievement: Achievement) {
         logcat(LogPriority.INFO) { "Achievement unlocked: ${achievement.title} (+${achievement.points} points)" }
 
-        scope.launch {
-            try {
-                activityDataRepository.recordAchievementUnlock()
-                pointsManager.addPoints(achievement.points)
-                pointsManager.incrementUnlocked()
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) { "Failed to add points for achievement: ${achievement.title}, ${e.message}" }
-            }
+        try {
+            activityDataRepository.recordAchievementUnlock()
+            pointsManager.addPoints(achievement.points)
+            pointsManager.incrementUnlocked()
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR) { "Failed to add points for achievement: ${achievement.title}, ${e.message}" }
+        }
 
-            try {
-                unlockableManager.unlockAchievementRewards(achievement)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) {
-                    "Failed to unlock rewards for achievement: ${achievement.title}, ${e.message}"
-                }
+        try {
+            unlockableManager.unlockAchievementRewards(achievement)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR) {
+                "Failed to unlock rewards for achievement: ${achievement.title}, ${e.message}"
             }
+        }
 
-            // Выдаем награды за достижение
-            if (achievement.hasRewards) {
-                try {
-                    userProfileManager.grantRewards(achievement.getAllRewards())
-                } catch (e: Exception) {
-                    logcat(LogPriority.ERROR) { "Failed to grant profile rewards: ${e.message}" }
-                }
+        // Выдаем награды за достижение
+        if (achievement.hasRewards) {
+            try {
+                userProfileManager.grantRewards(achievement.getAllRewards())
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) { "Failed to grant profile rewards: ${e.message}" }
             }
         }
 
@@ -386,7 +387,7 @@ class AchievementHandler(
         }
     }
 
-    private fun onAchievementTierUp(
+    private suspend fun onAchievementTierUp(
         achievement: Achievement,
         tier: tachiyomi.domain.achievement.model.AchievementTier,
         tierLevel: Int,
@@ -395,37 +396,35 @@ class AchievementHandler(
             "Achievement tier up: ${achievement.title} - Tier $tierLevel: ${tier.title} (+${tier.points} points)"
         }
 
-        scope.launch {
+        try {
+            unlockableManager.unlockAchievementRewards(achievement)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR) {
+                "Failed to unlock tier rewards for achievement: ${achievement.title}, ${e.message}"
+            }
+        }
+
+        // Use the shared reward-granting path so tier-ups stay consistent
+        // with normal unlocks. The current achievements.json does not
+        // declare rewards on tiered achievements, so this is a no-op
+        // today, but it future-proofs the path.
+        if (achievement.hasRewards) {
             try {
-                unlockableManager.unlockAchievementRewards(achievement)
+                userProfileManager.grantRewards(achievement.getAllRewards())
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR) {
-                    "Failed to unlock tier rewards for achievement: ${achievement.title}, ${e.message}"
+                    "Failed to grant tier rewards for achievement: ${achievement.title}, ${e.message}"
                 }
             }
+        }
 
-            // Use the shared reward-granting path so tier-ups stay consistent
-            // with normal unlocks. The current achievements.json does not
-            // declare rewards on tiered achievements, so this is a no-op
-            // today, but it future-proofs the path.
-            if (achievement.hasRewards) {
-                try {
-                    userProfileManager.grantRewards(achievement.getAllRewards())
-                } catch (e: Exception) {
-                    logcat(LogPriority.ERROR) {
-                        "Failed to grant tier rewards for achievement: ${achievement.title}, ${e.message}"
-                    }
-                }
-            }
-
-            // Выдаем XP за достижение уровня
-            try {
-                val xpReward = tier.points * 10 // XP = points * 10
-                userProfileManager.addXP(xpReward)
-            } catch (e: Exception) {
-                logcat(LogPriority.ERROR) {
-                    "Failed to add XP for tier up: ${achievement.title}, ${e.message}"
-                }
+        // Выдаем XP за достижение уровня
+        try {
+            val xpReward = tier.points * 10 // XP = points * 10
+            userProfileManager.addXP(xpReward)
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR) {
+                "Failed to add XP for tier up: ${achievement.title}, ${e.message}"
             }
         }
     }

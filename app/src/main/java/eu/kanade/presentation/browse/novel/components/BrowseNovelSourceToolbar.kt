@@ -21,6 +21,7 @@ import eu.kanade.presentation.components.RadioMenuItem
 import eu.kanade.presentation.components.SearchToolbar
 import eu.kanade.presentation.theme.LocalIsAuroraTheme
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
+import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.domain.library.model.LibraryDisplayMode
@@ -42,7 +43,10 @@ fun BrowseNovelSourceToolbar(
     scrollBehavior: TopAppBarScrollBehavior? = null,
 ) {
     val title = source?.name
-    val hasSourceSettings = source?.hasVisiblePluginSettingsByDiscovery() == true && onSettingsClick != null
+    val hasSourceSettings =
+        source != null &&
+            (source is ConfigurableNovelSource || source.hasVisiblePluginSettingsByDiscovery()) &&
+            onSettingsClick != null
     var selectingDisplayMode by remember { mutableStateOf(false) }
     val isAurora = LocalIsAuroraTheme.current
 

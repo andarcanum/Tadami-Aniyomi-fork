@@ -11,15 +11,44 @@ import java.io.InputStream
 
 private const val DEFAULT_COVER_NAME = "cover.jpg"
 
+private val DIRECTORY_COVER_NAMES = listOf("cover", "folder", "poster", "thumbnail")
+
 actual class LocalNovelCoverManager(
     private val context: Context,
     private val fileSystem: LocalNovelSourceFileSystem,
 ) {
 
     actual fun find(novelUrl: String): UniFile? {
-        return fileSystem.getFilesInNovelDirectory(novelUrl)
-            .filter { it.isFile && it.nameWithoutExtension.equals("cover", ignoreCase = true) }
-            .firstOrNull { ImageUtil.isImage(it.name) { it.openInputStream() } }
+        val novelDir = fileSystem.getNovelDirectory(novelUrl)
+        return if (novelDir != null) {
+            novelDir.listFiles().orEmpty()
+                .filter { it.isFile }
+                .sortedBy { coverNamePriority(it.nameWithoutExtension.orEmpty()) }
+                .firstOrNull {
+                    isPreferredDirectoryCoverName(it.nameWithoutExtension.orEmpty()) &&
+                        ImageUtil.isImage(it.name) { it.openInputStream() }
+                }
+        } else {
+            val baseDir = fileSystem.getBaseDirectory() ?: return null
+            val nameWithoutExt = novelUrl.substringBeforeLast('.')
+            baseDir.listFiles().orEmpty()
+                .filter {
+                    it.isFile &&
+                        !it.name.equals(novelUrl, ignoreCase = true) &&
+                        it.nameWithoutExtension.equals(nameWithoutExt, ignoreCase = true)
+                }
+                .firstOrNull { ImageUtil.isImage(it.name) { it.openInputStream() } }
+        }
+    }
+
+    private fun isPreferredDirectoryCoverName(nameWithoutExtension: String): Boolean {
+        return coverNamePriority(nameWithoutExtension) != Int.MAX_VALUE
+    }
+
+    private fun coverNamePriority(nameWithoutExtension: String): Int {
+        return DIRECTORY_COVER_NAMES.indexOfFirst { it.equals(nameWithoutExtension, ignoreCase = true) }
+            .takeIf { it >= 0 }
+            ?: Int.MAX_VALUE
     }
 
     actual fun update(
@@ -27,12 +56,13 @@ actual class LocalNovelCoverManager(
         inputStream: InputStream,
     ): UniFile? {
         val directory = fileSystem.getNovelDirectory(novel.url)
-        if (directory == null) {
-            inputStream.close()
-            return null
+        val targetFile = if (directory != null) {
+            find(novel.url) ?: directory.createFile(DEFAULT_COVER_NAME)!!
+        } else {
+            val baseDir = fileSystem.getBaseDirectory() ?: return null
+            val nameWithoutExt = novel.url.substringBeforeLast('.')
+            find(novel.url) ?: baseDir.createFile("$nameWithoutExt.jpg")!!
         }
-
-        val targetFile = find(novel.url) ?: directory.createFile(DEFAULT_COVER_NAME)!!
 
         inputStream.use { input ->
             targetFile.openOutputStream().use { output ->
@@ -40,7 +70,9 @@ actual class LocalNovelCoverManager(
             }
         }
 
-        DiskUtil.createNoMediaFile(directory, context)
+        if (directory != null) {
+            DiskUtil.createNoMediaFile(directory, context)
+        }
 
         novel.thumbnail_url = targetFile.uri.toString()
         return targetFile

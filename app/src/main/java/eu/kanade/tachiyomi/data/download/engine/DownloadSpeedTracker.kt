@@ -30,6 +30,7 @@ class DownloadSpeedTracker(
      *
      * @param sample one delta sample from a backend byte loop
      */
+    @Synchronized
     fun pushSample(sample: DownloadSpeedSample) {
         // Ignore invalid deltas
         if (sample.bytesDelta <= 0L) return
@@ -56,7 +57,7 @@ class DownloadSpeedTracker(
             }
         }
 
-        windowCurrentSpeed(samplesBySection.values.flatten()).let { currentSpeed ->
+        windowCurrentSpeed(samplesBySection.values.flatten().sortedBy { it.timestampMs }).let { currentSpeed ->
             if (currentSpeed != null) {
                 while (aggregateSpeedHistory.size >= windowSize) {
                     aggregateSpeedHistory.removeFirst()
@@ -71,6 +72,7 @@ class DownloadSpeedTracker(
      *
      * @param remainingBytes if non-null and positive, ETA is computed
      */
+    @Synchronized
     fun snapshot(remainingBytes: Long? = null): TrackerSnapshot {
         // Sample count from window deques, not cumulative totals
         val totalSamples = samplesBySection.values.sumOf { it.size }
@@ -82,9 +84,9 @@ class DownloadSpeedTracker(
 
         // Aggregate current speed: total bytes across all section windows / total time
         val aggregateCurrentSpeed = if (totalSamples > 0) {
-            val allSamples = samplesBySection.values.flatten()
+            val allSamples = samplesBySection.values.flatten().sortedBy { it.timestampMs }
             if (allSamples.size >= 2) {
-                windowCurrentSpeed(allSamples.toTypedArray().asList())
+                windowCurrentSpeed(allSamples)
             } else {
                 null
             }
@@ -122,13 +124,27 @@ class DownloadSpeedTracker(
     }
 
     /**
+     * Clears all rolling and cumulative statistics. Call when the queue becomes
+     * empty or when starting a new user-visible download session.
+     */
+    @Synchronized
+    fun reset() {
+        samplesBySection.clear()
+        totalBytesBySection.clear()
+        totalDurationMsBySection.clear()
+        totalSamplesBySection.clear()
+        aggregateSpeedHistory.clear()
+    }
+
+    /**
      * Compute current speed from a list of samples: total bytes / total time.
      * Returns null if fewer than 2 samples.
      */
     private fun windowCurrentSpeed(samples: List<DownloadSpeedSample>): Long? {
         if (samples.size < 2) return null
-        val totalBytes = samples.sumOf { it.bytesDelta }
-        val totalTime = samples.last().timestampMs - samples.first().timestampMs
+        val orderedSamples = samples.sortedBy { it.timestampMs }
+        val totalBytes = orderedSamples.sumOf { it.bytesDelta }
+        val totalTime = orderedSamples.last().timestampMs - orderedSamples.first().timestampMs
         return if (totalTime > 0L) totalBytes * 1000L / totalTime else null
     }
 

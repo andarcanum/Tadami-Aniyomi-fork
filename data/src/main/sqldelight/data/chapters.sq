@@ -77,6 +77,11 @@ FROM chapters
 WHERE manga_id = :mangaId
 AND read = 1;
 
+getTotalReadChapterCount:
+SELECT COUNT(*)
+FROM chapters
+WHERE read = 1;
+
 getBookmarkedChaptersByMangaId:
 SELECT *
 FROM chapters

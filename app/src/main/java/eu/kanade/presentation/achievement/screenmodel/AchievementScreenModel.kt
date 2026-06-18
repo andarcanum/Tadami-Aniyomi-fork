@@ -96,6 +96,15 @@ class AchievementScreenModel(
 }
 
 @Immutable
+data class UserLevelInfo(
+    val level: Int,
+    val rankName: String,
+    val currentXp: Int,
+    val requiredXpForNext: Int,
+    val progressFraction: Float,
+)
+
+@Immutable
 sealed interface AchievementScreenState {
     @Immutable
     data object Loading : AchievementScreenState
@@ -112,6 +121,37 @@ sealed interface AchievementScreenState {
         val currentMonthStats: MonthStats = MonthStats(0, 0, 0, 0),
         val previousMonthStats: MonthStats = MonthStats(0, 0, 0, 0),
     ) : AchievementScreenState {
+        val levelInfo: UserLevelInfo
+            get() = calculateLevelInfo(totalPoints)
+
+        private fun calculateLevelInfo(totalPoints: Int): UserLevelInfo {
+            var points = totalPoints
+            var currentLevel = 1
+            var requiredXpForNext = 1000
+
+            while (points >= requiredXpForNext) {
+                points -= requiredXpForNext
+                currentLevel++
+                requiredXpForNext = 1000 + (currentLevel - 1) * 500
+            }
+
+            val rankName = when (currentLevel) {
+                in 1..5 -> "Novice Reader"
+                in 6..10 -> "Avid Reader"
+                in 11..15 -> "Ranobe Master"
+                in 16..20 -> "Grandmaster"
+                else -> "Legendary Scholar"
+            }
+
+            return UserLevelInfo(
+                level = currentLevel,
+                rankName = rankName,
+                currentXp = points,
+                requiredXpForNext = requiredXpForNext,
+                progressFraction = points.toFloat() / requiredXpForNext,
+            )
+        }
+
         val filteredAchievements: List<Achievement>
             get() = when (selectedCategory) {
                 AchievementCategory.BOTH -> achievements

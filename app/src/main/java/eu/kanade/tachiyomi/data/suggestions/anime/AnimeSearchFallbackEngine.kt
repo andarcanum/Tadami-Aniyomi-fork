@@ -8,7 +8,6 @@ import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.SuggestionTitleResolver
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.anime.model.Anime
@@ -22,7 +21,13 @@ class AnimeSearchFallbackEngine {
         maxResults: Int = 40,
         onProgress: ((List<SuggestionItem>) -> Unit)? = null,
     ): AnimeFallbackOutcome {
-        val cacheKey = SuggestionCache.makeKey("search:${source.id}", anime.url, "ANIME", seed.candidateTitles)
+        val boundedMaxResults = maxResults.coerceIn(1, 100)
+        val cacheKey = SuggestionCache.makeKey(
+            "search:${source.id}:limit:$boundedMaxResults",
+            anime.url,
+            "ANIME",
+            seed.candidateTitles,
+        )
         val cached = SuggestionCache.get(cacheKey)
         if (cached != null) {
             logcat { "[AnimeSearchFallbackEngine] Cache HIT for key $cacheKey, count=${cached.size}" }
@@ -157,25 +162,19 @@ class AnimeSearchFallbackEngine {
         }
 
         for ((tierName, tierQueries) in queryTiers) {
-            if (synchronized(uniqueResults) { uniqueResults.size >= maxResults }) {
+            if (synchronized(uniqueResults) { uniqueResults.size >= boundedMaxResults }) {
                 logcat {
-                    "[AnimeSearchFallbackEngine] Reached target results limit ($maxResults) before processing all tiers. Stopping early."
+                    "[AnimeSearchFallbackEngine] Reached target results limit ($boundedMaxResults) before processing all tiers. Stopping early."
                 }
                 break
             }
             if (tierQueries.isEmpty()) continue
             logcat { "[AnimeSearchFallbackEngine] Processing $tierName with queries: $tierQueries" }
 
-            val staggerMs = when {
-                tierName.startsWith("Tier 4") -> 3000L
-                tierName.startsWith("Tier 3") -> 1500L
-                else -> 500L
-            }
             coroutineScope {
-                tierQueries.forEachIndexed { index, query ->
+                tierQueries.forEach { query ->
                     launch {
-                        delay(staggerMs * index)
-                        if (synchronized(uniqueResults) { uniqueResults.size >= maxResults }) return@launch
+                        if (synchronized(uniqueResults) { uniqueResults.size >= boundedMaxResults }) return@launch
                         try {
                             logcat { "[AnimeSearchFallbackEngine] Searching for query: '$query'" }
                             val page = source.getSearchAnime(1, query, filterList)
@@ -204,6 +203,10 @@ class AnimeSearchFallbackEngine {
                                     logcat {
                                         "[AnimeSearchFallbackEngine] Excluding franchise duplicate: '${sAnime.title}' against '${anime.title}'"
                                     }
+                                    return@mapNotNull null
+                                }
+
+                                if (synchronized(uniqueResults) { uniqueResults.containsKey(sAnime.url) }) {
                                     return@mapNotNull null
                                 }
 
@@ -236,7 +239,7 @@ class AnimeSearchFallbackEngine {
                                     val item = SuggestionItem(
                                         title = sAnime.title,
                                         searchQueries = listOf(sAnime.title),
-                                        thumbnailUrl = sAnime.thumbnail_url,
+                                        thumbnailUrl = resolveThumbnail(source, sAnime),
                                         providerName = source.name,
                                         reason = itemReason,
                                         providerUrl = sAnime.url,
@@ -258,7 +261,7 @@ class AnimeSearchFallbackEngine {
                                 if (isAuthorQuery && authorAdded >= maxAuthor) return@launch
                                 scoredItems.sortedByDescending { it.second }.forEach { (item, _) ->
                                     if (!uniqueResults.containsKey(item.providerUrl) &&
-                                        uniqueResults.size < maxResults
+                                        uniqueResults.size < boundedMaxResults
                                     ) {
                                         if ((isGenreQuery && genreAdded >= maxGenre) ||
                                             (isAuthorQuery && authorAdded >= maxAuthor)
@@ -280,6 +283,8 @@ class AnimeSearchFallbackEngine {
                             if (currentProgress != null) {
                                 onProgress?.invoke(currentProgress)
                             }
+                        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                            throw e
                         } catch (e: Exception) {
                             logcat { "[AnimeSearchFallbackEngine] Search failed for query '$query': ${e.message}" }
                         }
@@ -307,5 +312,14 @@ class AnimeSearchFallbackEngine {
         } else {
             AnimeFallbackOutcome.Success(items)
         }
+    }
+
+    private suspend fun resolveThumbnail(
+        source: AnimeCatalogueSource,
+        anime: eu.kanade.tachiyomi.animesource.model.SAnime,
+    ): String? {
+        return anime.thumbnail_url?.takeIf { it.isNotBlank() }
+            ?: runCatching { source.getAnimeDetails(anime.copy()).thumbnail_url?.takeIf { it.isNotBlank() } }
+                .getOrNull()
     }
 }

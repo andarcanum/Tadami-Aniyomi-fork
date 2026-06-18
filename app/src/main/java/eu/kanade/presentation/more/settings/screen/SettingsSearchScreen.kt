@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.UpIcon
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
@@ -86,7 +87,10 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
+import tachiyomi.presentation.core.util.collectAsState
 import tachiyomi.presentation.core.util.runOnEnterKeyPressed
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import cafe.adriel.voyager.core.screen.Screen as VoyagerScreen
 
 class SettingsSearchScreen(
@@ -102,6 +106,8 @@ class SettingsSearchScreen(
         val focusManager = LocalFocusManager.current
         val focusRequester = remember { FocusRequester() }
         val listState = rememberLazyListState()
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val darkRimLightEnabled by uiPreferences.auroraDarkRimLightEnabled().collectAsState()
         val topBarState = rememberTopAppBarState()
         val topBarScrollBehavior = if (isAurora) {
             TopAppBarDefaults.enterAlwaysScrollBehavior(
@@ -167,6 +173,7 @@ class SettingsSearchScreen(
                                                     colors = auroraColors,
                                                     shape = AURORA_SETTINGS_CARD_SHAPE,
                                                     applyModifierBackgroundInDark = true,
+                                                    applyDarkRimLight = darkRimLightEnabled,
                                                 )
                                                 .clip(AURORA_SETTINGS_CARD_SHAPE)
                                                 .padding(horizontal = 16.dp, vertical = 10.dp)
@@ -284,6 +291,7 @@ class SettingsSearchScreen(
                         isPlayer = isPlayer,
                         listState = listState,
                         contentPadding = contentPadding,
+                        darkRimLightEnabled = darkRimLightEnabled,
                     ) { result ->
                         SearchableSettings.highlightKey = result.highlightKey
                         navigator.replace(result.route)
@@ -308,6 +316,7 @@ private fun SearchResult(
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
     contentPadding: PaddingValues = PaddingValues(),
+    darkRimLightEnabled: Boolean = true,
     onItemClick: (SearchResultItem) -> Unit,
 ) {
     if (searchKey.isEmpty()) return
@@ -403,6 +412,7 @@ private fun SearchResult(
                                                 colors = AuroraTheme.colors,
                                                 shape = AURORA_SETTINGS_CARD_SHAPE,
                                                 applyModifierBackgroundInDark = true,
+                                                applyDarkRimLight = darkRimLightEnabled,
                                             )
                                             .clip(AURORA_SETTINGS_CARD_SHAPE)
                                     } else {

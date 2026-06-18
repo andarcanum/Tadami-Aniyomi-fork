@@ -99,9 +99,17 @@ class AnimeRestorer(
     private suspend fun restoreExistingAnime(backupAnime: BackupAnime, anime: Anime, dbAnime: Anime): Anime {
         val notes = resolveRestoredText(backupAnime.notes, anime.version, dbAnime.notes, dbAnime.version)
         return if (anime.version > dbAnime.version) {
-            updateAnime(dbAnime.copyFrom(anime).copy(id = dbAnime.id, parentId = anime.parentId, notes = notes))
+            updateAnime(
+                dbAnime.copyFrom(anime)
+                    .copy(id = dbAnime.id, parentId = anime.parentId, notes = notes)
+                    .markForSourceReinit(),
+            )
         } else {
-            updateAnime(anime.copyFrom(dbAnime).copy(id = dbAnime.id, parentId = anime.parentId, notes = notes))
+            updateAnime(
+                anime.copyFrom(dbAnime)
+                    .copy(id = dbAnime.id, parentId = anime.parentId, notes = notes)
+                    .markForSourceReinit(),
+            )
         }
     }
 
@@ -179,11 +187,15 @@ class AnimeRestorer(
     private suspend fun restoreNewAnime(
         anime: Anime,
     ): Anime {
-        return anime.copy(
-            initialized = anime.description != null,
-            id = insertAnime(anime),
+        val restoredAnime = anime.markForSourceReinit()
+        return restoredAnime.copy(
+            id = insertAnime(restoredAnime),
             version = anime.version,
         )
+    }
+
+    private fun Anime.markForSourceReinit(): Anime {
+        return copy(initialized = false)
     }
 
     private suspend fun restoreEpisodes(anime: Anime, backupEpisodes: List<BackupEpisode>) {

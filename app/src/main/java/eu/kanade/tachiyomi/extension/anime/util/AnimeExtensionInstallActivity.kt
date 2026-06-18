@@ -3,9 +3,12 @@ package eu.kanade.tachiyomi.extension.anime.util
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.util.system.hasMiuiPackageInstaller
+import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import eu.kanade.tachiyomi.util.system.toast
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -59,9 +62,17 @@ class AnimeExtensionInstallActivity : Activity() {
     override fun onStart() {
         super.onStart()
         if (hasIgnoredResult) {
-            checkInstallationResult(RESULT_CANCELED)
-            finish()
+            hasIgnoredResult = false
+            Handler(Looper.getMainLooper()).postDelayed({
+                checkInstallationResult(resolveInstallationResultAfterIgnoredMiuiResult())
+                finish()
+            }, MIUI_RESULT_CHECK_DELAY_MS)
         }
+    }
+
+    private fun resolveInstallationResultAfterIgnoredMiuiResult(): Int {
+        val pkgName = intent.extras?.getString(AnimeExtensionInstaller.EXTRA_PACKAGE_NAME)
+        return if (pkgName != null && isPackageInstalled(pkgName)) RESULT_OK else RESULT_CANCELED
     }
 
     private fun checkInstallationResult(resultCode: Int) {
@@ -83,3 +94,4 @@ class AnimeExtensionInstallActivity : Activity() {
 }
 
 private const val INSTALL_REQUEST_CODE = 500
+private const val MIUI_RESULT_CHECK_DELAY_MS = 3_000L

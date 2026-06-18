@@ -147,6 +147,18 @@ class UnlockableManagerTest {
         manager.isUnlockableUnlocked("aura_matrix") shouldBe true
         manager.isUnlockableUnlocked("theme_NEBULA_TIDE") shouldBe true
     }
+
+    @Test
+    fun `getUnlockableNameRes returns correct StringResource reference`() {
+        val prefs = InMemorySharedPreferences()
+        val manager = UnlockableManager(prefs, stubProfileManager)
+
+        val goldThemeRes = manager.getUnlockableNameRes("theme_achievement_gold")
+        goldThemeRes shouldBe tachiyomi.i18n.MR.strings.unlockable_theme_achievement_gold
+
+        val invalidRes = manager.getUnlockableNameRes("nonexistent_reward")
+        invalidRes shouldBe null
+    }
 }
 
 /**

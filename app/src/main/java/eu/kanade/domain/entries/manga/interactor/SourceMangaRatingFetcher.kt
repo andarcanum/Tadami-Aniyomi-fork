@@ -44,18 +44,6 @@ class SourceMangaRatingFetcher {
                 request
             }
 
-            val cachedRating = ratingCache.peek(
-                contentType = CONTENT_TYPE,
-                sourceName = source.name,
-                url = requestToUse.url.toString(),
-            )
-            if (cachedRating != null && !forceRefresh) {
-                debugLog(
-                    "await: source=${source.name} family=$family mangaUrl=${requestToUse.url} rating=${cachedRating.previewFloat()} cacheHit=true",
-                )
-                return@runCatching cachedRating
-            }
-
             if (sourceRating != null) {
                 ratingCache.put(
                     contentType = CONTENT_TYPE,

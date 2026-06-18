@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.canScroll
@@ -69,6 +70,9 @@ import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsState
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 class SupportProjectScreen : Screen() {
 
@@ -83,6 +87,8 @@ class SupportProjectScreen : Screen() {
 
         val options = remember(context) { DonationOptionsHelper.loadFromAssets(context) }
         val state = rememberLazyListState()
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
+        val darkRimLightEnabled by uiPreferences.auroraDarkRimLightEnabled().collectAsState()
 
         val backAction: () -> Unit = handleBack ?: { navigator.pop() }
 
@@ -104,6 +110,7 @@ class SupportProjectScreen : Screen() {
                         modifier = Modifier
                             .padding(horizontal = AURORA_SETTINGS_CARD_HORIZONTAL_INSET)
                             .padding(top = 12.dp),
+                        darkRimLightEnabled = darkRimLightEnabled,
                     )
                 }
 
@@ -132,6 +139,7 @@ class SupportProjectScreen : Screen() {
                         context = context,
                         uriHandler = uriHandler,
                         modifier = Modifier.padding(horizontal = AURORA_SETTINGS_CARD_HORIZONTAL_INSET),
+                        darkRimLightEnabled = darkRimLightEnabled,
                     )
                 }
             }
@@ -143,6 +151,7 @@ class SupportProjectScreen : Screen() {
 private fun SupportIntroCard(
     auroraColors: AuroraColors,
     modifier: Modifier = Modifier,
+    darkRimLightEnabled: Boolean = true,
 ) {
     if (auroraColors.isDark) {
         val shape = RoundedCornerShape(24.dp)
@@ -161,6 +170,7 @@ private fun SupportIntroCard(
         AuroraSettingsCard(
             modifier = modifier,
             onClick = null,
+            darkRimLightEnabled = darkRimLightEnabled,
         ) {
             SupportIntroCardContent(auroraColors)
         }
@@ -387,6 +397,7 @@ private fun DonationOptionCard(
     context: Context,
     uriHandler: androidx.compose.ui.platform.UriHandler,
     modifier: Modifier = Modifier,
+    darkRimLightEnabled: Boolean = true,
 ) {
     val isDark = auroraColors.isDark
     val onClickAction = {
@@ -470,6 +481,7 @@ private fun DonationOptionCard(
         AuroraSettingsCard(
             modifier = modifier,
             onClick = onClickAction,
+            darkRimLightEnabled = darkRimLightEnabled,
         ) {
             DonationOptionCardContent(
                 option = option,

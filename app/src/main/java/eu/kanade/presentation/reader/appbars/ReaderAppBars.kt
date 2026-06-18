@@ -119,6 +119,7 @@ fun ReaderAppBars(
 
     // Bottom bar button visibility
     visibleButtons: BottomBarButtonFlags = BottomBarButtonFlags(),
+    buttonsOrder: List<String> = emptyList(),
 
     // Navigator customization options
     showNavigator: Boolean = true,
@@ -461,6 +462,7 @@ fun ReaderAppBars(
                         onClickChapterList = onClickChapterList,
                         onClickSettings = onClickSettings,
                         visibleButtons = visibleButtons,
+                        buttonsOrder = buttonsOrder,
                     )
                 }
             }

@@ -115,9 +115,9 @@ private fun resolveAuroraCoverModelCandidate(data: Any?): Any? {
     return when (data) {
         null -> null
         is String -> data.takeIf { it.isNotBlank() }
-        is AnimeCover -> data.takeIf { !it.url.isNullOrBlank() }
-        is MangaCover -> data.takeIf { !it.url.isNullOrBlank() }
-        is NovelCover -> data
+        is AnimeCover -> data.takeIf { !it.url.isNullOrBlank() || it.isAnimeFavorite }
+        is MangaCover -> data.takeIf { !it.url.isNullOrBlank() || it.isMangaFavorite }
+        is NovelCover -> data.takeIf { !it.url.isNullOrBlank() || it.isNovelFavorite }
         else -> data
     }
 }

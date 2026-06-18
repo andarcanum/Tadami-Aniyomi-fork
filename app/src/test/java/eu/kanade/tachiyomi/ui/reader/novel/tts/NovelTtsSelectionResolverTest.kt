@@ -85,4 +85,26 @@ class NovelTtsSelectionResolverTest {
         resolved.selectedLocaleTag shouldBe "ru-RU"
         resolved.showLocaleFallback shouldBe true
     }
+
+    @Test
+    fun `blank preferred voice keeps system default voice while preserving locale`() {
+        val selection = resolveNovelTtsVoiceSelection(
+            availableVoices = listOf(
+                NovelTtsVoiceDescriptor(id = "en", name = "English", localeTag = "en-US"),
+            ),
+            availableLocales = listOf("en-US"),
+            capabilities = NovelTtsEngineCapabilities(
+                supportsExactWordOffsets = false,
+                supportsReliablePauseResume = true,
+                supportsVoiceEnumeration = true,
+                supportsLocaleEnumeration = true,
+            ),
+            preferredVoiceId = "",
+            preferredLocaleTag = "en-US",
+        )
+
+        selection.selectedVoice shouldBe null
+        selection.selectedVoiceId shouldBe ""
+        selection.selectedLocaleTag shouldBe "en-US"
+    }
 }

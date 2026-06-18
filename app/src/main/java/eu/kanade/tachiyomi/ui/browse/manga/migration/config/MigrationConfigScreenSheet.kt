@@ -47,6 +47,7 @@ private const val TRACKING = 0b00100
 private const val CUSTOM_COVER = 0b01000
 private const val DELETE_DOWNLOADED = 0b10000
 private const val EXTRA = 0b100000
+private const val NOTES = 0b1000000
 
 @Composable
 fun MigrationConfigScreenSheet(
@@ -106,6 +107,13 @@ fun MigrationConfigScreenSheet(
                         label = stringResource(MR.strings.migration_extra),
                         onClick = {
                             preferences.migrationFlags().set(migrationFlags xor EXTRA)
+                        },
+                    )
+                    MigrationFlagChip(
+                        selected = migrationFlags and NOTES != 0,
+                        label = stringResource(MR.strings.action_notes),
+                        onClick = {
+                            preferences.migrationFlags().set(migrationFlags xor NOTES)
                         },
                     )
                     MigrationFlagChip(

@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.achievement.ui
+package eu.kanade.presentation.achievement.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,19 +12,16 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.EmojiEvents
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,7 +30,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.achievement.components.AchievementActivityGraph
@@ -41,7 +40,6 @@ import eu.kanade.presentation.achievement.components.AchievementCard
 import eu.kanade.presentation.achievement.components.AchievementCategoryTabs
 import eu.kanade.presentation.achievement.components.AchievementContent
 import eu.kanade.presentation.achievement.components.AchievementStatsComparison
-import eu.kanade.presentation.achievement.components.ActivityStreakIndicator
 import eu.kanade.presentation.achievement.screenmodel.AchievementScreenState
 import eu.kanade.presentation.more.settings.AuroraTopBarLayout
 import eu.kanade.presentation.theme.AuroraTheme
@@ -50,7 +48,6 @@ import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
-import kotlin.math.roundToInt
 
 /**
  * Aurora-themed Achievement Screen with custom top bar and floating stats
@@ -136,13 +133,12 @@ fun AchievementScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                AuroraStatsHeader(
+                                AuroraBentoHeader(
+                                    levelInfo = state.levelInfo,
                                     totalPoints = state.totalPoints,
-                                    totalPossiblePoints = totalPossiblePoints,
-                                    pointsFraction = pointsFraction,
                                     unlockedCount = state.unlockedCount,
                                     totalCount = state.totalCount,
-                                    unlockedFraction = unlockedFraction,
+                                    currentStreak = state.currentStreak,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
 
@@ -159,18 +155,6 @@ fun AchievementScreen(
                             AchievementActivityGraph(
                                 yearlyStats = state.yearlyStats,
                             )
-                        }
-
-                        // Индикатор серии
-                        item {
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            ActivityStreakIndicator(
-                                currentStreak = state.currentStreak,
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                            )
-
-                            Spacer(modifier = Modifier.height(16.dp))
                         }
 
                         // Табы категорий
@@ -211,130 +195,365 @@ fun AchievementScreen(
 }
 
 /**
- * Floating stats header with glassmorphism cards
+ * Bento Grid Header for Achievements Screen
  */
 @Composable
-private fun AuroraStatsHeader(
+private fun AuroraBentoHeader(
+    levelInfo: eu.kanade.presentation.achievement.screenmodel.UserLevelInfo,
     totalPoints: Int,
-    totalPossiblePoints: Int,
-    pointsFraction: Float,
     unlockedCount: Int,
     totalCount: Int,
-    unlockedFraction: Float,
+    currentStreak: Int,
     modifier: Modifier = Modifier,
 ) {
-    val colors = AuroraTheme.colors
-    val pointsPercent = (pointsFraction.coerceIn(0f, 1f) * 100).roundToInt()
-    val unlockedPercent = (unlockedFraction.coerceIn(0f, 1f) * 100).roundToInt()
-
-    val pointsLabel = stringResource(AYMR.strings.achievement_stats_points, pointsPercent)
-    val unlockedLabel = stringResource(AYMR.strings.achievement_stats_unlocked, unlockedPercent)
-
     Row(
-        modifier = modifier,
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        // Points stat card
-        AuroraStatCard(
-            icon = Icons.Default.Star,
-            value = totalPoints.toString(),
-            label = pointsLabel,
-            modifier = Modifier.weight(1f),
-            iconTint = colors.accent,
-            progressFraction = pointsFraction,
+        // Left Column: Giant Level Card (weight 1.1f)
+        BentoLevelCard(
+            levelInfo = levelInfo,
+            modifier = Modifier
+                .weight(1.1f)
+                .height(156.dp),
         )
 
-        // Unlocked count stat card
-        AuroraStatCard(
-            icon = Icons.Default.EmojiEvents,
-            value = "$unlockedCount/$totalCount",
-            label = unlockedLabel,
-            modifier = Modifier.weight(1f),
-            iconTint = colors.accent,
-            progressFraction = unlockedFraction,
-        )
+        // Right Column: Stats & Streak (weight 1f)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .height(156.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            BentoStatsCard(
+                totalPoints = totalPoints,
+                unlockedCount = unlockedCount,
+                totalCount = totalCount,
+                modifier = Modifier.weight(1f),
+            )
+
+            BentoStreakCard(
+                currentStreak = currentStreak,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
 /**
- * Individual stat card with glassmorphism
+ * Bento Level progress card with giant watermark and neon indicators
  */
 @Composable
-private fun AuroraStatCard(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    value: String,
-    label: String,
-    iconTint: Color,
-    progressFraction: Float,
+private fun BentoLevelCard(
+    levelInfo: eu.kanade.presentation.achievement.screenmodel.UserLevelInfo,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
-    val clampedProgress = progressFraction.coerceIn(0f, 1f)
 
+    // Outer Shell
     Box(
         modifier = modifier
-            .height(80.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        colors.surface.copy(alpha = 0.6f),
-                        colors.surface.copy(alpha = 0.3f),
-                    ),
-                ),
-            )
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.surface.copy(alpha = 0.15f))
             .border(
                 width = 1.dp,
-                color = Color.White.copy(alpha = 0.1f),
+                color = Color.White.copy(alpha = 0.05f),
+                shape = RoundedCornerShape(20.dp),
+            )
+            .padding(4.dp),
+    ) {
+        // Inner Core
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            colors.surface.copy(alpha = 0.5f),
+                            colors.surface.copy(alpha = 0.3f),
+                        ),
+                    ),
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(16.dp),
+                )
+                .padding(14.dp),
+        ) {
+            // Giant Monospace Watermark background number
+            Text(
+                text = String.format("%02d", levelInfo.level),
+                fontSize = 90.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                color = colors.accent.copy(alpha = 0.06f),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 10.dp, y = 20.dp),
+            )
+
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text(
+                        text = stringResource(AYMR.strings.achievement_bento_rank),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textSecondary.copy(alpha = 0.4f),
+                        letterSpacing = 0.5.sp,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    val rankRes = when (levelInfo.level) {
+                        in 1..5 -> AYMR.strings.achievement_rank_novice_reader
+                        in 6..10 -> AYMR.strings.achievement_rank_avid_reader
+                        in 11..15 -> AYMR.strings.achievement_rank_ranobe_master
+                        in 16..20 -> AYMR.strings.achievement_rank_grandmaster
+                        else -> AYMR.strings.achievement_rank_legendary_scholar
+                    }
+                    Text(
+                        text = stringResource(rankRes).uppercase(),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary,
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        Text(
+                            text = stringResource(AYMR.strings.achievement_bento_level, levelInfo.level),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.accent,
+                        )
+                        Text(
+                            text = "${levelInfo.currentXp}/${levelInfo.requiredXpForNext} XP",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textSecondary.copy(alpha = 0.6f),
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    // Ultra thin progress bar
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .background(Color.White.copy(alpha = 0.05f)),
+                    ) {
+                        val progressFraction = levelInfo.progressFraction.coerceIn(0f, 1f)
+                        if (progressFraction > 0f) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progressFraction)
+                                    .fillMaxHeight()
+                                    .background(colors.accent),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Bento Stats Card displaying total points and unlocked count
+ */
+@Composable
+private fun BentoStatsCard(
+    totalPoints: Int,
+    unlockedCount: Int,
+    totalCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+
+    // Outer Shell
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.surface.copy(alpha = 0.12f))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.04f),
                 shape = RoundedCornerShape(16.dp),
             )
-            .drawBehind {
-                if (clampedProgress > 0f) {
-                    drawRect(
-                        color = iconTint.copy(alpha = 0.18f),
-                        size = androidx.compose.ui.geometry.Size(size.width * clampedProgress, size.height),
+            .padding(4.dp),
+    ) {
+        // Inner Core
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            colors.surface.copy(alpha = 0.4f),
+                            colors.surface.copy(alpha = 0.2f),
+                        ),
+                    ),
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.06f),
+                    shape = RoundedCornerShape(12.dp),
+                )
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceAround,
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(AYMR.strings.achievement_bento_xp_points),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textSecondary.copy(alpha = 0.4f),
+                        letterSpacing = 0.5.sp,
+                    )
+                    Text(
+                        text = totalPoints.toString(),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.achievementGold,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(AYMR.strings.achievement_bento_unlocked),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textSecondary.copy(alpha = 0.4f),
+                        letterSpacing = 0.5.sp,
+                    )
+                    Text(
+                        text = "$unlockedCount/$totalCount",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.accent,
                     )
                 }
             }
-            .padding(vertical = 12.dp, horizontal = 16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxHeight(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
-        ) {
-            // Icon container
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(iconTint.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
+        }
+    }
+}
 
-            // Value and label
-            Column {
-                Text(
-                    text = value,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = colors.textPrimary,
-                    letterSpacing = 0.5.sp,
+/**
+ * Bento Streak Card displaying current streak and horizontal micro timeline
+ */
+@Composable
+private fun BentoStreakCard(
+    currentStreak: Int,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AuroraTheme.colors
+
+    // Outer Shell
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(colors.surface.copy(alpha = 0.12f))
+            .border(
+                width = 1.dp,
+                color = Color.White.copy(alpha = 0.04f),
+                shape = RoundedCornerShape(16.dp),
+            )
+            .padding(4.dp),
+    ) {
+        // Inner Core
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(12.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            colors.surface.copy(alpha = 0.4f),
+                            colors.surface.copy(alpha = 0.2f),
+                        ),
+                    ),
                 )
-                Text(
-                    text = label,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.textSecondary.copy(alpha = 0.7f),
-                    letterSpacing = 1.sp,
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.06f),
+                    shape = RoundedCornerShape(12.dp),
                 )
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(
+                        text = stringResource(AYMR.strings.achievement_bento_streak),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textSecondary.copy(alpha = 0.4f),
+                        letterSpacing = 0.5.sp,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(AYMR.strings.achievement_bento_days, currentStreak),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.accent,
+                    )
+                }
+
+                // Micro timeline indicator: 5 micro-lines indicating streak status
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    repeat(5) { index ->
+                        val isActive = index < currentStreak.coerceAtMost(5)
+                        Box(
+                            modifier = Modifier
+                                .size(width = 4.dp, height = 14.dp)
+                                .clip(RoundedCornerShape(1.dp))
+                                .background(
+                                    if (isActive) colors.accent else Color.White.copy(alpha = 0.05f),
+                                )
+                                .border(
+                                    width = 0.5.dp,
+                                    color = if (isActive) {
+                                        colors.accent.copy(
+                                            alpha = 0.5f,
+                                        )
+                                    } else {
+                                        Color.White.copy(alpha = 0.1f)
+                                    },
+                                    shape = RoundedCornerShape(1.dp),
+                                ),
+                        )
+                    }
+                }
             }
         }
     }

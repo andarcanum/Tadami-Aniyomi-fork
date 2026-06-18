@@ -3,6 +3,7 @@ package eu.kanade.presentation.webview
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.os.Message
+import android.webkit.CookieManager
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.WebResourceRequest
@@ -130,6 +131,7 @@ fun WebViewScreenContent(
 
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
+                CookieManager.getInstance().flush()
                 showCloudflareHelp = isCloudflareChallengePage(
                     url = url,
                     title = view.title,
@@ -370,9 +372,10 @@ fun WebViewScreenContent(
                         WebView.setWebContentsDebuggingEnabled(true)
                     }
 
-                    headers["user-agent"]?.let {
-                        webView.settings.userAgentString = it
-                    }
+                    headers.entries
+                        .firstOrNull { it.key.equals("user-agent", ignoreCase = true) }
+                        ?.value
+                        ?.let { webView.settings.userAgentString = it }
                 },
                 onDispose = { webView ->
                     val window = windowStack.items.find { it.webView == webView }

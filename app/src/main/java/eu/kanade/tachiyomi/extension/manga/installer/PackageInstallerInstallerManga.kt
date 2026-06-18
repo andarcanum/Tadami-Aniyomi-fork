@@ -10,7 +10,6 @@ import android.content.IntentFilter
 import android.content.pm.PackageInstaller
 import android.os.Build
 import androidx.core.content.ContextCompat
-import androidx.core.content.IntentSanitizer
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.util.lang.use
 import eu.kanade.tachiyomi.util.system.getParcelableExtraCompat
@@ -24,25 +23,20 @@ class PackageInstallerInstallerManga(private val service: Service) : InstallerMa
 
     private val packageActionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+            val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+            if (sessionId != activeSession?.second) {
+                logcat(LogPriority.WARN) { "Ignoring PackageInstaller callback for unexpected session=$sessionId" }
+                return
+            }
+
+            val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+            val statusMessage = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+            val legacyStatus = intent.getIntExtra(EXTRA_LEGACY_STATUS, 0)
+            when (status) {
                 PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                     val userAction = intent.getParcelableExtraCompat<Intent>(Intent.EXTRA_INTENT)
-                        ?.run {
-                            // Doesn't actually needed as the receiver is actually not exported
-                            // But the warnings can't be suppressed without this
-                            IntentSanitizer.Builder()
-                                .allowAction(this.action!!)
-                                .allowExtra(PackageInstaller.EXTRA_SESSION_ID) { id -> id == activeSession?.second }
-                                .allowAnyComponent()
-                                .allowPackage {
-                                    // There is no way to check the actual installer name so allow all.
-                                    true
-                                }
-                                .build()
-                                .sanitizeByFiltering(this)
-                        }
                     if (userAction == null) {
-                        logcat(LogPriority.ERROR) { "Fatal error for $intent" }
+                        logcat(LogPriority.ERROR) { "PackageInstaller requested user action without intent: $intent" }
                         continueQueue(InstallStep.Error)
                         return
                     }
@@ -50,10 +44,16 @@ class PackageInstallerInstallerManga(private val service: Service) : InstallerMa
                     service.startActivity(userAction)
                 }
                 PackageInstaller.STATUS_FAILURE_ABORTED -> {
+                    logcat(LogPriority.INFO) { "Package install aborted: $statusMessage legacy=$legacyStatus" }
                     continueQueue(InstallStep.Idle)
                 }
                 PackageInstaller.STATUS_SUCCESS -> continueQueue(InstallStep.Installed)
-                else -> continueQueue(InstallStep.Error)
+                else -> {
+                    logcat(LogPriority.ERROR) {
+                        "Package install failed: status=$status legacy=$legacyStatus message=$statusMessage"
+                    }
+                    continueQueue(InstallStep.Error)
+                }
             }
         }
     }
@@ -131,4 +131,5 @@ class PackageInstallerInstallerManga(private val service: Service) : InstallerMa
     }
 }
 
-private const val INSTALL_ACTION = "PackageInstallerInstaller.INSTALL_ACTION"
+private const val INSTALL_ACTION = "eu.kanade.tachiyomi.extension.manga.PackageInstallerInstaller.INSTALL_ACTION"
+private const val EXTRA_LEGACY_STATUS = "android.content.pm.extra.LEGACY_STATUS"

@@ -79,9 +79,6 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 awaitingIdleViewerChapters?.let { viewerChapters ->
                     setChaptersInternal(viewerChapters)
                     awaitingIdleViewerChapters = null
-                    if (viewerChapters.currChapter.pages?.size == 1) {
-                        adapter.nextTransition?.to?.let(activity::requestPreloadChapter)
-                    }
                 }
             }
         }
@@ -263,8 +260,8 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
         // Page is transition page - preload allowed
         page ?: return true
 
-        // Initial opening - preload allowed
-        currentPage ?: return true
+        // Initial opening is a programmatic selection. Do not pull another chapter until the user moves.
+        currentPage ?: return false
 
         // Allow preload for
         // 1. Going to next chapter from chapter transition
@@ -297,7 +294,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
 
         // Preload next chapter once we're within the last 5 pages of the current chapter
         val inPreloadRange = pages.size - page.number < 5
-        if (inPreloadRange && allowPreload && page.chapter == adapter.currentChapter) {
+        if (config.preloadNextChapter && inPreloadRange && allowPreload && page.chapter == adapter.currentChapter) {
             logcat { "Request preload next chapter because we're at page ${page.number} of ${pages.size}" }
             adapter.nextTransition?.to?.let(activity::requestPreloadChapter)
         }

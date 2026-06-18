@@ -251,6 +251,33 @@ class NovelReaderTtsControlsTest {
     }
 
     @Test
+    fun `language picker keeps default voice unselected when preferred voice is blank`() {
+        val snapshot = resolveNovelReaderTtsLanguagePickerSnapshot(
+            uiState = NovelReaderTtsUiState(
+                enabled = true,
+                availableVoices = listOf(
+                    NovelTtsVoiceDescriptor(
+                        id = "voice.en",
+                        name = "Amy",
+                        localeTag = "en-US",
+                    ),
+                ),
+                selectedVoiceId = "",
+                selectedLocaleTag = "en-US",
+                capabilities = NovelTtsEngineCapabilities(
+                    supportsExactWordOffsets = false,
+                    supportsReliablePauseResume = true,
+                    supportsVoiceEnumeration = true,
+                    supportsLocaleEnumeration = true,
+                ),
+            ),
+        )
+
+        assertEquals("en-US", snapshot.activeLanguageTag)
+        assertFalse(snapshot.voices.first().selected)
+    }
+
+    @Test
     fun `language search filters by human label and locale tag`() {
         val filteredByLabel = filterNovelReaderTtsLanguages(
             languages = listOf(

@@ -5,6 +5,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
@@ -26,11 +27,17 @@ import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
+import eu.kanade.tachiyomi.data.library.shouldRetryLegacyAutoUpdateRun
+import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorMedia
+import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorRunType
+import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorStore
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.util.storage.getUriCompat
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
+import eu.kanade.tachiyomi.util.system.isCharging
 import eu.kanade.tachiyomi.util.system.isConnectedToWifi
 import eu.kanade.tachiyomi.util.system.isRunning
+import eu.kanade.tachiyomi.util.system.isRunningOrEnqueued
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -56,7 +63,6 @@ import tachiyomi.domain.items.episode.model.NoEpisodesException
 import tachiyomi.domain.items.season.interactor.GetAnimeSeasonsByParentId
 import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.library.service.LibraryPreferences
-import tachiyomi.domain.library.service.LibraryPreferences.Companion.DEVICE_ONLY_ON_WIFI
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_HAS_UNVIEWED
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_COMPLETED
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_VIEWED
@@ -110,10 +116,19 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         }
 
         if (tags.contains(WORK_NAME_AUTO)) {
+            if (context.workManager.isRunning(WORK_NAME_MANUAL)) {
+                return Result.retry()
+            }
+
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
                 val preferences = Injekt.get<LibraryPreferences>()
                 val restrictions = preferences.autoUpdateDeviceRestrictions().get()
-                if ((DEVICE_ONLY_ON_WIFI in restrictions) && !context.isConnectedToWifi()) {
+                if (shouldRetryLegacyAutoUpdateRun(
+                        restrictions = restrictions,
+                        isConnectedToWifi = context.isConnectedToWifi(),
+                        isCharging = context.isCharging(),
+                    )
+                ) {
                     return Result.retry()
                 }
             }
@@ -227,8 +242,15 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
      */
     private suspend fun addAnimeToQueue(categoryId: Long) {
         val libraryAnime = getLibraryAnime.await()
+        val targetEntryIds = inputData.getLongArray(KEY_ENTRY_IDS)
+            ?.takeIf { it.isNotEmpty() }
+            ?.toSet()
 
-        val listToUpdate = if (categoryId != -999L) {
+        val listToUpdate = if (targetEntryIds != null) {
+            libraryAnime
+                .filter { it.anime.id in targetEntryIds }
+                .distinctBy { it.anime.id }
+        } else if (categoryId != -999L) {
             filterByCategoryId(libraryAnime, categoryId)
         } else {
             val categoriesToUpdate = libraryPreferences.animeUpdateCategories().get().map { it.toLong() }
@@ -250,7 +272,19 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                 .distinctBy { it.anime.id }
         }
 
-        val includeSeasons = libraryPreferences.updateSeasonOnLibraryUpdate().get()
+        if (targetEntryIds != null) {
+            val queuedIds = listToUpdate.mapTo(mutableSetOf()) { it.anime.id }
+            targetEntryIds
+                .filterNot { it in queuedIds }
+                .forEach { entryId ->
+                    LibraryUpdateErrorStore.markResolved(
+                        media = LibraryUpdateErrorMedia.Anime,
+                        entryId = entryId,
+                    )
+                }
+        }
+
+        val includeSeasons = targetEntryIds == null && libraryPreferences.updateSeasonOnLibraryUpdate().get()
         val lastToUpdateWithSeasons = listToUpdate.flatMap { libAnime ->
             when (libAnime.anime.fetchType) {
                 FetchType.Seasons -> {
@@ -269,7 +303,9 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             }
         }
 
-        val restrictions = libraryPreferences.autoUpdateItemRestrictions().get()
+        val restrictions = libraryPreferences.autoUpdateItemRestrictions().get().takeIf {
+            targetEntryIds == null
+        }.orEmpty()
         val skippedUpdates = mutableListOf<Pair<Anime, String?>>()
         val (_, fetchWindowUpperBound) = animeFetchInterval.getWindow(ZonedDateTime.now())
 
@@ -368,10 +404,16 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                                         val newEpisodes = updateAnime(anime, fetchWindow)
                                             .sortedByDescending { it.sourceOrder }
 
+                                        LibraryUpdateErrorStore.markResolved(
+                                            media = LibraryUpdateErrorMedia.Anime,
+                                            entryId = anime.id,
+                                        )
+
                                         if (newEpisodes.isNotEmpty()) {
                                             val episodesToDownload = filterEpisodesForDownload.await(anime, newEpisodes)
 
                                             if (episodesToDownload.isNotEmpty()) {
+                                                downloadEpisodes(anime, episodesToDownload)
                                                 hasDownloads.set(true)
                                             }
 
@@ -393,12 +435,27 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                                             )
                                             else -> e.message
                                         }
+                                        val sourceName = sourceManager.getOrStub(anime.source).toString()
                                         failedUpdates.add(
                                             LibraryUpdateFailure(
                                                 title = anime.title,
-                                                sourceName = sourceManager.getOrStub(anime.source).toString(),
+                                                sourceName = sourceName,
                                                 reason = errorMessage,
                                             ),
+                                        )
+                                        LibraryUpdateErrorStore.upsert(
+                                            media = LibraryUpdateErrorMedia.Anime,
+                                            entryId = anime.id,
+                                            title = anime.title,
+                                            sourceId = anime.source,
+                                            sourceName = sourceName,
+                                            thumbnailUrl = anime.thumbnailUrl,
+                                            message = errorMessage ?: context.stringResource(MR.strings.unknown_error),
+                                            runType = if (isManualRun) {
+                                                LibraryUpdateErrorRunType.Manual
+                                            } else {
+                                                LibraryUpdateErrorRunType.Automatic
+                                            },
                                         )
                                     }
                                 }
@@ -482,17 +539,18 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             animeToUpdate.size,
         )
 
-        block()
-
-        ensureActive()
-
-        updatingAnime.remove(anime)
-        completed.getAndIncrement()
-        notifier.showProgressNotification(
-            updatingAnime,
-            completed.get(),
-            animeToUpdate.size,
-        )
+        try {
+            block()
+            ensureActive()
+        } finally {
+            updatingAnime.remove(anime)
+            completed.getAndIncrement()
+            notifier.showProgressNotification(
+                updatingAnime,
+                completed.get(),
+                animeToUpdate.size,
+            )
+        }
     }
 
     /**
@@ -501,7 +559,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private fun writeErrorFile(errors: List<LibraryUpdateFailure>): File {
         try {
             if (errors.isNotEmpty()) {
-                val file = context.createFileInCacheDir("tadami_update_errors.txt")
+                val file = context.createFileInCacheDir("tadami_anime_update_errors.txt")
                 file.bufferedWriter().use { out ->
                     out.write(
                         context.stringResource(MR.strings.library_errors_help, ERROR_LOG_HELP_URL) + "\n\n",
@@ -537,12 +595,11 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
 
         private const val ERROR_LOG_HELP_URL = "https://t.me/TadamiSupport"
 
-        private const val ANIME_PER_SOURCE_QUEUE_WARNING_THRESHOLD = 60
-
         /**
          * Key for category to update.
          */
         private const val KEY_CATEGORY = "animeCategory"
+        private const val KEY_ENTRY_IDS = "entryIds"
 
         fun cancelAllWorks(context: Context) {
             context.workManager.cancelAllWorkByTag(TAG)
@@ -558,15 +615,30 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             context: Context,
             category: Category? = null,
         ): Boolean {
+            val inputData = category
+                ?.let { workDataOf(KEY_CATEGORY to it.id) }
+                ?: workDataOf()
+            return enqueueManualUpdate(context, inputData)
+        }
+
+        fun startNow(
+            context: Context,
+            entryIds: LongArray,
+        ): Boolean {
+            if (entryIds.isEmpty()) return false
+            return enqueueManualUpdate(context, workDataOf(KEY_ENTRY_IDS to entryIds))
+        }
+
+        private fun enqueueManualUpdate(
+            context: Context,
+            inputData: Data,
+        ): Boolean {
             val wm = context.workManager
-            if (wm.isRunning(TAG)) {
+            if (wm.isRunning(TAG) || wm.isRunningOrEnqueued(WORK_NAME_MANUAL)) {
                 // Already running either as a scheduled or manual job
                 return false
             }
 
-            val inputData = workDataOf(
-                KEY_CATEGORY to category?.id,
-            )
             val request = OneTimeWorkRequestBuilder<AnimeLibraryUpdateJob>()
                 .addTag(TAG)
                 .addTag(WORK_NAME_MANUAL)

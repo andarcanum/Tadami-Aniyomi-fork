@@ -326,6 +326,22 @@ internal fun shouldResetHomeHubScroll(previousPage: Int, currentPage: Int): Bool
     return previousPage != currentPage
 }
 
+internal fun resolveHomeHubSectionIndex(
+    sections: List<HomeHubSection>,
+    section: HomeHubSection,
+): Int {
+    if (sections.isEmpty()) return 0
+    return sections.indexOf(section).takeIf { it >= 0 } ?: 0
+}
+
+internal fun shouldSwitchHomeHubSection(
+    currentIndex: Int,
+    targetIndex: Int,
+    lastIndex: Int,
+): Boolean {
+    return targetIndex in 0..lastIndex && targetIndex != currentIndex
+}
+
 internal fun shouldUseHomeHubWrappedSections(deviceClass: AuroraDeviceClass): Boolean {
     return deviceClass != AuroraDeviceClass.Phone
 }
@@ -588,6 +604,9 @@ internal enum class NicknameEffectPreset(val key: String) {
     AuroraCrown("aurora_crown"),
     GlitchRune("glitch_rune"),
     Cipher("cipher"),
+    TrinityPrism("trinity_prism"),
+    ShadowCrown("shadow_crown"),
+    RankSigils("rank_sigils"),
     ;
 
     companion object {
@@ -724,7 +743,7 @@ object HomeHubTab : Tab {
         val scope = rememberCoroutineScope()
         val activityDataFlow = remember(activityDataRepository) { activityDataRepository.getActivityData(days = 365) }
         val activityData by activityDataFlow.collectAsStateWithLifecycle(initialValue = emptyList())
-        val currentStreak = calculateHomeOpenStreak(activityData)
+        val currentStreak = remember(activityData) { calculateHomeOpenStreak(activityData) }
         val isNameEdited by userProfilePreferences.nameEdited().collectAsStateWithLifecycle()
         val showHomeGreeting by userProfilePreferences.showHomeGreeting().collectAsStateWithLifecycle()
         val showHomeStreak by userProfilePreferences.showHomeStreak().collectAsStateWithLifecycle()
@@ -760,6 +779,7 @@ object HomeHubTab : Tab {
         val nicknameEffectKey by userProfilePreferences.nicknameEffect().collectAsStateWithLifecycle()
         val avatarFrameStyleKey by userProfilePreferences.avatarFrameStyle().collectAsStateWithLifecycle()
         val homeBadgeStyleKey by userProfilePreferences.homeBadgeStyle().collectAsStateWithLifecycle()
+        val profileTitleKey by userProfilePreferences.profileTitle().collectAsStateWithLifecycle()
         val nicknameStyle = NicknameStyle(
             font = NicknameFontPreset.fromKey(nicknameFontKey),
             fontSize = nicknameFontSize.coerceIn(14, 36),
@@ -790,22 +810,19 @@ object HomeHubTab : Tab {
         val animeScreenModel = HomeHubTab.rememberScreenModel { HomeHubScreenModel() }
         val mangaScreenModel = HomeHubTab.rememberScreenModel { MangaHomeHubScreenModel() }
         val novelScreenModel = HomeHubTab.rememberScreenModel { NovelHomeHubScreenModel() }
-        val animeState by animeScreenModel.state.collectAsStateWithLifecycle()
-        val mangaState by mangaScreenModel.state.collectAsStateWithLifecycle()
-        val novelState by novelScreenModel.state.collectAsStateWithLifecycle()
 
         val profileSection = resolveHomeHubProfileSection(sections, selectedSection)
-        val (headerUserName, headerUserAvatar, headerGreeting) = when (profileSection) {
-            HomeHubSection.Anime -> Triple(animeState.userName, animeState.userAvatar, animeState.greeting)
-            HomeHubSection.Manga -> Triple(mangaState.userName, mangaState.userAvatar, mangaState.greeting)
-            HomeHubSection.Novel -> Triple(novelState.userName, novelState.userAvatar, novelState.greeting)
+        val profileScreenModel: BaseHomeHubScreenModel = when (profileSection) {
+            HomeHubSection.Anime -> animeScreenModel
+            HomeHubSection.Manga -> mangaScreenModel
+            HomeHubSection.Novel -> novelScreenModel
         }
+        val headerState by profileScreenModel.state.collectAsStateWithLifecycle()
+        val headerUserName = headerState.userName
         val headerDisplayUserName = headerUserName.ifBlank { resolveHomeHubDefaultNickname(profileSection) }
-        val headerGreetingReady = when (profileSection) {
-            HomeHubSection.Anime -> animeState.greetingReady
-            HomeHubSection.Manga -> mangaState.greetingReady
-            HomeHubSection.Novel -> novelState.greetingReady
-        }
+        val headerUserAvatar = headerState.userAvatar
+        val headerGreeting = headerState.greeting
+        val headerGreetingReady = headerState.greetingReady
         val showNameEditHint = shouldShowNicknameEditHint(
             currentName = headerUserName,
             isNameEdited = isNameEdited,
@@ -825,22 +842,14 @@ object HomeHubTab : Tab {
 
         var showNameDialog by remember { mutableStateOf(false) }
         if (showNameDialog) {
-            val currentName = when (selectedSection) {
-                HomeHubSection.Anime -> animeState.userName
-                HomeHubSection.Manga -> mangaState.userName
-                HomeHubSection.Novel -> novelState.userName
-            }.ifBlank { resolveHomeHubDefaultNickname(selectedSection) }
+            val currentName = headerUserName.ifBlank { resolveHomeHubDefaultNickname(profileSection) }
             NameDialog(
                 currentName = currentName,
                 currentStyle = nicknameStyle,
                 onDismiss = { showNameDialog = false },
                 onConfirm = { newName, newStyle ->
                     if (newName != currentName) {
-                        when (selectedSection) {
-                            HomeHubSection.Anime -> animeScreenModel.updateUserName(newName)
-                            HomeHubSection.Manga -> mangaScreenModel.updateUserName(newName)
-                            HomeHubSection.Novel -> novelScreenModel.updateUserName(newName)
-                        }
+                        profileScreenModel.updateUserName(newName)
                     }
                     userProfilePreferences.nicknameFont().set(newStyle.font.key)
                     userProfilePreferences.nicknameFontSize().set(newStyle.fontSize.coerceIn(14, 36))
@@ -884,13 +893,16 @@ object HomeHubTab : Tab {
             )
         }
 
+        val disableHomeHeaderScrollHide by uiPreferences.disableHomeHeaderScrollHide()
+            .collectAsStateWithLifecycle()
+
         // Do not persist collapsed header position across app relaunches.
         var headerOffsetPx by remember { mutableStateOf(0f) }
         var headerHeightPx by remember { mutableIntStateOf(0) }
         var scrollResetToken by rememberSaveable { mutableIntStateOf(0) }
 
         val onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit = { section, deltaY, atTop ->
-            if (section == selectedSection) {
+            if (!disableHomeHeaderScrollHide && section == selectedSection) {
                 headerOffsetPx = resolveHomeHubHeaderOffset(
                     currentOffsetPx = headerOffsetPx,
                     deltaY = deltaY,
@@ -950,11 +962,11 @@ object HomeHubTab : Tab {
             }
         }.toPersistentList()
 
-        val initialIndex = sections.indexOf(selectedSection).coerceAtLeast(0)
+        val initialIndex = resolveHomeHubSectionIndex(sections, selectedSection)
         val pagerState = rememberPagerState(initialPage = initialIndex) { tabs.size }
 
-        LaunchedEffect(sections, pagerState) {
-            val targetIndex = sections.indexOf(selectedSection).coerceAtLeast(0)
+        LaunchedEffect(sections, selectedSection, pagerState) {
+            val targetIndex = resolveHomeHubSectionIndex(sections, selectedSection)
             if (targetIndex in tabs.indices && pagerState.currentPage != targetIndex) {
                 pagerState.scrollToPage(targetIndex)
             }
@@ -973,8 +985,9 @@ object HomeHubTab : Tab {
         }
 
         val onSectionSelected: (Int) -> Unit = { index ->
-            if (index in tabs.indices && pagerState.currentPage != index) {
-                scope.launch { pagerState.animateScrollToPage(index) }
+            if (shouldSwitchHomeHubSection(pagerState.currentPage, index, tabs.lastIndex)) {
+                selectedSection = sections[index]
+                scope.launch { pagerState.scrollToPage(index) }
             }
         }
         val appHaptics = LocalAppHaptics.current
@@ -1015,6 +1028,7 @@ object HomeHubTab : Tab {
                     userAvatar = headerUserAvatar,
                     avatarFrameStyleKey = avatarFrameStyleKey,
                     homeBadgeStyleKey = homeBadgeStyleKey,
+                    profileTitleKey = profileTitleKey,
                     nicknameStyle = nicknameStyle,
                     greetingStyle = greetingStyle,
                     showGreeting = showHomeGreeting && headerGreetingReady,
@@ -1026,7 +1040,7 @@ object HomeHubTab : Tab {
                     nicknameAlignRight = homeHeaderNicknameAlignRight,
                     homeHeaderLayout = homeHeaderLayout,
                     tabs = tabs,
-                    selectedIndex = pagerState.currentPage.coerceIn(0, (tabs.size - 1).coerceAtLeast(0)),
+                    selectedIndex = resolveHomeHubSectionIndex(sections, selectedSection),
                     onTabSelected = onSectionSelected,
                     onAvatarClick = {
                         appHaptics.tap()
@@ -1125,6 +1139,9 @@ private fun applyNicknameEffect(text: String, effect: NicknameEffectPreset): Str
         NicknameEffectPreset.AuroraCrown -> text
         NicknameEffectPreset.GlitchRune -> text
         NicknameEffectPreset.Cipher -> text
+        NicknameEffectPreset.TrinityPrism -> text
+        NicknameEffectPreset.ShadowCrown -> text
+        NicknameEffectPreset.RankSigils -> text
     }
 }
 
@@ -1168,6 +1185,9 @@ private fun NicknameEffectPreset.label(): String {
         NicknameEffectPreset.AuroraCrown -> "Aurora Crown (Treasury)"
         NicknameEffectPreset.GlitchRune -> "Glitch Rune (Treasury)"
         NicknameEffectPreset.Cipher -> "Cipher Sigil (Treasury)"
+        NicknameEffectPreset.TrinityPrism -> "Trinity Prism (Treasury)"
+        NicknameEffectPreset.ShadowCrown -> "Shadow Crown (Treasury)"
+        NicknameEffectPreset.RankSigils -> "Rank Sigils (Treasury)"
     }
 }
 
@@ -1187,6 +1207,9 @@ private fun nicknameEffectPickerPresets(): List<NicknameEffectPreset> {
         NicknameEffectPreset.AuroraCrown,
         NicknameEffectPreset.GlitchRune,
         NicknameEffectPreset.Cipher,
+        NicknameEffectPreset.TrinityPrism,
+        NicknameEffectPreset.ShadowCrown,
+        NicknameEffectPreset.RankSigils,
     )
 }
 

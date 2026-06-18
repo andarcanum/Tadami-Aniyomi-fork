@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,10 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
@@ -41,7 +39,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
@@ -84,88 +85,117 @@ fun AchievementActivityGraph(
     // Pager для переключения между полугодиями
     val pagerState = rememberPagerState(pageCount = { 2 })
 
-    Card(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = colors.surface.copy(alpha = 0.5f),
-        ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(
+        // Заголовок с индикатором периода
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(MR.strings.achievement_year_activity_title).uppercase(),
+                color = colors.textPrimary,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.sp,
+            )
+
+            // Индикатор текущего периода
+            Text(
+                text = when (pagerState.currentPage) {
+                    0 -> stringResource(MR.strings.achievement_period_jan_jun).uppercase()
+                    1 -> stringResource(MR.strings.achievement_period_jul_dec).uppercase()
+                    else -> ""
+                },
+                color = colors.accent,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.5.sp,
+            )
+        }
+
+        // Bento Shell Box
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .clip(RoundedCornerShape(20.dp))
+                .background(colors.surface.copy(alpha = 0.15f))
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(20.dp),
+                )
+                .padding(4.dp),
         ) {
-            // Заголовок с индикатором периода
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(MR.strings.achievement_year_activity_title),
-                    color = colors.textPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.5.sp,
-                )
-
-                // Индикатор текущего периода
-                Text(
-                    text = when (pagerState.currentPage) {
-                        0 -> stringResource(MR.strings.achievement_period_jan_jun)
-                        1 -> stringResource(MR.strings.achievement_period_jul_dec)
-                        else -> ""
-                    },
-                    color = colors.accent,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Горизонтальный Pager
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxWidth(),
-            ) { page ->
-                val monthsToShow = when (page) {
-                    0 -> firstHalf
-                    1 -> secondHalf
-                    else -> emptyList()
-                }
-
-                MonthBarChart(
-                    months = monthsToShow,
-                    maxActivity = maxActivity,
-                    locale = locale,
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Индикаторы страниц (точки)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                repeat(2) { index ->
-                    Box(
-                        modifier = Modifier
-                            .size(if (pagerState.currentPage == index) 8.dp else 6.dp)
-                            .padding(horizontal = 4.dp)
-                            .background(
-                                color = if (pagerState.currentPage == index) {
-                                    colors.accent
-                                } else {
-                                    colors.textSecondary.copy(alpha = 0.3f)
-                                },
-                                shape = CircleShape,
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                colors.surface.copy(alpha = 0.5f),
+                                colors.surface.copy(alpha = 0.3f),
                             ),
+                        ),
                     )
+                    .border(
+                        width = 1.dp,
+                        color = Color.White.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                    .padding(16.dp),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    // Горизонтальный Pager
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { page ->
+                        val monthsToShow = when (page) {
+                            0 -> firstHalf
+                            1 -> secondHalf
+                            else -> emptyList()
+                        }
+
+                        MonthBarChart(
+                            months = monthsToShow,
+                            maxActivity = maxActivity,
+                            locale = locale,
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Индикаторы страниц (горизонтальные линии)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        repeat(2) { index ->
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 3.dp)
+                                    .size(width = 12.dp, height = 2.dp)
+                                    .background(
+                                        color = if (pagerState.currentPage == index) {
+                                            colors.accent
+                                        } else {
+                                            colors.textSecondary.copy(alpha = 0.2f)
+                                        },
+                                        shape = RoundedCornerShape(1.dp),
+                                    ),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -200,7 +230,25 @@ private fun MonthBarChart(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(180.dp),
+            .height(180.dp)
+            .drawBehind {
+                // Draw thin tech grid lines behind the bars
+                val strokeWidth = 1.dp.toPx()
+                val gridColor = Color.White.copy(alpha = 0.03f)
+                drawLine(
+                    gridColor,
+                    Offset(0f, size.height * 0.25f),
+                    Offset(size.width, size.height * 0.25f),
+                    strokeWidth,
+                )
+                drawLine(gridColor, Offset(0f, size.height * 0.5f), Offset(size.width, size.height * 0.5f), strokeWidth)
+                drawLine(
+                    gridColor,
+                    Offset(0f, size.height * 0.75f),
+                    Offset(size.width, size.height * 0.75f),
+                    strokeWidth,
+                )
+            },
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.Bottom,
     ) {
@@ -297,12 +345,12 @@ private fun ActivityBar(
                 contentDescription = "Activity bar for ${month.month.name}"
             },
         ) {
-            // The Bar with long-press gesture
+            // The Bar with long-press gesture (Sleek 8.dp narrow neon pillar)
             Box(
                 modifier = Modifier
-                    .width(16.dp)
+                    .width(8.dp)
                     .fillMaxHeight(animatedHeight)
-                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                    .clip(RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(
@@ -333,12 +381,12 @@ private fun ActivityBar(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Month Label
+            // Month Label (Uppercase Soft Sans-serif)
             Text(
-                text = monthLabel,
-                color = if (isHighlighted) colors.accent else colors.textSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
+                text = monthLabel.uppercase(),
+                color = if (isHighlighted) colors.accent else colors.textSecondary.copy(alpha = 0.5f),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
             )
         }

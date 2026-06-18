@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.download
 
+import android.content.ClipData
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.graphics.res.animatedVectorResource
@@ -65,6 +66,8 @@ import eu.kanade.presentation.components.DropdownMenu
 import eu.kanade.presentation.components.NestedMenuItem
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.download.DownloadEngineCard
+import eu.kanade.presentation.download.DownloadPowerPolicyBanner
+import eu.kanade.presentation.download.NovelDownloadThrottleSettingsDialog
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.AuroraTopBarLayout
 import eu.kanade.presentation.theme.AuroraTheme
@@ -116,7 +119,12 @@ private fun openDownloadFolder(context: android.content.Context, subdirectory: S
 
     val intent = Intent(Intent.ACTION_VIEW).apply {
         setDataAndType(dir.uri, "resource/folder")
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        clipData = ClipData.newUri(context.contentResolver, "downloads", dir.uri)
+        addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+        )
     }
 
     try {
@@ -124,7 +132,12 @@ private fun openDownloadFolder(context: android.content.Context, subdirectory: S
     } catch (_: Exception) {
         val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
             data = dir.uri
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            clipData = ClipData.newUri(context.contentResolver, "downloads", dir.uri)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
         }
         try {
             context.startActivity(fallbackIntent)
@@ -386,6 +399,12 @@ data object DownloadsTab : Tab {
                         onCancelAll = engineScreenModel::cancelAll,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
+
+                    if (engineSnapshot.hasWork) {
+                        DownloadPowerPolicyBanner(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        )
+                    }
 
                     HorizontalPager(
                         modifier = Modifier.fillMaxSize(),
@@ -696,12 +715,43 @@ data object DownloadsTab : Tab {
         isAurora: Boolean,
         onOpenFolder: () -> Unit,
     ) {
-        if (isAurora) {
-            AuroraTopBarIconButton(
-                onClick = onOpenFolder,
-                icon = Icons.Filled.FolderOpen,
-                contentDescription = stringResource(AYMR.strings.action_open_download_folder),
+        var overflowExpanded by remember { mutableStateOf(false) }
+        var showThrottleSettings by remember { mutableStateOf(false) }
+
+        if (showThrottleSettings) {
+            NovelDownloadThrottleSettingsDialog(
+                onDismissRequest = { showThrottleSettings = false },
             )
+        }
+
+        if (isAurora) {
+            Box {
+                AuroraTopBarIconButton(
+                    onClick = { overflowExpanded = true },
+                    icon = Icons.Filled.MoreVert,
+                    contentDescription = stringResource(MR.strings.action_menu_overflow_description),
+                )
+                DropdownMenu(
+                    expanded = overflowExpanded,
+                    onDismissRequest = { overflowExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(AYMR.strings.action_open_download_folder)) },
+                        leadingIcon = { Icon(Icons.Filled.FolderOpen, contentDescription = null) },
+                        onClick = {
+                            onOpenFolder()
+                            overflowExpanded = false
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(AYMR.strings.novel_download_throttle_menu)) },
+                        onClick = {
+                            showThrottleSettings = true
+                            overflowExpanded = false
+                        },
+                    )
+                }
+            }
         } else {
             AppBarActions(
                 persistentListOf(
@@ -709,6 +759,10 @@ data object DownloadsTab : Tab {
                         title = stringResource(AYMR.strings.action_open_download_folder),
                         icon = Icons.Filled.FolderOpen,
                         onClick = onOpenFolder,
+                    ),
+                    AppBar.OverflowAction(
+                        title = stringResource(AYMR.strings.novel_download_throttle_menu),
+                        onClick = { showThrottleSettings = true },
                     ),
                 ),
             )

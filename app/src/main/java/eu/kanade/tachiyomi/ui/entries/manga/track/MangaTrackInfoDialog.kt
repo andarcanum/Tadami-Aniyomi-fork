@@ -722,9 +722,8 @@ data class TrackServiceSearchScreen(
             onConfirmSelection = f@{ private: Boolean ->
                 val selected = state.selected ?: return@f
                 selected.private = private
-                screenModel.registerTracking(selected) {
-                    navigator.pop()
-                }
+                screenModel.registerTracking(selected)
+                navigator.pop()
             },
             onDismissRequest = navigator::pop,
             supportsPrivateTracking = screenModel.supportsPrivateTracking,
@@ -769,10 +768,15 @@ data class TrackServiceSearchScreen(
             }
         }
 
-        fun registerTracking(item: MangaTrackSearch, onComplete: () -> Unit) {
+        fun registerTracking(item: MangaTrackSearch) {
             screenModelScope.launchNonCancellable {
-                tracker.mangaService.register(item, mangaId)
-                onComplete()
+                try {
+                    tracker.mangaService.register(item, mangaId)
+                } catch (e: Throwable) {
+                    logcat(LogPriority.ERROR, e) {
+                        "Failed to register manga tracking entry mangaId=$mangaId serviceId=${tracker.id}"
+                    }
+                }
             }
         }
 

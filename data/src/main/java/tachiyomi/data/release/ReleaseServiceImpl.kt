@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.domain.release.model.Release
 import tachiyomi.domain.release.service.ReleaseService
+import java.net.URLEncoder
 
 class ReleaseServiceImpl(
     private val networkService: NetworkHelper,
@@ -16,15 +17,31 @@ class ReleaseServiceImpl(
 ) : ReleaseService {
 
     override suspend fun latest(arguments: GetApplicationRelease.Arguments): Release? {
-        val release = with(json) {
-            networkService.client
-                .newCall(GET("https://api.github.com/repos/${arguments.repository}/releases/latest"))
-                .awaitSuccess()
-                .parseAs<GithubRelease>()
-        }
+        val release = requestGithubRelease(
+            "https://api.github.com/repos/${arguments.repository}/releases/latest",
+        )
         val downloadLink = getDownloadLink(release = release) ?: return null
 
         return release.toRelease(downloadLink)
+    }
+
+    override suspend fun byTag(repository: String, versionTag: String): Release? {
+        val encodedTag = URLEncoder.encode(versionTag, Charsets.UTF_8.name())
+        val release = requestGithubRelease(
+            "https://api.github.com/repos/$repository/releases/tags/$encodedTag",
+        )
+        val downloadLink = getDownloadLink(release = release) ?: release.assets.firstOrNull()?.downloadLink.orEmpty()
+
+        return release.toRelease(downloadLink)
+    }
+
+    private suspend fun requestGithubRelease(url: String): GithubRelease {
+        return with(json) {
+            networkService.client
+                .newCall(GET(url))
+                .awaitSuccess()
+                .parseAs<GithubRelease>()
+        }
     }
 
     private fun getDownloadLink(release: GithubRelease): String? {

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.NewReleases
+import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.VideoSettings
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -40,6 +41,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,6 +50,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tadami.aurora.BuildConfig
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
@@ -60,6 +64,9 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
+import tachiyomi.presentation.core.util.collectAsState
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 @Composable
 fun MoreScreenAurora(
@@ -79,7 +86,9 @@ fun MoreScreenAurora(
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onDebugAppUpdatePreviewClick: () -> Unit,
+    onDebugUpdatedChangelogPreviewClick: () -> Unit,
     onStatsClick: () -> Unit,
+    onLibraryUpdateErrorsClick: () -> Unit,
     onAchievementsClick: () -> Unit,
     onTreasuryClick: () -> Unit,
     onHelpClick: () -> Unit,
@@ -87,6 +96,8 @@ fun MoreScreenAurora(
     val colors = AuroraTheme.colors
     val hostScaffoldContentPadding = LocalHostScaffoldContentPadding.current
     val bottomContentPadding = (hostScaffoldContentPadding?.calculateBottomPadding() ?: 0.dp) + 24.dp
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val darkRimLightEnabled by uiPreferences.auroraDarkRimLightEnabled().collectAsState()
 
     AuroraBackground {
         LazyColumn(
@@ -118,54 +129,70 @@ fun MoreScreenAurora(
                     title = navStyle.moreTab.options.title,
                     icon = navStyle.moreIcon,
                     onClick = onClickAlt,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_settings),
                     icon = Icons.Filled.Settings,
                     onClick = onSettingsClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_player_settings),
                     icon = Icons.Outlined.VideoSettings,
                     onClick = onPlayerSettingsClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(MR.strings.pref_category_reader),
                     icon = Icons.AutoMirrored.Outlined.ChromeReaderMode,
                     onClick = onMangaReaderSettingsClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.pref_category_novel_reader),
                     icon = Icons.Outlined.Book,
                     onClick = onNovelReaderSettingsClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_statistics),
                     icon = Icons.Filled.QueryStats,
                     onClick = onStatsClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_achievements),
                     icon = Icons.Filled.EmojiEvents,
                     onClick = onAchievementsClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.label_treasury),
                     icon = Icons.Outlined.Inventory2,
                     onClick = onTreasuryClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_data_storage),
                     icon = Icons.Outlined.Storage,
                     onClick = onDataStorageClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
+                )
+
+                AuroraSettingItem(
+                    title = stringResource(AYMR.strings.option_label_library_update_errors),
+                    icon = Icons.Outlined.ReportProblem,
+                    onClick = onLibraryUpdateErrorsClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 val downloadQueueState = downloadQueueStateProvider()
@@ -190,12 +217,14 @@ fun MoreScreenAurora(
                     subtitle = downloadSubtitle,
                     icon = Icons.Filled.Download,
                     onClick = onDownloadClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_categories),
                     icon = Icons.AutoMirrored.Outlined.Label,
                     onClick = onCategoriesClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraToggleItem(
@@ -203,6 +232,7 @@ fun MoreScreenAurora(
                     icon = Icons.Filled.CloudOff,
                     checked = downloadedOnly,
                     onCheckedChange = onDownloadedOnlyChange,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraToggleItem(
@@ -210,12 +240,14 @@ fun MoreScreenAurora(
                     icon = Icons.Outlined.VisibilityOff,
                     checked = incognitoMode,
                     onCheckedChange = onIncognitoModeChange,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_about),
                     icon = Icons.Filled.Info,
                     onClick = onAboutClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
 
                 if (BuildConfig.DEBUG) {
@@ -224,6 +256,14 @@ fun MoreScreenAurora(
                         subtitle = stringResource(AYMR.strings.debug_app_update_preview_summary),
                         icon = Icons.Outlined.NewReleases,
                         onClick = onDebugAppUpdatePreviewClick,
+                        darkRimLightEnabled = darkRimLightEnabled,
+                    )
+                    AuroraSettingItem(
+                        title = stringResource(AYMR.strings.debug_updated_changelog_preview),
+                        subtitle = stringResource(AYMR.strings.debug_updated_changelog_preview_summary),
+                        icon = Icons.Outlined.NewReleases,
+                        onClick = onDebugUpdatedChangelogPreviewClick,
+                        darkRimLightEnabled = darkRimLightEnabled,
                     )
                 }
 
@@ -231,6 +271,7 @@ fun MoreScreenAurora(
                     title = stringResource(AYMR.strings.aurora_help),
                     icon = Icons.AutoMirrored.Filled.Help,
                     onClick = onHelpClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
                 )
             }
         }
@@ -243,6 +284,7 @@ fun AuroraSettingItem(
     icon: ImageVector,
     onClick: () -> Unit,
     subtitle: String? = null,
+    darkRimLightEnabled: Boolean = true,
 ) {
     val colors = AuroraTheme.colors
     val useMediumWeight = LocalIsDefaultAppUiFont.current
@@ -256,7 +298,7 @@ fun AuroraSettingItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
-            .auroraCardStyle(colors, RoundedCornerShape(16.dp)),
+            .auroraCardStyle(colors, RoundedCornerShape(16.dp), applyDarkRimLight = darkRimLightEnabled),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (!colors.isDark && !colors.isEInk) {
@@ -315,6 +357,7 @@ fun AuroraToggleItem(
     icon: ImageVector,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    darkRimLightEnabled: Boolean = true,
 ) {
     val colors = AuroraTheme.colors
     val useMediumWeight = LocalIsDefaultAppUiFont.current
@@ -328,7 +371,7 @@ fun AuroraToggleItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = AURORA_MORE_CARD_VERTICAL_INSET)
-            .auroraCardStyle(colors, RoundedCornerShape(16.dp)),
+            .auroraCardStyle(colors, RoundedCornerShape(16.dp), applyDarkRimLight = darkRimLightEnabled),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (!colors.isDark && !colors.isEInk) {

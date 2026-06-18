@@ -113,9 +113,11 @@ abstract class InstallerManga(private val service: Service) {
     @CallSuper
     open fun onDestroy() {
         LocalBroadcastManager.getInstance(service).unregisterReceiver(cancelReceiver)
+        waitingInstall.getAndSet(null)?.let {
+            extensionManager.updateInstallStep(it.downloadId, InstallStep.Error)
+        }
         queue.forEach { extensionManager.updateInstallStep(it.downloadId, InstallStep.Error) }
         queue.clear()
-        waitingInstall.set(null)
     }
 
     protected fun getActiveEntry(): Entry? = waitingInstall.get()

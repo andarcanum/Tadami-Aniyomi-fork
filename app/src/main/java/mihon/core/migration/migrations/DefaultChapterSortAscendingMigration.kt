@@ -2,6 +2,7 @@ package mihon.core.migration.migrations
 
 import mihon.core.migration.Migration
 import mihon.core.migration.MigrationContext
+import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.interactor.SetMangaDefaultChapterFlags
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -9,13 +10,14 @@ import tachiyomi.domain.library.service.LibraryPreferences
 class DefaultChapterSortAscendingMigration : Migration {
     override val version = 136f
 
-    override suspend fun invoke(migrationContext: MigrationContext): Boolean {
-        val libraryPreferences = migrationContext.get<LibraryPreferences>() ?: return false
-        val setMangaDefaultChapterFlags = migrationContext.get<SetMangaDefaultChapterFlags>() ?: return false
+    override suspend fun invoke(migrationContext: MigrationContext): Boolean = withIOContext {
+        val libraryPreferences = migrationContext.get<LibraryPreferences>() ?: return@withIOContext false
+        val setMangaDefaultChapterFlags =
+            migrationContext.get<SetMangaDefaultChapterFlags>() ?: return@withIOContext false
 
         libraryPreferences.sortChapterByAscendingOrDescending().set(Manga.CHAPTER_SORT_ASC)
         setMangaDefaultChapterFlags.awaitAll()
 
-        return true
+        return@withIOContext true
     }
 }
