@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.theme.colorscheme
+package eu.kanade.presentation.theme.colorscheme
 
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -7,98 +7,98 @@ import androidx.compose.ui.graphics.Color
 /**
  * Event Horizon.
  *
- * Aurora-exclusive "singularity UI" palette. Unlike the other reward themes it
- * avoids another colorful accent-first look: dark mode is built around x-ray
- * white controls on near-black surfaces, infrared error/energy bands, and a
- * cold green lensing accent. Light mode becomes a paper observatory variant.
+ * Aurora-exclusive "singularity UI" palette.
+ * Inspired by the cinematic aesthetic of a black hole's event horizon:
+ * Absolute OLED black background contrasted with blazing hot plasma amber/orange,
+ * glowing accretion disk red-orange, and white-hot gold highlights.
  */
 internal object EventHorizonColorScheme : BaseColorScheme() {
 
     override val darkScheme = darkColorScheme(
-        primary = Color(0xFFF8F3E6),
-        onPrimary = Color(0xFF070407),
-        primaryContainer = Color(0xFF28222A),
-        onPrimaryContainer = Color(0xFFFFF8EF),
-        inversePrimary = Color(0xFF4D4651),
+        primary = Color(0xFFFF6F00), // Blazing Neon Amber/Orange (Accretion disk primary)
+        onPrimary = Color(0xFF4C1F00),
+        primaryContainer = Color(0xFF7F3500),
+        onPrimaryContainer = Color(0xFFFFD8C2),
+        inversePrimary = Color(0xFFB34A00),
 
-        secondary = Color(0xFFFF4D2E),
-        onSecondary = Color(0xFF230400),
-        secondaryContainer = Color(0xFF5A1209),
-        onSecondaryContainer = Color(0xFFFFDAD2),
+        secondary = Color(0xFFFF3D00), // Plasma Red-Orange (Hawking radiation / inner disk)
+        onSecondary = Color(0xFF4C0F00),
+        secondaryContainer = Color(0xFF801A00),
+        onSecondaryContainer = Color(0xFFFFD5CC),
 
-        tertiary = Color(0xFFB7FF6A),
-        onTertiary = Color(0xFF112100),
-        tertiaryContainer = Color(0xFF263F00),
-        onTertiaryContainer = Color(0xFFD8FFA4),
+        tertiary = Color(0xFFFFEA00), // White-Hot Gold (Photon sphere / hottest layer)
+        onTertiary = Color(0xFF4C4500),
+        tertiaryContainer = Color(0xFF807500),
+        onTertiaryContainer = Color(0xFFFFF7C2),
 
-        background = Color(0xFF020103),
-        onBackground = Color(0xFFF8F3E6),
-        surface = Color(0xFF070407),
-        onSurface = Color(0xFFF8F3E6),
-        surfaceVariant = Color(0xFF1E1A22),
-        onSurfaceVariant = Color(0xFFD2CAD6),
-        surfaceTint = Color(0xFFF8F3E6),
-        inverseSurface = Color(0xFFF8F3E6),
-        inverseOnSurface = Color(0xFF201A22),
+        background = Color(0xFF000000), // Absolute black (Singularity void)
+        onBackground = Color(0xFFF7F1ED),
+        surface = Color(0xFF090707), // Extremely dark charcoal (Warm cosmic dust base)
+        onSurface = Color(0xFFF7F1ED),
+        surfaceVariant = Color(0xFF1D1716),
+        onSurfaceVariant = Color(0xFFDDC9C5),
+        surfaceTint = Color(0xFFFF6F00),
+        inverseSurface = Color(0xFFF7F1ED),
+        inverseOnSurface = Color(0xFF140F0E),
 
-        outline = Color(0xFFA89DAE),
-        outlineVariant = Color(0xFF3E3544),
+        outline = Color(0xFFA68D89),
+        outlineVariant = Color(0xFF4B3D3B),
         error = Color(0xFFFFB4AB),
         onError = Color(0xFF690005),
         errorContainer = Color(0xFF93000A),
         onErrorContainer = Color(0xFFFFDAD6),
         scrim = Color(0xFF000000),
 
-        surfaceDim = Color(0xFF020103),
-        surfaceBright = Color(0xFF302A33),
+        surfaceDim = Color(0xFF090707),
+        surfaceBright = Color(0xFF282120),
         surfaceContainerLowest = Color(0xFF000000),
-        surfaceContainerLow = Color(0xFF09050A),
-        surfaceContainer = Color(0xFF0F0A12),
-        surfaceContainerHigh = Color(0xFF19121D),
-        surfaceContainerHighest = Color(0xFF241B2A),
+        surfaceContainerLow = Color(0xFF0E0B0B),
+        surfaceContainer = Color(0xFF140F0F),
+        surfaceContainerHigh = Color(0xFF1C1615),
+        surfaceContainerHighest = Color(0xFF251E1C),
     )
 
     override val lightScheme = lightColorScheme(
-        primary = Color(0xFF242027),
+        primary = Color(0xFFB34A00), // Deep Solar Orange
         onPrimary = Color(0xFFFFFFFF),
-        primaryContainer = Color(0xFFE8DFEA),
-        onPrimaryContainer = Color(0xFF1E1821),
-        inversePrimary = Color(0xFFF8F3E6),
+        primaryContainer = Color(0xFFFFE5D6),
+        onPrimaryContainer = Color(0xFF3B1400),
+        inversePrimary = Color(0xFFFF8A50),
 
-        secondary = Color(0xFFA72A13),
+        secondary = Color(0xFFB32700), // Solar Flare Red-Orange
         onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFFFFDAD2),
-        onSecondaryContainer = Color(0xFF3A0700),
+        secondaryContainer = Color(0xFFFFDAD0),
+        onSecondaryContainer = Color(0xFF3B0700),
 
-        tertiary = Color(0xFF466800),
+        tertiary = Color(0xFF8C7300), // Solar Corona Gold-Olive
         onTertiary = Color(0xFFFFFFFF),
-        tertiaryContainer = Color(0xFFD8FFA4),
-        onTertiaryContainer = Color(0xFF112100),
+        tertiaryContainer = Color(0xFFFFF2B3),
+        onTertiaryContainer = Color(0xFF2B2200),
 
-        background = Color(0xFFFCF7EF),
-        onBackground = Color(0xFF211A1F),
-        surface = Color(0xFFFCF7EF),
-        onSurface = Color(0xFF211A1F),
-        surfaceVariant = Color(0xFFE8DFEA),
-        onSurfaceVariant = Color(0xFF504751),
-        surfaceTint = Color(0xFF242027),
-        inverseSurface = Color(0xFF362F36),
-        inverseOnSurface = Color(0xFFF7EEF6),
+        background = Color(0xFFFFFBF7), // Warm Solar Ivory
+        onBackground = Color(0xFF251A15),
+        surface = Color(0xFFFFFBF7),
+        onSurface = Color(0xFF251A15),
+        surfaceVariant = Color(0xFFF7DFD5),
+        onSurfaceVariant = Color(0xFF55433C),
+        surfaceTint = Color(0xFFB34A00),
+        inverseSurface = Color(0xFF3C2F29),
+        inverseOnSurface = Color(0xFFFFF1EB),
 
-        outline = Color(0xFF827783),
-        outlineVariant = Color(0xFFD2C6D3),
+        outline = Color(0xFF88736B),
+        outlineVariant = Color(0xFFDDC2B8),
         error = Color(0xFFBA1A1A),
         onError = Color(0xFFFFFFFF),
         errorContainer = Color(0xFFFFDAD6),
         onErrorContainer = Color(0xFF410002),
         scrim = Color(0xFF000000),
 
-        surfaceDim = Color(0xFFDED7DF),
-        surfaceBright = Color(0xFFFCF7EF),
+        surfaceDim = Color(0xFFE6DDD8),
+        surfaceBright = Color(0xFFFFFBF7),
         surfaceContainerLowest = Color(0xFFFFFFFF),
-        surfaceContainerLow = Color(0xFFF7F0F7),
-        surfaceContainer = Color(0xFFF1EAF1),
-        surfaceContainerHigh = Color(0xFFEBE4EC),
-        surfaceContainerHighest = Color(0xFFE5DEE6),
+        surfaceContainerLow = Color(0xFFFFF5EF),
+        surfaceContainer = Color(0xFFFFF0E7),
+        surfaceContainerHigh = Color(0xFFFFEADF),
+        surfaceContainerHighest = Color(0xFFFFE4D6),
     )
 }
