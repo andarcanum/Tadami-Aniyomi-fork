@@ -3,9 +3,9 @@ package tachiyomi.domain.source.novel.interactor
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
-import eu.kanade.tachiyomi.novelsource.model.SNovel
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.source.novel.repository.NovelSourceRepository
 
 class GetRemoteNovelTest {
@@ -66,10 +66,10 @@ class GetRemoteNovelTest {
             FakePagingSource().also { latestCalls++ }
     }
 
-    private class FakePagingSource : PagingSource<Long, SNovel>() {
-        override fun getRefreshKey(state: PagingState<Long, SNovel>): Long? = null
+    private class FakePagingSource : PagingSource<Long, Novel>() {
+        override fun getRefreshKey(state: PagingState<Long, Novel>): Long? = null
 
-        override suspend fun load(params: LoadParams<Long>): LoadResult<Long, SNovel> {
+        override suspend fun load(params: LoadParams<Long>): LoadResult<Long, Novel> {
             return LoadResult.Page(emptyList(), null, null)
         }
     }

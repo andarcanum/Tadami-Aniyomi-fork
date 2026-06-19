@@ -9,6 +9,10 @@ class NetworkToLocalAnime(
     private val sourceManager: AnimeSourceManager,
 ) {
 
+    suspend fun await(animes: List<Anime>, autoFavorite: Boolean = false): List<Anime> {
+        return animeRepository.insertNetworkAnimes(animes, autoFavorite)
+    }
+
     suspend fun await(anime: Anime): Anime {
         val localAnime = getAnime(anime.url, anime.source)
         return when {

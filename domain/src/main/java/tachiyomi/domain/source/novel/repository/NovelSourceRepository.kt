@@ -2,12 +2,12 @@ package tachiyomi.domain.source.novel.repository
 
 import androidx.paging.PagingSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
-import eu.kanade.tachiyomi.novelsource.model.SNovel
 import kotlinx.coroutines.flow.Flow
+import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.source.novel.model.NovelSourceWithCount
 import tachiyomi.domain.source.novel.model.Source
 
-typealias SourcePagingSourceType = PagingSource<Long, SNovel>
+typealias SourcePagingSourceType = PagingSource<Long, Novel>
 
 interface NovelSourceRepository {
 

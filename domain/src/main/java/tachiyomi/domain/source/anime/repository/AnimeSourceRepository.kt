@@ -2,11 +2,11 @@ package tachiyomi.domain.source.anime.repository
 
 import androidx.paging.PagingSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
-import eu.kanade.tachiyomi.animesource.model.SAnime
 import kotlinx.coroutines.flow.Flow
+import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.source.anime.model.AnimeSource
 
-typealias AnimeSourcePagingSourceType = PagingSource<Long, SAnime>
+typealias AnimeSourcePagingSourceType = PagingSource<Long, Anime>
 
 interface AnimeSourceRepository {
 

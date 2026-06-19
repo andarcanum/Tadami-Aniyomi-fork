@@ -116,6 +116,139 @@ class AnimeRepositoryImpl(
         }
     }
 
+    override suspend fun insertNetworkAnimes(animes: List<Anime>, autoFavorite: Boolean): List<Anime> {
+        if (animes.isEmpty()) return emptyList()
+        return handler.await(inTransaction = true) { db ->
+            animes.map { anime ->
+                val local = db.animesQueries
+                    .getAnimeByUrlAndSource(anime.url, anime.source, AnimeMapper::mapAnime)
+                    .executeAsOneOrNull()
+                if (local == null) {
+                    val toInsert = if (autoFavorite) {
+                        anime.copy(favorite = true, dateAdded = System.currentTimeMillis())
+                    } else {
+                        anime
+                    }
+                    db.animesQueries.insert(
+                        source = toInsert.source,
+                        url = toInsert.url,
+                        artist = toInsert.artist,
+                        author = toInsert.author,
+                        description = toInsert.description,
+                        notes = toInsert.notes,
+                        genre = toInsert.genre,
+                        title = toInsert.title,
+                        status = toInsert.status,
+                        thumbnailUrl = toInsert.thumbnailUrl,
+                        backgroundUrl = toInsert.backgroundUrl,
+                        favorite = toInsert.favorite,
+                        pinned = toInsert.pinned,
+                        lastUpdate = toInsert.lastUpdate,
+                        nextUpdate = toInsert.nextUpdate,
+                        calculateInterval = toInsert.fetchInterval.toLong(),
+                        initialized = toInsert.initialized,
+                        viewerFlags = toInsert.viewerFlags,
+                        episodeFlags = toInsert.episodeFlags,
+                        coverLastModified = toInsert.coverLastModified,
+                        backgroundLastModified = toInsert.backgroundLastModified,
+                        dateAdded = toInsert.dateAdded,
+                        updateStrategy = toInsert.updateStrategy,
+                        version = toInsert.version,
+                        fetchType = toInsert.fetchType,
+                        parentId = toInsert.parentId,
+                        seasonFlags = toInsert.seasonFlags,
+                        seasonNumber = toInsert.seasonNumber,
+                        seasonSourceOrder = toInsert.seasonSourceOrder,
+                    )
+                    val insertedId = db.animesQueries.selectLastInsertedRowId().executeAsOne()
+                    toInsert.copy(id = insertedId)
+                } else if (!local.favorite && !autoFavorite) {
+                    val thumbnailUrl = if (local.thumbnailUrl.isNullOrBlank()) {
+                        anime.thumbnailUrl
+                    } else {
+                        local.thumbnailUrl
+                    }
+                    val updated = local.copy(
+                        title = anime.title,
+                        thumbnailUrl = thumbnailUrl,
+                    )
+                    db.animesQueries.update(
+                        source = updated.source,
+                        url = updated.url,
+                        artist = updated.artist,
+                        author = updated.author,
+                        description = updated.description,
+                        notes = updated.notes,
+                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        title = updated.title,
+                        status = updated.status,
+                        thumbnailUrl = updated.thumbnailUrl,
+                        backgroundUrl = updated.backgroundUrl,
+                        favorite = updated.favorite,
+                        pinned = updated.pinned,
+                        lastUpdate = updated.lastUpdate,
+                        nextUpdate = updated.nextUpdate,
+                        calculateInterval = updated.fetchInterval.toLong(),
+                        initialized = updated.initialized,
+                        viewer = updated.viewerFlags,
+                        episodeFlags = updated.episodeFlags,
+                        coverLastModified = updated.coverLastModified,
+                        backgroundLastModified = updated.backgroundLastModified,
+                        dateAdded = updated.dateAdded,
+                        animeId = updated.id,
+                        updateStrategy = AnimeUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        version = updated.version,
+                        isSyncing = 0,
+                        fetchType = FetchTypeColumnAdapter.encode(updated.fetchType),
+                        parentId = updated.parentId,
+                        seasonFlags = updated.seasonFlags,
+                        seasonNumber = updated.seasonNumber,
+                        seasonSourceOrder = updated.seasonSourceOrder,
+                    )
+                    updated
+                } else if (autoFavorite && !local.favorite) {
+                    val updated = local.copy(favorite = true, dateAdded = System.currentTimeMillis())
+                    db.animesQueries.update(
+                        source = updated.source,
+                        url = updated.url,
+                        artist = updated.artist,
+                        author = updated.author,
+                        description = updated.description,
+                        notes = updated.notes,
+                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        title = updated.title,
+                        status = updated.status,
+                        thumbnailUrl = updated.thumbnailUrl,
+                        backgroundUrl = updated.backgroundUrl,
+                        favorite = updated.favorite,
+                        pinned = updated.pinned,
+                        lastUpdate = updated.lastUpdate,
+                        nextUpdate = updated.nextUpdate,
+                        calculateInterval = updated.fetchInterval.toLong(),
+                        initialized = updated.initialized,
+                        viewer = updated.viewerFlags,
+                        episodeFlags = updated.episodeFlags,
+                        coverLastModified = updated.coverLastModified,
+                        backgroundLastModified = updated.backgroundLastModified,
+                        dateAdded = updated.dateAdded,
+                        animeId = updated.id,
+                        updateStrategy = AnimeUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        version = updated.version,
+                        isSyncing = 0,
+                        fetchType = FetchTypeColumnAdapter.encode(updated.fetchType),
+                        parentId = updated.parentId,
+                        seasonFlags = updated.seasonFlags,
+                        seasonNumber = updated.seasonNumber,
+                        seasonSourceOrder = updated.seasonSourceOrder,
+                    )
+                    updated
+                } else {
+                    local
+                }
+            }
+        }
+    }
+
     override suspend fun insertAnime(anime: Anime): Long? {
         return handler.awaitOneOrNullExecutable(inTransaction = true) { db ->
             db.animesQueries.insert(

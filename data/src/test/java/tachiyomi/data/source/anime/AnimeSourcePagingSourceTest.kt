@@ -6,14 +6,32 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import rx.Observable
+import tachiyomi.domain.entries.anime.interactor.NetworkToLocalAnime
+import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.items.episode.model.NoEpisodesException
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.fullType
+import uy.kohesive.injekt.api.get
 
 class AnimeSourcePagingSourceTest {
+
+    @BeforeEach
+    fun setUp() {
+        runCatching { Injekt.get<NetworkToLocalAnime>() }
+            .onFailure {
+                val networkToLocalAnime = mockk<NetworkToLocalAnime>()
+                coEvery { networkToLocalAnime.await(any<List<Anime>>(), any<Boolean>()) } answers { firstArg() }
+                Injekt.addSingleton(fullType<NetworkToLocalAnime>(), networkToLocalAnime)
+            }
+    }
 
     @Test
     fun `search paging source returns data and nextKey`() = runTest {

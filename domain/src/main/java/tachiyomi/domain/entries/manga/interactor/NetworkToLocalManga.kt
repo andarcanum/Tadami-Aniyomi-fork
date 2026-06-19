@@ -7,6 +7,10 @@ class NetworkToLocalManga(
     private val mangaRepository: MangaRepository,
 ) {
 
+    suspend fun await(mangas: List<Manga>, autoFavorite: Boolean = false): List<Manga> {
+        return mangaRepository.insertNetworkMangas(mangas, autoFavorite)
+    }
+
     suspend fun await(manga: Manga): Manga {
         val localManga = getManga(manga.url, manga.source)
         return when {

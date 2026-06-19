@@ -41,6 +41,10 @@ interface AnimeRepository {
 
     suspend fun insertAnime(anime: Anime): Long?
 
+    suspend fun insertNetworkAnimes(animes: List<Anime>, autoFavorite: Boolean = false): List<Anime> {
+        return animes.map { insertAnime(it)?.let { id -> it.copy(id = id) } ?: it }
+    }
+
     suspend fun updateAnime(update: AnimeUpdate): Boolean
 
     suspend fun updateAllAnime(animeUpdates: List<AnimeUpdate>): Boolean

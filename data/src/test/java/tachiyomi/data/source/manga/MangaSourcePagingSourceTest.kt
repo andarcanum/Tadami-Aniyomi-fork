@@ -6,14 +6,32 @@ import eu.kanade.tachiyomi.source.model.FilterList
 import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.SManga
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import rx.Observable
+import tachiyomi.domain.entries.manga.interactor.NetworkToLocalManga
+import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.model.NoChaptersException
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.fullType
+import uy.kohesive.injekt.api.get
 
 class MangaSourcePagingSourceTest {
+
+    @BeforeEach
+    fun setUp() {
+        runCatching { Injekt.get<NetworkToLocalManga>() }
+            .onFailure {
+                val networkToLocalManga = mockk<NetworkToLocalManga>()
+                coEvery { networkToLocalManga.await(any<List<Manga>>(), any<Boolean>()) } answers { firstArg() }
+                Injekt.addSingleton(fullType<NetworkToLocalManga>(), networkToLocalManga)
+            }
+    }
 
     @Test
     fun `search paging source returns data and nextKey`() = runTest {

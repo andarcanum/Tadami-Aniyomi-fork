@@ -13,9 +13,8 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
 import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.toDomainNovel
-import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.presentation.util.ioCoroutineScope
-import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
+import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
@@ -61,7 +60,6 @@ import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
 
 class BrowseNovelSourceScreenModel(
     private val sourceId: Long,
@@ -88,54 +86,17 @@ class BrowseNovelSourceScreenModel(
 
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
     private var defaultFiltersSerialized: String? = null
-    private val novelDetailsInFlight = ConcurrentHashMap.newKeySet<Long>()
-    private val novelDetailsDispatcher = kotlinx.coroutines.Dispatchers.IO.limitedParallelism(3)
-    private val browseNovelCoverUpdates = MutableStateFlow<Map<Long, BrowseNovelCoverUpdate>>(emptyMap())
 
     val source = sourceManager.getOrStub(sourceId)
 
     init {
         if (source is NovelCatalogueSource) {
             mutableState.update {
-                var query: String? = null
-                var listing = it.listing
-
-                if (listing is Listing.Search) {
-                    query = listing.query
-                }
+                val query = (it.listing as? Listing.Search)?.query
 
                 it.copy(
-                    listing = listing,
                     toolbarQuery = query,
                 )
-            }
-
-            screenModelScope.launch {
-                val loadedFilters = loadSourceFilters()
-
-                mutableState.update { state ->
-                    val hadNoFilters = state.filters.isEmpty()
-                    val updatedListing = when (val listing = state.listing) {
-                        is Listing.Search -> {
-                            if (listing.filters.isEmpty()) {
-                                listing.copy(filters = loadedFilters)
-                            } else {
-                                listing
-                            }
-                        }
-                        else -> listing
-                    }
-                    val updatedFilters = if (state.filters.isEmpty()) loadedFilters else state.filters
-                    state.copy(
-                        listing = updatedListing,
-                        filters = updatedFilters,
-                        filterVersion = if (hadNoFilters && updatedFilters.isNotEmpty()) {
-                            state.filterVersion + 1
-                        } else {
-                            state.filterVersion
-                        },
-                    )
-                }
             }
         }
 
@@ -143,11 +104,8 @@ class BrowseNovelSourceScreenModel(
 
         loadSavedSearches()
 
-        screenModelScope.launch {
-            val isConfigurable = withContext(ioCoroutineScope.coroutineContext) {
-                source is ConfigurableNovelSource || source.hasVisiblePluginSettingsByDiscovery()
-            }
-            mutableState.update { it.copy(isSourceConfigurable = isConfigurable) }
+        mutableState.update {
+            it.copy(isSourceConfigurable = source is ConfigurableNovelSource || source.hasVisiblePluginSettings())
         }
 
         if (savedSearchId != null && source is NovelCatalogueSource) {
@@ -165,6 +123,7 @@ class BrowseNovelSourceScreenModel(
                         filters = baseFilters,
                         toolbarQuery = savedSearch.query,
                         filterVersion = it.filterVersion + 1,
+                        filtersLoaded = true,
                     )
                 }
             }
@@ -246,6 +205,7 @@ class BrowseNovelSourceScreenModel(
                     filters = baseFilters,
                     toolbarQuery = savedSearch.query,
                     filterVersion = it.filterVersion + 1,
+                    filtersLoaded = true,
                     savedSearches = it.savedSearches.map { (s, _) -> s to (s.id == savedSearch.id) }.toImmutableList(),
                 )
             }
@@ -284,59 +244,22 @@ class BrowseNovelSourceScreenModel(
             Pager(PagingConfig(pageSize = 25)) {
                 getRemoteNovel.subscribe(sourceId, request.query, request.filters)
             }.flow
-                .map { pagingData ->
-                    pagingData
-                        .map { networkNovel ->
-                            val autoFavorite = autoFavoriteLocalNovels && sourceId == 0L
-                            val localNovel = networkToLocalNovel.await(
-                                networkNovel.toDomainNovel(sourceId),
-                                autoFavorite = autoFavorite,
-                            )
-                            maybeFetchMissingNovelDetails(localNovel)
-                            localNovel
+                .combine(favoriteNovelUrls) { pagingData, favorites ->
+                    pagingData.map { novel ->
+                        val isFavorite = novel.url in favorites
+                        if (novel.favorite != isFavorite) {
+                            novel.copy(favorite = isFavorite)
+                        } else {
+                            novel
                         }
-                        .filter { !hideInLibraryItems || !it.favorite }
-                }
-                .combine(browseNovelCoverUpdates) { pagingData, coverUpdates ->
-                    if (coverUpdates.isEmpty()) {
-                        pagingData
-                    } else {
-                        pagingData.map { novel -> coverUpdates[novel.id]?.applyTo(novel) ?: novel }
                     }
+                }
+                .map { pagingData ->
+                    pagingData.filter { !hideInLibraryItems || !it.favorite }
                 }
                 .cachedIn(ioCoroutineScope)
         }
         .stateIn(ioCoroutineScope, SharingStarted.Lazily, emptyFlow())
-
-    private fun maybeFetchMissingNovelDetails(novel: Novel) {
-        if (novel.id <= 0L) return
-        if (novel.initialized) return
-        if (!novel.thumbnailUrl.isNullOrBlank()) return
-        if (source !is NovelCatalogueSource) return
-        if (!novelDetailsInFlight.add(novel.id)) return
-
-        screenModelScope.launch(novelDetailsDispatcher) {
-            try {
-                val networkNovel = source.getNovelDetails(novel.toSNovel())
-                val resolvedThumbnailUrl = networkNovel.thumbnail_url?.takeIf { it.isNotBlank() }
-                if (resolvedThumbnailUrl != null) {
-                    browseNovelCoverUpdates.update { updates ->
-                        updates + (novel.id to BrowseNovelCoverUpdate(thumbnailUrl = resolvedThumbnailUrl))
-                    }
-                }
-                val updatePayload = NovelUpdate(
-                    id = novel.id,
-                    thumbnailUrl = resolvedThumbnailUrl ?: novel.thumbnailUrl,
-                    initialized = true,
-                )
-                resolveUpdateNovel()?.await(updatePayload)
-            } catch (_: Exception) {
-                // Best-effort background enrichment; keep browse flow resilient.
-            } finally {
-                novelDetailsInFlight.remove(novel.id)
-            }
-        }
-    }
 
     fun resetFilters() {
         if (source !is NovelCatalogueSource) return
@@ -345,7 +268,10 @@ class BrowseNovelSourceScreenModel(
             val resetFilters = loadSourceFilters()
 
             mutableState.update { state ->
-                state.copy(filters = resetFilters)
+                state.copy(
+                    filters = resetFilters,
+                    filtersLoaded = true,
+                )
             }
         }
     }
@@ -384,6 +310,9 @@ class BrowseNovelSourceScreenModel(
         val q = query ?: input.query
         if (!q.isNullOrBlank()) {
             val f = filters ?: input.filters
+            if (defaultFiltersSerialized == null) {
+                defaultFiltersSerialized = serializeFilters(source.getFilterList())
+            }
             val hasActiveFilters = serializeFilters(f)?.let { it != defaultFiltersSerialized } ?: f.isNotEmpty()
             if (hasActiveFilters) {
                 achievementHandler.trackFeatureUsed(AchievementEvent.Feature.ADVANCED_SEARCH)
@@ -424,7 +353,28 @@ class BrowseNovelSourceScreenModel(
     }
 
     fun openFilterSheet() {
-        setDialog(Dialog.Filter)
+        if (source !is NovelCatalogueSource || state.value.filtersLoaded) {
+            setDialog(Dialog.Filter)
+            return
+        }
+
+        screenModelScope.launch {
+            val loadedFilters = loadSourceFilters()
+            mutableState.update { current ->
+                val updatedListing = when (val listing = current.listing) {
+                    is Listing.Search -> {
+                        if (listing.filters.isEmpty()) listing.copy(filters = loadedFilters) else listing
+                    }
+                    else -> current.listing
+                }
+                current.copy(
+                    listing = updatedListing,
+                    filters = if (current.filters.isEmpty()) loadedFilters else current.filters,
+                    filtersLoaded = true,
+                    dialog = Dialog.Filter,
+                )
+            }
+        }
     }
 
     fun setDialog(dialog: Dialog?) {
@@ -658,6 +608,7 @@ class BrowseNovelSourceScreenModel(
         val toolbarQuery: String? = null,
         val dialog: Dialog? = null,
         val filterVersion: Int = 0,
+        val filtersLoaded: Boolean = false,
         val savedSearches: ImmutableList<Pair<SavedSearch, Boolean>> = persistentListOf(),
         val isSourceConfigurable: Boolean = false,
     ) {
@@ -671,16 +622,4 @@ class BrowseNovelSourceScreenModel(
         val filterVersion: Int,
         val filters: NovelFilterList,
     )
-
-    private data class BrowseNovelCoverUpdate(
-        val thumbnailUrl: String,
-    ) {
-        fun applyTo(novel: Novel): Novel {
-            return if (novel.thumbnailUrl == thumbnailUrl) {
-                novel
-            } else {
-                novel.copy(thumbnailUrl = thumbnailUrl)
-            }
-        }
-    }
 }

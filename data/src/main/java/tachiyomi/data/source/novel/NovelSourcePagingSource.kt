@@ -7,8 +7,12 @@ import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import kotlinx.coroutines.withTimeout
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
+import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.chapter.model.NoChaptersException
 import tachiyomi.domain.source.novel.repository.SourcePagingSourceType
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 class NovelSourceSearchPagingSource(
     source: NovelCatalogueSource,
@@ -50,9 +54,11 @@ abstract class NovelSourcePagingSource(
     private val requestTimeoutMillis: Long = NOVEL_SOURCE_PAGE_REQUEST_TIMEOUT_MS,
 ) : SourcePagingSourceType() {
 
+    private val networkToLocalNovel: NetworkToLocalNovel = Injekt.get()
+
     abstract suspend fun requestNextPage(currentPage: Int): NovelsPage
 
-    override suspend fun load(params: LoadParams<Long>): LoadResult<Long, SNovel> {
+    override suspend fun load(params: LoadParams<Long>): LoadResult<Long, Novel> {
         val page = params.key ?: 1
 
         return try {
@@ -60,8 +66,10 @@ abstract class NovelSourcePagingSource(
                 val novelsPage = withTimeout(requestTimeoutMillis) { requestNextPage(page.toInt()) }
                 when {
                     novelsPage.novels.isNotEmpty() -> {
+                        val domainNovels = novelsPage.novels.map { it.toDomainNovel(source.id) }
+                        val savedNovels = networkToLocalNovel.await(domainNovels)
                         LoadResult.Page(
-                            data = novelsPage.novels,
+                            data = savedNovels,
                             prevKey = null,
                             nextKey = if (novelsPage.hasNextPage) page + 1 else null,
                         )
@@ -84,12 +92,27 @@ abstract class NovelSourcePagingSource(
         }
     }
 
-    override fun getRefreshKey(state: PagingState<Long, SNovel>): Long? {
+    override fun getRefreshKey(state: PagingState<Long, Novel>): Long? {
         return state.anchorPosition?.let { anchorPosition ->
             val anchorPage = state.closestPageToPosition(anchorPosition)
             anchorPage?.prevKey ?: anchorPage?.nextKey
         }
     }
+}
+
+private fun SNovel.toDomainNovel(sourceId: Long): Novel {
+    return Novel.create().copy(
+        url = url,
+        title = title,
+        author = author,
+        description = description?.trim(),
+        genre = genre?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() },
+        status = status.toLong(),
+        thumbnailUrl = thumbnail_url,
+        updateStrategy = update_strategy,
+        initialized = initialized,
+        source = sourceId,
+    )
 }
 
 internal const val NOVEL_SOURCE_PAGE_REQUEST_TIMEOUT_MS = 30_000L

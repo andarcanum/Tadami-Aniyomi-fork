@@ -2,12 +2,12 @@ package tachiyomi.domain.source.manga.repository
 
 import androidx.paging.PagingSource
 import eu.kanade.tachiyomi.source.model.FilterList
-import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.flow.Flow
+import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.source.manga.model.MangaSourceWithCount
 import tachiyomi.domain.source.manga.model.Source
 
-typealias SourcePagingSourceType = PagingSource<Long, SManga>
+typealias SourcePagingSourceType = PagingSource<Long, Manga>
 
 interface MangaSourceRepository {
 

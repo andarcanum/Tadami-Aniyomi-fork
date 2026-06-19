@@ -96,6 +96,115 @@ class NovelRepositoryImpl(
         }
     }
 
+    override suspend fun insertNetworkNovels(novels: List<Novel>, autoFavorite: Boolean): List<Novel> {
+        if (novels.isEmpty()) return emptyList()
+        return handler.await(inTransaction = true) { db ->
+            novels.map { novel ->
+                val local = db.novelsQueries
+                    .getNovelByUrlAndSource(novel.url, novel.source, NovelMapper::mapNovel)
+                    .executeAsOneOrNull()
+                if (local == null) {
+                    val toInsert = if (autoFavorite) {
+                        novel.copy(favorite = true, dateAdded = System.currentTimeMillis())
+                    } else {
+                        novel
+                    }
+                    db.novelsQueries.insert(
+                        source = toInsert.source,
+                        url = toInsert.url,
+                        author = toInsert.author,
+                        description = toInsert.description,
+                        notes = toInsert.notes,
+                        genre = toInsert.genre,
+                        title = toInsert.title,
+                        status = toInsert.status,
+                        thumbnailUrl = toInsert.thumbnailUrl,
+                        favorite = toInsert.favorite,
+                        pinned = toInsert.pinned,
+                        lastUpdate = toInsert.lastUpdate,
+                        nextUpdate = toInsert.nextUpdate,
+                        calculateInterval = toInsert.fetchInterval.toLong(),
+                        initialized = toInsert.initialized,
+                        viewerFlags = toInsert.viewerFlags,
+                        chapterFlags = toInsert.chapterFlags,
+                        coverLastModified = toInsert.coverLastModified,
+                        dateAdded = toInsert.dateAdded,
+                        updateStrategy = toInsert.updateStrategy,
+                        version = toInsert.version,
+                    )
+                    val insertedId = db.novelsQueries.selectLastInsertedRowId().executeAsOne()
+                    toInsert.copy(id = insertedId)
+                } else if (!local.favorite && !autoFavorite) {
+                    val thumbnailUrl = if (local.thumbnailUrl.isNullOrBlank()) {
+                        novel.thumbnailUrl
+                    } else {
+                        local.thumbnailUrl
+                    }
+                    val updated = local.copy(
+                        title = novel.title,
+                        thumbnailUrl = thumbnailUrl,
+                    )
+                    db.novelsQueries.update(
+                        source = updated.source,
+                        url = updated.url,
+                        author = updated.author,
+                        description = updated.description,
+                        notes = updated.notes,
+                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        title = updated.title,
+                        status = updated.status,
+                        thumbnailUrl = updated.thumbnailUrl,
+                        favorite = updated.favorite,
+                        pinned = updated.pinned,
+                        lastUpdate = updated.lastUpdate,
+                        nextUpdate = updated.nextUpdate,
+                        calculateInterval = updated.fetchInterval.toLong(),
+                        initialized = updated.initialized,
+                        viewer = updated.viewerFlags,
+                        chapterFlags = updated.chapterFlags,
+                        coverLastModified = updated.coverLastModified,
+                        dateAdded = updated.dateAdded,
+                        novelId = updated.id,
+                        updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        version = updated.version,
+                        isSyncing = 0,
+                    )
+                    updated
+                } else if (autoFavorite && !local.favorite) {
+                    val updated = local.copy(favorite = true, dateAdded = System.currentTimeMillis())
+                    db.novelsQueries.update(
+                        source = updated.source,
+                        url = updated.url,
+                        author = updated.author,
+                        description = updated.description,
+                        notes = updated.notes,
+                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        title = updated.title,
+                        status = updated.status,
+                        thumbnailUrl = updated.thumbnailUrl,
+                        favorite = updated.favorite,
+                        pinned = updated.pinned,
+                        lastUpdate = updated.lastUpdate,
+                        nextUpdate = updated.nextUpdate,
+                        calculateInterval = updated.fetchInterval.toLong(),
+                        initialized = updated.initialized,
+                        viewer = updated.viewerFlags,
+                        chapterFlags = updated.chapterFlags,
+                        coverLastModified = updated.coverLastModified,
+                        dateAdded = updated.dateAdded,
+                        novelId = updated.id,
+                        updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        version = updated.version,
+                        isSyncing = 0,
+                    )
+                    updated
+                } else {
+                    local
+                }
+            }
+        }
+    }
+
     override suspend fun updateNovel(update: NovelUpdate): Boolean {
         return try {
             partialUpdateNovel(update)

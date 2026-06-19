@@ -15,7 +15,6 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
 import eu.kanade.domain.entries.manga.interactor.UpdateManga
-import eu.kanade.domain.entries.manga.model.toDomainManga
 import eu.kanade.domain.source.manga.interactor.GetMangaIncognitoState
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.track.manga.interactor.AddMangaTracks
@@ -28,6 +27,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.firstOrNull
@@ -263,12 +263,20 @@ class BrowseMangaSourceScreenModel(
         .map { listing ->
             Pager(PagingConfig(pageSize = 25)) {
                 getRemoteManga.subscribe(sourceId, listing.query ?: "", listing.filters)
-            }.flow.map { pagingData ->
-                pagingData.map {
-                    networkToLocalManga.await(it.toDomainManga(sourceId))
+            }.flow
+                .combine(favoriteMangaUrls) { pagingData, favorites ->
+                    pagingData.map { manga ->
+                        val isFavorite = manga.url in favorites
+                        if (manga.favorite != isFavorite) {
+                            manga.copy(favorite = isFavorite)
+                        } else {
+                            manga
+                        }
+                    }
                 }
-                    .filter { !hideInLibraryItems || !it.favorite }
-            }
+                .map { pagingData ->
+                    pagingData.filter { !hideInLibraryItems || !it.favorite }
+                }
                 .cachedIn(ioCoroutineScope)
         }
         .stateIn(ioCoroutineScope, SharingStarted.Lazily, emptyFlow())

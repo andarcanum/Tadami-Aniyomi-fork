@@ -35,6 +35,10 @@ interface MangaRepository {
 
     suspend fun insertManga(manga: Manga): Long?
 
+    suspend fun insertNetworkMangas(mangas: List<Manga>, autoFavorite: Boolean = false): List<Manga> {
+        return mangas.map { insertManga(it)?.let { id -> it.copy(id = id) } ?: it }
+    }
+
     suspend fun updateManga(update: MangaUpdate): Boolean
 
     suspend fun updateAllManga(mangaUpdates: List<MangaUpdate>): Boolean

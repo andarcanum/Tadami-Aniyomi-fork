@@ -7,6 +7,10 @@ class NetworkToLocalNovel(
     private val novelRepository: NovelRepository,
 ) {
 
+    suspend fun await(novels: List<Novel>, autoFavorite: Boolean = false): List<Novel> {
+        return novelRepository.insertNetworkNovels(novels, autoFavorite)
+    }
+
     suspend fun await(novel: Novel, autoFavorite: Boolean = false): Novel {
         val localNovel = getNovel(novel.url, novel.source)
         return when {

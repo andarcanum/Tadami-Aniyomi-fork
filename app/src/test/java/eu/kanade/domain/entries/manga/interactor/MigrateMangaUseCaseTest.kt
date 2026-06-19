@@ -429,7 +429,7 @@ class MigrateMangaUseCaseTest {
         coverCache: MangaCoverCache,
         trackerManager: TrackerManager,
         networkToLocalManga: NetworkToLocalManga = mockk<NetworkToLocalManga>().also {
-            coEvery { it.await(any()) } answers { firstArg() }
+            coEvery { it.await(any<Manga>()) } answers { firstArg<Manga>() }
         },
         getHistory: GetMangaHistory = mockk<GetMangaHistory>().also {
             coEvery { it.await(any()) } returns emptyList()

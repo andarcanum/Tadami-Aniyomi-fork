@@ -27,6 +27,17 @@ interface NovelRepository {
 
     suspend fun insertNovel(novel: Novel): Long?
 
+    suspend fun insertNetworkNovels(novels: List<Novel>, autoFavorite: Boolean = false): List<Novel> {
+        return novels.map { novel ->
+            val insertedId = insertNovel(novel)
+            if (insertedId != null) {
+                novel.copy(id = insertedId)
+            } else {
+                novel
+            }
+        }
+    }
+
     suspend fun updateNovel(update: NovelUpdate): Boolean
 
     suspend fun updateAllNovel(novelUpdates: List<NovelUpdate>): Boolean

@@ -101,6 +101,121 @@ class MangaRepositoryImpl(
         }
     }
 
+    override suspend fun insertNetworkMangas(mangas: List<Manga>, autoFavorite: Boolean): List<Manga> {
+        if (mangas.isEmpty()) return emptyList()
+        return handler.await(inTransaction = true) { db ->
+            mangas.map { manga ->
+                val local = db.mangasQueries
+                    .getMangaByUrlAndSource(manga.url, manga.source, MangaMapper::mapManga)
+                    .executeAsOneOrNull()
+                if (local == null) {
+                    val toInsert = if (autoFavorite) {
+                        manga.copy(favorite = true, dateAdded = System.currentTimeMillis())
+                    } else {
+                        manga
+                    }
+                    db.mangasQueries.insert(
+                        source = toInsert.source,
+                        url = toInsert.url,
+                        artist = toInsert.artist,
+                        author = toInsert.author,
+                        description = toInsert.description,
+                        notes = toInsert.notes,
+                        genre = toInsert.genre,
+                        title = toInsert.title,
+                        status = toInsert.status,
+                        rating = toInsert.rating.toDouble(),
+                        thumbnailUrl = toInsert.thumbnailUrl,
+                        favorite = toInsert.favorite,
+                        pinned = toInsert.pinned,
+                        lastUpdate = toInsert.lastUpdate,
+                        nextUpdate = toInsert.nextUpdate,
+                        calculateInterval = toInsert.fetchInterval.toLong(),
+                        initialized = toInsert.initialized,
+                        viewerFlags = toInsert.viewerFlags,
+                        chapterFlags = toInsert.chapterFlags,
+                        coverLastModified = toInsert.coverLastModified,
+                        dateAdded = toInsert.dateAdded,
+                        updateStrategy = toInsert.updateStrategy,
+                        version = toInsert.version,
+                    )
+                    val insertedId = db.mangasQueries.selectLastInsertedRowId().executeAsOne()
+                    toInsert.copy(id = insertedId)
+                } else if (!local.favorite && !autoFavorite) {
+                    val thumbnailUrl = if (local.thumbnailUrl.isNullOrBlank()) {
+                        manga.thumbnailUrl
+                    } else {
+                        local.thumbnailUrl
+                    }
+                    val updated = local.copy(
+                        title = manga.title,
+                        thumbnailUrl = thumbnailUrl,
+                    )
+                    db.mangasQueries.update(
+                        source = updated.source,
+                        url = updated.url,
+                        artist = updated.artist,
+                        author = updated.author,
+                        description = updated.description,
+                        notes = updated.notes,
+                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        title = updated.title,
+                        status = updated.status,
+                        rating = updated.rating.toDouble(),
+                        thumbnailUrl = updated.thumbnailUrl,
+                        favorite = updated.favorite,
+                        pinned = updated.pinned,
+                        lastUpdate = updated.lastUpdate,
+                        nextUpdate = updated.nextUpdate,
+                        calculateInterval = updated.fetchInterval.toLong(),
+                        initialized = updated.initialized,
+                        viewer = updated.viewerFlags,
+                        chapterFlags = updated.chapterFlags,
+                        coverLastModified = updated.coverLastModified,
+                        dateAdded = updated.dateAdded,
+                        mangaId = updated.id,
+                        updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        version = updated.version,
+                        isSyncing = 0,
+                    )
+                    updated
+                } else if (autoFavorite && !local.favorite) {
+                    val updated = local.copy(favorite = true, dateAdded = System.currentTimeMillis())
+                    db.mangasQueries.update(
+                        source = updated.source,
+                        url = updated.url,
+                        artist = updated.artist,
+                        author = updated.author,
+                        description = updated.description,
+                        notes = updated.notes,
+                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        title = updated.title,
+                        status = updated.status,
+                        rating = updated.rating.toDouble(),
+                        thumbnailUrl = updated.thumbnailUrl,
+                        favorite = updated.favorite,
+                        pinned = updated.pinned,
+                        lastUpdate = updated.lastUpdate,
+                        nextUpdate = updated.nextUpdate,
+                        calculateInterval = updated.fetchInterval.toLong(),
+                        initialized = updated.initialized,
+                        viewer = updated.viewerFlags,
+                        chapterFlags = updated.chapterFlags,
+                        coverLastModified = updated.coverLastModified,
+                        dateAdded = updated.dateAdded,
+                        mangaId = updated.id,
+                        updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        version = updated.version,
+                        isSyncing = 0,
+                    )
+                    updated
+                } else {
+                    local
+                }
+            }
+        }
+    }
+
     override suspend fun insertManga(manga: Manga): Long? {
         return handler.awaitOneOrNullExecutable(inTransaction = true) { db ->
             db.mangasQueries.insert(
