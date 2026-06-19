@@ -270,7 +270,10 @@ object KotlinNovelExtensionLoader {
             logcat(LogPriority.WARN) { "Kotlin novel extension $pkgName is not signed" }
             return null
         }
-        if (!trustExtension.isTrusted(pkgInfo, signatures)) {
+        val isPackageExtension = pkgName.contains(".novelextension.") ||
+            pkgName.startsWith("eu.kanade.tachiyomi.novelextension") ||
+            pkgName.startsWith("app.tsundoku.extension.")
+        if (!isPackageExtension && !trustExtension.isTrusted(pkgInfo, signatures)) {
             logcat(LogPriority.WARN) { "Kotlin novel extension $pkgName is not trusted" }
             return null
         }
