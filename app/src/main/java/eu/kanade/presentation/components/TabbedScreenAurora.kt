@@ -69,9 +69,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -93,6 +98,7 @@ import androidx.compose.ui.unit.sp
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
+import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -452,7 +458,23 @@ private fun AuroraTabHeader(
                 onValueChange = onSearchQueryChange,
                 modifier = Modifier
                     .weight(1f)
-                    .focusRequester(searchFocusRequester),
+                    .focusRequester(searchFocusRequester)
+                    .then(
+                        if (colors.isDark) {
+                            Modifier.border(
+                                width = 1.dp,
+                                brush = Brush.verticalGradient(
+                                    listOf(
+                                        Color.White.copy(alpha = 0.20f),
+                                        Color.White.copy(alpha = 0.05f),
+                                    ),
+                                ),
+                                shape = RoundedCornerShape(22.dp),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ),
                 placeholder = {
                     Text(
                         text = stringResource(MR.strings.action_search),
@@ -474,7 +496,7 @@ private fun AuroraTabHeader(
                     Icon(
                         imageVector = Icons.Filled.Search,
                         contentDescription = null,
-                        tint = colors.textSecondary,
+                        tint = if (colors.isDark) colors.textSecondary.copy(alpha = 0.70f) else colors.textSecondary,
                     )
                 },
                 trailingIcon = {
@@ -614,7 +636,7 @@ internal fun AuroraTabRow(
     val tabContainerColor = resolveAuroraTabContainerColor(colors)
     val isLightTheme = !colors.isDark && !colors.isEInk
     val showBorderFinal = showBorder && (colors.isDark || colors.isEInk)
-    val tabShape = RoundedCornerShape(28.dp)
+    val tabShape = RoundedCornerShape(20.dp)
 
     Card(
         modifier = Modifier
@@ -624,7 +646,7 @@ internal fun AuroraTabRow(
                 if (isLightTheme) {
                     Modifier
                         .drawBehind {
-                            val radius = 28.dp.toPx()
+                            val radius = 20.dp.toPx()
                             val cornerRadius = CornerRadius(radius, radius)
 
                             val neutralOffsetY = 3.dp.toPx()
@@ -670,6 +692,14 @@ internal fun AuroraTabRow(
                             ),
                             shape = tabShape,
                         )
+                } else if (colors.isDark && !colors.isEInk) {
+                    Modifier
+                        .auroraCardStyle(
+                            colors = colors,
+                            shape = tabShape,
+                            applyDarkRimLight = true,
+                            applyDarkShadow = false,
+                        )
                 } else {
                     Modifier
                 },
@@ -679,7 +709,11 @@ internal fun AuroraTabRow(
             containerColor = if (isLightTheme) Color.Transparent else tabContainerColor,
         ),
         border = if (showBorderFinal) {
-            BorderStroke(0.75.dp, menuBorderBrush)
+            if (colors.isDark) {
+                null
+            } else {
+                BorderStroke(0.75.dp, menuBorderBrush)
+            }
         } else {
             null
         },
@@ -738,7 +772,7 @@ internal fun AuroraTab(
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
-    val tabShape = RoundedCornerShape(20.dp)
+    val tabShape = RoundedCornerShape(16.dp)
     val maxTabTextWidth = if (!fillAvailableWidth) {
         (LocalConfiguration.current.screenWidthDp.dp - 72.dp).coerceAtMost(220.dp)
     } else {
@@ -799,7 +833,13 @@ internal fun AuroraTab(
                 } else {
                     Modifier.widthIn(max = maxTabTextWidth)
                 },
-                color = if (isSelected) colors.textPrimary else colors.textSecondary,
+                color = if (isSelected) {
+                    colors.textPrimary
+                } else if (colors.isDark) {
+                    colors.textPrimary.copy(alpha = 0.65f)
+                } else {
+                    colors.textSecondary
+                },
                 style = resolveAuroraTabTextStyle(
                     baseStyle = MaterialTheme.typography.bodyLarge,
                     isSelected = isSelected,
@@ -903,7 +943,7 @@ internal fun resolveAuroraTabSelectionBorderColor(colors: AuroraColors): Color {
         return Color(0xFF9A9A9A)
     }
     return if (colors.isDark) {
-        Color.White.copy(alpha = 0.12f)
+        colors.accent.copy(alpha = 0.25f)
     } else {
         colors.accent.copy(alpha = 0.28f)
     }

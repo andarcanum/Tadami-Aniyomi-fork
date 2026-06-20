@@ -111,7 +111,7 @@ internal fun HistoryRow(
                         coverData = item.coverData,
                         subtitle = stringResource(
                             progressLabelRes,
-                            (item.progressNumber % 1000).toInt().toString(),
+                            formatProgressNumber(item.progressNumber),
                         ),
                         onClick = { onEntryClick(item.entryId) },
                         deviceClass = auroraAdaptiveSpec.deviceClass,
@@ -138,7 +138,7 @@ internal fun HistoryRow(
                         coverData = item.coverData,
                         subtitle = stringResource(
                             progressLabelRes,
-                            (item.progressNumber % 1000).toInt().toString(),
+                            formatProgressNumber(item.progressNumber),
                         ),
                         onClick = { onEntryClick(item.entryId) },
                         deviceClass = auroraAdaptiveSpec.deviceClass,
@@ -280,5 +280,13 @@ internal fun RecommendationsGrid(
                 }
             }
         }
+    }
+}
+
+private fun formatProgressNumber(number: Double): String {
+    return if (number % 1.0 == 0.0) {
+        number.toInt().toString()
+    } else {
+        number.toString()
     }
 }

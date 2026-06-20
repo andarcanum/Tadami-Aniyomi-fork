@@ -12,9 +12,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.UiPreferences
@@ -83,6 +88,7 @@ fun Modifier.auroraCardStyle(
     applyShadow: Boolean = false,
     applyModifierBackgroundInDark: Boolean = false,
     applyDarkRimLight: Boolean = true,
+    applyDarkShadow: Boolean = true,
 ): Modifier {
     return if (!colors.isDark && !colors.isEInk) {
         this
@@ -157,26 +163,12 @@ fun Modifier.auroraCardStyle(
                     1.00f to Color.Transparent,
                 ),
             )
-            this
-                .drawBehind {
-                    val radius = 20.dp.toPx()
-                    val cornerRadiusPx = CornerRadius(radius, radius)
-                    drawRoundRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.45f)),
-                            startY = size.height * 0.5f,
-                            endY = size.height + 3.dp.toPx(),
-                        ),
-                        topLeft = Offset(0f, 3.dp.toPx()),
-                        size = size,
-                        cornerRadius = cornerRadiusPx,
-                    )
-                }
-                .border(
-                    width = 1.dp,
-                    brush = michelangeloBorderBrush,
-                    shape = shape,
-                )
+            val modifierWithShadow = this
+            modifierWithShadow.border(
+                width = 1.dp,
+                brush = michelangeloBorderBrush,
+                shape = shape,
+            )
         } else {
             val baseModifier = if (applyModifierBackgroundInDark) {
                 this.background(

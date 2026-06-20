@@ -55,6 +55,8 @@ data class AuroraColors(
     val warning: Color,
     val error: Color,
     val achievementGold: Color,
+    val ratingStar: Color = Color(0xFFFACC15),
+    val ctaContentOnGlassDark: Color = Color(0xFFE2E8F0),
 ) {
     val backgroundGradient: Brush
         get() = Brush.verticalGradient(listOf(gradientStart, gradientEnd))
@@ -155,6 +157,7 @@ data class AuroraColors(
                         warning = if (isDark) Color(0xFFFBBF24) else Color(0xFFF59E0B),
                         error = if (isDark) Color(0xFFF87171) else Color(0xFFEF4444),
                         achievementGold = Color(0xFFFFB800),
+                        ratingStar = Color(0xFFFACC15),
                     )
                 }
                 EInkProfile.MONOCHROME -> if (isDark) AuroraColors.EInkDark else AuroraColors.EInk
@@ -191,6 +194,7 @@ data class AuroraColors(
             warning = Color(0xFFFBBF24),
             error = Color(0xFFF87171),
             achievementGold = Color(0xFFFFB800),
+            ratingStar = Color(0xFFFACC15),
         )
 
         val Light = AuroraColors(
@@ -218,6 +222,7 @@ data class AuroraColors(
             warning = Color(0xFFF59E0B),
             error = Color(0xFFEF4444),
             achievementGold = Color(0xFFFFB800),
+            ratingStar = Color(0xFFFACC15),
         )
 
         val EInk = AuroraColors(
@@ -244,6 +249,7 @@ data class AuroraColors(
             warning = Color(0xFF5A5A5A),
             error = Color(0xFF000000),
             achievementGold = Color(0xFF4A4A4A),
+            ratingStar = Color(0xFF000000),
         )
 
         val EInkDark = AuroraColors(
@@ -270,6 +276,7 @@ data class AuroraColors(
             warning = Color(0xFFC0C0C0),
             error = Color(0xFFFFFFFF),
             achievementGold = Color(0xFFB0B0B0),
+            ratingStar = Color(0xFFFFFFFF),
         )
 
         private fun buildEInkColorPalette(
@@ -321,6 +328,7 @@ data class AuroraColors(
                 warning = if (isDark) Color(0xFFFBBF24) else Color(0xFFF59E0B),
                 error = if (isDark) Color(0xFFF87171) else Color(0xFFEF4444),
                 achievementGold = if (isDark) Color(0xFFFBBF24) else Color(0xFFF59E0B),
+                ratingStar = if (isDark) Color(0xFFFFFFFF) else Color(0xFF000000),
             )
         }
     }

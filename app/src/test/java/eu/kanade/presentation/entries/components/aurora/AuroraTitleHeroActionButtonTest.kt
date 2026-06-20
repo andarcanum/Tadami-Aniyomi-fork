@@ -9,33 +9,32 @@ import org.junit.jupiter.api.Test
 class AuroraTitleHeroActionButtonTest {
 
     @Test
-    fun `title hero cta visual mode switches between aurora glass and classic solid`() {
-        resolveAuroraTitleHeroCtaVisualMode(AuroraTitleHeroCtaMode.Aurora) shouldBe
-            AuroraTitleHeroCtaVisualMode.AuroraGlass
-        resolveAuroraTitleHeroCtaVisualMode(AuroraTitleHeroCtaMode.Classic) shouldBe
-            AuroraTitleHeroCtaVisualMode.ClassicSolid
+    fun `title hero cta mode maps to presentation mode`() {
+        AuroraTitleHeroCtaMode.Aurora.toPresentationMode() shouldBe AuroraHeroCtaMode.Aurora
+        AuroraTitleHeroCtaMode.Classic.toPresentationMode() shouldBe AuroraHeroCtaMode.Classic
     }
 
     @Test
-    fun `aurora title hero cta surface uses soft accent transparency without gradient`() {
-        resolveAuroraTitleHeroCtaSurfaceSpec(
-            mode = AuroraTitleHeroCtaMode.Aurora,
+    fun `aurora title hero cta surface on details screen uses correct specifications`() {
+        // Dark Details Screen
+        resolveAuroraHeroCtaSurfaceSpec(
+            mode = AuroraHeroCtaMode.Aurora,
             isDark = true,
-        ) shouldBe AuroraTitleHeroCtaSurfaceSpec(
-            containerAlpha = 0.50f,
-            usesGradient = false,
+            isHome = false,
+        ) shouldBe AuroraHeroCtaSurfaceSpec(
+            containerAlpha = 0.28f,
+            usesGradient = true,
             innerGlowAlpha = 0.55f,
-            highlightAlpha = 0f,
+            highlightAlpha = 0.42f,
             borderAlpha = 0.12f,
         )
-    }
 
-    @Test
-    fun `light aurora title hero cta uses stronger emphasis for readability`() {
-        resolveAuroraTitleHeroCtaSurfaceSpec(
-            mode = AuroraTitleHeroCtaMode.Aurora,
+        // Light Details Screen
+        resolveAuroraHeroCtaSurfaceSpec(
+            mode = AuroraHeroCtaMode.Aurora,
             isDark = false,
-        ) shouldBe AuroraTitleHeroCtaSurfaceSpec(
+            isHome = false,
+        ) shouldBe AuroraHeroCtaSurfaceSpec(
             containerAlpha = 0.88f,
             usesGradient = false,
             innerGlowAlpha = 0.08f,
@@ -45,16 +44,60 @@ class AuroraTitleHeroActionButtonTest {
     }
 
     @Test
-    fun `classic title hero cta surface stays opaque and non translucent`() {
-        resolveAuroraTitleHeroCtaSurfaceSpec(
-            mode = AuroraTitleHeroCtaMode.Classic,
+    fun `aurora title hero cta surface on home screen uses correct specifications`() {
+        // Dark Home Screen
+        resolveAuroraHeroCtaSurfaceSpec(
+            mode = AuroraHeroCtaMode.Aurora,
             isDark = true,
-        ) shouldBe AuroraTitleHeroCtaSurfaceSpec(
+            isHome = true,
+        ) shouldBe AuroraHeroCtaSurfaceSpec(
+            containerAlpha = 0.50f,
+            usesGradient = false,
+            innerGlowAlpha = 0.55f,
+            highlightAlpha = 0f,
+            borderAlpha = 0.12f,
+        )
+
+        // Light Home Screen
+        resolveAuroraHeroCtaSurfaceSpec(
+            mode = AuroraHeroCtaMode.Aurora,
+            isDark = false,
+            isHome = true,
+        ) shouldBe AuroraHeroCtaSurfaceSpec(
+            containerAlpha = 0.78f,
+            usesGradient = false,
+            innerGlowAlpha = 0.10f,
+            highlightAlpha = 0.12f,
+            borderAlpha = 0.18f,
+        )
+    }
+
+    @Test
+    fun `classic title hero cta surface specs`() {
+        // Details Screen
+        resolveAuroraHeroCtaSurfaceSpec(
+            mode = AuroraHeroCtaMode.Classic,
+            isDark = true,
+            isHome = false,
+        ) shouldBe AuroraHeroCtaSurfaceSpec(
             containerAlpha = 1f,
             usesGradient = false,
             innerGlowAlpha = 0f,
             highlightAlpha = 0f,
             borderAlpha = 0f,
+        )
+
+        // Home Screen
+        resolveAuroraHeroCtaSurfaceSpec(
+            mode = AuroraHeroCtaMode.Classic,
+            isDark = true,
+            isHome = true,
+        ) shouldBe AuroraHeroCtaSurfaceSpec(
+            containerAlpha = 1f,
+            usesGradient = true,
+            innerGlowAlpha = 0f,
+            highlightAlpha = 0f,
+            borderAlpha = 0.12f,
         )
     }
 

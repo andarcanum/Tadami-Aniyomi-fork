@@ -19,7 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,22 +26,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import eu.kanade.domain.ui.UserProfilePreferences
-import eu.kanade.domain.ui.model.AuroraTitleHeroCtaMode
 import eu.kanade.presentation.theme.AuroraTheme
-import tachiyomi.presentation.core.util.collectAsState
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
-
-@Composable
-private fun rememberAuroraPosterActionMode(): AuroraTitleHeroCtaMode {
-    val userProfilePreferences = remember { Injekt.get<UserProfilePreferences>() }
-    val titleHeroModeKey by userProfilePreferences.auroraTitleHeroCtaMode().collectAsState()
-    return remember(titleHeroModeKey) {
-        AuroraTitleHeroCtaMode.fromKey(titleHeroModeKey)
-    }
-}
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 internal fun AuroraPosterActionPanel(
@@ -51,43 +40,63 @@ internal fun AuroraPosterActionPanel(
     content: @Composable RowScope.(contentColor: Color) -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    val titleHeroMode = rememberAuroraPosterActionMode()
-    val visualMode = remember(titleHeroMode) {
-        resolveAuroraTitleHeroCtaVisualMode(titleHeroMode)
-    }
-    val surfaceSpec = remember(titleHeroMode, colors.isDark) {
-        resolveAuroraTitleHeroCtaSurfaceSpec(
+    val isEInk = colors.isEInk
+    val titleHeroMode = rememberAuroraTitleHeroCtaMode().toPresentationMode()
+    val surfaceSpec = remember(titleHeroMode, colors.isDark, isEInk) {
+        resolveAuroraHeroCtaSurfaceSpec(
             mode = titleHeroMode,
             isDark = colors.isDark,
-        )
-    }
-    val contentColor = when (visualMode) {
-        AuroraTitleHeroCtaVisualMode.AuroraGlass -> Color.White
-        AuroraTitleHeroCtaVisualMode.ClassicSolid -> colors.textOnAccent
-    }
-
-    // Эффект "фаски" на стекле - светится сверху, затухает снизу
-    val borderBrush = remember(colors.accent, surfaceSpec.borderAlpha) {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color.White.copy(alpha = surfaceSpec.borderAlpha * 1.8f),
-                Color.White.copy(alpha = surfaceSpec.borderAlpha * 0.2f),
-            ),
+            isHome = false,
         )
     }
 
-    // Внутреннее мягкое свечение снизу
-    val innerGlowBrush = remember(colors.accent, surfaceSpec.innerGlowAlpha) {
-        Brush.radialGradient(
-            colors = listOf(
-                colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.4f),
-                Color.Transparent,
-            ),
-            center = Offset(0.5f, 1.2f),
-        )
+    val contentColor = when {
+        isEInk -> colors.textPrimary
+        titleHeroMode == AuroraHeroCtaMode.Aurora -> Color.White
+        else -> colors.textOnAccent
     }
 
+    val islandContainerColor = if (isEInk) {
+        resolveAuroraHeroPanelContainerColor(colors)
+    } else {
+        colors.accent.copy(alpha = surfaceSpec.containerAlpha)
+    }
+    val closeContainerColor = if (isEInk) {
+        resolveAuroraHeroPanelContainerColor(colors)
+    } else {
+        colors.accent.copy(alpha = surfaceSpec.containerAlpha * 0.9f)
+    }
+
+    val borderBrush = remember(colors.accent, surfaceSpec.borderAlpha, isEInk) {
+        if (isEInk) {
+            SolidColor(resolveAuroraHeroPanelBorderColor(colors))
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = surfaceSpec.borderAlpha * 1.8f),
+                    Color.White.copy(alpha = surfaceSpec.borderAlpha * 0.2f),
+                ),
+            )
+        }
+    }
+
+    val innerGlowBrush = remember(colors.accent, surfaceSpec.innerGlowAlpha, isEInk) {
+        if (isEInk) {
+            SolidColor(Color.Transparent)
+        } else {
+            Brush.radialGradient(
+                colors = listOf(
+                    colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.4f),
+                    Color.Transparent,
+                ),
+                center = Offset(0.5f, 1.2f),
+            )
+        }
+    }
+
+    val showBorder = isEInk || surfaceSpec.borderAlpha > 0f
     val islandShape = RoundedCornerShape(28.dp)
+    val closeLabel = stringResource(MR.strings.action_close)
 
     Row(
         modifier = modifier
@@ -97,16 +106,15 @@ internal fun AuroraPosterActionPanel(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Основной остров действий
         Row(
             modifier = Modifier
                 .weight(1f)
                 .height(64.dp)
                 .clip(islandShape)
-                .background(colors.accent.copy(alpha = surfaceSpec.containerAlpha))
+                .background(islandContainerColor)
                 .background(innerGlowBrush)
                 .let { base ->
-                    if (surfaceSpec.borderAlpha > 0f) {
+                    if (showBorder) {
                         base.border(BorderStroke(1.dp, borderBrush), islandShape)
                     } else {
                         base
@@ -119,26 +127,29 @@ internal fun AuroraPosterActionPanel(
             content(contentColor)
         }
 
-        // Отдельный круглый остров для закрытия (Асимметрия)
         Box(
             modifier = Modifier
                 .size(64.dp)
                 .clip(CircleShape)
-                .background(colors.accent.copy(alpha = surfaceSpec.containerAlpha * 0.9f))
+                .background(closeContainerColor)
                 .let { base ->
-                    if (surfaceSpec.borderAlpha > 0f) {
+                    if (showBorder) {
                         base.border(BorderStroke(1.dp, borderBrush), CircleShape)
                     } else {
                         base
                     }
                 }
-                .clickable(onClick = onDismissRequest),
+                .clickable(
+                    role = Role.Button,
+                    onClickLabel = closeLabel,
+                    onClick = onDismissRequest,
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = Icons.Outlined.Close,
                 tint = contentColor,
-                contentDescription = null,
+                contentDescription = closeLabel,
                 modifier = Modifier.size(24.dp),
             )
         }

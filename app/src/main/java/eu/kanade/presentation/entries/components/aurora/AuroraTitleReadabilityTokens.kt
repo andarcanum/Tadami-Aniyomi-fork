@@ -17,8 +17,8 @@ internal fun resolveAuroraHeroOverlayAlphaStops(isDark: Boolean): List<Pair<Floa
     if ((isDark)) {
         return listOf(
             0.00f to 0.00f,
-            0.38f to 0.06f,
-            0.62f to 0.26f,
+            0.45f to 0.00f,
+            0.65f to 0.26f,
             0.82f to 0.56f,
             1.00f to 0.82f,
         )

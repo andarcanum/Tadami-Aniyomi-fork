@@ -55,6 +55,7 @@ import eu.kanade.presentation.more.resolveAuroraMoreCardBorderColor
 import eu.kanade.presentation.more.resolveAuroraMoreCardContainerColor
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
+import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.theme.AuroraSurfaceLevel
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
@@ -294,6 +295,11 @@ private fun QuickActionCard(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = minHeight)
+            .auroraCardStyle(
+                colors = colors,
+                shape = AURORA_SETTINGS_CARD_SHAPE,
+                applyDarkRimLight = true,
+            )
             .clickable(onClick = onClick),
         shape = AURORA_SETTINGS_CARD_SHAPE,
         colors = CardDefaults.cardColors(

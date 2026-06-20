@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -45,7 +46,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -70,6 +70,8 @@ import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.components.resolveAuroraCtaLabelShadowSpec
 import eu.kanade.presentation.components.resolveAuroraHomeIconShadowSpec
 import eu.kanade.presentation.components.toComposeShadow
+import eu.kanade.presentation.entries.components.aurora.AuroraGlassCtaSurface
+import eu.kanade.presentation.entries.components.aurora.AuroraHeroCtaMode
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroOverlayBrush
 import eu.kanade.presentation.theme.AuroraSurfaceLevel
@@ -82,6 +84,100 @@ import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
+
+@androidx.compose.runtime.Immutable
+internal class HomeHeroVisuals(
+    val overlayGradient: Brush,
+    val textBackdropBrush: Brush,
+    val readabilityScrim: Brush,
+    val rimLightBrush: Brush,
+    val textShadow: Shadow,
+)
+
+@Composable
+internal fun rememberHomeHeroVisuals(
+    colors: eu.kanade.presentation.theme.AuroraColors,
+    isEInkMode: Boolean,
+): HomeHeroVisuals {
+    return remember(colors, isEInkMode) {
+        val overlayGradient = if (isEInkMode) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.72f to Color.White.copy(alpha = 0.02f),
+                    1.00f to Color.White.copy(alpha = 0.08f),
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.40f to Color.Transparent,
+                    0.72f to Color.Black.copy(alpha = 0.12f),
+                    0.88f to Color.Black.copy(alpha = 0.38f),
+                    1.00f to Color.Black.copy(alpha = 0.58f),
+                ),
+            )
+        }
+
+        val eInkTextBackdropBrush = if (isEInkMode) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.30f to Color.Transparent,
+                    0.56f to Color.White.copy(alpha = 0.14f),
+                    0.82f to Color.White.copy(alpha = 0.74f),
+                    1.00f to Color.White.copy(alpha = 0.96f),
+                ),
+            )
+        } else {
+            resolveAuroraHeroOverlayBrush(colors)
+        }
+
+        val readabilityScrim = if (isEInkMode) {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.68f to Color.Transparent,
+                    1.00f to Color.White.copy(alpha = 0.16f),
+                ),
+            )
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.58f to Color.Transparent,
+                    0.78f to Color.Black.copy(alpha = 0.46f),
+                    1.00f to Color.Black.copy(alpha = 0.88f),
+                ),
+            )
+        }
+
+        val heroTextShadow = if (isEInkMode) {
+            Shadow(
+                color = Color.Transparent,
+                offset = Offset.Zero,
+                blurRadius = 0f,
+            )
+        } else {
+            Shadow(
+                color = Color.Black.copy(alpha = 0.86f),
+                offset = Offset(0f, 2.5f),
+                blurRadius = 10f,
+            )
+        }
+
+        val rimLightBrush = homeHubRimLightBrush(colors)
+
+        HomeHeroVisuals(
+            overlayGradient = overlayGradient,
+            textBackdropBrush = eInkTextBackdropBrush,
+            readabilityScrim = readabilityScrim,
+            rimLightBrush = rimLightBrush,
+            textShadow = heroTextShadow,
+        )
+    }
+}
 
 @Composable
 internal fun HeroSection(
@@ -101,223 +197,18 @@ internal fun HeroSection(
             mode = ctaMode,
         )
     }
-    val buttonVisualMode = remember(ctaMode) {
-        resolveHomeHubHeroButtonVisualMode(ctaMode)
-    }
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
-    val heroCardShape = RoundedCornerShape(24.dp)
-    val overlayGradient = remember(colors, isEInkMode) {
-        if (isEInkMode) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.00f to Color.Transparent,
-                    0.72f to Color.White.copy(alpha = 0.02f),
-                    1.00f to Color.White.copy(alpha = 0.08f),
-                ),
-            )
-        } else {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.00f to Color.Transparent,
-                    0.40f to Color.Transparent,
-                    0.72f to Color.Black.copy(alpha = 0.12f),
-                    0.88f to Color.Black.copy(alpha = 0.38f),
-                    1.00f to Color.Black.copy(alpha = 0.58f),
-                ),
-            )
-        }
-    }
-    val eInkTextBackdropBrush = remember(colors, isEInkMode) {
-        if (isEInkMode) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.00f to Color.Transparent,
-                    0.30f to Color.Transparent,
-                    0.56f to Color.White.copy(alpha = 0.14f),
-                    0.82f to Color.White.copy(alpha = 0.74f),
-                    1.00f to Color.White.copy(alpha = 0.96f),
-                ),
-            )
-        } else {
-            resolveAuroraHeroOverlayBrush(colors)
-        }
-    }
-    val readabilityScrim = remember(isEInkMode) {
-        if (isEInkMode) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.00f to Color.Transparent,
-                    0.68f to Color.Transparent,
-                    1.00f to Color.White.copy(alpha = 0.16f),
-                ),
-            )
-        } else {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.00f to Color.Transparent,
-                    0.58f to Color.Transparent,
-                    0.78f to Color.Black.copy(alpha = 0.46f),
-                    1.00f to Color.Black.copy(alpha = 0.88f),
-                ),
-            )
-        }
-    }
-    val heroTextShadow = remember(isEInkMode) {
-        if (isEInkMode) {
-            Shadow(
-                color = Color.Transparent,
-                offset = Offset.Zero,
-                blurRadius = 0f,
-            )
-        } else {
-            Shadow(
-                color = Color.Black.copy(alpha = 0.86f),
-                offset = Offset(0f, 2.5f),
-                blurRadius = 10f,
-            )
-        }
-    }
-    val rimLightBrush = remember(colors) { homeHubRimLightBrush(colors) }
+    val heroCardShape = RoundedCornerShape(20.dp)
+
+    val visuals = rememberHomeHeroVisuals(colors = colors, isEInkMode = isEInkMode)
+
     val heroInteractionSource = remember { MutableInteractionSource() }
     val isHeroPressed by heroInteractionSource.collectIsPressedAsState()
     val heroElevation by animateDpAsState(
         targetValue = if (isHeroPressed) 8.dp else 4.dp,
         label = "heroElevation",
     )
-    val actionButtonShape = RoundedCornerShape(16.dp)
-    val actionButtonSurfaceSpec = remember(ctaMode, colors.isDark) {
-        resolveHomeHubHeroButtonSurfaceSpec(
-            mode = ctaMode,
-            isDark = colors.isDark,
-        )
-    }
-    val actionButtonHasReadabilityEffects = buttonVisualMode == HomeHubHeroButtonVisualMode.AuroraGlass && !isEInkMode
-    val actionButtonLabelShadow = remember(actionButtonHasReadabilityEffects) {
-        resolveAuroraCtaLabelShadowSpec(
-            enabled = actionButtonHasReadabilityEffects,
-        ).toComposeShadow()
-    }
-    val actionButtonIconShadowSpec = remember(actionButtonHasReadabilityEffects) {
-        resolveAuroraHomeIconShadowSpec(enabled = actionButtonHasReadabilityEffects)
-    }
-    val actionButtonBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec, isEInkMode) {
-        when (buttonVisualMode) {
-            HomeHubHeroButtonVisualMode.ClassicSolid -> SolidColor(colors.accent)
-            HomeHubHeroButtonVisualMode.AuroraGlass -> if (isEInkMode) {
-                SolidColor(colors.accent)
-            } else {
-                SolidColor(colors.accent.copy(alpha = actionButtonSurfaceSpec.containerAlpha))
-            }
-        }
-    }
-    val actionButtonInnerGlowBrush = remember(colors.accent, actionButtonSurfaceSpec, isEInkMode) {
-        if (isEInkMode) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.00f to Color.Transparent,
-                    1.00f to Color.Transparent,
-                ),
-            )
-        } else {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.00f to Color.Transparent,
-                    0.46f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha * 0.18f),
-                    0.78f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha * 0.58f),
-                    1.00f to colors.accent.copy(alpha = actionButtonSurfaceSpec.innerGlowAlpha),
-                ),
-            )
-        }
-    }
-    val actionButtonHighlightBrush = remember(actionButtonSurfaceSpec, isEInkMode) {
-        if (isEInkMode) {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.00f to Color.Transparent,
-                    1.00f to Color.Transparent,
-                ),
-            )
-        } else {
-            Brush.verticalGradient(
-                colorStops = arrayOf(
-                    0.00f to Color.White.copy(alpha = actionButtonSurfaceSpec.highlightAlpha),
-                    0.34f to Color.White.copy(alpha = actionButtonSurfaceSpec.highlightAlpha * 0.48f),
-                    0.68f to Color.Transparent,
-                    1.00f to Color.Transparent,
-                ),
-            )
-        }
-    }
-    val actionButtonBorderBrush = remember(colors, buttonVisualMode, actionButtonSurfaceSpec, isEInkMode) {
-        when (buttonVisualMode) {
-            HomeHubHeroButtonVisualMode.ClassicSolid -> if (isEInkMode) {
-                SolidColor(Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha))
-            } else {
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
-                        Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
-                    ),
-                )
-            }
-            HomeHubHeroButtonVisualMode.AuroraGlass -> SolidColor(
-                Color.White.copy(alpha = actionButtonSurfaceSpec.borderAlpha),
-            )
-        }
-    }
-    val actionButtonElevation = when (buttonVisualMode) {
-        HomeHubHeroButtonVisualMode.ClassicSolid -> ButtonDefaults.buttonElevation()
-        HomeHubHeroButtonVisualMode.AuroraGlass -> ButtonDefaults.buttonElevation(
-            defaultElevation = 0.dp,
-            pressedElevation = 0.dp,
-            focusedElevation = 0.dp,
-            hoveredElevation = 0.dp,
-            disabledElevation = 0.dp,
-        )
-    }
-    val actionButtonModifier = remember(
-        actionButtonBrush,
-        actionButtonInnerGlowBrush,
-        actionButtonHighlightBrush,
-        actionButtonBorderBrush,
-        actionButtonShape,
-        buttonVisualMode,
-        actionButtonSurfaceSpec,
-    ) {
-        Modifier
-            .height(52.dp)
-            .clip(actionButtonShape)
-            .background(actionButtonBrush)
-            .let { baseModifier ->
-                if (buttonVisualMode == HomeHubHeroButtonVisualMode.AuroraGlass) {
-                    baseModifier
-                        .background(actionButtonInnerGlowBrush)
-                        .background(actionButtonHighlightBrush)
-                } else {
-                    baseModifier
-                }
-            }
-            .let { baseModifier ->
-                if (actionButtonSurfaceSpec.borderAlpha > 0f) {
-                    baseModifier.border(1.dp, actionButtonBorderBrush, actionButtonShape)
-                } else {
-                    baseModifier
-                }
-            }
-    }
-    val actionButtonContentColor = when (buttonVisualMode) {
-        HomeHubHeroButtonVisualMode.ClassicSolid -> colors.textOnAccent
-        HomeHubHeroButtonVisualMode.AuroraGlass -> if (isEInkMode) colors.textOnAccent else Color.White
-    }
-    val actionButtonPadding = when (buttonVisualMode) {
-        HomeHubHeroButtonVisualMode.ClassicSolid -> {
-            androidx.compose.foundation.layout.PaddingValues(start = 22.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
-        }
-        HomeHubHeroButtonVisualMode.AuroraGlass -> {
-            androidx.compose.foundation.layout.PaddingValues(start = 20.dp, end = 22.dp, top = 8.dp, bottom = 8.dp)
-        }
-    }
 
     Box(
         modifier = Modifier
@@ -327,7 +218,7 @@ internal fun HeroSection(
             .clip(heroCardShape)
             .then(
                 if (colors.isDark || colors.isEInk) {
-                    Modifier.border(width = 1.dp, brush = rimLightBrush, shape = heroCardShape)
+                    Modifier.border(width = 1.dp, brush = visuals.rimLightBrush, shape = heroCardShape)
                 } else {
                     Modifier.shadow(
                         elevation = heroElevation,
@@ -355,8 +246,8 @@ internal fun HeroSection(
             error = fallbackPainter,
             fallback = fallbackPainter,
         )
-        Box(Modifier.fillMaxSize().background(overlayGradient))
-        Box(Modifier.fillMaxSize().background(readabilityScrim))
+        Box(Modifier.fillMaxSize().background(visuals.overlayGradient))
+        Box(Modifier.fillMaxSize().background(visuals.readabilityScrim))
 
         Column(
             modifier = Modifier
@@ -365,7 +256,7 @@ internal fun HeroSection(
                     if (isEInkMode) {
                         Modifier
                             .fillMaxWidth()
-                            .background(eInkTextBackdropBrush)
+                            .background(visuals.textBackdropBrush)
                             .padding(horizontal = 18.dp, vertical = 16.dp)
                     } else {
                         Modifier.padding(24.dp)
@@ -376,13 +267,13 @@ internal fun HeroSection(
             if (isEInkMode) {
                 OutlinedHeroText(
                     text = hero.title,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     baseStyle = TextStyle(
                         fontSize = 28.sp,
                         fontFamily = FontFamily(Font(R.font.montserrat_bold)),
                         lineHeight = 34.sp,
                         lineBreak = LineBreak.Heading,
-                        shadow = heroTextShadow,
+                        shadow = visuals.textShadow,
                     ),
                     textAlign = TextAlign.Center,
                     maxLines = 2,
@@ -393,11 +284,12 @@ internal fun HeroSection(
             } else {
                 Text(
                     hero.title,
+                    modifier = Modifier.padding(horizontal = 16.dp),
                     color = Color.White,
                     fontSize = 28.sp,
                     fontFamily = FontFamily(Font(R.font.montserrat_bold)),
                     lineHeight = 34.sp,
-                    style = TextStyle(lineBreak = LineBreak.Heading, shadow = heroTextShadow),
+                    style = TextStyle(lineBreak = LineBreak.Heading, shadow = visuals.textShadow),
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -410,11 +302,11 @@ internal fun HeroSection(
                 Spacer(Modifier.width(8.dp))
                 if (isEInkMode) {
                     OutlinedHeroText(
-                        text = stringResource(actionSpec.progressLabelRes, (hero.progressNumber % 1000).toInt()),
+                        text = stringResource(actionSpec.progressLabelRes, hero.progressNumber.toInt()),
                         baseStyle = TextStyle(
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
-                            shadow = heroTextShadow,
+                            shadow = visuals.textShadow,
                         ),
                         textAlign = TextAlign.Start,
                         maxLines = 1,
@@ -424,72 +316,91 @@ internal fun HeroSection(
                     )
                 } else {
                     Text(
-                        stringResource(actionSpec.progressLabelRes, (hero.progressNumber % 1000).toInt()),
+                        stringResource(actionSpec.progressLabelRes, hero.progressNumber.toInt()),
                         color = Color.White.copy(alpha = 0.92f),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        style = TextStyle(shadow = heroTextShadow),
+                        style = TextStyle(shadow = visuals.textShadow),
                     )
                 }
             }
 
             Spacer(Modifier.height(24.dp))
 
-            Box(
+            val buttonInteractionSource = remember { MutableInteractionSource() }
+            val ctaPresentationMode = remember(ctaMode) {
+                when (ctaMode) {
+                    HomeHeroCtaMode.Aurora -> AuroraHeroCtaMode.Aurora
+                    HomeHeroCtaMode.Classic -> AuroraHeroCtaMode.Classic
+                }
+            }
+
+            AuroraGlassCtaSurface(
+                mode = ctaPresentationMode,
+                onClick = {
+                    appHaptics.tap()
+                    onPlayClick()
+                },
                 modifier = Modifier.height(52.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Button(
-                    onClick = {
-                        appHaptics.tap()
-                        onPlayClick()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    elevation = actionButtonElevation,
-                    shape = actionButtonShape,
-                    contentPadding = actionButtonPadding,
-                    modifier = actionButtonModifier,
+                isHome = true,
+                shape = RoundedCornerShape(16.dp),
+                contentPadding = if (ctaMode == HomeHeroCtaMode.Classic) {
+                    PaddingValues(start = 22.dp, end = 24.dp, top = 8.dp, bottom = 8.dp)
+                } else {
+                    PaddingValues(start = 20.dp, end = 22.dp, top = 8.dp, bottom = 8.dp)
+                },
+                interactionSource = buttonInteractionSource,
+            ) { contentColor ->
+                val actionIcon = when (actionSpec.icon) {
+                    HomeHubHeroActionIcon.Play -> Icons.Filled.PlayArrow
+                }
+                Row(
+                    modifier = Modifier.offset(x = (-2).dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val actionIcon = when (actionSpec.icon) {
-                        HomeHubHeroActionIcon.Play -> Icons.Filled.PlayArrow
+                    val actionButtonHasReadabilityEffects =
+                        ctaPresentationMode == AuroraHeroCtaMode.Aurora && !isEInkMode
+                    val actionButtonIconShadowSpec = remember(actionButtonHasReadabilityEffects) {
+                        resolveAuroraHomeIconShadowSpec(enabled = actionButtonHasReadabilityEffects)
                     }
-                    Row(
-                        modifier = Modifier.offset(x = (-2).dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    val actionButtonLabelShadow = remember(actionButtonHasReadabilityEffects) {
+                        resolveAuroraCtaLabelShadowSpec(
+                            enabled = actionButtonHasReadabilityEffects,
+                        ).toComposeShadow()
+                    }
+
+                    Box(
+                        modifier = Modifier.size(21.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Box(
-                            modifier = Modifier.size(21.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (actionButtonIconShadowSpec.alpha > 0f) {
-                                Icon(
-                                    imageVector = actionIcon,
-                                    contentDescription = null,
-                                    tint = Color.Black.copy(alpha = actionButtonIconShadowSpec.alpha),
-                                    modifier = Modifier
-                                        .size(21.dp)
-                                        .offset(
-                                            x = actionButtonIconShadowSpec.offsetXDp,
-                                            y = actionButtonIconShadowSpec.offsetYDp,
-                                        ),
-                                )
-                            }
+                        if (actionButtonIconShadowSpec.alpha > 0f) {
                             Icon(
                                 imageVector = actionIcon,
                                 contentDescription = null,
-                                tint = actionButtonContentColor,
-                                modifier = Modifier.size(21.dp),
+                                tint = Color.Black.copy(alpha = actionButtonIconShadowSpec.alpha),
+                                modifier = Modifier
+                                    .size(21.dp)
+                                    .offset(
+                                        x = actionButtonIconShadowSpec.offsetXDp,
+                                        y = actionButtonIconShadowSpec.offsetYDp,
+                                    ),
                             )
                         }
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            stringResource(actionSpec.labelRes),
-                            color = actionButtonContentColor,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            style = TextStyle(shadow = actionButtonLabelShadow),
+                        Icon(
+                            imageVector = actionIcon,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(21.dp),
                         )
                     }
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        stringResource(actionSpec.labelRes),
+                        color = contentColor,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        style = TextStyle(shadow = actionButtonLabelShadow),
+                    )
                 }
             }
         }

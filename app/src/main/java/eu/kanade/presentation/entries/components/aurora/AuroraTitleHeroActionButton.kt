@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -50,12 +51,17 @@ import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-internal enum class AuroraTitleHeroCtaVisualMode {
-    AuroraGlass,
-    ClassicSolid,
+internal enum class AuroraHeroCtaMode {
+    Aurora,
+    Classic,
 }
 
-internal data class AuroraTitleHeroCtaSurfaceSpec(
+internal fun AuroraTitleHeroCtaMode.toPresentationMode(): AuroraHeroCtaMode = when (this) {
+    AuroraTitleHeroCtaMode.Aurora -> AuroraHeroCtaMode.Aurora
+    AuroraTitleHeroCtaMode.Classic -> AuroraHeroCtaMode.Classic
+}
+
+internal data class AuroraHeroCtaSurfaceSpec(
     val containerAlpha: Float,
     val usesGradient: Boolean,
     val innerGlowAlpha: Float,
@@ -63,49 +69,60 @@ internal data class AuroraTitleHeroCtaSurfaceSpec(
     val borderAlpha: Float,
 )
 
-internal fun resolveAuroraTitleHeroCtaVisualMode(
-    mode: AuroraTitleHeroCtaMode,
-): AuroraTitleHeroCtaVisualMode {
-    return when (mode) {
-        AuroraTitleHeroCtaMode.Aurora -> AuroraTitleHeroCtaVisualMode.AuroraGlass
-        AuroraTitleHeroCtaMode.Classic -> AuroraTitleHeroCtaVisualMode.ClassicSolid
-    }
-}
-
-internal fun resolveAuroraTitleHeroCtaSurfaceSpec(
-    mode: AuroraTitleHeroCtaMode,
+internal fun resolveAuroraHeroCtaSurfaceSpec(
+    mode: AuroraHeroCtaMode,
     isDark: Boolean,
-): AuroraTitleHeroCtaSurfaceSpec {
-    return when (mode) {
-        AuroraTitleHeroCtaMode.Aurora -> if (isDark) {
-            AuroraTitleHeroCtaSurfaceSpec(
-                containerAlpha = 0.50f,
+    isHome: Boolean,
+): AuroraHeroCtaSurfaceSpec {
+    return if (isHome) {
+        when (mode) {
+            AuroraHeroCtaMode.Aurora -> AuroraHeroCtaSurfaceSpec(
+                containerAlpha = if (isDark) 0.50f else 0.78f,
                 usesGradient = false,
-                innerGlowAlpha = 0.55f,
-                highlightAlpha = 0f,
-                borderAlpha = 0.12f,
+                borderAlpha = if (isDark) 0.12f else 0.18f,
+                innerGlowAlpha = if (isDark) 0.55f else 0.10f,
+                highlightAlpha = if (isDark) 0f else 0.12f,
             )
-        } else {
-            AuroraTitleHeroCtaSurfaceSpec(
-                containerAlpha = 0.88f,
-                usesGradient = false,
-                innerGlowAlpha = 0.08f,
-                highlightAlpha = 0.12f,
-                borderAlpha = 0.10f,
+            AuroraHeroCtaMode.Classic -> AuroraHeroCtaSurfaceSpec(
+                containerAlpha = 1f,
+                usesGradient = true,
+                borderAlpha = 0.12f,
+                innerGlowAlpha = 0f,
+                highlightAlpha = 0f,
             )
         }
-        AuroraTitleHeroCtaMode.Classic -> AuroraTitleHeroCtaSurfaceSpec(
-            containerAlpha = 1f,
-            usesGradient = false,
-            innerGlowAlpha = 0f,
-            highlightAlpha = 0f,
-            borderAlpha = 0f,
-        )
+    } else {
+        when (mode) {
+            AuroraHeroCtaMode.Aurora -> if (isDark) {
+                AuroraHeroCtaSurfaceSpec(
+                    containerAlpha = 0.28f,
+                    usesGradient = true,
+                    innerGlowAlpha = 0.55f,
+                    highlightAlpha = 0.42f,
+                    borderAlpha = 0.12f,
+                )
+            } else {
+                AuroraHeroCtaSurfaceSpec(
+                    containerAlpha = 0.88f,
+                    usesGradient = false,
+                    innerGlowAlpha = 0.08f,
+                    highlightAlpha = 0.12f,
+                    borderAlpha = 0.10f,
+                )
+            }
+            AuroraHeroCtaMode.Classic -> AuroraHeroCtaSurfaceSpec(
+                containerAlpha = 1f,
+                usesGradient = false,
+                innerGlowAlpha = 0f,
+                highlightAlpha = 0f,
+                borderAlpha = 0f,
+            )
+        }
     }
 }
 
 @Composable
-private fun rememberAuroraTitleHeroCtaMode(): AuroraTitleHeroCtaMode {
+internal fun rememberAuroraTitleHeroCtaMode(): AuroraTitleHeroCtaMode {
     val userProfilePreferences = remember { Injekt.get<UserProfilePreferences>() }
     val titleHeroModeKey by userProfilePreferences.auroraTitleHeroCtaMode().collectAsState()
     return remember(titleHeroModeKey) {
@@ -114,48 +131,59 @@ private fun rememberAuroraTitleHeroCtaMode(): AuroraTitleHeroCtaMode {
 }
 
 @Composable
-private fun AuroraTitleHeroActionSurface(
-    mode: AuroraTitleHeroCtaMode,
+internal fun AuroraGlassCtaSurface(
+    mode: AuroraHeroCtaMode,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isHome: Boolean = false,
     shape: Shape,
     contentPadding: PaddingValues,
-    interactionSource: MutableInteractionSource,
+    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     content: @Composable BoxScope.(contentColor: Color) -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    val visualMode = remember(mode) {
-        resolveAuroraTitleHeroCtaVisualMode(mode)
-    }
-    val surfaceSpec = remember(mode, colors.isDark) {
-        resolveAuroraTitleHeroCtaSurfaceSpec(
+    val isEInk = colors.isEInk
+    val surfaceSpec = remember(mode, colors.isDark, isHome) {
+        resolveAuroraHeroCtaSurfaceSpec(
             mode = mode,
             isDark = colors.isDark,
+            isHome = isHome,
         )
     }
-    val contentColor = when (visualMode) {
-        AuroraTitleHeroCtaVisualMode.AuroraGlass -> Color.White
-        AuroraTitleHeroCtaVisualMode.ClassicSolid -> colors.textOnAccent
+
+    val contentColor = when (mode) {
+        AuroraHeroCtaMode.Aurora -> if (colors.isDark) colors.ctaContentOnGlassDark else Color.White
+        AuroraHeroCtaMode.Classic -> colors.textOnAccent
     }
-    val auroraInnerGlowBrush = remember(colors.accent, surfaceSpec) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.Transparent,
-                0.46f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.18f),
-                0.78f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.58f),
-                1.00f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha),
-            ),
-        )
+
+    val auroraInnerGlowBrush = remember(colors.accent, surfaceSpec, isEInk) {
+        if (isEInk) {
+            SolidColor(Color.Transparent)
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.Transparent,
+                    0.46f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.18f),
+                    0.78f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha * 0.58f),
+                    1.00f to colors.accent.copy(alpha = surfaceSpec.innerGlowAlpha),
+                ),
+            )
+        }
     }
-    val auroraHighlightBrush = remember(surfaceSpec) {
-        Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.00f to Color.White.copy(alpha = surfaceSpec.highlightAlpha),
-                0.34f to Color.White.copy(alpha = surfaceSpec.highlightAlpha * 0.48f),
-                0.68f to Color.Transparent,
-                1.00f to Color.Transparent,
-            ),
-        )
+
+    val auroraHighlightBrush = remember(surfaceSpec, isEInk) {
+        if (isEInk) {
+            SolidColor(Color.Transparent)
+        } else {
+            Brush.verticalGradient(
+                colorStops = arrayOf(
+                    0.00f to Color.White.copy(alpha = surfaceSpec.highlightAlpha),
+                    0.34f to Color.White.copy(alpha = surfaceSpec.highlightAlpha * 0.48f),
+                    0.68f to Color.Transparent,
+                    1.00f to Color.Transparent,
+                ),
+            )
+        }
     }
 
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -175,14 +203,31 @@ private fun AuroraTitleHeroActionSurface(
                 scaleY = scale
             }
             .clip(shape)
-            .background(colors.accent.copy(alpha = surfaceSpec.containerAlpha))
+            .background(
+                brush = if (surfaceSpec.usesGradient) {
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            colors.accent.copy(alpha = surfaceSpec.containerAlpha),
+                            colors.accentVariant.copy(alpha = surfaceSpec.containerAlpha),
+                        ),
+                    )
+                } else {
+                    Brush.linearGradient(
+                        colors = listOf(
+                            colors.accent.copy(alpha = surfaceSpec.containerAlpha),
+                            colors.accent.copy(alpha = surfaceSpec.containerAlpha),
+                        ),
+                    )
+                },
+                shape = shape,
+            )
             .background(
                 brush = auroraInnerGlowBrush,
-                alpha = if (visualMode == AuroraTitleHeroCtaVisualMode.AuroraGlass) 1f else 0f,
+                alpha = if (mode == AuroraHeroCtaMode.Aurora) 1f else 0f,
             )
             .background(
                 brush = auroraHighlightBrush,
-                alpha = if (visualMode == AuroraTitleHeroCtaVisualMode.AuroraGlass) 1f else 0f,
+                alpha = if (mode == AuroraHeroCtaMode.Aurora) 1f else 0f,
             )
             .let { base ->
                 if (surfaceSpec.borderAlpha > 0f) {
@@ -228,14 +273,13 @@ internal fun AuroraTitleHeroActionButton(
         ).toComposeShadow()
     }
     val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
 
     val actualShape = remember(cornerRadius) {
         RoundedCornerShape(cornerRadius)
     }
 
-    AuroraTitleHeroActionSurface(
-        mode = titleHeroMode,
+    AuroraGlassCtaSurface(
+        mode = titleHeroMode.toPresentationMode(),
         onClick = onClick,
         modifier = modifier,
         shape = actualShape,
@@ -278,8 +322,8 @@ internal fun AuroraTitleHeroActionFab(
     val titleHeroMode = rememberAuroraTitleHeroCtaMode()
     val interactionSource = remember { MutableInteractionSource() }
 
-    AuroraTitleHeroActionSurface(
-        mode = titleHeroMode,
+    AuroraGlassCtaSurface(
+        mode = titleHeroMode.toPresentationMode(),
         onClick = onClick,
         modifier = modifier.size(containerSize),
         shape = RoundedCornerShape(20.dp),
