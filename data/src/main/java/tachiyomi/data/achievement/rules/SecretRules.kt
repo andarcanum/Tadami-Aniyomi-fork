@@ -406,6 +406,7 @@ class GokuRule : AchievementRule {
         context: RuleContext,
     ): RuleResult {
         val totalPoints = context.getCurrentPoints()
+        if (totalPoints == currentProgress) return RuleResult.NoChange
         return RuleResult.Update(totalPoints)
     }
 

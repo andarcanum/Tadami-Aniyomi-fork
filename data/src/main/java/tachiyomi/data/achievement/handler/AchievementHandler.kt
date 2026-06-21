@@ -108,6 +108,7 @@ class AchievementHandler(
 
         if (corrected) {
             val allAchievements = repository.getAll().first()
+            val allProgress = repository.getAllProgress().first().associateBy { it.achievementId }
             val context = RuleContextImpl(
                 mangaHandler = mangaHandler,
                 animeHandler = animeHandler,
@@ -118,14 +119,14 @@ class AchievementHandler(
                 diversityChecker = diversityChecker,
                 streakChecker = streakChecker,
                 featureCollector = featureCollector,
-                pointsManager = pointsManager,
-                achievementRepository = repository,
+                allProgress = allProgress,
+                allAchievementsMap = allAchievements.associateBy { it.id },
             )
             val metaAchievements = allAchievements.filter { it.type == AchievementType.META }
             metaAchievements.forEach { achievement ->
                 val rule = ruleRegistry.getRule(achievement.id)
                 val newProgress = rule?.evaluateFull(context) ?: 0
-                val currentProgress = repository.getProgress(achievement.id).first()
+                val currentProgress = allProgress[achievement.id]
                 applyProgressUpdate(achievement, currentProgress, newProgress)
             }
         }
@@ -171,6 +172,8 @@ class AchievementHandler(
         }
 
         val allAchievements = repository.getAll().first()
+        val allAchievementsMap = allAchievements.associateBy { it.id }
+        val allProgress = repository.getAllProgress().first().associateBy { it.achievementId }.toMutableMap()
 
         // Standard rules are evaluated first.
         val standardAchievements = allAchievements.filter { it.type != AchievementType.META && it.id != "secret_goku" }
@@ -186,13 +189,13 @@ class AchievementHandler(
             diversityChecker = diversityChecker,
             streakChecker = streakChecker,
             featureCollector = featureCollector,
-            pointsManager = pointsManager,
-            achievementRepository = repository,
+            allProgress = allProgress,
+            allAchievementsMap = allAchievementsMap,
         )
 
         for (achievement in standardAchievements) {
             val rule = ruleRegistry.getRule(achievement.id) ?: continue
-            val currentProgress = repository.getProgress(achievement.id).first()
+            val currentProgress = allProgress[achievement.id]
             if (currentProgress?.isUnlocked == true) continue
 
             val result = rule.evaluateDelta(event, currentProgress?.progress ?: 0, context)
@@ -200,7 +203,10 @@ class AchievementHandler(
                 val threshold = achievement.threshold ?: 1
                 val isUnlockedNow = result.newProgress >= threshold
 
-                applyProgressUpdate(achievement, currentProgress, result.newProgress)
+                val updatedProgress = applyProgressUpdate(achievement, currentProgress, result.newProgress)
+                if (updatedProgress != null) {
+                    allProgress[achievement.id] = updatedProgress
+                }
                 if (isUnlockedNow) {
                     anyUnlockHappened = true
                 }
@@ -214,12 +220,15 @@ class AchievementHandler(
         val metaAchievements = allAchievements.filter { it.type == AchievementType.META || it.id == "secret_goku" }
         for (achievement in metaAchievements) {
             val rule = ruleRegistry.getRule(achievement.id) ?: continue
-            val currentProgress = repository.getProgress(achievement.id).first()
+            val currentProgress = allProgress[achievement.id]
             if (currentProgress?.isUnlocked == true) continue
 
             val result = rule.evaluateDelta(event, currentProgress?.progress ?: 0, context)
             if (result is RuleResult.Update) {
-                applyProgressUpdate(achievement, currentProgress, result.newProgress)
+                val updatedProgress = applyProgressUpdate(achievement, currentProgress, result.newProgress)
+                if (updatedProgress != null) {
+                    allProgress[achievement.id] = updatedProgress
+                }
             }
         }
     }
@@ -259,8 +268,8 @@ class AchievementHandler(
         achievement: Achievement,
         currentProgress: AchievementProgress?,
         newProgress: Int,
-    ) {
-        if (achievement.isTiered) {
+    ): AchievementProgress? {
+        return if (achievement.isTiered) {
             // Обработка многоуровневого достижения
             applyTieredProgressUpdate(achievement, currentProgress, newProgress)
         } else {
@@ -273,49 +282,53 @@ class AchievementHandler(
         achievement: Achievement,
         currentProgress: AchievementProgress?,
         newProgress: Int,
-    ) {
+    ): AchievementProgress? {
         val threshold = achievement.threshold ?: 1
         logcat(LogPriority.INFO) {
             "[ACHIEVEMENTS] Checking ${achievement.id}: current=$currentProgress, new=$newProgress, threshold=$threshold"
         }
 
         if (currentProgress == null) {
-            if (newProgress <= 0) return
+            if (newProgress <= 0) return null
             logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Creating new progress for ${achievement.id}" }
-            repository.insertOrUpdateProgress(
-                AchievementProgress.createStandard(
-                    achievementId = achievement.id,
-                    progress = newProgress,
-                    maxProgress = threshold,
-                    isUnlocked = newProgress >= threshold,
-                    unlockedAt = if (newProgress >= threshold) System.currentTimeMillis() else null,
-                ),
+            val progressToSave = AchievementProgress.createStandard(
+                achievementId = achievement.id,
+                progress = newProgress,
+                maxProgress = threshold,
+                isUnlocked = newProgress >= threshold,
+                unlockedAt = if (newProgress >= threshold) System.currentTimeMillis() else null,
             )
+            repository.insertOrUpdateProgress(progressToSave)
 
             if (newProgress >= threshold) {
                 logcat(LogPriority.INFO) { "[ACHIEVEMENTS] UNLOCKING ${achievement.id} on first check!" }
                 onAchievementUnlocked(achievement)
             }
+            return progressToSave
         } else if (!currentProgress.isUnlocked) {
+            if (newProgress == currentProgress.progress && newProgress < threshold) {
+                return currentProgress
+            }
             val shouldUnlock = newProgress >= threshold
             logcat(LogPriority.INFO) {
                 "[ACHIEVEMENTS] Updating progress for ${achievement.id}: shouldUnlock=$shouldUnlock"
             }
-            repository.insertOrUpdateProgress(
-                currentProgress.copy(
-                    progress = newProgress,
-                    isUnlocked = shouldUnlock,
-                    unlockedAt = if (shouldUnlock) System.currentTimeMillis() else currentProgress.unlockedAt,
-                    lastUpdated = System.currentTimeMillis(),
-                ),
+            val progressToSave = currentProgress.copy(
+                progress = newProgress,
+                isUnlocked = shouldUnlock,
+                unlockedAt = if (shouldUnlock) System.currentTimeMillis() else currentProgress.unlockedAt,
+                lastUpdated = System.currentTimeMillis(),
             )
+            repository.insertOrUpdateProgress(progressToSave)
 
             if (shouldUnlock) {
                 logcat(LogPriority.INFO) { "[ACHIEVEMENTS] UNLOCKING ${achievement.id}!" }
                 onAchievementUnlocked(achievement)
             }
+            return progressToSave
         } else {
             logcat(LogPriority.VERBOSE) { "[ACHIEVEMENTS] ${achievement.id} already unlocked, skipping" }
+            return currentProgress
         }
     }
 
@@ -323,11 +336,12 @@ class AchievementHandler(
         achievement: Achievement,
         currentProgress: AchievementProgress?,
         newProgress: Int,
-    ) {
-        val tiers = achievement.tiers ?: return
+    ): AchievementProgress? {
+        val tiers = achievement.tiers ?: return null
         logcat(LogPriority.INFO) { "[ACHIEVEMENTS] Checking tiered ${achievement.id}: newProgress=$newProgress" }
 
-        if (currentProgress == null && newProgress <= 0) return
+        if (currentProgress == null && newProgress <= 0) return null
+        if (currentProgress != null && newProgress == currentProgress.progress) return currentProgress
 
         // Вычисляем текущий уровень
         val newTierIndex = tiers.indexOfLast { newProgress >= it.threshold }
@@ -385,6 +399,7 @@ class AchievementHandler(
             }
             onAchievementTierUp(achievement, unlockedTier, newCurrentTier)
         }
+        return progressToSave
     }
 
     private suspend fun onAchievementTierUp(

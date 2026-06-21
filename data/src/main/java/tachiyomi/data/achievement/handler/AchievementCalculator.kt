@@ -56,6 +56,7 @@ class AchievementCalculator(
             val achievementsById = allAchievements.associateBy { it.id }
             val existingProgress = repository.getAllProgress().first()
                 .associateBy { it.achievementId }
+            val allProgressMap = existingProgress.toMutableMap()
 
             val context = RuleContextImpl(
                 mangaHandler = mangaHandler,
@@ -67,8 +68,8 @@ class AchievementCalculator(
                 diversityChecker = diversityChecker,
                 streakChecker = streakChecker,
                 featureCollector = featureCollector,
-                pointsManager = pointsManager,
-                achievementRepository = repository,
+                allProgress = allProgressMap,
+                allAchievementsMap = achievementsById,
             )
 
             // Step 1: Evaluate all standard rules (non-meta, excluding secret_goku)
@@ -79,7 +80,9 @@ class AchievementCalculator(
             val standardProgressUpdates = standardAchievements.map { achievement ->
                 val rule = ruleRegistry.getRule(achievement.id)
                 val progress = rule?.evaluateFull(context) ?: 0
-                buildProgress(achievement, progress, existingProgress[achievement.id])
+                val updated = buildProgress(achievement, progress, existingProgress[achievement.id])
+                allProgressMap[achievement.id] = updated
+                updated
             }
 
             // Step 2: Evaluate meta rules & Goku rule
@@ -87,7 +90,9 @@ class AchievementCalculator(
             val metaProgressUpdates = metaAchievements.map { achievement ->
                 val rule = ruleRegistry.getRule(achievement.id)
                 val progress = rule?.evaluateFull(context) ?: 0
-                buildProgress(achievement, progress, existingProgress[achievement.id])
+                val updated = buildProgress(achievement, progress, existingProgress[achievement.id])
+                allProgressMap[achievement.id] = updated
+                updated
             }
 
             val allProgressUpdates = standardProgressUpdates + metaProgressUpdates
@@ -131,7 +136,14 @@ class AchievementCalculator(
 
             val totalPoints = allProgressUpdates
                 .filter { it.isUnlocked }
-                .sumOf { achievementsById[it.achievementId]?.points ?: 0 }
+                .sumOf { progress ->
+                    val achievement = achievementsById[progress.achievementId] ?: return@sumOf 0
+                    if (achievement.isTiered) {
+                        achievement.tiers?.take(progress.currentTier)?.sumOf { it.points } ?: 0
+                    } else {
+                        achievement.points
+                    }
+                }
             val newLevel = pointsManager.calculateLevel(totalPoints)
             val xpSpentForCurrentLevel = (1..newLevel).sumOf { UserProfile.getXPForLevel(it) }
             val currentXP = (totalPoints - xpSpentForCurrentLevel).coerceAtLeast(0)

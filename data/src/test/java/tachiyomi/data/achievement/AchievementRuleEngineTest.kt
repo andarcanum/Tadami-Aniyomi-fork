@@ -120,6 +120,7 @@ class AchievementRuleEngineTest {
 
         val allAchievements = listOf(standardAch, metaAch)
         coEvery { repository.getAll() } returns flowOf(allAchievements)
+        coEvery { repository.getAllProgress() } returns flowOf(emptyList())
         coEvery { repository.getProgress("standard_1") } returns flowOf(null)
         coEvery { repository.getProgress("meta_1") } returns flowOf(null)
         coEvery { repository.insertOrUpdateProgress(any()) } returns Unit
