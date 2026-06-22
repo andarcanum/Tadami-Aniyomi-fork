@@ -9,10 +9,17 @@ import tachiyomi.domain.items.episode.model.NoEpisodesException
 import tachiyomi.domain.source.anime.model.AnimeSourceNotInstalledException
 import tachiyomi.domain.source.manga.model.SourceNotInstalledException
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import java.net.UnknownHostException
 
 fun Throwable.formattedMessage(appContext: Context): String {
     when (this) {
+        is aniyomi.core.common.torrent.DisabledTorrServerException,
+        is eu.kanade.tachiyomi.torrentutils.model.DisabledTorrServerException,
+            -> return appContext.stringResource(AYMR.strings.torrserver_disabled)
+        is eu.kanade.tachiyomi.torrentutils.model.DeadTorrentException -> {
+            return appContext.stringResource(AYMR.strings.dead_torrent)
+        }
         is HttpException -> return appContext.stringResource(MR.strings.exception_http, code)
         is UnknownHostException -> {
             return if (!appContext.isOnline()) {

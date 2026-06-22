@@ -5,6 +5,8 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import android.util.Log
+import aniyomi.core.common.torrent.TorrentServerApi
+import aniyomi.core.common.torrent.TorrentServerUtils
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
@@ -568,6 +570,8 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { eu.kanade.tachiyomi.data.coil.MetadataCoverResolver(get(), get(), get()) }
 
         addSingletonFactory { NetworkHelper(app, get()) }
+        addSingletonFactory { TorrentServerApi(get(), get()) }
+        addSingletonFactory { TorrentServerUtils(get(), get()) }
         addSingletonFactory { JavaScriptEngine(app) }
         addSingletonFactory {
             eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService(get<NetworkHelper>().client)

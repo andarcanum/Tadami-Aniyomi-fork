@@ -34,6 +34,7 @@ import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsDecoderS
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsGesturesScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsPlayerScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsSubtitleScreen
+import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsTorrentScreen
 import eu.kanade.presentation.more.settings.screen.player.custombutton.PlayerSettingsCustomButtonScreen
 import eu.kanade.presentation.more.settings.screen.player.editor.PlayerSettingsEditorScreen
 import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutMainScreen
@@ -225,6 +226,13 @@ internal fun playerSettingsNavigationItems(): List<SettingsNavigationItem> = lis
         subtitleRes = AYMR.strings.pref_player_editor_summary,
         icon = Icons.Outlined.EditNote,
         screen = PlayerSettingsEditorScreen,
+    ),
+    SettingsNavigationItem(
+        key = "player_torrents",
+        titleRes = AYMR.strings.pref_player_torrents,
+        subtitleRes = AYMR.strings.pref_player_torrents_summary,
+        icon = Icons.Outlined.PlayCircleOutline,
+        screen = PlayerSettingsTorrentScreen,
     ),
     SettingsNavigationItem(
         key = "player_advanced",

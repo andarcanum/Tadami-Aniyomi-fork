@@ -31,3 +31,11 @@ fun AnimeSource.getNameForAnimeInfo(): String {
 }
 
 fun AnimeSource.isLocalOrStub(): Boolean = isLocal() || this is StubAnimeSource
+
+
+fun AnimeSource?.isSourceForTorrents(): Boolean {
+    if (this == null || this.isLocalOrStub()) return false
+    val extension = Injekt.get<AnimeExtensionManager>().installedExtensionsFlow.value
+        .find { ext -> ext.sources.any { source -> source.id == this.id } }
+    return extension?.isTorrent == true
+}

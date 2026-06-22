@@ -92,6 +92,12 @@ object Notifications {
     const val ID_TRANSLATION_PROGRESS = -1003
 
     /**
+     * Notification channel and ids used by TorrServer.
+     */
+    const val CHANNEL_TORRENT_SERVER = "torrent_server_channel"
+    const val ID_TORRENT_SERVER = -1401
+
+    /**
      * Notification channel and ids used for app and extension updates.
      */
     private const val GROUP_APK_UPDATES = "group_apk_updates"
@@ -194,6 +200,10 @@ object Notifications {
                 buildNotificationChannel(CHANNEL_TRANSLATION_PROGRESS, IMPORTANCE_LOW) {
                     setName(context.stringResource(MR.strings.channel_translation_progress))
                     setDescription(context.stringResource(MR.strings.channel_translation_progress_description))
+                    setShowBadge(false)
+                },
+                buildNotificationChannel(CHANNEL_TORRENT_SERVER, IMPORTANCE_LOW) {
+                    setName(context.stringResource(AYMR.strings.torrentserver_is_running))
                     setShowBadge(false)
                 },
                 buildNotificationChannel(CHANNEL_APP_UPDATE, IMPORTANCE_DEFAULT) {

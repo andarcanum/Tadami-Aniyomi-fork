@@ -213,3 +213,17 @@
 -keep class eu.kanade.presentation.reader.novel.PageTurnPageRendererKt$* { *; }
 -keep class eu.kanade.presentation.reader.novel.NovelReaderSystemUiPolicyKt { *; }
 -keep class eu.kanade.presentation.reader.novel.NovelReaderSystemUiPolicyKt$* { *; }
+
+# TorrServer / torrent streaming
+# Keep public torrent extension API and core TorrServer models stable for
+# extension calls, kotlinx.serialization, and native TorrServer bridge usage.
+-keep,allowoptimization class eu.kanade.tachiyomi.torrentutils.** { public protected *; }
+-keep,allowoptimization class aniyomi.core.common.torrent.** { public protected *; }
+-keep,allowoptimization class aniyomi.core.common.torrent.model.** { public protected *; }
+-keepclassmembers class aniyomi.core.common.torrent.model.** {
+    *** Companion;
+}
+-keepclasseswithmembers class aniyomi.core.common.torrent.model.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-dontwarn xyz.secozzi.torrserver.**

@@ -54,6 +54,9 @@ dependencies {
     // FFmpeg-kit
     implementation(aniyomilibs.ffmpeg.kit)
 
+    // TorrServer
+    implementation(aniyomilibs.torrserver)
+
     // Tests
     testImplementation(libs.bundles.test)
 }

@@ -51,8 +51,8 @@ class SettingsNavigationParityTest {
     fun `settings search route list with player appends player routes`() {
         val routeClasses = settingsSearchRouteScreens(includePlayerSettings = true).map { it::class.simpleName }
 
-        routeClasses shouldHaveSize 19
-        routeClasses.takeLast(9) shouldContainExactly listOf(
+        routeClasses shouldHaveSize 20
+        routeClasses.takeLast(10) shouldContainExactly listOf(
             "PlayerSettingsPlayerScreen",
             "PlayerSettingsLayoutMainScreen",
             "PlayerSettingsLayoutScreen",
@@ -61,6 +61,7 @@ class SettingsNavigationParityTest {
             "PlayerSettingsDecoderScreen",
             "PlayerSettingsSubtitleScreen",
             "PlayerSettingsAudioScreen",
+            "PlayerSettingsTorrentScreen",
             "PlayerSettingsAdvancedScreen",
         )
     }

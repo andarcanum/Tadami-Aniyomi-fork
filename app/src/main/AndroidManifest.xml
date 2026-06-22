@@ -308,6 +308,11 @@
             android:foregroundServiceType="dataSync" />
 
         <service
+            android:name="eu.kanade.tachiyomi.data.torrent.service.TorrentServerService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <service
             android:name="eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />

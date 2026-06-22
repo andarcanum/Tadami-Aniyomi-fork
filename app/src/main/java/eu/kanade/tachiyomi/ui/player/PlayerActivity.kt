@@ -77,6 +77,7 @@ import eu.kanade.tachiyomi.ui.player.settings.AudioPreferences
 import eu.kanade.tachiyomi.ui.player.settings.DecoderPreferences
 import eu.kanade.tachiyomi.ui.player.settings.GesturePreferences
 import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
+import eu.kanade.tachiyomi.ui.player.torrent.TorrentPlaybackResolver
 import eu.kanade.tachiyomi.ui.player.utils.ChapterUtils
 import eu.kanade.tachiyomi.ui.player.utils.ChapterUtils.Companion.getStringRes
 import eu.kanade.tachiyomi.util.system.powerManager
@@ -138,6 +139,7 @@ class PlayerActivity : BaseActivity() {
     private val networkPreferences: NetworkPreferences = Injekt.get()
     private val storageManager: StorageManager = Injekt.get()
     private val uiPreferences: UiPreferences = Injekt.get()
+    private val torrentPlaybackResolver by lazy { TorrentPlaybackResolver(contentResolver) }
 
     private var audioFocusRequest: AudioFocusRequestCompat? = null
     private var restoreAudioFocus: () -> Unit = {}
@@ -1113,15 +1115,24 @@ class PlayerActivity : BaseActivity() {
             "$option=\"$value\""
         }
 
-        MPVLib.command(
-            arrayOf(
-                "loadfile",
-                parseVideoUrl(video.videoUrl),
-                "replace",
-                "0",
-                videoOptions,
-            ),
-        )
+        if (torrentPlaybackResolver.isTorrentLikeUrl(video.videoUrl)) {
+            lifecycleScope.launchIO {
+                try {
+                    val playUrl = torrentPlaybackResolver.resolve(video.videoUrl, video.videoTitle)
+                    withUIContext {
+                        loadMpvFile(playUrl, videoOptions)
+                    }
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to resolve torrent stream" }
+                    withUIContext {
+                        toast(e.message ?: stringResource(AYMR.strings.torrserver_disabled))
+                        finish()
+                    }
+                }
+            }
+        } else {
+            loadMpvFile(parseVideoUrl(video.videoUrl), videoOptions)
+        }
     }
 
     /**
@@ -1136,6 +1147,18 @@ class PlayerActivity : BaseActivity() {
         }
         logcat(LogPriority.ERROR, error)
         finish()
+    }
+
+    private fun loadMpvFile(url: String?, videoOptions: String) {
+        MPVLib.command(
+            arrayOf(
+                "loadfile",
+                url,
+                "replace",
+                "0",
+                videoOptions,
+            ),
+        )
     }
 
     fun parseVideoUrl(videoUrl: String?): String? {

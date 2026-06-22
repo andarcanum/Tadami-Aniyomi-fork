@@ -7,6 +7,9 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.flowWithLifecycle
+import aniyomi.core.common.torrent.DisabledTorrServerException
+import aniyomi.core.common.torrent.TorrentPreferences
+import aniyomi.core.common.torrent.TorrentServerUtils
 import aniyomi.domain.anime.SeasonAnime
 import aniyomi.domain.anime.SeasonDisplayMode
 import cafe.adriel.voyager.core.model.StateScreenModel
@@ -45,6 +48,7 @@ import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCoordinator
+import eu.kanade.tachiyomi.data.torrent.service.TorrentServerService
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSourceWeight
@@ -58,6 +62,7 @@ import eu.kanade.tachiyomi.data.suggestions.util.dedupeByCleanTitle
 import eu.kanade.tachiyomi.data.track.EnhancedAnimeTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.network.HttpException
+import eu.kanade.tachiyomi.source.anime.isSourceForTorrents
 import eu.kanade.tachiyomi.ui.entries.anime.track.AnimeTrackItem
 import eu.kanade.tachiyomi.ui.entries.mergeNewItemIds
 import eu.kanade.tachiyomi.ui.player.PlaybackPlayerPreference
@@ -173,6 +178,8 @@ class AnimeScreenModel(
     private val getAnimeMetadata: GetAnimeMetadata = Injekt.get(),
     private val suggestionCoordinator: SuggestionCoordinator = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
+    private val torrentPreferences: TorrentPreferences = Injekt.get(),
+    private val torrentServerUtils: TorrentServerUtils = Injekt.get(),
     val snackbarHostState: SnackbarHostState = SnackbarHostState(),
 ) : StateScreenModel<AnimeScreenModel.State>(State.Loading) {
 
@@ -186,6 +193,17 @@ class AnimeScreenModel(
 
     val source: AnimeSource?
         get() = successState?.source
+
+    fun isTorrentEnabled(): Boolean = torrentPreferences.torrServerEnable().get()
+
+    private suspend fun startTorrentServerIfNeeded(source: AnimeSource?) {
+        if (!isTorrentEnabled()) return
+        if (!source.isSourceForTorrents()) return
+
+        val started = TorrentServerService.startAndWait(timeoutSeconds = 10)
+        if (!started) throw DisabledTorrServerException()
+        torrentServerUtils.setTrackersList()
+    }
 
     private val isFavorited: Boolean
         get() = anime?.favorite ?: false
@@ -733,6 +751,7 @@ class AnimeScreenModel(
         val state = successState ?: return
         try {
             withIOContext {
+                startTorrentServerIfNeeded(state.source)
                 val networkAnime = state.source.getAnimeDetails(state.anime.toSAnime())
                 updateAnime.awaitUpdateFromSource(state.anime, networkAnime, manualFetch)
                 refreshAnimeSourceRating(
@@ -1108,6 +1127,7 @@ class AnimeScreenModel(
         source: AnimeSource,
         manualFetch: Boolean = false,
     ) {
+        startTorrentServerIfNeeded(source)
         val episodes = source.getEpisodeList(anime.toSAnime())
 
         val newEpisodes = syncEpisodesWithSource.await(
@@ -1133,6 +1153,7 @@ class AnimeScreenModel(
         val state = successState ?: return
         try {
             withIOContext {
+                startTorrentServerIfNeeded(state.source)
                 val seasons = state.source.getSeasonList(state.anime.toSAnime())
 
                 val newSeasons = syncSeasonsWithSource.await(

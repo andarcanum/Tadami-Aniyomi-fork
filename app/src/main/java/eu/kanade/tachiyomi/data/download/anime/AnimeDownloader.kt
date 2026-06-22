@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateNotifier
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
 import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
 import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
+import eu.kanade.tachiyomi.ui.player.torrent.TorrentPlaybackResolver
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.toFFmpegString
 import eu.kanade.tachiyomi.util.system.copyToClipboard
@@ -118,6 +119,7 @@ class AnimeDownloader(
      * Preference for user's choice of external downloader
      */
     private val preferences: DownloadPreferences by injectLazy()
+    private val torrentPlaybackResolver by lazy { TorrentPlaybackResolver(context.contentResolver) }
 
     /**
      * Whether the downloader is running.
@@ -430,6 +432,13 @@ class AnimeDownloader(
         val video = download.video!!
 
         video.status = Video.State.LOAD_VIDEO
+
+        if (torrentPlaybackResolver.isTorrentLikeUrl(video.videoUrl)) {
+            video.videoUrl = torrentPlaybackResolver.resolve(
+                videoUrl = video.videoUrl,
+                title = "${download.anime.title} - ${download.episode.name}",
+            )
+        }
 
         var progressJob: Job? = null
 

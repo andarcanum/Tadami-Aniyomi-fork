@@ -19,6 +19,31 @@
     <string name="relative_time_now">Now</string>
     <string name="action_stop">Stop</string>
     <string name="action_continue">Continue</string>
+
+    <!-- TorrServer / torrent streaming -->
+    <string name="pref_player_torrents">Torrents</string>
+    <string name="pref_player_torrents_summary">Experimental TorrServer-based torrent streaming</string>
+    <string name="pref_player_torrents_enable">Enable TorrServer</string>
+    <string name="pref_player_torrents_notice">Torrent streaming notice</string>
+    <string name="pref_player_torrents_notice_text">Torrent streaming uses peer-to-peer networking. Only stream content you are legally allowed to access and share. Your IP address may be visible to other peers.</string>
+    <string name="pref_player_torrents_notice_footer">By continuing, you accept responsibility for how this feature is used.</string>
+    <string name="pref_player_torrents_port">TorrServer port</string>
+    <string name="pref_player_torrents_port_summary">Use 0 to let the system choose a dynamic port</string>
+    <string name="pref_player_torrents_port_error">Port must be between 0 and 65535</string>
+    <string name="pref_player_torrents_trackers">Trackers</string>
+    <string name="pref_player_torrents_trackers_reset">Reset trackers</string>
+    <string name="pref_player_torrents_proxy_mode">Proxy mode</string>
+    <string name="pref_player_torrents_proxy_mode_none">None</string>
+    <string name="pref_player_torrents_proxy_mode_tracker">Tracker</string>
+    <string name="pref_player_torrents_proxy_mode_peers">Peers</string>
+    <string name="pref_player_torrents_proxy_mode_full">Full</string>
+    <string name="pref_player_torrents_proxy_url">Proxy URL</string>
+    <string name="pref_player_torrents_proxy_url_dialog">Enter proxy URL</string>
+    <string name="pref_player_torrents_proxy_url_invalid_uri">Invalid proxy URL</string>
+    <string name="pref_player_torrents_proxy_url_invalid_protocol">Unsupported proxy protocol</string>
+    <string name="torrentserver_is_running">TorrServer is running</string>
+    <string name="torrserver_disabled">TorrServer is disabled or unavailable</string>
+    <string name="dead_torrent">Torrent is unavailable or has no files</string>
     <!-- Changed from mihon -->
     <string name="manga">Manga</string>
     <string name="pref_library_summary">Categories, global update, chapter/episode swipe</string>

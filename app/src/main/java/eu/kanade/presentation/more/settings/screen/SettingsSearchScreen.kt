@@ -75,6 +75,7 @@ import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsDecoderS
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsGesturesScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsPlayerScreen
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsSubtitleScreen
+import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsTorrentScreen
 import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutMainScreen
 import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutScreen
 import eu.kanade.presentation.more.settings.settingsSubtitleColor
@@ -490,6 +491,7 @@ private val playerSettingScreens = listOf(
     PlayerSettingsDecoderScreen,
     PlayerSettingsSubtitleScreen,
     PlayerSettingsAudioScreen,
+    PlayerSettingsTorrentScreen,
     PlayerSettingsAdvancedScreen,
 )
 
