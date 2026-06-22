@@ -109,16 +109,25 @@ class NovelExtensionsScreenModel(
                     }
                 }
 
-                val availableByLanguage = available
-                    .asSequence()
+                val availableSorted = available
                     .filter { it.id !in installedIds }
                     .filter(matches)
                     .filter { it.lang in enabledLanguages }
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
                     .groupBy { it.lang }
                     .toSortedMap(LocaleHelper.comparator)
 
+                val updatesList = input.installed.filter { it.id in updateIds }.filter(matches)
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+
+                val installedList = input.installed.filter { it.id !in updateIds }.filter(matches)
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+
+                val untrustedList = input.untrusted.filter(matches)
+                    .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+
                 val items = buildList {
-                    input.installed.filter { it.id in updateIds }.filter(matches).forEach { plugin ->
+                    updatesList.forEach { plugin ->
                         val updateState = updateStatesById.getValue(plugin.id)
                         add(
                             NovelExtensionItem(
@@ -133,7 +142,7 @@ class NovelExtensionsScreenModel(
                             ),
                         )
                     }
-                    input.installed.filter { it.id !in updateIds }.filter(matches).forEach { plugin ->
+                    installedList.forEach { plugin ->
                         add(
                             NovelExtensionItem(
                                 plugin = plugin,
@@ -145,7 +154,7 @@ class NovelExtensionsScreenModel(
                             ),
                         )
                     }
-                    input.untrusted.filter(matches).forEach { plugin ->
+                    untrustedList.forEach { plugin ->
                         add(
                             NovelExtensionItem(
                                 plugin = plugin,
@@ -155,7 +164,7 @@ class NovelExtensionsScreenModel(
                             ),
                         )
                     }
-                    availableByLanguage.values.flatten().forEach { plugin ->
+                    availableSorted.values.flatten().forEach { plugin ->
                         add(
                             NovelExtensionItem(
                                 plugin = plugin,
@@ -168,7 +177,7 @@ class NovelExtensionsScreenModel(
                     }
                 }
 
-                Triple(items, updateIds.size, availableByLanguage.keys.toList())
+                Triple(items, updateIds.size, availableSorted.keys.toList())
             }
                 .collectLatest { (items, updatesCount, availableLanguages) ->
                     sourcePreferences.novelExtensionUpdatesCount().set(updatesCount)

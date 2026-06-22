@@ -1,5 +1,6 @@
 package eu.kanade.presentation.browse.novel
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -30,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +47,7 @@ import eu.kanade.presentation.browse.BaseBrowseItem
 import eu.kanade.presentation.browse.manga.ExtensionHeader
 import eu.kanade.presentation.browse.manga.ExtensionTrustDialog
 import eu.kanade.presentation.more.settings.screen.browse.NovelExtensionReposScreen
+import eu.kanade.presentation.util.animateItemFastScroll
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionItem
 import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionsScreenModel
@@ -262,6 +266,7 @@ private fun NovelExtensionContent(
                 key = { (key, _) -> key },
             ) { (_, item) ->
                 NovelExtensionItemRow(
+                    modifier = Modifier.animateItemFastScroll(this),
                     item = item,
                     onUpdateExtension = onUpdateExtension,
                     onReinstallExtension = onReinstallExtension,
@@ -285,6 +290,7 @@ private fun NovelExtensionContent(
                 key = { (key, _) -> key },
             ) { (_, item) ->
                 NovelExtensionItemRow(
+                    modifier = Modifier.animateItemFastScroll(this),
                     item = item,
                     onOpenExtension = onOpenExtension,
                     onOpenExtensionSettings = onOpenExtensionSettings,
@@ -333,6 +339,7 @@ private fun NovelExtensionContent(
                     key = { (key, _) -> key },
                 ) { (_, item) ->
                     NovelExtensionItemRow(
+                        modifier = Modifier.animateItemFastScroll(this),
                         item = item,
                         onInstallExtension = onInstallExtension,
                     )
@@ -368,6 +375,7 @@ private fun NovelExtensionItemRow(
     onOpenExtensionSettings: ((Long) -> Unit)? = null,
     onUninstallExtension: ((NovelPlugin.Installed) -> Unit)? = null,
     onTrustExtension: ((NovelPlugin.Untrusted) -> Unit)? = null,
+    modifier: Modifier = Modifier,
 ) {
     val plugin = item.plugin
     val onItemClick: () -> Unit = {
@@ -386,6 +394,7 @@ private fun NovelExtensionItemRow(
     }
 
     BaseBrowseItem(
+        modifier = modifier,
         onClickItem = onItemClick,
         icon = {
             Box(
@@ -395,23 +404,33 @@ private fun NovelExtensionItemRow(
                 val idle = item.installStep.isCompleted()
                 if (!idle) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(40.dp),
                         strokeWidth = 2.dp,
                     )
                 }
+                val padding by animateDpAsState(
+                    targetValue = if (idle) 0.dp else 8.dp,
+                    label = "iconPadding",
+                )
                 if (shouldLoadNovelPluginIcon(plugin.iconUrl)) {
                     AsyncImage(
                         model = plugin.iconUrl,
                         contentDescription = null,
                         placeholder = ColorPainter(Color(0x1F888888)),
                         error = painterResource(R.mipmap.ic_default_source),
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(padding)
+                            .clip(MaterialTheme.shapes.extraSmall),
                     )
                 } else {
                     Image(
                         painter = painterResource(R.mipmap.ic_default_source),
                         contentDescription = null,
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier
+                            .matchParentSize()
+                            .padding(padding)
+                            .clip(MaterialTheme.shapes.extraSmall),
                     )
                 }
             }
@@ -442,9 +461,8 @@ private fun NovelExtensionItemRow(
                     plugin is NovelPlugin.Untrusted -> {
                         IconButton(onClick = { onTrustExtension?.invoke(plugin) }) {
                             Icon(
-                                imageVector = Icons.Outlined.Warning,
+                                imageVector = Icons.Outlined.VerifiedUser,
                                 contentDescription = stringResource(MR.strings.ext_trust),
-                                tint = MaterialTheme.colorScheme.error,
                             )
                         }
                     }

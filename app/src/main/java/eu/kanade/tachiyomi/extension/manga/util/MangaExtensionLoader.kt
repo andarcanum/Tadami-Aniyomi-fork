@@ -419,7 +419,18 @@ internal object MangaExtensionLoader {
      * @param pkgInfo The package info of the application.
      */
     private fun isPackageAnExtension(pkgInfo: PackageInfo): Boolean {
-        return pkgInfo.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }
+        val hasFeature = pkgInfo.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }
+        if (!hasFeature) return false
+
+        val appInfo = pkgInfo.applicationInfo ?: return true
+        val isNovel = appInfo.metaData?.run {
+            getBoolean("tachiyomi.extension.novel", false) ||
+                getInt("tachiyomi.extension.novel", 0) == 1 ||
+                getBoolean("tachiyomi.novelextension.novel", false) ||
+                getInt("tachiyomi.novelextension.novel", 0) == 1
+        } ?: false
+
+        return !isNovel
     }
 
     /**
