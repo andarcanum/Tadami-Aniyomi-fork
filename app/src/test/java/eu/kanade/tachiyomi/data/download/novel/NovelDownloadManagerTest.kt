@@ -86,7 +86,8 @@ class NovelDownloadManagerTest {
                     parentFile?.mkdirs()
                     writeText("stable")
                 }
-            val readableFile = readableChapterFile(tempDir.resolve("downloads").toFile(), source.label, novel.title, chapterId)
+            val readableFile =
+                readableChapterFile(tempDir.resolve("downloads").toFile(), source.label, novel.title, chapterId)
 
             manager.isChapterDownloaded(novel, chapterId) shouldBe true
 
