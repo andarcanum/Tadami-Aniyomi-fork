@@ -105,7 +105,25 @@ Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for contributi
 
 ## Disclaimer
 
-This project does not host or distribute copyrighted content. Content availability depends on third-party sources and extensions.
+Tadami is a **media library manager and player**. Tadami **does not host, store,
+provide, bundle, or distribute** any content, sources, extensions, or
+repositories. The application ships **without** any preinstalled sources or
+repositories.
+
+Any content accessed through Tadami comes from **third-party sources that the
+user chooses to add**. The Tadami project has no control over, and assumes no
+responsibility for, such third-party sources, their content, or their legality.
+Users are solely responsible for ensuring they have the right to access any
+content and for complying with applicable laws.
+
+Tadami is **not affiliated with, endorsed by, or sponsored by** any anime, manga,
+or novel rights holder, streaming service, publisher, or studio, nor by Aniyomi,
+Mihon, or Tachiyomi as brands. All product names, logos, and brands are the
+property of their respective owners.
+
+Tadami is intended for **lawful use only**. Do not use Tadami to infringe the
+rights of others. See [DISCLAIMER.md](DISCLAIMER.md) for the full statement and
+[DMCA.md](DMCA.md) for our copyright/takedown policy.
 
 ## Credits
 

@@ -1,62 +1,34 @@
-Looking to report an issue/bug or make a feature request? Please refer to the [README file](https://github.com/aniyomiorg/aniyomi#issues-feature-requests-and-contributing).
+# Contributing to Tadami
 
----
+Thanks for your interest in improving Tadami. Please read the following before
+opening an issue or pull request.
 
-Thanks for your interest in contributing to Aniyomi!
+## Scope and legal policy
 
+Tadami is a **neutral media library manager and player**. To keep the project
+safe and lawful, the following are **strictly out of scope** and will be closed
+or rejected:
 
-# Code contributions
+- Adding **preinstalled sources, extensions, or repositories** of any kind.
+- Adding **links, references, or instructions** that point to pirated content,
+  unofficial source repositories, or extensions that provide access to
+  copyrighted material — in code, comments, documentation, issues, or pull
+  requests.
+- Requests such as "add source X", "where do I get extensions", or "add a repo
+  for site Y". These will be closed as out of scope.
+- Any change that promotes Tadami as a way to access content **for free** or
+  unlawfully, or that uses third-party trademarks, logos, or titles.
 
-Pull requests are welcome!
+Tadami does not host, bundle, or endorse any content or sources. Please help us
+keep it that way.
 
-If you're interested in taking on [an open issue](https://github.com/aniyomiorg/aniyomi/issues), please comment on it so others are aware.
-You do not need to ask for permission nor an assignment.
+## Pull requests
 
-### Reading regression policy (anime/manga/novel)
+- Keep changes focused and described clearly.
+- Do not include copyrighted assets you do not have the right to contribute.
+- By contributing, you agree your contribution is licensed under the project's
+  [LICENSE](LICENSE) (Apache 2.0).
 
-Changes that can affect viewing or reading flows are treated as `reading-critical`.
+## Code of conduct
 
-For `reading-critical` pull requests:
-
-- A strict CI regression gate must pass before merge.
-- Required checks include formatting, release build, unit tests, focused reader/source regression tests, and debug assemble smoke gate.
-- CI auto-detects `reading-critical` changes from modified paths and blocks merge if the required manual smoke checklist is not checked in the PR template.
-- PR description must include checked manual smoke confirmations for anime, manga, and novel flows.
-- If any check shows regression risk (crash, ANR, blank screen, broken navigation), the change must not be merged until fixed and re-verified.
-
-## Prerequisites
-
-Before you start, please note that the ability to use following technologies is **required** and that existing contributors will not actively teach them to you.
-
-- Basic [Android development](https://developer.android.com/)
-- [Kotlin](https://kotlinlang.org/)
-
-### Tools
-
-- [Android Studio](https://developer.android.com/studio)
-- Emulator or phone with developer options enabled to test changes.
-
-## Getting help
-
-- Join [the Discord server](https://discord.gg/F32UjdJZrR) for online help and to ask questions while developing.
-
-# Translations
-
-Translations are done externally via Weblate. See [our website](https://aniyomi.org/docs/contribute#translation) for more details.
-
-
-# Forks
-
-Forks are allowed so long as they abide by [the project's LICENSE](https://github.com/aniyomiorg/aniyomi/blob/main/LICENSE).
-
-When creating a fork, remember to:
-
-- To avoid confusion with the main app:
-    - Change the app name
-    - Change the app icon
-    - Change or disable the [app update checker](https://github.com/aniyomiorg/aniyomi/blob/main/app/src/main/java/eu/kanade/tachiyomi/data/updater/AppUpdateChecker.kt)
-- To avoid installation conflicts:
-    - Change the `applicationId` in [`build.gradle.kts`](https://github.com/aniyomiorg/aniyomi/blob/main/app/build.gradle.kts)
-- To avoid having your data polluting the main app's analytics and crash report services:
-    - If you want to use Firebase analytics, replace [`google-services.json`](https://github.com/aniyomiorg/aniyomi/blob/main/app/src/standard/google-services.json) with your own
-    - If you want to use ACRA crash reporting, replace the `ACRA_URI` endpoint in [`build.gradle.kts`](https://github.com/aniyomiorg/aniyomi/blob/main/app/build.gradle.kts) with your own
+Be respectful. Off-topic, illegal, or abusive content is not welcome.

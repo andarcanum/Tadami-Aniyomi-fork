@@ -32,6 +32,7 @@ fun OnboardingScreen(
     var currentStep by rememberSaveable { mutableIntStateOf(0) }
     val steps = remember {
         listOf(
+            DisclaimerStep(),
             LanguageStep(),
             ThemeStep(),
             MediaModesStep(),

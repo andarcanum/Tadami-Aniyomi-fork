@@ -236,6 +236,18 @@
     <string name="onboarding_guides_all_set">You are all set!</string>
     <string name="onboarding_guides_welcome_desc">Your media center is ready to roll. Welcome to the Tadami experience.</string>
     <string name="onboarding_guides_next_steps">Next Steps</string>
+    <!-- Onboarding: legal disclaimer step -->
+    <string name="onboarding_disclaimer_title">Before you start</string>
+    <string name="onboarding_disclaimer_body">Tadami is a media library manager and player. It does not include, host, or provide any content, sources, extensions, or repositories.\n\nTo use Tadami you must add your own sources that you are legally entitled to access. You are solely responsible for the sources you add and for complying with the laws and the rights of others in your country.\n\nTadami does not endorse or facilitate copyright infringement and is not affiliated with any rights holder, streaming service, publisher, or studio.</string>
+    <string name="onboarding_disclaimer_accept">I understand and accept the Terms of Service and Disclaimer</string>
+    <string name="onboarding_disclaimer_terms">Terms of Service</string>
+    <string name="onboarding_disclaimer_disclaimer_link">Disclaimer</string>
+    <!-- Extension repository add warning (legal) -->
+    <string name="repo_add_legal_warning">Repositories and extensions are not provided or verified by Tadami. Tadami does not control their content or availability. You are responsible for ensuring you may lawfully access their content, and you add them entirely at your own risk.</string>
+    <!-- About: legal links -->
+    <string name="pref_disclaimer">Disclaimer</string>
+    <string name="pref_terms_of_service">Terms of Service</string>
+    <string name="pref_copyright_dmca">Copyright / DMCA policy</string>
 
 
     <!-- Preferences -->

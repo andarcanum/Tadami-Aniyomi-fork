@@ -327,8 +327,48 @@ object AboutScreen : Screen() {
                     item {
                         TextPreferenceWidget(
                             modifier = itemModifier,
+                            title = stringResource(MR.strings.pref_disclaimer),
+                            onPreferenceClick = {
+                                uriHandler.openUri(
+                                    "https://github.com/andarcanum/Tadami-Aniyomi-fork/blob/ranobe-novel/DISCLAIMER.md",
+                                )
+                            },
+                        )
+                    }
+
+                    item {
+                        TextPreferenceWidget(
+                            modifier = itemModifier,
+                            title = stringResource(MR.strings.pref_terms_of_service),
+                            onPreferenceClick = {
+                                uriHandler.openUri(
+                                    "https://github.com/andarcanum/Tadami-Aniyomi-fork/blob/ranobe-novel/TERMS_OF_SERVICE.MD",
+                                )
+                            },
+                        )
+                    }
+
+                    item {
+                        TextPreferenceWidget(
+                            modifier = itemModifier,
                             title = stringResource(MR.strings.privacy_policy),
-                            onPreferenceClick = { uriHandler.openUri("https://aniyomi.org/privacy/") },
+                            onPreferenceClick = {
+                                uriHandler.openUri(
+                                    "https://github.com/andarcanum/Tadami-Aniyomi-fork/blob/ranobe-novel/PRIVACY.MD",
+                                )
+                            },
+                        )
+                    }
+
+                    item {
+                        TextPreferenceWidget(
+                            modifier = itemModifier,
+                            title = stringResource(MR.strings.pref_copyright_dmca),
+                            onPreferenceClick = {
+                                uriHandler.openUri(
+                                    "https://github.com/andarcanum/Tadami-Aniyomi-fork/blob/ranobe-novel/DMCA.md",
+                                )
+                            },
                         )
                     }
 
