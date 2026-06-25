@@ -53,8 +53,8 @@ class BackupDecoder(
                     }
                     BackupDetector.isMihonBackup(backupString) -> {
                         // Positively detected Mihon / Tachiyomi(-derived) backup: decode with
-                        // the dedicated Mihon schema directly so diverging manga fields and
-                        // Mihon-only data (e.g. excludedScanlators) are preserved, instead of
+                        // the dedicated Mihon schema directly so diverging manga fields (notes/rating
+                        // at 110, notes/initialized at 111) and Mihon-only data are preserved, instead of
                         // relying on a Tadami decode that may silently misread or drop them.
                         parser.decodeFromByteArray(MihonBackup.serializer(), backupString)
                             .toTadamiBackup(mangaSourceManager, novelSourceManager, animeSourceManager)
@@ -70,7 +70,7 @@ class BackupDecoder(
                 }
             } catch (e: Exception) {
                 // Safety net: detection is heuristic, so if the chosen schema fails
-                // (e.g. a wire-type mismatch on diverging manga fields 108/109), retry with
+                // (e.g. a wire-type mismatch on diverging manga fields 110/111), retry with
                 // the dedicated Mihon schema before giving up.
                 try {
                     parser.decodeFromByteArray(MihonBackup.serializer(), backupString)

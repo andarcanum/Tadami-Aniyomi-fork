@@ -113,6 +113,104 @@ class MihonBackupCompatibilityTest {
         assertEquals("Chapter 1", decoded.backupManga.first().chapters.first().name)
     }
 
+    @Test
+    fun `Mihon manga diverging fields 110 notes 111 initialized 112 memo decode losslessly via Mihon schema`() {
+        val realMihonBytes = ProtoBuf.encodeToByteArray(
+            RealMihonBackup.serializer(),
+            RealMihonBackup(
+                backupManga = listOf(
+                    RealMihonManga(
+                        source = 1,
+                        url = "/manga",
+                        title = "Manga title",
+                        chapters = listOf(
+                            RealMihonChapter(url = "/c1", name = "Chapter 1", memo = byteArrayOf(1, 2, 3)),
+                        ),
+                        excludedScanlators = listOf("BadGroup"),
+                        version = 7,
+                        notes = "My note",
+                        initialized = true,
+                        memo = byteArrayOf(9, 9),
+                    ),
+                ),
+            ),
+        )
+
+        // The dedicated Mihon schema preserves the diverging fields and skips the
+        // Mihon-only ones (initialized/memo) without crashing.
+        val viaMihon = ProtoBuf.decodeFromByteArray(MihonBackup.serializer(), realMihonBytes)
+            .toTadamiBackup(
+                mangaSourceClassifier = { true },
+                novelSourceClassifier = { false },
+                animeSourceClassifier = { false },
+            )
+        val manga = viaMihon.backupManga.single()
+        assertEquals("Manga title", manga.title)
+        assertEquals(7L, manga.version)
+        assertEquals("My note", manga.notes)
+        assertEquals(listOf("BadGroup"), manga.excludedScanlators)
+        assertEquals("Chapter 1", manga.chapters.single().name)
+        // Mihon's chapter memo (field 13) must NOT leak into Tadami's dateUploadRaw.
+        assertEquals(null, manga.chapters.single().dateUploadRaw)
+
+        // Decoding the same bytes with the Tadami schema fails on the wire-type
+        // mismatch at field 110 (rating Float vs notes String) / 111 (notes String
+        // vs initialized Boolean) - exactly why BackupDecoder falls back to Mihon.
+        assertFailsWith<SerializationException> {
+            ProtoBuf.decodeFromByteArray(Backup.serializer(), realMihonBytes)
+        }
+    }
+
+    @Test
+    fun `Mihon manga round-trips through MihonBackupManga mapper`() {
+        val original = sampleManga().copy(
+            version = 3,
+            notes = "Note",
+            excludedScanlators = listOf("Group A", "Group B"),
+        )
+        val restored = original.toMihonBackupManga().toBackupManga()
+        assertEquals(original.title, restored.title)
+        assertEquals(original.version, restored.version)
+        assertEquals(original.notes, restored.notes)
+        assertEquals(original.excludedScanlators, restored.excludedScanlators)
+    }
+
+    @Test
+    fun `isMihonBackup detects a Mihon-shaped backup`() {
+        val bytes = ProtoBuf.encodeToByteArray(
+            MihonBackup.serializer(),
+            MihonBackup(
+                backupManga = listOf(sampleManga().toMihonBackupManga()),
+                backupExtensionRepo = listOf(sampleRepo()),
+            ),
+        )
+        assertTrue(BackupDetector.isMihonBackup(bytes))
+    }
+
+    @Test
+    fun `isMihonBackup rejects a native Tadami backup (isLegacy field 500 present)`() {
+        // BackupCreator always writes isLegacy=false, which is a non-default value
+        // and therefore serialized at field 500 - the native marker.
+        val bytes = ProtoBuf.encodeToByteArray(
+            Backup.serializer(),
+            Backup(backupManga = listOf(sampleManga()), isLegacy = false),
+        )
+        assertFalse(BackupDetector.isMihonBackup(bytes))
+    }
+
+    @Test
+    fun `isMihonBackup rejects a Tadami backup containing novel entries (field 5)`() {
+        val bytes = ProtoBuf.encodeToByteArray(
+            Backup.serializer(),
+            Backup(
+                backupManga = listOf(sampleManga()),
+                backupNovel = listOf(sampleNovel()),
+                isLegacy = false,
+            ),
+        )
+        assertFalse(BackupDetector.isMihonBackup(bytes))
+    }
+
     private fun sampleTadamiBackup(): Backup {
         return Backup(
             backupManga = listOf(sampleManga()),
@@ -186,97 +284,8 @@ class MihonBackupCompatibilityTest {
         @ProtoNumber(600) var mergedMangaReferences: List<String> = emptyList(),
     )
 
-    @Test
-    fun `Mihon diverging fields 108, 109, 600 decode losslessly via Mihon schema`() {
-        val realMihonBytes = ProtoBuf.encodeToByteArray(
-            RealMihonBackup.serializer(),
-            RealMihonBackup(
-                backupManga = listOf(
-                    RealMihonManga(
-                        source = 1,
-                        url = "/manga",
-                        title = "Manga title",
-                        version = 7,
-                        notes = "My note",
-                        excludedScanlators = listOf("BadGroup"),
-                    ),
-                ),
-            ),
-        )
-
-        // The dedicated Mihon schema preserves every diverging field.
-        val viaMihon = ProtoBuf.decodeFromByteArray(MihonBackup.serializer(), realMihonBytes)
-            .toTadamiBackup(
-                mangaSourceClassifier = { true },
-                novelSourceClassifier = { false },
-                animeSourceClassifier = { false },
-            )
-        val manga = viaMihon.backupManga.single()
-        assertEquals("Manga title", manga.title)
-        assertEquals(7L, manga.version)
-        assertEquals("My note", manga.notes)
-        assertEquals(listOf("BadGroup"), manga.excludedScanlators)
-
-        // Decoding the same bytes with the Tadami schema fails on the wire-type
-        // mismatch at field 108/109 - this is precisely why BackupDecoder falls
-        // back to the Mihon schema instead of trusting a direct Tadami decode.
-        assertFailsWith<SerializationException> {
-            ProtoBuf.decodeFromByteArray(Backup.serializer(), realMihonBytes)
-        }
-    }
-
-    @Test
-    fun `Mihon manga round-trips through MihonBackupManga mapper`() {
-        val original = sampleManga().copy(
-            version = 3,
-            notes = "Note",
-            excludedScanlators = listOf("Group A", "Group B"),
-        )
-        val restored = original.toMihonBackupManga().toBackupManga()
-        assertEquals(original.title, restored.title)
-        assertEquals(original.version, restored.version)
-        assertEquals(original.notes, restored.notes)
-        assertEquals(original.excludedScanlators, restored.excludedScanlators)
-    }
-
-    @Test
-    fun `isMihonBackup detects a Mihon-shaped backup`() {
-        val bytes = ProtoBuf.encodeToByteArray(
-            MihonBackup.serializer(),
-            MihonBackup(
-                backupManga = listOf(sampleManga().toMihonBackupManga()),
-                backupExtensionRepo = listOf(sampleRepo()),
-            ),
-        )
-        assertTrue(BackupDetector.isMihonBackup(bytes))
-    }
-
-    @Test
-    fun `isMihonBackup rejects a native Tadami backup (isLegacy field 500 present)`() {
-        // BackupCreator always writes isLegacy=false, which is a non-default value
-        // and therefore serialized at field 500 - the native marker.
-        val bytes = ProtoBuf.encodeToByteArray(
-            Backup.serializer(),
-            Backup(backupManga = listOf(sampleManga()), isLegacy = false),
-        )
-        assertFalse(BackupDetector.isMihonBackup(bytes))
-    }
-
-    @Test
-    fun `isMihonBackup rejects a Tadami backup containing novel entries (field 5)`() {
-        val bytes = ProtoBuf.encodeToByteArray(
-            Backup.serializer(),
-            Backup(
-                backupManga = listOf(sampleManga()),
-                backupNovel = listOf(sampleNovel()),
-                isLegacy = false,
-            ),
-        )
-        assertFalse(BackupDetector.isMihonBackup(bytes))
-    }
-
-    // Mirrors Mihon / Tachiyomi(-derived) real manga numbering, which diverges
-    // from Tadami's BackupManga on fields 108/109/600.
+    // Mirrors the REAL Mihon / Tachiyomi(-derived) manga + chapter numbering, which
+    // diverges from Tadami on manga fields 110/111/112 and chapter field 13.
     @Serializable
     private data class RealMihonBackup(
         @ProtoNumber(1) val backupManga: List<RealMihonManga> = emptyList(),
@@ -287,9 +296,18 @@ class MihonBackupCompatibilityTest {
         @ProtoNumber(1) var source: Long,
         @ProtoNumber(2) var url: String,
         @ProtoNumber(3) var title: String = "",
-        @ProtoNumber(16) var chapters: List<BackupChapter> = emptyList(),
-        @ProtoNumber(108) var version: Long = 0,
-        @ProtoNumber(109) var notes: String = "",
-        @ProtoNumber(600) var excludedScanlators: List<String> = emptyList(),
+        @ProtoNumber(16) var chapters: List<RealMihonChapter> = emptyList(),
+        @ProtoNumber(108) var excludedScanlators: List<String> = emptyList(),
+        @ProtoNumber(109) var version: Long = 0,
+        @ProtoNumber(110) var notes: String = "",
+        @ProtoNumber(111) var initialized: Boolean = false,
+        @ProtoNumber(112) var memo: ByteArray = ByteArray(0),
+    )
+
+    @Serializable
+    private data class RealMihonChapter(
+        @ProtoNumber(1) var url: String,
+        @ProtoNumber(2) var name: String,
+        @ProtoNumber(13) var memo: ByteArray = ByteArray(0),
     )
 }

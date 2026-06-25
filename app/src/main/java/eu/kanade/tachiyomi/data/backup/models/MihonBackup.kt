@@ -240,20 +240,75 @@ fun BackupManga.toBackupAnime(): BackupAnime {
 }
 
 /**
+ * Chapter entry as serialized by Mihon / Tachiyomi(-derived) apps.
+ *
+ * Identical to [BackupChapter] on fields 1..12. Mihon adds @ProtoNumber(13) as a
+ * `memo` (ByteArray), whereas Tadami uses 13 for `dateUploadRaw` (String). Both are
+ * length-delimited so there is no decode crash, but reading Mihon's memo bytes into
+ * a String would corrupt dateUploadRaw - so field 13 is intentionally omitted here
+ * and skipped by the decoder.
+ */
+@Serializable
+data class MihonBackupChapter(
+    @ProtoNumber(1) var url: String,
+    @ProtoNumber(2) var name: String,
+    @ProtoNumber(3) var scanlator: String? = null,
+    @ProtoNumber(4) var read: Boolean = false,
+    @ProtoNumber(5) var bookmark: Boolean = false,
+    @ProtoNumber(6) var lastPageRead: Long = 0,
+    @ProtoNumber(7) var dateFetch: Long = 0,
+    @ProtoNumber(8) var dateUpload: Long = 0,
+    @ProtoNumber(9) var chapterNumber: Float = 0F,
+    @ProtoNumber(10) var sourceOrder: Long = 0,
+    @ProtoNumber(11) var lastModifiedAt: Long = 0,
+    @ProtoNumber(12) var version: Long = 0,
+    // 13 (memo: ByteArray) intentionally omitted - see kdoc.
+) {
+    fun toBackupChapter(): BackupChapter = BackupChapter(
+        url = this.url,
+        name = this.name,
+        scanlator = this.scanlator,
+        read = this.read,
+        bookmark = this.bookmark,
+        lastPageRead = this.lastPageRead,
+        dateFetch = this.dateFetch,
+        dateUpload = this.dateUpload,
+        chapterNumber = this.chapterNumber,
+        sourceOrder = this.sourceOrder,
+        lastModifiedAt = this.lastModifiedAt,
+        version = this.version,
+    )
+}
+
+fun BackupChapter.toMihonBackupChapter(): MihonBackupChapter = MihonBackupChapter(
+    url = this.url,
+    name = this.name,
+    scanlator = this.scanlator,
+    read = this.read,
+    bookmark = this.bookmark,
+    lastPageRead = this.lastPageRead,
+    dateFetch = this.dateFetch,
+    dateUpload = this.dateUpload,
+    chapterNumber = this.chapterNumber,
+    sourceOrder = this.sourceOrder,
+    lastModifiedAt = this.lastModifiedAt,
+    version = this.version,
+)
+
+/**
  * Manga entry as serialized by Mihon / Tachiyomi(-derived) apps.
  *
- * IMPORTANT: Mihon and Tadami/Aniyomi diverge on a few ProtoNumbers in the manga
- * model. Decoding a Mihon backup with Tadami's [BackupManga] would either throw a
- * wire-type mismatch (e.g. field 108 is a varint `version` in Mihon but a
- * repeated-string `excludedScanlators` in Tadami) or silently drop data. This
- * dedicated model carries Mihon's real numbering so the fallback path in
- * BackupDecoder can parse such backups losslessly.
+ * Mihon and Tadami/Aniyomi share field numbers 1..109 but DIVERGE afterwards.
+ * Decoding a Mihon backup with Tadami's [BackupManga] throws a wire-type mismatch
+ * (Tadami expects `rating: Float` (fixed32) at 110 and `notes: String` at 111,
+ * while Mihon stores `notes: String` at 110 and `initialized: Boolean` at 111).
  *
- * Divergences vs [BackupManga]:
- *   108 -> version            (Tadami: excludedScanlators)
- *   109 -> notes              (Tadami: version)
- *   600 -> excludedScanlators (Tadami: 108)
- * Fields 1..107 are identical between both formats.
+ * Real Mihon layout (verified against mihonapp/mihon):
+ *   108 -> excludedScanlators (same as Tadami)
+ *   109 -> version            (same as Tadami)
+ *   110 -> notes              (Tadami: rating)
+ *   111 -> initialized        (Tadami: notes)      -- omitted, skipped on decode
+ *   112 -> memo               (Tadami: none)       -- omitted, skipped on decode
  */
 @Serializable
 data class MihonBackupManga(
@@ -268,7 +323,7 @@ data class MihonBackupManga(
     @ProtoNumber(9) var thumbnailUrl: String? = null,
     @ProtoNumber(13) var dateAdded: Long = 0,
     @ProtoNumber(14) var viewer: Int = 0,
-    @ProtoNumber(16) var chapters: List<BackupChapter> = emptyList(),
+    @ProtoNumber(16) var chapters: List<MihonBackupChapter> = emptyList(),
     @ProtoNumber(17) var categories: List<Long> = emptyList(),
     @ProtoNumber(18) var tracking: List<BackupTracking> = emptyList(),
     @ProtoNumber(100) var favorite: Boolean = true,
@@ -278,9 +333,11 @@ data class MihonBackupManga(
     @ProtoNumber(105) var updateStrategy: UpdateStrategy = UpdateStrategy.ALWAYS_UPDATE,
     @ProtoNumber(106) var lastModifiedAt: Long = 0,
     @ProtoNumber(107) var favoriteModifiedAt: Long? = null,
-    @ProtoNumber(108) var version: Long = 0,
-    @ProtoNumber(109) var notes: String = "",
-    @ProtoNumber(600) var excludedScanlators: List<String> = emptyList(),
+    @ProtoNumber(108) var excludedScanlators: List<String> = emptyList(),
+    @ProtoNumber(109) var version: Long = 0,
+    @ProtoNumber(110) var notes: String = "",
+    // 111 (initialized: Boolean) and 112 (memo: ByteArray) intentionally omitted -
+    // Tadami has no equivalent; the decoder skips them.
 ) {
     fun toBackupManga(): BackupManga = BackupManga(
         source = this.source,
@@ -294,7 +351,7 @@ data class MihonBackupManga(
         thumbnailUrl = this.thumbnailUrl,
         dateAdded = this.dateAdded,
         viewer = this.viewer,
-        chapters = this.chapters,
+        chapters = this.chapters.map { it.toBackupChapter() },
         categories = this.categories,
         tracking = this.tracking,
         favorite = this.favorite,
@@ -322,7 +379,7 @@ fun BackupManga.toMihonBackupManga(): MihonBackupManga = MihonBackupManga(
     thumbnailUrl = this.thumbnailUrl,
     dateAdded = this.dateAdded,
     viewer = this.viewer,
-    chapters = this.chapters,
+    chapters = this.chapters.map { it.toMihonBackupChapter() },
     categories = this.categories,
     tracking = this.tracking,
     favorite = this.favorite,
@@ -332,7 +389,7 @@ fun BackupManga.toMihonBackupManga(): MihonBackupManga = MihonBackupManga(
     updateStrategy = this.updateStrategy,
     lastModifiedAt = this.lastModifiedAt,
     favoriteModifiedAt = this.favoriteModifiedAt,
+    excludedScanlators = this.excludedScanlators,
     version = this.version,
     notes = this.notes.orEmpty(),
-    excludedScanlators = this.excludedScanlators,
 )
