@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -142,15 +143,6 @@ class SupportProjectScreen : Screen() {
                         darkRimLightEnabled = darkRimLightEnabled,
                     )
                 }
-
-                item {
-                    SupportLegalDisclaimer(
-                        auroraColors = auroraColors,
-                        modifier = Modifier
-                            .padding(horizontal = AURORA_SETTINGS_CARD_HORIZONTAL_INSET)
-                            .padding(bottom = 12.dp),
-                    )
-                }
             }
         }
     }
@@ -195,7 +187,7 @@ private fun SupportIntroCardContent(
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
         ) {
             Box(
                 modifier = Modifier
@@ -230,6 +222,14 @@ private fun SupportIntroCardContent(
                 )
                 Text(
                     text = stringResource(MR.strings.support_info),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        lineHeight = 20.sp,
+                    ),
+                    color = auroraColors.textSecondary,
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(MR.strings.support_legal_disclaimer),
                     style = MaterialTheme.typography.bodyMedium.copy(
                         lineHeight = 20.sp,
                     ),
@@ -807,29 +807,3 @@ private val UsdtIcon = ImageVector.Builder(
         close()
     }
 }.build()
-
-@Composable
-private fun SupportLegalDisclaimer(
-    auroraColors: AuroraColors,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                color = if (auroraColors.isDark) {
-                    Color.White.copy(alpha = 0.04f)
-                } else {
-                    Color(0xFFF6F7F8)
-                },
-                shape = RoundedCornerShape(16.dp),
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        Text(
-            text = stringResource(MR.strings.support_legal_disclaimer),
-            style = MaterialTheme.typography.bodySmall.copy(lineHeight = 16.sp),
-            color = auroraColors.textSecondary,
-        )
-    }
-}
