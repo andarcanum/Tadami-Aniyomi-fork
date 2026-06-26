@@ -37,6 +37,7 @@ import eu.kanade.presentation.more.settings.screen.advanced.ClearNovelDatabaseSc
 import eu.kanade.presentation.more.settings.screen.debug.DebugInfoScreen
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadCache
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.anime.AnimeMetadataUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
@@ -219,6 +220,7 @@ object SettingsAdvancedScreen : SearchableSettings {
                     onClick = {
                         Injekt.get<MangaDownloadCache>().invalidateCache()
                         Injekt.get<AnimeDownloadCache>().invalidateCache()
+                        Injekt.get<NovelDownloadCache>().invalidateAll()
                         context.toast(MR.strings.download_cache_invalidated)
                     },
                 ),

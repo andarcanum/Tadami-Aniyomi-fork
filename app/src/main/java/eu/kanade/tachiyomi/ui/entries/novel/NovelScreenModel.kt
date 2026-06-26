@@ -1034,11 +1034,11 @@ class NovelScreenModel(
                     "Novel downloaded-state sync: novel=${state.novel.id}, from_cache=true, count=${downloadedIds.size}"
                 }
             } else {
-                if (deferFilesystemFallback) {
-                    logcat(LogPriority.DEBUG) {
-                        "Novel downloaded-state sync: novel=${state.novel.id}, cache_miss=true, deferred_filesystem=true"
-                    }
-                    return@launchIO
+                // Cache miss: always fall back to a filesystem scan so that downloads present on
+                // disk (e.g. under legacy/STABLE_ID folder schemes) are re-indexed and synced into
+                // the app instead of being silently skipped.
+                logcat(LogPriority.DEBUG) {
+                    "Novel downloaded-state sync: novel=${state.novel.id}, cache_miss=true, filesystem_fallback=true, deferred=$deferFilesystemFallback"
                 }
                 val elapsed = measureTimeMillis {
                     downloadedIds = resolveDownloadedChapterIds(state.novel, state.chapters)
