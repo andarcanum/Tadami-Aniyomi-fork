@@ -32,7 +32,6 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -471,10 +470,19 @@ private fun AuroraTabHeader(
                                         Color.White.copy(alpha = 0.05f),
                                     ),
                                 ),
-                                shape = RoundedCornerShape(22.dp),
+                                shape = CircleShape,
                             )
                         } else {
-                            Modifier
+                            Modifier.border(
+                                width = 1.dp,
+                                brush = Brush.verticalGradient(
+                                    listOf(
+                                        Color.Black.copy(alpha = 0.12f),
+                                        Color.Black.copy(alpha = 0.04f),
+                                    ),
+                                ),
+                                shape = CircleShape,
+                            )
                         },
                     ),
                 placeholder = {
@@ -484,15 +492,15 @@ private fun AuroraTabHeader(
                     )
                 },
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.cardBackground,
-                    unfocusedContainerColor = colors.cardBackground,
+                    focusedContainerColor = if (colors.isDark) Color.White.copy(alpha = 0.05f) else Color.Transparent,
+                    unfocusedContainerColor = if (colors.isDark) Color.White.copy(alpha = 0.05f) else Color.Transparent,
                     focusedTextColor = colors.textPrimary,
                     unfocusedTextColor = colors.textPrimary,
                     cursorColor = colors.accent,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
-                shape = RoundedCornerShape(22.dp),
+                shape = CircleShape,
                 singleLine = true,
                 leadingIcon = {
                     Icon(
