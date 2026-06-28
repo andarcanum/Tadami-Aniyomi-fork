@@ -19,6 +19,7 @@ import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
+import eu.kanade.tachiyomi.ui.reader.novel.SelectedTextAction
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
@@ -3048,6 +3049,98 @@ class NovelReaderScreenModelTest {
 
         override suspend fun getChapterWebUrl(chapterPath: String, novelPath: String?): String? {
             return chapterWebUrlResolver?.invoke(chapterPath, novelPath)
+        }
+    }
+
+    @Test
+    fun `updateSelectedTextSelection triggers dictionary lookup`() {
+        runBlocking {
+            ensureReaderScreenModelDependencies()
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val prefs = createNovelReaderPreferences(selectedTextTranslationEnabled = false).also {
+                it.novelDictionaryEnabled().set(true)
+            }
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val selection = NovelSelectedTextSelection(
+                sessionId = 123L,
+                renderer = NovelSelectedTextRenderer.PAGE_READER,
+                text = "test_term",
+                anchor = NovelSelectedTextAnchor(0, 0, 0, 0),
+                triggerAction = SelectedTextAction.DICTIONARY,
+            )
+
+            screenModel.updateSelectedTextSelection(selection)
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.selectedTextTranslationSelection shouldBe selection
+            state.novelDictionaryUiState.shouldBeInstanceOf<NovelDictionaryUiState.Looking>()
+        }
+    }
+
+    @Test
+    fun `updateSelectedTextSelection triggers translation`() {
+        runBlocking {
+            ensureReaderScreenModelDependencies()
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val prefs = createNovelReaderPreferences(selectedTextTranslationEnabled = true)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val selection = NovelSelectedTextSelection(
+                sessionId = 123L,
+                renderer = NovelSelectedTextRenderer.PAGE_READER,
+                text = "test_term",
+                anchor = NovelSelectedTextAnchor(0, 0, 0, 0),
+                triggerAction = SelectedTextAction.TRANSLATION,
+            )
+
+            screenModel.updateSelectedTextSelection(selection)
+
+            val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            state.selectedTextTranslationSelection shouldBe selection
+            state.selectedTextTranslationUiState.shouldBeInstanceOf<NovelSelectedTextTranslationUiState.Translating>()
         }
     }
 }

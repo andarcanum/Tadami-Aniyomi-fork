@@ -157,7 +157,7 @@ class NovelEpubStyleBuilderTest {
         customCSS: String = "",
         customJS: String = "",
         selectedTextTranslationEnabled: Boolean = true,
-        selectedTextTranslationTargetLanguage: String = "Russian",
+        selectedTextTranslationTargetLanguage: String = "ru",
     ): NovelReaderSettings {
         return NovelReaderSettings(
             fontSize = fontSize,

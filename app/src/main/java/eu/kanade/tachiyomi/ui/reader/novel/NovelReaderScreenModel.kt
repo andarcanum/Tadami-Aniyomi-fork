@@ -53,6 +53,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelDictionaryProvider
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelDictionaryProviderOutcome
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelDictionaryRequest
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelSelectedTextTranslationProvider
@@ -66,6 +69,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.OnlineDictionaryProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
@@ -317,6 +321,14 @@ class NovelReaderScreenModel(
             json = json,
         )
     },
+    private val novelDictionaryProvider: NovelDictionaryProvider = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        OnlineDictionaryProvider(
+            client = networkHelper.client,
+            json = json,
+        )
+    },
     private val googleTranslationService: GoogleTranslationService = run {
         val networkHelper = Injekt.get<NetworkHelper>()
         GoogleTranslationService(client = networkHelper.client)
@@ -450,6 +462,9 @@ class NovelReaderScreenModel(
         NovelSelectedTextTranslationUiState.Idle
     private var selectedTextTranslationJob: Job? = null
     private val selectedTextTranslationSessionCache = NovelSelectedTextTranslationSessionCache()
+    private var novelDictionaryUiState: NovelDictionaryUiState = NovelDictionaryUiState.Idle
+    private var novelDictionaryJob: Job? = null
+    private val novelDictionarySessionCache = NovelDictionarySessionCache()
     private val progressPersistenceMutex = Mutex()
     private val ttsRuntimeMutex = Mutex()
     private var ttsRuntimeGeneration: Long = 0L
@@ -828,7 +843,7 @@ class NovelReaderScreenModel(
         }
     }
     private fun updateContent(settings: NovelReaderSettings) {
-        if (!settings.selectedTextTranslationEnabled) {
+        if (!settings.selectedTextTranslationEnabled && !settings.novelDictionaryEnabled) {
             clearSelectedTextTranslationSelection(refreshUi = false)
         }
         val model = contentModel ?: return
@@ -966,6 +981,7 @@ class NovelReaderScreenModel(
             html = displayContent,
             enableJs = !pluginJs.isNullOrBlank() ||
                 settings.selectedTextTranslationEnabled ||
+                settings.novelDictionaryEnabled ||
                 settings.customJS.isNotBlank(),
             readerSettings = settings,
             contentBlocks = displayContentBlocks,
@@ -987,6 +1003,9 @@ class NovelReaderScreenModel(
             chapterWebUrl = chapterWebUrl,
             selectedTextTranslationSelection = selectedTextTranslationSelection,
             selectedTextTranslationUiState = selectedTextTranslationUiState,
+            novelDictionaryUiState = novelDictionaryUiState,
+            novelDictionaryEnabled = novelReaderPreferences.novelDictionaryEnabled().get(),
+            novelDictionaryTargetLanguage = novelReaderPreferences.novelDictionaryTargetLanguage().get(),
             geminiTranslation = State.ReaderGeminiState(
                 isGeminiTranslating = isGeminiTranslating,
                 geminiTranslationProgress = geminiTranslationProgress,
@@ -2092,6 +2111,11 @@ class NovelReaderScreenModel(
         queueProgressJob?.cancel()
         googleTranslationJob?.cancel()
         selectedTextTranslationJob?.cancel()
+        novelDictionaryJob?.cancel()
+        novelDictionaryJob = null
+        dictionaryTts?.stop()
+        dictionaryTts?.shutdown()
+        dictionaryTts = null
         progressPersistenceJob?.cancel()
         pendingProgressPersistenceByChapterId.clear()
         progressPersistenceScheduled = false
@@ -2793,19 +2817,36 @@ class NovelReaderScreenModel(
     }
     fun updateSelectedTextSelection(selection: NovelSelectedTextSelection?) {
         val currentSettings = (mutableState.value as? State.Success)?.readerSettings
-        if (currentSettings != null && !currentSettings.selectedTextTranslationEnabled) {
+        val translationEnabled = currentSettings?.selectedTextTranslationEnabled == true
+        val dictionaryEnabled = novelReaderPreferences.novelDictionaryEnabled().get()
+        if (!translationEnabled && !dictionaryEnabled) {
             clearSelectedTextTranslationSelection(refreshUi = false)
             return
         }
         selectedTextTranslationJob?.cancel()
         selectedTextTranslationJob = null
+        novelDictionaryJob?.cancel()
+        novelDictionaryJob = null
         selectedTextTranslationSelection = selection
         selectedTextTranslationUiState = if (selection == null) {
             NovelSelectedTextTranslationUiState.Idle
         } else {
-            NovelSelectedTextTranslationUiState.SelectionAvailable(selection)
+            NovelSelectedTextTranslationUiState.Idle
+        }
+        novelDictionaryUiState = if (selection == null) {
+            NovelDictionaryUiState.Idle
+        } else {
+            NovelDictionaryUiState.Idle
         }
         refreshSelectedTextTranslationUi()
+
+        if (selection != null) {
+            when (selection.triggerAction) {
+                SelectedTextAction.DICTIONARY -> lookupSelectedTextDefinition()
+                SelectedTextAction.TRANSLATION -> translateSelectedText()
+                null -> {}
+            }
+        }
     }
 
     fun translateSelectedText() {
@@ -2815,9 +2856,14 @@ class NovelReaderScreenModel(
         if (!settings.selectedTextTranslationEnabled) return
         if (selectedTextTranslationJob?.isActive == true) return
 
+        // Respect the language of the selected text: detect it (using the source's declared
+        // language as a tiebreaker for Han characters) and pass it as a hint so the provider can
+        // send an explicit `sl` instead of always relying on auto-detection.
+        val sourceLanguage = currentNovel?.source?.let { sourceManager.get(it)?.lang }
         val request = NovelSelectedTextTranslationRequest(
             selectedText = selection.text,
             targetLanguage = settings.selectedTextTranslationTargetLanguage,
+            sourceLanguageHint = detectNovelTextLanguage(selection.text, sourceLanguage),
         )
         val cacheKey = buildNovelSelectedTextTranslationRequestKey(
             providerFingerprint = selectedTextTranslationProvider.fingerprint,
@@ -2886,11 +2932,131 @@ class NovelReaderScreenModel(
         selectedTextTranslationSessionCache.clear()
     }
 
+    fun lookupSelectedTextDefinition() {
+        val enabled = novelReaderPreferences.novelDictionaryEnabled().get()
+        if (!enabled) return
+        val selection = selectedTextTranslationSelection ?: return
+        if (novelDictionaryJob?.isActive == true) return
+
+        val term = selection.text
+        val sourceLanguage = currentNovel?.source?.let { sourceManager.get(it)?.lang }
+        val wordLang = detectNovelTextLanguage(term, sourceLanguage)
+        val targetLangCode = novelReaderPreferences.novelDictionaryTargetLanguage().get()
+
+        val cacheKey = buildNovelDictionaryCacheKey(
+            backendFingerprint = novelDictionaryProvider.fingerprint,
+            sourceLanguage = wordLang ?: "",
+            term = term,
+        )
+        novelDictionarySessionCache.get(cacheKey)?.let { cached ->
+            novelDictionaryUiState = NovelDictionaryUiState.Result(selection, cached)
+            refreshSelectedTextTranslationUi()
+            return
+        }
+
+        novelDictionaryUiState = NovelDictionaryUiState.Looking(selection)
+        refreshSelectedTextTranslationUi()
+        novelDictionaryJob?.cancel()
+        novelDictionaryJob = screenModelScope.launch {
+            val outcome = novelDictionaryProvider.lookup(
+                NovelDictionaryRequest(
+                    term = term,
+                    sourceLanguageHint = wordLang,
+                    targetLanguageCode = targetLangCode,
+                ),
+            )
+            if (isNovelSelectedTextTranslationResponseStale(selectedTextTranslationSelection, selection.sessionId)) {
+                return@launch
+            }
+            when (outcome) {
+                is NovelDictionaryProviderOutcome.Success -> {
+                    novelDictionarySessionCache.put(cacheKey, outcome.result)
+                    novelDictionaryUiState = NovelDictionaryUiState.Result(selection, outcome.result)
+                }
+                is NovelDictionaryProviderOutcome.Unavailable -> {
+                    novelDictionaryUiState = when (outcome.reason) {
+                        is NovelSelectedTextTranslationErrorReason.Cooldown,
+                        NovelSelectedTextTranslationErrorReason.EmptySelection,
+                        NovelSelectedTextTranslationErrorReason.TooLongSelection,
+                        NovelSelectedTextTranslationErrorReason.WebViewUnavailable,
+                        is NovelSelectedTextTranslationErrorReason.BackendUnavailable,
+                        -> NovelDictionaryUiState.Unavailable(outcome.reason)
+                        is NovelSelectedTextTranslationErrorReason.NetworkFailure,
+                        NovelSelectedTextTranslationErrorReason.ParserFailure,
+                        -> NovelDictionaryUiState.Error(selection, outcome.reason)
+                    }
+                }
+            }
+            refreshSelectedTextTranslationUi()
+        }
+    }
+
+    fun retryNovelDictionary() {
+        lookupSelectedTextDefinition()
+    }
+
+    fun dismissNovelDictionary() {
+        novelDictionaryJob?.cancel()
+        novelDictionaryJob = null
+        novelDictionaryUiState = NovelDictionaryUiState.Idle
+        refreshSelectedTextTranslationUi()
+    }
+
+    fun resetNovelDictionaryForChapter() {
+        novelDictionaryJob?.cancel()
+        novelDictionaryJob = null
+        novelDictionarySessionCache.clear()
+        novelDictionaryUiState = NovelDictionaryUiState.Idle
+    }
+
+    private var dictionaryTts: android.speech.tts.TextToSpeech? = null
+
+    fun playSelectedTextPronunciation(text: String) {
+        val cleanText = text.trim()
+        if (cleanText.isEmpty()) return
+        val sourceLanguage = currentNovel?.source?.let { sourceManager.get(it)?.lang }
+        val lang = detectNovelTextLanguage(cleanText, sourceLanguage) ?: "en"
+        val locale = when (lang) {
+            "ja" -> java.util.Locale.JAPANESE
+            "zh" -> java.util.Locale.CHINESE
+            "ko" -> java.util.Locale.KOREAN
+            "ru" -> java.util.Locale("ru")
+            else -> java.util.Locale.ENGLISH
+        }
+
+        val ttsListener = android.speech.tts.TextToSpeech.OnInitListener { status ->
+            if (status == android.speech.tts.TextToSpeech.SUCCESS) {
+                dictionaryTts?.language = locale
+                dictionaryTts?.speak(
+                    cleanText,
+                    android.speech.tts.TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "dictionary_pronunciation",
+                )
+            }
+        }
+
+        if (dictionaryTts == null) {
+            dictionaryTts = android.speech.tts.TextToSpeech(application, ttsListener)
+        } else {
+            dictionaryTts?.language = locale
+            dictionaryTts?.speak(
+                cleanText,
+                android.speech.tts.TextToSpeech.QUEUE_FLUSH,
+                null,
+                "dictionary_pronunciation",
+            )
+        }
+    }
+
     private fun clearSelectedTextTranslationSelection(refreshUi: Boolean = true) {
         selectedTextTranslationJob?.cancel()
         selectedTextTranslationJob = null
         selectedTextTranslationSelection = null
         selectedTextTranslationUiState = NovelSelectedTextTranslationUiState.Idle
+        novelDictionaryJob?.cancel()
+        novelDictionaryJob = null
+        novelDictionaryUiState = NovelDictionaryUiState.Idle
         if (refreshUi) {
             refreshSelectedTextTranslationUi()
         }
@@ -3992,6 +4158,9 @@ class NovelReaderScreenModel(
             val selectedTextTranslationSelection: NovelSelectedTextSelection? = null,
             val selectedTextTranslationUiState: NovelSelectedTextTranslationUiState =
                 NovelSelectedTextTranslationUiState.Idle,
+            val novelDictionaryUiState: NovelDictionaryUiState = NovelDictionaryUiState.Idle,
+            val novelDictionaryEnabled: Boolean = false,
+            val novelDictionaryTargetLanguage: String = "Russian",
             val geminiTranslation: ReaderGeminiState = ReaderGeminiState(),
             val googleTranslation: ReaderGoogleState = ReaderGoogleState(),
             val ttsUiState: NovelReaderTtsUiState = NovelReaderTtsUiState(),

@@ -58,12 +58,17 @@ import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextAnchor
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
+import eu.kanade.tachiyomi.ui.reader.novel.SelectedTextAction
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
+import tachiyomi.i18n.aniyomi.AYMR
 import java.util.Locale
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
+
+private const val MENU_ID_DICTIONARY = 0x9001
+private const val MENU_ID_TRANSLATION = 0x9002
 
 internal data class NovelPageReaderContentLayout(
     val textPadding: PaddingValues,
@@ -410,9 +415,70 @@ private class NovelPageReaderTextView constructor(
         }
     }
 
+    private var localSelection: NovelSelectedTextSelection? = null
+    private var isExecutingAction = false
+    var isDictionaryEnabled = false
+    var isTranslationEnabled = false
+
     init {
         updateSelectionInteractionEnabled(selectionInteractionEnabled)
         isClickable = false
+        setupCustomSelectionActionModeCallback()
+    }
+
+    private fun setupCustomSelectionActionModeCallback() {
+        customSelectionActionModeCallback = object : android.view.ActionMode.Callback {
+            override fun onCreateActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+                if (menu == null) return true
+                val menuOrder = 100
+                if (isDictionaryEnabled) {
+                    menu.add(
+                        android.view.Menu.NONE,
+                        MENU_ID_DICTIONARY,
+                        menuOrder,
+                        context.getString(AYMR.strings.novel_reader_text_selection_action_dictionary.resourceId),
+                    )
+                }
+                if (isTranslationEnabled) {
+                    menu.add(
+                        android.view.Menu.NONE,
+                        MENU_ID_TRANSLATION,
+                        menuOrder + 1,
+                        context.getString(AYMR.strings.novel_reader_text_selection_action_translate.resourceId),
+                    )
+                }
+                return true
+            }
+
+            override fun onPrepareActionMode(mode: android.view.ActionMode?, menu: android.view.Menu?): Boolean {
+                return false
+            }
+
+            override fun onActionItemClicked(mode: android.view.ActionMode?, item: android.view.MenuItem?): Boolean {
+                if (item == null) return false
+                val selection = localSelection ?: return false
+                when (item.itemId) {
+                    MENU_ID_DICTIONARY -> {
+                        isExecutingAction = true
+                        val selectionWithAction = selection.copy(triggerAction = SelectedTextAction.DICTIONARY)
+                        onSelectedTextSelectionChanged(selectionWithAction)
+                        mode?.finish()
+                        return true
+                    }
+                    MENU_ID_TRANSLATION -> {
+                        isExecutingAction = true
+                        val selectionWithAction = selection.copy(triggerAction = SelectedTextAction.TRANSLATION)
+                        onSelectedTextSelectionChanged(selectionWithAction)
+                        mode?.finish()
+                        return true
+                    }
+                }
+                return false
+            }
+
+            override fun onDestroyActionMode(mode: android.view.ActionMode?) {
+            }
+        }
     }
 
     fun updateSelectionInteractionEnabled(enabled: Boolean) {
@@ -523,18 +589,30 @@ private class NovelPageReaderTextView constructor(
     private fun publishSelection(selStart: Int, selEnd: Int) {
         val currentText = text?.toString().orEmpty()
         if (selStart < 0 || selEnd < 0 || selStart == selEnd || currentText.isBlank()) {
-            onSelectedTextSelectionChanged(null)
+            localSelection = null
+            if (!isExecutingAction) {
+                onSelectedTextSelectionChanged(null)
+            }
+            isExecutingAction = false
             return
         }
 
         val layout = layout ?: run {
-            onSelectedTextSelectionChanged(null)
+            localSelection = null
+            if (!isExecutingAction) {
+                onSelectedTextSelectionChanged(null)
+            }
+            isExecutingAction = false
             return
         }
         val start = minOf(selStart, selEnd).coerceIn(0, currentText.length)
         val end = maxOf(selStart, selEnd).coerceIn(start, currentText.length)
         if (start >= end) {
-            onSelectedTextSelectionChanged(null)
+            localSelection = null
+            if (!isExecutingAction) {
+                onSelectedTextSelectionChanged(null)
+            }
+            isExecutingAction = false
             return
         }
 
@@ -543,31 +621,38 @@ private class NovelPageReaderTextView constructor(
         val bounds = RectF()
         selectionPath.computeBounds(bounds, true)
         if (bounds.isEmpty) {
-            onSelectedTextSelectionChanged(null)
+            localSelection = null
+            if (!isExecutingAction) {
+                onSelectedTextSelectionChanged(null)
+            }
+            isExecutingAction = false
             return
         }
 
         val selectedText = currentText.substring(start, end)
         if (selectedText.isBlank()) {
-            onSelectedTextSelectionChanged(null)
+            localSelection = null
+            if (!isExecutingAction) {
+                onSelectedTextSelectionChanged(null)
+            }
+            isExecutingAction = false
             return
         }
 
         val locationOnScreen = IntArray(2)
         getLocationOnScreen(locationOnScreen)
-        onSelectedTextSelectionChanged(
-            NovelSelectedTextSelection(
-                sessionId = selectionSessionIdProvider(),
-                renderer = selectionRenderer,
-                text = selectedText,
-                anchor = NovelSelectedTextAnchor(
-                    leftPx = (locationOnScreen[0] + bounds.left).roundToInt(),
-                    topPx = (locationOnScreen[1] + bounds.top).roundToInt(),
-                    rightPx = (locationOnScreen[0] + bounds.right).roundToInt(),
-                    bottomPx = (locationOnScreen[1] + bounds.bottom).roundToInt(),
-                ),
+        localSelection = NovelSelectedTextSelection(
+            sessionId = selectionSessionIdProvider(),
+            renderer = selectionRenderer,
+            text = selectedText,
+            anchor = NovelSelectedTextAnchor(
+                leftPx = (locationOnScreen[0] + bounds.left).roundToInt(),
+                topPx = (locationOnScreen[1] + bounds.top).roundToInt(),
+                rightPx = (locationOnScreen[0] + bounds.right).roundToInt(),
+                bottomPx = (locationOnScreen[1] + bounds.bottom).roundToInt(),
             ),
         )
+        isExecutingAction = false
     }
 
     private fun hasActiveSelection(): Boolean {
@@ -961,7 +1046,12 @@ internal fun NovelPageReaderTextBlock(
         shadow = blockTextShadow,
     )
     val selectionInteractionEnabled =
-        touchHandlingEnabled && (readerSettings.textSelectionEnabled || readerSettings.selectedTextTranslationEnabled)
+        touchHandlingEnabled &&
+            (
+                readerSettings.textSelectionEnabled ||
+                    readerSettings.selectedTextTranslationEnabled ||
+                    readerSettings.novelDictionaryEnabled
+                )
     AndroidView(
         modifier = modifier,
         factory = { context ->
@@ -986,6 +1076,8 @@ internal fun NovelPageReaderTextBlock(
             }
         },
         update = { textView ->
+            textView.isDictionaryEnabled = readerSettings.novelDictionaryEnabled
+            textView.isTranslationEnabled = readerSettings.selectedTextTranslationEnabled
             textView.updatePlainTapHandler(onPlainTap)
             textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
             val glyphPadBottom = resolvePageReaderGlyphOverflowPaddingPx(blockTextSizePx)

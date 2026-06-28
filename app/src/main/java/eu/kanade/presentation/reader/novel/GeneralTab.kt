@@ -475,36 +475,54 @@ fun GeneralTab(
                 )
             }
             SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_text_selection_enabled),
+                subtitle = stringResource(AYMR.strings.novel_reader_text_selection_enabled_summary),
+                checked = settings.textSelectionEnabled,
+                onCheckedChanged = { preferences.textSelectionEnabled().set(it) },
+            )
+            SwitchPreferenceWidget(
                 title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
                 checked = settings.selectedTextTranslationEnabled,
                 onCheckedChanged = { preferences.selectedTextTranslationEnabled().set(it) },
             )
-            EditTextPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
-                subtitle = "%s",
-                icon = null,
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_dictionary_enabled),
+                checked = settings.novelDictionaryEnabled,
+                onCheckedChanged = { preferences.novelDictionaryEnabled().set(it) },
+            )
+            val dictionaryLanguages = kotlinx.collections.immutable.persistentMapOf(
+                "en" to "English",
+                "ru" to "Русский",
+                "ja" to "日本語 (Japanese)",
+                "zh" to "中文 (Chinese)",
+                "ko" to "한국어 (Korean)",
+                "es" to "Español (Spanish)",
+                "fr" to "Français (French)",
+                "de" to "Deutsch (German)",
+                "it" to "Italiano (Italian)",
+                "pt" to "Português (Portuguese)",
+            )
+            ListPreferenceWidget(
                 value = settings.selectedTextTranslationTargetLanguage,
-                onConfirm = {
+                title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
+                subtitle = dictionaryLanguages[settings.selectedTextTranslationTargetLanguage]
+                    ?: settings.selectedTextTranslationTargetLanguage,
+                icon = null,
+                entries = dictionaryLanguages,
+                onValueChange = {
                     preferences.selectedTextTranslationTargetLanguage().set(it)
-                    true
                 },
-                singleLine = true,
-                canBeBlank = false,
-                formatSubtitle = true,
             )
-            Text(
-                text = buildString {
-                    append(stringResource(AYMR.strings.novel_reader_translation_provider))
-                    append(": ")
-                    append(getNovelReaderTranslationProviderLabel(settings.translationProvider))
+            ListPreferenceWidget(
+                value = settings.novelDictionaryTargetLanguage,
+                title = stringResource(AYMR.strings.novel_reader_dictionary_target_language),
+                subtitle = dictionaryLanguages[settings.novelDictionaryTargetLanguage]
+                    ?: settings.novelDictionaryTargetLanguage,
+                icon = null,
+                entries = dictionaryLanguages,
+                onValueChange = {
+                    preferences.novelDictionaryTargetLanguage().set(it)
                 },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(AYMR.strings.novel_reader_global_settings_quick_dialog_summary),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         NovelReaderAccordionSection(
@@ -616,12 +634,6 @@ fun GeneralTab(
                         { preferences.showWordCount().set(it) },
                     )
                 },
-            )
-            SwitchPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_text_selection_enabled),
-                subtitle = stringResource(AYMR.strings.novel_reader_text_selection_enabled_summary),
-                checked = settings.textSelectionEnabled,
-                onCheckedChanged = { preferences.textSelectionEnabled().set(it) },
             )
             SwitchPreferenceWidget(
                 title = stringResource(AYMR.strings.novel_reader_bionic_reading),
