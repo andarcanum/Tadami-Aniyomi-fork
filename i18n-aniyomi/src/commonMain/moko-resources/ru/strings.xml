@@ -2512,4 +2512,5 @@
     <!-- Time Paradox Achievement -->
     <string name="achievement_time_paradox_title">Временной парадокс</string>
     <string name="achievement_time_paradox_desc">Почитайте или посмотрите что-то ровно в 11:11</string>
+    <string name="achievement_time_paradox_hint">Симметрия времени</string>
 </resources>

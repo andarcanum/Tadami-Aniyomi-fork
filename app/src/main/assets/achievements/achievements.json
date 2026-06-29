@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "achievements": [
     {
       "id": "first_chapter",
@@ -2880,8 +2880,8 @@
       "title": "Time Paradox",
       "description": "Read or watch at exactly 11:11",
       "badge_icon": "ic_badge_time_paradox",
-      "is_hidden": false,
-      "is_secret": false,
+      "is_hidden": true,
+      "is_secret": true,
       "rarity": "rare",
       "tags": [
         "both",
@@ -2895,7 +2895,8 @@
           "title": "Tab Bottom Glow",
           "description": "Unlocks a bottom glow effect for the tab bar"
         }
-      ]
+      ],
+      "hint": "Symmetry of time."
     }
   ]
 }

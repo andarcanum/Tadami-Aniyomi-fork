@@ -2496,4 +2496,5 @@
     <!-- Time Paradox Achievement -->
     <string name="achievement_time_paradox_title">Time Paradox</string>
     <string name="achievement_time_paradox_desc">Read or watch at exactly 11:11</string>
+    <string name="achievement_time_paradox_hint">Symmetry of time</string>
 </resources>
