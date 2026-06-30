@@ -149,10 +149,18 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         pref = screenModel.preferences.pageTransitions(),
     )
 
+    val joinDoublePages by screenModel.preferences.joinDoublePages().collectAsState()
     CheckboxItem(
         label = stringResource(MR.strings.pref_join_double_pages),
         pref = screenModel.preferences.joinDoublePages(),
     )
+
+    if (joinDoublePages) {
+        CheckboxItem(
+            label = stringResource(MR.strings.pref_shift_double_pages),
+            pref = screenModel.preferences.shiftDoublePages(),
+        )
+    }
 
     val bottomBarButtonsOrder by screenModel.preferences.bottomBarButtonsOrder().collectAsState()
 

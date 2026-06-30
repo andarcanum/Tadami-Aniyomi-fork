@@ -212,6 +212,8 @@ class ReaderPreferences(
 
     fun joinDoublePages() = preferenceStore.getBoolean("pref_join_double_pages", false)
 
+    fun shiftDoublePages() = preferenceStore.getBoolean("pref_shift_double_pages", false)
+
     fun adaptivePreload() = preferenceStore.getBoolean("pref_adaptive_preload", false)
 
     fun sharpening() = preferenceStore.getInt("pref_sharpening", 0)

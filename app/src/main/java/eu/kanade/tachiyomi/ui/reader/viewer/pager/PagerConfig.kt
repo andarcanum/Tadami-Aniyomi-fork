@@ -48,6 +48,9 @@ class PagerConfig(
     var landscapeZoom = false
         private set
 
+    var shiftDoublePages = false
+        private set
+
     init {
         readerPreferences.readerTheme()
             .register(
@@ -110,6 +113,12 @@ class PagerConfig(
         readerPreferences.joinDoublePages()
             .register(
                 { joinDoublePages = it },
+                { imagePropertyChangedListener?.invoke() },
+            )
+
+        readerPreferences.shiftDoublePages()
+            .register(
+                { shiftDoublePages = it },
                 { imagePropertyChangedListener?.invoke() },
             )
     }

@@ -552,6 +552,8 @@
     <string name="pref_grayscale">Оттенки серого</string>
     <string name="pref_join_double_pages">Объединять одиночные страницы</string>
     <string name="pref_join_double_pages_summary">Показывать две одиночные страницы бок о бок в ландшафтном режиме</string>
+    <string name="pref_shift_double_pages">Сдвиг двойных страниц</string>
+    <string name="pref_shift_double_pages_summary">Смещать спаривание страниц в двухстраничном режиме на одну страницу</string>
     <string name="pref_adaptive_preload">Адаптивная предзагрузка</string>
     <string name="pref_adaptive_preload_summary">Динамически настраивает буфер страниц вперед (2–6 стр.) и порог загрузки следующей главы на основе темпа чтения и типа сети. Переопределяет ручную настройку буфера страниц вперед при включении.</string>
     <string name="pref_sharpening">Резкость</string>

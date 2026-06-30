@@ -107,4 +107,30 @@ class PagerViewerAdapterTest {
         group.firstPage shouldBe pages[1]
         group.secondPage shouldBe pages[0]
     }
+
+    @Test
+    fun `should shift double pages grouping by leaving the first page single`() {
+        val pages = listOf(createPage(0), createPage(1), createPage(2), createPage(3))
+        val result = groupPagesForDoublePage(
+            pages = pages,
+            joinDoublePages = true,
+            shiftDoublePages = true,
+            isLandscape = true,
+            isR2L = false,
+        )
+
+        // Page 0 remains single
+        // Page 1 and 2 grouped -> JoinedReaderPage
+        // Page 3 remains single
+        result.size shouldBe 3
+
+        result[0] shouldBe pages[0]
+
+        val secondGroup = result[1]
+        secondGroup.shouldBeInstanceOf<JoinedReaderPage>()
+        secondGroup.firstPage shouldBe pages[1]
+        secondGroup.secondPage shouldBe pages[2]
+
+        result[2] shouldBe pages[3]
+    }
 }

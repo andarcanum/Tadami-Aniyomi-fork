@@ -99,6 +99,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
             val grouped = groupPagesForDoublePage(
                 pages = pages,
                 joinDoublePages = viewer.config.joinDoublePages,
+                shiftDoublePages = viewer.config.shiftDoublePages,
                 isLandscape = isLandscape,
                 isR2L = viewer is R2LPagerViewer,
             )
@@ -225,6 +226,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
 internal fun groupPagesForDoublePage(
     pages: List<ReaderPage>,
     joinDoublePages: Boolean,
+    shiftDoublePages: Boolean = false,
     isLandscape: Boolean,
     isR2L: Boolean,
 ): List<Any> {
@@ -234,6 +236,10 @@ internal fun groupPagesForDoublePage(
 
     val result = mutableListOf<Any>()
     var i = 0
+    if (shiftDoublePages && pages.isNotEmpty()) {
+        result.add(pages[0])
+        i = 1
+    }
     while (i < pages.size) {
         val currentPage = pages[i]
         if (currentPage.isWide) {
