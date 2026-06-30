@@ -1131,12 +1131,25 @@ class ReaderActivity : BaseActivity() {
                 .onEach { setDisplayProfile(it) }
                 .launchIn(lifecycleScope)
 
-            uiPreferences.eInkProfile().changes()
+            merge(
+                readerPreferences.grayscale().changes(),
+                readerPreferences.invertedColors().changes(),
+                uiPreferences.eInkProfile().changes(),
+            )
                 .onEach {
                     setLayerPaint(
-                        readerPreferences.grayscale().get() && it.isEnabled,
-                        readerPreferences.invertedColors().get() && it.isEnabled,
+                        readerPreferences.grayscale().get(),
+                        readerPreferences.invertedColors().get(),
                     )
+                }
+                .launchIn(lifecycleScope)
+
+            merge(
+                readerPreferences.sharpening().changes(),
+                readerPreferences.denoise().changes(),
+            )
+                .onEach {
+                    applyRenderEffects()
                 }
                 .launchIn(lifecycleScope)
 
@@ -1152,15 +1165,6 @@ class ReaderActivity : BaseActivity() {
                 .onEach(::setCustomBrightness)
                 .launchIn(lifecycleScope)
 
-            merge(readerPreferences.grayscale().changes(), readerPreferences.invertedColors().changes())
-                .onEach {
-                    setLayerPaint(
-                        readerPreferences.grayscale().get() && isEInkMode(),
-                        readerPreferences.invertedColors().get() && isEInkMode(),
-                    )
-                }
-                .launchIn(lifecycleScope)
-
             readerPreferences.fullscreen().changes()
                 .onEach {
                     WindowCompat.setDecorFitsSystemWindows(window, !it)
@@ -1168,6 +1172,13 @@ class ReaderActivity : BaseActivity() {
                     setMenuVisibility(viewModel.state.value.menuVisible)
                 }
                 .launchIn(lifecycleScope)
+
+            // Apply initial state
+            setLayerPaint(
+                readerPreferences.grayscale().get(),
+                readerPreferences.invertedColors().get(),
+            )
+            applyRenderEffects()
         }
 
         /**
@@ -1262,6 +1273,37 @@ class ReaderActivity : BaseActivity() {
             val paint = if (grayscale || invertedColors) getCombinedPaint(grayscale, invertedColors) else null
             binding.viewerContainer.setLayerType(LAYER_TYPE_HARDWARE, paint)
         }
+
+        private fun applyRenderEffects() {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val sharpeningVal = readerPreferences.sharpening().get() / 100f
+                val denoiseVal = readerPreferences.denoise().get() / 100f
+
+                var effect: android.graphics.RenderEffect? = null
+
+                if (sharpeningVal > 0f) {
+                    val sharpShader = android.graphics.RuntimeShader(SHARPEN_SHADER)
+                    sharpShader.setFloatUniform("sharpness", sharpeningVal)
+                    effect = android.graphics.RenderEffect.createRuntimeShaderEffect(sharpShader, "inputShader")
+                }
+
+                if (denoiseVal > 0f) {
+                    val denoiseShader = android.graphics.RuntimeShader(DENOISE_SHADER)
+                    denoiseShader.setFloatUniform("denoise", denoiseVal)
+                    val denoiseEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(
+                        denoiseShader,
+                        "inputShader",
+                    )
+                    effect = if (effect != null) {
+                        android.graphics.RenderEffect.createChainEffect(denoiseEffect, effect)
+                    } else {
+                        denoiseEffect
+                    }
+                }
+
+                binding.viewerContainer.setRenderEffect(effect)
+            }
+        }
     }
 
     private fun applyReaderSystemBarIconStyle(menuVisible: Boolean) {
@@ -1285,3 +1327,43 @@ internal fun resolveReaderLightStatusBars(
     }
     return defaultLightStatusBars
 }
+
+private const val SHARPEN_SHADER = """
+    uniform shader inputShader;
+    uniform float sharpness;
+
+    half4 main(float2 coords) {
+        half4 center = inputShader.eval(coords);
+        half4 left = inputShader.eval(coords + float2(-1.0, 0.0));
+        half4 right = inputShader.eval(coords + float2(1.0, 0.0));
+        half4 top = inputShader.eval(coords + float2(0.0, -1.0));
+        half4 bottom = inputShader.eval(coords + float2(0.0, 1.0));
+
+        half4 sharp = center * 5.0 - (left + right + top + bottom);
+        return center + (sharp - center) * sharpness;
+    }
+"""
+
+private const val DENOISE_SHADER = """
+    uniform shader inputShader;
+    uniform float denoise;
+
+    half4 main(float2 coords) {
+        half4 color = inputShader.eval(coords);
+        half4 sum = color;
+        float count = 1.0;
+
+        for (int x = -1; x <= 1; x++) {
+            for (int y = -1; y <= 1; y++) {
+                if (x == 0 && y == 0) continue;
+                half4 neighbor = inputShader.eval(coords + float2(x, y));
+                if (distance(neighbor.rgb, color.rgb) < 0.15) {
+                    sum += neighbor;
+                    count += 1.0;
+                }
+            }
+        }
+        half4 smoothColor = sum / count;
+        return color + (smoothColor - color) * denoise;
+    }
+"""

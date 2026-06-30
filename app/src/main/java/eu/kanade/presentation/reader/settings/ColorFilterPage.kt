@@ -1,11 +1,14 @@
 package eu.kanade.presentation.reader.settings
 
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.graphics.alpha
 import androidx.core.graphics.blue
 import androidx.core.graphics.green
@@ -121,6 +124,31 @@ internal fun ColumnScope.ColorFilterPage(screenModel: ReaderSettingsScreenModel)
     CheckboxItem(
         label = stringResource(MR.strings.pref_inverted_colors),
         pref = screenModel.preferences.invertedColors(),
+    )
+
+    androidx.compose.material3.HorizontalDivider(
+        modifier = Modifier.padding(vertical = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+
+    val sharpening by screenModel.preferences.sharpening().collectAsState()
+    SliderItem(
+        value = sharpening,
+        valueRange = 0..100,
+        steps = 0,
+        label = stringResource(MR.strings.pref_sharpening),
+        onChange = { screenModel.preferences.sharpening().set(it) },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
+
+    val denoise by screenModel.preferences.denoise().collectAsState()
+    SliderItem(
+        value = denoise,
+        valueRange = 0..100,
+        steps = 0,
+        label = stringResource(MR.strings.pref_denoise),
+        onChange = { screenModel.preferences.denoise().set(it) },
+        pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     )
 }
 

@@ -437,6 +437,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
         CENTER,
         RIGHT,
     }
+
+    fun getImageView(): View? = pageView
 }
 
 private const val MAX_ZOOM_SCALE = 5F
