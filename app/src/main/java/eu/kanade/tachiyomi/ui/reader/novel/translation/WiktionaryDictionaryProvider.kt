@@ -126,7 +126,7 @@ class WiktionaryDictionaryProvider(
                             "HTTP " + response.code,
                         ),
                     )
-                    else -> response.body?.string().orEmpty()
+                    else -> response.body.string()
                 }
             }
 
@@ -270,7 +270,7 @@ class WiktionaryDictionaryProvider(
                             "HTTP " + response.code,
                         ),
                     )
-                    else -> response.body?.string().orEmpty()
+                    else -> response.body.string()
                 }
             }
 

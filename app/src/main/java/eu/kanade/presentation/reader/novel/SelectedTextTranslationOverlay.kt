@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package eu.kanade.presentation.reader.novel
 
 import android.text.Spanned
@@ -21,17 +23,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -129,7 +132,7 @@ internal fun SelectedTextTranslationOverlay(
                 ) {
                     // 1. Header Tabs
                     if (showTranslation && showDictionary) {
-                        TabRow(
+                        PrimaryTabRow(
                             selectedTabIndex = activeTab.ordinal,
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                             modifier = Modifier.fillMaxWidth(),
@@ -291,7 +294,7 @@ private fun DictionaryContent(
                         ),
                     ) {
                         Icon(
-                            imageVector = Icons.Default.VolumeUp,
+                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                             contentDescription = "Speak",
                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         )

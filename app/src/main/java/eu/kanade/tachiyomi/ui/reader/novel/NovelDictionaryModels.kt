@@ -54,6 +54,7 @@ fun detectNovelTextLanguage(text: String, sourceLanguage: String? = null): Strin
             Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A,
             -> hasHan = true
             Character.UnicodeBlock.CYRILLIC -> return "ru"
+            null -> {}
             else -> {}
         }
     }

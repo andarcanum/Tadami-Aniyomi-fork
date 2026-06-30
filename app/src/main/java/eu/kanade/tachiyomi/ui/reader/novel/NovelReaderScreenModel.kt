@@ -3020,7 +3020,7 @@ class NovelReaderScreenModel(
             "ja" -> java.util.Locale.JAPANESE
             "zh" -> java.util.Locale.CHINESE
             "ko" -> java.util.Locale.KOREAN
-            "ru" -> java.util.Locale("ru")
+            "ru" -> java.util.Locale.forLanguageTag("ru")
             else -> java.util.Locale.ENGLISH
         }
 

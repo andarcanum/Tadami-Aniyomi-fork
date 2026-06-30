@@ -393,7 +393,6 @@ class NovelReaderScreen(
                                         ),
                                     )
                                 }
-                                Unit
                             }
                         }
                     }
