@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.database.models.manga.toDomainChapter
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.online.HttpSource
+import eu.kanade.tachiyomi.ui.reader.ReaderPreloadManager
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
@@ -58,7 +59,7 @@ internal class HttpPageLoader(
         get() = readerPreferences.preloadPagesBefore().get()
 
     private val preloadPagesAfter: Int
-        get() = readerPreferences.preloadPagesAfter().get()
+        get() = ReaderPreloadManager.dynamicPreloadPagesAfter
 
     // SY -->
     private val dataSaver = DataSaver(source, sourcePreferences)

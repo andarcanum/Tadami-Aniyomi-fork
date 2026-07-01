@@ -181,6 +181,11 @@ private fun ColumnScope.WebtoonViewerSettings(screenModel: ReaderSettingsScreenM
         pref = screenModel.preferences.cropBordersWebtoon(),
     )
 
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_webtoon_smart_fit),
+        pref = screenModel.preferences.webtoonSmartFit(),
+    )
+
     val dualPageSplitWebtoon by screenModel.preferences.dualPageSplitWebtoon().collectAsStateWithLifecycle()
     CheckboxItem(
         label = stringResource(MR.strings.pref_dual_page_split),

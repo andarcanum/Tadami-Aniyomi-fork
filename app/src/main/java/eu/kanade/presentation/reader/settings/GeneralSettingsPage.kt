@@ -93,6 +93,11 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
     )
 
     CheckboxItem(
+        label = stringResource(MR.strings.pref_show_reading_time_left),
+        pref = screenModel.preferences.showReadingTimeLeft(),
+    )
+
+    CheckboxItem(
         label = stringResource(MR.strings.pref_auto_webtoon_mode),
         pref = screenModel.preferences.useAutoWebtoon(),
     )
@@ -148,6 +153,19 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         label = stringResource(MR.strings.pref_page_transitions),
         pref = screenModel.preferences.pageTransitions(),
     )
+
+    val joinDoublePages by screenModel.preferences.joinDoublePages().collectAsState()
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_join_double_pages),
+        pref = screenModel.preferences.joinDoublePages(),
+    )
+
+    if (joinDoublePages) {
+        CheckboxItem(
+            label = stringResource(MR.strings.pref_shift_double_pages),
+            pref = screenModel.preferences.shiftDoublePages(),
+        )
+    }
 
     val bottomBarButtonsOrder by screenModel.preferences.bottomBarButtonsOrder().collectAsState()
 

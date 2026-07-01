@@ -36,9 +36,18 @@ import com.github.chrisbanes.photoview.PhotoView
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.data.coil.cropBorders
 import eu.kanade.tachiyomi.data.coil.customDecoder
+import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonBorderDetector
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.view.isVisibleOnScreen
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okio.BufferedSource
 import tachiyomi.core.common.util.system.ImageUtil
 import uy.kohesive.injekt.Injekt
@@ -67,6 +76,26 @@ open class ReaderPageImageView @JvmOverloads constructor(
     private var pageView: View? = null
 
     private var config: Config? = null
+
+    private var scope: CoroutineScope? = null
+    private var smartFitJob: Job? = null
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        scope?.let {
+            if (it.isActive) {
+                it.cancel()
+            }
+        }
+        scope = null
+        smartFitJob?.cancel()
+        smartFitJob = null
+    }
 
     var onImageLoaded: (() -> Unit)? = null
     var onImageLoadError: (() -> Unit)? = null
@@ -162,6 +191,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     fun setImage(drawable: Drawable, config: Config) {
         this.config = config
+        smartFitJob?.cancel()
+        smartFitJob = null
         if (drawable is Animatable) {
             prepareAnimatedImageView()
             setAnimatedImage(drawable, config)
@@ -173,6 +204,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
     fun setImage(source: BufferedSource, isAnimated: Boolean, config: Config) {
         this.config = config
+        smartFitJob?.cancel()
+        smartFitJob = null
         if (isAnimated) {
             prepareAnimatedImageView()
             setAnimatedImage(source, config)
@@ -182,12 +215,16 @@ open class ReaderPageImageView @JvmOverloads constructor(
         }
     }
 
-    fun recycle() = pageView?.let {
-        when (it) {
-            is SubsamplingScaleImageView -> it.recycle()
-            is AppCompatImageView -> it.dispose()
+    fun recycle() {
+        smartFitJob?.cancel()
+        smartFitJob = null
+        pageView?.let {
+            when (it) {
+                is SubsamplingScaleImageView -> it.recycle()
+                is AppCompatImageView -> it.dispose()
+            }
+            it.isVisible = false
         }
-        it.isVisible = false
     }
 
     /**
@@ -310,14 +347,35 @@ open class ReaderPageImageView @JvmOverloads constructor(
 
         when (data) {
             is BitmapDrawable -> {
-                setImage(ImageSource.bitmap(data.bitmap))
-                isVisible = true
+                val bitmap = data.bitmap
+                if (config.webtoonSmartFit) {
+                    smartFitJob = scope?.launch {
+                        val bounds = withContext(Dispatchers.Default) {
+                            WebtoonBorderDetector.detectContentBounds(bitmap)
+                        }
+                        setImage(ImageSource.bitmap(bitmap).region(bounds))
+                        isVisible = true
+                    }
+                } else {
+                    setImage(ImageSource.bitmap(bitmap))
+                    isVisible = true
+                }
             }
             is BufferedSource -> {
                 if (!isWebtoon || alwaysDecodeLongStripWithSSIV || ImageUtil.isTallImage(data)) {
                     setHardwareConfig(ImageUtil.canUseHardwareBitmap(data))
-                    setImage(ImageSource.inputStream(data.inputStream()))
-                    isVisible = true
+                    if (config.webtoonSmartFit) {
+                        smartFitJob = scope?.launch {
+                            val bounds = withContext(Dispatchers.IO) {
+                                WebtoonBorderDetector.detectContentBounds(data.peek().inputStream())
+                            }
+                            setImage(ImageSource.inputStream(data.inputStream()).region(bounds))
+                            isVisible = true
+                        }
+                    } else {
+                        setImage(ImageSource.inputStream(data.inputStream()))
+                        isVisible = true
+                    }
                     return@apply
                 }
 
@@ -328,8 +386,19 @@ open class ReaderPageImageView @JvmOverloads constructor(
                     .target(
                         onSuccess = { result ->
                             val image = result as BitmapImage
-                            setImage(ImageSource.bitmap(image.bitmap))
-                            isVisible = true
+                            val bitmap = image.bitmap
+                            if (config.webtoonSmartFit) {
+                                smartFitJob = scope?.launch {
+                                    val bounds = withContext(Dispatchers.Default) {
+                                        WebtoonBorderDetector.detectContentBounds(bitmap)
+                                    }
+                                    setImage(ImageSource.bitmap(bitmap).region(bounds))
+                                    isVisible = true
+                                }
+                            } else {
+                                setImage(ImageSource.bitmap(bitmap))
+                                isVisible = true
+                            }
                         },
                         onError = {
                             onImageLoadError()
@@ -428,6 +497,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val zoomDuration: Int,
         val minimumScaleType: Int = SCALE_TYPE_CENTER_INSIDE,
         val cropBorders: Boolean = false,
+        val webtoonSmartFit: Boolean = false,
         val zoomStartPosition: ZoomStartPosition = ZoomStartPosition.CENTER,
         val landscapeZoom: Boolean = false,
     )
@@ -437,6 +507,8 @@ open class ReaderPageImageView @JvmOverloads constructor(
         CENTER,
         RIGHT,
     }
+
+    fun getImageView(): View? = pageView
 }
 
 private const val MAX_ZOOM_SCALE = 5F

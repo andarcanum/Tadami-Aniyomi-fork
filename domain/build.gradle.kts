@@ -23,6 +23,7 @@ dependencies {
     implementation(projects.core.common)
 
     implementation(libs.jsoup)
+    compileOnly(libs.jspecify)
     implementation(kotlinx.bundles.coroutines)
     implementation(kotlinx.bundles.serialization)
 

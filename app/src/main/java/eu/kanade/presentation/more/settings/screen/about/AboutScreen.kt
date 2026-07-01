@@ -164,6 +164,17 @@ object AboutScreen : Screen() {
                 }
             }
         }
+        val disclaimerTitle = stringResource(MR.strings.pref_disclaimer)
+        val disclaimerContent = stringResource(MR.strings.pref_disclaimer_text)
+
+        val termsTitle = stringResource(MR.strings.pref_terms_of_service)
+        val termsContent = stringResource(MR.strings.pref_terms_of_service_text)
+
+        val privacyTitle = stringResource(MR.strings.privacy_policy)
+        val privacyContent = stringResource(MR.strings.privacy_policy_text_content)
+
+        val dmcaTitle = stringResource(MR.strings.pref_copyright_dmca)
+        val dmcaContent = stringResource(MR.strings.pref_copyright_dmca_text)
 
         Box(modifier = Modifier.fillMaxSize()) {
             SettingsScaffold(
@@ -331,8 +342,8 @@ object AboutScreen : Screen() {
                             onPreferenceClick = {
                                 navigator.push(
                                     AboutTextScreen(
-                                        titleRes = MR.strings.pref_disclaimer,
-                                        contentRes = MR.strings.pref_disclaimer_text,
+                                        title = disclaimerTitle,
+                                        content = disclaimerContent,
                                     ),
                                 )
                             },
@@ -346,8 +357,8 @@ object AboutScreen : Screen() {
                             onPreferenceClick = {
                                 navigator.push(
                                     AboutTextScreen(
-                                        titleRes = MR.strings.pref_terms_of_service,
-                                        contentRes = MR.strings.pref_terms_of_service_text,
+                                        title = termsTitle,
+                                        content = termsContent,
                                     ),
                                 )
                             },
@@ -361,8 +372,8 @@ object AboutScreen : Screen() {
                             onPreferenceClick = {
                                 navigator.push(
                                     AboutTextScreen(
-                                        titleRes = MR.strings.privacy_policy,
-                                        contentRes = MR.strings.privacy_policy_text_content,
+                                        title = privacyTitle,
+                                        content = privacyContent,
                                     ),
                                 )
                             },
@@ -376,8 +387,8 @@ object AboutScreen : Screen() {
                             onPreferenceClick = {
                                 navigator.push(
                                     AboutTextScreen(
-                                        titleRes = MR.strings.pref_copyright_dmca,
-                                        contentRes = MR.strings.pref_copyright_dmca_text,
+                                        title = dmcaTitle,
+                                        content = dmcaContent,
                                     ),
                                 )
                             },

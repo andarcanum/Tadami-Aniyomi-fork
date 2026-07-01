@@ -9,6 +9,7 @@ android {
 
 dependencies {
     implementation(libs.jsoup)
+    compileOnly(libs.jspecify)
     implementation(libs.libarchive)
     implementation(libs.unifile)
 }

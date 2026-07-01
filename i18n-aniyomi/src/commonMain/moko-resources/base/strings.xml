@@ -753,9 +753,9 @@
     <string name="novel_reader_custom_js">Custom JavaScript</string>
     <string name="novel_reader_custom_js_hint">JavaScript executed after chapter loads</string>
     <string name="novel_reader_custom_js_set">%d characters</string>
-    <string name="novel_reader_text_selection_enabled">Text selection</string>
-    <string name="novel_reader_text_selection_enabled_summary">Select text for copying without translation</string>
-    <string name="novel_reader_selected_text_translation_section">Selected text translation</string>
+    <string name="novel_reader_text_selection_enabled">Enable text selection</string>
+    <string name="novel_reader_text_selection_enabled_summary">Required for dictionary and translation. Select text to copy, look up, or translate.</string>
+    <string name="novel_reader_selected_text_translation_section">Selecting text</string>
     <string name="novel_reader_selected_text_translation_enabled">Enable selected-text translation</string>
     <string name="novel_reader_selected_text_translation_target_language">Target language</string>
     <string name="novel_reader_selected_text_translation_global_only_summary">This setting is global only and ignores source overrides.</string>
@@ -763,9 +763,18 @@
     <string name="novel_reader_selected_text_translation_too_long">Selection is too long to translate.</string>
     <string name="novel_reader_selected_text_translation_retry_cooldown">Please wait before retrying this translation.</string>
     <string name="novel_reader_selected_text_translation_action_translate">Translate</string>
+    <string name="novel_reader_text_selection_action_dictionary">Dictionary</string>
+    <string name="novel_reader_text_selection_action_translate">Translate</string>
     <string name="novel_reader_selected_text_translation_action_retry">Retry</string>
     <string name="novel_reader_selected_text_translation_action_close">Close</string>
     <string name="novel_reader_selected_text_translation_loading">Translating selected text…</string>
+    <string name="novel_reader_dictionary_action_lookup">Definition</string>
+    <string name="novel_reader_dictionary_loading">Looking up definition…</string>
+    <string name="novel_reader_dictionary_enabled">Dictionary lookup</string>
+    <string name="novel_reader_dictionary_enabled_summary">Select text in the reader to look up definitions online</string>
+    <string name="novel_reader_dictionary_target_language">Dictionary target language</string>
+    <string name="novel_reader_dictionary_source">Source: %1$s</string>
+    <string name="novel_reader_dictionary_fallback_language">Showing results for %1$s</string>
     <string name="novel_reader_selected_text_translation_unavailable">Translation unavailable.</string>
     <string name="novel_reader_tts_section">Text-to-speech</string>
     <string name="novel_reader_tts_enabled">Enable text-to-speech</string>
@@ -1854,9 +1863,9 @@
     <!-- Shikimori Integration -->
     <string name="pref_category_shikimori">Shikimori Integration</string>
     <string name="pref_use_shikimori_rating">Use Shikimori ratings and types</string>
-    <string name="pref_use_shikimori_rating_summary">Display anime ratings and types from Shikimori.one</string>
+    <string name="pref_use_shikimori_rating_summary">Display anime ratings and types from Shikimori.io</string>
     <string name="pref_use_shikimori_covers">Use Shikimori covers</string>
-    <string name="pref_use_shikimori_covers_summary">Replace anime covers with high-quality images from Shikimori.one</string>
+    <string name="pref_use_shikimori_covers_summary">Replace anime covers with high-quality images from Shikimori.io</string>
     <string name="pref_show_original_title">Show original title</string>
     <string name="pref_show_original_title_summary">Display original title from description in parentheses</string>
     <string name="pref_aurora_entry_translation">Translate Aurora title cards</string>
@@ -2484,4 +2493,8 @@
     <string name="anixart_import_change_match">Change Match</string>
     <string name="anixart_import_score_match">Match score: %1$d%%</string>
     <string name="anixart_import_preference_group_title">Import</string>
+    <!-- Time Paradox Achievement -->
+    <string name="achievement_time_paradox_title">Time Paradox</string>
+    <string name="achievement_time_paradox_desc">Read or watch at exactly 11:11</string>
+    <string name="achievement_time_paradox_hint">Symmetry of time</string>
 </resources>

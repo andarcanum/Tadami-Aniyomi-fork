@@ -312,6 +312,10 @@ class NovelReaderScreen(
                     onTranslateSelectedText = screenModel::translateSelectedText,
                     onRetrySelectedTextTranslation = screenModel::retrySelectedTextTranslation,
                     onDismissSelectedTextTranslation = screenModel::dismissSelectedTextTranslation,
+                    onLookupSelectedTextDefinition = screenModel::lookupSelectedTextDefinition,
+                    onRetryNovelDictionary = screenModel::retryNovelDictionary,
+                    onDismissNovelDictionary = screenModel::dismissNovelDictionary,
+                    onPlaySelectedTextPronunciation = screenModel::playSelectedTextPronunciation,
                     onPrepareAutoScrollHandoff = screenModel::prepareAutoScrollHandoff,
                     onConsumeAutoScrollHandoff = screenModel::consumeAutoScrollHandoffIfMatches,
                     onCancelAutoScrollHandoff = screenModel::cancelAutoScrollHandoff,
@@ -389,7 +393,6 @@ class NovelReaderScreen(
                                         ),
                                     )
                                 }
-                                Unit
                             }
                         }
                     }

@@ -55,14 +55,21 @@ object AchievementRevealHelper {
 
         val threshold = achievement.threshold ?: return null
         val currentProgress = progress?.progress ?: return null
-        if (threshold <= 1) return null
-
-        val percent = (currentProgress * 100) / threshold
 
         val hintText = achievement.hint
         val vagueText = achievement.hintVague ?: hintText
         val directText = achievement.hintDirect ?: hintText
         val obviousText = achievement.hintObvious ?: hintText
+
+        if (threshold <= 1) {
+            return if (!vagueText.isNullOrBlank()) {
+                String.format(vaguePrefix, vagueText)
+            } else {
+                null
+            }
+        }
+
+        val percent = (currentProgress * 100) / threshold
 
         return when {
             percent >= 75 -> {

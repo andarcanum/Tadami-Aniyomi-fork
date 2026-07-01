@@ -175,6 +175,9 @@ object SettingsReaderScreen : SearchableSettings {
         )
         val chapterCache = remember { Injekt.get<ChapterCache>() }
 
+        val adaptivePreloadPref = readerPreferences.adaptivePreload()
+        val adaptivePreload by adaptivePreloadPref.collectAsState()
+
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.pref_reader_performance_cache),
             preferenceItems = persistentListOf(
@@ -189,11 +192,17 @@ object SettingsReaderScreen : SearchableSettings {
                     entries = preloadEntries,
                     title = stringResource(MR.strings.pref_reader_preload_pages_after),
                     subtitle = stringResource(MR.strings.pref_reader_preload_pages_after_summary),
+                    enabled = !adaptivePreload,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = readerPreferences.preloadNextChapter(),
                     title = stringResource(MR.strings.pref_reader_preload_next_chapter),
                     subtitle = stringResource(MR.strings.pref_reader_preload_next_chapter_summary),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = adaptivePreloadPref,
+                    title = stringResource(MR.strings.pref_adaptive_preload),
+                    subtitle = stringResource(MR.strings.pref_adaptive_preload_summary),
                 ),
                 Preference.PreferenceItem.ListPreference(
                     preference = readerPreferences.imageCacheSizeMb(),

@@ -29,6 +29,9 @@ class WebtoonConfig(
     var imageCropBorders = false
         private set
 
+    var webtoonSmartFit = false
+        private set
+
     var zoomOutDisabled = false
         private set
 
@@ -47,6 +50,9 @@ class WebtoonConfig(
     init {
         readerPreferences.cropBordersWebtoon()
             .register({ imageCropBorders = it }, { imagePropertyChangedListener?.invoke() })
+
+        readerPreferences.webtoonSmartFit()
+            .register({ webtoonSmartFit = it }, { imagePropertyChangedListener?.invoke() })
 
         readerPreferences.webtoonSidePadding()
             .register({ sidePadding = it }, { imagePropertyChangedListener?.invoke() })

@@ -1485,6 +1485,18 @@ object SettingsNovelReaderScreen : SearchableSettings {
 
     @Composable
     private fun getAdvancedGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val dictionaryLanguages = kotlinx.collections.immutable.persistentMapOf(
+            "en" to "English",
+            "ru" to "Русский",
+            "ja" to "日本語 (Japanese)",
+            "zh" to "中文 (Chinese)",
+            "ko" to "한국어 (Korean)",
+            "es" to "Español (Spanish)",
+            "fr" to "Français (French)",
+            "de" to "Deutsch (German)",
+            "it" to "Italiano (Italian)",
+            "pt" to "Português (Portuguese)",
+        )
         val items = mutableListOf<Preference.PreferenceItem<out Any>>(
             Preference.PreferenceItem.TextPreference(
                 title = stringResource(AYMR.strings.novel_reader_selected_text_translation_section),
@@ -1493,14 +1505,28 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 ),
             ),
             Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.textSelectionEnabled(),
+                title = stringResource(AYMR.strings.novel_reader_text_selection_enabled),
+                subtitle = stringResource(AYMR.strings.novel_reader_text_selection_enabled_summary),
+            ),
+            Preference.PreferenceItem.SwitchPreference(
                 preference = prefs.selectedTextTranslationEnabled(),
                 title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
             ),
-            Preference.PreferenceItem.EditTextInfoPreference(
+            Preference.PreferenceItem.SwitchPreference(
+                preference = prefs.novelDictionaryEnabled(),
+                title = stringResource(AYMR.strings.novel_reader_dictionary_enabled),
+                subtitle = stringResource(AYMR.strings.novel_reader_dictionary_enabled_summary),
+            ),
+            Preference.PreferenceItem.ListPreference(
                 preference = prefs.selectedTextTranslationTargetLanguage(),
-                dialogSubtitle = null,
                 title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
-                subtitle = "%s",
+                entries = dictionaryLanguages,
+            ),
+            Preference.PreferenceItem.ListPreference(
+                preference = prefs.novelDictionaryTargetLanguage(),
+                title = stringResource(AYMR.strings.novel_reader_dictionary_target_language),
+                entries = dictionaryLanguages,
             ),
         )
         items += Preference.PreferenceItem.MultiLineEditTextPreference(

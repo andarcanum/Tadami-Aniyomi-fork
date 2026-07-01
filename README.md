@@ -121,10 +121,40 @@ Tadami is intended for **lawful use only**. Do not use Tadami to infringe the
 rights of others. See [DISCLAIMER.md](DISCLAIMER.md) for the full statement and
 [DMCA.md](DMCA.md) for our copyright/takedown policy.
 
+## Support Development
+
+> [!IMPORTANT]
+> Donations fund **only the development of this open-source application** — coding,
+> maintenance, testing, and infrastructure. They are **not** a payment for content,
+> and they do **not** support, host, or endorse any third-party sources, extensions,
+> repositories, or copyrighted material. Tadami ships no content and provides no
+> access to any. Contributing is entirely voluntary.
+>
+> _Пожертвования идут **исключительно на разработку** этого приложения с открытым
+> исходным кодом и **не являются оплатой контента**. Они не поддерживают и не
+> финансируют какие-либо сторонние источники, расширения или нелегальные материалы._
+
+If you'd like to support the work on the code, here are a few optional ways:
+
+<div align="center">
+
+[![Boosty](https://img.shields.io/badge/Boosty-Support-F15F2C?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/tadami/donate)
+[![CloudTips](https://img.shields.io/badge/CloudTips-SBP%20%2F%20Card-1A73E8?style=for-the-badge&logo=cashapp&logoColor=white)](https://pay.cloudtips.ru/p/cae17cec)
+
+</div>
+
+**Crypto (copy the address):**
+
+| Asset | Network | Address |
+| --- | --- | --- |
+| ![USDT](https://img.shields.io/badge/USDT-TON-26A17B?style=flat-square&logo=tether&logoColor=white) | TON | `UQBTdyHogZWuUnv10WfFUM0yQ8lc3iXFh-4JyLStNirFCBrm` |
+| ![USDT](https://img.shields.io/badge/USDT-TRC20-26A17B?style=flat-square&logo=tether&logoColor=white) | TRON (TRC20) | `TJwbx9PNLLpMetpyJ83DpGCCdNWwkcEXTt` |
+
 ## Credits
 
 - [Mihon](https://github.com/mihonapp/mihon)
 - [Aniyomi](https://github.com/aniyomiorg/aniyomi)
+- [LNreader](https://github.com/LNReader/lnreader)
 
 ## License
 

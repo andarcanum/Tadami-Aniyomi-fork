@@ -13,15 +13,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun PageIndicatorText(
     currentPage: Int,
     totalPages: Int,
+    estimatedMinutesLeft: Int? = null,
 ) {
     if (currentPage <= 0 || totalPages <= 0) return
 
-    val text = "$currentPage / $totalPages"
+    val timeLeftText = when (estimatedMinutesLeft) {
+        null -> ""
+        0 -> " (${stringResource(MR.strings.reading_time_left_less_than_minute)})"
+        else -> " (${stringResource(MR.strings.reading_time_left_minute, estimatedMinutesLeft)})"
+    }
+
+    val text = "$currentPage / $totalPages$timeLeftText"
 
     val style = TextStyle(
         color = Color(235, 235, 235),

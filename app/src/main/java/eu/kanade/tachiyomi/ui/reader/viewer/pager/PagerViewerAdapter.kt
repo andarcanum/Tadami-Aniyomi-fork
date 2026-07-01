@@ -4,6 +4,7 @@ import android.view.View
 import android.view.ViewGroup
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
+import eu.kanade.tachiyomi.ui.reader.model.JoinedReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
@@ -92,7 +93,17 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
                     preprocessed[key]?.let { pages.add(key + 1, it) }
                 }
 
-            newItems.addAll(pages)
+            val isLandscape =
+                viewer.activity.resources.configuration.orientation ==
+                    android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            val grouped = groupPagesForDoublePage(
+                pages = pages,
+                joinDoublePages = viewer.config.joinDoublePages,
+                shiftDoublePages = viewer.config.shiftDoublePages,
+                isLandscape = isLandscape,
+                isR2L = viewer is R2LPagerViewer,
+            )
+            newItems.addAll(grouped)
         }
 
         currentChapter = chapters.currChapter
@@ -146,6 +157,7 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
      */
     override fun createView(container: ViewGroup, position: Int): View {
         return when (val item = items[position]) {
+            is JoinedReaderPage -> JoinedPagerPageHolder(readerThemedContext, viewer, item)
             is ReaderPage -> PagerPageHolder(readerThemedContext, viewer, item)
             is ChapterTransition -> PagerTransitionHolder(readerThemedContext, viewer, item)
             else -> throw NotImplementedError("Holder for ${item.javaClass} not implemented")
@@ -209,4 +221,43 @@ class PagerViewerAdapter(private val viewer: PagerViewer) : ViewPagerAdapter() {
     fun refresh() {
         readerThemedContext = viewer.activity.createReaderThemeContext()
     }
+}
+
+internal fun groupPagesForDoublePage(
+    pages: List<ReaderPage>,
+    joinDoublePages: Boolean,
+    shiftDoublePages: Boolean = false,
+    isLandscape: Boolean,
+    isR2L: Boolean,
+): List<Any> {
+    if (!joinDoublePages || !isLandscape) {
+        return pages
+    }
+
+    val result = mutableListOf<Any>()
+    var i = 0
+    if (shiftDoublePages && pages.isNotEmpty()) {
+        result.add(pages[0])
+        i = 1
+    }
+    while (i < pages.size) {
+        val currentPage = pages[i]
+        if (currentPage.isWide) {
+            result.add(currentPage)
+            i++
+            continue
+        }
+
+        val nextPage = pages.getOrNull(i + 1)
+        if (nextPage != null && !nextPage.isWide) {
+            val first = if (isR2L) nextPage else currentPage
+            val second = if (isR2L) currentPage else nextPage
+            result.add(JoinedReaderPage(first, second))
+            i += 2
+        } else {
+            result.add(currentPage)
+            i++
+        }
+    }
+    return result
 }

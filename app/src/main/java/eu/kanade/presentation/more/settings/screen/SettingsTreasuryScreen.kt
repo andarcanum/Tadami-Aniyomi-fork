@@ -97,6 +97,7 @@ import eu.kanade.presentation.theme.TachiyomiTheme
 import eu.kanade.tachiyomi.ui.home.components.AvatarFrameDecorations
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.domain.achievement.model.Achievement
+import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
@@ -125,6 +126,7 @@ object SettingsTreasuryScreen : SearchableSettings {
         val profileTitleKey by userProfilePreferences.profileTitle().collectAsStateWithLifecycle()
         val specialBackgroundStyleKey by uiPreferences.specialBackgroundStyle().collectAsStateWithLifecycle()
         val amoled by uiPreferences.themeDarkAmoled().collectAsStateWithLifecycle()
+        val showTabGlow by uiPreferences.showTabGlow().collectAsStateWithLifecycle()
 
         val unlockedUnlockables = visibleUnlockablesForTreasuryPreview(
             debugBypassLocks = debugBypassLocks,
@@ -507,6 +509,18 @@ object SettingsTreasuryScreen : SearchableSettings {
             ),
         )
 
+        val tabCustomizationPresets = listOf(
+            TreasuryPreset(
+                unlockableId = "special_tab_glow",
+                title = stringResource(MR.strings.reward_special_tab_glow_title),
+                description = stringResource(MR.strings.reward_special_tab_glow_desc),
+                accentColor = Color(0xFF00E5FF),
+                isActive = { showTabGlow },
+                onApply = { uiPreferences.showTabGlow().set(true) },
+                onDeactivate = { uiPreferences.showTabGlow().set(false) },
+            ),
+        )
+
         val preferences = mutableListOf<Preference>()
 
         val name by userProfilePreferences.name().collectAsStateWithLifecycle()
@@ -783,6 +797,7 @@ object SettingsTreasuryScreen : SearchableSettings {
             avatarFramePresets,
             homePresets,
             specialBackgroundPresets,
+            tabCustomizationPresets,
             unlockedUnlockables,
         ) {
             calculateTreasuryRewardProgress(
@@ -793,6 +808,7 @@ object SettingsTreasuryScreen : SearchableSettings {
                     addAll(avatarFramePresets.map { it.unlockableId })
                     addAll(homePresets.map { it.unlockableId })
                     addAll(specialBackgroundPresets.map { it.unlockableId })
+                    addAll(tabCustomizationPresets.map { it.unlockableId })
                 },
                 auraIds = allAuraPalettes().map { it.id },
                 hiddenThemes = AppTheme.entries.filter(AppTheme::isHidden),
@@ -858,6 +874,21 @@ object SettingsTreasuryScreen : SearchableSettings {
                     title = stringResource(AYMR.strings.treasury_background_effects),
                     subtitle = stringResource(AYMR.strings.treasury_background_effects_subtitle),
                     presets = specialBackgroundPresets,
+                    unlockedUnlockables = unlockedUnlockables,
+                    rewardToAchievementMap = rewardToAchievementMap,
+                    amoled = amoled,
+                )
+            },
+        )
+
+        preferences.add(
+            Preference.PreferenceItem.CustomPreference(
+                title = stringResource(MR.strings.treasury_tab_customization),
+            ) {
+                TreasuryToggleSelector(
+                    title = stringResource(MR.strings.treasury_tab_customization),
+                    subtitle = stringResource(MR.strings.treasury_tab_customization_subtitle),
+                    presets = tabCustomizationPresets,
                     unlockedUnlockables = unlockedUnlockables,
                     rewardToAchievementMap = rewardToAchievementMap,
                     amoled = amoled,
@@ -2772,6 +2803,7 @@ private fun getRewardIconResourceId(rewardId: String, context: android.content.C
         "special_background_deep_space_archive" -> "ic_reward_background_deep_space_archive"
         "special_background_shadow_realm" -> "ic_reward_background_shadow_realm"
         "special_background_event_horizon_library" -> "ic_reward_background_event_horizon_library"
+        "special_tab_glow" -> "ic_reward_tab_glow"
         else -> "ic_reward_$rewardId"
     }
 

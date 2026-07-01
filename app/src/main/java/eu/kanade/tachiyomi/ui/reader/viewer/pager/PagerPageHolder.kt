@@ -202,6 +202,16 @@ class PagerPageHolder(
     )
 
     private fun process(page: ReaderPage, imageSource: BufferedSource): BufferedSource {
+        val isDoublePage = ImageUtil.isWideImage(imageSource)
+        if (isDoublePage && !page.isWide) {
+            page.isWide = true
+            if (viewer.config.joinDoublePages) {
+                viewer.activity.runOnUiThread {
+                    viewer.refreshAdapter()
+                }
+            }
+        }
+
         if (viewer.config.dualPageRotateToFit) {
             return rotateDualPage(imageSource)
         }
@@ -214,7 +224,6 @@ class PagerPageHolder(
             return splitInHalf(imageSource)
         }
 
-        val isDoublePage = ImageUtil.isWideImage(imageSource)
         if (!isDoublePage) {
             return imageSource
         }

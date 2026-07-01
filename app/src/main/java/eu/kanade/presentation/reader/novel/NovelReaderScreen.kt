@@ -5,8 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.SystemClock
+import android.view.ActionMode
 import android.view.GestureDetector
 import android.view.KeyEvent
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -140,6 +143,7 @@ import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
+import eu.kanade.tachiyomi.ui.reader.novel.SelectedTextAction
 import eu.kanade.tachiyomi.ui.reader.novel.encodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.encodeWebScrollProgressPercent
@@ -237,11 +241,86 @@ private fun buildSourceIndexedPageReaderTextList(
     }
 }
 
-fun createNovelReaderWebView(context: Context): WebView {
-    return WebView(context).apply {
+private const val MENU_ID_DICTIONARY = 0x9001
+private const val MENU_ID_TRANSLATION = 0x9002
+
+class NovelReaderWebView(context: Context) : WebView(context) {
+    var localSelection: NovelSelectedTextSelection? = null
+    var onSelectedTextSelectionChanged: ((NovelSelectedTextSelection?) -> Unit)? = null
+    var isExecutingAction = false
+    var isDictionaryEnabled = false
+    var isTranslationEnabled = false
+
+    init {
         isFocusable = false
         isFocusableInTouchMode = false
     }
+
+    override fun startActionMode(callback: ActionMode.Callback?, type: Int): ActionMode? {
+        val wrappedCallback = object : ActionMode.Callback {
+            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                val result = callback?.onCreateActionMode(mode, menu) ?: true
+                if (menu != null) {
+                    val menuOrder = 100
+                    if (isDictionaryEnabled) {
+                        menu.add(
+                            Menu.NONE,
+                            MENU_ID_DICTIONARY,
+                            menuOrder,
+                            context.getString(AYMR.strings.novel_reader_text_selection_action_dictionary.resourceId),
+                        )
+                    }
+                    if (isTranslationEnabled) {
+                        menu.add(
+                            Menu.NONE,
+                            MENU_ID_TRANSLATION,
+                            menuOrder + 1,
+                            context.getString(AYMR.strings.novel_reader_text_selection_action_translate.resourceId),
+                        )
+                    }
+                }
+                return result
+            }
+
+            override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+                return callback?.onPrepareActionMode(mode, menu) ?: false
+            }
+
+            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?): Boolean {
+                if (item != null) {
+                    val selection = localSelection
+                    if (selection != null) {
+                        when (item.itemId) {
+                            MENU_ID_DICTIONARY -> {
+                                isExecutingAction = true
+                                val selectionWithAction = selection.copy(triggerAction = SelectedTextAction.DICTIONARY)
+                                onSelectedTextSelectionChanged?.invoke(selectionWithAction)
+                                mode?.finish()
+                                return true
+                            }
+                            MENU_ID_TRANSLATION -> {
+                                isExecutingAction = true
+                                val selectionWithAction = selection.copy(triggerAction = SelectedTextAction.TRANSLATION)
+                                onSelectedTextSelectionChanged?.invoke(selectionWithAction)
+                                mode?.finish()
+                                return true
+                            }
+                        }
+                    }
+                }
+                return callback?.onActionItemClicked(mode, item) ?: false
+            }
+
+            override fun onDestroyActionMode(mode: ActionMode?) {
+                callback?.onDestroyActionMode(mode)
+            }
+        }
+        return super.startActionMode(wrappedCallback, type)
+    }
+}
+
+fun createNovelReaderWebView(context: Context): WebView {
+    return NovelReaderWebView(context)
 }
 
 @Suppress("ktlint:standard:max-line-length", "UNNECESSARY_SAFE_CALL", "USELESS_ELVIS")
@@ -341,6 +420,10 @@ fun NovelReaderScreen(
     onTranslateSelectedText: () -> Unit = {},
     onRetrySelectedTextTranslation: () -> Unit = onTranslateSelectedText,
     onDismissSelectedTextTranslation: () -> Unit = {},
+    onLookupSelectedTextDefinition: () -> Unit = {},
+    onRetryNovelDictionary: () -> Unit = onLookupSelectedTextDefinition,
+    onDismissNovelDictionary: () -> Unit = {},
+    onPlaySelectedTextPronunciation: (String) -> Unit = {},
 ) {
     val sanitizedSettings = remember(rawState.readerSettings) {
         rawState.readerSettings.copy(
@@ -2826,6 +2909,10 @@ fun NovelReaderScreen(
                         },
                         update = { webView ->
                             webViewInstance = webView
+                            if (webView is NovelReaderWebView) {
+                                webView.isDictionaryEnabled = state.novelDictionaryEnabled
+                                webView.isTranslationEnabled = state.readerSettings.selectedTextTranslationEnabled
+                            }
                             webView.setBackgroundColor(backgroundColor)
                             webView.settings.javaScriptEnabled = shouldEnableJavaScriptInReaderWebView(state.enableJs)
                             webView.registerWebReaderSelectionBridge(
@@ -4111,6 +4198,10 @@ fun NovelReaderScreen(
                 onTranslate = onTranslateSelectedText,
                 onRetry = onRetrySelectedTextTranslation,
                 onDismiss = onDismissSelectedTextTranslation,
+                onLookupDefinition = onLookupSelectedTextDefinition,
+                onRetryDictionary = onRetryNovelDictionary,
+                onDismissDictionary = onDismissNovelDictionary,
+                onPlayPronunciation = onPlaySelectedTextPronunciation,
                 modifier = Modifier.align(Alignment.BottomEnd),
             )
 

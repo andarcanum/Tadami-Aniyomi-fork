@@ -44,6 +44,7 @@ private val previewPresetUnlockables = setOf(
     "special_background_deep_space_archive",
     "special_background_shadow_realm",
     "special_background_event_horizon_library",
+    "special_tab_glow",
 )
 
 private val previewThemeUnlockables by lazy {

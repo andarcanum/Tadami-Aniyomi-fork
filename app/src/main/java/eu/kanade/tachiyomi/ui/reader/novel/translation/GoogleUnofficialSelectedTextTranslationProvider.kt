@@ -120,6 +120,11 @@ internal class GoogleUnofficialSelectedTextTranslationProvider(
 
         return Builder()
             .url(url)
+            // Google's translate_a/single endpoint rejects requests without a browser-like
+            // User-Agent with HTTP 403. Mimic a mobile Chrome client — the same approach the
+            // chapter-level GoogleTranslationService already uses successfully.
+            .header("User-Agent", BROWSER_USER_AGENT)
+            .header("Accept", "*/*")
             .get()
             .build()
     }
@@ -140,7 +145,13 @@ internal class GoogleUnofficialSelectedTextTranslationProvider(
         return if (isCooldownFailure) {
             registerCooldown(requestKey, now)
         } else {
-            handleParserFailure(requestKey, now, NovelSelectedTextTranslationErrorReason.ParserFailure)
+            // Surface the real HTTP status (e.g. 403/400/5xx) instead of masking it as a parser
+            // failure, while still counting toward the retry budget.
+            handleParserFailure(
+                requestKey,
+                now,
+                NovelSelectedTextTranslationErrorReason.BackendUnavailable("HTTP $code"),
+            )
         }
     }
 
@@ -240,6 +251,9 @@ internal class GoogleUnofficialSelectedTextTranslationProvider(
     companion object {
         private const val DEFAULT_ENDPOINT_BASE_URL = "https://translate.googleapis.com/translate_a/single"
         private const val DEFAULT_FINGERPRINT = "google-unofficial-translate_a_single"
+        private const val BROWSER_USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro Build/UQ1A.240205.004) " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.6834.83 Mobile Safari/537.36"
         private const val MAX_CONSECUTIVE_FAILURES = 3
         private const val MAX_NORMALIZED_SELECTION_LENGTH = 320
         private const val COOLDOWN_MILLIS = 60_000L

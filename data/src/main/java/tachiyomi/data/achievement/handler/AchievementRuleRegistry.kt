@@ -30,6 +30,7 @@ import tachiyomi.data.achievement.rules.ShonenRule
 import tachiyomi.data.achievement.rules.StreakRule
 import tachiyomi.data.achievement.rules.ThreeRealmsRule
 import tachiyomi.data.achievement.rules.TimeBasedRule
+import tachiyomi.data.achievement.rules.TimeParadoxRule
 import tachiyomi.data.achievement.rules.TrinityRule
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.rule.AchievementRule
@@ -82,6 +83,7 @@ class AchievementRuleRegistry(
             EventRule("complete_1_novel"),
             EventRule("read_long_manga"),
             EventRule("read_long_novel"),
+            TimeParadoxRule(),
 
             // Library rules
             LibraryRule("library_collector", AchievementCategory.BOTH),

@@ -87,6 +87,35 @@ class ReaderViewModelTest {
         store.getInt("pref_auto_scroll_speed", 50).get() shouldBe 88
     }
 
+    @Test
+    fun `preload buffer is 2 on metered connections regardless of speed`() {
+        calculatePreloadBufferSize(averageSpeedSeconds = null, isMetered = true) shouldBe 2
+        calculatePreloadBufferSize(averageSpeedSeconds = 2.0, isMetered = true) shouldBe 2
+        calculatePreloadBufferSize(averageSpeedSeconds = 20.0, isMetered = true) shouldBe 2
+    }
+
+    @Test
+    fun `preload buffer is 3 by default on unmetered connections`() {
+        calculatePreloadBufferSize(averageSpeedSeconds = null, isMetered = false) shouldBe 3
+    }
+
+    @Test
+    fun `preload buffer scales to 6 when reading speed is fast on unmetered connections`() {
+        calculatePreloadBufferSize(averageSpeedSeconds = 3.9, isMetered = false) shouldBe 6
+        calculatePreloadBufferSize(averageSpeedSeconds = 1.0, isMetered = false) shouldBe 6
+    }
+
+    @Test
+    fun `preload buffer scales to 2 when reading speed is slow on unmetered connections`() {
+        calculatePreloadBufferSize(averageSpeedSeconds = 16.0, isMetered = false) shouldBe 2
+    }
+
+    @Test
+    fun `preload buffer is 3 for normal reading speed on unmetered connections`() {
+        calculatePreloadBufferSize(averageSpeedSeconds = 5.0, isMetered = false) shouldBe 3
+        calculatePreloadBufferSize(averageSpeedSeconds = 14.0, isMetered = false) shouldBe 3
+    }
+
     private fun readerChapter(
         read: Boolean,
         lastPageRead: Long,

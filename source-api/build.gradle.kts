@@ -31,6 +31,7 @@ kotlin {
                 api(libs.injekt)
                 api(libs.rxjava)
                 api(libs.jsoup)
+                compileOnly(libs.jspecify)
 
                 implementation(project.dependencies.platform(compose.bom))
                 implementation(compose.runtime)

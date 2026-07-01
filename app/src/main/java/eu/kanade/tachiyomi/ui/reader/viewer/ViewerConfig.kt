@@ -50,6 +50,9 @@ abstract class ViewerConfig(
     var dualPageRotateToFitInvert = false
         protected set
 
+    var joinDoublePages = false
+        protected set
+
     private var isEInkMode = uiPreferences.eInkProfile().get().isEnabled
 
     abstract var navigator: ViewerNavigation

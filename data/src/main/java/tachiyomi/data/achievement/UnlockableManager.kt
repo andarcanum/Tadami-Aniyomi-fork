@@ -246,6 +246,7 @@ class UnlockableManager(
             "special_background_petal_storm" -> MR.strings.unlockable_special_background_petal_storm
             "special_background_neon_orbit" -> MR.strings.unlockable_special_background_neon_orbit
             "special_background_event_horizon_library" -> MR.strings.unlockable_special_background_event_horizon_library
+            "special_tab_glow" -> MR.strings.unlockable_special_tab_glow
 
             else -> null
         }

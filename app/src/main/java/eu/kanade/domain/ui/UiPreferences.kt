@@ -125,6 +125,8 @@ class UiPreferences(
 
     fun showAchievementNotifications() = preferenceStore.getBoolean("show_achievement_notifications", true)
 
+    fun showTabGlow() = preferenceStore.getBoolean("show_tab_glow", false)
+
     fun animatedAuroraBackground() = preferenceStore.getBoolean("animated_aurora_background", true)
 
     fun auroraDarkRimLightEnabled() = preferenceStore.getBoolean("aurora_dark_rim_light_enabled", true)

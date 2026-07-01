@@ -183,14 +183,34 @@ internal class NovelReaderSelectionBridge(
             )
         }
         view.post {
-            onSelectedTextSelectionChanged(selection)
+            if (view is NovelReaderWebView) {
+                view.localSelection = selection
+                if (selection == null) {
+                    if (!view.isExecutingAction) {
+                        onSelectedTextSelectionChanged(null)
+                    }
+                    view.isExecutingAction = false
+                } else {
+                    view.isExecutingAction = false
+                }
+            } else {
+                onSelectedTextSelectionChanged(selection)
+            }
         }
     }
 
     @JavascriptInterface
     fun onSelectionCleared() {
         view.post {
-            onSelectedTextSelectionChanged(null)
+            if (view is NovelReaderWebView) {
+                view.localSelection = null
+                if (!view.isExecutingAction) {
+                    onSelectedTextSelectionChanged(null)
+                }
+                view.isExecutingAction = false
+            } else {
+                onSelectedTextSelectionChanged(null)
+            }
         }
     }
 }
@@ -199,6 +219,9 @@ internal fun WebView.registerWebReaderSelectionBridge(
     selectionSessionIdProvider: () -> Long,
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
 ) {
+    if (this is NovelReaderWebView) {
+        this.onSelectedTextSelectionChanged = onSelectedTextSelectionChanged
+    }
     runCatching {
         removeJavascriptInterface(WEB_READER_SELECTION_BRIDGE_NAME)
     }

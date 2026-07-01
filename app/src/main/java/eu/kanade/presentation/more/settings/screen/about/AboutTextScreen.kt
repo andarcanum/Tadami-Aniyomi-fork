@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +18,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -27,16 +30,16 @@ import com.halilibo.richtext.markdown.Markdown
 import com.halilibo.richtext.ui.RichTextStyle
 import com.halilibo.richtext.ui.material3.RichText
 import com.halilibo.richtext.ui.string.RichTextStringStyle
-import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.more.settings.SettingsScaffold
 import eu.kanade.presentation.more.settings.canScroll
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
 import eu.kanade.presentation.util.Screen
-import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.i18n.MR
 
 class AboutTextScreen(
-    private val titleRes: StringResource,
-    private val contentRes: StringResource,
+    private val title: String,
+    private val content: String,
 ) : Screen() {
 
     @Composable
@@ -45,9 +48,24 @@ class AboutTextScreen(
         val uiStyle = rememberResolvedSettingsUiStyle()
         val scrollState = rememberScrollState()
 
-        val rawContent = stringResource(contentRes)
-        val formattedContent = remember(rawContent) {
-            stripFirstHeader(rawContent)
+        val formattedContent = remember(content) {
+            stripFirstHeader(content)
+        }
+
+        val context = LocalContext.current
+        val originalUriHandler = LocalUriHandler.current
+        val customUriHandler = remember(navigator, originalUriHandler, context) {
+            object : androidx.compose.ui.platform.UriHandler {
+                override fun openUri(uri: String) {
+                    if (uri == "app://dmca" || uri == "dmca" || uri == "dmca.md" || uri.endsWith("DMCA.md")) {
+                        val dmcaTitle = context.stringResource(MR.strings.pref_copyright_dmca)
+                        val dmcaContent = context.stringResource(MR.strings.pref_copyright_dmca_text)
+                        navigator.push(AboutTextScreen(title = dmcaTitle, content = dmcaContent))
+                    } else {
+                        originalUriHandler.openUri(uri)
+                    }
+                }
+            }
         }
 
         // Custom Typography to calibrate all line heights and font sizes, preventing text overlapping
@@ -131,7 +149,7 @@ class AboutTextScreen(
         )
 
         SettingsScaffold(
-            title = stringResource(titleRes),
+            title = title,
             uiStyle = uiStyle,
             onBackPressed = navigator::pop,
             topBarCanScroll = { scrollState.canScroll() },
@@ -148,14 +166,16 @@ class AboutTextScreen(
                     .padding(horizontal = 24.dp, vertical = 24.dp),
             ) {
                 MaterialTheme(typography = customTypography) {
-                    RichText(
-                        style = RichTextStyle(
-                            stringStyle = RichTextStringStyle(
-                                linkStyle = SpanStyle(color = MaterialTheme.colorScheme.primary),
+                    CompositionLocalProvider(LocalUriHandler provides customUriHandler) {
+                        RichText(
+                            style = RichTextStyle(
+                                stringStyle = RichTextStringStyle(
+                                    linkStyle = SpanStyle(color = MaterialTheme.colorScheme.primary),
+                                ),
                             ),
-                        ),
-                    ) {
-                        Markdown(content = formattedContent)
+                        ) {
+                            Markdown(content = formattedContent)
+                        }
                     }
                 }
             }

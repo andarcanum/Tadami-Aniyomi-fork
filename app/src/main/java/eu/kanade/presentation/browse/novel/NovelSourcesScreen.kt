@@ -1,6 +1,7 @@
 package eu.kanade.presentation.browse.novel
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,9 +84,9 @@ fun NovelSourcesScreen(
 ) {
     val colors = AuroraTheme.colors
     val searchBackground = if (colors.isDark) {
-        colors.glass.copy(alpha = 0.12f)
+        Color.White.copy(alpha = 0.05f)
     } else {
-        colors.cardBackground
+        Color.Transparent
     }
     val hasSearchQuery = !searchQuery.isNullOrBlank()
     when {
@@ -154,7 +156,24 @@ fun NovelSourcesScreen(
                                     modifier = Modifier
                                         .focusRequester(searchFocusRequester)
                                         .fillMaxWidth()
-                                        .height(56.dp),
+                                        .height(56.dp)
+                                        .border(
+                                            width = 1.dp,
+                                            brush = Brush.verticalGradient(
+                                                if (colors.isDark) {
+                                                    listOf(
+                                                        Color.White.copy(alpha = 0.20f),
+                                                        Color.White.copy(alpha = 0.05f),
+                                                    )
+                                                } else {
+                                                    listOf(
+                                                        Color.Black.copy(alpha = 0.12f),
+                                                        Color.Black.copy(alpha = 0.04f),
+                                                    )
+                                                },
+                                            ),
+                                            shape = CircleShape,
+                                        ),
                                     shape = CircleShape,
                                     colors = TextFieldDefaults.colors(
                                         focusedContainerColor = searchBackground,

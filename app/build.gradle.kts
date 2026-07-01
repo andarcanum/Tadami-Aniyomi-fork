@@ -19,8 +19,8 @@ android {
     defaultConfig {
         applicationId = "com.tadami.aurora"
 
-        versionCode = 182
-        versionName = "0.54"
+        versionCode = 184
+        versionName = "0.54.5"
 
         buildConfigField("String", "COMMIT_COUNT", "\"${getCommitCount()}\"")
         buildConfigField("String", "COMMIT_SHA", "\"${getGitSha()}\"")
@@ -132,6 +132,8 @@ android {
         }
         resources {
             excludes += setOf(
+                "**/*.dylib",
+                "**/*.dll",
                 "kotlin-tooling-metadata.json",
                 "LICENSE.txt",
                 "META-INF/**/*.properties",
@@ -284,6 +286,7 @@ dependencies {
 
     // HTML parser
     implementation(libs.jsoup)
+    compileOnly(libs.jspecify)
 
     // Disk
     implementation(libs.disklrucache)

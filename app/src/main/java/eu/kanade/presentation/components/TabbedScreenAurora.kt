@@ -32,7 +32,6 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -72,10 +71,14 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -95,7 +98,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
 import eu.kanade.presentation.more.settings.auroraCardStyle
@@ -107,9 +112,13 @@ import eu.kanade.presentation.tutorial.coachAnchor
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
+import tachiyomi.presentation.core.util.collectAsState
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import kotlin.math.roundToInt
 
 data class TabState(
@@ -471,10 +480,19 @@ private fun AuroraTabHeader(
                                         Color.White.copy(alpha = 0.05f),
                                     ),
                                 ),
-                                shape = RoundedCornerShape(22.dp),
+                                shape = CircleShape,
                             )
                         } else {
-                            Modifier
+                            Modifier.border(
+                                width = 1.dp,
+                                brush = Brush.verticalGradient(
+                                    listOf(
+                                        Color.Black.copy(alpha = 0.12f),
+                                        Color.Black.copy(alpha = 0.04f),
+                                    ),
+                                ),
+                                shape = CircleShape,
+                            )
                         },
                     ),
                 placeholder = {
@@ -484,15 +502,15 @@ private fun AuroraTabHeader(
                     )
                 },
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colors.cardBackground,
-                    unfocusedContainerColor = colors.cardBackground,
+                    focusedContainerColor = if (colors.isDark) Color.White.copy(alpha = 0.05f) else Color.Transparent,
+                    unfocusedContainerColor = if (colors.isDark) Color.White.copy(alpha = 0.05f) else Color.Transparent,
                     focusedTextColor = colors.textPrimary,
                     unfocusedTextColor = colors.textPrimary,
                     cursorColor = colors.accent,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
                 ),
-                shape = RoundedCornerShape(22.dp),
+                shape = CircleShape,
                 singleLine = true,
                 leadingIcon = {
                     Icon(
@@ -704,10 +722,70 @@ internal fun AuroraTabRow(
         label = "tabY",
     )
 
+    val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    val showTabGlowPref by uiPreferences.showTabGlow().collectAsState()
+    val debugBypassLocks by uiPreferences.debugBypassTreasuryLocks().collectAsState()
+    val unlockableManager = remember { Injekt.get<UnlockableManager>() }
+    val showTabGlow =
+        showTabGlowPref && (debugBypassLocks || unlockableManager.isUnlockableAvailable("special_tab_glow"))
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
+            .then(
+                if (showTabGlow && !colors.isEInk) {
+                    val glowColor = colors.accent
+                    Modifier
+                        .zIndex(1f)
+                        .drawBehind {
+                            // Cosmetic reward: a soft warm halo around the whole capsule.
+                            // The capsule shape is clipped OUT (ClipOp.Difference) so the bloom
+                            // is only painted OUTSIDE the bar. This prevents the translucent tab
+                            // container from revealing layered "waves" across the tabs, while
+                            // still giving an ambient glow that is strongest along the bottom.
+                            val radiusPx = size.height / 2f
+                            val capsule = Path().apply {
+                                addRoundRect(
+                                    RoundRect(
+                                        left = 0f,
+                                        top = 0f,
+                                        right = size.width,
+                                        bottom = size.height,
+                                        cornerRadius = CornerRadius(radiusPx, radiusPx),
+                                    ),
+                                )
+                            }
+                            clipPath(capsule, clipOp = ClipOp.Difference) {
+                                // Bottom rim light only. Each thin layer is the capsule shape
+                                // pushed DOWNWARD (and barely widened), so once the capsule is
+                                // clipped out only a soft band below the bar remains. Stacking
+                                // many low-alpha layers yields a smooth bottom glow with no ring
+                                // around the top or sides.
+                                val steps = 10
+                                val maxDrop = 5.dp.toPx()
+                                val maxSideSpread = 0.dp.toPx()
+                                val layerAlpha = 0.029f
+                                for (i in steps downTo 1) {
+                                    val t = i / steps.toFloat()
+                                    val drop = maxDrop * t
+                                    val spread = maxSideSpread * t
+                                    drawRoundRect(
+                                        color = glowColor.copy(alpha = layerAlpha),
+                                        topLeft = Offset(-spread, drop),
+                                        size = Size(
+                                            width = size.width + spread * 2f,
+                                            height = size.height,
+                                        ),
+                                        cornerRadius = CornerRadius(radiusPx, radiusPx),
+                                    )
+                                }
+                            }
+                        }
+                } else {
+                    Modifier
+                },
+            )
             .then(
                 if (isLightTheme) {
                     Modifier
@@ -749,13 +827,23 @@ internal fun AuroraTabRow(
                         )
                         .border(
                             width = 1.dp,
-                            brush = Brush.verticalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.75f),
-                                    Color.White.copy(alpha = 0.28f),
-                                    Color.White.copy(alpha = 0.12f),
-                                ),
-                            ),
+                            brush = if (showTabGlow) {
+                                Brush.verticalGradient(
+                                    listOf(
+                                        colors.accent.copy(alpha = 0.55f),
+                                        colors.accent.copy(alpha = 0.28f),
+                                        colors.accent.copy(alpha = 0.12f),
+                                    ),
+                                )
+                            } else {
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color.White.copy(alpha = 0.75f),
+                                        Color.White.copy(alpha = 0.28f),
+                                        Color.White.copy(alpha = 0.12f),
+                                    ),
+                                )
+                            },
                             shape = tabShape,
                         )
                 } else if (colors.isDark && !colors.isEInk) {
@@ -763,8 +851,27 @@ internal fun AuroraTabRow(
                         .auroraCardStyle(
                             colors = colors,
                             shape = tabShape,
-                            applyDarkRimLight = true,
+                            applyDarkRimLight = !showTabGlow,
                             applyDarkShadow = false,
+                        )
+                        .then(
+                            if (showTabGlow) {
+                                val combinedBorderBrush = Brush.verticalGradient(
+                                    colorStops = arrayOf(
+                                        0.00f to Color.White.copy(alpha = 0.38f),
+                                        0.35f to Color.White.copy(alpha = 0.15f),
+                                        0.65f to colors.accent.copy(alpha = 0.15f),
+                                        1.00f to colors.accent.copy(alpha = 0.50f),
+                                    ),
+                                )
+                                Modifier.border(
+                                    width = 1.dp,
+                                    brush = combinedBorderBrush,
+                                    shape = tabShape,
+                                )
+                            } else {
+                                Modifier
+                            },
                         )
                 } else {
                     Modifier
@@ -855,7 +962,7 @@ internal fun AuroraTabRow(
             }
         }
     }
-}
+} // close AuroraTabRow
 
 @Composable
 internal fun AuroraTab(

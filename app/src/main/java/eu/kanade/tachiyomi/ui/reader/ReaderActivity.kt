@@ -397,11 +397,14 @@ class ReaderActivity : BaseActivity() {
             ) {
                 val state by viewModel.state.collectAsStateWithLifecycle()
                 val showPageNumber by viewModel.readerPreferences.showPageNumber().collectAsStateWithLifecycle()
+                val showReadingTimeLeft by viewModel.readerPreferences.showReadingTimeLeft()
+                    .collectAsStateWithLifecycle()
 
                 if (!state.menuVisible && showPageNumber) {
                     PageIndicatorText(
                         currentPage = state.currentPage,
                         totalPages = state.totalPages,
+                        estimatedMinutesLeft = if (showReadingTimeLeft) state.estimatedMinutesLeft else null,
                     )
                 }
             }
@@ -1131,12 +1134,26 @@ class ReaderActivity : BaseActivity() {
                 .onEach { setDisplayProfile(it) }
                 .launchIn(lifecycleScope)
 
-            uiPreferences.eInkProfile().changes()
+            merge(
+                readerPreferences.grayscale().changes(),
+                readerPreferences.invertedColors().changes(),
+                uiPreferences.eInkProfile().changes(),
+            )
                 .onEach {
                     setLayerPaint(
-                        readerPreferences.grayscale().get() && it.isEnabled,
-                        readerPreferences.invertedColors().get() && it.isEnabled,
+                        readerPreferences.grayscale().get(),
+                        readerPreferences.invertedColors().get(),
                     )
+                }
+                .launchIn(lifecycleScope)
+
+            merge(
+                readerPreferences.sharpening().changes(),
+                readerPreferences.denoise().changes(),
+                readerPreferences.binarization().changes(),
+            )
+                .onEach {
+                    applyRenderEffects()
                 }
                 .launchIn(lifecycleScope)
 
@@ -1152,15 +1169,6 @@ class ReaderActivity : BaseActivity() {
                 .onEach(::setCustomBrightness)
                 .launchIn(lifecycleScope)
 
-            merge(readerPreferences.grayscale().changes(), readerPreferences.invertedColors().changes())
-                .onEach {
-                    setLayerPaint(
-                        readerPreferences.grayscale().get() && isEInkMode(),
-                        readerPreferences.invertedColors().get() && isEInkMode(),
-                    )
-                }
-                .launchIn(lifecycleScope)
-
             readerPreferences.fullscreen().changes()
                 .onEach {
                     WindowCompat.setDecorFitsSystemWindows(window, !it)
@@ -1168,6 +1176,13 @@ class ReaderActivity : BaseActivity() {
                     setMenuVisibility(viewModel.state.value.menuVisible)
                 }
                 .launchIn(lifecycleScope)
+
+            // Apply initial state
+            setLayerPaint(
+                readerPreferences.grayscale().get(),
+                readerPreferences.invertedColors().get(),
+            )
+            applyRenderEffects()
         }
 
         /**
@@ -1262,6 +1277,52 @@ class ReaderActivity : BaseActivity() {
             val paint = if (grayscale || invertedColors) getCombinedPaint(grayscale, invertedColors) else null
             binding.viewerContainer.setLayerType(LAYER_TYPE_HARDWARE, paint)
         }
+
+        private fun applyRenderEffects() {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val sharpeningVal = readerPreferences.sharpening().get() / 100f
+                val denoiseVal = readerPreferences.denoise().get() / 100f
+                val binarizationVal = readerPreferences.binarization().get() / 100f
+
+                var effect: android.graphics.RenderEffect? = null
+
+                if (sharpeningVal > 0f) {
+                    val sharpShader = android.graphics.RuntimeShader(SHARPEN_SHADER)
+                    sharpShader.setFloatUniform("sharpness", sharpeningVal)
+                    effect = android.graphics.RenderEffect.createRuntimeShaderEffect(sharpShader, "inputShader")
+                }
+
+                if (denoiseVal > 0f) {
+                    val denoiseShader = android.graphics.RuntimeShader(DENOISE_SHADER)
+                    denoiseShader.setFloatUniform("denoise", denoiseVal)
+                    val denoiseEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(
+                        denoiseShader,
+                        "inputShader",
+                    )
+                    effect = if (effect != null) {
+                        android.graphics.RenderEffect.createChainEffect(denoiseEffect, effect)
+                    } else {
+                        denoiseEffect
+                    }
+                }
+
+                if (binarizationVal > 0f) {
+                    val binarizationShader = android.graphics.RuntimeShader(BINARIZATION_SHADER)
+                    binarizationShader.setFloatUniform("binarization", binarizationVal)
+                    val binarizationEffect = android.graphics.RenderEffect.createRuntimeShaderEffect(
+                        binarizationShader,
+                        "inputShader",
+                    )
+                    effect = if (effect != null) {
+                        android.graphics.RenderEffect.createChainEffect(binarizationEffect, effect)
+                    } else {
+                        binarizationEffect
+                    }
+                }
+
+                binding.viewerContainer.setRenderEffect(effect)
+            }
+        }
     }
 
     private fun applyReaderSystemBarIconStyle(menuVisible: Boolean) {
@@ -1285,3 +1346,93 @@ internal fun resolveReaderLightStatusBars(
     }
     return defaultLightStatusBars
 }
+
+private const val SHARPEN_SHADER = """
+    uniform shader inputShader;
+    uniform float sharpness;
+
+    half4 main(float2 coords) {
+        half4 center = inputShader.eval(coords);
+        half4 left = inputShader.eval(coords + float2(-1.0, 0.0));
+        half4 right = inputShader.eval(coords + float2(1.0, 0.0));
+        half4 top = inputShader.eval(coords + float2(0.0, -1.0));
+        half4 bottom = inputShader.eval(coords + float2(0.0, 1.0));
+
+        half4 sharp = center * 5.0 - (left + right + top + bottom);
+        return center + (sharp - center) * sharpness;
+    }
+"""
+
+private const val DENOISE_SHADER = """
+    uniform shader inputShader;
+    uniform float denoise;
+
+    half4 main(float2 coords) {
+        half4 color = inputShader.eval(coords);
+        half4 sum = color;
+        float count = 1.0;
+
+        for (int x = -1; x <= 1; x++) {
+            for (int y = -1; y <= 1; y++) {
+                if (x == 0 && y == 0) continue;
+                half4 neighbor = inputShader.eval(coords + float2(x, y));
+                if (distance(neighbor.rgb, color.rgb) < 0.15) {
+                    sum += neighbor;
+                    count += 1.0;
+                }
+            }
+        }
+        half4 smoothColor = sum / count;
+        return color + (smoothColor - color) * denoise;
+    }
+"""
+
+private const val BINARIZATION_SHADER = """
+    uniform shader inputShader;
+    uniform float binarization;
+
+    half4 main(float2 coords) {
+        half4 center = inputShader.eval(coords);
+        float centerLuma = (center.r + center.g + center.b) * 0.3333;
+
+        float sum = centerLuma;
+        float minVal = centerLuma;
+        float maxVal = centerLuma;
+
+        // Разреженная сетка 3x3 с шагом 2.0 (всего 8 дополнительных выборок вместо 24)
+        float2 offsets[8];
+        offsets[0] = float2(-2.0, -2.0);
+        offsets[1] = float2( 0.0, -2.0);
+        offsets[2] = float2( 2.0, -2.0);
+        offsets[3] = float2(-2.0,  0.0);
+        offsets[4] = float2( 2.0,  0.0);
+        offsets[5] = float2(-2.0,  2.0);
+        offsets[6] = float2( 0.0,  2.0);
+        offsets[7] = float2( 2.0,  2.0);
+
+        for (int i = 0; i < 8; i++) {
+            half4 col = inputShader.eval(coords + offsets[i]);
+            float luma = (col.r + col.g + col.b) * 0.3333;
+            sum += luma;
+            minVal = min(minVal, luma);
+            maxVal = max(maxVal, luma);
+        }
+
+        float mean = sum * 0.1111; // 1.0 / 9.0
+        float contrast = maxVal - minVal;
+
+        // Локальная бинаризация
+        float binaryLuma = step(mean, centerLuma);
+
+        // Бинаризация для областей с очень низким контрастом (сплошной фон)
+        float lowContrastLuma = step(0.5, centerLuma);
+
+        // Безветвленный выбор (branch-free) на основе уровня контраста
+        float isLowContrast = step(contrast, 0.15);
+        float finalLuma = mix(binaryLuma, lowContrastLuma, isLowContrast);
+
+        // Смешивание с оригиналом на основе ползунка интенсивности
+        float mixedLuma = mix(centerLuma, finalLuma, binarization);
+        return half4(mixedLuma, mixedLuma, mixedLuma, center.a);
+    }
+"""

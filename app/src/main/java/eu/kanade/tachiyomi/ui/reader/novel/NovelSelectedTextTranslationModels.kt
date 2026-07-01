@@ -16,11 +16,17 @@ data class NovelSelectedTextAnchor(
     val heightPx: Int get() = (bottomPx - topPx).coerceAtLeast(0)
 }
 
+enum class SelectedTextAction {
+    DICTIONARY,
+    TRANSLATION,
+}
+
 data class NovelSelectedTextSelection(
     val sessionId: Long,
     val renderer: NovelSelectedTextRenderer,
     val text: String,
     val anchor: NovelSelectedTextAnchor,
+    val triggerAction: SelectedTextAction? = null,
 ) {
     val normalizedText: String = normalizeNovelSelectedText(text)
 

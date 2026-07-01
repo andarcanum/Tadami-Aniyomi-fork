@@ -13,6 +13,7 @@ import androidx.viewpager.widget.ViewPager
 import com.tadami.aurora.R
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import eu.kanade.tachiyomi.ui.reader.ReaderPreloadManager
 import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
@@ -292,8 +293,8 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
             return
         }
 
-        // Preload next chapter once we're within the last 5 pages of the current chapter
-        val inPreloadRange = pages.size - page.number < 5
+        // Preload next chapter once we're within the last dynamic pages of the current chapter
+        val inPreloadRange = pages.size - page.number < ReaderPreloadManager.nextChapterPreloadThreshold
         if (config.preloadNextChapter && inPreloadRange && allowPreload && page.chapter == adapter.currentChapter) {
             logcat { "Request preload next chapter because we're at page ${page.number} of ${pages.size}" }
             adapter.nextTransition?.to?.let(activity::requestPreloadChapter)
@@ -424,7 +425,7 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
      * Resets the adapter in order to recreate all the views. Used when a image configuration is
      * changed.
      */
-    private fun refreshAdapter() {
+    internal fun refreshAdapter() {
         val currentItem = pager.currentItem
         adapter.refresh()
         pager.adapter = adapter

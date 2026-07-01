@@ -104,8 +104,12 @@ data class NovelReaderSettings(
     val textSelectionEnabled: Boolean = false,
 
     // Selected text translation
-    val selectedTextTranslationEnabled: Boolean = true,
-    val selectedTextTranslationTargetLanguage: String = "Russian",
+    val selectedTextTranslationEnabled: Boolean = false,
+    val selectedTextTranslationTargetLanguage: String = "ru",
+
+    // Novel dictionary
+    val novelDictionaryEnabled: Boolean = false,
+    val novelDictionaryTargetLanguage: String = "ru",
 
     // Gemini Translation
     val geminiEnabled: Boolean = false,
@@ -643,7 +647,19 @@ class NovelReaderPreferences(
         preferenceStore.getBoolean("novel_reader_selected_text_translation_enabled", false)
 
     fun selectedTextTranslationTargetLanguage() =
-        preferenceStore.getString("novel_reader_selected_text_translation_target_language", "Russian")
+        preferenceStore.getString("novel_reader_selected_text_translation_target_language", "ru")
+
+    fun novelDictionaryEnabled() =
+        preferenceStore.getBoolean("novel_reader_dictionary_enabled", false)
+
+    fun novelDictionarySource() =
+        preferenceStore.getString("novel_reader_dictionary_source", "ONLINE")
+
+    fun novelDictionaryFallbackLanguage() =
+        preferenceStore.getString("novel_reader_dictionary_fallback_language", "en")
+
+    fun novelDictionaryTargetLanguage() =
+        preferenceStore.getString("novel_reader_dictionary_target_language", "ru")
 
     fun ttsEnabled() = preferenceStore.getBoolean("novel_reader_tts_enabled", false)
 
@@ -1185,6 +1201,8 @@ class NovelReaderPreferences(
             selectedTextTranslationEnabled().get(),
             selectedTextTranslationTargetLanguage =
             selectedTextTranslationTargetLanguage().get(),
+            novelDictionaryEnabled = novelDictionaryEnabled().get(),
+            novelDictionaryTargetLanguage = novelDictionaryTargetLanguage().get(),
             geminiEnabled = geminiEnabled().get(),
             geminiApiKey = override?.geminiApiKey ?: geminiApiKey().get(),
             geminiModel = override?.geminiModel ?: geminiModel().get(),
@@ -1406,6 +1424,8 @@ class NovelReaderPreferences(
             textSelectionEnabled().changes(),
             selectedTextTranslationEnabled().changes(),
             selectedTextTranslationTargetLanguage().changes(),
+            novelDictionaryEnabled().changes(),
+            novelDictionaryTargetLanguage().changes(),
         ) { values: Array<Any?> ->
             AdvancedSettings(
                 customCSS = values[0] as String,
@@ -1413,6 +1433,8 @@ class NovelReaderPreferences(
                 textSelectionEnabled = values[2] as Boolean,
                 selectedTextTranslationEnabled = values[3] as Boolean,
                 selectedTextTranslationTargetLanguage = values[4] as String,
+                novelDictionaryEnabled = values[5] as Boolean,
+                novelDictionaryTargetLanguage = values[6] as String,
             )
         }.distinctUntilChanged()
 
@@ -1638,6 +1660,8 @@ class NovelReaderPreferences(
                 textSelectionEnabled = advanced.textSelectionEnabled,
                 selectedTextTranslationEnabled = advanced.selectedTextTranslationEnabled,
                 selectedTextTranslationTargetLanguage = advanced.selectedTextTranslationTargetLanguage,
+                novelDictionaryEnabled = advanced.novelDictionaryEnabled,
+                novelDictionaryTargetLanguage = advanced.novelDictionaryTargetLanguage,
                 geminiEnabled = gemini.enabled,
                 geminiApiKey = override?.geminiApiKey ?: gemini.apiKey,
                 geminiModel = override?.geminiModel ?: gemini.model,
@@ -1787,6 +1811,8 @@ class NovelReaderPreferences(
         val textSelectionEnabled: Boolean,
         val selectedTextTranslationEnabled: Boolean,
         val selectedTextTranslationTargetLanguage: String,
+        val novelDictionaryEnabled: Boolean,
+        val novelDictionaryTargetLanguage: String,
     )
 
     private data class GeminiSettings(

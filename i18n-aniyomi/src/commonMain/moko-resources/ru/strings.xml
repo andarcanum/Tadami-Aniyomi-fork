@@ -66,7 +66,7 @@
     <string name="pref_disable_home_header_scroll_hide">Закрепить шапку</string>
     <string name="pref_disable_home_header_scroll_hide_summary">Оставлять шапку с приветствием всегда видимой и не скрывать её при прокрутке.</string>
     <string name="pref_aurora_library_swipe_switches_categories">Свайп переключает категории</string>
-    <string name="pref_aurora_library_swipe_switches_categories_summary">Горизонтальные свайпы в библиотеке переключают категории вместо разделов (аниме/манга/ранобэ).</string>
+    <string name="pref_aurora_library_swipe_switches_categories_summary">Гор��зонтальные свайпы в библиотеке переключают категории вместо разделов (аниме/манга/ранобэ).</string>
     <string name="label_player_settings">Настройки проигрывателя</string>
     <string name="action_search_player_settings">Поиск по настройкам проигрывателя</string>
     <string name="pref_player_internal">Внутренний проигрыватель</string>
@@ -137,7 +137,7 @@
     <string name="single_action_switch">Поменять эпизод</string>
     <string name="single_action_custom">Своё</string>
     <string name="pref_category_long_press">Долгое нажатие</string>
-    <string name="pref_long_press_action">Действие при долгом нажатии</string>
+    <string name="pref_long_press_action">��ействие при долгом нажатии</string>
     <string name="long_press_action_none">Нет</string>
     <string name="long_press_action_screenshot">Сделать скриншот</string>
     <string name="long_press_action_playback_speed">Динамическое изменение скорости</string>
@@ -443,7 +443,7 @@
     <string name="novel_reader_renderer_disabled_webview_summary">Недоступно, пока глава открыта в WebView.</string>
     <string name="novel_reader_renderer_disabled_bionic_summary">Недоступно, пока включено Bionic Reading.</string>
     <string name="novel_reader_settings_surface_strategy">Доступность настроек</string>
-    <string name="novel_reader_quick_dialog_global_policy_summary">Подробные политики выравнивания текста источника и кэша глав остаются в глобальных настройках; это быстрое меню оставлено для часто меняемых параметров во время чтения.</string>
+    <string name="novel_reader_quick_dialog_global_policy_summary">Подробные политики выравнивания текста источника и кэш�� глав остаются в глобальных настройках; это быстрое меню оставлено для часто меняемых параметров во время чтения.</string>
     <string name="novel_reader_global_settings_quick_dialog_summary">Глобальные настройки хранят долгоживущие значения по умолчанию, вроде выравнивания текста источника и кэша глав; быстрое меню в ридере оставлено для параметров, которые меняют прямо во время чтения.</string>
     <string name="novel_reader_clear_chapter_cache">Очистить кэш глав</string>
     <string name="novel_reader_clear_chapter_cache_summary">Удалить весь кэш прочитанных глав (не влияет на загрузки)</string>
@@ -461,9 +461,9 @@
     <string name="novel_reader_custom_js">Пользовательский JavaScript</string>
     <string name="novel_reader_custom_js_hint">JavaScript выполняется после загрузки главы</string>
     <string name="novel_reader_custom_js_set">%d символов</string>
-    <string name="novel_reader_text_selection_enabled">Выделение текста</string>
-    <string name="novel_reader_text_selection_enabled_summary">Выделяйте и копируйте текст без перевода</string>
-    <string name="novel_reader_selected_text_translation_section">Перевод выделенного текста</string>
+    <string name="novel_reader_text_selection_enabled">Включить выделение текста</string>
+    <string name="novel_reader_text_selection_enabled_summary">Необходимо для словаря и перевода. Выделяйте текст, чтобы копировать, искать определения или переводить.</string>
+    <string name="novel_reader_selected_text_translation_section">Выделение текста</string>
     <string name="novel_reader_selected_text_translation_enabled">Включить перевод выделенного текста</string>
     <string name="novel_reader_selected_text_translation_target_language">Язык перевода</string>
     <string name="novel_reader_selected_text_translation_global_only_summary">Этот параметр глобальный и игнорирует source overrides.</string>
@@ -471,9 +471,18 @@
     <string name="novel_reader_selected_text_translation_too_long">Выделение слишком длинное для перевода.</string>
     <string name="novel_reader_selected_text_translation_retry_cooldown">Подождите перед повторной попыткой перевода.</string>
     <string name="novel_reader_selected_text_translation_action_translate">Перевести</string>
+    <string name="novel_reader_text_selection_action_dictionary">Словарь</string>
+    <string name="novel_reader_text_selection_action_translate">Перевод</string>
     <string name="novel_reader_selected_text_translation_action_retry">Повторить</string>
     <string name="novel_reader_selected_text_translation_action_close">Закрыть</string>
     <string name="novel_reader_selected_text_translation_loading">Переводим выделенный текст…</string>
+    <string name="novel_reader_dictionary_action_lookup">Определение</string>
+    <string name="novel_reader_dictionary_loading">Поиск определения…</string>
+    <string name="novel_reader_dictionary_enabled">Поиск в словаре</string>
+    <string name="novel_reader_dictionary_enabled_summary">Выделите текст в читалке, чтобы посмотреть определения онлайн</string>
+    <string name="novel_reader_dictionary_target_language">Язык словаря</string>
+    <string name="novel_reader_dictionary_source">Источник: %1$s</string>
+    <string name="novel_reader_dictionary_fallback_language">Показаны результаты для %1$s</string>
     <string name="novel_reader_selected_text_translation_unavailable">Перевод недоступен.</string>
     <string name="novel_reader_tts_section">Озвучка текста</string>
     <string name="novel_reader_tts_enabled">Включить озвучку текста</string>
@@ -581,7 +590,7 @@
     <string name="novel_reader_gemini_top_k">Top K</string>
     <string name="novel_reader_gemini_source_lang">Язык источника</string>
     <string name="novel_reader_gemini_target_lang">Язык перевода</string>
-    <string name="novel_reader_translation_languages">Языки перевода</string>
+    <string name="novel_reader_translation_languages">Языки перев��да</string>
     <string name="novel_reader_translation_languages_summary">Выберите язык исходного текста и язык, на который нужно переводить.</string>
     <string name="novel_reader_gemini_prompt_mode">Режим промпта</string>
     <string name="novel_reader_gemini_prompt_mode_classic">Классический</string>
@@ -603,7 +612,7 @@
     <string name="novel_reader_gemini_show_translation">Показать перевод</string>
     <string name="novel_reader_gemini_advanced_show">Доп. настройки</string>
     <string name="novel_reader_gemini_advanced_hide">Скрыть доп. настройки</string>
-    <string name="novel_reader_gemini_private_python_like_mode">Python-like режим (цельная глава, ответ до ***)</string>
+    <string name="novel_reader_gemini_private_python_like_mode">Python-like режим (цельная глава, о��вет до ***)</string>
     <string name="novel_reader_gemini_action_start">Старт</string>
     <string name="novel_reader_gemini_action_clear">Очистить</string>
     <string name="novel_reader_gemini_action_close">Закрыть</string>
@@ -758,7 +767,7 @@
     <string name="novel_reader_gemini_generation_dialogue_plus_advantage">Речь персонажей звучит естественнее и эмоциональнее</string>
     <string name="novel_reader_gemini_generation_private_pulse_title">18+ Импульс</string>
     <string name="novel_reader_gemini_generation_private_pulse_scenario">Эротические и напряжённые сцены</string>
-    <string name="novel_reader_gemini_generation_private_pulse_advantage">Максимум чувственности, экспрессии и «живого» ритма</string>
+    <string name="novel_reader_gemini_generation_private_pulse_advantage">Максимум чу��ственности, экспрессии и «живого» ритма</string>
     <string name="novel_reader_gemini_generation_unbound_title">Без тормозов</string>
     <string name="novel_reader_gemini_generation_unbound_scenario">Экспериментальный режим для самых дерзких глав</string>
     <string name="novel_reader_gemini_generation_unbound_advantage">Пиковая креативность и вариативность слога</string>
@@ -1121,7 +1130,7 @@
     <string name="pref_behavior">Поведение главы</string>
     <string name="pref_auto_update_manga_on_mark_read">Обновлять прогресс, когда отмечено как Прочитано/Просмотрено</string>
     <string name="pref_clear_chapter_cache">Очистить кэш глав и серий</string>
-    <string name="pref_auto_clear_chapter_cache">Очистить кэш глав/серий при запуске приложения</string>
+    <string name="pref_auto_clear_chapter_cache">Очистить кэш глав/серий при запуске пр��ложения</string>
     <string name="clear_database_confirmation">Вы уверены? Завершенные серии и главы а также прогресс не библиотечного контента будет потерян</string>
     <string name="pref_incognito_mode_summary">Приостанавливает историю чтения</string>
     <string name="manga_from_library">Из библиотеки</string>
@@ -1317,7 +1326,7 @@
     <string name="aurora_greeting_library_100">100+ тайтлов! Твой бэклог вызывает трепет (и сочувствие)</string>
 
     <!-- Weekend/Special Days Greetings -->
-    <string name="aurora_greeting_weekend_time">Ура, выходные! Можно легально стать овощем перед экраном</string>
+    <string name="aurora_greeting_weekend_time">Ура, выходные! Можно легально стать овощем ��еред экраном</string>
     <string name="aurora_greeting_saturday_perfect">Суббота, вкусняшки, плед и аниме. План капкан!</string>
     <string name="aurora_greeting_sunday_marathon">Воскресенье — официальный день марафонов. Никаких сожалений!</string>
     <string name="aurora_greeting_weekend_relax">Выходные созданы для того, чтобы забыть о 3D-мире</string>
@@ -1386,7 +1395,7 @@
     <string name="aurora_greeting_night_red_eyes">У тебя уже Шаринган от недосыпа открылся, иди спать! 👁️🩸</string>
     <string name="aurora_greeting_night_3am">Глубокая ночь — идеальное время для драмы, чтобы поплакать в подушку 😭</string>
     <string name="aurora_greeting_weekend_pajamas">Выходные — это значит не снимать пижаму до понедельника 👘</string>
-    <string name="aurora_greeting_weekend_marathon_prep">Готовь снеки, закрывай шторы — начинается великий марафон! 🏃‍♂️💨</string>
+    <string name="aurora_greeting_weekend_marathon_prep">Готовь снеки, закрывай штор�� — начинается великий марафон! 🏃‍♂️💨</string>
     <string name="aurora_greeting_weekend_no_regrets">Никаких сожалений о потраченном времени. Оно потрачено на искусство! 🎨</string>
     <string name="aurora_greeting_weekday_survival">Пережить будни — это тоже своего рода хардкор-квест 🛡️</string>
     <string name="aurora_greeting_weekday_motivation">Сделай вид, что ты в монтаже тренировок. Скоро выходные! 🎬</string>
@@ -1449,7 +1458,7 @@
     <string name="aurora_greeting_ui_update_check">Свайпай вниз, чтобы обновить. Вдруг автор внезапно выпустил экстру? ⬇️</string>
     <string name="aurora_greeting_ui_dark_mode">Тёмная тема — друг молодёжи и спонсор бессонных ночей 🌙</string>
     <string name="aurora_greeting_ui_haptic">Чувствуешь вибрацию? Это новые главы стучатся к тебе в библиотеку 📳</string>
-    <string name="aurora_greeting_ui_welcome_master">Библиотека отсортирована, обновления проверены. Ждём ваших указаний! 📋</string>
+    <string name="aurora_greeting_ui_welcome_master">Библиотека отсортирована, обновления проверены. Ждём ваших указаний! ����</string>
     <!-- Browse Screen -->
     <string name="aurora_browse">Обзор</string>
     <string name="aurora_discover_sources">Открыть источники</string>
@@ -1647,9 +1656,9 @@
 
     <!-- Shikimori Integration -->
     <string name="pref_use_shikimori_rating">Использовать рейтинг и тип из Shikimori</string>
-    <string name="pref_use_shikimori_rating_summary">Отображать рейтинг и тип аниме из базы данных Shikimori.one</string>
+    <string name="pref_use_shikimori_rating_summary">Отображать рейтинг и тип аниме из базы данных Shikimori.io</string>
     <string name="pref_use_shikimori_covers">Использовать постеры Shikimori</string>
-    <string name="pref_use_shikimori_covers_summary">Заменять постеры аниме на высококачественные версии из Shikimori.one</string>
+    <string name="pref_use_shikimori_covers_summary">Заменять постеры аниме на высококачественные версии из Shikimori.io</string>
 
     <!-- Achievements -->
     <string name="label_achievements">Достижения</string>
@@ -1723,7 +1732,7 @@
 
     <string name="achievement_secret_weeb_awakening_hint_vague">Примите культуру во всех её проявлениях.</string>
     <string name="achievement_secret_weeb_awakening_hint_direct">Ваша библиотека должна охватывать мангу, аниме и ранобэ.</string>
-    <string name="achievement_secret_weeb_awakening_hint_obvious">Соберите 50+ тайтлов во всех трёх медиа-форматах (Манга, Аниме, Ранобэ).</string>
+    <string name="achievement_secret_weeb_awakening_hint_obvious">Соберите 50+ тайтлов во всех трёх медиа-форматах (Манга, А��име, Ранобэ).</string>
 
     <string name="achievement_first_chapter_title">Первые шаги</string>
     <string name="achievement_first_chapter_desc">Прочитайте свою первую главу</string>
@@ -2162,7 +2171,7 @@
     <string name="novel_reader_google_translate_translated">Перевод</string>
     <string name="novel_reader_google_translate_clear">Очистить перевод</string>
     <string name="novel_reader_google_translate_progress">Перевод: %1$d%%</string>
-    <string name="novel_reader_google_translate_preparing">Подготовка перевода…</string>
+    <string name="novel_reader_google_translate_preparing">Подготовк�� перевода…</string>
     <string name="novel_reader_google_translate_backend_simple">Перевод Google онлайн</string>
     <string name="novel_reader_google_translate_show_translation">Показать перевод</string>
     <string name="novel_reader_google_translate_hide_translation">Скрыть перевод</string>
@@ -2500,4 +2509,8 @@
     <string name="anixart_import_change_match">Изменить совпадение</string>
     <string name="anixart_import_score_match">Схожесть: %1$d%%</string>
     <string name="anixart_import_preference_group_title">Импорт</string>
+    <!-- Time Paradox Achievement -->
+    <string name="achievement_time_paradox_title">Временной парадокс</string>
+    <string name="achievement_time_paradox_desc">Почитайте или посмотрите что-то ровно в 11:11</string>
+    <string name="achievement_time_paradox_hint">Симметрия времени</string>
 </resources>

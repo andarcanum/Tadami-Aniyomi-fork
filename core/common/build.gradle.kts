@@ -44,6 +44,7 @@ dependencies {
     implementation(libs.preferencektx)
 
     implementation(libs.jsoup)
+    compileOnly(libs.jspecify)
 
     // Sort
     implementation(libs.natural.comparator)

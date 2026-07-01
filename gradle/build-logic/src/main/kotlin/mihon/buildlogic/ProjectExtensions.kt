@@ -76,8 +76,6 @@ internal fun Project.configureAndroid(commonExtension: ApplicationExtension) {
         compilerOptions {
             jvmTarget.set(AndroidConfig.JvmTarget)
             freeCompilerArgs.addAll(
-                "-Xcontext-parameters",
-                "-Xannotation-default-target=param-property",
                 "-opt-in=kotlin.RequiresOptIn",
             )
 
@@ -100,8 +98,6 @@ internal fun Project.configureAndroid(commonExtension: LibraryExtension) {
         compilerOptions {
             jvmTarget.set(AndroidConfig.JvmTarget)
             freeCompilerArgs.addAll(
-                "-Xcontext-parameters",
-                "-Xannotation-default-target=param-property",
                 "-opt-in=kotlin.RequiresOptIn",
             )
 
@@ -124,8 +120,6 @@ internal fun Project.configureAndroid(commonExtension: TestExtension) {
         compilerOptions {
             jvmTarget.set(AndroidConfig.JvmTarget)
             freeCompilerArgs.addAll(
-                "-Xcontext-parameters",
-                "-Xannotation-default-target=param-property",
                 "-opt-in=kotlin.RequiresOptIn",
             )
 

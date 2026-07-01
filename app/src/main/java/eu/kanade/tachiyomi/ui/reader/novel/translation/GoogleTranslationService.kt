@@ -80,7 +80,6 @@ class GoogleTranslationService(
             }
         }
 
-        lastFailure
         null
     }
 

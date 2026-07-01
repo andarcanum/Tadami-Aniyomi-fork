@@ -28,6 +28,8 @@ class ReaderPreferences(
 
     fun showPageNumber() = preferenceStore.getBoolean("pref_show_page_number_key", true)
 
+    fun showReadingTimeLeft() = preferenceStore.getBoolean("pref_show_reading_time_left_key", true)
+
     fun showReadingMode() = preferenceStore.getBoolean("pref_show_reading_mode", true)
 
     // region Bottom bar button visibility
@@ -99,6 +101,8 @@ class ReaderPreferences(
     fun landscapeZoom() = preferenceStore.getBoolean("landscape_zoom", true)
 
     fun cropBordersWebtoon() = preferenceStore.getBoolean("crop_borders_webtoon", false)
+
+    fun webtoonSmartFit() = preferenceStore.getBoolean("webtoon_smart_fit", false)
 
     fun webtoonSidePadding() = preferenceStore.getInt("webtoon_side_padding", WEBTOON_PADDING_MIN)
 
@@ -206,11 +210,21 @@ class ReaderPreferences(
 
     // endregion
 
-    // region Split two page spread
-
     fun dualPageSplitPaged() = preferenceStore.getBoolean("pref_dual_page_split", false)
 
     fun dualPageInvertPaged() = preferenceStore.getBoolean("pref_dual_page_invert", false)
+
+    fun joinDoublePages() = preferenceStore.getBoolean("pref_join_double_pages", false)
+
+    fun shiftDoublePages() = preferenceStore.getBoolean("pref_shift_double_pages", false)
+
+    fun adaptivePreload() = preferenceStore.getBoolean("pref_adaptive_preload", false)
+
+    fun sharpening() = preferenceStore.getInt("pref_sharpening", 0)
+
+    fun denoise() = preferenceStore.getInt("pref_denoise", 0)
+
+    fun binarization() = preferenceStore.getInt("pref_binarization", 0)
 
     fun dualPageSplitWebtoon() = preferenceStore.getBoolean("pref_dual_page_split_webtoon", false)
 

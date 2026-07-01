@@ -1,7 +1,7 @@
 package tachiyomi.domain.shikimori.model
 
 /**
- * Metadata from Shikimori.one for an anime.
+ * Metadata from Shikimori.io for an anime.
  *
  * Used to display rating, type, status, and cover from Shikimori in Aurora anime cards.
  */

@@ -49,6 +49,7 @@ import eu.kanade.tachiyomi.util.lang.byteSize
 import eu.kanade.tachiyomi.util.lang.takeBytes
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.cacheImageDir
+import eu.kanade.tachiyomi.util.system.connectivityManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -174,6 +175,8 @@ class ReaderViewModel @JvmOverloads constructor(
     private var seriesInterstitialShownForChapterId: Long? = null
 
     private var chapterToDownload: MangaDownload? = null
+
+    private val speedTracker = ReadingSpeedTracker()
 
     /**
      * Full chapter list for gap detection. This intentionally ignores reader skip filters, so
@@ -593,6 +596,13 @@ class ReaderViewModel @JvmOverloads constructor(
             return
         }
 
+        // Track reading speed and update dynamic preloading
+        speedTracker.addPageTransition(System.currentTimeMillis())
+        val context = Injekt.get<Application>()
+        val isMetered = context.connectivityManager.isActiveNetworkMetered
+        val bufferSize = calculatePreloadBufferSize(speedTracker.getAverageSpeedSeconds(), isMetered)
+        ReaderPreloadManager.dynamicPreloadPagesAfter = bufferSize
+
         val selectedChapter = page.chapter
         val pages = selectedChapter.pages ?: return
 
@@ -686,8 +696,23 @@ class ReaderViewModel @JvmOverloads constructor(
         val pageIndex = page.index
         val totalPages = readerChapter.pages?.size ?: 0
 
+        val averageSpeed = speedTracker.getAverageSpeedSeconds()
+        val estimatedMinutes = if (averageSpeed != null) {
+            val remainingPages = totalPages - (pageIndex + 1)
+            if (remainingPages > 0) {
+                (remainingPages * averageSpeed / 60.0).toInt()
+            } else {
+                null
+            }
+        } else {
+            null
+        }
+
         mutableState.update {
-            it.copy(currentPage = pageIndex + 1)
+            it.copy(
+                currentPage = pageIndex + 1,
+                estimatedMinutesLeft = estimatedMinutes,
+            )
         }
         readerChapter.requestedPage = pageIndex
         readerChapter.requestedPageOffset = 0
@@ -1391,6 +1416,7 @@ class ReaderViewModel @JvmOverloads constructor(
         val bookmarked: Boolean = false,
         val isLoadingAdjacentChapter: Boolean = false,
         val currentPage: Int = -1,
+        val estimatedMinutesLeft: Int? = null,
 
         /**
          * Viewer used to display the pages (pager, webtoon, ...).
@@ -1472,4 +1498,17 @@ internal fun persistAutoScrollSpeed(
     val clampedSpeed = speed.coerceIn(1, 100)
     readerPreferences.autoScrollSpeed().set(clampedSpeed)
     return clampedSpeed
+}
+
+internal fun calculatePreloadBufferSize(
+    averageSpeedSeconds: Double?,
+    isMetered: Boolean,
+): Int {
+    if (isMetered) return 2
+    if (averageSpeedSeconds == null) return 3 // Default buffer
+    return when {
+        averageSpeedSeconds < 4.0 -> 6
+        averageSpeedSeconds > 15.0 -> 2
+        else -> 3
+    }
 }
