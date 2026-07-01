@@ -138,17 +138,29 @@ If you'd like to support the work on the code, here are a few optional ways:
 
 <div align="center">
 
-[![Boosty](https://img.shields.io/badge/Boosty-Support-F15F2C?style=for-the-badge&logo=boosty&logoColor=white)](https://boosty.to/tadami/donate)
-[![CloudTips](https://img.shields.io/badge/CloudTips-SBP%20%2F%20Card-1A73E8?style=for-the-badge&logo=cashapp&logoColor=white)](https://pay.cloudtips.ru/p/cae17cec)
+If you'd like to support the work on the code, here are a few optional ways.
 
-</div>
+<br />
 
-**Crypto (copy the address):**
+<a href="https://boosty.to/tadami/donate"><img src="https://img.shields.io/badge/Boosty-Support-F15F2C?style=for-the-badge&logo=boosty&logoColor=white" alt="Boosty" height="34" /></a>&nbsp;&nbsp;
+<a href="https://pay.cloudtips.ru/p/cae17cec"><img src="https://img.shields.io/badge/CloudTips-SBP%20%2F%20Card-1A73E8?style=for-the-badge&logo=cashapp&logoColor=white" alt="CloudTips" height="34" /></a>
+
+<sub>Our Boosty blog: <a href="https://boosty.to/tadami"><b>boosty.to/tadami</b></a></sub>
+
+<br />
+
+<details>
+<summary><b>💠 Crypto (USDT)</b></summary>
+<br />
 
 | Asset | Network | Address |
-| --- | --- | --- |
-| ![USDT](https://img.shields.io/badge/USDT-TON-26A17B?style=flat-square&logo=tether&logoColor=white) | TON | `UQBTdyHogZWuUnv10WfFUM0yQ8lc3iXFh-4JyLStNirFCBrm` |
-| ![USDT](https://img.shields.io/badge/USDT-TRC20-26A17B?style=flat-square&logo=tether&logoColor=white) | TRON (TRC20) | `TJwbx9PNLLpMetpyJ83DpGCCdNWwkcEXTt` |
+| :---: | :---: | :--- |
+| ![USDT](https://img.shields.io/badge/USDT-26A17B?style=flat-square&logo=tether&logoColor=white) | **TON** | `UQBTdyHogZWuUnv10WfFUM0yQ8lc3iXFh-4JyLStNirFCBrm` |
+| ![USDT](https://img.shields.io/badge/USDT-26A17B?style=flat-square&logo=tether&logoColor=white) | **TRON (TRC20)** | `TJwbx9PNLLpMetpyJ83DpGCCdNWwkcEXTt` |
+
+</details>
+
+</div>
 
 ## Credits
 
