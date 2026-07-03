@@ -12,10 +12,11 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.manga.MangaSourceOptionsDialog
+import eu.kanade.presentation.browse.manga.MangaSourceUiModel
 import eu.kanade.presentation.browse.manga.MangaSourcesScreen
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
-import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
+import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourcePagerScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
@@ -49,7 +50,25 @@ fun Screen.mangaSourcesTab(): TabContent {
                 state = state,
                 contentPadding = contentPadding,
                 onClickItem = { source, listing ->
-                    navigator.push(BrowseMangaSourceScreen(source.id, listing.query))
+                    val sourceIds = if (state.pinnedItems.any { it.id == source.id } && !state.verticalPinnedLayout) {
+                        state.pinnedItems.map { it.id }
+                    } else {
+                        var currentHeaderLang: String? = null
+                        val groups = mutableMapOf<String, MutableList<Long>>()
+                        state.items.forEach { uiModel ->
+                            when (uiModel) {
+                                is MangaSourceUiModel.Header -> {
+                                    currentHeaderLang = uiModel.language
+                                }
+                                is MangaSourceUiModel.Item -> {
+                                    val lang = currentHeaderLang ?: ""
+                                    groups.getOrPut(lang) { mutableListOf() }.add(uiModel.source.id)
+                                }
+                            }
+                        }
+                        groups.values.firstOrNull { it.contains(source.id) } ?: listOf(source.id)
+                    }
+                    navigator.push(BrowseMangaSourcePagerScreen(source.id, sourceIds, listing.query))
                 },
                 onClickPin = screenModel::togglePin,
                 onLongClickItem = screenModel::showSourceDialog,
