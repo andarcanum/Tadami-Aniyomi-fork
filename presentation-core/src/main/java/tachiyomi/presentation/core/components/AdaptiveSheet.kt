@@ -165,6 +165,7 @@ private fun PhoneAdaptiveSheet(
     var dismissRequested by remember { mutableStateOf(false) }
     var dismissRequestedByDrag by remember { mutableStateOf(false) }
     var isDragging by remember { mutableStateOf(false) }
+    var sheetHeight by remember { mutableStateOf(-1) }
     val scrimAlpha by animateFloatAsState(
         targetValue = scrimTargetAlpha,
         animationSpec = SHEET_ANIMATION_SPEC,
@@ -214,11 +215,14 @@ private fun PhoneAdaptiveSheet(
                 .statusBarsPadding()
                 .padding(top = 8.dp)
                 .onSizeChanged {
-                    val anchors = DraggableAnchors {
-                        0 at 0f
-                        1 at it.height.toFloat()
+                    if (it.height != sheetHeight) {
+                        sheetHeight = it.height
+                        val anchors = DraggableAnchors {
+                            0 at 0f
+                            1 at it.height.toFloat()
+                        }
+                        anchoredDraggableState.updateAnchors(anchors)
                     }
-                    anchoredDraggableState.updateAnchors(anchors)
                 }
                 .offset {
                     IntOffset(
@@ -283,11 +287,14 @@ private fun PhoneAdaptiveSheet(
         }
 
         LaunchedEffect(sheetShown, dismissRequested, isDragging, anchoredDraggableState.offset) {
+            val maxPosition = anchoredDraggableState.anchors.maxPosition()
             if (
                 sheetShown &&
                 !dismissRequested &&
                 !isDragging &&
-                anchoredDraggableState.offset >= anchoredDraggableState.anchors.maxPosition()
+                maxPosition.isFinite() &&
+                maxPosition > 0f &&
+                anchoredDraggableState.offset >= maxPosition
             ) {
                 dismissRequestedByDrag = true
                 dismissRequested = true
@@ -363,4 +370,4 @@ private fun AnchoredDraggableState<Int>.preUpPostDownNestedScrollConnection(
         private fun Velocity.toFloat() = y
 
         private fun Offset.toFloat(): Float = y
-    }
+    }
