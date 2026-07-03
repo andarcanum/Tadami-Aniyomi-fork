@@ -56,8 +56,8 @@ const float PUPIL      = 0.46;
 const float BLINK      = 0.15;
 const float VEINS      = 2.00;
 const float IRIS       = 0.57;
-const float TEAR_AMT   = 0.85;
-const float TEAR_SPD   = 0.25;
+const float TEAR_AMT   = 0.91;
+const float TEAR_SPD   = 0.10;
 const float BLOOD      = 0.31;
 const float PULSE      = 0.66;
 const float FOG        = 1.91;
@@ -116,6 +116,19 @@ float rfbm(float2 p){
     return v;
 }
 
+// full-detail fbm for the eye surface + tears; called ONLY inside gated
+// regions (eye / narrow tear strip), so its extra octaves cost almost nothing.
+float fbmHQ(float2 p){
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        v += a * vnoise(p);
+        p *= 2.02;
+        a *= 0.5;
+    }
+    return v;
+}
+
 float embers(float2 uv, float t){
     float e = 0.0;
     for (int i = 0; i < 3; i++) {
@@ -129,7 +142,7 @@ float embers(float2 uv, float t){
         float2 c = float2(0.5 + 0.32 * sin(h * 40.0 + t * 0.7), 0.5);
         float dd = length(f - c);
         float tw = 0.55 + 0.45 * sin(t * 3.0 + h * 60.0);
-        e += smoothstep(0.16, 0.0, dd) * step(0.62, h) * tw * (0.7 - 0.18 * fi);
+        e += (1.0 - smoothstep(0.0, 0.16, dd)) * step(0.62, h) * tw * (0.7 - 0.18 * fi);
     }
     return e;
 }
@@ -139,11 +152,12 @@ float godrays(float2 uv, float t){
     float r = length(uv);
     float ray = 0.5 + 0.5 * sin(a * 9.0 + fbm(uv * 2.0) * 4.0 + t * 0.1);
     ray = pow(ray, 2.2);
-    return ray * smoothstep(1.15, 0.05, r);
+    return ray * (1.0 - smoothstep(0.05, 1.15, r));
 }
 
 half4 main(float2 fragCoord){
     float2 uv = (fragCoord - 0.5 * u_resolution) / u_resolution.y;
+    uv.y = -uv.y; // AGSL/Skia is Y-down; flip to match the WebGL lab so tears fall downward
     float T = u_time;
 
     // horizontal glitch band
@@ -153,10 +167,14 @@ half4 main(float2 fragCoord){
 
     float rad = length(uv);
 
-    // LCL fog
-    float fog = fbm(uv * 3.0 + float2(0.0, T * 0.06));
-    fog *= fbm(uv * 6.5 - float2(T * 0.04, 0.0));
-    float glow = smoothstep(1.15, 0.0, rad);
+    // LCL fog. Rotate the sample domain + scroll diagonally so the value-noise
+    // grid ridges don't line up with the axes (that produced a fixed vertical
+    // stripe when a layer scrolled along only one axis).
+    float2 fp1 = float2(uv.x * 0.80 - uv.y * 0.60, uv.x * 0.60 + uv.y * 0.80);
+    float2 fp2 = float2(uv.x * 0.60 + uv.y * 0.80, -uv.x * 0.80 + uv.y * 0.60);
+    float fog = fbm(fp1 * 3.0 + float2(T * 0.035, T * 0.06));
+    fog *= fbm(fp2 * 6.5 + float2(-T * 0.05, T * 0.04));
+    float glow = 1.0 - smoothstep(0.0, 1.15, rad);
     float gr = godrays(uv, T);
     float em = embers(uv, T) * EMBERS;
     float crack = smoothstep(0.93, 1.0, rfbm(uv * 2.6 + float2(11.0, T * 0.02))) * CRACKLE;
@@ -171,37 +189,47 @@ half4 main(float2 fragCoord){
     h *= max(openA, 0.0);
     float xn = clamp(uv.x / w, -1.0, 1.0);
     float lid = h * (1.0 - xn * xn);
-    float eyeMask = smoothstep(0.006, 0.0, abs(uv.y) - lid) * step(abs(uv.x), w);
-    float rimShadow = smoothstep(0.03, 0.0, abs(abs(uv.y) - lid)) * step(abs(uv.x), w) * eyeMask;
+    float eyeMask = (1.0 - smoothstep(0.0, 0.006, abs(uv.y) - lid)) * step(abs(uv.x), w);
+    float rimShadow = (1.0 - smoothstep(0.0, 0.03, abs(abs(uv.y) - lid))) * step(abs(uv.x), w) * eyeMask;
 
     // iris / pupil
     float d = length(uv);
     float irisR = 0.15 * EYE_SIZE;
     float rr = clamp(d / irisR, 0.0, 1.4);
-    float aa = atan(uv.y, uv.x);
-    float strand = fbm(float2(aa * 40.0, rr * 4.0));
-    float crypts = fbm(float2(aa * 15.0 + 7.0, rr * 6.0));
-    float rays = 0.5 + 0.5 * sin(aa * 36.0 + strand * 3.0);
+    // expensive iris noise: only near the eye (skipped for the rest of screen)
+    float strand = 0.0;
+    float crypts = 0.0;
+    float rays = 0.0;
+    if (eyeMask > 0.0) {
+        float aa = atan(uv.y, uv.x);
+        strand = fbmHQ(float2(aa * 40.0, rr * 4.0));
+        crypts = fbmHQ(float2(aa * 15.0 + 7.0, rr * 6.0));
+        rays = 0.5 + 0.5 * sin(aa * 36.0 + strand * 3.0);
+    }
     float fib = mix(0.6, strand * (0.35 + 0.85 * rays), FIBERS);
-    float irisGrad = smoothstep(1.0, 0.0, rr);
-    float collar = smoothstep(0.07, 0.0, abs(rr - 0.42));
+    float irisGrad = 1.0 - smoothstep(0.0, 1.0, rr);
+    float collar = 1.0 - smoothstep(0.0, 0.07, abs(rr - 0.42));
     float limbal = smoothstep(0.72, 1.0, rr);
-    float irisMask = smoothstep(irisR, irisR - 0.010, d);
+    float irisMask = 1.0 - smoothstep(irisR - 0.010, irisR, d);
     float pupilR = irisR * (0.26 + 0.5 * PUPIL) * (1.0 + 0.14 * sin(T * PULSE));
-    float pupilMask = smoothstep(pupilR, pupilR - 0.006, d);
+    float pupilMask = 1.0 - smoothstep(pupilR - 0.006, pupilR, d);
 
     // catchlights (wet)
     float2 hlp = float2(-0.045 * EYE_SIZE, 0.075 * EYE_SIZE);
-    float hl = smoothstep(0.032, 0.0, length(uv - hlp));
-    float hl2 = smoothstep(0.013, 0.0, length(uv - float2(0.03, -0.028) * EYE_SIZE));
+    float hl = 1.0 - smoothstep(0.0, 0.032, length(uv - hlp));
+    float hl2 = 1.0 - smoothstep(0.0, 0.013, length(uv - float2(0.03, -0.028) * EYE_SIZE));
 
     // veins converge toward corners
-    float veinLine = smoothstep(0.55, 0.95, rfbm(uv * float2(20.0, 10.0) + 3.0));
+    // vein noise: only inside the eye white (skipped elsewhere)
     float cornerBias = smoothstep(w * 0.4, w, abs(uv.x));
-    veinLine *= 0.35 + 0.65 * cornerBias;
+    float veinLine = 0.0;
+    if (eyeMask > 0.0) {
+        veinLine = smoothstep(0.55, 0.95, rfbm(uv * float2(20.0, 10.0) + 3.0));
+        veinLine *= 0.35 + 0.65 * cornerBias;
+    }
 
     // spherical shading of the eyeball
-    float sphere = smoothstep(lid, 0.0, abs(uv.y));
+    float sphere = 1.0 - smoothstep(0.0, max(lid, 0.0001), abs(uv.y));
 
     float3 col;
     if (u_light < 0.5) {
@@ -229,10 +257,10 @@ half4 main(float2 fragCoord){
         col = mix(col, eye, eyeMask);
         col = mix(col, float3(0.0), rimShadow * 0.55);
 
-        if (uv.y < 0.02) {
-            float env = smoothstep(w * 1.15, 0.0, abs(uv.x)) * smoothstep(0.02, -0.02, uv.y);
-            float s1 = fbm(float2(uv.x * 9.0, uv.y * 2.6 + T * TEAR_SPD));
-            float s2 = fbm(float2(uv.x * 17.0 + 9.0, uv.y * 3.4 + T * TEAR_SPD * 1.4));
+        if (uv.y < 0.02 && abs(uv.x) < w * 1.4) {
+            float env = (1.0 - smoothstep(0.0, w * 1.15, abs(uv.x))) * (1.0 - smoothstep(-0.02, 0.02, uv.y));
+            float s1 = fbmHQ(float2(uv.x * 9.0, uv.y * 2.6 + T * TEAR_SPD));
+            float s2 = fbmHQ(float2(uv.x * 17.0 + 9.0, uv.y * 3.4 + T * TEAR_SPD * 1.4));
             float drip = smoothstep(0.5, 0.86, max(s1, s2 * 0.9)) * env;
             float tears = clamp(drip * TEAR_AMT, 0.0, 1.0);
             float glint = smoothstep(0.72, 0.8, s1) * env;
@@ -240,7 +268,7 @@ half4 main(float2 fragCoord){
             col = mix(col, tearCol, tears);
             col += float3(1.0, 0.5, 0.4) * glint * WET * 0.6;
         }
-        float vig = smoothstep(1.25, 0.2, rad);
+        float vig = 1.0 - smoothstep(0.2, 1.25, rad);
         col *= mix(1.0, vig, clamp(VIGNETTE, 0.0, 1.5));
     } else {
         // ===== LIGHT THEME (ashen apocalypse) =====
@@ -270,10 +298,10 @@ half4 main(float2 fragCoord){
         col = mix(col, eye, eyeMask);
         col = mix(col, float3(0.2, 0.0, 0.02), rimShadow * 0.7);
 
-        if (uv.y < 0.02) {
-            float env = smoothstep(w * 1.15, 0.0, abs(uv.x)) * smoothstep(0.02, -0.02, uv.y);
-            float s1 = fbm(float2(uv.x * 9.0, uv.y * 2.6 + T * TEAR_SPD));
-            float s2 = fbm(float2(uv.x * 17.0 + 9.0, uv.y * 3.4 + T * TEAR_SPD * 1.4));
+        if (uv.y < 0.02 && abs(uv.x) < w * 1.4) {
+            float env = (1.0 - smoothstep(0.0, w * 1.15, abs(uv.x))) * (1.0 - smoothstep(-0.02, 0.02, uv.y));
+            float s1 = fbmHQ(float2(uv.x * 9.0, uv.y * 2.6 + T * TEAR_SPD));
+            float s2 = fbmHQ(float2(uv.x * 17.0 + 9.0, uv.y * 3.4 + T * TEAR_SPD * 1.4));
             float drip = smoothstep(0.5, 0.86, max(s1, s2 * 0.9)) * env;
             float tears = clamp(drip * TEAR_AMT, 0.0, 1.0);
             float glint = smoothstep(0.72, 0.8, s1) * env;
@@ -281,7 +309,7 @@ half4 main(float2 fragCoord){
             col = mix(col, tearCol, tears);
             col += float3(0.9, 0.4, 0.35) * glint * WET * 0.4;
         }
-        float vig = smoothstep(1.3, 0.25, rad);
+        float vig = 1.0 - smoothstep(0.25, 1.3, rad);
         col = mix(col, col * float3(0.6, 0.42, 0.42), (1.0 - vig) * clamp(VIGNETTE, 0.0, 1.5));
     }
 
