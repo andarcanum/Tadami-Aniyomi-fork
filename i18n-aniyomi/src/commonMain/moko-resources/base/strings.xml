@@ -2504,7 +2504,7 @@
     <string name="achievement_void_broadcast_unlocked_hint_vague">The world had turned into a crypt where the remnants of human will clung vainly to their fragile, worn-out bodies. On the cooling screen, the scar of an empty line throbbed faintly—a lock leading straight into the dead void of the Chambers of Guf. One had only to entrust to this darkness the name of that triad-completing crushing for which the blood of Antarctica was once spilled, and bones and thoughts turned into a single boiling crimson sludge. The walls of consciousness collapsed, drowning in the pain of others, and the convulsing transmitter was stripped of its carrier frequency forever.</string>
     <string name="achievement_void_broadcast_unlocked_hint_direct">The crimson sea awaits its call. Speak the name of the catastrophe where all worlds are sought.</string>
     <string name="achievement_void_broadcast_unlocked_hint_obvious">Type Third Impact into global search to burn out the core fuses.</string>
-    <string name="theme_void_red">Terminal Red</string>
+    <string name="theme_void_red">Blood of Lilith</string>
     <string name="treasury_tagline_void_red">Meltdown at core unit 01</string>
     <string name="treasury_reward_glitch_rune_red_title">Crimson Glitch Nickname Effect</string>
     <string name="treasury_reward_glitch_rune_red_description">Crimson digital noise and error runes</string>
@@ -2544,7 +2544,7 @@
 
     <!-- Meltdown Reward Screen Strings -->
     <string name="meltdown_reward_theme_tag">[ THEME ]</string>
-    <string name="meltdown_reward_theme_name">Terminal Red</string>
+    <string name="meltdown_reward_theme_name">Blood of Lilith</string>
     <string name="meltdown_reward_theme_lore">An interface scorched by a distress signal.</string>
 
     <string name="meltdown_reward_nick_tag">[ NICKNAME ]</string>

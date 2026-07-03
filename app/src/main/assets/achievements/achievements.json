@@ -1,5 +1,5 @@
 {
-  "version": 16,
+  "version": 17,
   "achievements": [
     {
       "id": "first_chapter",
@@ -2919,7 +2919,7 @@
         {
           "type": "THEME",
           "id": "theme_void_red",
-          "title": "Red Terminal Theme",
+          "title": "Blood of Lilith Theme",
           "description": "Fatal system error design with deep crimson glow"
         },
         {

@@ -11,15 +11,15 @@ import androidx.compose.ui.graphics.Color
 internal object VoidRedColorScheme : BaseColorScheme() {
 
     override val darkScheme = darkColorScheme(
-        primary = Color(0xFFFF003C), // Crimson Red
-        onPrimary = Color(0xFF000000),
-        primaryContainer = Color(0xFF5A0012),
+        primary = Color(0xFF9E0B14), // Wet Artery Blood Red
+        onPrimary = Color(0xFFFFFFFF), // High contrast white
+        primaryContainer = Color(0xFF3D0007), // Pooling Coagulated Blood
         onPrimaryContainer = Color(0xFFFFDADE),
-        inversePrimary = Color(0xFFC0002A),
+        inversePrimary = Color(0xFF8F0D15),
 
-        secondary = Color(0xFFD30030),
+        secondary = Color(0xFF8F0D15),
         onSecondary = Color(0xFFFFFFFF),
-        secondaryContainer = Color(0xFF3C000C),
+        secondaryContainer = Color(0xFF280004),
         onSecondaryContainer = Color(0xFFFFE6E8),
 
         tertiary = Color(0xFFFF8B9F),
@@ -27,18 +27,18 @@ internal object VoidRedColorScheme : BaseColorScheme() {
         tertiaryContainer = Color(0xFF8B002A),
         onTertiaryContainer = Color(0xFFFFDADE),
 
-        background = Color(0xFF000000), // Pitch Black AMOLED
+        background = Color(0xFF050001), // Pitch Black with a faint red void tint
         onBackground = Color(0xFFECEFF1), // Off-white
-        surface = Color(0xFF080808),
+        surface = Color(0xFF120305), // Oxidized metallic-crimson black
         onSurface = Color(0xFFECEFF1),
-        surfaceVariant = Color(0xFF161616),
+        surfaceVariant = Color(0xFF1B0709), // Rusty iron
         onSurfaceVariant = Color(0xFFCFD8DC),
-        surfaceTint = Color(0xFFFF003C),
+        surfaceTint = Color(0xFF9E0B14),
         inverseSurface = Color(0xFFECEFF1),
         inverseOnSurface = Color(0xFF101010),
 
-        outline = Color(0xFF8B0018),
-        outlineVariant = Color(0xFF3A000A),
+        outline = Color(0xFF5C1A20), // Rust-iron edge
+        outlineVariant = Color(0xFF2A080C),
 
         error = Color(0xFFFFB4AB),
         onError = Color(0xFF690005),
@@ -47,13 +47,13 @@ internal object VoidRedColorScheme : BaseColorScheme() {
 
         scrim = Color(0xFF000000),
 
-        surfaceDim = Color(0xFF040404),
-        surfaceBright = Color(0xFF221113),
-        surfaceContainerLowest = Color(0xFF000000),
-        surfaceContainerLow = Color(0xFF0C0C0C),
-        surfaceContainer = Color(0xFF121212),
-        surfaceContainerHigh = Color(0xFF1A1A1A),
-        surfaceContainerHighest = Color(0xFF242424),
+        surfaceDim = Color(0xFF0A0203),
+        surfaceBright = Color(0xFF220A0D),
+        surfaceContainerLowest = Color(0xFF020000),
+        surfaceContainerLow = Color(0xFF0A0203),
+        surfaceContainer = Color(0xFF100305),
+        surfaceContainerHigh = Color(0xFF180609),
+        surfaceContainerHighest = Color(0xFF20090D),
     )
 
     override val lightScheme = lightColorScheme(

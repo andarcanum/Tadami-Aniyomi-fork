@@ -2520,7 +2520,7 @@
     <string name="achievement_void_broadcast_unlocked_hint_vague">Мир превратился в склеп, где ошметки человеческой воли тщетно цеплялись за свои хрупкие, изношенные тела. На остывающем экране слабо пульсировал шрам пустой строки — шлюз, ведущий прямиком в мертвую пустоту комнат Гафа. Стоило вверить этой темноте название завершающего триаду сокрушения, ради которого когда-то пролилась кровь Антарктиды, как кости и мысли превратились в единую кипящую багровую жижу. Стены сознания рухнули, захлебываясь в чужой боли, и терзаемый судорогами передатчик навсегда лишился несущей частоты.</string>
     <string name="achievement_void_broadcast_unlocked_hint_direct">Багровое море ждёт зова. Произнеси имя катастрофы там, где ищут все миры.</string>
     <string name="achievement_void_broadcast_unlocked_hint_obvious">Введи «Третий Удар» в глобальный поиск, чтобы сжечь предохранители ядра.</string>
-    <string name="theme_void_red">Терминальный Красный</string>
+    <string name="theme_void_red">Кровь Лилит</string>
     <string name="treasury_tagline_void_red">Сбой энергоблока Евы-01</string>
     <string name="treasury_reward_glitch_rune_red_title">Эффект ника "Багровый глитч"</string>
     <string name="treasury_reward_glitch_rune_red_description">Багровые цифровые помехи и руны ошибок</string>
@@ -2560,7 +2560,7 @@
 
     <!-- Meltdown Reward Screen Strings -->
     <string name="meltdown_reward_theme_tag">[ ТЕМА ]</string>
-    <string name="meltdown_reward_theme_name">Терминальный Красный</string>
+    <string name="meltdown_reward_theme_name">Кровь Лилит</string>
     <string name="meltdown_reward_theme_lore">Интерфейс, выжженный сигналом бедствия.</string>
     
     <string name="meltdown_reward_nick_tag">[ НИК ]</string>

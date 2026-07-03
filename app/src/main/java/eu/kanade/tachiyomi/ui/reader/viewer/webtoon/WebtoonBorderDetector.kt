@@ -19,7 +19,9 @@ object WebtoonBorderDetector {
         var leftLimit = width
         var rightLimit = 0
 
-        val cleanBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bitmap.config == Bitmap.Config.HARDWARE) {
+        val cleanBitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            bitmap.config == Bitmap.Config.HARDWARE
+        ) {
             bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return Rect(0, 0, width, height)
         } else {
             bitmap

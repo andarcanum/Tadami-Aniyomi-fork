@@ -1763,7 +1763,7 @@ private fun TreasuryThemeSelector(
             theme = AppTheme.VOID_RED,
             rarity = AYMR.strings.treasury_exclusive_rarity_mythic,
             tagline = AYMR.strings.treasury_tagline_void_red,
-            accentColor = Color(0xFFFF003C),
+            accentColor = Color(0xFF9E0B14),
         ),
     )
 
