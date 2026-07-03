@@ -1,50 +1,3 @@
-package eu.kanade.presentation.components
-
-import android.graphics.RuntimeShader
-import android.os.Build
-import androidx.annotation.RequiresApi
-import androidx.compose.ui.graphics.ShaderBrush
-import androidx.compose.ui.graphics.drawscope.DrawScope
-
-/**
- * Isolates RuntimeShader (AGSL) usage for the "Weeping Void" background.
- * Prevents class validation crashes on devices below Android 13.
- *
- * Redesigned eye (layered iris fibers / crypts / collarette / limbal ring,
- * wet catchlights, spherical sclera, corner-biased veins, realistic tears)
- * and a darker crimson apocalypse scene (LCL fog, god-rays, embers, light
- * cracks, heavy bloom). Tuning values are the locked "Weeping Void" preset.
- */
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
-internal class WeepingVoidShader private constructor() {
-
-    private val shader = RuntimeShader(WEEPING_VOID_AGSL)
-    private val brush = ShaderBrush(shader)
-
-    /** Draw one GPU-driven pass of the weeping eye background. */
-    fun DrawScope.drawWeepingVoid(light: Boolean, time: Float) {
-        synchronized(shader) {
-            shader.setFloatUniform("u_resolution", size.width, size.height)
-            shader.setFloatUniform("u_time", time)
-            shader.setFloatUniform("u_light", if (light) 1f else 0f)
-            shader.setFloatUniform("u_quality", 0f) // ECO preset (3-octave noise)
-            drawRect(brush = brush)
-        }
-    }
-
-    companion object {
-        private var instance: WeepingVoidShader? = null
-
-        fun getInstance(): WeepingVoidShader {
-            return instance ?: synchronized(this) {
-                instance ?: WeepingVoidShader().also { instance = it }
-            }
-        }
-    }
-}
-
-// Keep in sync with void_weeping_bg.agsl
-private const val WEEPING_VOID_AGSL = """
 uniform float2 u_resolution;
 uniform float  u_time;
 uniform float  u_light;
@@ -296,4 +249,3 @@ half4 main(float2 fragCoord){
     col = max(col, float3(0.0));
     return half4(col.r, col.g, col.b, 1.0);
 }
-"""

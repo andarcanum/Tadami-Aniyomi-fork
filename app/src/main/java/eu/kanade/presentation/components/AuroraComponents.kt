@@ -481,7 +481,7 @@ private fun AuroraSpecialBackgroundCanvas(
 ) {
     if (styleKey == "none" || colors.isEInk) return
 
-    var timeMillis by remember { mutableStateOf(0L) }
+    var timeMillis by remember { mutableStateOf(android.os.SystemClock.uptimeMillis()) }
 
     val facePath = remember { Path() }
     val lensPath = remember { Path() }
@@ -651,9 +651,8 @@ private fun AuroraSpecialBackgroundCanvas(
 
     if (animate) {
         LaunchedEffect(Unit) {
-            val startTime = android.os.SystemClock.uptimeMillis()
             while (true) {
-                timeMillis = android.os.SystemClock.uptimeMillis() - startTime
+                timeMillis = android.os.SystemClock.uptimeMillis()
                 kotlinx.coroutines.delay(33) // ~30 FPS throttling
             }
         }
@@ -692,7 +691,7 @@ private fun AuroraSpecialBackgroundCanvas(
     }
     val weepingVoid = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            WeepingVoidShader()
+            WeepingVoidShader.getInstance()
         } else {
             null
         }
