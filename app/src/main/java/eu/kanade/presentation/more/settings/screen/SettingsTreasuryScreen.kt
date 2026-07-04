@@ -2403,8 +2403,6 @@ private fun TreasuryAuraChannel(
                 } else {
                     MaterialTheme.colorScheme.error
                 },
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
             )
             Box(
                 modifier = Modifier
@@ -2756,8 +2754,6 @@ private fun TreasuryArtifactShard(
                     } else {
                         MaterialTheme.colorScheme.error
                     },
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
