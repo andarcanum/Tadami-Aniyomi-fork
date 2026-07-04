@@ -16,7 +16,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,11 +61,9 @@ import eu.kanade.domain.extension.manga.interactor.TrustMangaExtension
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.source.service.SourcePreferences.DataSaver
 import eu.kanade.domain.ui.UiPreferences
-import eu.kanade.presentation.components.GlitchConfig
 import eu.kanade.presentation.components.GlitchPalette
-import eu.kanade.presentation.components.GlitchStack
 import eu.kanade.presentation.components.RiftBreachDirective
-import eu.kanade.presentation.components.RiftDatamoshBackground
+import eu.kanade.presentation.components.RiftCorruptTerminal
 import eu.kanade.presentation.components.heartbeat
 import eu.kanade.presentation.components.quakeOffset
 import eu.kanade.presentation.components.rememberGlitchTime
@@ -816,7 +813,7 @@ object SettingsAdvancedScreen : SearchableSettings {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
-                .height(104.dp)
+                .height(150.dp)
                 .offset { IntOffset(q.x.roundToInt(), q.y.roundToInt()) }
                 .clip(shape)
                 .pointerInput(Unit) {
@@ -847,39 +844,22 @@ object SettingsAdvancedScreen : SearchableSettings {
         ) {
             // Разлом + приглушённый глитч: тяжёлые Canvas-фолбэки (datamosh/scan/static)
             // отключены, а текст вынесен НАД оверлеями, чтобы его снова было видно.
-            GlitchStack(
-                intensity = intensity,
+            // Весь арт (рамка-терминал, RGB-датамош, шов, сфера-глобус, трещина)
+            // рисуется одним AGSL-шейдером; на API<33 — фолбэк RiftDatamoshBackground.
+            RiftCorruptTerminal(
+                time = time,
+                charge = holdCharge.value,
+                breach = if (breaching) breachOpenProg.value else 0f,
+                open = openValue,
                 modifier = Modifier.matchParentSize(),
-                config = GlitchConfig(
-                    chromaticAberration = false,
-                    blockDisplacement = false,
-                    scanlines = false,
-                    staticNoise = false,
-                    flicker = true,
-                    bloodVignette = true,
-                    bloodDrips = false,
-                ),
-            ) {
-                RiftDatamoshBackground(
-                    time = time,
-                    open = openValue,
-                    modifier = Modifier.matchParentSize(),
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .border(
-                        width = 1.5.dp,
-                        color = GlitchPalette.HazardRed.copy(alpha = 0.45f + 0.55f * flicker),
-                        shape = shape,
-                    ),
             )
 
+            // Текст и шкала — в левой части блока (сфера шейдера справа).
             Column(
                 modifier = Modifier
                     .matchParentSize()
-                    .padding(horizontal = 16.dp),
+                    .padding(start = 18.dp, end = 8.dp, top = 24.dp, bottom = 12.dp)
+                    .fillMaxWidth(0.60f),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {

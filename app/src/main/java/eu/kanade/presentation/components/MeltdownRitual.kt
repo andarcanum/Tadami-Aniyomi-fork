@@ -530,11 +530,8 @@ fun RiftBreachDirective(
         kotlinx.coroutines.delay(120)
         powered = true
     }
-    val title = rememberScrambleReveal(
-        text = stringResource(AYMR.strings.meltdown_directive_title),
-        charDelayMs = 84,
-        scramblePerChar = 3,
-    )
+
+    var activeStep by remember { mutableStateOf(0) }
 
     Box(
         modifier = modifier
@@ -571,71 +568,102 @@ fun RiftBreachDirective(
             Spacer(modifier = Modifier.height(14.dp))
             BrutalTag(text = "DIRECTIVE // STAGE 03")
             Spacer(modifier = Modifier.height(18.dp))
-            Text(
-                text = title,
-                color = GlitchPalette.SignalRed,
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Black,
-                fontFamily = FontFamily.Monospace,
-            )
+
+            SequentialRevealItem(enabled = activeStep >= 0) {
+                GlitchTypewriterText(
+                    text = stringResource(AYMR.strings.meltdown_directive_title),
+                    enabled = activeStep >= 0,
+                    onFinished = { if (activeStep == 0) activeStep = 1 },
+                    color = GlitchPalette.SignalRed,
+                    fontSize = 30.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
             Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = "SYSTEM BREACH CONFIRMED",
-                color = GlitchPalette.Phosphor,
-                fontSize = 13.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-            )
+
+            SequentialRevealItem(enabled = activeStep >= 1) {
+                GlitchTypewriterText(
+                    text = "SYSTEM BREACH CONFIRMED",
+                    enabled = activeStep >= 1,
+                    onFinished = { if (activeStep == 1) activeStep = 2 },
+                    color = GlitchPalette.Phosphor,
+                    fontSize = 13.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Spacer(modifier = Modifier.height(22.dp))
-            HazardDivider()
-            Spacer(modifier = Modifier.height(22.dp))
-            DirectiveStep(
-                num = "01",
-                text = stringResource(AYMR.strings.meltdown_directive_step_1),
-                startDelayMs = 600L,
-            )
-            DirectiveStep(
-                num = "02",
-                text = stringResource(AYMR.strings.meltdown_directive_step_2),
-                startDelayMs = 1500L,
-            )
-            DirectiveStep(
-                num = "03",
-                text = stringResource(AYMR.strings.meltdown_directive_step_3),
-                startDelayMs = 2600L,
-            )
-            DirectiveStep(
-                num = "04",
-                text = stringResource(AYMR.strings.meltdown_directive_step_4),
-                startDelayMs = 3700L,
-            )
+
+            SequentialRevealItem(enabled = activeStep >= 2) {
+                Column {
+                    HazardDivider()
+                    Spacer(modifier = Modifier.height(22.dp))
+                }
+            }
+
+            SequentialRevealItem(enabled = activeStep >= 2) {
+                DirectiveStep(
+                    num = "01",
+                    text = stringResource(AYMR.strings.meltdown_directive_step_1),
+                    enabled = activeStep >= 2,
+                    onFinished = { if (activeStep == 2) activeStep = 3 },
+                )
+            }
+            SequentialRevealItem(enabled = activeStep >= 3) {
+                DirectiveStep(
+                    num = "02",
+                    text = stringResource(AYMR.strings.meltdown_directive_step_2),
+                    enabled = activeStep >= 3,
+                    onFinished = { if (activeStep == 3) activeStep = 4 },
+                )
+            }
+            SequentialRevealItem(enabled = activeStep >= 4) {
+                DirectiveStep(
+                    num = "03",
+                    text = stringResource(AYMR.strings.meltdown_directive_step_3),
+                    enabled = activeStep >= 4,
+                    onFinished = { if (activeStep == 4) activeStep = 5 },
+                )
+            }
+            SequentialRevealItem(enabled = activeStep >= 5) {
+                DirectiveStep(
+                    num = "04",
+                    text = stringResource(AYMR.strings.meltdown_directive_step_4),
+                    enabled = activeStep >= 5,
+                    onFinished = { if (activeStep == 5) activeStep = 6 },
+                )
+            }
             Spacer(modifier = Modifier.height(28.dp))
-            BrutalActionButton(
-                text = stringResource(AYMR.strings.meltdown_directive_enter_void),
-                filled = true,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = {
-                    if (!isCollapsing) {
-                        try {
-                            val bmp = Bitmap.createBitmap(
-                                view.width.coerceAtLeast(1),
-                                view.height.coerceAtLeast(1),
-                                Bitmap.Config.ARGB_8888,
-                            )
-                            val canvas = android.graphics.Canvas(bmp)
-                            view.draw(canvas)
-                            screenTex = bmp
-                        } catch (e: Exception) {
-                            // ignore/fallback
+
+            SequentialRevealItem(enabled = activeStep >= 6) {
+                BrutalActionButton(
+                    text = stringResource(AYMR.strings.meltdown_directive_enter_void),
+                    filled = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        if (!isCollapsing) {
+                            try {
+                                val bmp = Bitmap.createBitmap(
+                                    view.width.coerceAtLeast(1),
+                                    view.height.coerceAtLeast(1),
+                                    Bitmap.Config.ARGB_8888,
+                                )
+                                val canvas = android.graphics.Canvas(bmp)
+                                view.draw(canvas)
+                                screenTex = bmp
+                            } catch (e: Exception) {
+                                // ignore/fallback
+                            }
+                            isCollapsing = true
+                            scope.launch {
+                                collapseAnim.animateTo(1f, tween(CRUMBLE_MS, easing = LinearEasing))
+                                onEnter()
+                            }
                         }
-                        isCollapsing = true
-                        scope.launch {
-                            collapseAnim.animateTo(1f, tween(CRUMBLE_MS, easing = LinearEasing))
-                            onEnter()
-                        }
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
 
         // Оверлей схлопывания / разрушения экрана
@@ -648,35 +676,32 @@ fun RiftBreachDirective(
 }
 
 @Composable
-private fun DirectiveStep(num: String, text: String, startDelayMs: Long = 0L) {
-    var started by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(startDelayMs)
-        started = true
-    }
-
-    val displayedText = if (started) {
-        rememberScrambleReveal(text, charDelayMs = 32, scramblePerChar = 2)
-    } else {
-        ""
-    }
-
-    Row(modifier = Modifier.padding(bottom = 12.dp)) {
-        Text(
-            text = "[$num] ",
-            color = GlitchPalette.HazardRed,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Black,
-            fontFamily = FontFamily.Monospace,
-        )
-        Text(
-            text = displayedText,
-            color = Color.White.copy(alpha = 0.86f),
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
-        )
+private fun DirectiveStep(
+    num: String,
+    text: String,
+    enabled: Boolean,
+    onFinished: () -> Unit = {},
+) {
+    if (enabled) {
+        Row(modifier = Modifier.padding(bottom = 12.dp)) {
+            Text(
+                text = "[$num] ",
+                color = GlitchPalette.HazardRed,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+            )
+            GlitchTypewriterText(
+                text = text,
+                enabled = enabled,
+                onFinished = onFinished,
+                color = Color.White.copy(alpha = 0.86f),
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
     }
 }
 
