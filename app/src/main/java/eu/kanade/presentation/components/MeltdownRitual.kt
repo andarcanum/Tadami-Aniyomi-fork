@@ -304,8 +304,14 @@ fun VoidRevealScreen(
                 SequentialRevealItem(enabled = activeStep >= 2) {
                     var titleText by remember { mutableStateOf("") }
                     val rawTitle = stringResource(AYMR.strings.meltdown_ritual_reveal_title)
+                    var hasStarted by remember { mutableStateOf(false) }
                     LaunchedEffect(activeStep) {
-                        if (activeStep < 2) return@LaunchedEffect
+                        if (activeStep >= 2) {
+                            hasStarted = true
+                        }
+                    }
+                    LaunchedEffect(hasStarted) {
+                        if (!hasStarted) return@LaunchedEffect
                         val sb = StringBuilder()
                         val charDelayMs = 26L
                         val scramblePerChar = 2
@@ -324,6 +330,26 @@ fun VoidRevealScreen(
                             kotlinx.coroutines.delay(charDelayMs)
                         }
                         if (activeStep == 2) activeStep = 3
+
+                        // Бесконечный цикл фонового глитча после успешного вывода заголовка
+                        while (true) {
+                            kotlinx.coroutines.delay(kotlin.random.Random.nextLong(2000, 4000))
+                            val glitchDuration = kotlin.random.Random.nextLong(150, 300)
+                            val startTime = System.currentTimeMillis()
+                            while (System.currentTimeMillis() - startTime < glitchDuration) {
+                                val chars = rawTitle.toCharArray()
+                                val glitchCount = kotlin.random.Random.nextInt(1, 3)
+                                repeat(glitchCount) {
+                                    val idx = kotlin.random.Random.nextInt(chars.size)
+                                    if (!chars[idx].isWhitespace()) {
+                                        chars[idx] = SCRAMBLE_GLYPHS.random()
+                                    }
+                                }
+                                titleText = String(chars)
+                                kotlinx.coroutines.delay(50L)
+                            }
+                            titleText = rawTitle
+                        }
                     }
                     Text(
                         text = titleText,

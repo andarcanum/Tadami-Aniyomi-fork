@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
@@ -1461,6 +1462,7 @@ class ReaderActivity : BaseActivity() {
                     android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 )
                 setContent {
+                    val view = androidx.compose.ui.platform.LocalView.current
                     androidx.compose.foundation.layout.Box(
                         modifier = androidx.compose.ui.Modifier
                             .fillMaxSize()
@@ -1469,6 +1471,7 @@ class ReaderActivity : BaseActivity() {
                         var showGlitch by remember { mutableStateOf(true) }
                         var showDialog by remember { mutableStateOf(false) }
                         var showBreach by remember { mutableStateOf(false) }
+                        var capturedScreenshot by remember { mutableStateOf<Bitmap?>(null) }
 
                         LaunchedEffect(Unit) {
                             kotlinx.coroutines.delay(800)
@@ -1487,6 +1490,20 @@ class ReaderActivity : BaseActivity() {
                                 dismissButtonText = composeStringResource(AYMR.strings.meltdown_terminal_dismiss),
                                 holdToConfirm = true,
                                 onConfirm = {
+                                    // Снимаем скриншот через LocalView в момент нажатия (точно как на Этапе 2)
+                                    try {
+                                        val bmp = Bitmap.createBitmap(
+                                            view.width.coerceAtLeast(1),
+                                            view.height.coerceAtLeast(1),
+                                            Bitmap.Config.ARGB_8888,
+                                        )
+                                        val canvas = android.graphics.Canvas(bmp)
+                                        view.draw(canvas)
+                                        capturedScreenshot = bmp
+                                    } catch (e: Exception) {
+                                        // ignore/fallback
+                                    }
+
                                     showDialog = false
                                     showGlitch = false
 
@@ -1585,6 +1602,7 @@ class ReaderActivity : BaseActivity() {
 
                             eu.kanade.presentation.components.VoidRealityBreachFinale(
                                 rewards = voidRewards,
+                                screenshot = capturedScreenshot,
                                 onEnterTreasury = {
                                     val intent = Intent(this@ReaderActivity, MainActivity::class.java).apply {
                                         action = MainActivity.INTENT_OPEN_TREASURY

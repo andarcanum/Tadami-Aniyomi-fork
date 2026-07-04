@@ -54,8 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.activity.compose.BackHandler
 import kotlinx.coroutines.launch
 
 /* =============================================================================
@@ -116,114 +115,109 @@ fun TerminalGlitchDialog(
     val crack = remember { Animatable(0f) }
     LaunchedEffect(Unit) { crack.animateTo(1f, tween(2600, easing = LinearEasing)) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
-            usePlatformDefaultWidth = false,
-        ),
-    ) {
-        val bgAlpha = if (dismissButtonText != null) 0f else 0.88f
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = bgAlpha)),
-            contentAlignment = Alignment.Center,
-        ) {
-            // Скан-линии + статик поверх scrim
-            ScanlineOverlay(intensity = 0.7f, time = time, modifier = Modifier.fillMaxSize())
-            StaticNoiseOverlay(intensity = 0.5f, time = time, modifier = Modifier.fillMaxSize())
+    BackHandler {
+        onDismiss()
+    }
 
-            if (dismissButtonText != null) {
-                BrinkTerminalDialogContent(
-                    title = title,
-                    message = message,
-                    buttonText = buttonText,
-                    dismissButtonText = dismissButtonText,
-                    onConfirm = onConfirm,
-                    onDismiss = onDismiss,
-                    accent = accent,
-                    time = time,
-                    observerName = observerName,
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .padding(24.dp)
-                        .widthIn(max = 360.dp)
-                        .crtPowerOn(powered)
-                        .clip(CutCornerShape(topStart = 18.dp, bottomEnd = 18.dp))
-                        .background(GlitchPalette.Void)
-                        // пульсирующий алый бордер + свечение
-                        .border(
-                            width = 2.dp,
-                            color = accent.copy(alpha = 0.65f + 0.35f * cursorOn),
-                            shape = CutCornerShape(topStart = 18.dp, bottomEnd = 18.dp),
-                        )
-                        .padding(20.dp),
+    val bgAlpha = if (dismissButtonText != null) 0f else 0.88f
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = bgAlpha)),
+        contentAlignment = Alignment.Center,
+    ) {
+        // Скан-линии + статик поверх scrim
+        ScanlineOverlay(intensity = 0.7f, time = time, modifier = Modifier.fillMaxSize())
+        StaticNoiseOverlay(intensity = 0.5f, time = time, modifier = Modifier.fillMaxSize())
+
+        if (dismissButtonText != null) {
+            BrinkTerminalDialogContent(
+                title = title,
+                message = message,
+                buttonText = buttonText,
+                dismissButtonText = dismissButtonText,
+                onConfirm = onConfirm,
+                onDismiss = onDismiss,
+                accent = accent,
+                time = time,
+                observerName = observerName,
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .widthIn(max = 360.dp)
+                    .crtPowerOn(powered)
+                    .clip(CutCornerShape(topStart = 18.dp, bottomEnd = 18.dp))
+                    .background(GlitchPalette.Void)
+                    // пульсирующий алый бордер + свечение
+                    .border(
+                        width = 2.dp,
+                        color = accent.copy(alpha = 0.65f + 0.35f * cursorOn),
+                        shape = CutCornerShape(topStart = 18.dp, bottomEnd = 18.dp),
+                    )
+                    .padding(20.dp),
+            ) {
+                // Растущие трещины на фоне окна
+                Canvas(modifier = Modifier.matchParentSize()) {
+                    val p = crack.value
+                    val path = Path().apply {
+                        moveTo(0f, size.height * 0.2f)
+                        lineTo(size.width * 0.15f * p, size.height * 0.28f)
+                        lineTo(size.width * 0.10f * p, size.height * 0.45f)
+                        moveTo(size.width, size.height * 0.75f)
+                        lineTo(size.width * (1f - 0.15f * p), size.height * 0.65f)
+                        lineTo(size.width * (1f - 0.10f * p), size.height * 0.50f)
+                        lineTo(size.width * (1f - 0.22f * p), size.height * 0.45f)
+                        moveTo(size.width * 0.5f, 0f)
+                        lineTo(size.width * 0.55f, size.height * 0.18f * p)
+                        lineTo(size.width * 0.47f, size.height * 0.30f * p)
+                    }
+                    drawPath(
+                        path = path,
+                        color = accent.copy(alpha = 0.30f * p),
+                        style = Stroke(width = 1.5.dp.toPx()),
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    // Растущие трещины на фоне окна
-                    Canvas(modifier = Modifier.matchParentSize()) {
-                        val p = crack.value
-                        val path = Path().apply {
-                            moveTo(0f, size.height * 0.2f)
-                            lineTo(size.width * 0.15f * p, size.height * 0.28f)
-                            lineTo(size.width * 0.10f * p, size.height * 0.45f)
-                            moveTo(size.width, size.height * 0.75f)
-                            lineTo(size.width * (1f - 0.15f * p), size.height * 0.65f)
-                            lineTo(size.width * (1f - 0.10f * p), size.height * 0.50f)
-                            lineTo(size.width * (1f - 0.22f * p), size.height * 0.45f)
-                            moveTo(size.width * 0.5f, 0f)
-                            lineTo(size.width * 0.55f, size.height * 0.18f * p)
-                            lineTo(size.width * 0.47f, size.height * 0.30f * p)
-                        }
-                        drawPath(
-                            path = path,
-                            color = accent.copy(alpha = 0.30f * p),
-                            style = Stroke(width = 1.5.dp.toPx()),
+                    // Хроматический заголовок
+                    GlitchTitle(text = title, accent = accent, time = time)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 104.dp)
+                            .background(Color(0xFF050001))
+                            .border(1.dp, accent.copy(alpha = 0.35f))
+                            .padding(12.dp),
+                    ) {
+                        val cursor = if (cursorOn > 0.5f) "\u2588" else " "
+                        Text(
+                            text = "$displayedText$cursor",
+                            color = GlitchPalette.Phosphor,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 18.sp,
                         )
                     }
 
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        // Хроматический заголовок
-                        GlitchTitle(text = title, accent = accent, time = time)
+                    if (displayedText == message) {
+                        Spacer(modifier = Modifier.height(20.dp))
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 104.dp)
-                                .background(Color(0xFF050001))
-                                .border(1.dp, accent.copy(alpha = 0.35f))
-                                .padding(12.dp),
-                        ) {
-                            val cursor = if (cursorOn > 0.5f) "\u2588" else " "
-                            Text(
-                                text = "$displayedText$cursor",
-                                color = GlitchPalette.Phosphor,
-                                fontSize = 12.sp,
-                                fontFamily = FontFamily.Monospace,
-                                lineHeight = 18.sp,
-                            )
-                        }
-
-                        if (displayedText == message) {
-                            Spacer(modifier = Modifier.height(20.dp))
-
-                            HazardButton(
-                                text = buttonText,
-                                accent = accent,
-                                filled = true,
-                                holdToConfirm = holdToConfirm,
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = onConfirm,
-                            )
-                        }
+                        HazardButton(
+                            text = buttonText,
+                            accent = accent,
+                            filled = true,
+                            holdToConfirm = holdToConfirm,
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = onConfirm,
+                        )
                     }
                 }
             }
@@ -341,16 +335,55 @@ private fun HazardButton(
         base.clickable { onClick() }
     }
 
+    val spacedText = remember(text) {
+        val uppercase = text.uppercase()
+        val builder = StringBuilder("† ")
+        for (i in uppercase.indices) {
+            builder.append(uppercase[i])
+            if (i < uppercase.length - 1) {
+                builder.append(" ")
+            }
+        }
+        builder.append(" †")
+        builder.toString()
+    }
+
     Box(modifier = clickMod, contentAlignment = Alignment.Center) {
-        Text(
-            text = text,
-            color = if (filled) Color.White else GlitchPalette.Phosphor,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 8.dp),
-        )
+        val pVal = progress.value
+        val jitterX = (kotlin.math.sin(System.currentTimeMillis() * 0.05f) * (1f + pVal * 4.5f)).dp
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = spacedText,
+                color = GlitchPalette.SignalRed.copy(alpha = 0.75f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .offset(x = -jitterX, y = 0.dp)
+                    .padding(horizontal = 8.dp),
+            )
+            Text(
+                text = spacedText,
+                color = GlitchPalette.Phosphor.copy(alpha = 0.75f),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .offset(x = jitterX, y = 0.dp)
+                    .padding(horizontal = 8.dp),
+            )
+            Text(
+                text = spacedText,
+                color = if (filled) Color.White else GlitchPalette.Phosphor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
+        }
     }
 }
 

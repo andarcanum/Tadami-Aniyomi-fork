@@ -34,8 +34,12 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -644,12 +648,14 @@ private fun DrawScope.drawShatterHoleOverlay(
 @Composable
 fun VoidRealityBreachFinale(
     rewards: List<VoidReward>,
+    screenshot: Bitmap? = null,
     onEnterTreasury: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val time by rememberGlitchTime()
     val codeShader = rememberCodeShader()
     val field = remember { buildCrackField(0xBEEFL) }
+    val imageBitmap = remember(screenshot) { screenshot?.asImageBitmap() }
 
     var phase by remember { mutableStateOf(MeltdownPhase.Collapse) }
     val collapse = remember { Animatable(0f) }
@@ -691,7 +697,7 @@ fun VoidRealityBreachFinale(
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val q = quakeOffset(time, shakeAmt)
                 withTransform({ translate(q.x, q.y) }) {
-                    drawPeelCollapse(time, collapse.value, field, codeShader)
+                    drawPeelCollapse(time, collapse.value, field, codeShader, imageBitmap)
                 }
                 if (flash > 0f) drawRect(color = Color.White.copy(alpha = flash), size = size)
                 if (black > 0f) drawRect(color = Color.Black.copy(alpha = black), size = size)
@@ -716,6 +722,7 @@ private fun DrawScope.drawPeelCollapse(
     collapse: Float,
     field: CrackField,
     codeShader: BitmapShader,
+    imageBitmap: ImageBitmap?,
 ) {
     val w = size.width
     val h = size.height
@@ -774,11 +781,26 @@ private fun DrawScope.drawPeelCollapse(
                 rotate(rotDeg, pivot = Offset(tx, ty))
                 scale(sc, sc, pivot = Offset(tx, ty))
             }) {
-                drawRect(
-                    color = plate.copy(alpha = alpha),
-                    topLeft = Offset(gx * tw, gy * th),
-                    size = Size(tw, th),
-                )
+                if (imageBitmap != null) {
+                    val srcX = (gx * tw).toInt().coerceIn(0, imageBitmap.width - 1)
+                    val srcY = (gy * th).toInt().coerceIn(0, imageBitmap.height - 1)
+                    val srcW = tw.toInt().coerceAtMost(imageBitmap.width - srcX).coerceAtLeast(1)
+                    val srcH = th.toInt().coerceAtMost(imageBitmap.height - srcY).coerceAtLeast(1)
+                    drawImage(
+                        image = imageBitmap,
+                        srcOffset = IntOffset(srcX, srcY),
+                        srcSize = IntSize(srcW, srcH),
+                        dstOffset = IntOffset(srcX, srcY),
+                        dstSize = IntSize(srcW, srcH),
+                        alpha = alpha,
+                    )
+                } else {
+                    drawRect(
+                        color = plate.copy(alpha = alpha),
+                        topLeft = Offset(gx * tw, gy * th),
+                        size = Size(tw, th),
+                    )
+                }
                 // тонкая раскалённая кромка плиты
                 drawRect(
                     color = GlitchPalette.HazardRed.copy(alpha = alpha * 0.35f),
