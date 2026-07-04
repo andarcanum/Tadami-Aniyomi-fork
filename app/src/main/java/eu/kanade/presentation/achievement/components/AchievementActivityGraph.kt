@@ -332,7 +332,16 @@ private fun ActivityBar(
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
         tooltip = {
-            PlainTooltip {
+            PlainTooltip(
+                containerColor = colors.surface,
+                contentColor = colors.textPrimary,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.border(
+                    width = 1.dp,
+                    color = colors.divider,
+                    shape = RoundedCornerShape(12.dp),
+                ),
+            ) {
                 ActivityTooltipContent(month = month, stats = stats, locale = locale)
             }
         },
