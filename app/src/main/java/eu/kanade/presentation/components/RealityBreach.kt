@@ -649,6 +649,7 @@ private fun DrawScope.drawShatterHoleOverlay(
 fun VoidRealityBreachFinale(
     rewards: List<VoidReward>,
     screenshot: Bitmap? = null,
+    justUnlocked: Boolean = false,
     onEnterTreasury: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -684,6 +685,7 @@ fun VoidRealityBreachFinale(
         if (phase == MeltdownPhase.Reveal) {
             VoidRevealScreen(
                 rewards = rewards,
+                justUnlocked = justUnlocked,
                 onEnterTreasury = onEnterTreasury,
                 modifier = Modifier.fillMaxSize(),
             )

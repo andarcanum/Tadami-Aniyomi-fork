@@ -814,7 +814,8 @@ class MainActivity : BaseActivity() {
                 null
             }
             INTENT_OPEN_TREASURY -> {
-                eu.kanade.presentation.more.settings.screen.SettingsTreasuryScreen.shouldShowVoidBroadcastBanner = true
+                val justUnlocked = intent.getBooleanExtra("just_unlocked", false)
+                eu.kanade.presentation.more.settings.screen.SettingsTreasuryScreen.shouldShowVoidBroadcastBanner = justUnlocked
                 navigator.popUntilRoot()
                 navigator.push(SettingsTreasuryScreen)
                 null

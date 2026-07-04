@@ -230,6 +230,7 @@ fun VoidDisintegrationOverlay(
 @Composable
 fun VoidRevealScreen(
     rewards: List<VoidReward>,
+    justUnlocked: Boolean = false,
     onEnterTreasury: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -362,8 +363,14 @@ fun VoidRevealScreen(
                 }
                 Spacer(Modifier.height(6.dp))
                 SequentialRevealItem(enabled = activeStep >= 3) {
+                    val achievementText = if (justUnlocked) {
+                        stringResource(AYMR.strings.meltdown_ritual_achievement_unlocked)
+                    } else {
+                        val isRussian = stringResource(AYMR.strings.meltdown_ritual_reveal_title).contains(Regex("[а-яА-Я]"))
+                        if (isRussian) "ДОСТИЖЕНИЕ УЖЕ ПОЛУЧЕНО" else "ACHIEVEMENT ALREADY UNLOCKED"
+                    }
                     GlitchTypewriterText(
-                        text = stringResource(AYMR.strings.meltdown_ritual_achievement_unlocked),
+                        text = achievementText,
                         enabled = activeStep >= 3,
                         onFinished = { if (activeStep == 3) activeStep = 4 },
                         color = GlitchPalette.Phosphor,

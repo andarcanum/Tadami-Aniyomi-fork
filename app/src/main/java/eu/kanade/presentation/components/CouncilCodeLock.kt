@@ -284,6 +284,9 @@ fun CouncilCodeLockDialog(
 
     // Текст со скриншота с разметкой
     val isRussian = remember(title) { title.contains(Regex("[а-яА-Я]")) }
+    val labelCodeAssembly = if (isRussian) "СБОРКА КОДА · ${seq.size}/$n" else "CODE ASSEMBLY · ${seq.size}/$n"
+    val labelReset = if (isRussian) "✕ СБРОС" else "✕ RESET"
+    val cardSubLabel = if (isRussian) "СОВЕТ" else "COUNCIL"
     val fullBriefingText = remember(isRussian) {
         if (isRussian) {
             "СИСТЕМНОЕ УПРАВЛЕНИЕ ЗАБЛОКИРОВАНО СОВЕТОМ.\n" +
@@ -554,6 +557,7 @@ fun CouncilCodeLockDialog(
                                 accent = accent,
                                 green = green,
                                 glitchActive = (i == activeGlitchingCardIndex),
+                                subLabel = cardSubLabel,
                                 modifier = Modifier.weight(1f),
                                 onClick = { onCard(i) },
                             )
@@ -569,14 +573,14 @@ fun CouncilCodeLockDialog(
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    MonoLabel("СБОРКА КОДА · ${seq.size}/$n", Color(0xFF8A8A8A), letterSpacingEm = 0.12f)
+                    MonoLabel(labelCodeAssembly, Color(0xFF8A8A8A), letterSpacingEm = 0.12f)
                     Spacer(Modifier.weight(1f))
                     Box(
                         modifier = Modifier
                             .border(1.dp, GlitchPalette.HazardRed.copy(alpha = 0.5f))
                             .clickable { onReset() }
                             .padding(horizontal = 10.dp, vertical = 5.dp),
-                    ) { MonoLabel("✕ СБРОС", Color(0xFFBBBBBB)) }
+                    ) { MonoLabel(labelReset, Color(0xFFBBBBBB)) }
                 }
 
                 val slotsPerRow = 6
@@ -604,9 +608,9 @@ fun CouncilCodeLockDialog(
 
                 // статус
                 val (statusText, statusColor) = when {
-                    locked -> "▶ КОД ПРИНЯТ · БЛОКИРОВКА СНЯТА" to green
-                    errorFlash -> "▲ НЕВЕРНЫЙ ПОРЯДОК · СВЕРЬТЕ СМЫСЛ" to GlitchPalette.HazardRed
-                    else -> "ОЖИДАНИЕ ВВОДА… (${seq.size}/$n)" to Color(0xFF6A6A6A)
+                    locked -> (if (isRussian) "▶ КОД ПРИНЯТ · БЛОКИРОВКА СНЯТА" else "▶ CODE ACCEPTED · LOCK BYPASSED") to green
+                    errorFlash -> (if (isRussian) "▲ НЕВЕРНЫЙ ПОРЯДОК · СВЕРЬТЕ СМЫСЛ" else "▲ INVALID ORDER · CHECK MEANING") to GlitchPalette.HazardRed
+                    else -> (if (isRussian) "ОЖИДАНИЕ ВВОДА… (${seq.size}/$n)" else "AWAITING INPUT… (${seq.size}/$n)") to Color(0xFF6A6A6A)
                 }
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -656,6 +660,7 @@ private fun FlipCard(
     accent: Color,
     green: Color,
     glitchActive: Boolean = false,
+    subLabel: String = "СОВЕТ",
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -711,7 +716,7 @@ private fun FlipCard(
                     fontFamily = FontFamily.Monospace,
                 )
                 Text(
-                    text = "СОВЕТ",
+                    text = subLabel,
                     color = faceColor.copy(alpha = 0.6f),
                     fontSize = 7.sp,
                     fontFamily = FontFamily.Monospace,

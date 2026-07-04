@@ -1472,6 +1472,7 @@ class ReaderActivity : BaseActivity() {
                         var showDialog by remember { mutableStateOf(false) }
                         var showBreach by remember { mutableStateOf(false) }
                         var capturedScreenshot by remember { mutableStateOf<Bitmap?>(null) }
+                        var justUnlocked by remember { mutableStateOf(false) }
 
                         LaunchedEffect(Unit) {
                             kotlinx.coroutines.delay(800)
@@ -1521,8 +1522,9 @@ class ReaderActivity : BaseActivity() {
                                             }
                                             if (achievement != null) {
                                                 val progressFlow = achievementRepository
-                                                    .getProgress("void_broadcast_unlocked").first()
+                                                     .getProgress("void_broadcast_unlocked").first()
                                                 if (progressFlow == null || !progressFlow.isUnlocked) {
+                                                    justUnlocked = true
                                                     val newProgress = AchievementProgress.createStandard(
                                                         achievementId = "void_broadcast_unlocked",
                                                         progress = 1,
@@ -1532,12 +1534,12 @@ class ReaderActivity : BaseActivity() {
                                                     )
                                                     achievementRepository.insertOrUpdateProgress(newProgress)
 
-                                                    val pointsManager =
-                                                        Injekt.get<tachiyomi.data.achievement.handler.PointsManager>()
-                                                    pointsManager.incrementUnlocked()
+                                                     val pointsManager =
+                                                         Injekt.get<tachiyomi.data.achievement.handler.PointsManager>()
+                                                     pointsManager.incrementUnlocked()
 
-                                                    val unlockableManager = Injekt.get<UnlockableManager>()
-                                                    unlockableManager.unlockAchievementRewards(achievement)
+                                                     val unlockableManager = Injekt.get<UnlockableManager>()
+                                                     unlockableManager.unlockAchievementRewards(achievement)
                                                 }
                                             }
                                         }
@@ -1603,9 +1605,11 @@ class ReaderActivity : BaseActivity() {
                             eu.kanade.presentation.components.VoidRealityBreachFinale(
                                 rewards = voidRewards,
                                 screenshot = capturedScreenshot,
+                                justUnlocked = justUnlocked,
                                 onEnterTreasury = {
                                     val intent = Intent(this@ReaderActivity, MainActivity::class.java).apply {
                                         action = MainActivity.INTENT_OPEN_TREASURY
+                                        putExtra("just_unlocked", justUnlocked)
                                         flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                                     }
                                     startActivity(intent)

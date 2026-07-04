@@ -420,10 +420,10 @@ private fun BrinkTerminalDialogContent(
             listOf(
                 "> scanning reality core...",
                 "> integrity: 00%",
-                "> observer detected: JAN",
+                "> observer detected: $observerName",
                 "> backup gate... not found",
                 "> protocol RED SECTOR ready",
-                        "> awaiting operator authorization_"
+                "> awaiting operator authorization_"
             )
         }
     }
