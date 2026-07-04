@@ -60,7 +60,7 @@ half4 main(float2 fragCoord){
     float aa = 1.0 * PX;
     float inside = smoothstep(aa, -aa, sdf);
     float cx = uRes.x * 0.5;
-    float below = step(TB, fc.y);
+    float below = 1.0;
     float3 col = float3(0.031, 0.027, 0.039);
 
     // ---- RGB датамош ----
@@ -103,11 +103,11 @@ half4 main(float2 fragCoord){
         float3 n = float3(sp.x, sp.y, z);
         float neb = noise(n.xy * 3.2 + float2(uTime * 0.05, 0.0));
         float neb2 = noise(n.xy * 7.0 - float2(uTime * 0.03, uTime * 0.03));
-        float3 space = mix(float3(0.04, 0.05, 0.14), float3(0.20, 0.10, 0.34), neb);
-        space = mix(space, float3(0.35, 0.18, 0.5), neb2 * 0.5);
+        float3 space = mix(float3(0.02, 0.025, 0.07), float3(0.10, 0.05, 0.17), neb);
+        space = mix(space, float3(0.18, 0.09, 0.25), neb2 * 0.5);
         float st = step(0.90, hash(floor(n.xy * 46.0))) * step(0.4, z);
-        space += float3(1.0) * st * 0.9;
-        space += float3(0.65, 0.75, 1.0) * smoothstep(0.55, 0.0, length(sp)) * 0.55;
+        space += float3(1.0) * st * 0.4;
+        space += float3(0.65, 0.75, 1.0) * smoothstep(0.55, 0.0, length(sp)) * 0.15;
         float a = uTime * 0.4;
         float lat = asin(clamp(n.y, -1.0, 1.0));
         float lon = atan(n.x, n.z) + a;
@@ -116,7 +116,7 @@ half4 main(float2 fragCoord){
         float grid = smoothstep(0.05, 0.0, latL) + smoothstep(0.05, 0.0, lonL);
         float3 wire = float3(1.0, 0.13, 0.26) * grid * (0.55 + uCharge * 0.35);
         float rim = smoothstep(0.82, 1.0, length(sp));
-        wire += float3(1.0, 0.16, 0.28) * rim;
+        wire += float3(1.0, 1.0, 1.0) * rim;
         float3 sphereCol = space + wire;
         float edge = smoothstep(1.0, 0.94, length(sp));
         col = mix(col, sphereCol, edge);
@@ -141,12 +141,13 @@ half4 main(float2 fragCoord){
     col = mix(col, float3(1.0, 0.16, 0.16) * 0.5, smoothstep(0.8 * PX, 0.0, abs(sdf2)) * 0.4 * inside);
     float sep = smoothstep(1.0 * PX, 0.0, abs(fc.y - TB));
     float gapv = step(13.0 * PX, abs(fc.x - cx));
-    col = mix(col, float3(1.0, 0.16, 0.22) * 0.7, sep * gapv * inside);
+    // col = mix(col, float3(1.0, 0.16, 0.22) * 0.7, sep * gapv * inside);
     float nub = smoothstep(1.2 * PX, 0.0, abs(fc.x - cx)) * step(fc.y, TB + 7.0 * PX) * inside;
     col += float3(1.0) * nub * (0.5 + 0.4 * fp);
 
     // ---- наружное свечение ----
-    float glow = exp(-max(sdf, 0.0) / (7.0 * PX)) * (0.45 + 0.4 * fp);
+    float glow = exp(-max(sdf, 0.0) / (3.0 * PX)) * (0.45 + 0.4 * fp);
+    glow *= smoothstep(5.0 * PX, 1.0 * PX, sdf);
     col = mix(col, fcol, glow * (1.0 - inside));
     float alpha = clamp(inside + glow * (1.0 - inside), 0.0, 1.0);
     return half4(col, alpha);
