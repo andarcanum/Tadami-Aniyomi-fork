@@ -41,6 +41,7 @@ private enum class InitiationPhase { Idle, Corrupting, Terminal }
 fun MeltdownInitiationHost(
     triggered: Boolean,
     onAcknowledged: () -> Unit,
+    onDismiss: () -> Unit = {},
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -124,11 +125,29 @@ fun MeltdownInitiationHost(
         }
 
         if (phase == InitiationPhase.Terminal && !isShuttingDown) {
-            TerminalGlitchDialog(
-                title = stringResource(AYMR.strings.meltdown_initiation_title),
-                message = stringResource(AYMR.strings.meltdown_initiation_message),
+            val titleStr = stringResource(AYMR.strings.meltdown_initiation_title)
+            val isRussian = remember(titleStr) { titleStr.contains(Regex("[а-яА-Я]")) }
+            val phraseWords = remember(isRussian) {
+                if (isRussian) {
+                    listOf(
+                        "ДЛЯ", "СБРОСА", "ОХЛАЖДЕНИЯ", "СПУСТИСЬ", "В",
+                        "ДОПОЛНИТЕЛЬНЫЙ", "ИНЖЕНЕРНЫЙ", "ОТСЕК", "СИСТЕМНОГО",
+                        "УПРАВЛЕНИЯ", "И", "НАСТРОЙКИ"
+                    )
+                } else {
+                    listOf(
+                        "TO", "RESET", "COOLING", "DESCEND", "INTO",
+                        "THE", "ADVANCED", "ENGINEERING", "SECTION",
+                        "OF", "SYSTEM", "SETTINGS"
+                    )
+                }
+            }
+
+            CouncilCodeLockDialog(
+                title = titleStr,
+                briefing = stringResource(AYMR.strings.meltdown_initiation_message),
+                words = phraseWords,
                 buttonText = stringResource(AYMR.strings.meltdown_initiation_button),
-                holdToConfirm = true,
                 onConfirm = {
                     isShuttingDown = true
                     scope.launch {
@@ -142,13 +161,14 @@ fun MeltdownInitiationHost(
                 onDismiss = {
                     isShuttingDown = true
                     scope.launch {
-                        shutdownAnim.animateTo(1f, tween(5000, easing = LinearEasing))
+                        shutdownAnim.animateTo(1f, tween(1000, easing = LinearEasing))
                         phase = InitiationPhase.Idle
                         isShuttingDown = false
                         shutdownAnim.snapTo(0f)
-                        onAcknowledged()
+                        onDismiss()
                     }
                 },
+                progressiveReveal = true,
             )
         }
     }

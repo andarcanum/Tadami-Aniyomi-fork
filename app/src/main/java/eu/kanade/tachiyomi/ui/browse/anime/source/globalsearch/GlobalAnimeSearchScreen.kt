@@ -69,6 +69,9 @@ data class GlobalAnimeSearchScreen(
                 meltdownTriggered = false
                 uiPreferences.meltdownStage().set(1)
             },
+            onDismiss = {
+                meltdownTriggered = false
+            },
         ) {
             if (showSingleLoadingScreen) {
                 LoadingScreen()
