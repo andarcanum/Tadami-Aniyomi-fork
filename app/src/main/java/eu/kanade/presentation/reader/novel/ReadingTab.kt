@@ -59,6 +59,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.more.settings.widget.EditTextPreferenceWidget
+import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.SwitchPreferenceWidget
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
@@ -67,7 +68,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTypographyPreset
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentMapOf
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
@@ -236,6 +240,22 @@ fun ReadingTab(
     ) {
         SettingsSectionHeader(title = stringResource(AYMR.strings.novel_reader_section_typography))
 
+        val typographyPresetEntries = novelReaderTypographyPresetEntries()
+        ListPreferenceWidget(
+            value = settings.typographyPreset,
+            title = stringResource(AYMR.strings.novel_reader_typography_scale_preset),
+            subtitle = typographyPresetEntries[settings.typographyPreset].orEmpty(),
+            icon = null,
+            entries = typographyPresetEntries,
+            onValueChange = { preset ->
+                update(
+                    preset,
+                    { o, v -> o.copy(typographyPreset = v) },
+                    { preferences.typographyPreset().set(it) },
+                )
+            },
+        )
+
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_font_size),
             valueText = { "${it.roundToInt()}sp" },
@@ -248,11 +268,20 @@ fun ReadingTab(
         )
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_line_height),
-            valueText = { String.format("%.1f", it) },
+            valueText = { String.format("%.2f", it) },
             committedValue = settings.lineHeight,
             range = 1.2f..2f,
-            steps = 7,
-            onCommit = { update(it, { o, v -> o.copy(lineHeight = v) }, { preferences.lineHeight().set(it) }) },
+            steps = 16,
+            onCommit = {
+                if (settings.typographyPreset != NovelReaderTypographyPreset.CUSTOM) {
+                    update(
+                        NovelReaderTypographyPreset.CUSTOM,
+                        { o, v -> o.copy(typographyPreset = v) },
+                        { preferences.typographyPreset().set(it) },
+                    )
+                }
+                update(it, { o, v -> o.copy(lineHeight = v) }, { preferences.lineHeight().set(it) })
+            },
         )
         LnReaderSliderRow(
             label = stringResource(AYMR.strings.novel_reader_paragraph_spacing),
@@ -261,6 +290,13 @@ fun ReadingTab(
             range = 0f..32f,
             steps = 31,
             onCommit = {
+                if (settings.typographyPreset != NovelReaderTypographyPreset.CUSTOM) {
+                    update(
+                        NovelReaderTypographyPreset.CUSTOM,
+                        { o, v -> o.copy(typographyPreset = v) },
+                        { preferences.typographyPreset().set(it) },
+                    )
+                }
                 update(
                     it.roundToInt(),
                     { o, v -> o.copy(paragraphSpacingDp = v) },
@@ -274,7 +310,16 @@ fun ReadingTab(
             committedValue = settings.margin.toFloat(),
             range = 0f..50f,
             steps = 49,
-            onCommit = { update(it.roundToInt(), { o, v -> o.copy(margin = v) }, { preferences.margin().set(it) }) },
+            onCommit = {
+                if (settings.typographyPreset != NovelReaderTypographyPreset.CUSTOM) {
+                    update(
+                        NovelReaderTypographyPreset.CUSTOM,
+                        { o, v -> o.copy(typographyPreset = v) },
+                        { preferences.typographyPreset().set(it) },
+                    )
+                }
+                update(it.roundToInt(), { o, v -> o.copy(margin = v) }, { preferences.margin().set(it) })
+            },
         )
 
         AlignButtonsRow(
@@ -1240,4 +1285,14 @@ private fun backgroundPresetDescription(presetId: String): String {
             stringResource(AYMR.strings.novel_reader_background_preset_dark_wood_description)
         else -> ""
     }
+}
+
+@Composable
+private fun novelReaderTypographyPresetEntries(): ImmutableMap<NovelReaderTypographyPreset, String> {
+    return persistentMapOf(
+        NovelReaderTypographyPreset.CUSTOM to stringResource(AYMR.strings.novel_reader_typography_scale_preset_custom),
+        NovelReaderTypographyPreset.SUPERGOLDEN to
+            stringResource(AYMR.strings.novel_reader_typography_scale_preset_supergolden),
+        NovelReaderTypographyPreset.GOLDEN to stringResource(AYMR.strings.novel_reader_typography_scale_preset_golden),
+    )
 }

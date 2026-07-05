@@ -108,11 +108,13 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTypographyPreset
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
@@ -191,8 +193,22 @@ object SettingsNovelReaderScreen : SearchableSettings {
     }
 
     @Composable
+    private fun novelReaderTypographyPresetEntries(): ImmutableMap<NovelReaderTypographyPreset, String> {
+        return persistentMapOf(
+            NovelReaderTypographyPreset.CUSTOM to
+                stringResource(AYMR.strings.novel_reader_typography_scale_preset_custom),
+            NovelReaderTypographyPreset.SUPERGOLDEN to
+                stringResource(AYMR.strings.novel_reader_typography_scale_preset_supergolden),
+            NovelReaderTypographyPreset.GOLDEN to
+                stringResource(AYMR.strings.novel_reader_typography_scale_preset_golden),
+        )
+    }
+
+    @Composable
     private fun getDisplayGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
         val context = LocalContext.current
+        val typographyPresetPref = prefs.typographyPreset()
+        val typographyPreset by typographyPresetPref.collectAsState()
         val fontSizePref = prefs.fontSize()
         val fontSize by fontSizePref.collectAsState()
         val lineHeightPref = prefs.lineHeight()
@@ -233,6 +249,22 @@ object SettingsNovelReaderScreen : SearchableSettings {
             fontFamilyPref.set(importedFont.id)
             fontCatalogVersion += 1
         }
+        val resolvedLineHeight = when (typographyPreset) {
+            NovelReaderTypographyPreset.SUPERGOLDEN -> 1.47f
+            NovelReaderTypographyPreset.GOLDEN -> 1.52f
+            NovelReaderTypographyPreset.CUSTOM -> lineHeight
+        }
+        val resolvedMargin = when (typographyPreset) {
+            NovelReaderTypographyPreset.SUPERGOLDEN -> (fontSize * 1.50f).roundToInt()
+            NovelReaderTypographyPreset.GOLDEN -> (fontSize * 1.83f).roundToInt()
+            NovelReaderTypographyPreset.CUSTOM -> margin
+        }
+        val resolvedParagraphSpacing = when (typographyPreset) {
+            NovelReaderTypographyPreset.SUPERGOLDEN -> (fontSize * 1.21f).roundToInt()
+            NovelReaderTypographyPreset.GOLDEN -> (fontSize * 1.27f).roundToInt()
+            NovelReaderTypographyPreset.CUSTOM -> paragraphSpacing
+        }
+
         val settingsSurfaceSummary = if (surfaceStrategy.globalOnlyFamilies.isNotEmpty()) {
             stringResource(AYMR.strings.novel_reader_global_settings_quick_dialog_summary)
         } else {
@@ -242,6 +274,12 @@ object SettingsNovelReaderScreen : SearchableSettings {
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.novel_reader_display),
             preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = typographyPresetPref,
+                    entries = novelReaderTypographyPresetEntries()
+                        .toImmutableMap(),
+                    title = stringResource(AYMR.strings.novel_reader_typography_scale_preset),
+                ),
                 Preference.PreferenceItem.SliderPreference(
                     value = fontSize,
                     title = stringResource(AYMR.strings.novel_reader_font_size),
@@ -253,21 +291,27 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     },
                 ),
                 Preference.PreferenceItem.SliderPreference(
-                    value = (lineHeight * 10).toInt(),
+                    value = (resolvedLineHeight * 10).toInt(),
                     title = stringResource(AYMR.strings.novel_reader_line_height),
-                    subtitle = String.format("%.1f", lineHeight),
+                    subtitle = String.format("%.2f", resolvedLineHeight),
                     valueRange = 12..20,
                     onValueChanged = {
+                        if (typographyPreset != NovelReaderTypographyPreset.CUSTOM) {
+                            typographyPresetPref.set(NovelReaderTypographyPreset.CUSTOM)
+                        }
                         lineHeightPref.set(it / 10f)
                         true
                     },
                 ),
                 Preference.PreferenceItem.SliderPreference(
-                    value = margin,
+                    value = resolvedMargin,
                     title = stringResource(AYMR.strings.novel_reader_margins),
-                    subtitle = "${margin}dp",
+                    subtitle = "${resolvedMargin}dp",
                     valueRange = 0..50,
                     onValueChanged = {
+                        if (typographyPreset != NovelReaderTypographyPreset.CUSTOM) {
+                            typographyPresetPref.set(NovelReaderTypographyPreset.CUSTOM)
+                        }
                         marginPref.set(it)
                         true
                     },
@@ -280,11 +324,14 @@ object SettingsNovelReaderScreen : SearchableSettings {
                     title = stringResource(AYMR.strings.novel_reader_text_align),
                 ),
                 Preference.PreferenceItem.SliderPreference(
-                    value = paragraphSpacing,
+                    value = resolvedParagraphSpacing,
                     title = stringResource(AYMR.strings.novel_reader_paragraph_spacing),
-                    subtitle = "${paragraphSpacing}dp",
+                    subtitle = "${resolvedParagraphSpacing}dp",
                     valueRange = 0..32,
                     onValueChanged = {
+                        if (typographyPreset != NovelReaderTypographyPreset.CUSTOM) {
+                            typographyPresetPref.set(NovelReaderTypographyPreset.CUSTOM)
+                        }
                         paragraphSpacingPref.set(it)
                         true
                     },

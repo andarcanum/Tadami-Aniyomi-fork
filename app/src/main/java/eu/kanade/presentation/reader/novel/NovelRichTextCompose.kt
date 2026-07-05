@@ -18,7 +18,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -32,7 +31,6 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import android.graphics.Color as AndroidColor
-import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign as ReaderTextAlign
 
 internal fun buildNovelRichAnnotatedString(
     segments: List<NovelRichTextSegment>,
@@ -102,25 +100,6 @@ private fun parseNovelRichCssColor(value: String?): Color? {
             Color(AndroidColor.parseColor(normalized))
         }.getOrNull()
         else -> runCatching { Color(AndroidColor.parseColor(normalized)) }.getOrNull()
-    }
-}
-
-private fun resolveNativeReaderTextAlign(
-    globalTextAlign: ReaderTextAlign,
-    preserveSourceTextAlignInNative: Boolean,
-    sourceTextAlign: eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign? = null,
-): ReaderTextAlign {
-    return when (
-        resolveNativeTextAlign(
-            globalTextAlign = globalTextAlign,
-            preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
-            sourceTextAlign = sourceTextAlign,
-        )
-    ) {
-        TextAlign.Center -> ReaderTextAlign.CENTER
-        TextAlign.End -> ReaderTextAlign.RIGHT
-        TextAlign.Justify -> ReaderTextAlign.JUSTIFY
-        else -> ReaderTextAlign.LEFT
     }
 }
 

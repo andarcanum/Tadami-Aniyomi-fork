@@ -19,11 +19,18 @@ import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.math.roundToInt
 
 enum class NovelAutoScrollChapterEndBehavior {
     StopAtEnd,
     AdvanceAndStop,
     ContinuousReading,
+}
+
+enum class NovelReaderTypographyPreset {
+    CUSTOM,
+    SUPERGOLDEN,
+    GOLDEN,
 }
 
 data class NovelReaderSettings(
@@ -45,6 +52,7 @@ data class NovelReaderSettings(
     val textShadowY: Float,
     val pageEdgeShadow: Boolean,
     val pageEdgeShadowAlpha: Float,
+    val typographyPreset: NovelReaderTypographyPreset = NovelReaderTypographyPreset.CUSTOM,
 
     // Theme
     val theme: NovelReaderTheme,
@@ -315,6 +323,7 @@ data class NovelReaderOverride(
     val textShadowY: Float? = null,
     val pageEdgeShadow: Boolean? = null,
     val pageEdgeShadowAlpha: Float? = null,
+    val typographyPreset: NovelReaderTypographyPreset? = null,
 
     // Theme
     val theme: NovelReaderTheme? = null,
@@ -447,6 +456,11 @@ class NovelReaderPreferences(
 
     // Display
     fun fontSize() = preferenceStore.getInt("novel_reader_font_size", DEFAULT_FONT_SIZE)
+
+    fun typographyPreset() = preferenceStore.getEnum(
+        "novel_reader_typography_preset",
+        NovelReaderTypographyPreset.CUSTOM,
+    )
 
     fun lineHeight() = preferenceStore.getFloat("novel_reader_line_height", DEFAULT_LINE_HEIGHT)
 
@@ -1003,6 +1017,7 @@ class NovelReaderPreferences(
                 paragraphSpacingDp = paragraphSpacing().get(),
                 forceParagraphIndent = forceParagraphIndent().get(),
                 preserveSourceTextAlignInNative = preserveSourceTextAlignInNative().get(),
+                typographyPreset = typographyPreset().get(),
                 fontFamily = fontFamily().get(),
                 forceBoldText = forceBoldText().get(),
                 forceItalicText = forceItalicText().get(),
@@ -1122,12 +1137,32 @@ class NovelReaderPreferences(
 
     fun resolveSettings(sourceId: Long): NovelReaderSettings {
         val override = getSourceOverride(sourceId)
+        val rawFontSize = override?.fontSize ?: fontSize().get()
+        val preset = override?.typographyPreset ?: typographyPreset().get()
+
+        val resolvedLineHeight = when (preset) {
+            NovelReaderTypographyPreset.SUPERGOLDEN -> 1.47f
+            NovelReaderTypographyPreset.GOLDEN -> 1.52f
+            NovelReaderTypographyPreset.CUSTOM -> override?.lineHeight ?: lineHeight().get()
+        }
+        val resolvedParagraphSpacing = when (preset) {
+            NovelReaderTypographyPreset.SUPERGOLDEN -> (rawFontSize * 1.21f).roundToInt()
+            NovelReaderTypographyPreset.GOLDEN -> (rawFontSize * 1.27f).roundToInt()
+            NovelReaderTypographyPreset.CUSTOM -> override?.paragraphSpacingDp ?: paragraphSpacing().get()
+        }
+        val resolvedMargin = when (preset) {
+            NovelReaderTypographyPreset.SUPERGOLDEN -> (rawFontSize * 1.50f).roundToInt()
+            NovelReaderTypographyPreset.GOLDEN -> (rawFontSize * 1.83f).roundToInt()
+            NovelReaderTypographyPreset.CUSTOM -> override?.margin ?: margin().get()
+        }
+
         return NovelReaderSettings(
-            fontSize = override?.fontSize ?: fontSize().get(),
-            lineHeight = override?.lineHeight ?: lineHeight().get(),
-            margin = override?.margin ?: margin().get(),
+            fontSize = rawFontSize,
+            lineHeight = resolvedLineHeight,
+            margin = resolvedMargin,
             textAlign = override?.textAlign ?: textAlign().get(),
-            paragraphSpacing = override?.paragraphSpacingDp ?: paragraphSpacing().get(),
+            paragraphSpacing = resolvedParagraphSpacing,
+            typographyPreset = preset,
             forceParagraphIndent = override?.forceParagraphIndent ?: forceParagraphIndent().get(),
             preserveSourceTextAlignInNative =
             override?.preserveSourceTextAlignInNative ?: preserveSourceTextAlignInNative().get(),
@@ -1290,6 +1325,7 @@ class NovelReaderPreferences(
             textShadowY().changes(),
             pageEdgeShadow().changes(),
             pageEdgeShadowAlpha().changes(),
+            typographyPreset().changes(),
         ) { values: Array<Any?> ->
             DisplaySettings(
                 values[0] as Int,
@@ -1309,6 +1345,7 @@ class NovelReaderPreferences(
                 values[14] as Float,
                 values[15] as Boolean,
                 values[16] as Float,
+                (values[17] as? NovelReaderTypographyPreset) ?: NovelReaderTypographyPreset.CUSTOM,
             )
         }.distinctUntilChanged()
 
@@ -1584,12 +1621,31 @@ class NovelReaderPreferences(
             val overrides = values[7] as Map<Long, NovelReaderOverride>
 
             val override = overrides[sourceId]
+            val rawFontSize = override?.fontSize ?: display.fontSize
+            val preset = override?.typographyPreset ?: display.typographyPreset
+
+            val resolvedLineHeight = when (preset) {
+                NovelReaderTypographyPreset.SUPERGOLDEN -> 1.47f
+                NovelReaderTypographyPreset.GOLDEN -> 1.52f
+                NovelReaderTypographyPreset.CUSTOM -> override?.lineHeight ?: display.lineHeight
+            }
+            val resolvedParagraphSpacing = when (preset) {
+                NovelReaderTypographyPreset.SUPERGOLDEN -> (rawFontSize * 1.21f).roundToInt()
+                NovelReaderTypographyPreset.GOLDEN -> (rawFontSize * 1.27f).roundToInt()
+                NovelReaderTypographyPreset.CUSTOM -> override?.paragraphSpacingDp ?: display.paragraphSpacing
+            }
+            val resolvedMargin = when (preset) {
+                NovelReaderTypographyPreset.SUPERGOLDEN -> (rawFontSize * 1.50f).roundToInt()
+                NovelReaderTypographyPreset.GOLDEN -> (rawFontSize * 1.83f).roundToInt()
+                NovelReaderTypographyPreset.CUSTOM -> override?.margin ?: display.margin
+            }
+
             NovelReaderSettings(
-                fontSize = override?.fontSize ?: display.fontSize,
-                lineHeight = override?.lineHeight ?: display.lineHeight,
-                margin = override?.margin ?: display.margin,
+                fontSize = rawFontSize,
+                lineHeight = resolvedLineHeight,
+                margin = resolvedMargin,
                 textAlign = override?.textAlign ?: display.textAlign,
-                paragraphSpacing = override?.paragraphSpacingDp ?: display.paragraphSpacing,
+                paragraphSpacing = resolvedParagraphSpacing,
                 forceParagraphIndent = override?.forceParagraphIndent ?: display.forceParagraphIndent,
                 preserveSourceTextAlignInNative =
                 override?.preserveSourceTextAlignInNative ?: display.preserveSourceTextAlignInNative,
@@ -1603,6 +1659,7 @@ class NovelReaderPreferences(
                 textShadowY = override?.textShadowY ?: display.textShadowY,
                 pageEdgeShadow = override?.pageEdgeShadow ?: display.pageEdgeShadow,
                 pageEdgeShadowAlpha = override?.pageEdgeShadowAlpha ?: display.pageEdgeShadowAlpha,
+                typographyPreset = preset,
                 theme = override?.theme ?: theme.theme,
                 backgroundColor = override?.backgroundColor ?: theme.backgroundColor,
                 textColor = override?.textColor ?: theme.textColor,
@@ -1750,6 +1807,7 @@ class NovelReaderPreferences(
         val textShadowY: Float,
         val pageEdgeShadow: Boolean,
         val pageEdgeShadowAlpha: Float,
+        val typographyPreset: NovelReaderTypographyPreset,
     )
 
     private data class ThemeSettings(

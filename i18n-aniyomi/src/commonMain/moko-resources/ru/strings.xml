@@ -345,6 +345,10 @@
     <string name="novel_reader_editing_global">Редактируются глобальные настройки</string>
     <string name="novel_reader_editing_source">Редактируется переопределение источника</string>
     <string name="novel_reader_font_size">Размер шрифта</string>
+    <string name="novel_reader_typography_scale_preset">Шкала типографики</string>
+    <string name="novel_reader_typography_scale_preset_custom">Вручную</string>
+    <string name="novel_reader_typography_scale_preset_supergolden">Сверхзолотое сечение (1.465)</string>
+    <string name="novel_reader_typography_scale_preset_golden">Золотое сечение (1.618)</string>
     <string name="novel_reader_line_height">Межстрочный интервал</string>
     <string name="novel_reader_margins">Поля</string>
     <string name="novel_reader_paragraph_spacing">Интервал между абзацами</string>

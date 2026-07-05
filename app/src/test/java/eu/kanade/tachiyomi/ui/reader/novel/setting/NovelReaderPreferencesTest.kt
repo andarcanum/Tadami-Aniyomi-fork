@@ -621,6 +621,53 @@ class NovelReaderPreferencesTest {
         updatedSettings?.googleTranslationAutoStart shouldBe true
     }
 
+    @Test
+    fun `typography preset calculates dynamic scale parameters`() = runTest {
+        val prefs = createPrefs()
+        val sourceId = 1L
+
+        // Default should be CUSTOM and return manual preferences
+        prefs.fontSize().set(16)
+        prefs.lineHeight().set(1.4f)
+        prefs.margin().set(20)
+        prefs.paragraphSpacing().set(10)
+        prefs.typographyPreset().set(NovelReaderTypographyPreset.CUSTOM)
+
+        val customSettings = prefs.resolveSettings(sourceId)
+        customSettings.fontSize shouldBe 16
+        customSettings.lineHeight shouldBe 1.4f
+        customSettings.margin shouldBe 20
+        customSettings.paragraphSpacing shouldBe 10
+        customSettings.typographyPreset shouldBe NovelReaderTypographyPreset.CUSTOM
+
+        val initialFlowSettings = prefs.settingsFlow(sourceId).first()
+        initialFlowSettings.typographyPreset shouldBe NovelReaderTypographyPreset.CUSTOM
+
+        // Switch to SUPERGOLDEN
+        prefs.typographyPreset().set(NovelReaderTypographyPreset.SUPERGOLDEN)
+        val sgSettings = prefs.resolveSettings(sourceId)
+        sgSettings.fontSize shouldBe 16
+        sgSettings.lineHeight shouldBe 1.47f
+        sgSettings.margin shouldBe 24 // 16 * 1.50 = 24
+        sgSettings.paragraphSpacing shouldBe 19 // 16 * 1.21 = 19.36 -> 19
+
+        val sgFlowSettings = prefs.settingsFlow(sourceId).first()
+        sgFlowSettings.typographyPreset shouldBe NovelReaderTypographyPreset.SUPERGOLDEN
+        sgFlowSettings.lineHeight shouldBe 1.47f
+
+        // Switch to GOLDEN
+        prefs.typographyPreset().set(NovelReaderTypographyPreset.GOLDEN)
+        val gSettings = prefs.resolveSettings(sourceId)
+        gSettings.fontSize shouldBe 16
+        gSettings.lineHeight shouldBe 1.52f
+        gSettings.margin shouldBe 29 // 16 * 1.83 = 29.28 -> 29
+        gSettings.paragraphSpacing shouldBe 20 // 16 * 1.27 = 20.32 -> 20
+
+        val gFlowSettings = prefs.settingsFlow(sourceId).first()
+        gFlowSettings.typographyPreset shouldBe NovelReaderTypographyPreset.GOLDEN
+        gFlowSettings.lineHeight shouldBe 1.52f
+    }
+
     private class FakePreferenceStore : PreferenceStore {
         private val strings = mutableMapOf<String, Preference<String>>()
         private val longs = mutableMapOf<String, Preference<Long>>()

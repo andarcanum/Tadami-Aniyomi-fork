@@ -781,6 +781,7 @@ internal fun NovelPageReaderPageContent(
         fontSize = readerSettings.fontSize,
         lineHeight = readerSettings.lineHeight,
     )
+    val preserveSourceAlign = readerSettings.preserveSourceTextAlignInNative
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -845,7 +846,11 @@ internal fun NovelPageReaderPageContent(
                                     readerSettings = readerSettings,
                                     textColor = textColor,
                                     textBackground = textBackground,
-                                    textAlign = readerSettings.textAlign,
+                                    textAlign = resolveNativeReaderTextAlign(
+                                        globalTextAlign = readerSettings.textAlign,
+                                        preserveSourceTextAlignInNative = preserveSourceAlign,
+                                        sourceTextAlign = null,
+                                    ),
                                     textTypeface = textTypeface,
                                     chapterTitleTypeface = chapterTitleTypeface,
                                     chapterTitleTextColor = if (block.isChapterTitle) {
@@ -888,7 +893,11 @@ internal fun NovelPageReaderPageContent(
                                     readerSettings = readerSettings,
                                     textColor = textColor,
                                     textBackground = textBackground,
-                                    textAlign = readerSettings.textAlign,
+                                    textAlign = resolveNativeReaderTextAlign(
+                                        globalTextAlign = readerSettings.textAlign,
+                                        preserveSourceTextAlignInNative = preserveSourceAlign,
+                                        sourceTextAlign = block.sourceTextAlign,
+                                    ),
                                     textTypeface = textTypeface,
                                     chapterTitleTypeface = chapterTitleTypeface,
                                     chapterTitleTextColor = if (block.isChapterTitle) {

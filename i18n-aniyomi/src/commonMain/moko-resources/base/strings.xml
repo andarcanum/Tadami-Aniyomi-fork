@@ -528,6 +528,10 @@
     <string name="novel_reader_editing_global">Editing global settings</string>
     <string name="novel_reader_editing_source">Editing source override</string>
     <string name="novel_reader_font_size">Font size</string>
+    <string name="novel_reader_typography_scale_preset">Typography scale</string>
+    <string name="novel_reader_typography_scale_preset_custom">Manual</string>
+    <string name="novel_reader_typography_scale_preset_supergolden">Supergolden ratio (1.465)</string>
+    <string name="novel_reader_typography_scale_preset_golden">Golden ratio (1.618)</string>
     <string name="novel_reader_line_height">Line height</string>
     <string name="novel_reader_margins">Margins</string>
     <string name="novel_reader_paragraph_spacing">Paragraph spacing</string>

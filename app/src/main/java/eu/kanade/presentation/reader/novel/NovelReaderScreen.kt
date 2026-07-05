@@ -2665,7 +2665,7 @@ fun NovelReaderScreen(
                         bottomBarHeightPx = bottomBarHeight,
                         basePaddingPx = initialWebReaderPaddingPx,
                     )
-                    val initialPaddingHorizontal = state.readerSettings.margin
+                    val initialPaddingHorizontal = with(density) { state.readerSettings.margin.dp.roundToPx() }
                     val initialCssTextAlign = resolveWebViewTextAlignCss(state.readerSettings.textAlign)
                     val initialCssFirstLineIndent = resolveWebViewFirstLineIndentCss(
                         forceParagraphIndent = state.readerSettings.forceParagraphIndent,
@@ -2694,7 +2694,9 @@ fun NovelReaderScreen(
                                     paddingHorizontal = initialPaddingHorizontal,
                                     fontSizePx = state.readerSettings.fontSize,
                                     lineHeightMultiplier = state.readerSettings.lineHeight,
-                                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                    paragraphSpacingPx = with(density) {
+                                        state.readerSettings.paragraphSpacing.dp.roundToPx()
+                                    },
                                     textAlignCss = initialCssTextAlign,
                                     firstLineIndentCss = initialCssFirstLineIndent,
                                     textColorHex = colorToCssHex(textColor),
@@ -3048,7 +3050,7 @@ fun NovelReaderScreen(
                                 bottomBarHeightPx = bottomBarHeight,
                                 basePaddingPx = webReaderPaddingPx,
                             )
-                            val paddingHorizontal = state.readerSettings.margin
+                            val paddingHorizontal = with(density) { state.readerSettings.margin.dp.roundToPx() }
                             val cssTextAlign = resolveWebViewTextAlignCss(state.readerSettings.textAlign)
                             val cssFirstLineIndent = resolveWebViewFirstLineIndentCss(
                                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
@@ -3068,6 +3070,8 @@ fun NovelReaderScreen(
                                 textColor = textColor,
                                 backgroundColor = textBackground,
                             )
+                            val paragraphSpacingPx =
+                                with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
                             val styleFingerprint = buildWebReaderCssFingerprint(
                                 chapterId = state.chapter.id,
                                 paddingTop = paddingTop,
@@ -3075,7 +3079,7 @@ fun NovelReaderScreen(
                                 paddingHorizontal = paddingHorizontal,
                                 fontSizePx = state.readerSettings.fontSize,
                                 lineHeightMultiplier = state.readerSettings.lineHeight,
-                                paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                paragraphSpacingPx = paragraphSpacingPx,
                                 textAlignCss = cssTextAlign,
                                 firstLineIndentCss = cssFirstLineIndent,
                                 textColorHex = colorToCssHex(textColor),
@@ -3262,7 +3266,7 @@ fun NovelReaderScreen(
                                     paddingHorizontal = paddingHorizontal,
                                     fontSizePx = state.readerSettings.fontSize,
                                     lineHeightMultiplier = state.readerSettings.lineHeight,
-                                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
+                                    paragraphSpacingPx = paragraphSpacingPx,
                                     textAlignCss = cssTextAlign,
                                     firstLineIndentCss = cssFirstLineIndent,
                                     textColorHex = colorToCssHex(textColor),

@@ -203,3 +203,22 @@ internal fun isNativeChapterTitleText(
         .trim()
     return normalizedBlock.isNotBlank() && normalizedBlock == normalizedChapter
 }
+
+internal fun resolveNativeReaderTextAlign(
+    globalTextAlign: ReaderTextAlign,
+    preserveSourceTextAlignInNative: Boolean,
+    sourceTextAlign: NovelRichBlockTextAlign? = null,
+): ReaderTextAlign {
+    return when (
+        resolveNativeTextAlign(
+            globalTextAlign = globalTextAlign,
+            preserveSourceTextAlignInNative = preserveSourceTextAlignInNative,
+            sourceTextAlign = sourceTextAlign,
+        )
+    ) {
+        TextAlign.Center -> ReaderTextAlign.CENTER
+        TextAlign.End -> ReaderTextAlign.RIGHT
+        TextAlign.Justify -> ReaderTextAlign.JUSTIFY
+        else -> ReaderTextAlign.LEFT
+    }
+}
