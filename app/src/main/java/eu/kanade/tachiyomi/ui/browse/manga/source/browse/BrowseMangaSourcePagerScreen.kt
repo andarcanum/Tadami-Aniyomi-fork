@@ -30,7 +30,7 @@ data class BrowseMangaSourcePagerScreen(
             val isVisible = page == pagerState.currentPage || page == pagerState.targetPage
             if (isVisible) {
                 val screen = remember(sourceId) {
-                    BrowseMangaSourceScreen(sourceId, listingQuery)
+                    BrowseMangaSourceScreen(sourceId, listingQuery, parentScreen = this@BrowseMangaSourcePagerScreen)
                 }
                 screen.Content()
             } else {

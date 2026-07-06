@@ -68,11 +68,20 @@ data class BrowseNovelSourceScreen(
     val sourceId: Long,
     private val listingQuery: String?,
     private val savedSearchId: Long? = null,
+    private val parentScreen: cafe.adriel.voyager.core.screen.Screen? = null,
 ) : Screen() {
 
     @Composable
     override fun Content() {
-        val screenModel = rememberScreenModel { BrowseNovelSourceScreenModel(sourceId, listingQuery, savedSearchId) }
+        val screenModel = if (parentScreen != null) {
+            parentScreen.rememberScreenModel(tag = sourceId.toString()) {
+                BrowseNovelSourceScreenModel(sourceId, listingQuery, savedSearchId)
+            }
+        } else {
+            rememberScreenModel {
+                BrowseNovelSourceScreenModel(sourceId, listingQuery, savedSearchId)
+            }
+        }
         val state by screenModel.state.collectAsStateWithLifecycle()
         val favoriteNovelUrls by screenModel.favoriteNovelUrls.collectAsStateWithLifecycle()
         val navigator = LocalNavigator.currentOrThrow

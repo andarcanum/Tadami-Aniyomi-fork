@@ -80,6 +80,7 @@ data class BrowseMangaSourceScreen(
     val sourceId: Long,
     private val listingQuery: String?,
     private val savedSearchId: Long? = null,
+    private val parentScreen: cafe.adriel.voyager.core.screen.Screen? = null,
 ) : Screen(), AssistContentScreen {
 
     private var assistUrl: String? = null
@@ -93,7 +94,15 @@ data class BrowseMangaSourceScreen(
             return
         }
 
-        val screenModel = rememberScreenModel { BrowseMangaSourceScreenModel(sourceId, listingQuery, savedSearchId) }
+        val screenModel = if (parentScreen != null) {
+            parentScreen.rememberScreenModel(tag = sourceId.toString()) {
+                BrowseMangaSourceScreenModel(sourceId, listingQuery, savedSearchId)
+            }
+        } else {
+            rememberScreenModel {
+                BrowseMangaSourceScreenModel(sourceId, listingQuery, savedSearchId)
+            }
+        }
         val state by screenModel.state.collectAsStateWithLifecycle()
         val favoriteMangaUrls by screenModel.favoriteMangaUrls.collectAsStateWithLifecycle()
 
