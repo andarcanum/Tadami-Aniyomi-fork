@@ -80,6 +80,13 @@ object Notifications {
     const val ID_SYNC_ERROR = -602
 
     /**
+     * Notification channel and ids used by the Anixart/Shikimori import system.
+     */
+    const val CHANNEL_ANIXART_IMPORT = "anixart_import_channel"
+    const val ID_ANIXART_IMPORT_PROGRESS = -801
+    const val ID_ANIXART_IMPORT_COMPLETE = -802
+
+    /**
      * Notification channel used for Incognito Mode
      */
     const val CHANNEL_INCOGNITO_MODE = "incognito_mode_channel"
@@ -195,6 +202,10 @@ object Notifications {
                 },
                 buildNotificationChannel(CHANNEL_SYNC_COMPLETE, IMPORTANCE_HIGH) {
                     setName("Cloud Sync")
+                    setShowBadge(false)
+                },
+                buildNotificationChannel(CHANNEL_ANIXART_IMPORT, IMPORTANCE_LOW) {
+                    setName(context.getString(AYMR.strings.anixart_import_title.resourceId))
                     setShowBadge(false)
                 },
                 buildNotificationChannel(CHANNEL_TRANSLATION_PROGRESS, IMPORTANCE_LOW) {

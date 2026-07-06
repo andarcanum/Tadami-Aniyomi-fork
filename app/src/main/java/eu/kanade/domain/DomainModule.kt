@@ -409,6 +409,11 @@ class DomainModule : InjektModule {
         addFactory {
             eu.kanade.tachiyomi.data.anixart.ImportAnixartEntries(get(), get(), get(), get(), get())
         }
+        addFactory { eu.kanade.tachiyomi.data.anixart.AnixartTrackerSync(get(), get()) }
+        addFactory { eu.kanade.tachiyomi.data.shikimori.FetchShikimoriImportEntries(get()) }
+        addFactory {
+            eu.kanade.tachiyomi.data.shikimori.ImportShikimoriEntries(get(), get(), get(), get(), get(), get(), get())
+        }
         addFactory { UpdateAnime(get(), get()) }
         addFactory { SetAnimeCategories(get()) }
         addFactory { ShouldUpdateDbSeason() }

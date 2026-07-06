@@ -22,10 +22,7 @@ object AnixartCsvParser {
     /** Required header columns; parsing fails fast if any are missing. */
     private val REQUIRED_COLUMNS = listOf(
         "Русское название",
-        "Оригинальное название",
-        "Альтернативные названия",
         "Статус просмотра",
-        "Моя оценка",
     )
 
     private const val COL_INDEX = "#"

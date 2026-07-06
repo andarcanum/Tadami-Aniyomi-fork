@@ -143,4 +143,52 @@ class AnixartCsvParserTest {
         rows.first().index shouldBe 1
         rows.first().originalTitle shouldBe "No Number"
     }
+
+    @Test
+    fun `parses when optional columns like original title are missing`() {
+        val minimalHeader = "Русское название,Статус просмотра"
+        val csv = minimalHeader + "\n" +
+            "Re:Жизнь в альтернативном мире,Смотрю"
+
+        val rows = AnixartCsvParser.parse(csv)
+
+        rows.size shouldBe 1
+        val row = rows.first()
+        row.russianTitle shouldBe "Re:Жизнь в альтернативном мире"
+        row.originalTitle shouldBe ""
+        row.status shouldBe AnixartStatus.WATCHING
+        row.isFavorite shouldBe false
+        row.ratingOutOfTen shouldBe null
+    }
+
+    @Test
+    fun `cleanAnimeTitle and searchQueries handles various anime suffixes`() {
+        AnixartRow.cleanAnimeTitle("Клинок, рассекающий демонов (ТВ-1)") shouldBe "Клинок, рассекающий демонов"
+        AnixartRow.cleanAnimeTitle("Наруто: Ураганные хроники [ТВ-2]") shouldBe "Наруто: Ураганные хроники"
+        AnixartRow.cleanAnimeTitle("Моя геройская академия 5 сезон") shouldBe "Моя геройская академия"
+        AnixartRow.cleanAnimeTitle("Boku no Hero Academia (2021)") shouldBe "Boku no Hero Academia"
+        AnixartRow.cleanAnimeTitle("Sword Art Online [ТВ]") shouldBe "Sword Art Online"
+        // Latin suffixes without brackets (EN catalogue / romanized titles)
+        AnixartRow.cleanAnimeTitle("Kimetsu no Yaiba TV-1") shouldBe "Kimetsu no Yaiba"
+        AnixartRow.cleanAnimeTitle("Attack on Titan Season 2") shouldBe "Attack on Titan"
+        AnixartRow.cleanAnimeTitle("One Piece Movie") shouldBe "One Piece"
+        AnixartRow.cleanAnimeTitle("Naruto Shippuden Special") shouldBe "Naruto Shippuden"
+        AnixartRow.cleanAnimeTitle("Bleach 2nd Season") shouldBe "Bleach"
+
+        val row = AnixartRow(
+            index = 1,
+            russianTitle = "Клинок, рассекающий демонов (ТВ-1)",
+            originalTitle = "Kimetsu no Yaiba (TV-1)",
+            alternativeTitles = "Blade of Demon Destruction, Kimetsu no Yaiba [TV]",
+            favoriteRaw = "",
+            statusRaw = "Смотрю",
+            ratingRaw = "",
+        )
+
+        row.searchQueries() shouldContainExactly listOf(
+            "Kimetsu no Yaiba",
+            "Клинок, рассекающий демонов",
+            "Blade of Demon Destruction",
+        )
+    }
 }

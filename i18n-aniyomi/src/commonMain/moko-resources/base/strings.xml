@@ -2497,6 +2497,27 @@
     <string name="anixart_import_change_match">Change Match</string>
     <string name="anixart_import_score_match">Match score: %1$d%%</string>
     <string name="anixart_import_preference_group_title">Import</string>
+    <string name="anixart_import_export_hint">In Anixart export, enable Original titles (or All). For large libraries, export one list at a time.</string>
+    <string name="anixart_import_warning_missing_original">%1$d of %2$d entries have no original title — matching may be less accurate.</string>
+    <string name="anixart_import_warning_large">%1$d entries — matching may take several minutes.</string>
+    <string name="anixart_import_source_warning">May return inaccurate matches for anime titles</string>
+    <string name="anixart_import_status_filter_title">Statuses to import</string>
+    <string name="anixart_import_sync_shikimori">Sync status and score to Shikimori after import</string>
+    <string name="anixart_import_matched_query">Matched by: %1$s</string>
+    <string name="anixart_import_matched_source">Source: %1$s</string>
+    <string name="anixart_import_matching_report">Auto %1$d · Review %2$d · Not found %3$d</string>
+    <string name="anixart_import_background_started">Import continues in the background. You will get a notification when it finishes.</string>
+    <string name="anixart_import_tracker_report">Shikimori synced %1$d, skipped %2$d, failed %3$d</string>
+
+    <!-- Shikimori library import -->
+    <string name="shikimori_import_title">Import from Shikimori</string>
+    <string name="shikimori_import_summary">Import your Shikimori anime list into the library</string>
+    <string name="shikimori_import_not_logged_in">Log in to Shikimori in Tracking settings first</string>
+    <string name="shikimori_import_empty">No anime entries found in your Shikimori list</string>
+    <string name="shikimori_import_status_planned">Planned</string>
+    <string name="shikimori_import_status_on_hold">On Hold</string>
+    <string name="shikimori_import_status_rewatching">Rewatching</string>
+    <string name="shikimori_import_report">Added %1$d, already in library %2$d, failed %3$d, Shikimori bound %4$d</string>
     <!-- Time Paradox Achievement -->
     <string name="achievement_time_paradox_title">Time Paradox</string>
     <string name="achievement_time_paradox_desc">Read or watch at exactly 11:11</string>

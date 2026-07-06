@@ -11,6 +11,7 @@ import eu.kanade.tachiyomi.data.track.shikimori.dto.SMEntry
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMOAuth
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMUser
 import eu.kanade.tachiyomi.data.track.shikimori.dto.SMUserListEntry
+import eu.kanade.tachiyomi.data.track.shikimori.dto.SMUserRate
 import eu.kanade.tachiyomi.network.DELETE
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.POST
@@ -264,6 +265,50 @@ class ShikimoriApi(
                 .awaitSuccess()
                 .parseAs<SMUser>()
                 .id
+        }
+    }
+
+    suspend fun getUserAnimeRates(userId: Int, page: Int = 1, limit: Int = 50): List<SMUserRate> {
+        return withIOContext {
+            val url = "$API_URL/v2/user_rates".toUri().buildUpon()
+                .appendQueryParameter("user_id", userId.toString())
+                .appendQueryParameter("target_type", "Anime")
+                .appendQueryParameter("page", page.toString())
+                .appendQueryParameter("limit", limit.toString())
+                .build()
+            with(json) {
+                authClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs<List<SMUserRate>>()
+            }
+        }
+    }
+
+    suspend fun getAllUserAnimeRates(userId: Int): List<SMUserRate> {
+        val all = ArrayList<SMUserRate>()
+        var page = 1
+        while (true) {
+            val chunk = getUserAnimeRates(userId, page = page)
+            if (chunk.isEmpty()) break
+            all += chunk
+            if (chunk.size < 50) break
+            page++
+        }
+        return all
+    }
+
+    suspend fun getAnimesByIds(ids: List<Long>): List<SMEntry> {
+        if (ids.isEmpty()) return emptyList()
+        return withIOContext {
+            val url = "$API_URL/animes".toUri().buildUpon()
+                .appendQueryParameter("ids", ids.joinToString(","))
+                .appendQueryParameter("limit", ids.size.toString())
+                .build()
+            with(json) {
+                authClient.newCall(GET(url.toString()))
+                    .awaitSuccess()
+                    .parseAs<List<SMEntry>>()
+            }
         }
     }
 

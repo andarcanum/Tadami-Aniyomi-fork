@@ -75,6 +75,7 @@ import eu.kanade.presentation.more.settings.screen.data.CloudSyncOptionsScreen
 import eu.kanade.presentation.more.settings.screen.data.CreateBackupScreen
 import eu.kanade.presentation.more.settings.screen.data.RestoreBackupScreen
 import eu.kanade.presentation.more.settings.screen.data.StorageInfo
+import eu.kanade.presentation.more.settings.screen.shikimori.ShikimoriImportScreen
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
 import eu.kanade.presentation.theme.AuroraSurfaceLevel
@@ -741,6 +742,12 @@ object SettingsDataScreen : SearchableSettings {
                     subtitle = stringResource(AYMR.strings.anixart_import_summary),
                     icon = Icons.Outlined.CloudDownload,
                     onClick = { anixartImportLauncher.launch("*/*") },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.shikimori_import_title),
+                    subtitle = stringResource(AYMR.strings.shikimori_import_summary),
+                    icon = Icons.Outlined.CloudDownload,
+                    onClick = { navigator.push(ShikimoriImportScreen()) },
                 ),
             ),
         )

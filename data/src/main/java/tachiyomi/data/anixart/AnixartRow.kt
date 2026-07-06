@@ -72,8 +72,30 @@ data class AnixartRow(
     fun candidateTitles(): List<String> {
         val raw = buildList {
             add(originalTitle)
+            add(cleanAnimeTitle(originalTitle))
             add(russianTitle)
-            alternativeTitles.split(',').forEach { add(it) }
+            add(cleanAnimeTitle(russianTitle))
+            alternativeTitles.split(',').forEach {
+                add(it)
+                add(cleanAnimeTitle(it))
+            }
+        }
+        val seen = HashSet<String>()
+        return raw
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !isPlaceholder(it) }
+            .filter { seen.add(it.lowercase()) }
+    }
+
+    /**
+     * Cleaned version of candidate titles to use for catalog search.
+     * Strips suffixes, brackets, parentheses, and common anime metadata.
+     */
+    fun searchQueries(): List<String> {
+        val raw = buildList {
+            add(cleanAnimeTitle(originalTitle))
+            add(cleanAnimeTitle(russianTitle))
+            alternativeTitles.split(',').forEach { add(cleanAnimeTitle(it)) }
         }
         val seen = HashSet<String>()
         return raw
@@ -98,5 +120,31 @@ data class AnixartRow(
         )
 
         fun isPlaceholder(value: String): Boolean = value.trim().lowercase() in PLACEHOLDERS
+
+        /**
+         * Strips bracket/parenthesis metadata and trailing season/type suffixes in
+         * both Cyrillic (Anixart RU exports) and Latin (romanized / EN catalogue titles).
+         */
+        fun cleanAnimeTitle(title: String): String {
+            var cleaned = title
+            cleaned = cleaned.replace(Regex("""\s*\[.*?\]"""), "")
+            cleaned = cleaned.replace(Regex("""\s*\(.*?\)"""), "")
+            cleaned = cleaned.replace(TRAILING_SUFFIX, "")
+            cleaned = cleaned.trim().trimEnd('.', ',', '-', ':')
+            return cleaned.trim()
+        }
+
+        private val TRAILING_SUFFIX = Regex(
+            """\s+(?:
+                ТВ-\d+|ТВ|
+                сезон\s+\d+|\d+\s+сезон|
+                фильм|спешл|спэшл|
+                TV-\d+|TV|
+                Season\s+\d+|\d+(?:st|nd|rd|th)?\s+Season|
+                Movie|Special|Film|
+                OVA|ONA|OVA-\d+|ONA-\d+
+            )\s*$""",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.COMMENTS),
+        )
     }
 }

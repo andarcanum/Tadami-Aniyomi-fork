@@ -2513,6 +2513,27 @@
     <string name="anixart_import_change_match">Изменить совпадение</string>
     <string name="anixart_import_score_match">Схожесть: %1$d%%</string>
     <string name="anixart_import_preference_group_title">Импорт</string>
+    <string name="anixart_import_export_hint">При экспорте в Anixart включите «Ориг.» или «Все». Для больших списков экспортируйте по одному списку.</string>
+    <string name="anixart_import_warning_missing_original">У %1$d из %2$d записей нет оригинального названия — матчинг может быть менее точным.</string>
+    <string name="anixart_import_warning_large">%1$d записей — сопоставление может занять несколько минут.</string>
+    <string name="anixart_import_source_warning">Может давать неточные совпадения для аниме-названий</string>
+    <string name="anixart_import_status_filter_title">Статусы для импорта</string>
+    <string name="anixart_import_sync_shikimori">Синхронизировать статус и оценку в Shikimori после импорта</string>
+    <string name="anixart_import_matched_query">Найдено по запросу: %1$s</string>
+    <string name="anixart_import_matched_source">Источник: %1$s</string>
+    <string name="anixart_import_matching_report">Авто %1$d · Проверка %2$d · Не найдено %3$d</string>
+    <string name="anixart_import_background_started">Импорт продолжается в фоне. По завершении придёт уведомление.</string>
+    <string name="anixart_import_tracker_report">Shikimori: синхр. %1$d, пропущено %2$d, ошибок %3$d</string>
+
+    <!-- Shikimori library import -->
+    <string name="shikimori_import_title">Импорт из Shikimori</string>
+    <string name="shikimori_import_summary">Импорт вашего аниме-списка Shikimori в библиотеку</string>
+    <string name="shikimori_import_not_logged_in">Сначала войдите в Shikimori в настройках трекинга</string>
+    <string name="shikimori_import_empty">В списке Shikimori не найдено аниме</string>
+    <string name="shikimori_import_status_planned">В планах</string>
+    <string name="shikimori_import_status_on_hold">Отложено</string>
+    <string name="shikimori_import_status_rewatching">Пересматриваю</string>
+    <string name="shikimori_import_report">Добавлено %1$d, уже в библиотеке %2$d, ошибок %3$d, привязано к Shikimori %4$d</string>
     <!-- Time Paradox Achievement -->
     <string name="achievement_time_paradox_title">Временной парадокс</string>
     <string name="achievement_time_paradox_desc">Почитайте или посмотрите что-то ровно в 11:11</string>

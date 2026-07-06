@@ -40,6 +40,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.AppBar
 import tachiyomi.data.anixart.AnixartMatcher
+import tachiyomi.data.anixart.AnixartSourceHints
 import tachiyomi.data.anixart.AnixartStatus
 import tachiyomi.domain.category.model.Category
 import tachiyomi.i18n.aniyomi.AYMR
@@ -70,9 +71,17 @@ class AnixartImportScreen(
             },
         ) { padding ->
             when (val s = state) {
-                is AnixartImportScreenModel.State.Loading,
-                is AnixartImportScreenModel.State.Matching,
-                -> Centered(padding) { CircularProgressIndicator() }
+                is AnixartImportScreenModel.State.Loading -> Centered(padding) { CircularProgressIndicator() }
+                is AnixartImportScreenModel.State.Matching -> Centered(padding) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Text(
+                            text = stringResource(AYMR.strings.anixart_import_searching) +
+                                " ${s.current}/${s.total}",
+                            modifier = Modifier.padding(top = 16.dp),
+                        )
+                    }
+                }
 
                 is AnixartImportScreenModel.State.Error -> Centered(padding) {
                     Text(
@@ -99,14 +108,41 @@ class AnixartImportScreen(
                 is AnixartImportScreenModel.State.Done -> Centered(padding) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(stringResource(AYMR.strings.anixart_import_done))
-                        Text(
-                            stringResource(
-                                AYMR.strings.anixart_import_report,
-                                s.report.added,
-                                s.report.alreadyInLibrary,
-                                s.report.failed,
-                            ),
-                        )
+                        if (s.backgroundJob) {
+                            Text(
+                                stringResource(AYMR.strings.anixart_import_background_started),
+                                modifier = Modifier.padding(vertical = 8.dp),
+                            )
+                        } else {
+                            Text(
+                                stringResource(
+                                    AYMR.strings.anixart_import_report,
+                                    s.report.added,
+                                    s.report.alreadyInLibrary,
+                                    s.report.failed,
+                                ),
+                            )
+                            Text(
+                                stringResource(
+                                    AYMR.strings.anixart_import_matching_report,
+                                    s.matchingReport.auto,
+                                    s.matchingReport.needsReview,
+                                    s.matchingReport.noMatch,
+                                ),
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                            s.trackerReport?.let { tracker ->
+                                Text(
+                                    stringResource(
+                                        AYMR.strings.anixart_import_tracker_report,
+                                        tracker.synced,
+                                        tracker.skipped,
+                                        tracker.failed,
+                                    ),
+                                    modifier = Modifier.padding(top = 4.dp),
+                                )
+                            }
+                        }
                         Button(onClick = navigator::pop) { Text("OK") }
                     }
                 }
@@ -170,6 +206,60 @@ class AnixartImportScreen(
                         stringResource(AYMR.strings.anixart_import_legal_notice),
                         modifier = Modifier.padding(16.dp),
                     )
+                    Text(
+                        stringResource(AYMR.strings.anixart_import_export_hint),
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (s.preflight.missingOriginalCount > 0) {
+                        Text(
+                            stringResource(
+                                AYMR.strings.anixart_import_warning_missing_original,
+                                s.preflight.missingOriginalCount,
+                                s.preflight.totalRows,
+                            ),
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                    if (s.preflight.largeImport) {
+                        Text(
+                            stringResource(
+                                AYMR.strings.anixart_import_warning_large,
+                                s.preflight.totalRows,
+                            ),
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                }
+                item {
+                    Text(
+                        stringResource(AYMR.strings.anixart_import_status_filter_title),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
+                items(AnixartStatus.entries.toList()) { status ->
+                    val checked = status in s.statusFilter
+                    ListItem(
+                        headlineContent = { Text(statusLabel(status)) },
+                        leadingContent = {
+                            Checkbox(checked = checked, onCheckedChange = { model.toggleStatusFilter(status) })
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text(stringResource(AYMR.strings.anixart_import_sync_shikimori)) },
+                        leadingContent = {
+                            Checkbox(
+                                checked = s.syncToShikimori,
+                                onCheckedChange = model::setSyncToShikimori,
+                            )
+                        },
+                    )
                 }
                 item {
                     Text(
@@ -179,8 +269,20 @@ class AnixartImportScreen(
                     )
                 }
                 items(s.sources, key = { it.id }) { src ->
+                    val warning = src.recommendation == AnixartSourceHints.Recommendation.WARNING
                     ListItem(
                         headlineContent = { Text(src.name) },
+                        supportingContent = if (warning) {
+                            {
+                                Text(
+                                    stringResource(AYMR.strings.anixart_import_source_warning),
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        } else {
+                            null
+                        },
                         leadingContent = {
                             Checkbox(checked = src.selected, onCheckedChange = { model.toggleSource(src.id) })
                         },
@@ -295,30 +397,41 @@ class AnixartImportScreen(
                     )
                 },
                 supportingContent = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 2.dp),
-                    ) {
-                        val bestText = selectedCandidate?.displayTitle
-                            ?: stringResource(AYMR.strings.anixart_import_group_nomatch)
-                        Text(
-                            text = bestText,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f, fill = false),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Box(
-                            modifier = Modifier
-                                .padding(start = 8.dp)
-                                .clip(MaterialTheme.shapes.extraSmall)
-                                .background(badgeColor)
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                        ) {
+                    Column(modifier = Modifier.padding(top = 2.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val bestText = selectedCandidate?.displayTitle
+                                ?: stringResource(AYMR.strings.anixart_import_group_nomatch)
                             Text(
-                                text = badgeText,
+                                text = bestText,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f, fill = false),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .clip(MaterialTheme.shapes.extraSmall)
+                                    .background(badgeColor)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = badgeText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = badgeTextColor,
+                                )
+                            }
+                        }
+                        item.matchedQuery?.let { query ->
+                            Text(
+                                stringResource(AYMR.strings.anixart_import_matched_query, query),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = badgeTextColor,
+                            )
+                        }
+                        item.matchedSourceName?.let { source ->
+                            Text(
+                                stringResource(AYMR.strings.anixart_import_matched_source, source),
+                                style = MaterialTheme.typography.labelSmall,
                             )
                         }
                     }
@@ -425,6 +538,14 @@ class AnixartImportScreen(
                 Text(stringResource(AYMR.strings.anixart_import_action_import, model.selectedCount()))
             }
         }
+    }
+
+    @Composable
+    private fun statusLabel(status: AnixartStatus): String = when (status) {
+        AnixartStatus.WATCHING -> stringResource(AYMR.strings.anixart_import_status_watching)
+        AnixartStatus.COMPLETED -> stringResource(AYMR.strings.anixart_import_status_completed)
+        AnixartStatus.PLAN_TO_WATCH -> stringResource(AYMR.strings.anixart_import_status_plan_to_watch)
+        AnixartStatus.DROPPED -> stringResource(AYMR.strings.anixart_import_status_dropped)
     }
 
     @Composable
