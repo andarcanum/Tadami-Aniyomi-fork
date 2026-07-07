@@ -5,6 +5,7 @@ import android.net.Uri
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.LegacyBackup
 import eu.kanade.tachiyomi.data.backup.models.MihonBackup
+import eu.kanade.tachiyomi.data.backup.models.mergeLegacyPayloadIfPresent
 import eu.kanade.tachiyomi.data.backup.models.routeSharedMangaEntriesBySource
 import kotlinx.serialization.protobuf.ProtoBuf
 import okio.buffer
@@ -60,12 +61,7 @@ class BackupDecoder(
                             .toTadamiBackup(mangaSourceManager, novelSourceManager, animeSourceManager)
                     }
                     else -> {
-                        parser.decodeFromByteArray(Backup.serializer(), backupString)
-                            .routeSharedMangaEntriesBySource(
-                                mangaSourceClassifier = ::isMangaSource,
-                                novelSourceClassifier = ::isNovelSource,
-                                animeSourceClassifier = ::isAnimeSource,
-                            )
+                        decodeNativeBackup(backupString)
                     }
                 }
             } catch (e: Exception) {
@@ -80,6 +76,26 @@ class BackupDecoder(
                 }
             }
         }
+    }
+
+    private fun decodeNativeBackup(backupString: ByteArray): Backup {
+        val decoded = parser.decodeFromByteArray(Backup.serializer(), backupString)
+        val merged = if (BackupDetector.hasLegacyPayloadFields(backupString)) {
+            try {
+                decoded.mergeLegacyPayloadIfPresent(
+                    parser.decodeFromByteArray(LegacyBackup.serializer(), backupString),
+                )
+            } catch (_: Exception) {
+                decoded
+            }
+        } else {
+            decoded
+        }
+        return merged.routeSharedMangaEntriesBySource(
+            mangaSourceClassifier = ::isMangaSource,
+            novelSourceClassifier = ::isNovelSource,
+            animeSourceClassifier = ::isAnimeSource,
+        )
     }
 
     private fun isMangaSource(sourceId: Long): Boolean {

@@ -79,12 +79,17 @@ internal fun Backup.routeSharedMangaEntriesBySource(
     val novels = backupNovel.toMutableList()
     val animes = backupAnime.toMutableList()
 
+    val knownAnimeSourceIds = backupAnimeSources.map { it.sourceId }.toSet()
+    val knownNovelSourceIds = backupNovelSources.map { it.sourceId }.toSet()
+
     backupManga.forEach { entry ->
         val sourceId = entry.source
         when {
             novelSourceClassifier(sourceId) -> novels.add(entry.toBackupNovel())
             animeSourceClassifier(sourceId) -> animes.add(entry.toBackupAnime())
             mangaSourceClassifier(sourceId) -> mangas.add(entry)
+            sourceId in knownNovelSourceIds -> novels.add(entry.toBackupNovel())
+            sourceId in knownAnimeSourceIds -> animes.add(entry.toBackupAnime())
             else -> mangas.add(entry)
         }
     }

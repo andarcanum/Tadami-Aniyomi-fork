@@ -26,9 +26,24 @@ object BackupDetector {
 
     fun isLegacyBackup(bytes: ByteArray): Boolean {
         return try {
+            val fields = topLevelFieldNumbers(bytes)
+            // Legacy Aniyomi/Tadami stores anime/novel at top-level fields 3 and 5.
+            if (LEGACY_ANIME_FIELD in fields || LEGACY_NOVEL_FIELD in fields) {
+                return true
+            }
             val detect = ProtoBuf.decodeFromByteArray(BackupDetector.serializer(), bytes)
             detect.isLegacy && detect.backupAnimeSources.isNotEmpty()
         } catch (_: SerializationException) {
+            false
+        }
+    }
+
+    /** True when the wire format still carries legacy anime/novel payload fields. */
+    fun hasLegacyPayloadFields(bytes: ByteArray): Boolean {
+        return try {
+            val fields = topLevelFieldNumbers(bytes)
+            LEGACY_ANIME_FIELD in fields || LEGACY_NOVEL_FIELD in fields
+        } catch (_: Exception) {
             false
         }
     }
@@ -38,10 +53,11 @@ object BackupDetector {
      * native Aniyomi/Tadami backup).
      *
      * Native Aniyomi/Tadami backups always carry at least one "native marker" field
-     * at the top level: backupAnimeCategories(4), backupNovel(5),
-     * backupNovelCategories(6), or any field >= 500 (BackupCreator always writes
-     * isLegacy=false at field 500, and all anime/novel/feature data lives in the
-     * 500+ range). Mihon backups only ever use field numbers {1,2,100,101,104,105,106}.
+     * at the top level: legacy backupAnime(3), backupAnimeCategories(4),
+     * legacy backupNovel(5), backupNovelCategories(6), or any field >= 500
+     * (BackupCreator always writes isLegacy=false at field 500, and all
+     * anime/novel/feature data lives in the 500+ range). Mihon backups only ever
+     * use field numbers {1,2,100,101,104,105,106}.
      *
      * So a backup with no native marker but recognizable Mihon content is a Mihon
      * backup. Must be checked AFTER [isLegacyBackup].
@@ -52,12 +68,17 @@ object BackupDetector {
         } catch (_: Exception) {
             return false
         }
-        val hasNativeMarker = fields.any { it == 4 || it == 5 || it == 6 || it >= 500 }
+        val hasNativeMarker = fields.any {
+            it == LEGACY_ANIME_FIELD || it == 4 || it == LEGACY_NOVEL_FIELD || it == 6 || it >= 500
+        }
         val hasMihonContent = fields.any { it in MIHON_CONTENT_FIELDS }
         return !hasNativeMarker && hasMihonContent
     }
 
     private val MIHON_CONTENT_FIELDS = setOf(1, 2, 101, 104, 105, 106)
+
+    private const val LEGACY_ANIME_FIELD = 3
+    private const val LEGACY_NOVEL_FIELD = 5
 
     /**
      * Walk the top level of a protobuf message and collect the field numbers present.

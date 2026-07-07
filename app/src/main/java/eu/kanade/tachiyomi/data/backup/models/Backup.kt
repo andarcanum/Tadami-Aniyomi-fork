@@ -97,3 +97,29 @@ data class Backup(
     // Feed
     @ProtoNumber(622) var backupFeeds: List<BackupFeed> = emptyList(),
 )
+
+/**
+ * Fill modern [Backup] slots from a co-encoded [LegacyBackup] payload when the
+ * native 500+ fields were not populated (common for older Aniyomi exports).
+ */
+internal fun Backup.mergeLegacyPayloadIfPresent(legacy: LegacyBackup): Backup {
+    return copy(
+        backupAnime = backupAnime.ifEmpty { legacy.backupAnime },
+        backupAnimeCategories = backupAnimeCategories.ifEmpty { legacy.backupAnimeCategories },
+        backupAnimeSources = backupAnimeSources.ifEmpty { legacy.backupAnimeSources },
+        backupNovel = backupNovel.ifEmpty { legacy.backupNovel },
+        backupNovelCategories = backupNovelCategories.ifEmpty { legacy.backupNovelCategories },
+        backupNovelSources = backupNovelSources.ifEmpty { legacy.backupNovelSources },
+        backupExtensions = backupExtensions.ifEmpty { legacy.backupExtensions },
+        backupAnimeExtensionRepo = backupAnimeExtensionRepo.ifEmpty { legacy.backupAnimeExtensionRepo },
+        backupCustomButton = backupCustomButton.ifEmpty { legacy.backupCustomButton },
+        backupNovelExtensionRepo = backupNovelExtensionRepo.ifEmpty { legacy.backupNovelExtensionRepo },
+        backupAchievements = backupAchievements.ifEmpty { legacy.backupAchievements },
+        backupUserProfile = backupUserProfile ?: legacy.backupUserProfile,
+        backupActivityLog = backupActivityLog.ifEmpty { legacy.backupActivityLog },
+        backupStats = backupStats ?: legacy.backupStats,
+        backupMangaSeries = backupMangaSeries.ifEmpty { legacy.backupMangaSeries },
+        backupNovelSeries = backupNovelSeries.ifEmpty { legacy.backupNovelSeries },
+        backupFeeds = backupFeeds.ifEmpty { legacy.backupFeeds },
+    )
+}
