@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.View
 import android.view.View.LAYER_TYPE_HARDWARE
 import android.view.WindowManager
 import android.widget.Toast
@@ -54,8 +55,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.core.content.getSystemService
+import androidx.core.graphics.Insets
 import androidx.core.net.toUri
 import androidx.core.transition.doOnEnd
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -66,7 +69,6 @@ import com.google.android.material.transition.platform.MaterialContainerTransfor
 import com.hippo.unifile.UniFile
 import com.tadami.aurora.R
 import com.tadami.aurora.databinding.ReaderActivityBinding
-import dev.chrisbanes.insetter.applyInsetter
 import eu.kanade.core.util.ifMangaSourcesLoaded
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.ui.UiPreferences
@@ -111,6 +113,7 @@ import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.view.setComposeContent
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
@@ -815,6 +818,11 @@ class ReaderActivity : BaseActivity() {
                     WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
         }
+        updateViewerInset(
+            readerPreferences.fullscreen().get(),
+            readerPreferences.cutoutShort().get(),
+            visible,
+        )
     }
 
     /**
@@ -839,7 +847,11 @@ class ReaderActivity : BaseActivity() {
             binding.viewerContainer.removeAllViews()
         }
         viewModel.onViewerLoaded(newViewer)
-        updateViewerInset(readerPreferences.fullscreen().get())
+        updateViewerInset(
+            readerPreferences.fullscreen().get(),
+            readerPreferences.cutoutShort().get(),
+            viewModel.state.value.menuVisible,
+        )
 
         // Touch cooldown: pause auto-scroll briefly on any touch in the active viewer.
         newViewer.getView().setOnTouchListener { _, event ->
@@ -1097,14 +1109,31 @@ class ReaderActivity : BaseActivity() {
     /**
      * Updates viewer inset depending on fullscreen reader preferences.
      */
-    private fun updateViewerInset(fullscreen: Boolean) {
-        viewModel.state.value.viewer?.getView()?.applyInsetter {
-            if (!fullscreen) {
-                type(navigationBars = true, statusBars = true) {
-                    padding()
-                }
-            }
+    private fun updateViewerInset(fullscreen: Boolean, cutoutShort: Boolean, menuVisible: Boolean) {
+        if (!::binding.isInitialized) return
+        val view = binding.viewerContainer
+
+        view.applyInsetsPadding(ViewCompat.getRootWindowInsets(view), fullscreen, cutoutShort, menuVisible)
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, windowInsets ->
+            v.applyInsetsPadding(windowInsets, fullscreen, cutoutShort, menuVisible)
+            windowInsets
         }
+    }
+
+    private fun View.applyInsetsPadding(
+        windowInsets: WindowInsetsCompat?,
+        fullscreen: Boolean,
+        cutoutShort: Boolean,
+        menuVisible: Boolean,
+    ) {
+        val insets = when {
+            !fullscreen || menuVisible -> windowInsets?.getInsets(WindowInsetsCompat.Type.systemBars())
+            !cutoutShort -> windowInsets?.getInsets(WindowInsetsCompat.Type.displayCutout())
+            else -> null
+        }
+            ?: Insets.NONE
+
+        setPadding(insets.left, insets.top, insets.right, insets.bottom)
     }
 
     /**
@@ -1194,10 +1223,13 @@ class ReaderActivity : BaseActivity() {
                 .onEach(::setCustomBrightness)
                 .launchIn(lifecycleScope)
 
-            readerPreferences.fullscreen().changes()
-                .onEach {
-                    WindowCompat.setDecorFitsSystemWindows(window, !it)
-                    updateViewerInset(it)
+            combine(
+                readerPreferences.fullscreen().changes(),
+                readerPreferences.cutoutShort().changes(),
+            ) { fullscreen, cutoutShort -> fullscreen to cutoutShort }
+                .onEach { (fullscreen, cutoutShort) ->
+                    WindowCompat.setDecorFitsSystemWindows(window, !fullscreen)
+                    updateViewerInset(fullscreen, cutoutShort, viewModel.state.value.menuVisible)
                     setMenuVisibility(viewModel.state.value.menuVisible)
                 }
                 .launchIn(lifecycleScope)
