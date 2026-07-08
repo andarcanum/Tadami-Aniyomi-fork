@@ -362,8 +362,14 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 }
             }
             is BufferedSource -> {
-                if (!isWebtoon || alwaysDecodeLongStripWithSSIV || ImageUtil.isTallImage(data)) {
-                    setHardwareConfig(ImageUtil.canUseHardwareBitmap(data))
+                val supportsHardwareBitmap = ImageUtil.canUseHardwareBitmap(data)
+                if (
+                    !isWebtoon ||
+                    alwaysDecodeLongStripWithSSIV ||
+                    ImageUtil.isTallImage(data) ||
+                    !supportsHardwareBitmap
+                ) {
+                    setHardwareConfig(supportsHardwareBitmap)
                     if (config.webtoonSmartFit) {
                         smartFitJob = scope?.launch {
                             val bounds = withContext(Dispatchers.IO) {
