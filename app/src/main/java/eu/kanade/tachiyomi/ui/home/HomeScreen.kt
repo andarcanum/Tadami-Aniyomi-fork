@@ -499,7 +499,7 @@ object HomeScreen : Screen() {
                         openTabEvent.receiveAsFlow().collectLatest {
                             tabNavigator.current = when (it) {
                                 is Tab.AnimeLib -> AnimeLibraryTab
-                                is Tab.Library -> MangaLibraryTab
+                                is Tab.Library -> resolveLibraryTabForOpenTab(isAuroraTheme)
                                 is Tab.NovelLib -> AnimeLibraryTab
                                 is Tab.Updates -> UpdatesTab
                                 is Tab.History -> HistoriesTab
@@ -518,6 +518,9 @@ object HomeScreen : Screen() {
                             }
                             if (it is Tab.NovelLib) {
                                 AnimeLibraryTab.showNovelSection()
+                            }
+                            if (it is Tab.Library && isAuroraTheme) {
+                                AnimeLibraryTab.showMangaSection()
                             }
 
                             if (it is Tab.AnimeLib && it.animeIdToOpen != null) {
@@ -862,6 +865,10 @@ internal fun resolveHomeStartTab(
     currentMoreTab: cafe.adriel.voyager.navigator.tab.Tab,
 ): cafe.adriel.voyager.navigator.tab.Tab {
     return if (defaultTab != currentMoreTab) defaultTab else AnimeLibraryTab
+}
+
+internal fun resolveLibraryTabForOpenTab(isAuroraTheme: Boolean): eu.kanade.presentation.util.Tab {
+    return if (isAuroraTheme) AnimeLibraryTab else MangaLibraryTab
 }
 
 internal fun shouldHandleBackInHome(
