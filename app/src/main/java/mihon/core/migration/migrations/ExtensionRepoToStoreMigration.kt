@@ -14,8 +14,15 @@ import tachiyomi.data.handlers.manga.MangaDatabaseHandler
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 
 class ExtensionRepoToStoreMigration : Migration {
-    override val version: Float = 139f
+    override val version = Migration.ALWAYS
 
+    /**
+     * Ports user-added extension repos (from pre-refactor ExtensionRepo tables)
+     * into the new unified ExtensionStore tables (one per media DB).
+     * Uses ALWAYS so that users who updated across the refactor (versionCode
+     * ranges that skipped the old 139f gate) still get their repos migrated
+     * on next launch if their store tables are empty.
+     */
     override suspend fun invoke(migrationContext: MigrationContext): Boolean = withIOContext {
         val mangaHandler = migrationContext.get<MangaDatabaseHandler>() ?: return@withIOContext false
         val animeHandler = migrationContext.get<AnimeDatabaseHandler>() ?: return@withIOContext false

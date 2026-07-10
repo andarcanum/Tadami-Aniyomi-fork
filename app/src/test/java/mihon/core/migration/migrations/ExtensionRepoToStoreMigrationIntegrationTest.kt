@@ -160,7 +160,7 @@ class ExtensionRepoToStoreMigrationIntegrationTest {
     }
 
     @Test
-    fun `v139 migration copies legacy repos into extension_store via MigrationContext injekt`() = runTest {
+    fun `legacy repo to store migration (ALWAYS) copies previously added repos when stores empty`() = runTest {
         val result = ExtensionRepoToStoreMigration().invoke(MigrationContext(dryrun = false))
 
         result shouldBe true

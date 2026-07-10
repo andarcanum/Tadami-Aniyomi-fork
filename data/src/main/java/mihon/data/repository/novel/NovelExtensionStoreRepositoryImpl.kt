@@ -81,7 +81,31 @@ class NovelExtensionStoreRepositoryImpl(
     }
 
     override suspend fun getAll(): List<ExtensionStore> {
+        migrateLegacyIfNeeded()
         return handler.awaitList { db -> db.extension_storeQueries.getAll(::extensionStoreMapper) }
+    }
+
+    private suspend fun migrateLegacyIfNeeded() {
+        if (handler.awaitList { db -> db.extension_storeQueries.getAll() }.isNotEmpty()) return
+
+        handler.awaitList { db ->
+            db.novel_extension_reposQueries.findAll { baseUrl, name, shortName, website, fingerprint ->
+                ExtensionStore(
+                    indexUrl = baseUrl,
+                    name = name,
+                    badgeLabel = shortName ?: name,
+                    signingKey = fingerprint,
+                    contact = ExtensionStore.Contact(
+                        website = website,
+                        discord = null,
+                    ),
+                    isLegacy = true,
+                    extensionListUrl = null,
+                )
+            }
+        }.forEach { store ->
+            upsertStore(store)
+        }
     }
 
     override fun getAllAsFlow(): Flow<List<ExtensionStore>> {

@@ -58,4 +58,5 @@ val migrations: List<Migration>
         MoveLatestToFeedMigration(),
         RecomputeGenreAchievementsMigration(),
         ExtensionRepoToStoreMigration(),
+        ForceMissedMigrations187(),
     )

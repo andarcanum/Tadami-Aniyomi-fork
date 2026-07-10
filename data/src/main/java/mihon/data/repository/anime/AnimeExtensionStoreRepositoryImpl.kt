@@ -4,8 +4,10 @@ import kotlinx.coroutines.flow.Flow
 import logcat.LogPriority
 import mihon.data.extension.repository.extensionStoreMapper
 import mihon.data.extension.service.ExtensionStoreService
+import mihon.domain.extensionrepo.model.ExtensionRepo
 import mihon.domain.extensionstore.anime.repository.AnimeExtensionStoreRepository
 import mihon.domain.extensionstore.model.ExtensionStore
+import mihon.domain.extensionstore.toLegacyExtensionStore
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.mi.data.AnimeDatabase
@@ -79,7 +81,26 @@ class AnimeExtensionStoreRepositoryImpl(
     }
 
     override suspend fun getAll(): List<ExtensionStore> {
+        migrateLegacyIfNeeded()
         return handler.awaitList { db -> db.extension_storeQueries.getAll(::extensionStoreMapper) }
+    }
+
+    private suspend fun migrateLegacyIfNeeded() {
+        if (handler.awaitList { db -> db.extension_storeQueries.getAll() }.isNotEmpty()) return
+
+        handler.awaitList { db ->
+            db.extension_reposQueries.findAll { baseUrl, name, shortName, website, fingerprint ->
+                ExtensionRepo(
+                    baseUrl = baseUrl,
+                    name = name,
+                    shortName = shortName,
+                    website = website,
+                    signingKeyFingerprint = fingerprint,
+                )
+            }
+        }.forEach { repo ->
+            upsertStore(repo.toLegacyExtensionStore())
+        }
     }
 
     override fun getAllAsFlow(): Flow<List<ExtensionStore>> {
