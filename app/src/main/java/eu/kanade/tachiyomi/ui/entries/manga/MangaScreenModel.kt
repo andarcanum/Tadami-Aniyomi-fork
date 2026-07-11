@@ -72,6 +72,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -415,6 +416,7 @@ class MangaScreenModel(
                         it.copy(
                             manga = manga,
                             chapters = chapters.toChapterListItems(manga),
+                            chapterSourcePreview = null, // real persisted data arrived, clear preview
                         )
                     }
                     if (metadataChanged) {
@@ -470,8 +472,14 @@ class MangaScreenModel(
             }
 
             val source = Injekt.get<MangaSourceManager>().getOrStub(manga.source)
-            val chapters = getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
-                .toChapterListItems(manga)
+            val rawChapters = getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
+            val start = System.currentTimeMillis()
+            // Cheap path for Aurora: list visible immediately. Real download states via observeDownloads + hydrate.
+            val chapters = rawChapters.toChapterListItemsCheap(manga)
+            val loadMs = System.currentTimeMillis() - start
+            logcat(LogPriority.DEBUG) {
+                "TADAMI_PERF_MANGA_TITLE db-loaded+items id=$mangaId chapters=${chapters.size} took=${loadMs}ms (cheap-initial)"
+            }
 
             val needRefreshInfo = !manga.initialized || isFromSource
             val needRefreshChapter = chapters.isEmpty()
@@ -502,6 +510,22 @@ class MangaScreenModel(
                     },
                 )
             }
+
+            // Hydrate real download states asynchronously so Aurora sees chapters list immediately (cheap path).
+            // Individual updates continue to come via observeDownloads().
+            screenModelScope.launchIO {
+                val hydrated = rawChapters.toChapterListItems(manga)
+                updateSuccessState { current ->
+                    if (current.manga.id ==
+                        manga.id
+                    ) {
+                        current.copy(chapters = hydrated, chapterSourcePreview = null)
+                    } else {
+                        current
+                    }
+                }
+            }
+
             val fetchFromSourceTasks = if (screenModelScope.isActive) {
                 listOf(
                     async { if (needRefreshInfo) fetchMangaFromSource() },
@@ -1034,6 +1058,25 @@ class MangaScreenModel(
         }
     }
 
+    /** Cheap version for initial state: defers expensive FS isDownloaded checks. Aurora list appears immediately. */
+    private fun List<Chapter>.toChapterListItemsCheap(manga: Manga): List<ChapterList.Item> {
+        val isLocal = manga.isLocal()
+        return map { chapter ->
+            val activeDownload = if (isLocal) null else downloadManager.getQueuedDownloadOrNull(chapter.id)
+            val downloadState = when {
+                activeDownload != null -> activeDownload.status
+                isLocal -> MangaDownload.State.DOWNLOADED
+                else -> MangaDownload.State.NOT_DOWNLOADED
+            }
+            ChapterList.Item(
+                chapter = chapter,
+                downloadState = downloadState,
+                downloadProgress = activeDownload?.progress ?: 0,
+                selected = chapter.id in selectedChapterIds,
+            )
+        }
+    }
+
     /**
      * Requests an updated list of chapters from the source.
      */
@@ -1041,14 +1084,74 @@ class MangaScreenModel(
         val state = successState ?: return
         try {
             withIOContext {
-                val chapters = state.source.getChapterList(state.manga.toSManga())
+                val getStart = System.currentTimeMillis()
+                val sourceChapters = state.source.getChapterList(state.manga.toSManga())
+                val getMs = System.currentTimeMillis() - getStart
+                logcat(LogPriority.DEBUG) {
+                    "TADAMI_PERF_MANGA_TITLE getChapterList-done id=${state.manga.id} count=${sourceChapters.size} took=${getMs}ms"
+                }
 
+                // Preview for display only: list becomes visible right after parse (before full sync cost).
+                // Real chapters (with persisted ids) will come via DB flow / collector later.
+                val previewItems = sourceChapters.mapIndexed { idx, sCh ->
+                    val dummy = Chapter(
+                        id = -(1000000000L + idx),
+                        mangaId = state.manga.id,
+                        read = false,
+                        bookmark = false,
+                        lastPageRead = 0L,
+                        dateFetch = 0L,
+                        sourceOrder = 0L,
+                        url = sCh.url,
+                        name = sCh.name,
+                        dateUpload = sCh.date_upload,
+                        chapterNumber = sCh.chapter_number.toDouble(),
+                        scanlator = sCh.scanlator,
+                        lastModifiedAt = 0L,
+                        version = 0L,
+                    )
+                    ChapterList.Item(
+                        chapter = dummy,
+                        downloadState = MangaDownload.State.NOT_DOWNLOADED,
+                        downloadProgress = 0,
+                        selected = false,
+                    )
+                }
+                updateSuccessState { current ->
+                    if (current.manga.id ==
+                        state.manga.id
+                    ) {
+                        current.copy(chapterSourcePreview = previewItems)
+                    } else {
+                        current
+                    }
+                }
+                logcat(LogPriority.DEBUG) {
+                    "TADAMI_PERF_MANGA_TITLE preview-pushed id=${state.manga.id} count=${previewItems.size}"
+                }
+
+                val syncStart = System.currentTimeMillis()
                 val newChapters = syncChaptersWithSource.await(
-                    chapters,
+                    sourceChapters,
                     state.manga,
                     state.source,
                     manualFetch,
                 )
+                val syncMs = System.currentTimeMillis() - syncStart
+                logcat(LogPriority.DEBUG) {
+                    "TADAMI_PERF_MANGA_TITLE syncChapters-done id=${state.manga.id} new=${newChapters.size} took=${syncMs}ms"
+                }
+
+                // Immediately push real chapters after sync (in addition to DB flow) so resolve is fast
+                updateSuccessState { current ->
+                    if (current.manga.id == state.manga.id) {
+                        current.copy(
+                            chapterSourcePreview = null,
+                        )
+                    } else {
+                        current
+                    }
+                }
 
                 if (manualFetch) {
                     downloadNewChapters(newChapters)
@@ -1119,6 +1222,19 @@ class MangaScreenModel(
     /**
      * @throws IllegalStateException if the swipe action is [LibraryPreferences.ChapterSwipeAction.Disabled]
      */
+    suspend fun resolveChapterForOpen(previewOrReal: Chapter): Chapter {
+        if (previewOrReal.id > 0) return previewOrReal
+        // Wait briefly for the sync to populate the real persisted chapter (by url)
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < 8000) {
+            val current = state.value as? State.Success
+            val real = current?.chapters?.firstOrNull { it.chapter.url == previewOrReal.url }?.chapter
+            if (real != null && real.id > 0) return real
+            delay(30)
+        }
+        return previewOrReal // fallback (may cause issues in reader, but rare)
+    }
+
     private fun executeChapterSwipeAction(
         chapterItem: ChapterList.Item,
         swipeAction: LibraryPreferences.ChapterSwipeAction,
@@ -1711,9 +1827,12 @@ class MangaScreenModel(
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
             val suggestions: SuggestionState = SuggestionState.Idle,
+            /** Display-only preview from source list (after getChapterList, before full sync). Real persisted chapters come via DB flow. */
+            val chapterSourcePreview: List<ChapterList.Item>? = null,
         ) : State {
             val processedChapters by lazy {
-                chapters.applyFilters(manga).toList()
+                val displayChapters = chapterSourcePreview ?: chapters
+                displayChapters.applyFilters(manga).toList()
             }
 
             val targetChapterIndex by lazy {

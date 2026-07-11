@@ -333,6 +333,7 @@ class NovelScreenModel(
                         it.copy(
                             novel = novel,
                             chapters = chapters,
+                            chapterSourcePreview = null,
                             selectedChapterIds = it.selectedChapterIds.intersect(
                                 chapterIds,
                             ),
@@ -1549,8 +1550,8 @@ class NovelScreenModel(
         }
 
         // PERF instrumentation
-        val fetchStart = System.currentTimeMillis()
-        logcat(LogPriority.DEBUG) { "TADAMI_PERF_NOVEL_TITLE chapter-fetch-start id=${state.novel.id}" }
+        val getStart = System.currentTimeMillis()
+        logcat(LogPriority.DEBUG) { "TADAMI_PERF_NOVEL_TITLE getChapterList-start id=${state.novel.id}" }
 
         // Use short-lived cache unless this is an explicit user refresh
         val cacheKey = state.novel.id
@@ -1565,9 +1566,39 @@ class NovelScreenModel(
             }
             fresh
         }
-        val fetchMs = System.currentTimeMillis() - fetchStart
+        val getMs = System.currentTimeMillis() - getStart
         logcat(LogPriority.DEBUG) {
-            "TADAMI_PERF_NOVEL_TITLE chapter-fetch-done id=${state.novel.id} count=${sourceChapters.size} took=${fetchMs}ms manual=$manualFetch"
+            "TADAMI_PERF_NOVEL_TITLE getChapterList-done id=${state.novel.id} count=${sourceChapters.size} took=${getMs}ms manual=$manualFetch"
+        }
+
+        // Preview for display only
+        val preview = sourceChapters.mapIndexed { idx, s ->
+            NovelChapter(
+                id = -(1000000000L + idx),
+                novelId = state.novel.id,
+                read = false,
+                bookmark = false,
+                lastPageRead = 0L,
+                dateFetch = 0L,
+                sourceOrder = 0L,
+                url = s.url,
+                name = s.name,
+                dateUpload = s.date_upload,
+                chapterNumber = s.chapter_number.toDouble(),
+                scanlator = s.scanlator,
+                lastModifiedAt = 0L,
+                version = 0L,
+            )
+        }
+        updateSuccessState { current ->
+            if (current.novel.id == state.novel.id) {
+                current.copy(chapterSourcePreview = preview)
+            } else {
+                current
+            }
+        }
+        logcat(LogPriority.DEBUG) {
+            "TADAMI_PERF_NOVEL_TITLE preview-pushed id=${state.novel.id} count=${preview.size}"
         }
 
         logcat {
@@ -1589,11 +1620,22 @@ class NovelScreenModel(
         )
         val syncMs = System.currentTimeMillis() - syncStart
         logcat(LogPriority.DEBUG) {
-            "TADAMI_PERF_NOVEL_TITLE sync-done id=${state.novel.id} new=${newChapters.size} took=${syncMs}ms"
+            "TADAMI_PERF_NOVEL_TITLE syncNovelChapters-done id=${state.novel.id} new=${newChapters.size} took=${syncMs}ms"
         }
         logcat(LogPriority.DEBUG) {
             "Synced chapters for id=${state.novel.id} source=${state.source.name}, " +
                 "newCount=${newChapters.size}, manualFetch=$manualFetch"
+        }
+
+        // push real and clear preview
+        updateSuccessState { current ->
+            if (current.novel.id == state.novel.id) {
+                current.copy(
+                    chapterSourcePreview = null,
+                )
+            } else {
+                current
+            }
         }
         updateNewChapterIds(
             addedIds = newChapters.asSequence()
@@ -2203,6 +2245,18 @@ class NovelScreenModel(
         refreshChapterActionStatesAsync(delayMs = 100L)
     }
 
+    suspend fun resolveChapterForOpen(previewOrReal: NovelChapter): NovelChapter {
+        if (previewOrReal.id > 0) return previewOrReal
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < 8000) {
+            val current = state.value as? State.Success
+            val real = current?.chapters?.firstOrNull { it.url == previewOrReal.url }
+            if (real != null && real.id > 0) return real
+            delay(30)
+        }
+        return previewOrReal
+    }
+
     fun openTranslatedFolder(chapterId: Long) {
         val state = successState ?: return
         val chapter = state.chapters.find { it.id == chapterId } ?: return
@@ -2536,6 +2590,8 @@ class NovelScreenModel(
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
             val suggestions: SuggestionState = SuggestionState.Idle,
+            /** Display-only preview from source list (after getChapterList, before full sync). */
+            val chapterSourcePreview: List<NovelChapter>? = null,
         ) : State {
             val scanlatorFilterActive: Boolean
                 get() = excludedScanlators.intersect(availableScanlators).isNotEmpty()
@@ -2556,8 +2612,9 @@ class NovelScreenModel(
                 get() = trackingCount > 0
 
             val processedChapters by lazy {
+                val displayChapters = chapterSourcePreview ?: chapters
                 val chapterSort = Comparator(getNovelChapterSort(novel))
-                chapters
+                displayChapters
                     .asSequence()
                     .filter { chapter ->
                         (

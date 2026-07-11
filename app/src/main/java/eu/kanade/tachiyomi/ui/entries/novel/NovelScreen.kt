@@ -454,7 +454,18 @@ class NovelScreen(
                 if (screenModel.isAnyChapterSelected) {
                     screenModel.toggleSelection(chapterId)
                 } else {
-                    navigator.push(NovelReaderScreen(chapterId, successState.source.id))
+                    val srcId = successState.source.id
+                    coroutineScope.launch {
+                        val current = screenModel.state.value as? NovelScreenModel.State.Success
+                        val ch = current?.chapters?.firstOrNull { it.id == chapterId }
+                            ?: current?.chapterSourcePreview?.firstOrNull { it.id == chapterId }
+                        if (ch != null) {
+                            val real = screenModel.resolveChapterForOpen(ch)
+                            navigator.push(NovelReaderScreen(real.id, srcId))
+                        } else {
+                            navigator.push(NovelReaderScreen(chapterId, srcId))
+                        }
+                    }
                 }
             },
             onChapterTranslateClick = { chapterId ->

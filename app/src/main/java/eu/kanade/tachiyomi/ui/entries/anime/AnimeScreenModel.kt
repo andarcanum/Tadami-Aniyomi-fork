@@ -584,11 +584,20 @@ class AnimeScreenModel(
             val anime = getAnimeAndEpisodesAndSeasons.awaitAnime(animeId)
             val source = sourceManager.getOrStub(anime.source)
 
-            val episodes = if (anime.fetchType == FetchType.Seasons) {
+            val rawEpisodes = if (anime.fetchType == FetchType.Seasons) {
                 emptyList()
             } else {
                 getAnimeAndEpisodesAndSeasons.awaitEpisodes(animeId)
-                    .toEpisodeListItems(anime)
+            }
+            val start = System.currentTimeMillis()
+            val episodes = if (anime.fetchType == FetchType.Seasons) {
+                emptyList()
+            } else {
+                rawEpisodes.toEpisodeListItems(anime)
+            }
+            val loadMs = System.currentTimeMillis() - start
+            logcat(LogPriority.DEBUG) {
+                "TADAMI_PERF_ANIME_TITLE db-loaded+items id=$animeId episodes=${episodes.size} took=${loadMs}ms"
             }
 
             val seasons = if (anime.fetchType == FetchType.Episodes) {

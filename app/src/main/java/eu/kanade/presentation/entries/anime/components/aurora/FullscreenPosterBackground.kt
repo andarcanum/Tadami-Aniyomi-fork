@@ -10,12 +10,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -76,19 +79,27 @@ fun FullscreenPosterBackground(
 
     val hasScrolledAway = firstVisibleItemIndex > 0 || scrollOffset > 100
 
+    // PERF (backported from novel Aurora): direct values on initial to avoid anim cost on every open.
+    val rawDim = if (hasScrolledAway) 0.7f else (scrollOffset / 100f).coerceIn(0f, 0.7f)
+    val rawBlur = if (hasScrolledAway) {
+        1f
+    } else {
+        (scrollOffset / 100f).coerceIn(0f, 1f)
+    }
+
     val dimAlpha by animateFloatAsState(
-        targetValue = if (hasScrolledAway) 0.7f else (scrollOffset / 100f).coerceIn(0f, 0.7f),
+        targetValue = rawDim,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessLow,
+            stiffness = if (hasScrolledAway) Spring.StiffnessLow else Spring.StiffnessMedium,
         ),
         label = "dimAlpha",
     )
     val blurOverlayAlpha by animateFloatAsState(
-        targetValue = if (hasScrolledAway) 1f else (scrollOffset / 100f).coerceIn(0f, 1f),
+        targetValue = rawBlur,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessLow,
+            stiffness = if (hasScrolledAway) Spring.StiffnessLow else Spring.StiffnessMedium,
         ),
         label = "blurOverlayAlpha",
     )
@@ -201,15 +212,24 @@ fun FullscreenPosterBackground(
                 modifier = Modifier.fillMaxSize(),
             )
 
-            if (shouldDrawAuroraPosterBlurOverlay(blurOverlayAlpha)) {
+            // PERF (backported from novel): guard the blur layer cost on initial Aurora title open.
+            val shouldApplyBlurLayer by remember {
+                derivedStateOf {
+                    blurOverlayAlpha > 0.08f &&
+                        shouldDrawAuroraPosterBlurOverlay(blurOverlayAlpha)
+                }
+            }
+            if (shouldApplyBlurLayer) {
                 Image(
                     painter = backgroundPainter,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     colorFilter = posterColorFilter,
-                    alpha = blurOverlayAlpha,
                     modifier = Modifier
                         .fillMaxSize()
+                        .graphicsLayer {
+                            alpha = blurOverlayAlpha
+                        }
                         .auroraPosterBlur(20.dp),
                 )
             }
@@ -231,13 +251,13 @@ fun FullscreenPosterBackground(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    if (colors.isDark) {
-                        Color.Black.copy(alpha = dimAlpha)
-                    } else {
-                        colors.background.copy(alpha = dimAlpha * 0.35f)
-                    },
-                ),
+                .drawWithCache {
+                    val color = if (colors.isDark) Color.Black else colors.background
+                    val factor = if (colors.isDark) 1f else 0.35f
+                    onDrawBehind {
+                        drawRect(color = color, alpha = dimAlpha * factor)
+                    }
+                },
         )
     }
 }
