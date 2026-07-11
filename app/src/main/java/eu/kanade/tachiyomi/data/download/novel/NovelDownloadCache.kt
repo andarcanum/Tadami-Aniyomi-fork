@@ -84,6 +84,10 @@ class NovelDownloadCache(
     private val _downloadedIds = MutableStateFlow<Set<Long>>(emptySet())
     val downloadedIds: StateFlow<Set<Long>> = _downloadedIds.asStateFlow()
 
+    private var updateDiskCacheJob: Job? = null
+    private val writeDiskCacheMutex = Mutex()
+    private val isInitializing = MutableStateFlow(false)
+
     init {
         _changes.tryEmit(NovelDownloadCacheEvent.InvalidateAll)
 
@@ -257,9 +261,6 @@ class NovelDownloadCache(
         rebuildDownloadedIds()
     }
 
-    private var updateDiskCacheJob: Job? = null
-    private val writeDiskCacheMutex = Mutex()
-
     private fun writeDiskCache() {
         writeDiskCache(immediate = false)
     }
@@ -311,8 +312,6 @@ class NovelDownloadCache(
             }
         }
     }
-
-    private val isInitializing = MutableStateFlow(false)
 
     fun renewCache() {
         if (isInitializing.value) return
