@@ -24,6 +24,7 @@ import eu.kanade.domain.entries.anime.interactor.UpdateAnime
 import eu.kanade.domain.entries.anime.model.effectiveDownloadedFilter
 import eu.kanade.domain.entries.anime.model.effectiveSeasonDownloadedFilter
 import eu.kanade.domain.entries.anime.model.toSAnime
+import eu.kanade.domain.items.episode.interactor.FetchEpisodePreviews
 import eu.kanade.domain.items.episode.interactor.SetSeenStatus
 import eu.kanade.domain.items.episode.interactor.SyncEpisodesWithSource
 import eu.kanade.domain.metadata.interactor.GetAnimeMetadata
@@ -166,6 +167,7 @@ class AnimeScreenModel(
     private val animeRatingFetcher: AnimeRatingFetcher = Injekt.get(),
     private val syncEpisodesWithSource: SyncEpisodesWithSource = Injekt.get(),
     private val syncSeasonsWithSource: SyncSeasonsWithSource = Injekt.get(),
+    private val fetchEpisodePreviews: FetchEpisodePreviews = FetchEpisodePreviews(),
     private val getCategories: GetAnimeCategories = Injekt.get(),
     private val getTracks: GetAnimeTracks = Injekt.get(),
     private val addTracks: AddAnimeTracks = Injekt.get(),
@@ -1145,6 +1147,15 @@ class AnimeScreenModel(
             source,
             manualFetch,
         )
+
+        // Дозаполняем previewUrl из внешних метаданных (TMDB/Kitsu/AniList/Jikan/Simkl/Shikimori)
+        screenModelScope.launchIO {
+            try {
+                fetchEpisodePreviews.await(anime, getEpisodesByAnimeId.await(anime.id))
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) { "Episode preview enrichment failed" }
+            }
+        }
 
         if (manualFetch) {
             downloadNewEpisodes(newEpisodes)
