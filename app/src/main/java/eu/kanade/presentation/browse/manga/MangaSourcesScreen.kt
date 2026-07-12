@@ -58,7 +58,7 @@ import tachiyomi.domain.source.manga.model.Pin
 import tachiyomi.domain.source.manga.model.Source
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.ScrollbarLazyColumn
+import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.components.material.SECONDARY_ALPHA
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.components.material.topSmallPaddingValues
@@ -94,7 +94,7 @@ fun MangaSourcesScreen(
             modifier = Modifier.padding(contentPadding),
         )
         else -> {
-            ScrollbarLazyColumn(
+            FastScrollLazyColumn(
                 contentPadding = contentPadding + topSmallPaddingValues,
             ) {
                 // Search Bar

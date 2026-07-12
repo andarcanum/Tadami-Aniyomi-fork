@@ -60,7 +60,7 @@ import eu.kanade.tachiyomi.util.system.LocaleHelper
 import tachiyomi.domain.source.novel.model.Pin
 import tachiyomi.domain.source.novel.model.Source
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.ScrollbarLazyColumn
+import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.components.material.SECONDARY_ALPHA
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.components.material.topSmallPaddingValues
@@ -96,7 +96,7 @@ fun NovelSourcesScreen(
             modifier = Modifier.padding(contentPadding),
         )
         else -> {
-            ScrollbarLazyColumn(
+            FastScrollLazyColumn(
                 contentPadding = contentPadding + topSmallPaddingValues,
             ) {
                 if (searchQuery != null && onChangeSearchQuery != null) {
