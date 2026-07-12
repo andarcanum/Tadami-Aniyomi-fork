@@ -11,6 +11,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
+import logcat.LogPriority
 import mihon.domain.extensionrepo.manga.interactor.CreateMangaExtensionRepo
 import mihon.domain.extensionrepo.manga.interactor.DeleteMangaExtensionRepo
 import mihon.domain.extensionrepo.manga.interactor.GetMangaExtensionRepo
@@ -18,6 +19,7 @@ import mihon.domain.extensionrepo.manga.interactor.ReplaceMangaExtensionRepo
 import mihon.domain.extensionrepo.manga.interactor.UpdateMangaExtensionRepo
 import mihon.domain.extensionrepo.model.ExtensionRepo
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -56,14 +58,19 @@ class MangaExtensionStoreScreenModel(
      */
     fun createRepo(baseUrl: String, displayName: String? = null) {
         screenModelScope.launchIO {
-            when (val result = createExtensionRepo.await(baseUrl, displayName)) {
-                CreateMangaExtensionRepo.Result.InvalidUrl -> _events.send(RepoEvent.InvalidUrl)
-                CreateMangaExtensionRepo.Result.RepoAlreadyExists -> _events.send(RepoEvent.RepoAlreadyExists)
-                is CreateMangaExtensionRepo.Result.DuplicateFingerprint -> {
-                    showDialog(RepoDialog.Conflict(result.oldRepo, result.newRepo))
+            try {
+                when (val result = createExtensionRepo.await(baseUrl, displayName)) {
+                    CreateMangaExtensionRepo.Result.InvalidUrl -> _events.send(RepoEvent.InvalidUrl)
+                    CreateMangaExtensionRepo.Result.RepoAlreadyExists -> _events.send(RepoEvent.RepoAlreadyExists)
+                    is CreateMangaExtensionRepo.Result.DuplicateFingerprint -> {
+                        showDialog(RepoDialog.Conflict(result.oldRepo, result.newRepo))
+                    }
+                    CreateMangaExtensionRepo.Result.Success -> refreshAvailablePlugins()
+                    CreateMangaExtensionRepo.Result.Error -> _events.send(RepoEvent.UnknownError)
                 }
-                CreateMangaExtensionRepo.Result.Success -> refreshAvailablePlugins()
-                else -> {}
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to create repository" }
+                _events.send(RepoEvent.UnknownError)
             }
         }
     }
@@ -75,8 +82,13 @@ class MangaExtensionStoreScreenModel(
      */
     fun replaceRepo(newRepo: ExtensionRepo) {
         screenModelScope.launchIO {
-            replaceExtensionRepo.await(newRepo)
-            refreshAvailablePlugins()
+            try {
+                replaceExtensionRepo.await(newRepo)
+                refreshAvailablePlugins()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to replace repository" }
+                _events.send(RepoEvent.UnknownError)
+            }
         }
     }
 
@@ -85,8 +97,13 @@ class MangaExtensionStoreScreenModel(
      */
     fun renameRepo(repo: ExtensionRepo, displayName: String) {
         screenModelScope.launchIO {
-            replaceExtensionRepo.await(repo.copy(name = displayName))
-            refreshAvailablePlugins()
+            try {
+                replaceExtensionRepo.await(repo.copy(name = displayName))
+                refreshAvailablePlugins()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to rename repository" }
+                _events.send(RepoEvent.UnknownError)
+            }
         }
     }
 
@@ -98,8 +115,13 @@ class MangaExtensionStoreScreenModel(
 
         if (status is RepoScreenState.Success) {
             screenModelScope.launchIO {
-                updateExtensionRepo.awaitAll()
-                refreshAvailablePlugins()
+                try {
+                    updateExtensionRepo.awaitAll()
+                    refreshAvailablePlugins()
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to refresh repositories" }
+                    _events.send(RepoEvent.UnknownError)
+                }
             }
         }
     }
@@ -109,13 +131,21 @@ class MangaExtensionStoreScreenModel(
      */
     fun deleteRepo(baseUrl: String) {
         screenModelScope.launchIO {
-            deleteExtensionRepo.await(baseUrl)
-            refreshAvailablePlugins()
+            try {
+                deleteExtensionRepo.await(baseUrl)
+                refreshAvailablePlugins()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to delete repository" }
+                _events.send(RepoEvent.UnknownError)
+            }
         }
     }
 
     private suspend fun refreshAvailablePlugins() {
-        extensionManager.findAvailableExtensions()
+        runCatching { extensionManager.findAvailableExtensions() }
+            .onFailure { error ->
+                logcat(LogPriority.WARN, error) { "Failed to refresh available manga plugins" }
+            }
     }
 
     fun showDialog(dialog: RepoDialog) {
@@ -141,6 +171,7 @@ sealed class RepoEvent {
     sealed class LocalizedMessage(val stringRes: StringResource) : RepoEvent()
     data object InvalidUrl : LocalizedMessage(MR.strings.invalid_store_name)
     data object RepoAlreadyExists : LocalizedMessage(MR.strings.error_store_exists)
+    data object UnknownError : LocalizedMessage(MR.strings.unknown_error)
 }
 
 sealed class RepoDialog {

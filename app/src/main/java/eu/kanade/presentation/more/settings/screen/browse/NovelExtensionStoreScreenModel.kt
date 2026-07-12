@@ -65,14 +65,19 @@ class NovelExtensionStoreScreenModel(
      */
     fun createRepo(baseUrl: String, displayName: String? = null) {
         screenModelScope.launchIO {
-            when (val result = createExtensionRepo.await(baseUrl, displayName)) {
-                CreateNovelExtensionRepo.Result.InvalidUrl -> _events.send(RepoEvent.InvalidUrl)
-                CreateNovelExtensionRepo.Result.RepoAlreadyExists -> _events.send(RepoEvent.RepoAlreadyExists)
-                is CreateNovelExtensionRepo.Result.DuplicateFingerprint -> {
-                    showDialog(RepoDialog.Conflict(result.oldRepo, result.newRepo))
+            try {
+                when (val result = createExtensionRepo.await(baseUrl, displayName)) {
+                    CreateNovelExtensionRepo.Result.InvalidUrl -> _events.send(RepoEvent.InvalidUrl)
+                    CreateNovelExtensionRepo.Result.RepoAlreadyExists -> _events.send(RepoEvent.RepoAlreadyExists)
+                    is CreateNovelExtensionRepo.Result.DuplicateFingerprint -> {
+                        showDialog(RepoDialog.Conflict(result.oldRepo, result.newRepo))
+                    }
+                    CreateNovelExtensionRepo.Result.Success -> refreshAvailablePlugins()
+                    CreateNovelExtensionRepo.Result.Error -> _events.send(RepoEvent.UnknownError)
                 }
-                CreateNovelExtensionRepo.Result.Success -> refreshAvailablePlugins()
-                else -> {}
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to create repository" }
+                _events.send(RepoEvent.UnknownError)
             }
         }
     }
@@ -84,8 +89,13 @@ class NovelExtensionStoreScreenModel(
      */
     fun replaceRepo(newRepo: ExtensionRepo) {
         screenModelScope.launchIO {
-            replaceExtensionRepo.await(newRepo)
-            refreshAvailablePlugins()
+            try {
+                replaceExtensionRepo.await(newRepo)
+                refreshAvailablePlugins()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to replace repository" }
+                _events.send(RepoEvent.UnknownError)
+            }
         }
     }
 
@@ -94,8 +104,13 @@ class NovelExtensionStoreScreenModel(
      */
     fun renameRepo(repo: ExtensionRepo, displayName: String) {
         screenModelScope.launchIO {
-            replaceExtensionRepo.await(repo.copy(name = displayName))
-            refreshAvailablePlugins()
+            try {
+                replaceExtensionRepo.await(repo.copy(name = displayName))
+                refreshAvailablePlugins()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to rename repository" }
+                _events.send(RepoEvent.UnknownError)
+            }
         }
     }
 
@@ -107,13 +122,13 @@ class NovelExtensionStoreScreenModel(
 
         if (status is RepoScreenState.Success) {
             screenModelScope.launchIO {
-                runCatching { updateExtensionRepo.awaitAll() }
-                    .onFailure { error ->
-                        logcat(LogPriority.WARN, error) { "Failed to refresh novel extension repositories" }
-                    }
-                    .onSuccess {
-                        refreshAvailablePlugins()
-                    }
+                try {
+                    updateExtensionRepo.awaitAll()
+                    refreshAvailablePlugins()
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to refresh repositories" }
+                    _events.send(RepoEvent.UnknownError)
+                }
             }
         }
     }
@@ -123,8 +138,13 @@ class NovelExtensionStoreScreenModel(
      */
     fun deleteRepo(baseUrl: String) {
         screenModelScope.launchIO {
-            deleteExtensionRepo.await(baseUrl)
-            refreshAvailablePlugins()
+            try {
+                deleteExtensionRepo.await(baseUrl)
+                refreshAvailablePlugins()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to delete repository" }
+                _events.send(RepoEvent.UnknownError)
+            }
         }
     }
 

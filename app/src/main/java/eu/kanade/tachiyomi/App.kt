@@ -120,6 +120,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     private val disableIncognitoReceiver = DisableIncognitoReceiver()
     private val achievementScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var isMainProcess = false
 
     @SuppressLint("LaunchActivityFromNotification")
     @OptIn(DelicateCoilApi::class)
@@ -143,7 +144,7 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
 
         // Avoid potential crashes
-        val isMainProcess = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        isMainProcess = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val process = getProcessName()
             if (packageName != process) WebView.setDataDirectorySuffix(process)
             packageName == process
@@ -176,25 +177,27 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
         SingletonImageLoader.setUnsafe { context -> newImageLoader(context) }
 
-        Handler(Looper.getMainLooper()).post {
-            achievementScope.launch {
-                runCatching {
-                    appUpdateFileManager.cleanupIfInstalledVersionReached(
-                        isPreview = isPreviewBuildType,
-                        installedCommitCount = BuildConfig.COMMIT_COUNT.toInt(),
-                        installedVersionName = BuildConfig.VERSION_NAME,
-                    )
-                }.onFailure { error ->
-                    this@App.systemLogcat(LogPriority.ERROR, error) { "App update cleanup failed" }
+        if (isMainProcess) {
+            Handler(Looper.getMainLooper()).post {
+                achievementScope.launch {
+                    runCatching {
+                        appUpdateFileManager.cleanupIfInstalledVersionReached(
+                            isPreview = isPreviewBuildType,
+                            installedCommitCount = BuildConfig.COMMIT_COUNT.toInt(),
+                            installedVersionName = BuildConfig.VERSION_NAME,
+                        )
+                    }.onFailure { error ->
+                        this@App.systemLogcat(LogPriority.ERROR, error) { "App update cleanup failed" }
+                    }
                 }
-            }
 
-            // Register memory-pressure callback that trims novel plugin runtime caches
-            registerComponentCallbacks(
-                NovelRuntimeCacheTrimCallbacks(
-                    sourceFactory = Injekt.get<NovelPluginSourceFactory>(),
-                ),
-            )
+                // Register memory-pressure callback that trims novel plugin runtime caches
+                registerComponentCallbacks(
+                    NovelRuntimeCacheTrimCallbacks(
+                        sourceFactory = Injekt.get<NovelPluginSourceFactory>(),
+                    ),
+                )
+            }
         }
 
         setupNotificationChannels()
@@ -242,85 +245,89 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         setAppCompatDelegateThemeMode(Injekt.get<UiPreferences>().themeMode().get())
 
-        // Updates widget update
-        with(MangaWidgetManager(Injekt.get(), Injekt.get())) {
-            init(ProcessLifecycleOwner.get().lifecycleScope)
-        }
-
-        with(AnimeWidgetManager(Injekt.get(), Injekt.get())) {
-            init(ProcessLifecycleOwner.get().lifecycleScope)
-        }
-
-        // Defer achievement initialization past the first frame.
-        // Handler.post fires in the next main-thread message-queue cycle, after onCreate() has
-        // returned and the first activity draw pass has been scheduled. All Injekt modules are
-        // fully imported by then, so DI resolution inside achievementScope (Dispatchers.IO)
-        // is safe. Achievement events can only come from user actions that haven't happened yet.
-        Handler(Looper.getMainLooper()).post {
-            // Initialize achievements from JSON
-            achievementScope.launch {
-                try {
-                    val loader = Injekt.get<tachiyomi.data.achievement.loader.AchievementLoader>()
-                    loader.loadAchievements()
-                } catch (e: Exception) {
-                    logcat(LogPriority.ERROR) { "Error during achievement initialization: ${e.message}" }
-                }
+        if (isMainProcess) {
+            // Updates widget update
+            with(MangaWidgetManager(Injekt.get(), Injekt.get())) {
+                init(ProcessLifecycleOwner.get().lifecycleScope)
             }
 
-            // Migrate legacy activity data from SharedPreferences to database (v4 → v5)
-            achievementScope.launch {
-                try {
-                    val migrator = eu.kanade.tachiyomi.data.backup.restore.LegacyActivityDataMigrator(
-                        context = this@App,
-                        repository = Injekt.get(),
-                    )
-
-                    if (migrator.isMigrationNeeded()) {
-                        logcat(LogPriority.INFO) { "[MIGRATION] Starting legacy activity data migration..." }
-                        val result = migrator.migrate()
-
-                        if (result.success) {
-                            logcat(LogPriority.INFO) {
-                                "[MIGRATION] Migration completed: ${result.recordsMigrated} records migrated, " +
-                                    "${result.recordsFailed} failed in ${result.duration}ms"
-                            }
-                            // Optional: Clear legacy data after successful migration
-                            // migrator.clearLegacyData()
-                        } else {
-                            logcat(LogPriority.ERROR) { "[MIGRATION] Migration failed: ${result.error}" }
-                        }
-                    }
-                } catch (e: Exception) {
-                    logcat(LogPriority.ERROR) { "[MIGRATION] Error during legacy data migration: ${e.message}" }
-                }
+            with(AnimeWidgetManager(Injekt.get(), Injekt.get())) {
+                init(ProcessLifecycleOwner.get().lifecycleScope)
             }
 
-            // Start achievement handler
-            achievementScope.launch {
-                try {
-                    logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] About to get AchievementHandler from Injekt..." }
-                    val achievementHandler = Injekt.get<tachiyomi.data.achievement.handler.AchievementHandler>()
-                    logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] AchievementHandler obtained successfully" }
+            // Defer achievement initialization past the first frame.
+            // Handler.post fires in the next main-thread message-queue cycle, after onCreate() has
+            // returned and the first activity draw pass has been scheduled. All Injekt modules are
+            // fully imported by then, so DI resolution inside achievementScope (Dispatchers.IO)
+            // is safe. Achievement events can only come from user actions that haven't happened yet.
+            Handler(Looper.getMainLooper()).post {
+                // Initialize achievements from JSON
+                achievementScope.launch {
+                    try {
+                        val loader = Injekt.get<tachiyomi.data.achievement.loader.AchievementLoader>()
+                        loader.loadAchievements()
+                    } catch (e: Exception) {
+                        logcat(LogPriority.ERROR) { "Error during achievement initialization: ${e.message}" }
+                    }
+                }
 
-                    // Set up callback to show unlock banners
-                    achievementHandler.unlockCallback =
-                        object : tachiyomi.data.achievement.handler.AchievementHandler.AchievementUnlockCallback {
-                            override fun onAchievementUnlocked(
-                                achievement: tachiyomi.domain.achievement.model.Achievement,
-                            ) {
-                                AchievementBannerManager.showAchievement(achievement)
+                // Migrate legacy activity data from SharedPreferences to database (v4 → v5)
+                achievementScope.launch {
+                    try {
+                        val migrator = eu.kanade.tachiyomi.data.backup.restore.LegacyActivityDataMigrator(
+                            context = this@App,
+                            repository = Injekt.get(),
+                        )
+
+                        if (migrator.isMigrationNeeded()) {
+                            logcat(LogPriority.INFO) { "[MIGRATION] Starting legacy activity data migration..." }
+                            val result = migrator.migrate()
+
+                            if (result.success) {
+                                logcat(LogPriority.INFO) {
+                                    "[MIGRATION] Migration completed: ${result.recordsMigrated} records migrated, " +
+                                        "${result.recordsFailed} failed in ${result.duration}ms"
+                                }
+                                // Optional: Clear legacy data after successful migration
+                                // migrator.clearLegacyData()
+                            } else {
+                                logcat(LogPriority.ERROR) { "[MIGRATION] Migration failed: ${result.error}" }
                             }
                         }
-
-                    logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] Calling achievementHandler.start()..." }
-                    achievementHandler.start()
-                    logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] AchievementHandler started successfully" }
-                } catch (e: Exception) {
-                    logcat(LogPriority.ERROR) {
-                        "[ACHIEVEMENTS-INIT] Failed to start achievement handler: ${e.message}"
+                    } catch (e: Exception) {
+                        logcat(LogPriority.ERROR) { "[MIGRATION] Error during legacy data migration: ${e.message}" }
                     }
-                    logcat(LogPriority.ERROR) {
-                        "[ACHIEVEMENTS-INIT] Failed to start achievement handler: ${e.stackTraceToString()}"
+                }
+
+                // Start achievement handler
+                achievementScope.launch {
+                    try {
+                        logcat(LogPriority.INFO) {
+                            "[ACHIEVEMENTS-INIT] About to get AchievementHandler from Injekt..."
+                        }
+                        val achievementHandler = Injekt.get<tachiyomi.data.achievement.handler.AchievementHandler>()
+                        logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] AchievementHandler obtained successfully" }
+
+                        // Set up callback to show unlock banners
+                        achievementHandler.unlockCallback =
+                            object : tachiyomi.data.achievement.handler.AchievementHandler.AchievementUnlockCallback {
+                                override fun onAchievementUnlocked(
+                                    achievement: tachiyomi.domain.achievement.model.Achievement,
+                                ) {
+                                    AchievementBannerManager.showAchievement(achievement)
+                                }
+                            }
+
+                        logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] Calling achievementHandler.start()..." }
+                        achievementHandler.start()
+                        logcat(LogPriority.INFO) { "[ACHIEVEMENTS-INIT] AchievementHandler started successfully" }
+                    } catch (e: Exception) {
+                        logcat(LogPriority.ERROR) {
+                            "[ACHIEVEMENTS-INIT] Failed to start achievement handler: ${e.message}"
+                        }
+                        logcat(LogPriority.ERROR) {
+                            "[ACHIEVEMENTS-INIT] Failed to start achievement handler: ${e.stackTraceToString()}"
+                        }
                     }
                 }
             }
@@ -442,20 +449,15 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     }
 
     override fun onStart(owner: LifecycleOwner) {
-        SecureActivityDelegate.onApplicationStart()
-        sessionManager.onSessionStart()
-        applicationScope.launch {
-            PendingApkInstallStore(basePreferences).resumeIfPermissionGranted(this@App)
-        }
-        val libraryPreferences = Injekt.get<tachiyomi.domain.library.service.LibraryPreferences>()
-        val autoUpdateInterval = libraryPreferences.autoUpdateInterval().get()
-        if (autoUpdateInterval == -1) {
-            val mainProcess = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                packageName == getProcessName()
-            } else {
-                true
+        if (isMainProcess) {
+            SecureActivityDelegate.onApplicationStart()
+            sessionManager.onSessionStart()
+            applicationScope.launch {
+                PendingApkInstallStore(basePreferences).resumeIfPermissionGranted(this@App)
             }
-            if (mainProcess) {
+            val libraryPreferences = Injekt.get<tachiyomi.domain.library.service.LibraryPreferences>()
+            val autoUpdateInterval = libraryPreferences.autoUpdateInterval().get()
+            if (autoUpdateInterval == -1) {
                 MangaLibraryUpdateJob.startNow(this)
                 AnimeLibraryUpdateJob.startNow(this)
                 NovelLibraryUpdateJob.startNow(this)
@@ -464,8 +466,10 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        SecureActivityDelegate.onApplicationStopped()
-        sessionManager.onSessionEnd()
+        if (isMainProcess) {
+            SecureActivityDelegate.onApplicationStopped()
+            sessionManager.onSessionEnd()
+        }
     }
 
     override fun getPackageName(): String {

@@ -33,17 +33,26 @@ class ExtensionStoreService(
     )
 
     suspend fun fetch(indexUrl: String): Result<ExtensionStore> {
-        if (indexUrl.endsWith("/index.min.json")) {
-            val isLegacyArray = withDecodedBody(indexUrl) { source ->
-                source.peek().readByte() == 0x5B.toByte()
+        return try {
+            if (indexUrl.endsWith("/index.min.json")) {
+                val isLegacyArray = withDecodedBody(indexUrl) { source ->
+                    source.peek().readByte() == 0x5B.toByte()
+                }
+                if (isLegacyArray) {
+                    val repoUrl = indexUrl.replace("/index.min.json", "/repo.json")
+                    return fetchFromUrl(requestUrl = repoUrl, storeIndexUrl = repoUrl)
+                }
             }
-            if (isLegacyArray) {
-                val repoUrl = indexUrl.replace("/index.min.json", "/repo.json")
-                return fetchFromUrl(requestUrl = repoUrl, storeIndexUrl = repoUrl)
-            }
-        }
 
-        return fetchFromUrl(requestUrl = indexUrl, storeIndexUrl = indexUrl)
+            fetchFromUrl(requestUrl = indexUrl, storeIndexUrl = indexUrl)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR, e) {
+                "Failed to fetch extension store '$indexUrl'"
+            }
+            Result.failure(e)
+        }
     }
 
     private suspend fun fetchFromUrl(requestUrl: String, storeIndexUrl: String): Result<ExtensionStore> {
