@@ -17,7 +17,15 @@ rm app/src/main/java/eu/kanade/domain/easteregg/aurora/vault.json
   "firstRiddle": "текст первой загадки",
   "stages": [
     { "answer": "ответ1", "payload": { "kind": "riddle", "echoTitle": "…", "riddle": "следующая загадка" } },
-    { "answer": "ответN", "payload": { "kind": "final", "title": "…", "holder": "…", "letter": "…", "themeName": "…", "themeColors": { }, "bonusPoints": 0 } }
+    {
+      "answer": "ответN",
+      "payload": {
+        "kind": "final", "title": "…", "holder": "…", "letter": "…",
+        "themeName": "…", "themeColors": { },
+        "themeMaterial": { "style": "aurora-metal", "base": "#0A1626", "sheen": "#EAF6FF", "iridescence": "0.45", "gloss": "0.8" },
+        "bonusPoints": 0
+      }
+    }
   ]
 }
 ```
@@ -26,7 +34,24 @@ rm app/src/main/java/eu/kanade/domain/easteregg/aurora/vault.json
 
 - `firstRiddle` — обязательная непустая строка;
 - каждый `answer` после нормализации — 3..64 символа, без дублей;
-- промежуточные ступени — `kind: riddle` с непустой `riddle`; последняя — `kind: final`.
+- промежуточные ступени — `kind: riddle` с непустой `riddle`; последняя — `kind: final`;
+- у финала настоятельно рекомендуется `payload.themeMaterial` (иначе форж выдаст предупреждение, а тема AURORA_PRIME будет статичной).
+
+### Живая тема (`themeMaterial`)
+
+Все значения — строки:
+
+- `style` — обязательно `"aurora-metal"` (иначе материал игнорируется клиентом);
+- `base` — hex-цвет «металла» (по умолчанию берётся `themeColors.surface`);
+- `sheen` — hex-цвет блика (по умолчанию `#EAF6FF`);
+- `iridescence`, `gloss` — числа `"0".."1"` (по умолчанию `0.4` / `0.8`).
+
+При наличии этих данных клиент (v3.1) оживляет наградную тему: акцентные
+цвета бликуют от наклона устройства и «дышат» (`AuroraPrimeColors.kt`),
+а hero-поверхности рендерятся шейдерным «живым металлом»
+(`Modifier.auroraMetal`, `AuroraLivingMaterial.kt`). Ранее разблокированный
+payload без `themeMaterial` считается устаревшим и мягко мигрируется
+(`AuroraHeartManager.migrateIfNeeded`).
 
 ### Версия ваулта
 

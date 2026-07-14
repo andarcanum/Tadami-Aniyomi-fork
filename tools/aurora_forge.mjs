@@ -46,6 +46,12 @@ function validate(scenario) {
     if (!isLast && (typeof s.payload.riddle !== 'string' || !s.payload.riddle.length)) {
       fail(`stage ${n}: у промежуточной ступени должна быть следующая загадка payload.riddle`);
     }
+    if (isLast && (!s.payload.themeMaterial || s.payload.themeMaterial.style !== 'aurora-metal')) {
+      console.warn(
+        `[forge] stage ${n}: в payload финала нет themeMaterial (style="aurora-metal") — ` +
+          'тема AURORA_PRIME останется статичной, без живого перелива (см. README_AURORA.md).',
+      );
+    }
   });
   const answers = scenario.stages.map((s) => normalize(s.answer));
   if (new Set(answers).size !== answers.length) fail('ответы ступеней не должны повторяться');
