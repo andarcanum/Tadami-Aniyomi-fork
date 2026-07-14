@@ -187,6 +187,7 @@ fun AuroraEchoFlash(
                 0.00f to AuroraPublicPalette.Green,
                 0.05f to AuroraPublicPalette.Blue,
                 0.10f to AuroraPublicPalette.Violet,
+                0.15f to ShinkaiPalette.Rose,
             )
             for ((lag, col) in rings) {
                 val rp = easeOut(seg(t, 0.40f + lag, 0.84f + lag))
@@ -252,6 +253,16 @@ fun AuroraEchoFlash(
             }
         }
 
+        // Синкай-кинематика: сумеречная вуаль «часа кого-то» заливает кадр
+        // после пика, анаморфный блик линзы в точке сжатия и «дождь света»,
+        // разлетающийся из сердца взрыва (Kimi no Na wa / Tenki no Ko).
+        val twilight = easeOut(seg(t, 0.44f, 0.80f)) * fade
+        KatawareDokiVeil(alpha = 0.45f * twilight)
+        AuroraLightRain(progress = easeOut(seg(t, 0.46f, 0.95f)), alpha = fade)
+        AuroraAnamorphicFlare(
+            progress = (1f - abs(seg(t, 0.33f, 0.56f) * 2f - 1f)) * fade,
+        )
+
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = AuroraLocalization.translate(echoTitle).orEmpty(),
@@ -283,6 +294,14 @@ fun AuroraEchoFlash(
                     )
                 }
             }
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "「彗星の夜」",
+                color = Color(0x88FFD9A0),
+                fontSize = 11.sp,
+                letterSpacing = (8f - 5f * titleIn).sp,
+                modifier = Modifier.alpha(titleIn * 0.8f * fade),
+            )
         }
     }
 }

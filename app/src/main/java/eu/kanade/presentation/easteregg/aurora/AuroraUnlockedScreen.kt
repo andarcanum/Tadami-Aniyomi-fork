@@ -99,12 +99,28 @@ fun AuroraUnlockedScreen(
             colorC = accent,
         )
 
+        // Синкай-финал: сумерки «часа кого-то» расцветают вместе с сиянием,
+        // тёплые лучи из-за горизонта, пылинки света и одинокая комета.
+        KatawareDokiVeil(alpha = 0.50f * bloom)
+        AuroraGodRays(alpha = 0.50f * bloom)
+        AuroraLightMotes(count = 26, alpha = 0.55f * bloom)
+        AuroraCometShower(alpha = 0.9f * bloom, periodSeconds = 11f)
+
         // Первые мгновения — полная темнота, из которой всё рождается
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .alpha(darkness)
                 .background(Color.Black),
+        )
+
+        // Белая «вспышка рождения»: миг, в который из темноты проступает мир
+        val birthFlash = 1f - kotlin.math.abs(seg(t, 0.30f, 0.44f) * 2f - 1f)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(0.30f * birthFlash)
+                .background(Color.White),
         )
 
         Column(
@@ -115,6 +131,16 @@ fun AuroraUnlockedScreen(
                 .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            Text(
+                text = "— 誰そ彼 —",
+                color = Color(0x99FFD9A0),
+                fontSize = 12.sp,
+                letterSpacing = (10f - 6f * titleIn).sp,
+                modifier = Modifier
+                    .padding(bottom = 14.dp)
+                    .alpha(titleIn),
+            )
+
             Text(
                 text = AuroraLocalization.translate(payload.achievementTitle).orEmpty(),
                 color = primary,

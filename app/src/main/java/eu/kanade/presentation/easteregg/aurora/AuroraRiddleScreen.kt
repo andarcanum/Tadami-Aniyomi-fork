@@ -8,7 +8,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -41,8 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
@@ -156,23 +154,11 @@ fun AuroraRiddleScreen(
                 .background(Color.Black),
         )
 
-        // Brutalist terminal scanlines + subtle noise (tactical telemetry feel from the skill)
-        Canvas(modifier = Modifier.fillMaxSize().alpha(0.06f * awake.value)) {
-            val lineH = 3.dp.toPx()
-            for (y in 0 until (size.height / lineH).toInt() step 3) {
-                drawRect(
-                    color = Color.Black,
-                    topLeft = Offset(0f, y * lineH),
-                    size = Size(size.width, lineH * 0.6f),
-                )
-            }
-            // light film grain
-            repeat(80) {
-                val x = kotlin.random.Random.nextFloat() * size.width
-                val y = kotlin.random.Random.nextFloat() * size.height
-                drawCircle(Color.White, radius = 0.6f, center = Offset(x, y))
-            }
-        }
+        // Синкай-слои: сумеречный «час кого-то» у горизонта дышит вместе
+        // с сиянием, парящие пылинки света и редкая одинокая комета.
+        KatawareDokiVeil(alpha = (0.16f + 0.10f * breath) * awake.value)
+        AuroraLightMotes(count = 18, alpha = 0.35f * awake.value)
+        AuroraCometShower(alpha = 0.8f * awake.value, periodSeconds = 12f)
 
         IconButton(
             onClick = onBack,
@@ -218,6 +204,14 @@ fun AuroraRiddleScreen(
                 )
             }
 
+            Text(
+                text = "「オーロラの残響」",
+                color = Color(0x669BD8FF),
+                fontSize = 11.sp,
+                letterSpacing = 6.sp,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+
             Row(
                 modifier = Modifier.padding(top = 16.dp, bottom = 28.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -249,7 +243,13 @@ fun AuroraRiddleScreen(
                     .background(Color(0x14B8D8FF))
                     .border(
                         width = 0.5.dp,
-                        color = Color.White.copy(alpha = 0.08f),
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                ShinkaiPalette.SkyCyan.copy(alpha = 0.20f),
+                                Color.White.copy(alpha = 0.06f),
+                                ShinkaiPalette.Rose.copy(alpha = 0.18f),
+                            ),
+                        ),
                         shape = RoundedCornerShape(26.dp),
                     )
                     .padding(6.dp),

@@ -4,6 +4,7 @@ package eu.kanade.domain.easteregg.aurora
 // В этом файле НЕТ секрета: только соли, контрольные хеши ключей (PBKDF2,
 // 120000 итераций) и AES-256-GCM-шифртекст. Ответы и награда в кодовой
 // базе не существуют — их невозможно извлечь анализом кода.
+@Suppress("ktlint:standard:max-line-length")
 object AuroraVaultData {
 
     // Версия ваулта для мягкой миграции прогресса (AuroraHeartManager).
