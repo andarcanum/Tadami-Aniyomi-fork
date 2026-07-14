@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,8 +21,10 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -434,6 +437,14 @@ class AnixartImportScreen(
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         }
+                        if (item.result.confidence == AnixartMatcher.Confidence.NO_MATCH) {
+                            TextButton(
+                                onClick = { model.openManualSearch(index) },
+                                modifier = Modifier.padding(top = 2.dp),
+                            ) {
+                                Text(stringResource(AYMR.strings.shikimori_import_manual_search))
+                            }
+                        }
                     }
                 },
                 leadingContent = {
@@ -485,6 +496,13 @@ class AnixartImportScreen(
                     },
                     enabled = false,
                     onClick = {},
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(AYMR.strings.shikimori_import_manual_search)) },
+                    onClick = {
+                        model.openManualSearch(index)
+                        menuExpanded = false
+                    },
                 )
                 item.result.ranked.forEach { scored ->
                     val cand = scored.candidate
@@ -538,6 +556,55 @@ class AnixartImportScreen(
                 Text(stringResource(AYMR.strings.anixart_import_action_import, model.selectedCount()))
             }
         }
+        s.manualSearch?.let { manual ->
+            ManualSearchDialog(manual, model)
+        }
+    }
+
+    @Composable
+    private fun ManualSearchDialog(
+        manual: AnixartImportScreenModel.State.ManualSearchState,
+        model: AnixartImportScreenModel,
+    ) {
+        AlertDialog(
+            onDismissRequest = model::dismissManualSearch,
+            title = { Text(stringResource(AYMR.strings.shikimori_import_manual_search_title)) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = manual.query,
+                        onValueChange = model::setManualSearchQuery,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(AYMR.strings.shikimori_import_manual_search_hint)) },
+                        singleLine = true,
+                        enabled = !manual.loading,
+                    )
+                    if (manual.loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(top = 16.dp)
+                                .align(Alignment.CenterHorizontally),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = model::runManualSearch,
+                    enabled = manual.query.isNotBlank() && !manual.loading,
+                ) {
+                    Text(stringResource(AYMR.strings.anixart_import_start_matching))
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = model::dismissManualSearch,
+                    enabled = !manual.loading,
+                ) {
+                    Text(stringResource(AYMR.strings.novel_reader_background_action_cancel))
+                }
+            },
+        )
     }
 
     @Composable

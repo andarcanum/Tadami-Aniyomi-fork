@@ -38,6 +38,19 @@ class ShikimoriImportNotifier(private val context: Context) {
         }
     }
 
+    private var lastProgressNotifyAt = 0L
+
+    /**
+     * Builds and actually posts the progress notification. Throttled so bulk
+     * imports do not spam the notification manager on every row.
+     */
+    fun notifyProgress(current: Int, total: Int) {
+        val now = System.currentTimeMillis()
+        if (current < total && now - lastProgressNotifyAt < PROGRESS_THROTTLE_MS) return
+        lastProgressNotifyAt = now
+        context.notify(Notifications.ID_SHIKIMORI_IMPORT_PROGRESS, showProgress(current, total).build())
+    }
+
     fun showComplete(report: ImportShikimoriExecutor.Report) {
         completeNotificationBuilder.apply {
             setContentTitle(context.stringResource(AYMR.strings.anixart_import_done))
@@ -62,5 +75,9 @@ class ShikimoriImportNotifier(private val context: Context) {
         }.build().let {
             context.notify(Notifications.ID_SHIKIMORI_IMPORT_COMPLETE, it)
         }
+    }
+
+    companion object {
+        private const val PROGRESS_THROTTLE_MS = 500L
     }
 }

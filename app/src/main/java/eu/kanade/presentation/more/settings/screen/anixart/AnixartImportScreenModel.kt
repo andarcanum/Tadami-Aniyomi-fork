@@ -70,12 +70,22 @@ class AnixartImportScreenModel(
             val syncToShikimori: Boolean,
         ) : State
         data class Matching(val current: Int, val total: Int) : State
+
+        data class ManualSearchState(
+            val rowIndex: Int,
+            val query: String,
+            val loading: Boolean = false,
+        )
+
         data class Review(
             val items: List<ReviewItem>,
             val matchingReport: AnixartMatchingCoordinator.MatchingReport,
             val statusCategoryIds: Map<AnixartStatus, Long?>,
             val favoriteCategoryId: Long?,
             val syncToShikimori: Boolean,
+            val sourceIds: List<Long> = emptyList(),
+            val sourceNames: Map<Long, String> = emptyMap(),
+            val manualSearch: ManualSearchState? = null,
         ) : State
         data class Importing(val current: Int, val total: Int) : State
         data class Done(
@@ -233,7 +243,15 @@ class AnixartImportScreenModel(
                 )
             }
             mutableState.update {
-                State.Review(items, matchingReport, statusCategoryIds, favoriteCategoryId, syncToShikimori)
+                State.Review(
+                    items = items,
+                    matchingReport = matchingReport,
+                    statusCategoryIds = statusCategoryIds,
+                    favoriteCategoryId = favoriteCategoryId,
+                    syncToShikimori = syncToShikimori,
+                    sourceIds = sourceIds,
+                    sourceNames = sourceNames,
+                )
             }
         }
     }
@@ -241,7 +259,86 @@ class AnixartImportScreenModel(
     fun setSelection(rowIndex: Int, candidateId: Long?) {
         mutableState.update { s ->
             if (s !is State.Review) return@update s
-            s.copy(items = s.items.mapIndexed { i, it -> if (i == rowIndex) it.copy(selectedId = candidateId) else it })
+            s.copy(
+                items = s.items.mapIndexed { i, item ->
+                    if (i != rowIndex) return@mapIndexed item
+                    item.copy(
+                        selectedId = candidateId,
+                        enabled = candidateId != null,
+                    )
+                },
+            )
+        }
+    }
+
+    fun openManualSearch(rowIndex: Int) {
+        mutableState.update { s ->
+            if (s !is State.Review) return@update s
+            val row = s.items.getOrNull(rowIndex)?.row ?: return@update s
+            val defaultQuery = row.searchQueries().firstOrNull()
+                ?: row.russianTitle.ifBlank { row.originalTitle }
+            s.copy(manualSearch = State.ManualSearchState(rowIndex, defaultQuery))
+        }
+    }
+
+    fun dismissManualSearch() {
+        mutableState.update { s ->
+            if (s !is State.Review) return@update s
+            s.copy(manualSearch = null)
+        }
+    }
+
+    fun setManualSearchQuery(query: String) {
+        mutableState.update { s ->
+            if (s !is State.Review) return@update s
+            val manual = s.manualSearch ?: return@update s
+            s.copy(manualSearch = manual.copy(query = query))
+        }
+    }
+
+    fun runManualSearch() {
+        val review = state.value as? State.Review ?: return
+        val manual = review.manualSearch ?: return
+        val query = manual.query.trim()
+        if (query.isEmpty()) return
+        val rowIndex = manual.rowIndex
+        val item = review.items.getOrNull(rowIndex) ?: return
+
+        mutableState.update { s ->
+            if (s !is State.Review) return@update s
+            s.copy(manualSearch = manual.copy(loading = true))
+        }
+
+        screenModelScope.launch {
+            val searcher = AnixartSourceSearcher(sourceManager, review.sourceIds)
+            val candidates = searcher.search(query)
+            val rawMatch = AnixartMatcher.match(item.row.candidateTitles(), candidates)
+            val top = rawMatch.ranked.firstOrNull()
+            val result = if (top == null || top.score <= 0) {
+                rawMatch
+            } else {
+                rawMatch.copy(
+                    confidence = AnixartMatcher.Confidence.NEEDS_REVIEW,
+                    best = top,
+                )
+            }
+            val sourceName = result.best?.candidate?.sourceId?.let { review.sourceNames[it] }
+            mutableState.update { s ->
+                if (s !is State.Review) return@update s
+                s.copy(
+                    manualSearch = null,
+                    items = s.items.mapIndexed { i, reviewItem ->
+                        if (i != rowIndex) return@mapIndexed reviewItem
+                        reviewItem.copy(
+                            result = result,
+                            selectedId = result.best?.candidate?.id,
+                            enabled = result.best != null,
+                            matchedQuery = query,
+                            matchedSourceName = sourceName,
+                        )
+                    },
+                )
+            }
         }
     }
 

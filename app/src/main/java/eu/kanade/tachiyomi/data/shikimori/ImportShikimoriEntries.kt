@@ -78,17 +78,25 @@ class ImportShikimoriEntries(
                 }
 
                 if (shikimori.isLoggedIn) {
-                    val track = AnimeTrack.create(shikimori.id).apply {
-                        anime_id = localAnime.id
-                        remote_id = action.entry.remoteId
-                        title = action.entry.name
-                        total_episodes = action.entry.totalCount ?: 0L
-                        score = action.entry.score.toDouble()
-                        status = toTrackStatus(action.entry.status)
-                        last_episode_seen = action.entry.progress.toDouble()
+                    // Tracker binding is best-effort: a Shikimori API hiccup must
+                    // not mark an already successful library import as failed.
+                    try {
+                        val track = AnimeTrack.create(shikimori.id).apply {
+                            anime_id = localAnime.id
+                            remote_id = action.entry.remoteId
+                            title = action.entry.name
+                            total_episodes = action.entry.totalCount ?: 0L
+                            score = action.entry.score.toDouble()
+                            status = toTrackStatus(action.entry.status)
+                            last_episode_seen = action.entry.progress.toDouble()
+                        }
+                        addAnimeTracks.bind(shikimori, track, localAnime.id)
+                        trackerBound++
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN, e) {
+                            "Shikimori tracker bind failed for '${action.entry.name}'"
+                        }
                     }
-                    addAnimeTracks.bind(shikimori, track, localAnime.id)
-                    trackerBound++
                 }
 
                 if (wasInLibrary) alreadyInLibrary++ else added++
