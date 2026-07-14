@@ -21,9 +21,9 @@ import java.time.ZoneId
 
 class CrashLogUtil(
     private val context: Context,
-    private val mangaExtensionManager: MangaExtensionManager = Injekt.get(),
-    private val animeExtensionManager: AnimeExtensionManager = Injekt.get(),
-    private val networkPreferences: NetworkPreferences = Injekt.get(),
+    private val mangaExtensionManager: MangaExtensionManager? = runCatching { Injekt.get<MangaExtensionManager>() }.getOrNull(),
+    private val animeExtensionManager: AnimeExtensionManager? = runCatching { Injekt.get<AnimeExtensionManager>() }.getOrNull(),
+    private val networkPreferences: NetworkPreferences? = runCatching { Injekt.get<NetworkPreferences>() }.getOrNull(),
 ) {
 
     suspend fun dumpLogs(exception: Throwable? = null) = withNonCancellableContext {
@@ -59,7 +59,7 @@ class CrashLogUtil(
     }
 
     private fun dumpLogcat(outputFile: java.io.File) {
-        val verbose = networkPreferences.verboseLogging().get()
+        val verbose = networkPreferences?.verboseLogging()?.get() ?: false
         val backupFilter = if (verbose) {
             BackupDiagnosticLog.TAG + ":V"
         } else {
@@ -88,7 +88,7 @@ class CrashLogUtil(
             Device name: ${Build.DEVICE} (${Build.PRODUCT})
             Device model: ${Build.MODEL}
             WebView: ${WebViewUtil.getVersion(context)}
-            Verbose logging: ${networkPreferences.verboseLogging().get()}
+            Verbose logging: ${networkPreferences?.verboseLogging()?.get() ?: false}
             Current time: ${OffsetDateTime.now(ZoneId.systemDefault())}
             MPV version: 6764488
             Libplacebo version: v7.349.0
@@ -102,6 +102,7 @@ class CrashLogUtil(
     }
 
     private fun getMangaExtensionsInfo(): String? {
+        val mangaExtensionManager = mangaExtensionManager ?: return null
         val availableExtensions = mangaExtensionManager.availableExtensionsFlow.value.associateBy { it.pkgName }
 
         val extensionInfoList = mangaExtensionManager.installedExtensionsFlow.value
@@ -128,6 +129,7 @@ class CrashLogUtil(
     }
 
     private fun getAnimeExtensionsInfo(): String? {
+        val animeExtensionManager = animeExtensionManager ?: return null
         val availableExtensions = animeExtensionManager.availableExtensionsFlow.value.associateBy { it.pkgName }
 
         val extensionInfoList = animeExtensionManager.installedExtensionsFlow.value
