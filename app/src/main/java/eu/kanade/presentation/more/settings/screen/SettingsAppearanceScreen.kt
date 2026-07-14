@@ -87,10 +87,14 @@ object SettingsAppearanceScreen : SearchableSettings {
 
         return listOf(
             getThemeGroup(uiPreferences = uiPreferences),
-            getDisplayGroup(
+            getAppInterfaceGroup(uiPreferences = uiPreferences),
+            getNavigationGroup(uiPreferences = uiPreferences),
+            getHomeScreenGroup(
                 uiPreferences = uiPreferences,
                 userProfilePreferences = userProfilePreferences,
             ),
+            getTitleScreensGroup(uiPreferences = uiPreferences),
+            getFontsGroup(uiPreferences = uiPreferences),
             getTutorialGroup(tutorialPreferences = tutorialPreferences),
             getMetadataGroup(uiPreferences = uiPreferences),
         )
@@ -101,6 +105,7 @@ object SettingsAppearanceScreen : SearchableSettings {
         uiPreferences: UiPreferences,
     ): Preference.PreferenceGroup {
         val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
 
         val themeModePref = uiPreferences.themeMode()
         val themeMode by themeModePref.collectAsState()
@@ -111,100 +116,199 @@ object SettingsAppearanceScreen : SearchableSettings {
         val amoledPref = uiPreferences.themeDarkAmoled()
         val amoled by amoledPref.collectAsState()
 
+        val eInkProfilePref = uiPreferences.eInkProfile()
+        val eInkProfile by eInkProfilePref.collectAsState()
+
         return Preference.PreferenceGroup(
             title = stringResource(MR.strings.pref_category_theme),
-            preferenceItems = persistentListOf(
-                Preference.PreferenceItem.CustomPreference(
-                    title = stringResource(MR.strings.pref_app_theme),
-                ) {
-                    Column {
-                        AppThemeModePreferenceWidget(
-                            value = themeMode,
-                            onItemClick = {
-                                themeModePref.set(it)
-                                setAppCompatDelegateThemeMode(it)
-                            },
-                        )
+            preferenceItems = buildList<Preference.PreferenceItem<out Any>> {
+                add(
+                    Preference.PreferenceItem.CustomPreference(
+                        title = stringResource(MR.strings.pref_app_theme),
+                    ) {
+                        Column {
+                            AppThemeModePreferenceWidget(
+                                value = themeMode,
+                                onItemClick = {
+                                    themeModePref.set(it)
+                                    setAppCompatDelegateThemeMode(it)
+                                },
+                            )
 
-                        AppThemePreferenceWidget(
-                            value = appTheme,
-                            amoled = amoled,
-                            onItemClick = {
-                                appThemePref.set(it)
-                                // Track theme change for achievement
-                                val achievementHandler = Injekt.get<AchievementHandler>()
-                                achievementHandler.trackFeatureUsed(AchievementEvent.Feature.THEME_CHANGE)
-                            },
-                        )
-                    }
-                },
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = amoledPref,
-                    title = stringResource(MR.strings.pref_dark_theme_pure_black),
-                    enabled = themeMode != ThemeMode.LIGHT,
+                            AppThemePreferenceWidget(
+                                value = appTheme,
+                                amoled = amoled,
+                                onItemClick = {
+                                    appThemePref.set(it)
+                                    // Track theme change for achievement
+                                    val achievementHandler = Injekt.get<AchievementHandler>()
+                                    achievementHandler.trackFeatureUsed(AchievementEvent.Feature.THEME_CHANGE)
+                                },
+                            )
+                        }
+                    },
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = amoledPref,
+                        title = stringResource(MR.strings.pref_dark_theme_pure_black),
+                        enabled = themeMode != ThemeMode.LIGHT,
+                        onValueChanged = {
+                            (context as? Activity)?.let { ActivityCompat.recreate(it) }
+                            true
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(AYMR.strings.pref_e_ink_profile),
+                        subtitle = stringResource(eInkProfile.titleRes),
+                        onClick = { navigator.push(SettingsEInkScreen) },
+                    ),
+                )
+                if (!eInkProfile.isEnabled) {
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.animatedAuroraBackground(),
+                            title = stringResource(AYMR.strings.pref_animated_aurora_background),
+                            subtitle = stringResource(AYMR.strings.pref_animated_aurora_background_summary),
+                        ),
+                    )
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.auroraDarkRimLightEnabled(),
+                            title = stringResource(AYMR.strings.pref_aurora_dark_rim_light),
+                            subtitle = stringResource(AYMR.strings.pref_aurora_dark_rim_light_summary),
+                        ),
+                    )
+                }
+            }.toPersistentList(),
+        )
+    }
+
+    @Composable
+    private fun getAppInterfaceGroup(
+        uiPreferences: UiPreferences,
+    ): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val navigator = LocalNavigator.currentOrThrow
+
+        val now = remember { LocalDate.now() }
+        val dateFormat by uiPreferences.dateFormat().collectAsState()
+        val formattedNow = remember(dateFormat) {
+            UiPreferences.dateFormat(dateFormat).format(now)
+        }
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.pref_category_app_interface),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(MR.strings.pref_app_language),
+                    onClick = { navigator.push(AppLanguageScreen()) },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = uiPreferences.tabletUiMode(),
+                    entries = TabletUiMode.entries
+                        .associateWith { stringResource(it.titleRes) }
+                        .toImmutableMap(),
+                    title = stringResource(MR.strings.pref_tablet_ui_mode),
                     onValueChanged = {
-                        (context as? Activity)?.let { ActivityCompat.recreate(it) }
+                        context.toast(MR.strings.requires_app_restart)
                         true
                     },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = uiPreferences.startScreen(),
+                    entries = StartScreen.entries
+                        .associateWith { stringResource(it.titleRes) }
+                        .toImmutableMap(),
+                    title = stringResource(AYMR.strings.pref_start_screen),
+                    onValueChanged = {
+                        context.toast(MR.strings.requires_app_restart)
+                        true
+                    },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = uiPreferences.dateFormat(),
+                    entries = DateFormats
+                        .associateWith {
+                            val formattedDate = UiPreferences.dateFormat(it).format(now)
+                            "${it.ifEmpty { stringResource(MR.strings.label_default) }} ($formattedDate)"
+                        }
+                        .toImmutableMap(),
+                    title = stringResource(MR.strings.pref_date_format),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = uiPreferences.relativeTime(),
+                    title = stringResource(MR.strings.pref_relative_format),
+                    subtitle = stringResource(
+                        MR.strings.pref_relative_format_summary,
+                        stringResource(MR.strings.relative_time_today),
+                        formattedNow,
+                    ),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = uiPreferences.showAchievementNotifications(),
+                    title = stringResource(AYMR.strings.pref_show_achievement_notifications),
+                    subtitle = stringResource(AYMR.strings.pref_show_achievement_notifications_summary),
                 ),
             ),
         )
     }
 
     @Composable
-    private fun getDisplayGroup(
+    private fun getNavigationGroup(
+        uiPreferences: UiPreferences,
+    ): Preference.PreferenceGroup {
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.pref_category_navigation),
+            preferenceItems = persistentListOf(
+                Preference.PreferenceItem.ListPreference(
+                    preference = uiPreferences.bottomNavAppearance(),
+                    entries = BottomNavAppearance.entries
+                        .associateWith { stringResource(it.titleRes) }
+                        .toImmutableMap(),
+                    title = stringResource(AYMR.strings.pref_bottom_nav_appearance),
+                    onValueChanged = { true },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = uiPreferences.navStyle(),
+                    entries = NavStyle.entries
+                        .associateWith { stringResource(it.titleRes) }
+                        .toImmutableMap(),
+                    title = stringResource(AYMR.strings.pref_bottom_nav_style),
+                    onValueChanged = { true },
+                ),
+                Preference.PreferenceItem.ListPreference(
+                    preference = uiPreferences.navigationTransitionMode(),
+                    entries = mapOf(
+                        NavTransitionMode.AUTO to stringResource(AYMR.strings.pref_navigation_transition_mode_auto),
+                        NavTransitionMode.MODERN to
+                            stringResource(AYMR.strings.pref_navigation_transition_mode_modern),
+                        NavTransitionMode.LEGACY to
+                            stringResource(AYMR.strings.pref_navigation_transition_mode_legacy),
+                    ).toImmutableMap(),
+                    title = stringResource(AYMR.strings.pref_navigation_transition_mode),
+                    subtitle = stringResource(AYMR.strings.pref_navigation_transition_mode_summary),
+                ),
+            ),
+        )
+    }
+
+    @Composable
+    private fun getHomeScreenGroup(
         uiPreferences: UiPreferences,
         userProfilePreferences: UserProfilePreferences,
     ): Preference.PreferenceGroup {
-        val context = LocalContext.current
         val navigator = LocalNavigator.currentOrThrow
-
-        val now = remember { LocalDate.now() }
-
-        val dateFormat by uiPreferences.dateFormat().collectAsState()
-        val formattedNow = remember(dateFormat) {
-            UiPreferences.dateFormat(dateFormat).format(now)
-        }
 
         val showAnimeSectionPref = uiPreferences.showAnimeSection()
         val showMangaSectionPref = uiPreferences.showMangaSection()
         val showNovelSectionPref = uiPreferences.showNovelSection()
-        val auroraEntryTranslationPref = uiPreferences.auroraEntryTranslationEnabled()
-        val auroraEntryTranslationLanguagesPref = uiPreferences.auroraEntryTranslationSourceLanguages()
-        val showMangaScanlatorBranchesPref = uiPreferences.showMangaScanlatorBranches()
-        val appUiFontPref = uiPreferences.appUiFontId()
-        val coverTitleFontPref = uiPreferences.coverTitleFontId()
-        val eInkProfilePref = uiPreferences.eInkProfile()
         val showAnimeSection by showAnimeSectionPref.collectAsState()
         val showMangaSection by showMangaSectionPref.collectAsState()
         val showNovelSection by showNovelSectionPref.collectAsState()
-        val auroraEntryTranslationEnabled by auroraEntryTranslationPref.collectAsState()
-        val appUiFontId by appUiFontPref.collectAsState()
-        val coverTitleFontId by coverTitleFontPref.collectAsState()
-        val eInkProfile by eInkProfilePref.collectAsState()
-        val canResetAppearanceFonts = shouldEnableAppearanceFontsReset(
-            appUiFontId = appUiFontId,
-            coverTitleFontId = coverTitleFontId,
-        )
-        var fontCatalogVersion by rememberSaveable { mutableIntStateOf(0) }
-        val fontCatalog = remember(context, fontCatalogVersion) {
-            buildNovelReaderFontCatalog(context)
-        }
-        val importedFonts = remember(fontCatalog) {
-            fontCatalog.filter { it.source == NovelReaderFontSource.USER_IMPORTED }
-        }
-        var isFontSettingsExpanded by rememberSaveable { mutableStateOf(false) }
-        val importFontLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.OpenDocument(),
-        ) { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            val importedFont = importNovelReaderCustomFont(context, uri).getOrNull()
-            if (importedFont == null) {
-                context.toast(AYMR.strings.novel_reader_font_import_failed)
-                return@rememberLauncherForActivityResult
-            }
-            fontCatalogVersion += 1
-        }
+
         val greetingFontSizePref = userProfilePreferences.greetingFontSize()
         val greetingFontSize by greetingFontSizePref.collectAsState()
         val greetingAlphaPref = userProfilePreferences.greetingAlpha()
@@ -215,7 +319,6 @@ object SettingsAppearanceScreen : SearchableSettings {
         var isGreetingSettingsExpanded by rememberSaveable { mutableStateOf(false) }
         val auroraCustomizationTitle = stringResource(AYMR.strings.pref_aurora_customization)
         val greetingSettingsToggleTitle = stringResource(AYMR.strings.aurora_change_greeting_style)
-        val fontSettingsToggleTitle = stringResource(AYMR.strings.pref_fonts_settings)
         val greetingCustomizationItems = if (isGreetingSettingsExpanded) {
             listOf(
                 Preference.PreferenceItem.ListPreference(
@@ -299,40 +402,8 @@ object SettingsAppearanceScreen : SearchableSettings {
         }
 
         return Preference.PreferenceGroup(
-            title = stringResource(MR.strings.pref_category_display),
+            title = stringResource(AYMR.strings.pref_category_home_screen),
             preferenceItems = buildList<Preference.PreferenceItem<out Any>> {
-                add(
-                    Preference.PreferenceItem.TextPreference(
-                        title = stringResource(MR.strings.pref_app_language),
-                        onClick = { navigator.push(AppLanguageScreen()) },
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.ListPreference(
-                        preference = uiPreferences.tabletUiMode(),
-                        entries = TabletUiMode.entries
-                            .associateWith { stringResource(it.titleRes) }
-                            .toImmutableMap(),
-                        title = stringResource(MR.strings.pref_tablet_ui_mode),
-                        onValueChanged = {
-                            context.toast(MR.strings.requires_app_restart)
-                            true
-                        },
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.ListPreference(
-                        preference = uiPreferences.startScreen(),
-                        entries = StartScreen.entries
-                            .associateWith { stringResource(it.titleRes) }
-                            .toImmutableMap(),
-                        title = stringResource(AYMR.strings.pref_start_screen),
-                        onValueChanged = {
-                            context.toast(MR.strings.requires_app_restart)
-                            true
-                        },
-                    ),
-                )
                 add(
                     Preference.PreferenceItem.SwitchPreference(
                         preference = showAnimeSectionPref,
@@ -375,128 +446,6 @@ object SettingsAppearanceScreen : SearchableSettings {
                         },
                     ),
                 )
-                add(
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = showMangaScanlatorBranchesPref,
-                        title = stringResource(AYMR.strings.pref_show_manga_scanlator_branches),
-                        subtitle = stringResource(AYMR.strings.pref_show_manga_scanlator_branches_summary),
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.ListPreference(
-                        preference = uiPreferences.bottomNavAppearance(),
-                        entries = BottomNavAppearance.entries
-                            .associateWith { stringResource(it.titleRes) }
-                            .toImmutableMap(),
-                        title = stringResource(AYMR.strings.pref_bottom_nav_appearance),
-                        onValueChanged = { true },
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.ListPreference(
-                        preference = uiPreferences.navStyle(),
-                        entries = NavStyle.entries
-                            .associateWith { stringResource(it.titleRes) }
-                            .toImmutableMap(),
-                        title = stringResource(AYMR.strings.pref_bottom_nav_style),
-                        onValueChanged = { true },
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.ListPreference(
-                        preference = uiPreferences.navigationTransitionMode(),
-                        entries = mapOf(
-                            NavTransitionMode.AUTO to stringResource(AYMR.strings.pref_navigation_transition_mode_auto),
-                            NavTransitionMode.MODERN to
-                                stringResource(AYMR.strings.pref_navigation_transition_mode_modern),
-                            NavTransitionMode.LEGACY to
-                                stringResource(AYMR.strings.pref_navigation_transition_mode_legacy),
-                        ).toImmutableMap(),
-                        title = stringResource(AYMR.strings.pref_navigation_transition_mode),
-                        subtitle = stringResource(AYMR.strings.pref_navigation_transition_mode_summary),
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.ListPreference(
-                        preference = uiPreferences.dateFormat(),
-                        entries = DateFormats
-                            .associateWith {
-                                val formattedDate = UiPreferences.dateFormat(it).format(now)
-                                "${it.ifEmpty { stringResource(MR.strings.label_default) }} ($formattedDate)"
-                            }
-                            .toImmutableMap(),
-                        title = stringResource(MR.strings.pref_date_format),
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = uiPreferences.relativeTime(),
-                        title = stringResource(MR.strings.pref_relative_format),
-                        subtitle = stringResource(
-                            MR.strings.pref_relative_format_summary,
-                            stringResource(MR.strings.relative_time_today),
-                            formattedNow,
-                        ),
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = uiPreferences.showOriginalTitle(),
-                        title = stringResource(AYMR.strings.pref_show_original_title),
-                        subtitle = stringResource(AYMR.strings.pref_show_original_title_summary),
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = auroraEntryTranslationPref,
-                        title = stringResource(AYMR.strings.pref_aurora_entry_translation),
-                        subtitle = stringResource(AYMR.strings.pref_aurora_entry_translation_summary),
-                    ),
-                )
-                if (auroraEntryTranslationEnabled) {
-                    add(
-                        Preference.PreferenceItem.MultiSelectListPreference(
-                            preference = auroraEntryTranslationLanguagesPref,
-                            entries = googleTranslationSourceLanguageFamilyOptions()
-                                .associate { it.code to it.label }
-                                .toImmutableMap(),
-                            title = stringResource(AYMR.strings.pref_aurora_entry_translation_source_languages),
-                            subtitle = stringResource(
-                                AYMR.strings.pref_aurora_entry_translation_source_languages_summary,
-                            ),
-                        ),
-                    )
-                }
-                add(
-                    Preference.PreferenceItem.SwitchPreference(
-                        preference = uiPreferences.showAchievementNotifications(),
-                        title = stringResource(AYMR.strings.pref_show_achievement_notifications),
-                        subtitle = stringResource(AYMR.strings.pref_show_achievement_notifications_summary),
-                    ),
-                )
-                add(
-                    Preference.PreferenceItem.TextPreference(
-                        title = stringResource(AYMR.strings.pref_e_ink_profile),
-                        subtitle = stringResource(eInkProfile.titleRes),
-                        onClick = { navigator.push(SettingsEInkScreen) },
-                    ),
-                )
-                if (!eInkProfile.isEnabled) {
-                    add(
-                        Preference.PreferenceItem.SwitchPreference(
-                            preference = uiPreferences.animatedAuroraBackground(),
-                            title = stringResource(AYMR.strings.pref_animated_aurora_background),
-                            subtitle = stringResource(AYMR.strings.pref_animated_aurora_background_summary),
-                        ),
-                    )
-                    add(
-                        Preference.PreferenceItem.SwitchPreference(
-                            preference = uiPreferences.auroraDarkRimLightEnabled(),
-                            title = stringResource(AYMR.strings.pref_aurora_dark_rim_light),
-                            subtitle = stringResource(AYMR.strings.pref_aurora_dark_rim_light_summary),
-                        ),
-                    )
-                }
                 add(
                     Preference.PreferenceItem.SwitchPreference(
                         preference = uiPreferences.disableHomeHeaderScrollHide(),
@@ -570,85 +519,6 @@ object SettingsAppearanceScreen : SearchableSettings {
                 }
                 add(
                     Preference.PreferenceItem.TextPreference(
-                        title = fontSettingsToggleTitle,
-                        onClick = { isFontSettingsExpanded = !isFontSettingsExpanded },
-                        widget = { ExpandablePreferenceChevron(expanded = isFontSettingsExpanded) },
-                    ),
-                )
-                if (isFontSettingsExpanded) {
-                    add(
-                        Preference.PreferenceItem.CustomPreference(
-                            title = stringResource(AYMR.strings.pref_app_font_family),
-                        ) {
-                            FontListPreferenceWidget(
-                                title = stringResource(AYMR.strings.pref_app_font_family),
-                                value = appUiFontId,
-                                fontCatalog = fontCatalog,
-                                onValueChange = { appUiFontPref.set(it) },
-                            )
-                        },
-                    )
-                    add(
-                        Preference.PreferenceItem.CustomPreference(
-                            title = stringResource(AYMR.strings.pref_cover_title_font_family),
-                        ) {
-                            FontListPreferenceWidget(
-                                title = stringResource(AYMR.strings.pref_cover_title_font_family),
-                                value = coverTitleFontId,
-                                fontCatalog = fontCatalog,
-                                onValueChange = { coverTitleFontPref.set(it) },
-                            )
-                        },
-                    )
-                    add(
-                        Preference.PreferenceItem.TextPreference(
-                            title = stringResource(AYMR.strings.pref_font_reset_defaults),
-                            subtitle = stringResource(AYMR.strings.pref_font_reset_defaults_summary),
-                            enabled = canResetAppearanceFonts,
-                            onClick = {
-                                appUiFontPref.set(UiPreferences.DEFAULT_APP_UI_FONT_ID)
-                                coverTitleFontPref.set(UiPreferences.DEFAULT_COVER_TITLE_FONT_ID)
-                            },
-                        ),
-                    )
-                    add(
-                        Preference.PreferenceItem.TextPreference(
-                            title = stringResource(AYMR.strings.pref_font_import),
-                            subtitle = stringResource(AYMR.strings.pref_font_import_summary),
-                            onClick = {
-                                importFontLauncher.launch(arrayOf("*/*"))
-                            },
-                        ),
-                    )
-                    if (importedFonts.isEmpty()) {
-                        add(
-                            Preference.PreferenceItem.InfoPreference(
-                                title = stringResource(AYMR.strings.novel_reader_font_section_empty_imported),
-                            ),
-                        )
-                    } else {
-                        importedFonts.forEach { font ->
-                            add(
-                                Preference.PreferenceItem.TextPreference(
-                                    title = stringResource(AYMR.strings.pref_font_remove_named, font.label),
-                                    onClick = {
-                                        if (removeNovelReaderCustomFont(font.filePath).isSuccess) {
-                                            if (appUiFontId == font.id) {
-                                                appUiFontPref.set(UiPreferences.DEFAULT_APP_UI_FONT_ID)
-                                            }
-                                            if (coverTitleFontId == font.id) {
-                                                coverTitleFontPref.set(UiPreferences.DEFAULT_COVER_TITLE_FONT_ID)
-                                            }
-                                            fontCatalogVersion += 1
-                                        }
-                                    },
-                                ),
-                            )
-                        }
-                    }
-                }
-                add(
-                    Preference.PreferenceItem.TextPreference(
                         title = greetingSettingsToggleTitle,
                         onClick = {
                             isGreetingSettingsExpanded = toggleGreetingSettingsExpanded(isGreetingSettingsExpanded)
@@ -657,6 +527,194 @@ object SettingsAppearanceScreen : SearchableSettings {
                     ),
                 )
                 addAll(greetingCustomizationItems)
+            }.toPersistentList(),
+        )
+    }
+
+    @Composable
+    private fun getTitleScreensGroup(
+        uiPreferences: UiPreferences,
+    ): Preference.PreferenceGroup {
+        val auroraEntryTranslationPref = uiPreferences.auroraEntryTranslationEnabled()
+        val auroraEntryTranslationLanguagesPref = uiPreferences.auroraEntryTranslationSourceLanguages()
+        val auroraEntryTranslationEnabled by auroraEntryTranslationPref.collectAsState()
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.pref_category_title_screens),
+            preferenceItems = buildList<Preference.PreferenceItem<out Any>> {
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.showOriginalTitle(),
+                        title = stringResource(AYMR.strings.pref_show_original_title),
+                        subtitle = stringResource(AYMR.strings.pref_show_original_title_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.showMangaScanlatorBranches(),
+                        title = stringResource(AYMR.strings.pref_show_manga_scanlator_branches),
+                        subtitle = stringResource(AYMR.strings.pref_show_manga_scanlator_branches_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.showSeasonTabs(),
+                        title = stringResource(AYMR.strings.pref_show_season_tabs),
+                        subtitle = stringResource(AYMR.strings.pref_show_season_tabs_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.alwaysShowFullEpisodeList(),
+                        title = stringResource(AYMR.strings.pref_always_show_full_episode_list),
+                        subtitle = stringResource(AYMR.strings.pref_always_show_full_episode_list_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.alwaysShowFullChapterListManga(),
+                        title = stringResource(AYMR.strings.pref_always_show_full_chapter_list_manga),
+                        subtitle = stringResource(AYMR.strings.pref_always_show_full_chapter_list_manga_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.alwaysShowFullChapterListNovel(),
+                        title = stringResource(AYMR.strings.pref_always_show_full_chapter_list_novel),
+                        subtitle = stringResource(AYMR.strings.pref_always_show_full_chapter_list_novel_summary),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = auroraEntryTranslationPref,
+                        title = stringResource(AYMR.strings.pref_aurora_entry_translation),
+                        subtitle = stringResource(AYMR.strings.pref_aurora_entry_translation_summary),
+                    ),
+                )
+                if (auroraEntryTranslationEnabled) {
+                    add(
+                        Preference.PreferenceItem.MultiSelectListPreference(
+                            preference = auroraEntryTranslationLanguagesPref,
+                            entries = googleTranslationSourceLanguageFamilyOptions()
+                                .associate { it.code to it.label }
+                                .toImmutableMap(),
+                            title = stringResource(AYMR.strings.pref_aurora_entry_translation_source_languages),
+                            subtitle = stringResource(
+                                AYMR.strings.pref_aurora_entry_translation_source_languages_summary,
+                            ),
+                        ),
+                    )
+                }
+            }.toPersistentList(),
+        )
+    }
+
+    @Composable
+    private fun getFontsGroup(
+        uiPreferences: UiPreferences,
+    ): Preference.PreferenceGroup {
+        val context = LocalContext.current
+
+        val appUiFontPref = uiPreferences.appUiFontId()
+        val coverTitleFontPref = uiPreferences.coverTitleFontId()
+        val appUiFontId by appUiFontPref.collectAsState()
+        val coverTitleFontId by coverTitleFontPref.collectAsState()
+        val canResetAppearanceFonts = shouldEnableAppearanceFontsReset(
+            appUiFontId = appUiFontId,
+            coverTitleFontId = coverTitleFontId,
+        )
+        var fontCatalogVersion by rememberSaveable { mutableIntStateOf(0) }
+        val fontCatalog = remember(context, fontCatalogVersion) {
+            buildNovelReaderFontCatalog(context)
+        }
+        val importedFonts = remember(fontCatalog) {
+            fontCatalog.filter { it.source == NovelReaderFontSource.USER_IMPORTED }
+        }
+        val importFontLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            val importedFont = importNovelReaderCustomFont(context, uri).getOrNull()
+            if (importedFont == null) {
+                context.toast(AYMR.strings.novel_reader_font_import_failed)
+                return@rememberLauncherForActivityResult
+            }
+            fontCatalogVersion += 1
+        }
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.pref_fonts_settings),
+            preferenceItems = buildList<Preference.PreferenceItem<out Any>> {
+                add(
+                    Preference.PreferenceItem.CustomPreference(
+                        title = stringResource(AYMR.strings.pref_app_font_family),
+                    ) {
+                        FontListPreferenceWidget(
+                            title = stringResource(AYMR.strings.pref_app_font_family),
+                            value = appUiFontId,
+                            fontCatalog = fontCatalog,
+                            onValueChange = { appUiFontPref.set(it) },
+                        )
+                    },
+                )
+                add(
+                    Preference.PreferenceItem.CustomPreference(
+                        title = stringResource(AYMR.strings.pref_cover_title_font_family),
+                    ) {
+                        FontListPreferenceWidget(
+                            title = stringResource(AYMR.strings.pref_cover_title_font_family),
+                            value = coverTitleFontId,
+                            fontCatalog = fontCatalog,
+                            onValueChange = { coverTitleFontPref.set(it) },
+                        )
+                    },
+                )
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(AYMR.strings.pref_font_reset_defaults),
+                        subtitle = stringResource(AYMR.strings.pref_font_reset_defaults_summary),
+                        enabled = canResetAppearanceFonts,
+                        onClick = {
+                            appUiFontPref.set(UiPreferences.DEFAULT_APP_UI_FONT_ID)
+                            coverTitleFontPref.set(UiPreferences.DEFAULT_COVER_TITLE_FONT_ID)
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(AYMR.strings.pref_font_import),
+                        subtitle = stringResource(AYMR.strings.pref_font_import_summary),
+                        onClick = {
+                            importFontLauncher.launch(arrayOf("*/*"))
+                        },
+                    ),
+                )
+                if (importedFonts.isEmpty()) {
+                    add(
+                        Preference.PreferenceItem.InfoPreference(
+                            title = stringResource(AYMR.strings.novel_reader_font_section_empty_imported),
+                        ),
+                    )
+                } else {
+                    importedFonts.forEach { font ->
+                        add(
+                            Preference.PreferenceItem.TextPreference(
+                                title = stringResource(AYMR.strings.pref_font_remove_named, font.label),
+                                onClick = {
+                                    if (removeNovelReaderCustomFont(font.filePath).isSuccess) {
+                                        if (appUiFontId == font.id) {
+                                            appUiFontPref.set(UiPreferences.DEFAULT_APP_UI_FONT_ID)
+                                        }
+                                        if (coverTitleFontId == font.id) {
+                                            coverTitleFontPref.set(UiPreferences.DEFAULT_COVER_TITLE_FONT_ID)
+                                        }
+                                        fontCatalogVersion += 1
+                                    }
+                                },
+                            ),
+                        )
+                    }
+                }
             }.toPersistentList(),
         )
     }

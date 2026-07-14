@@ -187,6 +187,7 @@ fun MangaScreenAuroraImpl(
     val entrySuggestionsEnabled by sourcePreferences.entrySuggestionsEnabled().collectAsState()
     val entrySuggestionsExpandInline by uiPreferences.entrySuggestionsExpandInline().collectAsState()
     val entrySuggestionsInOverflow by uiPreferences.entrySuggestionsInOverflow().collectAsState()
+    val alwaysShowFullChapterList by uiPreferences.alwaysShowFullChapterListManga().collectAsState()
     val globalSearchQuery = remember(manga.displayTitle) { normalizeAuroraGlobalSearchQuery(manga.displayTitle) }
     val chapters = state.chapterListItems
     val realChapterCount = remember(chapters) {
@@ -296,7 +297,7 @@ fun MangaScreenAuroraImpl(
     val haptic = LocalHapticFeedback.current
 
     // State for chapters expansion
-    var chaptersExpanded by remember { mutableStateOf(false) }
+    var chaptersExpanded by remember(alwaysShowFullChapterList) { mutableStateOf(alwaysShowFullChapterList) }
     var isReverseScrollingOverlay by remember { mutableStateOf(false) }
     LaunchedEffect(chaptersExpanded) {
         if (chaptersExpanded) {
@@ -727,7 +728,7 @@ fun MangaScreenAuroraImpl(
                                     }
                                 }
 
-                                if (realChapterCount > 5) {
+                                if (realChapterCount > 5 && !alwaysShowFullChapterList) {
                                     item {
                                         Box(
                                             modifier = Modifier
@@ -1030,7 +1031,7 @@ fun MangaScreenAuroraImpl(
                         }
 
                         // Show More button if there are more than 5 chapters
-                        if (realChapterCount > 5) {
+                        if (realChapterCount > 5 && !alwaysShowFullChapterList) {
                             item {
                                 Box(
                                     modifier = Modifier

@@ -156,6 +156,14 @@ class UiPreferences(
 
     fun debugBypassTreasuryLocks() = preferenceStore.getBoolean("debug_bypass_treasury_locks", false)
 
+    fun showSeasonTabs() = preferenceStore.getBoolean("show_season_tabs", true)
+
+    fun alwaysShowFullEpisodeList() = preferenceStore.getBoolean("always_show_full_episode_list", false)
+
+    fun alwaysShowFullChapterListManga() = preferenceStore.getBoolean("always_show_full_chapter_list_manga", false)
+
+    fun alwaysShowFullChapterListNovel() = preferenceStore.getBoolean("always_show_full_chapter_list_novel", false)
+
     fun entrySuggestionsExpandInline() = preferenceStore.getBoolean("entry_suggestions_expand_inline", true)
 
     fun entrySuggestionsInOverflow() = preferenceStore.getBoolean("entry_suggestions_in_overflow", false)
