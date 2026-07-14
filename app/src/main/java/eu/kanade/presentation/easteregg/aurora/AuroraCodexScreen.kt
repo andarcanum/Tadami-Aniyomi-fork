@@ -1,5 +1,7 @@
 package eu.kanade.presentation.easteregg.aurora
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -21,11 +23,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.domain.easteregg.aurora.AuroraCodexEntry
 import eu.kanade.domain.easteregg.aurora.AuroraLocalization
 import eu.kanade.domain.easteregg.aurora.AuroraPayload
+import kotlinx.coroutines.delay
 
 /**
  * «Кодекс Авроры» (Pillar 5): красивый архив пройденного пути —
@@ -60,19 +68,30 @@ fun AuroraCodexScreen(
     val primary = themeColor("primary", AuroraPublicPalette.Green)
     val accent = themeColor("accent", AuroraPublicPalette.Blue)
 
-    val breath by rememberInfiniteTransition(label = "codexBreath").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(8000), RepeatMode.Reverse),
-        label = "codexBreathValue",
-    )
+    val reducedMotion = rememberAuroraReducedMotion()
+
+    // «Время как материал»: в час сумерек Кодекс светится чуть ярче —
+    // повторные возвращения в разное время выглядят по-разному
+    val twilight = rememberAuroraTwilight()
+
+    // Дыхание сияния; при reduced motion — статичная середина вдоха
+    val breath by if (reducedMotion) {
+        remember { mutableStateOf(0.4f) }
+    } else {
+        rememberInfiniteTransition(label = "codexBreath").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(8000), RepeatMode.Reverse),
+            label = "codexBreathValue",
+        )
+    }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(AuroraPublicPalette.Night),
     ) {
-        AuroraBackdrop(intensity = 0.45f + 0.15f * breath)
+        AuroraBackdrop(intensity = (0.45f + 0.15f * breath) * (0.85f + 0.35f * twilight))
 
         IconButton(
             onClick = onClose,
@@ -101,27 +120,34 @@ fun AuroraCodexScreen(
                 letterSpacing = 6.sp,
             )
 
-            CodexCard(
-                title = AuroraLocalization.translate("Зов").orEmpty(),
-                body = AuroraLocalization.translate(firstRiddle).orEmpty(),
-                accent = primary,
-            )
-
-            entries.forEach { entry ->
+            CodexReveal(index = 0, reducedMotion = reducedMotion) {
                 CodexCard(
-                    title = AuroraLocalization.translate(entry.title ?: "Эхо").orEmpty(),
-                    body = AuroraLocalization.translate(entry.riddle.orEmpty()).orEmpty(),
+                    title = AuroraLocalization.translate("Зов").orEmpty(),
+                    body = AuroraLocalization.translate(firstRiddle).orEmpty(),
                     accent = primary,
                 )
             }
 
+            entries.forEachIndexed { index, entry ->
+                CodexReveal(index = index + 1, reducedMotion = reducedMotion) {
+                    CodexCard(
+                        title = AuroraLocalization.translate(entry.title ?: "Эхо").orEmpty(),
+                        body = AuroraLocalization.translate(entry.riddle.orEmpty()).orEmpty(),
+                        accent = primary,
+                        ordinal = romanOrdinal(index + 1),
+                    )
+                }
+            }
+
             payload?.letter?.let { letter ->
-                CodexCard(
-                    title = AuroraLocalization.translate("Письмо").orEmpty(),
-                    body = AuroraLocalization.translate(letter).orEmpty(),
-                    accent = accent,
-                    metal = AuroraMaterialSpec.from(payload),
-                )
+                CodexReveal(index = entries.size + 1, reducedMotion = reducedMotion) {
+                    CodexCard(
+                        title = AuroraLocalization.translate("Письмо").orEmpty(),
+                        body = AuroraLocalization.translate(letter).orEmpty(),
+                        accent = accent,
+                        metal = AuroraMaterialSpec.from(payload),
+                    )
+                }
             }
 
             if (payload != null) {
@@ -151,6 +177,7 @@ private fun CodexCard(
     body: String,
     accent: Color,
     metal: AuroraMaterialSpec? = null,
+    ordinal: String? = null,
 ) {
     val cardSurface = if (metal != null) {
         Modifier.auroraMetal(metal)
@@ -165,6 +192,14 @@ private fun CodexCard(
             .then(cardSurface)
             .padding(20.dp),
     ) {
+        ordinal?.let {
+            Text(
+                text = it,
+                color = accent.copy(alpha = 0.55f),
+                fontSize = 10.sp,
+                letterSpacing = 4.sp,
+            )
+        }
         Text(
             text = title,
             color = accent,
@@ -181,4 +216,41 @@ private fun CodexCard(
             modifier = Modifier.padding(top = 10.dp),
         )
     }
+}
+
+/** Каскадное проявление карточек Кодекса; при reduced motion — мгновенно. */
+@Composable
+private fun CodexReveal(
+    index: Int,
+    reducedMotion: Boolean,
+    content: @Composable () -> Unit,
+) {
+    val appear = remember { Animatable(if (reducedMotion) 1f else 0f) }
+    LaunchedEffect(Unit) {
+        if (!reducedMotion) {
+            delay(150L + index * 160L)
+            appear.animateTo(1f, tween(700, easing = FastOutSlowInEasing))
+        }
+    }
+    Box(
+        modifier = Modifier
+            .alpha(appear.value)
+            .graphicsLayer { translationY = (1f - appear.value) * 24f },
+    ) {
+        content()
+    }
+}
+
+/** Римский порядковый номер эха — «галерея света» нумерует залы. */
+private fun romanOrdinal(n: Int): String = when (n) {
+    1 -> "I"
+    2 -> "II"
+    3 -> "III"
+    4 -> "IV"
+    5 -> "V"
+    6 -> "VI"
+    7 -> "VII"
+    8 -> "VIII"
+    9 -> "IX"
+    else -> "$n"
 }

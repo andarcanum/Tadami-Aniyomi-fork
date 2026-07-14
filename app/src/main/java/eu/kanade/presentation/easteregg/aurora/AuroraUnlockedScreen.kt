@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.sp
 import eu.kanade.domain.easteregg.aurora.AuroraLocalization
 import eu.kanade.domain.easteregg.aurora.AuroraPayload
 
-private const val REVEAL_MS = 4500
+private const val REVEAL_MS = 5400 // три «вдоха»: свет → имя → дары
 
 private fun seg(t: Float, a: Float, b: Float): Float = ((t - a) / (b - a)).coerceIn(0f, 1f)
 
@@ -71,9 +71,15 @@ fun AuroraUnlockedScreen(
         Modifier.background(surface.copy(alpha = 0.8f))
     }
 
+    val reducedMotion = rememberAuroraReducedMotion()
     val anim = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        anim.animateTo(1f, tween(REVEAL_MS, easing = LinearEasing))
+        if (reducedMotion) {
+            // Reduced motion: награда видна сразу, без постановочного проявления
+            anim.snapTo(1f)
+        } else {
+            anim.animateTo(1f, tween(REVEAL_MS, easing = LinearEasing))
+        }
     }
     val t = anim.value
 
@@ -101,10 +107,12 @@ fun AuroraUnlockedScreen(
 
         // Синкай-финал: сумерки «часа кого-то» расцветают вместе с сиянием,
         // тёплые лучи из-за горизонта, пылинки света и одинокая комета.
-        KatawareDokiVeil(alpha = 0.50f * bloom)
-        AuroraGodRays(alpha = 0.50f * bloom)
-        AuroraLightMotes(count = 26, alpha = 0.55f * bloom)
-        AuroraCometShower(alpha = 0.9f * bloom, periodSeconds = 11f)
+        if (!reducedMotion) {
+            KatawareDokiVeil(alpha = 0.50f * bloom)
+            AuroraGodRays(alpha = 0.50f * bloom)
+            AuroraLightMotes(count = 26, alpha = 0.55f * bloom)
+            AuroraCometShower(alpha = 0.9f * bloom, periodSeconds = 11f)
+        }
 
         // Первые мгновения — полная темнота, из которой всё рождается
         Box(
