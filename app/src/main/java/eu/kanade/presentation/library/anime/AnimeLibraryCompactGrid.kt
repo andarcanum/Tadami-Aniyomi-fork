@@ -4,8 +4,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.util.fastAny
 import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.EntryCompactGridItem
 import eu.kanade.presentation.library.components.LanguageBadge
@@ -13,6 +13,7 @@ import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.PinnedBadge
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.globalSearchItem
+import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryItem
 import tachiyomi.domain.entries.anime.model.AnimeCover
@@ -25,6 +26,7 @@ fun AnimeLibraryCompactGrid(
     columns: Int,
     contentPadding: PaddingValues,
     selection: List<LibraryAnime>,
+    selectedIds: Set<Long> = selection.idsToHashSet { it.id },
     onClick: (LibraryAnime) -> Unit,
     onLongClick: (LibraryAnime) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
@@ -41,19 +43,23 @@ fun AnimeLibraryCompactGrid(
 
         items(
             items = items,
+            key = { it.libraryAnime.id },
             contentType = { "anime_library_compact_grid_item" },
         ) { libraryItem ->
             val anime = libraryItem.libraryAnime.anime
-            EntryCompactGridItem(
-                isSelected = selection.fastAny { it.id == libraryItem.libraryAnime.id },
-                title = anime.title.takeIf { showTitle },
-                coverData = AnimeCover(
+            val coverData = remember(anime) {
+                AnimeCover(
                     animeId = anime.id,
                     sourceId = anime.source,
                     isAnimeFavorite = anime.favorite,
                     url = anime.thumbnailUrl,
                     lastModified = anime.coverLastModified,
-                ),
+                )
+            }
+            EntryCompactGridItem(
+                isSelected = selectedIds.contains(libraryItem.libraryAnime.id),
+                title = anime.title.takeIf { showTitle },
+                coverData = coverData,
                 coverBadgeStart = {
                     DownloadsBadge(count = libraryItem.downloadCount)
                     UnviewedBadge(count = libraryItem.unseenCount)

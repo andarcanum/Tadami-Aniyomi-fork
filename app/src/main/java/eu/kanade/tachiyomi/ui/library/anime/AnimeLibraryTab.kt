@@ -69,6 +69,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -510,22 +511,21 @@ data object AnimeLibraryTab : Tab {
                     initialPage = animeCategoryIndex,
                     pageCount = { state.categories.size },
                 )
-                val isProgrammaticScroll = remember { mutableStateOf(false) }
-                // When pager changes from user swipe → sync to model
-                LaunchedEffect(pagerState.currentPage) {
-                    if (!isProgrammaticScroll.value) {
-                        screenModel.activeCategoryIndex = pagerState.currentPage
-                    }
+                // Sync pager → model only when the pager has settled: this cannot
+                // interleave with programmatic animations and never drops a user
+                // swipe performed mid-animation (the old flag-based sync could).
+                LaunchedEffect(pagerState) {
+                    snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
+                        .collect { (page, scrolling) ->
+                            if (!scrolling) {
+                                screenModel.activeCategoryIndex = page
+                            }
+                        }
                 }
                 // When model changes from tap → animate pager
                 LaunchedEffect(animeCategoryIndex) {
                     if (animeCategoryIndex != pagerState.currentPage) {
-                        try {
-                            isProgrammaticScroll.value = true
-                            pagerState.animateScrollToPage(animeCategoryIndex)
-                        } finally {
-                            isProgrammaticScroll.value = false
-                        }
+                        pagerState.animateScrollToPage(animeCategoryIndex)
                     }
                 }
                 HorizontalPager(
@@ -574,20 +574,18 @@ data object AnimeLibraryTab : Tab {
                     initialPage = mangaCategoryIndex,
                     pageCount = { mangaState.categories.size },
                 )
-                val isProgrammaticScroll = remember { mutableStateOf(false) }
-                LaunchedEffect(pagerState.currentPage) {
-                    if (!isProgrammaticScroll.value) {
-                        mangaScreenModel.activeCategoryIndex = pagerState.currentPage
-                    }
+                // Settled-page sync (see anime tab comment): race-free pager → model.
+                LaunchedEffect(pagerState) {
+                    snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
+                        .collect { (page, scrolling) ->
+                            if (!scrolling) {
+                                mangaScreenModel.activeCategoryIndex = page
+                            }
+                        }
                 }
                 LaunchedEffect(mangaCategoryIndex) {
                     if (mangaCategoryIndex != pagerState.currentPage) {
-                        try {
-                            isProgrammaticScroll.value = true
-                            pagerState.animateScrollToPage(mangaCategoryIndex)
-                        } finally {
-                            isProgrammaticScroll.value = false
-                        }
+                        pagerState.animateScrollToPage(mangaCategoryIndex)
                     }
                 }
                 HorizontalPager(
@@ -648,20 +646,18 @@ data object AnimeLibraryTab : Tab {
                     initialPage = novelCategoryIndex,
                     pageCount = { novelState.categories.size },
                 )
-                val isProgrammaticScroll = remember { mutableStateOf(false) }
-                LaunchedEffect(pagerState.currentPage) {
-                    if (!isProgrammaticScroll.value) {
-                        novelScreenModel.activeCategoryIndex = pagerState.currentPage
-                    }
+                // Settled-page sync (see anime tab comment): race-free pager → model.
+                LaunchedEffect(pagerState) {
+                    snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
+                        .collect { (page, scrolling) ->
+                            if (!scrolling) {
+                                activeNovelScreenModel.activeCategoryIndex = page
+                            }
+                        }
                 }
                 LaunchedEffect(novelCategoryIndex) {
                     if (novelCategoryIndex != pagerState.currentPage) {
-                        try {
-                            isProgrammaticScroll.value = true
-                            pagerState.animateScrollToPage(novelCategoryIndex)
-                        } finally {
-                            isProgrammaticScroll.value = false
-                        }
+                        pagerState.animateScrollToPage(novelCategoryIndex)
                     }
                 }
                 HorizontalPager(
@@ -732,8 +728,6 @@ data object AnimeLibraryTab : Tab {
                         onImportEpub = { epubImportLauncher.launch(arrayOf("application/epub+zip")) },
                         showInlineHeader = false,
                         libraryPreferences = activeNovelScreenModel.libraryPreferences,
-                        sourceManager = activeNovelScreenModel.sourceManager,
-                        downloadCache = activeNovelScreenModel.downloadCache,
                     )
                 }
             },

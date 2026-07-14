@@ -138,6 +138,7 @@ fun AnimeLibraryAuroraContent(
                     cardStyle = auroraCardStyle,
                     glowDisplayMode = LibraryDisplayMode.CompactGrid,
                     enabledAuras = enabledAuras,
+                    performanceMode = useLargeGridPerformanceMode,
                 )
             } else {
                 AnimeLibraryCompactGrid(
@@ -146,6 +147,7 @@ fun AnimeLibraryAuroraContent(
                     columns = safeColumns,
                     contentPadding = contentPadding,
                     selection = selection,
+                    selectedIds = selectedIds,
                     onClick = onClickAnime,
                     onLongClick = onToggleRangeSelection,
                     onTogglePinned = onTogglePinned,
@@ -175,6 +177,7 @@ fun AnimeLibraryAuroraContent(
                 cardStyle = auroraCardStyle,
                 glowDisplayMode = LibraryDisplayMode.CoverOnlyGrid,
                 enabledAuras = enabledAuras,
+                performanceMode = useLargeGridPerformanceMode,
             )
         }
 
@@ -197,6 +200,7 @@ fun AnimeLibraryAuroraContent(
                 cardStyle = auroraCardStyle,
                 glowDisplayMode = LibraryDisplayMode.ComfortableGrid,
                 enabledAuras = enabledAuras,
+                performanceMode = useLargeGridPerformanceMode,
             )
         }
     }
@@ -365,9 +369,11 @@ private fun AnimeLibraryAuroraCardGrid(
     cardStyle: AuroraLibraryCardStyle,
     glowDisplayMode: LibraryDisplayMode,
     enabledAuras: Set<String> = emptySet(),
+    performanceMode: Boolean = false,
 ) {
     val useGlowContourCards = cardStyle == AuroraLibraryCardStyle.GlowContour
     val showPinnedSection = remember(items) { items.containsAtLeastMatches(requiredCount = 2) { it.pinned } }
+    val textSpec = resolveGlowContourLibraryTextSpec(glowDisplayMode)
 
     LazyLibraryGrid(
         modifier = Modifier
@@ -415,7 +421,6 @@ private fun AnimeLibraryAuroraCardGrid(
                 seenCount = libraryAnime.seenCount,
                 totalCount = libraryAnime.totalCount,
             )
-            val textSpec = resolveGlowContourLibraryTextSpec(glowDisplayMode)
             val cornerIndicatorState = resolveGlowContourCornerIndicatorState(
                 hasContinueAction = onClickContinueWatching != null,
                 remainingCount = libraryItem.libraryAnime.unseenCount,
@@ -446,7 +451,7 @@ private fun AnimeLibraryAuroraCardGrid(
                     textSpec = textSpec,
                     genres = anime.genre ?: emptyList(),
                     enabledAuras = enabledAuras,
-                    performanceMode = items.size > AURORA_LARGE_GRID_PERFORMANCE_THRESHOLD,
+                    performanceMode = performanceMode,
                     badge = if (hasBadge) {
                         {
                             AnimeAuroraBadgeGroup(
