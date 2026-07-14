@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -193,6 +194,7 @@ fun AppThemePreviewItem(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    selectedBorderColor: Color? = null,
 ) {
     val appHaptics = LocalAppHaptics.current
     val isAurora = LocalSettingsUiStyle.current == SettingsUiStyle.Aurora
@@ -219,7 +221,7 @@ fun AppThemePreviewItem(
     }
 
     val borderColor = if (selected) {
-        MaterialTheme.colorScheme.primary
+        selectedBorderColor ?: MaterialTheme.colorScheme.primary
     } else {
         if (isAurora) {
             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)

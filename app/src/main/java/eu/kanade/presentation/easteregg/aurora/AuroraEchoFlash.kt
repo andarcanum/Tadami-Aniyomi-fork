@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.easteregg.aurora.AuroraLocalization
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.cos
@@ -253,7 +254,7 @@ fun AuroraEchoFlash(
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = echoTitle,
+                text = AuroraLocalization.translate(echoTitle).orEmpty(),
                 color = Color(0xFFEAF6FF),
                 fontSize = 21.sp,
                 fontWeight = FontWeight.SemiBold,

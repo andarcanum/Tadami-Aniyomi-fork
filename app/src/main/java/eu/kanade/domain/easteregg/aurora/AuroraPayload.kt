@@ -19,5 +19,6 @@ data class AuroraPayload(
     val letter: String? = null,
     val themeName: String? = null,
     val themeColors: Map<String, String>? = null,
+    val themeMaterial: Map<String, String>? = null,
     val bonusPoints: Int? = null,
 )

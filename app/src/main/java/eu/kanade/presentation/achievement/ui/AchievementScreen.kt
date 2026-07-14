@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.domain.easteregg.aurora.AuroraHeartManager
+import eu.kanade.domain.easteregg.aurora.AuroraLocalization
 import eu.kanade.presentation.achievement.components.AchievementActivityGraph
 import eu.kanade.presentation.achievement.components.AchievementCard
 import eu.kanade.presentation.achievement.components.AchievementCategoryTabs
@@ -352,7 +353,7 @@ private fun BentoLevelCard(
                             val holderTitle = manager.unlockedPayload()?.holderTitle
                             if (holderTitle != null) {
                                 Text(
-                                    text = "• $holderTitle",
+                                    text = "• ${AuroraLocalization.translate(holderTitle)}",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = colors.accent,

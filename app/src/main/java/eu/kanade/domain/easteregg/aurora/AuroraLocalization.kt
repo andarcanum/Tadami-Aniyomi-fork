@@ -37,6 +37,7 @@ object AuroraLocalization {
             // Echo titles
             "Эхо I — Бессонница" -> "Echo I — Insomnia"
             "Эхо II — Ориентир" -> "Echo II — Landmark"
+            "Эхо Авроры" -> "Aurora Echo"
 
             // Codex titles
             "КОДЕКС АВРОРЫ" -> "AURORA CODEX"
@@ -72,6 +73,9 @@ object AuroraLocalization {
             "Сохранить в сердце" -> "Save to Heart"
             "если слова бессильны — удержи загадку" -> "if words are powerless — hold the riddle"
             "Прочитать эхо заново" -> "Replay the echo"
+            "Аврора заметила тебя в этот час..." -> "Aurora noticed you at this hour..."
+            "Некоторые границы тоньше других." -> "Some boundaries are thinner than others."
+            "Скрыто северным сиянием" -> "Hidden by the aurora"
             else -> text
         }
     }

@@ -129,6 +129,8 @@ class UiPreferences(
 
     fun showTabGlow() = preferenceStore.getBoolean("show_tab_glow", false)
 
+    fun showCelestialNavbar() = preferenceStore.getBoolean("show_celestial_navbar", false)
+
     fun animatedAuroraBackground() = preferenceStore.getBoolean("animated_aurora_background", true)
 
     fun auroraDarkRimLightEnabled() = preferenceStore.getBoolean("aurora_dark_rim_light_enabled", true)

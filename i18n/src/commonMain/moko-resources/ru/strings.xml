@@ -1498,6 +1498,8 @@
     <string name="unlockable_aura_void_broadcast_red">Аура «Плавление Ядра»</string>
     <string name="unlockable_profile_nickname_effect_glitch_rune_red">Эффект ника "Багровый глитч"</string>
     <string name="unlockable_avatar_frame_glitch_red">Багровая рамка аватара</string>
+    <string name="unlockable_theme_AURORA_PRIME">Тема «Aurora Prime»</string>
+    <string name="unlockable_special_navbar_aurora_celestial">Свечение «Celestial Navigation»</string>
 
     <!-- Onboarding: legal disclaimer step -->
     <string name="onboarding_disclaimer_title">Прежде чем начать</string>
@@ -1547,4 +1549,6 @@
     <string name="achievement_time_paradox_desc">Почитайте или посмотрите что-то ровно в 11:11</string>
     <string name="reward_special_tab_glow_title">Нижняя подсветка табов</string>
     <string name="reward_special_tab_glow_desc">Акцентная подсветка под панелью переключения вкладок</string>
+    <string name="reward_special_navbar_aurora_celestial_title">Celestial Navigation</string>
+    <string name="reward_special_navbar_aurora_celestial_desc">Ночное небо, бегущие волны света и полярное гало для навигационной панели</string>
 </resources>

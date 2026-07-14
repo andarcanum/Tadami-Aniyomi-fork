@@ -120,6 +120,7 @@ fun AuroraCodexScreen(
                     title = AuroraLocalization.translate("Письмо").orEmpty(),
                     body = AuroraLocalization.translate(letter).orEmpty(),
                     accent = accent,
+                    metal = AuroraMaterialSpec.from(payload),
                 )
             }
 
@@ -145,13 +146,23 @@ fun AuroraCodexScreen(
 }
 
 @Composable
-private fun CodexCard(title: String, body: String, accent: Color) {
+private fun CodexCard(
+    title: String,
+    body: String,
+    accent: Color,
+    metal: AuroraMaterialSpec? = null,
+) {
+    val cardSurface = if (metal != null) {
+        Modifier.auroraMetal(metal)
+    } else {
+        Modifier.background(Color(0x8C0A1626))
+    }
     Column(
         modifier = Modifier
             .padding(top = 24.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0x8C0A1626))
+            .then(cardSurface)
             .padding(20.dp),
     ) {
         Text(

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import eu.kanade.domain.easteregg.aurora.AuroraEchoBus
+import eu.kanade.domain.easteregg.aurora.AuroraLocalization
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -83,7 +84,7 @@ fun AuroraEchoOverlay() {
             contentAlignment = Alignment.TopCenter,
         ) {
             Text(
-                text = text,
+                text = AuroraLocalization.translate(text).orEmpty(),
                 color = Color(0x8CB8D8FF),
                 fontSize = 12.sp,
                 fontStyle = FontStyle.Italic,

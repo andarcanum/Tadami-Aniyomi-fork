@@ -42,8 +42,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import eu.kanade.domain.easteregg.aurora.AuroraLocalization
 import eu.kanade.presentation.achievement.utils.AchievementRevealHelper
 import eu.kanade.presentation.easteregg.aurora.AuroraCodexScreen
+import eu.kanade.presentation.easteregg.aurora.AuroraMaterialSpec
+import eu.kanade.presentation.easteregg.aurora.auroraMetal
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.achievement.model.Achievement
 import tachiyomi.domain.achievement.model.AchievementProgress
@@ -71,6 +74,15 @@ fun AchievementCard(
     val isAuroraHeart = achievement.id == "aurora_heart"
 
     val payload = remember(managerState.unlocked) { manager.unlockedPayload() }
+    val spec = remember(payload) { AuroraMaterialSpec.from(payload) }
+    val cardBackgroundModifier = if (isAuroraHeart && spec != null) {
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .auroraMetal(spec)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    } else {
+        Modifier
+    }
     var showCodexDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -86,12 +98,13 @@ fun AchievementCard(
 
     val displayName = remember(achievement, progress, managerState, payload) {
         if (isAuroraHeart) {
-            when {
+            val title = when {
                 managerState.unlocked && payload != null -> payload.achievementTitle ?: "Сердце Авроры"
                 managerState.stageIndex > 0 -> "Сердце Авроры"
                 managerState.hintRevealed -> "???"
                 else -> "???"
             }
+            if (title == "???") title else AuroraLocalization.translate(title).orEmpty()
         } else {
             AchievementRevealHelper.getDisplayName(achievement, progress)
         }
@@ -114,12 +127,13 @@ fun AchievementCard(
             cluePrefix,
         ) {
             if (isAuroraHeart) {
-                when {
+                val desc = when {
                     managerState.unlocked && payload != null ->
                         payload.achievementDescription
                             ?: "Скрыто северным сиянием"
                     else -> "Скрыто северным сиянием"
                 }
+                AuroraLocalization.translate(desc).orEmpty()
             } else {
                 if (achievement.isHidden && !isUnlocked) {
                     AchievementRevealHelper.getDisplayDescription(
@@ -159,15 +173,18 @@ fun AchievementCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .then(cardBackgroundModifier)
             .clickable(onClick = cardClick)
             .drawBehind {
                 // Top hairline divider
-                drawLine(
-                    color = Color.White.copy(alpha = 0.06f),
-                    start = Offset(0f, 0f),
-                    end = Offset(size.width, 0f),
-                    strokeWidth = 1.dp.toPx(),
-                )
+                if (spec == null) {
+                    drawLine(
+                        color = Color.White.copy(alpha = 0.06f),
+                        start = Offset(0f, 0f),
+                        end = Offset(size.width, 0f),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
             }
             .padding(vertical = 14.dp, horizontal = 4.dp),
     ) {

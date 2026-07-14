@@ -201,6 +201,10 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                     activityDataRepository.recordAchievementUnlock()
 
                     userProfileManager.unlockTheme("AURORA_PRIME")
+
+                    val unlockableManager = Injekt.get<tachiyomi.data.achievement.UnlockableManager>()
+                    unlockableManager.setUnlockableUnlocked("theme_AURORA_PRIME")
+                    unlockableManager.setUnlockableUnlocked("special_navbar_aurora_celestial")
                 }
             }
         }

@@ -1,5 +1,5 @@
 {
-  "version": 20,
+  "version": 22,
   "achievements": [
     {
       "id": "first_chapter",
@@ -2960,9 +2960,24 @@
       "is_hidden": true,
       "is_secret": true,
       "rarity": "mythic",
+      "badge_icon": "ic_badge_aurora_heart",
       "tags": [
         "secret",
         "secret"
+      ],
+      "rewards": [
+        {
+          "type": "THEME",
+          "id": "theme_AURORA_PRIME",
+          "title": "Aurora Prime",
+          "description": "Living aurora-metal theme that gleams with device tilt"
+        },
+        {
+          "type": "SPECIAL",
+          "id": "special_navbar_aurora_celestial",
+          "title": "Celestial Navigation",
+          "description": "Night sky, travelling light wave and polar halo for the Aurora bottom bar"
+        }
       ],
       "season": null
     }

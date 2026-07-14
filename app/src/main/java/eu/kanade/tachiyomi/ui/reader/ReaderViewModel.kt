@@ -778,6 +778,12 @@ class ReaderViewModel @JvmOverloads constructor(
             ),
         )
 
+        if (eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin()) {
+            val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
+            manager.registerNightAction()
+            manager.revealHint()
+        }
+
         // Record reading activity for stats
         val chapterId = readerChapter.chapter.id ?: 0L
         if (chapterId > 0) {

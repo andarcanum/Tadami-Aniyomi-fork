@@ -211,20 +211,21 @@ class AuroraHeartManager private constructor(context: Context) {
      */
     private fun migrateIfNeeded() {
         val stored = prefs.getInt(K_VER, 0)
-        if (stored == AuroraVaultData.VERSION) return
-        if (stored != 0) {
-            prefs.edit()
-                .remove("rp_warm")
-                .remove("rp_pass")
-                .remove("rp_shader")
-                .remove("rp_baked")
-                .remove("rp_blob")
-                .remove(K_ECHOES)
-                .remove(K_NIGHT)
-                .remove(K_WHISPER)
-                .apply()
-        }
-        prefs.edit().putInt(K_VER, AuroraVaultData.VERSION).apply()
+        val payload = quest.unlockedPayload()
+        val isStale = quest.isUnlocked && payload != null && payload.themeMaterial == null
+        if (stored == AuroraVaultData.VERSION && !isStale) return
+        prefs.edit()
+            .remove("rp_warm")
+            .remove("rp_pass")
+            .remove("rp_shader")
+            .remove("rp_baked")
+            .remove("rp_blob")
+            .remove(K_ECHOES)
+            .remove(K_NIGHT)
+            .remove(K_WHISPER)
+            .remove(K_SHOWN_STAGES)
+            .putInt(K_VER, AuroraVaultData.VERSION)
+            .apply()
         refresh()
     }
 

@@ -1,5 +1,7 @@
 package eu.kanade.presentation.theme
 
+import android.content.Context
+import android.os.PowerManager
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.ColorScheme
@@ -17,6 +19,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.domain.ui.model.EInkThemeMode
+import eu.kanade.presentation.easteregg.aurora.rememberAuroraPrimeColors
 import eu.kanade.presentation.theme.colorscheme.AuroraColorScheme
 import eu.kanade.presentation.theme.colorscheme.BaseColorScheme
 import eu.kanade.presentation.theme.colorscheme.CloudflareColorScheme
@@ -100,24 +103,16 @@ private fun BaseTachiyomiTheme(
     content: @Composable () -> Unit,
 ) {
     val isEInkMode = eInkProfile.isEnabled
+    val baseColorScheme = getThemeColorScheme(
+        appTheme = appTheme,
+        isAmoled = isAmoled,
+        eInkProfile = eInkProfile,
+        isDark = isDark,
+    )
     val colorScheme = if (appTheme == AppTheme.AURORA_PRIME) {
-        val context = LocalContext.current
-        val payload =
-            remember {
-                eu.kanade.domain.easteregg.aurora.AuroraQuest(
-                    context.applicationContext as android.app.Application,
-                ).unlockedPayload()
-            }
-        remember(payload, isDark, isAmoled) {
-            buildAuroraPrimeColorScheme(payload, isDark, isAmoled)
-        }
+        auroraPrimeOverlay(base = baseColorScheme, isAmoled = isAmoled)
     } else {
-        getThemeColorScheme(
-            appTheme = appTheme,
-            isAmoled = isAmoled,
-            eInkProfile = eInkProfile,
-            isDark = isDark,
-        )
+        baseColorScheme
     }
     val appFontFamily = rememberAppFontFamily(appUiFontId)
     val coverTitleFontFamily = rememberAppFontFamily(coverTitleFontId)
@@ -230,62 +225,40 @@ private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
     AppTheme.NEBULA_TIDE to NebulaTideColorScheme,
     AppTheme.EVENT_HORIZON to EventHorizonColorScheme,
     AppTheme.VOID_RED to VoidRedColorScheme,
+    AppTheme.AURORA_PRIME to AuroraColorScheme,
 )
 
-private fun buildAuroraPrimeColorScheme(
-    payload: eu.kanade.domain.easteregg.aurora.AuroraPayload?,
-    isDark: Boolean,
-    isAmoled: Boolean,
-): ColorScheme {
-    fun parseColor(hex: String?, fallback: Color): Color {
-        if (hex == null) return fallback
-        return runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(fallback)
+@Composable
+private fun auroraPrimeOverlay(base: ColorScheme, isAmoled: Boolean): ColorScheme {
+    val context = LocalContext.current
+    val manager = remember { eu.kanade.domain.easteregg.aurora.AuroraHeartManager.get(context) }
+    val payload = remember { manager.unlockedPayload() }
+    val powerSave = remember {
+        (context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager)?.isPowerSaveMode == true
     }
-
-    val primaryColor = parseColor(payload?.themeColors?.get("primary"), Color(0xFF64FFDA))
-    val secondaryColor = parseColor(payload?.themeColors?.get("secondary"), Color(0xFF7C4DFF))
-    val accentColor = parseColor(payload?.themeColors?.get("accent"), Color(0xFFFF6E9C))
-    val backgroundColor = parseColor(payload?.themeColors?.get("background"), Color(0xFF050B14))
-    val surfaceColor = parseColor(payload?.themeColors?.get("surface"), Color(0xFF0A1626))
-
-    val baseScheme = androidx.compose.material3.darkColorScheme(
-        primary = primaryColor,
+    val live = rememberAuroraPrimeColors(payload, animated = !powerSave) ?: return base
+    return base.copy(
+        primary = live.primary,
         onPrimary = Color.Black,
-        primaryContainer = primaryColor.copy(alpha = 0.2f),
-        onPrimaryContainer = primaryColor,
-        secondary = secondaryColor,
+        primaryContainer = live.primary.copy(alpha = 0.2f),
+        onPrimaryContainer = live.primary,
+        secondary = live.secondary,
         onSecondary = Color.White,
-        secondaryContainer = secondaryColor.copy(alpha = 0.2f),
-        onSecondaryContainer = secondaryColor,
-        tertiary = accentColor,
+        secondaryContainer = live.secondary.copy(alpha = 0.2f),
+        onSecondaryContainer = live.secondary,
+        tertiary = live.accent,
         onTertiary = Color.Black,
-        tertiaryContainer = accentColor.copy(alpha = 0.2f),
-        onTertiaryContainer = accentColor,
-        background = if (isAmoled) Color.Black else backgroundColor,
+        tertiaryContainer = live.accent.copy(alpha = 0.2f),
+        onTertiaryContainer = live.accent,
+        // При AMOLED фон/поверхности оставляем чёрными (так делает BaseColorScheme)
+        background = if (isAmoled) base.background else live.background,
         onBackground = Color(0xFFDCEBFF),
-        surface = if (isAmoled) Color.Black else surfaceColor,
+        surface = if (isAmoled) base.surface else live.surface,
         onSurface = Color(0xFFDCEBFF),
-        surfaceVariant = surfaceColor.copy(alpha = 0.8f),
+        surfaceVariant = (if (isAmoled) base.surface else live.surface).copy(alpha = 0.8f),
         onSurfaceVariant = Color(0xCCDCEBFF),
-        surfaceTint = primaryColor,
-        outline = primaryColor.copy(alpha = 0.5f),
-        outlineVariant = primaryColor.copy(alpha = 0.2f),
+        surfaceTint = live.primary,
+        outline = live.primary.copy(alpha = 0.5f),
+        outlineVariant = live.primary.copy(alpha = 0.2f),
     )
-
-    return if (isAmoled) {
-        baseScheme.copy(
-            background = Color.Black,
-            onBackground = Color.White,
-            surface = Color.Black,
-            onSurface = Color.White,
-            surfaceVariant = Color(0xFF0C0C0C),
-            surfaceContainerLowest = Color(0xFF0C0C0C),
-            surfaceContainerLow = Color(0xFF0C0C0C),
-            surfaceContainer = Color(0xFF0C0C0C),
-            surfaceContainerHigh = Color(0xFF131313),
-            surfaceContainerHighest = Color(0xFF1B1B1B),
-        )
-    } else {
-        baseScheme
-    }
 }

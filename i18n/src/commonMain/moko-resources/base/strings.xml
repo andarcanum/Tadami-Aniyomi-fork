@@ -1691,6 +1691,8 @@
     <string name="unlockable_aura_void_broadcast_red">Core Melt Aura</string>
     <string name="unlockable_profile_nickname_effect_glitch_rune_red">Crimson Glitch Nickname Effect</string>
     <string name="unlockable_avatar_frame_glitch_red">Crimson Avatar Frame</string>
+    <string name="unlockable_theme_AURORA_PRIME">Aurora Prime Theme</string>
+    <string name="unlockable_special_navbar_aurora_celestial">Celestial Navigation</string>
 
     <!-- Download engine -->
     <string name="download_engine_title">Download Engine</string>
@@ -1750,4 +1752,6 @@
     <string name="achievement_time_paradox_desc">Read or watch at exactly 11:11</string>
     <string name="reward_special_tab_glow_title">Tab Bottom Glow</string>
     <string name="reward_special_tab_glow_desc">An accent-colored glow below the tab switcher</string>
+    <string name="reward_special_navbar_aurora_celestial_title">Celestial Navigation</string>
+    <string name="reward_special_navbar_aurora_celestial_desc">Night sky, travelling light wave and polar halo for the Aurora bottom bar</string>
 </resources>

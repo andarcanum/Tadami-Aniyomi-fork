@@ -237,6 +237,7 @@ class UnlockableManager(
             "theme_NEBULA_TIDE" -> MR.strings.unlockable_theme_NEBULA_TIDE
             "theme_EVENT_HORIZON" -> MR.strings.unlockable_theme_EVENT_HORIZON
             "theme_void_red" -> MR.strings.unlockable_theme_void_red
+            "theme_AURORA_PRIME" -> MR.strings.unlockable_theme_AURORA_PRIME
 
             // Badges
             "badge_achievement_master" -> MR.strings.unlockable_badge_achievement_master
@@ -280,6 +281,7 @@ class UnlockableManager(
             "special_background_event_horizon_library" -> MR.strings.unlockable_special_background_event_horizon_library
             "special_background_void_weeping_red" -> MR.strings.unlockable_special_background_void_weeping_red
             "special_tab_glow" -> MR.strings.unlockable_special_tab_glow
+            "special_navbar_aurora_celestial" -> MR.strings.unlockable_special_navbar_aurora_celestial
             else -> null
         }
     }

@@ -62,6 +62,15 @@ fun AuroraUnlockedScreen(
     val accent = themeColor("accent", AuroraPublicPalette.Blue)
     val surface = themeColor("surface", Color(0xFF0A1626))
 
+    // «Живой материал»: если ваулт прислал themeMaterial — письмо лежит
+    // на металлической поверхности с бликом от наклона устройства
+    val metal = AuroraMaterialSpec.from(payload)
+    val letterSurface = if (metal != null) {
+        Modifier.auroraMetal(metal)
+    } else {
+        Modifier.background(surface.copy(alpha = 0.8f))
+    }
+
     val anim = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         anim.animateTo(1f, tween(REVEAL_MS, easing = LinearEasing))
@@ -152,7 +161,7 @@ fun AuroraUnlockedScreen(
                         .padding(top = 24.dp)
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .background(surface.copy(alpha = 0.8f))
+                        .then(letterSurface)
                         .padding(20.dp)
                         .alpha(letterIn),
                 ) {

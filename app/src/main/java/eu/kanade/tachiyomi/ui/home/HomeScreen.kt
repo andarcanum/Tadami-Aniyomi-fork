@@ -80,7 +80,10 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.BottomNavAppearance
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
+import eu.kanade.presentation.components.auroraCelestialBar
+import eu.kanade.presentation.components.auroraCelestialHalo
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.rememberAuroraCelestialNavbarUnlocked
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.presentation.tutorial.coachAnchorForTab
@@ -336,6 +339,24 @@ object HomeScreen : Screen() {
                                 } else {
                                     Modifier
                                 }
+                                val celestialNavbar =
+                                    useAuroraBottomNav && !isEInkMode && rememberAuroraCelestialNavbarUnlocked()
+                                val celestialTabNavigator = if (celestialNavbar) LocalTabNavigator.current else null
+                                val celestialSelectedIndex = celestialTabNavigator?.let { tn ->
+                                    navStyle.tabs.indexOfFirst { it::class == tn.current::class }
+                                } ?: -1
+                                val decoratedNavModifier = if (celestialNavbar && auroraColors != null) {
+                                    navModifier.auroraCelestialBar(
+                                        accent = auroraColors.accent,
+                                        accentVariant = auroraColors.accentVariant,
+                                        isDark = auroraColors.isDark,
+                                        selectedIndex = celestialSelectedIndex,
+                                        tabCount = navStyle.tabs.size,
+                                    )
+                                } else {
+                                    navModifier
+                                }
+
                                 if (isEInkMode) {
                                     if (showBottomNav) {
                                         NavigationBar(
@@ -354,7 +375,7 @@ object HomeScreen : Screen() {
                                             } else {
                                                 NavigationBarDefaults.windowInsets
                                             },
-                                            modifier = navModifier,
+                                            modifier = decoratedNavModifier,
                                             shape = navBarShape,
                                             contentPadding = if (useAuroraBottomNav) {
                                                 PaddingValues(horizontal = 8.dp)
@@ -389,7 +410,7 @@ object HomeScreen : Screen() {
                                             } else {
                                                 NavigationBarDefaults.windowInsets
                                             },
-                                            modifier = navModifier,
+                                            modifier = decoratedNavModifier,
                                             shape = navBarShape,
                                             contentPadding = if (useAuroraBottomNav) {
                                                 PaddingValues(horizontal = 8.dp)
@@ -645,6 +666,7 @@ object HomeScreen : Screen() {
             null
         }
         val iconShape = RoundedCornerShape(999.dp)
+        val celestialHalo = rememberAuroraCelestialNavbarUnlocked()
 
         Box(
             modifier = Modifier
@@ -678,6 +700,13 @@ object HomeScreen : Screen() {
                         .then(
                             if (selected) {
                                 Modifier
+                                    .auroraCelestialHalo(
+                                        accent = auroraColors.accent,
+                                        accentVariant = auroraColors.accentVariant,
+                                        isDark = auroraColors.isDark,
+                                        shape = iconShape,
+                                        enabled = celestialHalo,
+                                    )
                                     .background(iconBackgroundBrush!!, iconShape)
                                     .border(
                                         BorderStroke(

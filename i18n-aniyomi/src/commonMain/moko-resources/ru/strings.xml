@@ -2564,6 +2564,7 @@
     <string name="achievement_void_broadcast_unlocked_hint_obvious">Введи «Третий Удар» в глобальный поиск, чтобы сжечь предохранители ядра.</string>
     <string name="theme_void_red">Кровь Лилит</string>
     <string name="theme_aurora_prime">Первозданная Аврора</string>
+    <string name="treasury_tagline_aurora_prime">Эфирное космическое свечение северного сияния</string>
     <string name="treasury_tagline_void_red">Сбой энергоблока Евы-01</string>
     <string name="treasury_reward_glitch_rune_red_title">Эффект ника "Багровый глитч"</string>
     <string name="treasury_reward_glitch_rune_red_description">Багровые цифровые помехи и руны ошибок</string>
