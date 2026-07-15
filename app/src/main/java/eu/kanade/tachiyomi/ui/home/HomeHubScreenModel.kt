@@ -8,9 +8,7 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
-import logcat.LogPriority
 import tachiyomi.core.common.util.lang.launchIO
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
 import tachiyomi.domain.entries.anime.model.AnimeCover
@@ -169,9 +167,6 @@ internal class HomeHubScreenModel(
                     showFilteredEmpty = cached.isInitialized && cached.isEmpty,
                 )
             }
-            logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH home-cache-applied anime hadCache=true" }
-        } else {
-            logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH home-cache-applied anime hadCache=false" }
         }
 
         // PERF: Defer expensive DB work (library + history + streaks + greeting) until after first frame.

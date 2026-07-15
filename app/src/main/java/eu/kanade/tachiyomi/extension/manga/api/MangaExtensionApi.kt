@@ -9,6 +9,7 @@ import mihon.data.extension.mapper.toMangaExtensionAvailable
 import mihon.data.extension.repository.ExtensionStoreFetcher
 import mihon.domain.extensionrepo.manga.interactor.UpdateMangaExtensionRepo
 import mihon.domain.extensionstore.manga.repository.MangaExtensionStoreRepository
+import mihon.domain.extensionstore.model.legacyBaseUrl
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.withIOContext
@@ -33,10 +34,27 @@ internal class MangaExtensionApi(
         return checkForUpdates(context, fromAvailableExtensionList = true)
     }
 
-    suspend fun findExtensions(): List<MangaExtension.Available> {
+    /**
+     * The result of fetching the available extensions.
+     *
+     * @param extensions The extensions of the stores that responded successfully.
+     * @param failedRepoUrls The repo urls of the stores that failed to respond. When this is not
+     * empty the fetch is partial and consumers should not assume missing extensions were removed.
+     */
+    data class FetchedExtensions(
+        val extensions: List<MangaExtension.Available>,
+        val failedRepoUrls: Set<String>,
+    ) {
+        val isComplete: Boolean get() = failedRepoUrls.isEmpty()
+    }
+
+    suspend fun findExtensions(): FetchedExtensions {
         return withIOContext {
-            storeFetcher.fetchExtensions(storeRepository.getAll())
-                .mapNotNull { it.toMangaExtensionAvailable() }
+            val result = storeFetcher.fetchExtensions(storeRepository.getAll())
+            FetchedExtensions(
+                extensions = result.extensions.mapNotNull { it.toMangaExtensionAvailable() },
+                failedRepoUrls = result.failedStores.map { it.legacyBaseUrl() }.toSet(),
+            )
         }
     }
 
@@ -56,7 +74,7 @@ internal class MangaExtensionApi(
         val extensions = if (fromAvailableExtensionList) {
             extensionManager.availableExtensionsFlow.value
         } else {
-            findExtensions()
+            findExtensions().extensions
         }
         lastExtCheck.set(nowMs)
 

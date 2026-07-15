@@ -9,13 +9,13 @@ import mihon.domain.extensionstore.model.ExtensionStore
 @Serializable
 data class NetworkLegacyExtensionRepo(
     @SerialName("index_v2")
-    val indexV2: String?,
+    val indexV2: String? = null,
     val meta: Meta,
 ) : BaseNetworkExtensionStore {
     @Serializable
     data class Meta(
         val name: String,
-        val shortName: String?,
+        val shortName: String? = null,
         val website: String,
         val signingKeyFingerprint: String,
     )

@@ -13,6 +13,7 @@ import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import mihon.data.extension.model.AvailableExtensionData
+import mihon.data.extension.repository.ExtensionStoreFetchResult
 import mihon.data.extension.repository.ExtensionStoreFetcher
 import mihon.domain.extensionrepo.anime.interactor.UpdateAnimeExtensionRepo
 import mihon.domain.extensionstore.anime.repository.AnimeExtensionStoreRepository
@@ -104,9 +105,12 @@ class AnimeExtensionApiTest {
                 badgeLabel = "Beta Store",
             )
             coEvery { storeRepository.getAll() } returns listOf(alphaStore, betaStore)
-            coEvery { storeFetcher.fetchExtensions(any()) } returns listOf(
-                availableExtension(alphaStore, versionCode = 10),
-                availableExtension(betaStore, versionCode = 11),
+            coEvery { storeFetcher.fetchExtensions(any()) } returns ExtensionStoreFetchResult(
+                extensions = listOf(
+                    availableExtension(alphaStore, versionCode = 10),
+                    availableExtension(betaStore, versionCode = 11),
+                ),
+                failedStores = emptyList(),
             )
 
             val api = AnimeExtensionApi(
@@ -118,7 +122,7 @@ class AnimeExtensionApiTest {
                 timeProvider = { nowMs },
             )
 
-            val extensions = api.findExtensions()
+            val extensions = api.findExtensions().extensions
 
             extensions.size shouldBe 2
             extensions.map { it.pkgName }.distinct().size shouldBe 1

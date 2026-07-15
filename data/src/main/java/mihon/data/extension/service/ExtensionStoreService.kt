@@ -9,6 +9,7 @@ import kotlinx.serialization.json.okio.decodeFromBufferedSource
 import kotlinx.serialization.protobuf.ProtoBuf
 import logcat.LogPriority
 import mihon.data.extension.model.AvailableExtensionData
+import mihon.data.extension.model.BaseNetworkExtensionStore
 import mihon.data.extension.model.NetworkExtensionStore
 import mihon.data.extension.model.NetworkLegacyExtension
 import mihon.data.extension.model.NetworkLegacyExtensionRepo
@@ -19,6 +20,7 @@ import okio.BufferedSource
 import okio.buffer
 import okio.gzip
 import tachiyomi.core.common.util.system.logcat
+import java.net.URI
 import kotlin.coroutines.cancellation.CancellationException
 
 class ExtensionStoreService(
@@ -32,19 +34,37 @@ class ExtensionStoreService(
         protoBuf = protoBuf,
     )
 
+    /**
+     * Fetches the store metadata behind [indexUrl] using a single request for the index itself.
+     *
+     * Supported formats:
+     * - Legacy min index (JSON array): resolves the sibling `repo.json` for metadata. When
+     *   `repo.json` is unavailable, a placeholder legacy store is synthesized so that the
+     *   repo can still be added and used.
+     * - Legacy `repo.json` (JSON object with `meta`): used directly, following `index_v2` redirects.
+     * - Store index (JSON object or protobuf): used directly.
+     */
     suspend fun fetch(indexUrl: String): Result<ExtensionStore> {
         return try {
-            if (indexUrl.endsWith("/index.min.json")) {
-                val isLegacyArray = withDecodedBody(indexUrl) { source ->
-                    source.peek().readByte() == 0x5B.toByte()
-                }
-                if (isLegacyArray) {
-                    val repoUrl = indexUrl.replace("/index.min.json", "/repo.json")
-                    return fetchFromUrl(requestUrl = repoUrl, storeIndexUrl = repoUrl)
+            val networkStore: BaseNetworkExtensionStore? = withDecodedBody(indexUrl) { source ->
+                when (source.peek().readByte()) {
+                    JSON_ARRAY_PREFIX -> null // Legacy min index; metadata lives in repo.json
+                    JSON_OBJECT_PREFIX -> decodeJsonStore(source)
+                    else -> protoBuf.decodeFromByteArray<NetworkExtensionStore>(source.readByteArray())
                 }
             }
 
-            fetchFromUrl(requestUrl = indexUrl, storeIndexUrl = indexUrl)
+            val indexV2 = (networkStore as? NetworkLegacyExtensionRepo)?.indexV2
+            when {
+                networkStore == null -> {
+                    if (!indexUrl.endsWith("/index.min.json")) {
+                        throw IllegalArgumentException("Provided legacy store url is not valid")
+                    }
+                    fetchLegacyRepoDetails(indexUrl.removeSuffix("/index.min.json"))
+                }
+                indexV2 != null -> fetch(indexV2)
+                else -> Result.success(networkStore.toExtensionStore(indexUrl))
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -55,37 +75,68 @@ class ExtensionStoreService(
         }
     }
 
-    private suspend fun fetchFromUrl(requestUrl: String, storeIndexUrl: String): Result<ExtensionStore> {
+    /**
+     * Fetches the `repo.json` metadata of a legacy repo. When it cannot be retrieved (some
+     * legacy repos only host `index.min.json`), a placeholder store is synthesized instead of
+     * failing, since the extension index itself is known to be reachable at this point.
+     */
+    private suspend fun fetchLegacyRepoDetails(baseUrl: String): Result<ExtensionStore> {
+        val repoUrl = "$baseUrl/repo.json"
         return try {
-            val networkStore = withDecodedBody(requestUrl) { source ->
+            val networkStore = withDecodedBody(repoUrl) { source ->
                 when (source.peek().readByte()) {
-                    0x5B.toByte() -> {
-                        if (!requestUrl.endsWith("/index.min.json")) {
-                            throw IllegalArgumentException("Provided legacy store url is not valid")
-                        }
-                        throw IllegalArgumentException("Legacy index must be resolved before fetchFromUrl")
-                    }
-                    0x7B.toByte() -> try {
-                        json.decodeFromBufferedSource<NetworkLegacyExtensionRepo>(source.peek())
-                    } catch (_: IllegalArgumentException) {
-                        json.decodeFromBufferedSource<NetworkExtensionStore>(source)
-                    }
+                    JSON_OBJECT_PREFIX -> decodeJsonStore(source)
                     else -> protoBuf.decodeFromByteArray<NetworkExtensionStore>(source.readByteArray())
                 }
             }
-
-            if (networkStore is NetworkLegacyExtensionRepo && networkStore.indexV2 != null) {
-                return fetch(networkStore.indexV2)
+            val indexV2 = (networkStore as? NetworkLegacyExtensionRepo)?.indexV2
+            if (indexV2 != null) {
+                return fetch(indexV2)
             }
-
-            Result.success(networkStore.toExtensionStore(storeIndexUrl))
+            Result.success(networkStore.toExtensionStore(repoUrl))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            logcat(LogPriority.ERROR, e) {
-                "Failed to add extension store '$storeIndexUrl'"
+            logcat(LogPriority.WARN, e) {
+                "Failed to fetch repo details from '$repoUrl'; using placeholder store metadata"
             }
-            Result.failure(e)
+            Result.success(placeholderLegacyStore(repoUrl))
+        }
+    }
+
+    private fun decodeJsonStore(source: BufferedSource): BaseNetworkExtensionStore {
+        return try {
+            json.decodeFromBufferedSource<NetworkLegacyExtensionRepo>(source.peek())
+        } catch (_: IllegalArgumentException) {
+            json.decodeFromBufferedSource<NetworkExtensionStore>(source)
+        }
+    }
+
+    private fun placeholderLegacyStore(repoUrl: String): ExtensionStore {
+        val baseUrl = repoUrl.removeSuffix("/repo.json")
+        val name = extractStoreName(baseUrl)
+        return ExtensionStore(
+            indexUrl = repoUrl,
+            name = name,
+            badgeLabel = name,
+            signingKey = NO_SIGNING_KEY,
+            contact = ExtensionStore.Contact(website = baseUrl, discord = null),
+            isLegacy = true,
+            extensionListUrl = null,
+        )
+    }
+
+    private fun extractStoreName(baseUrl: String): String {
+        return try {
+            val uri = URI(baseUrl)
+            val segments = uri.path?.trim('/')?.split("/").orEmpty().filter { it.isNotBlank() }
+            when {
+                segments.size >= 2 -> "${segments[0]}/${segments[1]}"
+                segments.isNotEmpty() -> segments[0]
+                else -> uri.host ?: baseUrl
+            }
+        } catch (_: Exception) {
+            baseUrl
         }
     }
 
@@ -94,7 +145,7 @@ class ExtensionStoreService(
             val extensions = if (store.extensionListUrl != null) {
                 withDecodedBody(store.extensionListUrl!!) { source ->
                     when (source.peek().readByte()) {
-                        0x7B.toByte() -> json.decodeFromBufferedSource<NetworkExtensionStore.ExtensionList>(source)
+                        JSON_OBJECT_PREFIX -> json.decodeFromBufferedSource<NetworkExtensionStore.ExtensionList>(source)
                         else -> protoBuf.decodeFromByteArray<NetworkExtensionStore.ExtensionList>(
                             source.readByteArray(),
                         )
@@ -103,12 +154,15 @@ class ExtensionStoreService(
                 }
             } else if (!store.isLegacy) {
                 withDecodedBody(store.indexUrl) { source ->
-                    when (source.peek().readByte()) {
-                        0x7B.toByte() -> json.decodeFromBufferedSource<NetworkExtensionStore>(source)
+                    val networkStore = when (source.peek().readByte()) {
+                        JSON_OBJECT_PREFIX -> json.decodeFromBufferedSource<NetworkExtensionStore>(source)
                         else -> protoBuf.decodeFromByteArray<NetworkExtensionStore>(source.readByteArray())
                     }
-                        .extensionList!!
-                        .toAvailableExtensionData(store)
+                    val extensionList = networkStore.extensionList
+                        ?: throw IllegalStateException(
+                            "Store '${store.name}' provides neither an extension list nor an extension list url",
+                        )
+                    extensionList.toAvailableExtensionData(store)
                 }
             } else {
                 val storeBaseUrl = store.indexUrl.removeSuffix("/repo.json")
@@ -140,5 +194,11 @@ class ExtensionStoreService(
         }
 
         return if (isGzip) gzip().buffer() else this
+    }
+
+    private companion object {
+        const val NO_SIGNING_KEY = "NO_SIGNING_KEY"
+        val JSON_ARRAY_PREFIX = '['.code.toByte()
+        val JSON_OBJECT_PREFIX = '{'.code.toByte()
     }
 }

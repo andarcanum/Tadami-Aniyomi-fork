@@ -288,7 +288,7 @@
     <string name="timer_remaining">%s осталось</string>
     <string name="timer_picker_enter_timer">Введите длительность</string>
     <string name="timer_picker_pick_time">Выбор длительности</string>
-    <string name="timer_cancel_timer">Отмена текущего ��аймера</string>
+    <string name="timer_cancel_timer">Отмена текущего таймера</string>
     <string name="player_sheets_speed_slider_label">Скорость</string>
     <string name="player_sheets_speed_make_default">Задать нормальную скорость</string>
     <string name="pref_audio_pitch_correction_title">Включить коррекцию тональности звука</string>
@@ -860,7 +860,7 @@
     <string name="novel_export_destination_folder">Папка назначения (необязательно)</string>
     <string name="novel_export_select_folder">Выбрать папку</string>
     <string name="novel_export_apply_reader_theme">Применить тему ридера к EPUB</string>
-    <string name="novel_export_include_custom_css">Вклю��ить пользовательский CSS</string>
+    <string name="novel_export_include_custom_css">Включить пользовательский CSS</string>
     <string name="novel_export_include_custom_js">Включить пользовательский JavaScript</string>
     <string name="novel_export_custom_js_warning">Пользовательский JavaScript поддерживается не всеми EPUB-ридерами</string>
     <string name="novel_export_invalid_range">Введите корректный диапазон глав</string>
@@ -1004,7 +1004,7 @@
     <string name="notification_episodes_multiple">Эпизоды %1$s</string>
     <string name="episode_settings">Настройка эпизода</string>
     <string name="pref_backup_flags">Варианты резервного копирования</string>
-    <string name="label_manga_extensions">Установить расширен��е</string>
+    <string name="label_manga_extensions">Установить расширение</string>
     <string name="label_anime_extensions">Установить расширение</string>
     <string name="label_novel_extensions">Установить расширение</string>
     <string name="novel_repo_picker_title">Выберите источник установки</string>
@@ -1145,7 +1145,7 @@
     <string name="pref_player_settings_summary">Внутренний плеер, жесты, декодировщики, субтитры</string>
     <string name="pref_hosters">Хосты</string>
     <string name="pref_mpv_user_files">Использовать файлы MPV пользователя</string>
-    <string name="pref_mpv_user_files_summary">Исполь��овать файлы в директории mpv-config</string>
+    <string name="pref_mpv_user_files_summary">Использовать файлы в директории mpv-config</string>
     <string name="player_chapter_type_ending">Эндинг</string>
     <string name="player_chapter_type_recap">Краткий пересказ</string>
     <string name="player_sheets_track_palette">Палитра</string>
@@ -1167,7 +1167,7 @@
     <string name="aurora_continue_watching">Продолжить просмотр</string>
     <string name="aurora_continue_watching_header">ПРОДОЛЖИТЬ ПРОСМОТР</string>
     <string name="aurora_play">Смотреть</string>
-    <string name="aurora_read">��итать</string>
+    <string name="aurora_read">Читать</string>
     <string name="aurora_details">Подробнее</string>
     <string name="aurora_view_all">Показать все</string>
     <string name="aurora_episode_number">Эпизод %s</string>
@@ -1314,7 +1314,7 @@
     <!-- Statistics-based Greetings -->
     <string name="aurora_greeting_stats_100_eps">Сотня серий! Ты сделал свои 100 отжиманий и 100 приседаний?</string>
     <string name="aurora_greeting_stats_marathoner">Золотая медаль по спидрану сериалов — твоя!</string>
-    <string name="aurora_greeting_stats_500_eps">Сила: 500+ эпизодов. Скаутер сейч��с взорвётся!</string>
+    <string name="aurora_greeting_stats_500_eps">Сила: 500+ эпизодов. Скаутер сейчас взорвётся!</string>
     <string name="aurora_greeting_stats_beginner_critic">Ещё пара тайтлов, и сможешь писать душные эссе на форумах</string>
     <string name="aurora_greeting_stats_expert">Гуру 2D-мира. Люди приходят к тебе за советом</string>
     <string name="aurora_greeting_stats_1000_eps">1000+ серий?! Это же больше, чем в Ван Писе! (почти)</string>
@@ -1405,7 +1405,7 @@
     <string name="aurora_greeting_general_gacha">Твоя удача на сегодня — ранга SSR! Приятного просмотра ✨</string>
     <string name="aurora_greeting_general_plot_armor">Надеваем сюжетную броню и ныряем в новый тайтл! 🛡️</string>
     <string name="aurora_greeting_general_bankai">БАНКАЙ! Ой, то есть... запускаю приложение! 🗡️</string>
-    <string name="aurora_greeting_general_titan">Отдадим же ��аши сердца за годный контент! Шинзо во сасагеё! ✊❤️</string>
+    <string name="aurora_greeting_general_titan">Отдадим же наши сердца за годный контент! Шинзо во сасагеё! ✊❤️</string>
     <string name="aurora_greeting_general_isekai_truck">Смотри по сторонам, а то Грузовик-сан отправит тебя в фэнтези! 🚚</string>
     <string name="aurora_greeting_general_susume">СУСУМЭЭЭ! Вперёд, к новым эпизодам! 🐎</string>
     <string name="aurora_greeting_general_magic_girl">Трансформация в девочку-волшебницу... или просто включение плеера 🪄</string>
@@ -1431,7 +1431,7 @@
     <string name="aurora_greeting_novel_cultivation_stage">Твоя база культивации чтения достигла стадии Зарождения Души 🧘</string>
     <string name="aurora_greeting_trope_system_quest">[Система] выдаёт квест: прочитать 10 глав до отбоя 🔔</string>
     <string name="aurora_greeting_trope_villainess">Очередной тайтл про перерождение в злодейку? Отменяй помолвку! 👑</string>
-    <string name="aurora_greeting_trope_murim">Мурим зовёт! Расчехляй свой те��ефон, юный мастер меча ⚔️</string>
+    <string name="aurora_greeting_trope_murim">Мурим зовёт! Расчехляй свой телефон, юный мастер меча ⚔️</string>
     <string name="aurora_greeting_trope_hidden_power">ГГ скрывает свою силу уже 100 глав. Давай посмотрим, когда он сорвётся 🤫</string>
     <string name="aurora_greeting_trope_regression">Герой вернулся на 10 лет назад, а ты просто вернулся в приложение ⏪</string>
     <string name="aurora_greeting_trope_op_mc">Опять исекай, где ГГ — имба с первой главы? Дайте два! 🛡️</string>
@@ -1452,7 +1452,7 @@
     <string name="aurora_greeting_habit_backlog_crying">Слышишь? Это плачут тайтлы в твоём списке «Прочитать позже» 💧</string>
     <string name="aurora_greeting_habit_bookmarks">Твои закладки уже скоро лопнут от количества годноты! 📑</string>
     <string name="aurora_greeting_habit_memory_wipe">Эх, стереть бы себе память, чтобы прочитать это заново... 🧠✨</string>
-    <string name="aurora_greeting_habit_new_tab">Ты ��ачинаешь новый тайтл, хотя не дочитал предыдущие пять? Осуждаем... но понимаем 👀</string>
+    <string name="aurora_greeting_habit_new_tab">Ты начинаешь новый тайтл, хотя не дочитал предыдущие пять? Осуждаем... но понимаем 👀</string>
     <string name="aurora_greeting_habit_chapter_hoarder">Копишь главы, чтобы прочитать залпом? Надеюсь, ты дождался! 🐹</string>
     <string name="aurora_greeting_ui_screen_clean">Протри экран, а то пропустишь мелкие детали на фреймах! 🧽</string>
     <string name="aurora_greeting_ui_battery_check">Надеюсь, у тебя достаточно зарядки на этот марафон? 🔋</string>
@@ -1542,7 +1542,7 @@
     <string name="aurora_watched">Просмотрено</string>
     <string name="aurora_downloaded">Загружено</string>
     <string name="aurora_trackers">Трекеры</string>
-    <string name="aurora_tracked_titles">Отслеживаемы��</string>
+    <string name="aurora_tracked_titles">Отслеживаемые</string>
     <string name="aurora_mean_score">Средняя оценка</string>
     <string name="aurora_trackers_used">Используемые трекеры</string>
 
@@ -1924,7 +1924,7 @@
     <string name="achievement_secret_crybaby_desc">Дочитайте тайтл с жанром Трагедия</string>
     <string name="achievement_secret_harem_king_desc">20+ тайтлов с жанром Harem</string>
     <string name="achievement_secret_truck_victim_desc">20+ тайтлов с жанром Isekai</string>
-    <string name="achievement_secret_chad_reader_desc">10+ завершённых ма��г, 0 онгоингов</string>
+    <string name="achievement_secret_chad_reader_desc">10+ завершённых манг, 0 онгоингов</string>
     <string name="achievement_secret_power_of_friendship_desc">10+ завершённых сёнэн-тайтлов - я стану королём!</string>
     <string name="achievement_secret_plus_ultra_desc">Завершите тайтл с жанром Super Power</string>
     <string name="achievement_secret_tatakae_desc">Завершите тайтл с жанром Military (отсылка к AOT)</string>
@@ -2090,7 +2090,7 @@
     <string name="novel_reader_prefetch_next_chapter">Предзагрузка следующей главы</string>
     <string name="novel_reader_prefetch_next_chapter_summary">Тихо предзагружать следующую главу после достижения 50% прогресса</string>
     <string name="novel_reader_cache_read_chapters">Кэшировать прочитанные главы</string>
-    <string name="novel_reader_cache_read_chapters_summary">Сохранять открытые главы во временный сжатый кэш для быстрого повторного открытия (размер ограничен авт��матически)</string>
+    <string name="novel_reader_cache_read_chapters_summary">Сохранять открытые главы во временный сжатый кэш для быстрого повторного открытия (размер ограничен автоматически)</string>
     <string name="novel_reader_cache_read_chapters_unlimited">Безлимитный кэш глав</string>
     <string name="novel_reader_cache_read_chapters_unlimited_summary">Отключить ограничения по размеру и количеству глав в кэше (может занять много места)</string>
     <string name="novel_reader_chapter_cache_size">Размер кэша глав</string>
@@ -2407,7 +2407,7 @@
     <string name="treasury_fallback_achievement">Достижение</string>
     <string name="treasury_cd_locked">Заблокировано</string>
     <string name="treasury_cd_active">Активно</string>
-    <string name="pref_category_debug">��ежим отладки</string>
+    <string name="pref_category_debug">Режим отладки</string>
     <string name="pref_debug_bypass_treasury_locks">Обойти блокировки для тестирования</string>
     <string name="pref_debug_bypass_treasury_locks_summary">Временно разблокирует все награды Сокровищницы для визуальной проверки</string>
 
@@ -2471,7 +2471,7 @@
     <string name="player_subtitle_translation_ai_requires_opt_in">Для AI-перевода субтитров нужно явно включить разрешение</string>
     <string name="player_subtitle_translation_failed">Не удалось перевести субтитры</string>
     <string name="pref_player_subtitle_translation">Перевод субтитров</string>
-    <string name="pref_player_subtitle_translation_summary">Переводит дорожки субтитров и д��бавляет результат как новую дорожку в проигрыватель. Внешние дорожки поддерживаются сразу; встроенные поддерживаются для локальных/загруженных видео, если поток субтитров удалось сопоставить.</string>
+    <string name="pref_player_subtitle_translation_summary">Переводит дорожки субтитров и добавляет результат как новую дорожку в проигрыватель. Внешние дорожки поддерживаются сразу; встроенные поддерживаются для локальных/загруженных видео, если поток субтитров удалось сопоставить.</string>
     <string name="pref_player_subtitle_translation_provider">Переводчик</string>
     <string name="pref_player_subtitle_translation_provider_summary">Выберите Google для быстрого перевода или AI, чтобы использовать провайдер AI-перевода из настроек читалки новелл.</string>
     <string name="pref_player_subtitle_translation_google_info">Google: самый простой вариант. Использует встроенный неофициальный переводчик Google и не требует AI-ключей.</string>

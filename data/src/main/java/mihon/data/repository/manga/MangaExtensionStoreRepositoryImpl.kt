@@ -1,6 +1,9 @@
 package mihon.data.repository.manga
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import mihon.data.extension.repository.extensionStoreMapper
 import mihon.data.extension.service.ExtensionStoreService
@@ -37,23 +40,27 @@ class MangaExtensionStoreRepositoryImpl(
 
     override suspend fun refreshAll() {
         try {
-            handler.awaitList { db -> db.extension_storeQueries.getAll(::extensionStoreMapper) }
-                .forEach { store ->
-                    service.fetch(store.indexUrl)
-                        .mapCatching { fetched ->
-                            handler.await(inTransaction = true) { db ->
-                                upsert(db, fetched)
-                                if (store.indexUrl != fetched.indexUrl) {
-                                    db.extension_storeQueries.delete(store.indexUrl)
+            val stores = handler.awaitList { db -> db.extension_storeQueries.getAll(::extensionStoreMapper) }
+            supervisorScope {
+                stores.map { store ->
+                    async {
+                        service.fetch(store.indexUrl)
+                            .mapCatching { fetched ->
+                                handler.await(inTransaction = true) { db ->
+                                    upsert(db, fetched)
+                                    if (store.indexUrl != fetched.indexUrl) {
+                                        db.extension_storeQueries.delete(store.indexUrl)
+                                    }
                                 }
                             }
-                        }
-                        .onFailure {
-                            logcat(LogPriority.ERROR, it) {
-                                "Failed to refresh extension store '${store.name} (${store.indexUrl})'"
+                            .onFailure {
+                                logcat(LogPriority.ERROR, it) {
+                                    "Failed to refresh extension store '${store.name} (${store.indexUrl})'"
+                                }
                             }
-                        }
-                }
+                    }
+                }.awaitAll()
+            }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
         }

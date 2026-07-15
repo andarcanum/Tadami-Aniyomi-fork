@@ -109,10 +109,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import logcat.LogPriority
 import soup.compose.material.motion.animation.materialFadeThroughIn
 import soup.compose.material.motion.animation.materialFadeThroughOut
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.NavigationBar
@@ -143,7 +141,6 @@ object HomeScreen : Screen() {
     @Composable
     override fun Content() {
         val context = LocalContext.current
-        logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homescreen-content-start" }
 
         val navStyle by uiPreferences.navStyle().collectAsState()
         val bottomNavAppearance by uiPreferences.bottomNavAppearance().collectAsState()
@@ -175,7 +172,6 @@ object HomeScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val bottomNavVisibilityController = remember { BottomNavVisibilityController() }
         val hazeState = remember { HazeState() }
-        logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homescreen-pre-tabnavigator" }
         eu.kanade.presentation.tutorial.TutorialHost {
             TabNavigator(
                 tab = defaultTab,
@@ -217,16 +213,12 @@ object HomeScreen : Screen() {
                         }
                     }
                 }
-                logcat(LogPriority.DEBUG) {
-                    "TADAMI_PERF_LAUNCH homescreen-tabnavigator-ready current=${tabNavigator.current}"
-                }
-                logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homescreen-tabnavigator-inside" }
+
                 // Provide usable navigator to content screen
                 CompositionLocalProvider(
                     LocalNavigator provides navigator,
                     LocalBottomNavVisibilityController provides bottomNavVisibilityController,
                 ) {
-                    logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homescreen-before-scaffold" }
                     Scaffold(
                         startBar = {
                             if (useNavigationRail) {

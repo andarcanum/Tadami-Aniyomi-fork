@@ -85,8 +85,6 @@ import eu.kanade.tachiyomi.ui.home.components.isTreasury
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import logcat.LogPriority
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.achievement.model.DayActivity
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -707,8 +705,6 @@ object HomeHubTab : Tab {
 
     @Composable
     override fun Content() {
-        logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homehubtab-content-start" }
-
         var hasReportedDrawn by remember { mutableStateOf(false) }
 
         val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
@@ -1052,8 +1048,6 @@ object HomeHubTab : Tab {
             }
         }
         val appHaptics = LocalAppHaptics.current
-
-        logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homehubtab-before-tabbed-aurora" }
 
         TabbedScreenAurora(
             titleRes = null,
