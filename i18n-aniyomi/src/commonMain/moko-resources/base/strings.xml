@@ -789,7 +789,7 @@
     <string name="novel_reader_dictionary_source_online_first">Online first, offline fallback</string>
     <string name="novel_reader_dictionary_import">Import StarDict dictionary</string>
     <string name="novel_reader_dictionary_import_summary">Select a .zip archive or the .ifo, .idx and .dict files. Dictionaries are stored locally; none are bundled with the app.</string>
-    <string name="novel_reader_dictionary_import_success">Imported: %1$s</string>
+    <string name="novel_reader_dictionary_import_success">Dictionary added: %1$s (%2$s words)</string>
     <string name="novel_reader_dictionary_import_failed">Could not import dictionary. Expected StarDict .ifo, .idx and .dict files (or a .zip containing them).</string>
     <string name="novel_reader_dictionary_imported_empty">No dictionaries imported yet</string>
     <string name="novel_reader_dictionary_word_count">%1$d words</string>

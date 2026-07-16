@@ -485,11 +485,6 @@ fun GeneralTab(
                 checked = settings.selectedTextTranslationEnabled,
                 onCheckedChanged = { preferences.selectedTextTranslationEnabled().set(it) },
             )
-            SwitchPreferenceWidget(
-                title = stringResource(AYMR.strings.novel_reader_dictionary_enabled),
-                checked = settings.novelDictionaryEnabled,
-                onCheckedChanged = { preferences.novelDictionaryEnabled().set(it) },
-            )
             val dictionaryLanguages = kotlinx.collections.immutable.persistentMapOf(
                 "en" to "English",
                 "ru" to "Русский",
@@ -513,13 +508,56 @@ fun GeneralTab(
                     preferences.selectedTextTranslationTargetLanguage().set(it)
                 },
             )
+        }
+        var dictionariesExpanded by rememberSaveable { mutableStateOf(false) }
+        NovelReaderAccordionSection(
+            title = stringResource(AYMR.strings.novel_reader_dictionary_section),
+            expanded = dictionariesExpanded,
+            onToggle = { dictionariesExpanded = !dictionariesExpanded },
+        ) {
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_dictionary_enabled),
+                subtitle = stringResource(AYMR.strings.novel_reader_dictionary_enabled_summary),
+                checked = settings.novelDictionaryEnabled,
+                onCheckedChanged = { preferences.novelDictionaryEnabled().set(it) },
+            )
+            val dictionarySourceEntries = persistentMapOf(
+                "ONLINE" to stringResource(AYMR.strings.novel_reader_dictionary_source_online),
+                "OFFLINE" to stringResource(AYMR.strings.novel_reader_dictionary_source_offline),
+                "OFFLINE_FIRST" to stringResource(AYMR.strings.novel_reader_dictionary_source_offline_first),
+                "ONLINE_FIRST" to stringResource(AYMR.strings.novel_reader_dictionary_source_online_first),
+            )
+            var dictionarySourceMode by remember { mutableStateOf(preferences.novelDictionarySource().get()) }
+            ListPreferenceWidget(
+                value = dictionarySourceMode,
+                title = stringResource(AYMR.strings.novel_reader_dictionary_source_mode),
+                subtitle = dictionarySourceEntries[dictionarySourceMode] ?: dictionarySourceMode,
+                icon = null,
+                entries = dictionarySourceEntries,
+                onValueChange = {
+                    dictionarySourceMode = it
+                    preferences.novelDictionarySource().set(it)
+                },
+            )
+            val dictionaryTargetLanguages = kotlinx.collections.immutable.persistentMapOf(
+                "en" to "English",
+                "ru" to "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
+                "ja" to "\u65e5\u672c\u8a9e (Japanese)",
+                "zh" to "\u4e2d\u6587 (Chinese)",
+                "ko" to "\ud55c\uad6d\uc5b4 (Korean)",
+                "es" to "Espa\u00f1ol (Spanish)",
+                "fr" to "Fran\u00e7ais (French)",
+                "de" to "Deutsch (German)",
+                "it" to "Italiano (Italian)",
+                "pt" to "Portugu\u00eas (Portuguese)",
+            )
             ListPreferenceWidget(
                 value = settings.novelDictionaryTargetLanguage,
                 title = stringResource(AYMR.strings.novel_reader_dictionary_target_language),
-                subtitle = dictionaryLanguages[settings.novelDictionaryTargetLanguage]
+                subtitle = dictionaryTargetLanguages[settings.novelDictionaryTargetLanguage]
                     ?: settings.novelDictionaryTargetLanguage,
                 icon = null,
-                entries = dictionaryLanguages,
+                entries = dictionaryTargetLanguages,
                 onValueChange = {
                     preferences.novelDictionaryTargetLanguage().set(it)
                 },

@@ -4,6 +4,8 @@ import org.jsoup.Jsoup
 import org.jsoup.safety.Safelist
 import java.io.File
 import java.io.RandomAccessFile
+import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
 
 data class StarDictInfo(
     val bookname: String,
@@ -30,56 +32,115 @@ data class StarDictArticle(
  *  - `<name>.syn`  — optional synonym index
  *  - `<name>.dict` — article data (`.dict.dz`/`.idx.gz` archives are decompressed at import time)
  *
- * The `.idx`/`.syn` index is loaded into memory once per process; article bodies are read
- * lazily from the `.dict` file on lookup. Nothing is bundled with the app — dictionaries are
- * always imported by the user.
+ * Memory model: the `.idx`/`.syn` files are memory-mapped (off the Java heap) and only a
+ * compact `IntArray` of entry positions is kept on the heap (~4 bytes per entry). Lookups
+ * use binary search over the mapped bytes, relying on the StarDict sort contract
+ * (`g_ascii_strcasecmp`, i.e. ASCII-case-insensitive byte order). This keeps even huge
+ * dictionaries (millions of synonyms) at a few MB of heap instead of hundreds of MB.
+ *
+ * Article bodies are read lazily from the `.dict` file on lookup. Nothing is bundled with
+ * the app — dictionaries are always imported by the user.
  */
 class StarDictDictionary private constructor(
     val id: String,
     val info: StarDictInfo,
     private val dictFile: File,
-    private val words: Array<String>,
-    private val offsets: LongArray,
-    private val sizes: IntArray,
-    private val index: HashMap<String, MutableList<Int>>,
+    private val offsetBytes: Int,
+    private val idx: SortedIndex,
+    private val syn: SortedIndex?,
 ) {
 
-    val wordCount: Int get() = words.size
+    val wordCount: Int get() = idx.size
 
     /**
-     * Looks up [rawTerm] with forgiving fallbacks (trimmed punctuation, case-insensitive
-     * index). Returns at most [maxArticles] rendered articles.
+     * Looks up [rawTerm] with a few forgiving fallbacks (trimmed punctuation, lowercase,
+     * decapitalized/capitalized first letter). Returns at most [maxArticles] rendered articles.
      */
     fun lookup(rawTerm: String, maxArticles: Int = MAX_ARTICLES): List<StarDictArticle> {
         val term = rawTerm.trim()
-        if (term.isEmpty()) return emptyList()
+        if (term.isEmpty() || term.length > MAX_TERM_LENGTH) return emptyList()
 
+        val stripped = term.trim { !it.isLetterOrDigit() }
         val candidates = LinkedHashSet<String>()
         candidates += term
-        candidates += term.trim { !it.isLetterOrDigit() }
+        if (stripped.isNotEmpty()) candidates += stripped
+        candidates += term.lowercase()
+        if (stripped.isNotEmpty()) {
+            candidates += stripped.lowercase()
+            candidates += stripped.replaceFirstChar { it.lowercase() }
+            candidates += stripped.lowercase().replaceFirstChar { it.uppercase() }
+        }
 
         val articles = ArrayList<StarDictArticle>(maxArticles)
-        val seen = HashSet<Int>()
+        val seenOffsets = HashSet<Long>()
         for (candidate in candidates) {
             if (candidate.isEmpty()) continue
-            val hits = index[candidate.lowercase()] ?: continue
-            for (entryIndex in hits) {
-                if (!seen.add(entryIndex)) continue
-                val html = runCatching { readArticle(entryIndex) }.getOrNull() ?: continue
-                if (html.isBlank()) continue
-                articles += StarDictArticle(headword = words[entryIndex], definitionsHtml = html)
-                if (articles.size >= maxArticles) return articles
-            }
+            val query = candidate.toByteArray(Charsets.UTF_8)
+            collectFromIdx(query, articles, seenOffsets, maxArticles)
+            if (articles.size >= maxArticles) return articles
+            collectFromSyn(query, articles, seenOffsets, maxArticles)
+            if (articles.size >= maxArticles) return articles
         }
         return articles
     }
 
-    private fun readArticle(entryIndex: Int): String {
-        val size = sizes[entryIndex]
-        if (size <= 0 || size > MAX_ARTICLE_BYTES) return ""
+    private fun collectFromIdx(
+        query: ByteArray,
+        out: MutableList<StarDictArticle>,
+        seenOffsets: MutableSet<Long>,
+        maxArticles: Int,
+    ) {
+        var i = idx.firstMatch(query)
+        if (i < 0) return
+        var scanned = 0
+        while (i < idx.size && scanned < MAX_EQUAL_SCAN && idx.compareAsciiFold(query, i) == 0) {
+            appendEntry(i, out, seenOffsets)
+            if (out.size >= maxArticles) return
+            i++
+            scanned++
+        }
+    }
+
+    private fun collectFromSyn(
+        query: ByteArray,
+        out: MutableList<StarDictArticle>,
+        seenOffsets: MutableSet<Long>,
+        maxArticles: Int,
+    ) {
+        val syn = syn ?: return
+        var i = syn.firstMatch(query)
+        if (i < 0) return
+        var scanned = 0
+        while (i < syn.size && scanned < MAX_EQUAL_SCAN && syn.compareAsciiFold(query, i) == 0) {
+            val target = syn.readUInt32(syn.payloadPosition(i)).toInt()
+            if (target in 0 until idx.size) {
+                appendEntry(target, out, seenOffsets)
+                if (out.size >= maxArticles) return
+            }
+            i++
+            scanned++
+        }
+    }
+
+    private fun appendEntry(
+        entryIndex: Int,
+        out: MutableList<StarDictArticle>,
+        seenOffsets: MutableSet<Long>,
+    ) {
+        val payload = idx.payloadPosition(entryIndex)
+        val offset = if (offsetBytes == 8) idx.readUInt64(payload) else idx.readUInt32(payload)
+        val size = idx.readUInt32(payload + offsetBytes).toInt()
+        if (!seenOffsets.add(offset)) return
+        val html = runCatching { readArticle(offset, size) }.getOrNull() ?: return
+        if (html.isBlank()) return
+        out += StarDictArticle(headword = idx.wordAt(entryIndex), definitionsHtml = html)
+    }
+
+    private fun readArticle(offset: Long, size: Int): String {
+        if (offset < 0 || size <= 0 || size > MAX_ARTICLE_BYTES) return ""
         val buffer = ByteArray(size)
         RandomAccessFile(dictFile, "r").use { raf ->
-            raf.seek(offsets[entryIndex])
+            raf.seek(offset)
             raf.readFully(buffer)
         }
         return renderFields(buffer)
@@ -180,9 +241,102 @@ class StarDictDictionary private constructor(
             .replace(Regex("<rref>.*?</rref>", RegexOption.DOT_MATCHES_ALL), "")
     }
 
-    companion object {
+    /**
+     * A NUL-terminated, StarDict-sorted (ASCII-case-insensitive) word list backed by a
+     * read-only memory-mapped buffer. Only entry start positions live on the Java heap.
+     * All buffer reads are absolute (no shared mutable position), so concurrent lookups
+     * are safe.
+     */
+    private class SortedIndex(
+        private val buffer: MappedByteBuffer,
+        private val positions: IntArray,
+    ) {
+        val size: Int get() = positions.size
+
+        private fun wordEnd(i: Int): Int {
+            var p = positions[i]
+            while (buffer.get(p) != 0.toByte()) p++
+            return p
+        }
+
+        fun payloadPosition(i: Int): Int = wordEnd(i) + 1
+
+        fun wordAt(i: Int): String {
+            val start = positions[i]
+            val end = wordEnd(i)
+            val bytes = ByteArray(end - start)
+            for (k in bytes.indices) bytes[k] = buffer.get(start + k)
+            return String(bytes, Charsets.UTF_8)
+        }
+
+        /**
+         * ASCII-case-insensitive comparison of [query] against entry [i]'s word bytes,
+         * mirroring glib's `g_ascii_strcasecmp` used by StarDict to sort `.idx`/`.syn`.
+         * Returns <0 / 0 / >0 when the query sorts before / equals / sorts after the entry.
+         */
+        fun compareAsciiFold(query: ByteArray, i: Int): Int {
+            var p = positions[i]
+            var q = 0
+            while (true) {
+                val entryByte = buffer.get(p)
+                if (q == query.size) return if (entryByte == 0.toByte()) 0 else -1
+                if (entryByte == 0.toByte()) return 1
+                val qc = foldAscii(query[q])
+                val ec = foldAscii(entryByte)
+                if (qc != ec) return qc - ec
+                p++
+                q++
+            }
+        }
+
+        /** Binary search for the first entry that fold-equals [query]; -1 when absent. */
+        fun firstMatch(query: ByteArray): Int {
+            var lo = 0
+            var hi = size - 1
+            var result = -1
+            while (lo <= hi) {
+                val mid = (lo + hi) ushr 1
+                val cmp = compareAsciiFold(query, mid)
+                when {
+                    cmp == 0 -> {
+                        result = mid
+                        hi = mid - 1
+                    }
+                    cmp < 0 -> hi = mid - 1
+                    else -> lo = mid + 1
+                }
+            }
+            return result
+        }
+
+        fun readUInt32(p: Int): Long {
+            return ((buffer.get(p).toLong() and 0xFF) shl 24) or
+                ((buffer.get(p + 1).toLong() and 0xFF) shl 16) or
+                ((buffer.get(p + 2).toLong() and 0xFF) shl 8) or
+                (buffer.get(p + 3).toLong() and 0xFF)
+        }
+
+        fun readUInt64(p: Int): Long {
+            var value = 0L
+            for (k in 0 until 8) {
+                value = (value shl 8) or (buffer.get(p + k).toLong() and 0xFF)
+            }
+            return value
+        }
+
+        private fun foldAscii(b: Byte): Int {
+            val v = b.toInt() and 0xFF
+            return if (v in 'A'.code..'Z'.code) v + 32 else v
+        }
+    }
+
+    companion object Loader {
         private const val MAX_ARTICLE_BYTES = 1 shl 20 // 1 MiB per article
         private const val MAX_ARTICLES = 3
+        private const val MAX_TERM_LENGTH = 256
+        private const val MAX_EQUAL_SCAN = 32 // duplicate headwords scanned per candidate
+        private const val MAX_INDEX_BYTES = 1L shl 30 // 1 GiB per index file
+        private const val MAX_ENTRIES = 20_000_000
 
         private val SAFE_HTML: Safelist = Safelist.relaxed()
             .removeTags("img")
@@ -244,7 +398,8 @@ class StarDictDictionary private constructor(
 
         /**
          * Loads a dictionary from [dir], which must contain `<base>.ifo`, `<base>.idx`
-         * and `<base>.dict` (already decompressed).
+         * and `<base>.dict` (already decompressed). The index files are memory-mapped;
+         * only compact position arrays are allocated on the heap.
          */
         fun load(id: String, dir: File): StarDictDictionary {
             val ifoFile = dir.listFiles()?.firstOrNull { it.isFile && it.extension.equals("ifo", true) }
@@ -259,71 +414,76 @@ class StarDictDictionary private constructor(
                 "Unsupported idxoffsetbits=${info.idxoffsetbits}"
             }
 
-            val idxBytes = idxFile.readBytes()
             val offsetBytes = info.idxoffsetbits / 8
-            val expected = info.wordcount.coerceAtLeast(16)
-            val wordList = ArrayList<String>(expected)
-            val offsetList = ArrayList<Long>(expected)
-            val sizeList = ArrayList<Int>(expected)
-
-            var pos = 0
-            while (pos < idxBytes.size) {
-                val start = pos
-                while (pos < idxBytes.size && idxBytes[pos] != 0.toByte()) pos++
-                if (pos >= idxBytes.size) break
-                val word = String(idxBytes, start, pos - start, Charsets.UTF_8)
-                pos++ // NUL terminator
-                if (pos + offsetBytes + 4 > idxBytes.size) break
-                val offset = if (offsetBytes == 8) readUInt64(idxBytes, pos) else readUInt32(idxBytes, pos)
-                pos += offsetBytes
-                val size = readUInt32(idxBytes, pos).toInt()
-                pos += 4
-                if (word.isEmpty()) continue
-                wordList += word
-                offsetList += offset
-                sizeList += size
-            }
-            check(wordList.isNotEmpty()) { "Empty .idx index for $base" }
-
-            val words = wordList.toTypedArray()
-            val offsets = offsetList.toLongArray()
-            val sizes = sizeList.toIntArray()
-            val index = HashMap<String, MutableList<Int>>(words.size * 2)
-            for (i in words.indices) {
-                index.getOrPut(words[i].lowercase()) { mutableListOf() } += i
-            }
+            val idxBuffer = mapReadOnly(idxFile)
+            val idxPositions = scanEntryPositions(
+                buffer = idxBuffer,
+                payloadBytes = offsetBytes + 4,
+                expectedCount = info.wordcount,
+            )
+            check(idxPositions.isNotEmpty()) { "Empty .idx index for $base" }
 
             // Optional synonym index (.syn) maps alternative spellings to idx entries.
             val synFile = File(dir, "$base.syn")
-            if (synFile.isFile) {
+            val syn = if (synFile.isFile) {
                 runCatching {
-                    val synBytes = synFile.readBytes()
-                    var p = 0
-                    while (p < synBytes.size) {
-                        val start = p
-                        while (p < synBytes.size && synBytes[p] != 0.toByte()) p++
-                        if (p >= synBytes.size) break
-                        val word = String(synBytes, start, p - start, Charsets.UTF_8)
-                        p++ // NUL terminator
-                        if (p + 4 > synBytes.size) break
-                        val target = readUInt32(synBytes, p).toInt()
-                        p += 4
-                        if (word.isNotEmpty() && target in words.indices) {
-                            index.getOrPut(word.lowercase()) { mutableListOf() } += target
-                        }
-                    }
-                }
+                    val synBuffer = mapReadOnly(synFile)
+                    val synPositions = scanEntryPositions(
+                        buffer = synBuffer,
+                        payloadBytes = 4,
+                        expectedCount = info.synwordcount,
+                    )
+                    SortedIndex(synBuffer, synPositions).takeIf { it.size > 0 }
+                }.getOrNull()
+            } else {
+                null
             }
 
             return StarDictDictionary(
                 id = id,
                 info = info,
                 dictFile = dictFile,
-                words = words,
-                offsets = offsets,
-                sizes = sizes,
-                index = index,
+                offsetBytes = offsetBytes,
+                idx = SortedIndex(idxBuffer, idxPositions),
+                syn = syn,
             )
+        }
+
+        private fun mapReadOnly(file: File): MappedByteBuffer {
+            val length = file.length()
+            check(length in 1..MAX_INDEX_BYTES) { "Unsupported index file size: ${file.name}" }
+            return RandomAccessFile(file, "r").use { raf ->
+                raf.channel.map(FileChannel.MapMode.READ_ONLY, 0, length)
+            }
+        }
+
+        /** Scans NUL-terminated entries and returns the start position of each word. */
+        private fun scanEntryPositions(
+            buffer: MappedByteBuffer,
+            payloadBytes: Int,
+            expectedCount: Int,
+        ): IntArray {
+            val limit = buffer.capacity()
+            var positions = IntArray(expectedCount.coerceIn(16, MAX_ENTRIES))
+            var count = 0
+            var p = 0
+            while (p < limit) {
+                val start = p
+                while (p < limit && buffer.get(p) != 0.toByte()) p++
+                if (p >= limit) break
+                val wordLength = p - start
+                p++ // NUL terminator
+                if (p + payloadBytes > limit) break
+                if (wordLength > 0) {
+                    if (count == MAX_ENTRIES) break
+                    if (count == positions.size) {
+                        positions = positions.copyOf((positions.size * 2).coerceAtMost(MAX_ENTRIES))
+                    }
+                    positions[count++] = start
+                }
+                p += payloadBytes
+            }
+            return if (count == positions.size) positions else positions.copyOf(count)
         }
     }
 }

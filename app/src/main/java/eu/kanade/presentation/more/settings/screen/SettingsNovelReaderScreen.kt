@@ -1587,6 +1587,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
                                 context.stringResource(
                                     AYMR.strings.novel_reader_dictionary_import_success,
                                     installed.bookname,
+                                    installed.wordCount.toString(),
                                 ),
                             )
                         }
