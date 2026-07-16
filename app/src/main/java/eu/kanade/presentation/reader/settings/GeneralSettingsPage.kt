@@ -32,7 +32,9 @@ import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.CheckboxItem
+import tachiyomi.presentation.core.components.HeadingItem
 import tachiyomi.presentation.core.components.SettingsChipRow
 import tachiyomi.presentation.core.components.SliderItem
 import tachiyomi.presentation.core.i18n.pluralStringResource
@@ -77,6 +79,9 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         )
     }
 
+    // Display: how the reader looks on screen
+    HeadingItem(MR.strings.pref_category_display)
+
     SettingsChipRow(MR.strings.pref_reader_theme) {
         themes.map { (labelRes, value) ->
             FilterChip(
@@ -85,41 +90,6 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
                 label = { Text(stringResource(labelRes)) },
             )
         }
-    }
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_show_page_number),
-        pref = screenModel.preferences.showPageNumber(),
-    )
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_show_reading_time_left),
-        pref = screenModel.preferences.showReadingTimeLeft(),
-    )
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_auto_webtoon_mode),
-        pref = screenModel.preferences.useAutoWebtoon(),
-    )
-
-    // Navigator settings button
-    Row(
-        modifier = Modifier
-            .clickable { showNavigatorSettings = true }
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = stringResource(MR.strings.pref_navigator_settings),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 
     CheckboxItem(
@@ -137,6 +107,24 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
     CheckboxItem(
         label = stringResource(MR.strings.pref_keep_screen_on),
         pref = screenModel.preferences.keepScreenOn(),
+    )
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_show_page_number),
+        pref = screenModel.preferences.showPageNumber(),
+    )
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_show_reading_time_left),
+        pref = screenModel.preferences.showReadingTimeLeft(),
+    )
+
+    // Reading behavior
+    HeadingItem(MR.strings.pref_category_reading)
+
+    CheckboxItem(
+        label = stringResource(MR.strings.pref_auto_webtoon_mode),
+        pref = screenModel.preferences.useAutoWebtoon(),
     )
 
     CheckboxItem(
@@ -167,6 +155,39 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         )
     }
 
+    // Toolbar (top app bar) action buttons
+    HeadingItem(AYMR.strings.reader_toolbar_heading)
+
+    CheckboxItem(
+        label = stringResource(AYMR.strings.reader_toolbar_show_webview),
+        pref = screenModel.preferences.showToolbarWebViewButton(),
+    )
+
+    CheckboxItem(
+        label = stringResource(AYMR.strings.reader_toolbar_show_share),
+        pref = screenModel.preferences.showToolbarShareButton(),
+    )
+
+    // Navigator settings button
+    Row(
+        modifier = Modifier
+            .clickable { showNavigatorSettings = true }
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(MR.strings.pref_navigator_settings),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
     val bottomBarButtonsOrder by screenModel.preferences.bottomBarButtonsOrder().collectAsState()
 
     val defaultOrder = remember {
@@ -183,11 +204,7 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         screenModel.preferences.bottomBarButtonsOrder().set(newList.joinToString(","))
     }
 
-    Text(
-        text = stringResource(MR.strings.pref_bottom_bar),
-        style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-    )
+    HeadingItem(MR.strings.pref_bottom_bar)
 
     val lazyListState = rememberLazyListState()
     val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
@@ -238,11 +255,7 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         }
     }
 
-    Text(
-        text = stringResource(MR.strings.pref_category_eink),
-        style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-    )
+    HeadingItem(MR.strings.pref_category_eink)
 
     CheckboxItem(
         label = stringResource(MR.strings.pref_flash_page),

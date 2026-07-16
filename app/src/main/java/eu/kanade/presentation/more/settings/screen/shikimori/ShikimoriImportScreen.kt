@@ -214,11 +214,12 @@ class ShikimoriImportScreen : ParentScreen() {
     ) {
         val filteredSources = remember(s.sources, s.searchQuery, s.enabledLanguages) {
             s.sources.filter {
-                it.lang in s.enabledLanguages && (
-                    s.searchQuery.isBlank() ||
-                        it.name.contains(s.searchQuery, ignoreCase = true) ||
-                        it.lang.contains(s.searchQuery, ignoreCase = true)
-                    )
+                it.lang in s.enabledLanguages &&
+                    (
+                        s.searchQuery.isBlank() ||
+                            it.name.contains(s.searchQuery, ignoreCase = true) ||
+                            it.lang.contains(s.searchQuery, ignoreCase = true)
+                        )
             }
         }
 

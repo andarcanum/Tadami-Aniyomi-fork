@@ -690,6 +690,9 @@
     <string name="novel_reader_auto_scroll_pause_description">Pause auto-scroll</string>
     <string name="novel_reader_auto_scroll_settings_description">Open auto-scroll settings</string>
     <string name="reader_auto_scroll_floating_button">Show floating control button</string>
+    <string name="reader_toolbar_heading">Toolbar</string>
+    <string name="reader_toolbar_show_webview">Show Open in WebView button</string>
+    <string name="reader_toolbar_show_share">Show Share button</string>
     <string name="novel_reader_prefetch_next_chapter">Prefetch next chapter</string>
     <string name="novel_reader_prefetch_next_chapter_summary">Silently prefetch next chapter after reaching 50% progress</string>
     <string name="novel_reader_cache_read_chapters">Cache read chapters</string>

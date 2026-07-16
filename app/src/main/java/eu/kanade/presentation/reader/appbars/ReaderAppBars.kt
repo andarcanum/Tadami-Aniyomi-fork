@@ -37,6 +37,8 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,7 +53,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -94,6 +95,8 @@ fun ReaderAppBars(
     bookmarked: Boolean,
     onToggleBookmarked: () -> Unit,
     onOpenInWebView: (() -> Unit)?,
+    showWebViewButton: Boolean = false,
+    showShareButton: Boolean = false,
     onOpenInBrowser: (() -> Unit)?,
     onShare: (() -> Unit)?,
 
@@ -210,13 +213,26 @@ fun ReaderAppBars(
                                                     onClick = onToggleBookmarked,
                                                 ),
                                             )
+                                            // Keep at most 3 icon actions in the toolbar (bookmark +
+                                            // optional WebView/Share); everything else stays in the
+                                            // overflow menu so the title always has enough room.
                                             onOpenInWebView?.let {
-                                                add(
-                                                    AppBar.OverflowAction(
-                                                        title = stringResource(MR.strings.action_open_in_web_view),
-                                                        onClick = it,
-                                                    ),
-                                                )
+                                                if (showWebViewButton) {
+                                                    add(
+                                                        AppBar.Action(
+                                                            title = stringResource(MR.strings.action_open_in_web_view),
+                                                            icon = Icons.Outlined.Public,
+                                                            onClick = it,
+                                                        ),
+                                                    )
+                                                } else {
+                                                    add(
+                                                        AppBar.OverflowAction(
+                                                            title = stringResource(MR.strings.action_open_in_web_view),
+                                                            onClick = it,
+                                                        ),
+                                                    )
+                                                }
                                             }
                                             onOpenInBrowser?.let {
                                                 add(
@@ -227,12 +243,22 @@ fun ReaderAppBars(
                                                 )
                                             }
                                             onShare?.let {
-                                                add(
-                                                    AppBar.OverflowAction(
-                                                        title = stringResource(MR.strings.action_share),
-                                                        onClick = it,
-                                                    ),
-                                                )
+                                                if (showShareButton) {
+                                                    add(
+                                                        AppBar.Action(
+                                                            title = stringResource(MR.strings.action_share),
+                                                            icon = Icons.Outlined.Share,
+                                                            onClick = it,
+                                                        ),
+                                                    )
+                                                } else {
+                                                    add(
+                                                        AppBar.OverflowAction(
+                                                            title = stringResource(MR.strings.action_share),
+                                                            onClick = it,
+                                                        ),
+                                                    )
+                                                }
                                             }
                                         }
                                         .build(),
@@ -291,7 +317,6 @@ fun ReaderAppBars(
                                         value = autoScrollSpeed.toFloat(),
                                         onValueChange = { onSpeedChange(it.toInt()) },
                                         valueRange = 1f..100f,
-                                        steps = 99,
                                         modifier = Modifier.padding(top = 4.dp),
                                     )
                                     if (viewer is PagerViewer) {
@@ -321,9 +346,9 @@ fun ReaderAppBars(
                                                 onToggleAutoScroll()
                                             },
                                         color = if (autoScrollEnabled) {
-                                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                            MaterialTheme.colorScheme.primaryContainer
                                         } else {
-                                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                                            MaterialTheme.colorScheme.secondaryContainer
                                         },
                                     ) {
                                         Row(
@@ -337,7 +362,11 @@ fun ReaderAppBars(
                                                     Icons.Outlined.PlayArrow
                                                 },
                                                 contentDescription = null,
-                                                tint = Color.White,
+                                                tint = if (autoScrollEnabled) {
+                                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                                },
                                                 modifier = Modifier.size(20.dp),
                                             )
                                             Spacer(Modifier.width(8.dp))
@@ -350,7 +379,11 @@ fun ReaderAppBars(
                                                     },
                                                 ),
                                                 style = MaterialTheme.typography.labelLarge,
-                                                color = Color.White,
+                                                color = if (autoScrollEnabled) {
+                                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                                },
                                             )
                                         }
                                     }

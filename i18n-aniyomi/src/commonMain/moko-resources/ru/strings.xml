@@ -2087,6 +2087,9 @@
     <string name="novel_reader_auto_scroll_pause_description">Приостановить автопрокрутку</string>
     <string name="novel_reader_auto_scroll_settings_description">Открыть настройки автопрокрутки</string>
     <string name="reader_auto_scroll_floating_button">Показывать плавающую кнопку управления</string>
+    <string name="reader_toolbar_heading">Верхняя панель</string>
+    <string name="reader_toolbar_show_webview">Кнопка «Открыть в WebView»</string>
+    <string name="reader_toolbar_show_share">Кнопка «Поделиться»</string>
     <string name="novel_reader_prefetch_next_chapter">Предзагрузка следующей главы</string>
     <string name="novel_reader_prefetch_next_chapter_summary">Тихо предзагружать следующую главу после достижения 50% прогресса</string>
     <string name="novel_reader_cache_read_chapters">Кэшировать прочитанные главы</string>

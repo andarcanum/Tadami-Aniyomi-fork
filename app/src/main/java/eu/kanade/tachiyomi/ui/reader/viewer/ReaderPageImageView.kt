@@ -294,6 +294,13 @@ open class ReaderPageImageView @JvmOverloads constructor(
             setDoubleTapZoomStyle(SubsamplingScaleImageView.ZOOM_FOCUS_CENTER)
             setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
             setMinimumTileDpi(180)
+            if (isWebtoon) {
+                // Defer high-res tile decoding until gestures/flings settle. This
+                // reduces decode churn while scrolling through long strips, which
+                // is a major source of dropped frames on high refresh rate
+                // displays (90/120Hz+).
+                setEagerLoadingEnabled(false)
+            }
             setOnStateChangedListener(
                 object : SubsamplingScaleImageView.OnStateChangedListener {
                     override fun onScaleChanged(newScale: Float, origin: Int) {

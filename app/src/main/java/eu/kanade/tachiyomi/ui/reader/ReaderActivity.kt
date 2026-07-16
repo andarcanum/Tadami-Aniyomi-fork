@@ -516,6 +516,12 @@ class ReaderActivity : BaseActivity() {
                     val bottomBarButtonsOrder by readerPreferences
                         .bottomBarButtonsOrder()
                         .collectAsStateWithLifecycle()
+                    val showToolbarWebViewButton by readerPreferences
+                        .showToolbarWebViewButton()
+                        .collectAsStateWithLifecycle()
+                    val showToolbarShareButton by readerPreferences
+                        .showToolbarShareButton()
+                        .collectAsStateWithLifecycle()
                     val buttonsOrderList = remember(bottomBarButtonsOrder) {
                         bottomBarButtonsOrder.split(",").filter { it.isNotBlank() }
                     }
@@ -563,6 +569,8 @@ class ReaderActivity : BaseActivity() {
                         bookmarked = state.bookmarked,
                         onToggleBookmarked = viewModel::toggleChapterBookmark,
                         onOpenInWebView = ::openChapterInWebView.takeIf { isHttpSource },
+                        showWebViewButton = showToolbarWebViewButton,
+                        showShareButton = showToolbarShareButton,
                         onOpenInBrowser = ::openChapterInBrowser.takeIf { isHttpSource },
                         onShare = ::shareChapter.takeIf { isHttpSource },
 

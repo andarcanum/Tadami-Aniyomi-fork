@@ -52,6 +52,14 @@ class ReaderPreferences(
 
     // endregion
 
+    // region Toolbar (top app bar) action buttons
+
+    fun showToolbarWebViewButton() = preferenceStore.getBoolean("pref_toolbar_web_view_button", false)
+
+    fun showToolbarShareButton() = preferenceStore.getBoolean("pref_toolbar_share_button", false)
+
+    // endregion
+
     fun useAutoWebtoon() = preferenceStore.getBoolean("reader_use_auto_webtoon", true)
 
     fun autoWebtoonPromptDismissedMangaIds() =
