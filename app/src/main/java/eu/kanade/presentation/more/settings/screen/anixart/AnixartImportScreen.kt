@@ -1,18 +1,23 @@
 package eu.kanade.presentation.more.settings.screen.anixart
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -20,6 +25,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -34,7 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.rememberScreenModel
@@ -42,6 +50,13 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.components.AuroraBackground
+import eu.kanade.presentation.entries.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.theme.AuroraSurfaceLevel
+import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraFloatingSurface
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 import tachiyomi.data.anixart.AnixartMatcher
 import tachiyomi.data.anixart.AnixartSourceHints
 import tachiyomi.data.anixart.AnixartStatus
@@ -54,6 +69,10 @@ import eu.kanade.presentation.util.Screen as ParentScreen
  * The Anixart import wizard. A [java.io.InputStream] provider is passed in from
  * the settings entry point (which owns the SAF file picker), so this screen is
  * agnostic of how the file was chosen.
+ *
+ * Styled with the Aurora glass design system: ambient gradient background,
+ * glassmorphism cards and shared Aurora surface tokens (with automatic
+ * fallbacks for AMOLED and e-ink profiles).
  */
 class AnixartImportScreen(
     private val openStream: () -> java.io.InputStream,
@@ -65,18 +84,20 @@ class AnixartImportScreen(
         val model = rememberScreenModel { AnixartImportScreenModel(openStream) }
         val state by model.state.collectAsState()
 
-        Scaffold(
-            topBar = {
-                AppBar(
-                    title = stringResource(AYMR.strings.anixart_import_title),
-                    navigateUp = navigator::pop,
-                )
-            },
-        ) { padding ->
-            when (val s = state) {
-                is AnixartImportScreenModel.State.Loading -> Centered(padding) { CircularProgressIndicator() }
-                is AnixartImportScreenModel.State.Matching -> Centered(padding) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        AuroraBackground {
+            Scaffold(
+                containerColor = Color.Transparent,
+                topBar = {
+                    AppBar(
+                        title = stringResource(AYMR.strings.anixart_import_title),
+                        backgroundColor = Color.Transparent,
+                        navigateUp = navigator::pop,
+                    )
+                },
+            ) { padding ->
+                when (val s = state) {
+                    is AnixartImportScreenModel.State.Loading -> Centered(padding) { CircularProgressIndicator() }
+                    is AnixartImportScreenModel.State.Matching -> Centered(padding) {
                         CircularProgressIndicator()
                         Text(
                             text = stringResource(AYMR.strings.anixart_import_searching) +
@@ -84,33 +105,35 @@ class AnixartImportScreen(
                             modifier = Modifier.padding(top = 16.dp),
                         )
                     }
-                }
 
-                is AnixartImportScreenModel.State.Error -> Centered(padding) {
-                    Text(
-                        stringResource(
-                            when (s.messageKey) {
-                                AnixartImportScreenModel.ErrorKind.INVALID -> AYMR.strings.anixart_import_error_invalid
-                                AnixartImportScreenModel.ErrorKind.EMPTY -> AYMR.strings.anixart_import_empty
-                            },
-                        ),
-                    )
-                }
+                    is AnixartImportScreenModel.State.Error -> Centered(padding) {
+                        Text(
+                            stringResource(
+                                when (s.messageKey) {
+                                    AnixartImportScreenModel.ErrorKind.INVALID ->
+                                        AYMR.strings.anixart_import_error_invalid
+                                    AnixartImportScreenModel.ErrorKind.EMPTY ->
+                                        AYMR.strings.anixart_import_empty
+                                },
+                            ),
+                        )
+                    }
 
-                is AnixartImportScreenModel.State.PickSources -> PickSources(padding, s, model)
-                is AnixartImportScreenModel.State.Review -> Review(padding, s, model)
-                is AnixartImportScreenModel.State.Importing -> Centered(padding) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    is AnixartImportScreenModel.State.PickSources -> PickSources(padding, s, model)
+                    is AnixartImportScreenModel.State.Review -> Review(padding, s, model)
+                    is AnixartImportScreenModel.State.Importing -> Centered(padding) {
                         CircularProgressIndicator()
                         Text(
                             stringResource(AYMR.strings.anixart_import_importing) +
                                 " ${s.current}/${s.total}",
+                            modifier = Modifier.padding(top = 16.dp),
                         )
                     }
-                }
-                is AnixartImportScreenModel.State.Done -> Centered(padding) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(AYMR.strings.anixart_import_done))
+                    is AnixartImportScreenModel.State.Done -> Centered(padding) {
+                        Text(
+                            stringResource(AYMR.strings.anixart_import_done),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                         if (s.backgroundJob) {
                             Text(
                                 stringResource(AYMR.strings.anixart_import_background_started),
@@ -124,6 +147,7 @@ class AnixartImportScreen(
                                     s.report.alreadyInLibrary,
                                     s.report.failed,
                                 ),
+                                modifier = Modifier.padding(top = 8.dp),
                             )
                             Text(
                                 stringResource(
@@ -146,7 +170,10 @@ class AnixartImportScreen(
                                 )
                             }
                         }
-                        Button(onClick = navigator::pop) { Text("OK") }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = navigator::pop) {
+                            Text(stringResource(AYMR.strings.action_ok))
+                        }
                     }
                 }
             }
@@ -161,13 +188,14 @@ class AnixartImportScreen(
         onCategorySelected: (Long?) -> Unit,
     ) {
         var expanded by remember { mutableStateOf(false) }
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().auroraGlassItem()) {
             ListItem(
                 headlineContent = { Text(label) },
                 supportingContent = { Text(selectedCategoryName) },
                 trailingContent = {
                     Text("▼", style = MaterialTheme.typography.bodyMedium)
                 },
+                colors = auroraTransparentListItemColors(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { expanded = true },
@@ -205,43 +233,45 @@ class AnixartImportScreen(
         Column(Modifier.padding(padding).fillMaxSize()) {
             LazyColumn(Modifier.weight(1f)) {
                 item {
-                    Text(
-                        stringResource(AYMR.strings.anixart_import_legal_notice),
-                        modifier = Modifier.padding(16.dp),
-                    )
-                    Text(
-                        stringResource(AYMR.strings.anixart_import_export_hint),
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    if (s.preflight.missingOriginalCount > 0) {
-                        Text(
-                            stringResource(
-                                AYMR.strings.anixart_import_warning_missing_original,
-                                s.preflight.missingOriginalCount,
-                                s.preflight.totalRows,
-                            ),
-                            modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.tertiary,
-                        )
-                    }
-                    if (s.preflight.largeImport) {
-                        Text(
-                            stringResource(
-                                AYMR.strings.anixart_import_warning_large,
-                                s.preflight.totalRows,
-                            ),
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            color = MaterialTheme.colorScheme.tertiary,
-                        )
+                    GlassmorphismCard(
+                        modifier = Modifier.padding(top = 8.dp),
+                        cornerRadius = 20.dp,
+                        innerPadding = 16.dp,
+                    ) {
+                        Column {
+                            Text(stringResource(AYMR.strings.anixart_import_legal_notice))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                stringResource(AYMR.strings.anixart_import_export_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AuroraTheme.colors.textSecondary,
+                            )
+                            if (s.preflight.missingOriginalCount > 0) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    stringResource(
+                                        AYMR.strings.anixart_import_warning_missing_original,
+                                        s.preflight.missingOriginalCount,
+                                        s.preflight.totalRows,
+                                    ),
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                            if (s.preflight.largeImport) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    stringResource(
+                                        AYMR.strings.anixart_import_warning_large,
+                                        s.preflight.totalRows,
+                                    ),
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                )
+                            }
+                        }
                     }
                 }
                 item {
-                    Text(
-                        stringResource(AYMR.strings.anixart_import_status_filter_title),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    AuroraSectionHeader(stringResource(AYMR.strings.anixart_import_status_filter_title))
                 }
                 items(AnixartStatus.entries.toList()) { status ->
                     val checked = status in s.statusFilter
@@ -250,7 +280,10 @@ class AnixartImportScreen(
                         leadingContent = {
                             Checkbox(checked = checked, onCheckedChange = { model.toggleStatusFilter(status) })
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        colors = auroraTransparentListItemColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .auroraGlassItem(),
                     )
                 }
                 item {
@@ -262,14 +295,14 @@ class AnixartImportScreen(
                                 onCheckedChange = model::setSyncToShikimori,
                             )
                         },
+                        colors = auroraTransparentListItemColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .auroraGlassItem(),
                     )
                 }
                 item {
-                    Text(
-                        stringResource(AYMR.strings.anixart_import_select_sources),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    AuroraSectionHeader(stringResource(AYMR.strings.anixart_import_select_sources))
                 }
                 items(s.sources, key = { it.id }) { src ->
                     val warning = src.recommendation == AnixartSourceHints.Recommendation.WARNING
@@ -289,15 +322,14 @@ class AnixartImportScreen(
                         leadingContent = {
                             Checkbox(checked = src.selected, onCheckedChange = { model.toggleSource(src.id) })
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        colors = auroraTransparentListItemColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .auroraGlassItem(),
                     )
                 }
                 item {
-                    Text(
-                        stringResource(AYMR.strings.anixart_import_category_mapping_title),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    AuroraSectionHeader(stringResource(AYMR.strings.anixart_import_category_mapping_title))
                 }
                 item {
                     val catId = s.favoriteCategoryId
@@ -390,7 +422,7 @@ class AnixartImportScreen(
             AnixartMatcher.Confidence.NO_MATCH -> stringResource(AYMR.strings.anixart_import_group_nomatch)
         }
 
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().auroraGlassItem()) {
             ListItem(
                 headlineContent = {
                     Text(
@@ -478,6 +510,7 @@ class AnixartImportScreen(
                         }
                     }
                 },
+                colors = auroraTransparentListItemColors(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { menuExpanded = true },
@@ -568,6 +601,7 @@ class AnixartImportScreen(
     ) {
         AlertDialog(
             onDismissRequest = model::dismissManualSearch,
+            containerColor = resolveAuroraSurfaceColor(AuroraTheme.colors, AuroraSurfaceLevel.Strong),
             title = { Text(stringResource(AYMR.strings.shikimori_import_manual_search_title)) },
             text = {
                 Column {
@@ -619,8 +653,47 @@ class AnixartImportScreen(
     private fun Centered(padding: PaddingValues, content: @Composable () -> Unit) {
         Column(
             modifier = Modifier.padding(padding).fillMaxSize(),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
-        ) { content() }
+        ) {
+            GlassmorphismCard(cornerRadius = 24.dp, innerPadding = 24.dp) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    content()
+                }
+            }
+        }
     }
+}
+
+/**
+ * Rounded glass list item surface built from the shared Aurora tokens.
+ */
+@Composable
+private fun Modifier.auroraGlassItem(shape: RoundedCornerShape = RoundedCornerShape(14.dp)): Modifier {
+    val colors = AuroraTheme.colors
+    return this
+        .padding(horizontal = 16.dp, vertical = 3.dp)
+        .auroraFloatingSurface(colors, AuroraSurfaceLevel.Glass, shape)
+        .clip(shape)
+        .background(resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass))
+        .border(1.dp, resolveAuroraBorderColor(colors, emphasized = false), shape)
+}
+
+@Composable
+private fun auroraTransparentListItemColors() = ListItemDefaults.colors(
+    containerColor = Color.Transparent,
+)
+
+@Composable
+private fun AuroraSectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = AuroraTheme.colors.accent,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+    )
 }

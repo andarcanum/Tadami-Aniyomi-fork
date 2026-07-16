@@ -1,7 +1,9 @@
 package eu.kanade.presentation.more.settings.screen.shikimori
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -27,6 +30,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
@@ -43,8 +47,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.model.rememberScreenModel
@@ -52,6 +58,13 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.components.AuroraBackground
+import eu.kanade.presentation.entries.components.aurora.GlassmorphismCard
+import eu.kanade.presentation.theme.AuroraSurfaceLevel
+import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraFloatingSurface
+import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import tachiyomi.data.anixart.AnixartMatcher
 import tachiyomi.data.anixart.AnixartSourceHints
@@ -62,6 +75,11 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import eu.kanade.presentation.util.Screen as ParentScreen
 
+/**
+ * Shikimori library import wizard, styled with the Aurora glass design system:
+ * ambient gradient background, glassmorphism cards and shared Aurora surface
+ * tokens (with automatic fallbacks for AMOLED and e-ink profiles).
+ */
 class ShikimoriImportScreen : ParentScreen() {
 
     @Composable
@@ -70,111 +88,115 @@ class ShikimoriImportScreen : ParentScreen() {
         val model = rememberScreenModel { ShikimoriImportScreenModel() }
         val state by model.state.collectAsState()
 
-        Scaffold(
-            topBar = {
-                AppBar(
-                    title = stringResource(AYMR.strings.shikimori_import_title),
-                    navigateUp = navigator::pop,
-                    actions = {
-                        val pickState = state as? ShikimoriImportScreenModel.State.PickSources
-                        if (pickState != null) {
-                            var menuExpanded by remember { mutableStateOf(false) }
-                            Box {
-                                IconButton(onClick = { menuExpanded = true }) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = null)
-                                }
-                                DropdownMenu(
-                                    expanded = menuExpanded,
-                                    onDismissRequest = { menuExpanded = false },
-                                ) {
-                                    val context = LocalContext.current
-                                    val allLangs = remember(pickState.sources) {
-                                        pickState.sources.map { it.lang }.distinct().sorted()
+        AuroraBackground {
+            Scaffold(
+                containerColor = Color.Transparent,
+                topBar = {
+                    AppBar(
+                        title = stringResource(AYMR.strings.shikimori_import_title),
+                        backgroundColor = Color.Transparent,
+                        navigateUp = navigator::pop,
+                        actions = {
+                            val pickState = state as? ShikimoriImportScreenModel.State.PickSources
+                            if (pickState != null) {
+                                var menuExpanded by remember { mutableStateOf(false) }
+                                Box {
+                                    IconButton(onClick = { menuExpanded = true }) {
+                                        Icon(Icons.Default.MoreVert, contentDescription = null)
                                     }
-                                    allLangs.forEach { lang ->
-                                        DropdownMenuItem(
-                                            text = {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Checkbox(
-                                                        checked = lang in pickState.enabledLanguages,
-                                                        onCheckedChange = null,
-                                                        modifier = Modifier.padding(end = 8.dp),
-                                                    )
-                                                    Text(LocaleHelper.getSourceDisplayName(lang, context))
-                                                }
-                                            },
-                                            onClick = {
-                                                model.toggleLanguageEnabled(lang)
-                                            },
-                                        )
+                                    DropdownMenu(
+                                        expanded = menuExpanded,
+                                        onDismissRequest = { menuExpanded = false },
+                                    ) {
+                                        val context = LocalContext.current
+                                        val allLangs = remember(pickState.sources) {
+                                            pickState.sources.map { it.lang }.distinct().sorted()
+                                        }
+                                        allLangs.forEach { lang ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Checkbox(
+                                                            checked = lang in pickState.enabledLanguages,
+                                                            onCheckedChange = null,
+                                                            modifier = Modifier.padding(end = 8.dp),
+                                                        )
+                                                        Text(LocaleHelper.getSourceDisplayName(lang, context))
+                                                    }
+                                                },
+                                                onClick = {
+                                                    model.toggleLanguageEnabled(lang)
+                                                },
+                                            )
+                                        }
                                     }
                                 }
                             }
-                        }
-                    },
-                )
-            },
-        ) { padding ->
-            Column(Modifier.padding(padding).fillMaxSize()) {
-                MediaTypeTabs(
-                    selected = state.mediaType,
-                    enabled = state is ShikimoriImportScreenModel.State.PickSources ||
-                        state is ShikimoriImportScreenModel.State.Loading ||
-                        state is ShikimoriImportScreenModel.State.Error,
-                    onSelect = model::switchMediaType,
-                )
-                when (val s = state) {
-                    is ShikimoriImportScreenModel.State.Loading -> Centered { CircularProgressIndicator() }
-                    is ShikimoriImportScreenModel.State.Matching -> Centered {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Text(
-                                stringResource(AYMR.strings.anixart_import_searching) + " ${s.current}/${s.total}",
-                                modifier = Modifier.padding(top = 16.dp),
-                            )
-                        }
-                    }
-                    is ShikimoriImportScreenModel.State.Error -> Centered {
-                        Text(stringResource(errorMessageFor(s.messageKey, s.mediaType)))
-                    }
-                    is ShikimoriImportScreenModel.State.PickSources -> PickSources(s, model)
-                    is ShikimoriImportScreenModel.State.Review -> Review(s, model)
-                    is ShikimoriImportScreenModel.State.Importing -> Centered {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Text(stringResource(AYMR.strings.anixart_import_importing) + " ${s.current}/${s.total}")
-                        }
-                    }
-                    is ShikimoriImportScreenModel.State.Done -> Centered {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(stringResource(AYMR.strings.anixart_import_done))
-                            if (s.backgroundJob) {
+                        },
+                    )
+                },
+            ) { padding ->
+                Column(Modifier.padding(padding).fillMaxSize()) {
+                    MediaTypeTabs(
+                        selected = state.mediaType,
+                        enabled = state is ShikimoriImportScreenModel.State.PickSources ||
+                            state is ShikimoriImportScreenModel.State.Loading ||
+                            state is ShikimoriImportScreenModel.State.Error,
+                        onSelect = model::switchMediaType,
+                    )
+                    when (val s = state) {
+                        is ShikimoriImportScreenModel.State.Loading -> Centered { CircularProgressIndicator() }
+                        is ShikimoriImportScreenModel.State.Matching -> Centered {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator()
                                 Text(
-                                    stringResource(AYMR.strings.shikimori_import_background_started),
-                                    modifier = Modifier.padding(vertical = 8.dp),
-                                )
-                            } else {
-                                Text(
-                                    stringResource(
-                                        AYMR.strings.shikimori_import_report,
-                                        s.report.added,
-                                        s.report.alreadyInLibrary,
-                                        s.report.failed,
-                                        s.report.trackerBound,
-                                    ),
-                                )
-                                Text(
-                                    stringResource(
-                                        AYMR.strings.anixart_import_matching_report,
-                                        s.matchingReport.auto,
-                                        s.matchingReport.needsReview,
-                                        s.matchingReport.noMatch,
-                                    ),
-                                    modifier = Modifier.padding(top = 4.dp),
+                                    stringResource(AYMR.strings.anixart_import_searching) + " ${s.current}/${s.total}",
+                                    modifier = Modifier.padding(top = 16.dp),
                                 )
                             }
-                            Button(onClick = navigator::pop) {
-                                Text(stringResource(AYMR.strings.action_ok))
+                        }
+                        is ShikimoriImportScreenModel.State.Error -> Centered {
+                            Text(stringResource(errorMessageFor(s.messageKey, s.mediaType)))
+                        }
+                        is ShikimoriImportScreenModel.State.PickSources -> PickSources(s, model)
+                        is ShikimoriImportScreenModel.State.Review -> Review(s, model)
+                        is ShikimoriImportScreenModel.State.Importing -> Centered {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator()
+                                Text(stringResource(AYMR.strings.anixart_import_importing) + " ${s.current}/${s.total}")
+                            }
+                        }
+                        is ShikimoriImportScreenModel.State.Done -> Centered {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(stringResource(AYMR.strings.anixart_import_done))
+                                if (s.backgroundJob) {
+                                    Text(
+                                        stringResource(AYMR.strings.shikimori_import_background_started),
+                                        modifier = Modifier.padding(vertical = 8.dp),
+                                    )
+                                } else {
+                                    Text(
+                                        stringResource(
+                                            AYMR.strings.shikimori_import_report,
+                                            s.report.added,
+                                            s.report.alreadyInLibrary,
+                                            s.report.failed,
+                                            s.report.trackerBound,
+                                        ),
+                                    )
+                                    Text(
+                                        stringResource(
+                                            AYMR.strings.anixart_import_matching_report,
+                                            s.matchingReport.auto,
+                                            s.matchingReport.needsReview,
+                                            s.matchingReport.noMatch,
+                                        ),
+                                        modifier = Modifier.padding(top = 4.dp),
+                                    )
+                                }
+                                Button(onClick = navigator::pop) {
+                                    Text(stringResource(AYMR.strings.action_ok))
+                                }
                             }
                         }
                     }
@@ -195,7 +217,10 @@ class ShikimoriImportScreen : ParentScreen() {
             ShikimoriImportMediaType.RANOBE to AYMR.strings.shikimori_import_tab_ranobe,
         )
         val selectedIndex = tabs.indexOfFirst { it.first == selected }.coerceAtLeast(0)
-        PrimaryTabRow(selectedTabIndex = selectedIndex) {
+        PrimaryTabRow(
+            selectedTabIndex = selectedIndex,
+            containerColor = Color.Transparent,
+        ) {
             tabs.forEachIndexed { index, (type, labelRes) ->
                 Tab(
                     selected = selectedIndex == index,
@@ -241,19 +266,20 @@ class ShikimoriImportScreen : ParentScreen() {
             LazyColumn(Modifier.weight(1f)) {
                 if (s.largeImport) {
                     item {
-                        Text(
-                            stringResource(AYMR.strings.anixart_import_warning_large, s.entries.size),
-                            modifier = Modifier.padding(16.dp),
-                            color = MaterialTheme.colorScheme.tertiary,
-                        )
+                        GlassmorphismCard(
+                            modifier = Modifier.padding(top = 8.dp),
+                            cornerRadius = 20.dp,
+                            innerPadding = 16.dp,
+                        ) {
+                            Text(
+                                stringResource(AYMR.strings.anixart_import_warning_large, s.entries.size),
+                                color = MaterialTheme.colorScheme.tertiary,
+                            )
+                        }
                     }
                 }
                 item {
-                    Text(
-                        stringResource(AYMR.strings.anixart_import_status_filter_title),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    AuroraSectionHeader(stringResource(AYMR.strings.anixart_import_status_filter_title))
                 }
                 items(ShikimoriImportStatus.forMediaType(s.mediaType)) { status ->
                     ListItem(
@@ -264,14 +290,14 @@ class ShikimoriImportScreen : ParentScreen() {
                                 onCheckedChange = { model.toggleStatusFilter(status) },
                             )
                         },
+                        colors = auroraTransparentListItemColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .auroraGlassItem(),
                     )
                 }
                 item {
-                    Text(
-                        stringResource(AYMR.strings.anixart_import_select_sources),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    AuroraSectionHeader(stringResource(AYMR.strings.anixart_import_select_sources))
                 }
                 item {
                     OutlinedTextField(
@@ -346,17 +372,16 @@ class ShikimoriImportScreen : ParentScreen() {
                                 leadingContent = {
                                     Checkbox(checked = src.selected, onCheckedChange = { model.toggleSource(src.id) })
                                 },
-                                modifier = Modifier.padding(start = 16.dp),
+                                colors = auroraTransparentListItemColors(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraGlassItem(),
                             )
                         }
                     }
                 }
                 item {
-                    Text(
-                        stringResource(AYMR.strings.anixart_import_category_mapping_title),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    AuroraSectionHeader(stringResource(AYMR.strings.anixart_import_category_mapping_title))
                 }
                 items(ShikimoriImportStatus.forMediaType(s.mediaType)) { status ->
                     val catId = s.statusCategoryIds[status]
@@ -393,11 +418,9 @@ class ShikimoriImportScreen : ParentScreen() {
         Row(
             modifier = modifier
                 .fillMaxWidth()
+                .auroraGlassItem()
                 .clickable(onClick = onToggleCollapse)
-                .padding(
-                    horizontal = 16.dp,
-                    vertical = 8.dp,
-                ),
+                .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Checkbox(
@@ -426,13 +449,14 @@ class ShikimoriImportScreen : ParentScreen() {
         onCategorySelected: (Long?) -> Unit,
     ) {
         var expanded by remember { mutableStateOf(false) }
-        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Box(modifier = Modifier.fillMaxWidth().auroraGlassItem()) {
             ListItem(
                 headlineContent = { Text(label) },
                 supportingContent = { Text(selectedCategoryName) },
                 trailingContent = {
                     Text("▼", style = MaterialTheme.typography.bodyMedium)
                 },
+                colors = auroraTransparentListItemColors(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { expanded = true },
@@ -476,8 +500,9 @@ class ShikimoriImportScreen : ParentScreen() {
                             s.matchingReport.needsReview,
                             s.matchingReport.noMatch,
                         ),
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.bodyMedium,
+                        color = AuroraTheme.colors.textSecondary,
                     )
                 }
                 itemsIndexed(s.items) { index, item ->
@@ -504,6 +529,7 @@ class ShikimoriImportScreen : ParentScreen() {
     ) {
         AlertDialog(
             onDismissRequest = model::dismissManualSearch,
+            containerColor = resolveAuroraSurfaceColor(AuroraTheme.colors, AuroraSurfaceLevel.Strong),
             title = { Text(stringResource(AYMR.strings.shikimori_import_manual_search_title)) },
             text = {
                 Column {
@@ -568,7 +594,7 @@ class ShikimoriImportScreen : ParentScreen() {
             AnixartMatcher.Confidence.NO_MATCH -> stringResource(AYMR.strings.anixart_import_group_nomatch)
         }
 
-        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().auroraGlassItem()) {
             ListItem(
                 headlineContent = {
                     Text(
@@ -656,6 +682,7 @@ class ShikimoriImportScreen : ParentScreen() {
                         }
                     }
                 },
+                colors = auroraTransparentListItemColors(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { menuExpanded = true },
@@ -744,8 +771,47 @@ class ShikimoriImportScreen : ParentScreen() {
     private fun Centered(content: @Composable () -> Unit) {
         Column(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
-        ) { content() }
+        ) {
+            GlassmorphismCard(cornerRadius = 24.dp, innerPadding = 24.dp) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    content()
+                }
+            }
+        }
     }
+}
+
+/**
+ * Rounded glass list item surface built from the shared Aurora tokens.
+ */
+@Composable
+private fun Modifier.auroraGlassItem(shape: RoundedCornerShape = RoundedCornerShape(14.dp)): Modifier {
+    val colors = AuroraTheme.colors
+    return this
+        .padding(horizontal = 16.dp, vertical = 3.dp)
+        .auroraFloatingSurface(colors, AuroraSurfaceLevel.Glass, shape)
+        .clip(shape)
+        .background(resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass))
+        .border(1.dp, resolveAuroraBorderColor(colors, emphasized = false), shape)
+}
+
+@Composable
+private fun auroraTransparentListItemColors() = ListItemDefaults.colors(
+    containerColor = Color.Transparent,
+)
+
+@Composable
+private fun AuroraSectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = AuroraTheme.colors.accent,
+        modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+    )
 }
