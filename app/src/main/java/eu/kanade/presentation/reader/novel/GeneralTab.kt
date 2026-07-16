@@ -521,6 +521,18 @@ fun GeneralTab(
                 checked = settings.novelDictionaryEnabled,
                 onCheckedChanged = { preferences.novelDictionaryEnabled().set(it) },
             )
+            var dictionaryQuickAccess by remember {
+                mutableStateOf(preferences.novelDictionaryQuickAccess().get())
+            }
+            SwitchPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_dictionary_quick_access),
+                subtitle = stringResource(AYMR.strings.novel_reader_dictionary_quick_access_summary),
+                checked = dictionaryQuickAccess,
+                onCheckedChanged = {
+                    dictionaryQuickAccess = it
+                    preferences.novelDictionaryQuickAccess().set(it)
+                },
+            )
             val dictionarySourceEntries = persistentMapOf(
                 "ONLINE" to stringResource(AYMR.strings.novel_reader_dictionary_source_online),
                 "OFFLINE" to stringResource(AYMR.strings.novel_reader_dictionary_source_offline),

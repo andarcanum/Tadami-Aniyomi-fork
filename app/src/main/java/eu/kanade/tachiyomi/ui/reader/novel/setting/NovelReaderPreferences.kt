@@ -675,6 +675,9 @@ class NovelReaderPreferences(
     fun novelDictionaryTargetLanguage() =
         preferenceStore.getString("novel_reader_dictionary_target_language", "ru")
 
+    fun novelDictionaryQuickAccess() =
+        preferenceStore.getBoolean("novel_reader_dictionary_quick_access", false)
+
     fun novelDictionaryHistoryEnabled() =
         preferenceStore.getBoolean("novel_reader_dictionary_history_enabled", true)
 

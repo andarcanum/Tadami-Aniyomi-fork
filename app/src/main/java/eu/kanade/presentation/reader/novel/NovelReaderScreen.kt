@@ -59,6 +59,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Pause
@@ -331,6 +332,7 @@ fun NovelReaderScreen(
     onBack: () -> Unit,
     onReadingProgress: (currentIndex: Int, totalItems: Int, persistedProgress: Long?) -> Unit,
     onToggleBookmark: () -> Unit = {},
+    onOpenDictionaryHistory: (() -> Unit)? = null,
     onStartGeminiTranslation: () -> Unit = {},
     onStopGeminiTranslation: () -> Unit = {},
     onToggleGeminiTranslationVisibility: () -> Unit = {},
@@ -4145,6 +4147,18 @@ fun NovelReaderScreen(
                         }
                         IconButton(onClick = { showSettings = true }) {
                             Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
+                        }
+                        if (onOpenDictionaryHistory != null) {
+                            val dictionaryQuickAccess by remember { Injekt.get<NovelReaderPreferences>().novelDictionaryQuickAccess() }
+                                .collectAsState()
+                            if (dictionaryQuickAccess) {
+                                IconButton(onClick = { onOpenDictionaryHistory() }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.MenuBook,
+                                        contentDescription = stringResource(AYMR.strings.novel_reader_dictionary_history),
+                                    )
+                                }
+                            }
                         }
                         if (ttsPlacement.showFooterEntry) {
                             IconButton(onClick = { showTtsBehaviorSettings = true }) {

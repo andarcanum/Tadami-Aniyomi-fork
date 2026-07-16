@@ -31,6 +31,7 @@ import eu.kanade.presentation.reader.novel.NovelReaderBackdropSession
 import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.NovelReaderPageReaderHandoffTarget
 import eu.kanade.presentation.reader.novel.NovelReaderScreen
+import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistoryScreen
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.presentation.reader.novel.SeriesInterstitialOverlay
 import eu.kanade.presentation.reader.novel.SystemUIController
@@ -234,6 +235,7 @@ class NovelReaderScreen(
                     },
                     onReadingProgress = screenModel::updateReadingProgress,
                     onToggleBookmark = screenModel::toggleChapterBookmark,
+                    onOpenDictionaryHistory = { navigator.push(NovelDictionaryHistoryScreen()) },
                     onStartGeminiTranslation = screenModel::startGeminiTranslation,
                     onStopGeminiTranslation = screenModel::stopGeminiTranslation,
                     onToggleGeminiTranslationVisibility = screenModel::toggleGeminiTranslationVisibility,

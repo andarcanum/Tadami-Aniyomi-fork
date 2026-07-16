@@ -2991,7 +2991,7 @@ class NovelReaderScreenModel(
         )
         novelDictionarySessionCache.get(cacheKey)?.let { cached ->
             novelDictionaryUiState = NovelDictionaryUiState.Result(selection, cached)
-            recordNovelDictionaryHistory(term, wordLang, targetLangCode, cached)
+            recordDictionaryHistory(term, wordLang, targetLangCode, cached)
             refreshSelectedTextTranslationUi()
             return
         }
@@ -3013,7 +3013,7 @@ class NovelReaderScreenModel(
             when (outcome) {
                 is NovelDictionaryProviderOutcome.Success -> {
                     novelDictionarySessionCache.put(cacheKey, outcome.result)
-                    recordNovelDictionaryHistory(term, wordLang, targetLangCode, outcome.result)
+                    recordDictionaryHistory(term, wordLang, targetLangCode, outcome.result)
                     novelDictionaryUiState = NovelDictionaryUiState.Result(selection, outcome.result)
                 }
                 is NovelDictionaryProviderOutcome.Unavailable -> {
@@ -3052,21 +3052,25 @@ class NovelReaderScreenModel(
         novelDictionaryUiState = NovelDictionaryUiState.Idle
     }
 
-    private fun recordNovelDictionaryHistory(
+    private fun recordDictionaryHistory(
         term: String,
         language: String?,
         targetLanguage: String?,
         result: NovelDictionaryResult,
     ) {
-        if (!novelReaderPreferences.novelDictionaryHistoryEnabled().get()) return
+        val novelTitle = currentNovel?.title
+        val chapterName = currentChapter?.name
         screenModelScope.launch(Dispatchers.IO) {
             runCatching {
                 NovelDictionaryHistory.record(
-                    context = application,
+                    context = Injekt.get<Application>(),
                     term = term,
                     language = language,
                     targetLanguage = targetLanguage,
                     preview = NovelDictionaryHistory.previewOf(result),
+                    novelTitle = novelTitle,
+                    chapterName = chapterName,
+                    provider = result.attribution,
                 )
             }
         }

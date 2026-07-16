@@ -107,7 +107,10 @@ import eu.kanade.presentation.reader.novel.resolveRendererSettingsAvailability
 import eu.kanade.presentation.reader.novel.shouldShowPageTurnTuningControls
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCache
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCacheStore
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistory
+import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistoryScreen
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.StarDictManager
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelAutoScrollChapterEndBehavior
@@ -1644,59 +1647,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
             }
         }
 
-        var showHistoryDialog by remember { mutableStateOf(false) }
-        var historyRevision by remember { mutableIntStateOf(0) }
-        if (showHistoryDialog) {
-            val historyEntries = remember(historyRevision) { NovelDictionaryHistory.entries(context) }
-            val dateFormat = remember {
-                java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
-            }
-            AlertDialog(
-                onDismissRequest = { showHistoryDialog = false },
-                title = { Text(stringResource(AYMR.strings.novel_reader_dictionary_history_view)) },
-                text = {
-                    if (historyEntries.isEmpty()) {
-                        Text(stringResource(AYMR.strings.novel_reader_dictionary_history_empty))
-                    } else {
-                        LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
-                            items(historyEntries) { entry ->
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 6.dp),
-                                ) {
-                                    Text(
-                                        text = entry.term +
-                                            (entry.language?.let { " · $it" } ?: ""),
-                                        style = MaterialTheme.typography.titleSmall,
-                                    )
-                                    entry.preview?.takeIf { it.isNotBlank() }?.let { preview ->
-                                        Text(
-                                            text = preview,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis,
-                                            style = MaterialTheme.typography.bodySmall,
-                                        )
-                                    }
-                                    Text(
-                                        text = stringResource(
-                                            AYMR.strings.novel_reader_dictionary_history_lookup_count,
-                                            entry.lookupCount,
-                                        ) + " · " + dateFormat.format(java.util.Date(entry.lastLookupAt)),
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showHistoryDialog = false }) {
-                        Text(stringResource(AYMR.strings.novel_reader_dictionary_history_close))
-                    }
-                },
-            )
-        }
+
 
         val items = mutableListOf<Preference.PreferenceItem<out Any>>()
         items += Preference.PreferenceItem.SwitchPreference(
@@ -1766,17 +1717,16 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 )
             }
         }
+        val navigator = LocalNavigator.currentOrThrow
         items += Preference.PreferenceItem.SwitchPreference(
-            preference = prefs.novelDictionaryHistoryEnabled(),
-            title = stringResource(AYMR.strings.novel_reader_dictionary_history_enabled),
-            subtitle = stringResource(AYMR.strings.novel_reader_dictionary_history_enabled_summary),
+            preference = prefs.novelDictionaryQuickAccess(),
+            title = stringResource(AYMR.strings.novel_reader_dictionary_quick_access),
+            subtitle = stringResource(AYMR.strings.novel_reader_dictionary_quick_access_summary),
         )
         items += Preference.PreferenceItem.TextPreference(
-            title = stringResource(AYMR.strings.novel_reader_dictionary_history_view),
-            onClick = {
-                historyRevision += 1
-                showHistoryDialog = true
-            },
+            title = stringResource(AYMR.strings.novel_reader_dictionary_history),
+            subtitle = stringResource(AYMR.strings.novel_reader_dictionary_history_summary),
+            onClick = { navigator.push(NovelDictionaryHistoryScreen()) },
         )
         items += Preference.PreferenceItem.TextPreference(
             title = stringResource(AYMR.strings.novel_reader_dictionary_history_export),
@@ -1785,18 +1735,6 @@ object SettingsNovelReaderScreen : SearchableSettings {
         items += Preference.PreferenceItem.TextPreference(
             title = stringResource(AYMR.strings.novel_reader_dictionary_history_import),
             onClick = { importHistoryLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
-        )
-        items += Preference.PreferenceItem.TextPreference(
-            title = stringResource(AYMR.strings.novel_reader_dictionary_history_clear),
-            onClick = {
-                scope.launch(Dispatchers.IO) {
-                    NovelDictionaryHistory.clear(context)
-                    withContext(Dispatchers.Main) {
-                        historyRevision += 1
-                        context.toast(context.stringResource(AYMR.strings.novel_reader_dictionary_history_cleared))
-                    }
-                }
-            },
         )
 
         return Preference.PreferenceGroup(
