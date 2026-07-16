@@ -154,10 +154,23 @@ actual class LocalNovelSource(
                 if (firstEpub != null) {
                     fillNovelMetadataFromEpub(firstEpub, novel)
                     extractEmbeddedCoverIfMissing(novel, firstEpub)
+                } else {
+                    val firstFb2 = novelDirFiles.firstOrNull {
+                        it.extension?.equals("fb2", ignoreCase = true) == true
+                    }
+                    if (firstFb2 != null) {
+                        val book = parseFb2(firstFb2)
+                        fillNovelMetadataFromFb2(book, novel)
+                        extractFb2CoverIfMissing(novel, book, firstFb2.name)
+                    }
                 }
             } else if (novelEntry.extension?.equals("epub", ignoreCase = true) == true) {
                 fillNovelMetadataFromEpub(novelEntry, novel)
                 extractEmbeddedCoverIfMissing(novel, novelEntry)
+            } else if (novelEntry.extension?.equals("fb2", ignoreCase = true) == true) {
+                val book = parseFb2(novelEntry)
+                fillNovelMetadataFromFb2(book, novel)
+                extractFb2CoverIfMissing(novel, book, novelEntry.name)
             }
         } catch (e: Throwable) {
             logcat(LogPriority.ERROR, e) {
@@ -218,6 +231,34 @@ actual class LocalNovelSource(
         return values.firstOrNull { !it.isNullOrBlank() }?.trim()
     }
 
+    private fun parseFb2(file: UniFile): Fb2Book {
+        return file.openInputStream().use { Fb2Book.parse(it) }
+    }
+
+    private fun fillNovelMetadataFromFb2(book: Fb2Book, novel: SNovel) {
+        book.bookTitle?.let { novel.title = it }
+        if (book.authors.isNotEmpty()) {
+            novel.author = book.authors.joinToString(", ")
+        }
+        book.annotation?.let { novel.description = it }
+        if (book.genres.isNotEmpty()) {
+            val currentGenres = novel.genre?.split(",")?.map { it.trim() }?.filter { it.isNotBlank() }
+                ?: emptyList()
+            novel.genre = (currentGenres + book.genres).distinct().joinToString(", ")
+        }
+    }
+
+    private fun extractFb2CoverIfMissing(novel: SNovel, book: Fb2Book, fileName: String?) {
+        if (coverManager.find(novel.url) != null) return
+
+        runCatching {
+            val cover = book.coverImageBytes() ?: return
+            cover.inputStream().use { coverManager.update(novel, it) }
+        }.onFailure { e ->
+            logcat(LogPriority.WARN, e) { "Unable to extract embedded cover from $fileName" }
+        }
+    }
+
     private fun extractEmbeddedCoverIfMissing(novel: SNovel, epubFile: UniFile) {
         if (coverManager.find(novel.url) != null) return
 
@@ -273,6 +314,34 @@ actual class LocalNovelSource(
                     }
                 } catch (e: Throwable) {
                     logcat(LogPriority.ERROR, e) { "Error reading epub ${chapterFile.name}" }
+                    allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
+                }
+            } else if (chapterFile.extension?.equals("fb2", ignoreCase = true) == true) {
+                try {
+                    val book = parseFb2(chapterFile)
+                    extractFb2CoverIfMissing(novel, book, chapterFile.name)
+
+                    val sections = book.chapters
+                    if (sections.size > 1) {
+                        val chapterNumberOffset = allChapters.size
+                        sections.forEach { section ->
+                            allChapters.add(
+                                SNovelChapter.create().apply {
+                                    url = "${novel.url}/${chapterEntry.relativePath}" +
+                                        "#$FB2_FRAGMENT_PREFIX${section.index}"
+                                    name = section.title.ifBlank {
+                                        "${chapterEntry.displayName} ${section.index + 1}"
+                                    }
+                                    date_upload = chapterFile.lastModified()
+                                    chapter_number = (chapterNumberOffset + section.index + 1).toFloat()
+                                },
+                            )
+                        }
+                    } else {
+                        allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
+                    }
+                } catch (e: Throwable) {
+                    logcat(LogPriority.ERROR, e) { "Error reading fb2 ${chapterFile.name}" }
                     allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
                 }
             } else {
@@ -337,18 +406,32 @@ actual class LocalNovelSource(
                         }
                     }
                 }
+                chapterFile.extension.equals("fb2", true) -> {
+                    val book = parseFb2(chapterFile)
+                    val sectionIndex = chapterFragment
+                        ?.removePrefix(FB2_FRAGMENT_PREFIX)
+                        ?.toIntOrNull()
+                    if (sectionIndex != null) {
+                        book.chapterHtml(sectionIndex)
+                    } else {
+                        book.bookHtml()
+                    }
+                }
                 isArchiveSupported(chapterFile) -> {
                     chapterFile.archiveReader(context).use { reader ->
                         reader.useEntries { entries ->
-                            entries.filter { it.isFile && isTextFileName(it.name) }
+                            entries.filter { it.isFile && (isTextFileName(it.name) || isFb2FileName(it.name)) }
                                 .toList()
                                 .sortedWith { e1, e2 ->
                                     e1.name.compareToCaseInsensitiveNaturalOrder(e2.name)
                                 }
                         }.joinToString("\n\n") { entry ->
                             reader.getInputStream(entry.name)?.use { stream ->
-                                val rawText = stream.bufferedReader().readText()
-                                if (isHtmlFileName(entry.name)) rawText else plainTextToHtml(rawText)
+                                when {
+                                    isFb2FileName(entry.name) -> Fb2Book.parse(stream).bookHtml()
+                                    isHtmlFileName(entry.name) -> stream.bufferedReader().readText()
+                                    else -> plainTextToHtml(stream.bufferedReader().readText())
+                                }
                             } ?: ""
                         }
                     }
@@ -501,6 +584,10 @@ actual class LocalNovelSource(
         return ext in TEXT_EXTENSIONS
     }
 
+    private fun isFb2FileName(name: String): Boolean {
+        return name.substringAfterLast('.', "").equals("fb2", ignoreCase = true)
+    }
+
     private fun resolveNovelEntry(url: String): UniFile? {
         val base = fileSystem.getBaseDirectory() ?: return null
         return base.findFile(url)
@@ -521,9 +608,12 @@ actual class LocalNovelSource(
             "md", "markdown",
             "html", "htm", "xhtml",
             "epub",
+            "fb2",
             "zip", "cbz",
             "rar", "cbr",
         )
+
+        private const val FB2_FRAGMENT_PREFIX = "fb2:"
 
         private val TEXT_EXTENSIONS = setOf(
             "txt",
