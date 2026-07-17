@@ -7,7 +7,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +18,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -48,6 +49,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -55,6 +57,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -80,7 +83,6 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
 import eu.kanade.presentation.entries.components.aurora.AuroraGlassCtaSurface
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroCtaMode
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -112,8 +114,11 @@ import tachiyomi.domain.achievement.model.DayActivity
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.time.LocalDate
 import kotlin.math.roundToInt
@@ -911,11 +916,6 @@ object HomeHubTab : Tab {
         }
 
         var showNameDialog by remember { mutableStateOf(false) }
-        // Prefer the Home scaffold haze state (same one Aurora nav bar uses) so blur
-        // samples the real tab surface. Fall back to a local state if unavailable.
-        val homeHazeState = LocalHomeHazeState.current
-        val nameEditorHazeState = homeHazeState ?: remember { HazeState() }
-        val useNestedHazeSource = homeHazeState == null
         var showGreetingDialog by remember { mutableStateOf(false) }
         if (showGreetingDialog) {
             GreetingStyleDialog(
@@ -1055,8 +1055,9 @@ object HomeHubTab : Tab {
         }
         val appHaptics = LocalAppHaptics.current
 
-        // Stack: home content (+ optional nested hazeSource) then nickname overlay.
-        // Prefer LocalHomeHazeState (same as Aurora nav bar) so blur samples the real tab.
+        // Stack: home content (render-effect blurred while the nickname editor is open)
+        // followed by the nickname editor overlay. The blur is applied directly to the
+        // home layer, so everything under the editor window is genuinely blurred.
         Box(modifier = Modifier.fillMaxSize()) {
             val homeContent: @Composable () -> Unit = {
                 TabbedScreenAurora(
@@ -1129,40 +1130,48 @@ object HomeHubTab : Tab {
                     },
                 )
             }
-            if (useNestedHazeSource) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .hazeSource(nameEditorHazeState),
-                ) {
-                    homeContent()
+            homeContent()
+
+            // Nickname editor overlay: installed into the Home overlay host, which is
+            // rendered OUTSIDE the tabs' hazeSource. That lets the panel's hazeEffect
+            // blur exactly (and only) the content directly under the window, while the
+            // rest of the screen stays sharp and is merely dimmed.
+            val homeOverlayHost = LocalHomeOverlayHost.current
+            val homeHazeState = LocalHomeHazeState.current
+            val nameDialogOverlay: @Composable () -> Unit = {
+                if (showNameDialog) {
+                    val currentName = headerUserName.ifBlank { resolveHomeHubDefaultNickname(profileSection) }
+                    NameDialog(
+                        hazeState = if (homeOverlayHost != null) homeHazeState else null,
+                        currentName = currentName,
+                        currentStyle = nicknameStyle,
+                        onDismiss = { showNameDialog = false },
+                        onConfirm = { newName, newStyle ->
+                            if (newName != currentName) {
+                                profileScreenModel.updateUserName(newName)
+                            }
+                            userProfilePreferences.nicknameFont().set(newStyle.font.key)
+                            userProfilePreferences.nicknameFontSize().set(newStyle.fontSize.coerceIn(14, 36))
+                            userProfilePreferences.nicknameColor().set(newStyle.color.key)
+                            userProfilePreferences.nicknameCustomColorHex().set(newStyle.customColorHex)
+                            userProfilePreferences.nicknameOutline().set(newStyle.outline)
+                            userProfilePreferences.nicknameOutlineWidth().set(newStyle.outlineWidth.coerceIn(1, 8))
+                            userProfilePreferences.nicknameGlow().set(newStyle.glow)
+                            userProfilePreferences.nicknameEffect().set(newStyle.effect.key)
+                            showNameDialog = false
+                        },
+                    )
+                }
+            }
+            val currentNameDialogOverlay by rememberUpdatedState(nameDialogOverlay)
+            if (homeOverlayHost != null) {
+                DisposableEffect(homeOverlayHost) {
+                    homeOverlayHost.value = { currentNameDialogOverlay() }
+                    onDispose { homeOverlayHost.value = null }
                 }
             } else {
-                homeContent()
-            }
-
-            if (showNameDialog) {
-                val currentName = headerUserName.ifBlank { resolveHomeHubDefaultNickname(profileSection) }
-                NameDialog(
-                    hazeState = nameEditorHazeState,
-                    currentName = currentName,
-                    currentStyle = nicknameStyle,
-                    onDismiss = { showNameDialog = false },
-                    onConfirm = { newName, newStyle ->
-                        if (newName != currentName) {
-                            profileScreenModel.updateUserName(newName)
-                        }
-                        userProfilePreferences.nicknameFont().set(newStyle.font.key)
-                        userProfilePreferences.nicknameFontSize().set(newStyle.fontSize.coerceIn(14, 36))
-                        userProfilePreferences.nicknameColor().set(newStyle.color.key)
-                        userProfilePreferences.nicknameCustomColorHex().set(newStyle.customColorHex)
-                        userProfilePreferences.nicknameOutline().set(newStyle.outline)
-                        userProfilePreferences.nicknameOutlineWidth().set(newStyle.outlineWidth.coerceIn(1, 8))
-                        userProfilePreferences.nicknameGlow().set(newStyle.glow)
-                        userProfilePreferences.nicknameEffect().set(newStyle.effect.key)
-                        showNameDialog = false
-                    },
-                )
+                // Fallback: render inline (no backdrop blur, dim scrim only).
+                nameDialogOverlay()
             }
         }
     }
@@ -1467,12 +1476,14 @@ internal fun NameStyleChip(
 }
 
 /**
- * Nickname studio editor as an **in-composition** overlay (not a separate Dialog window)
- * so [hazeState] can blur the real home content behind a frosted glass card.
+ * Nickname studio editor as an **in-composition** overlay (not a separate Dialog window),
+ * hosted in the Home overlay slot outside the tabs' hazeSource so [hazeState] can blur
+ * just the backdrop of the frosted glass card — not the whole screen.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NameDialog(
-    hazeState: HazeState,
+    hazeState: HazeState?,
     currentName: String,
     currentStyle: NicknameStyle,
     onDismiss: () -> Unit,
@@ -1490,7 +1501,10 @@ private fun NameDialog(
     var glowEnabled by remember(currentStyle) { mutableStateOf(currentStyle.glow) }
     var selectedEffect by remember(currentStyle) { mutableStateOf(currentStyle.effect) }
     var isFontDropdownOpen by remember { mutableStateOf(false) }
-    var isEffectDropdownOpen by remember { mutableStateOf(false) }
+
+    val unlockableManager = remember { Injekt.get<UnlockableManager>() }
+    val unlockedUnlockables by remember(unlockableManager) { unlockableManager.observeUnlockedUnlockables() }
+        .collectAsStateWithLifecycle(initialValue = unlockableManager.getUnlockedUnlockables())
     val appHaptics = LocalAppHaptics.current
     val colors = AuroraTheme.colors
     val cardShape = RoundedCornerShape(28.dp)
@@ -1523,33 +1537,22 @@ private fun NameDialog(
 
     BackHandler(onBack = onDismiss)
 
-    // Same glass recipe as Aurora bottom nav (HomeScreen):
-    //   hazeEffect(backgroundColor = colors.background, tint = surface@0.65, blur 24–32)
-    // plus a dense solid frost base so the panel never becomes a fully transparent window
-    // when blur capture fails.
-    val navBarGlassStyle = HazeStyle(
-        backgroundColor = colors.background,
-        tint = HazeTint(colors.surface.copy(alpha = 0.65f)),
-        blurRadius = 28.dp,
-        noiseFactor = 0.12f,
-    )
-    val mistStyle = HazeStyle(
-        backgroundColor = colors.background,
-        tint = HazeTint(
-            if (colors.isDark) {
-                Color.Black.copy(alpha = 0.42f)
-            } else {
-                Color.White.copy(alpha = 0.55f)
-            },
-        ),
-        blurRadius = 32.dp,
-        noiseFactor = 0.10f,
-    )
-    val cardFrostBase = if (colors.isDark) {
-        // Dense dark mist panel — home barely readable even without blur.
-        Color.White.copy(alpha = 0.10f).compositeOver(colors.background.copy(alpha = 0.88f))
+    // Backdrop blur is applied ONLY under this panel via hazeEffect: the overlay is
+    // hosted outside the home hazeSource, so haze capture works, and the rest of the
+    // screen stays sharp (dimmed by the scrim, never blurred).
+    val hasBackdropBlur = hazeState != null && !colors.isEInk
+    val cardFrostBase = when {
+        hasBackdropBlur && colors.isDark ->
+            Color.White.copy(alpha = 0.06f).compositeOver(colors.background.copy(alpha = 0.40f))
+        hasBackdropBlur -> Color.White.copy(alpha = 0.55f)
+        colors.isDark ->
+            Color.White.copy(alpha = 0.10f).compositeOver(colors.background.copy(alpha = 0.90f))
+        else -> Color.White.copy(alpha = 0.92f)
+    }
+    val fieldFill = if (colors.isDark) {
+        Color.White.copy(alpha = 0.07f)
     } else {
-        Color.White.copy(alpha = 0.82f)
+        Color.Black.copy(alpha = 0.04f)
     }
 
     Box(
@@ -1558,18 +1561,18 @@ private fun NameDialog(
             .zIndex(20f),
         contentAlignment = Alignment.Center,
     ) {
-        // Full-screen mist: blur home (nav-bar haze state) + strong dim.
+        // Dim scrim — the screen outside the panel stays sharp, only dimmed.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(
-                    if (colors.isEInk) {
-                        Modifier.background(Color.Black.copy(alpha = 0.55f))
-                    } else {
-                        Modifier
-                            .hazeEffect(state = hazeState, style = mistStyle)
-                            .background(Color.Black.copy(alpha = if (colors.isDark) 0.45f else 0.28f))
-                    },
+                .background(
+                    Color.Black.copy(
+                        alpha = when {
+                            colors.isEInk -> 0.55f
+                            colors.isDark -> 0.45f
+                            else -> 0.30f
+                        },
+                    ),
                 )
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
@@ -1591,27 +1594,22 @@ private fun NameDialog(
                     spotColor = Color.Black.copy(alpha = 0.28f),
                 )
                 .clip(cardShape)
-                // Solid frost base first — never rely on haze alone for opacity.
-                .background(cardFrostBase)
                 .then(
-                    if (colors.isEInk) {
-                        Modifier
+                    if (hazeState != null && hasBackdropBlur) {
+                        Modifier.hazeEffect(
+                            state = hazeState,
+                            style = HazeStyle(
+                                backgroundColor = colors.background,
+                                tint = HazeTint(colors.surface.copy(alpha = 0.55f)),
+                                blurRadius = 24.dp,
+                                noiseFactor = 0.12f,
+                            ),
+                        )
                     } else {
-                        // Match Aurora nav bar glass recipe for real background blur.
-                        Modifier.hazeEffect(state = hazeState, style = navBarGlassStyle)
+                        Modifier
                     },
                 )
-                .border(
-                    BorderStroke(
-                        1.dp,
-                        if (colors.isDark) {
-                            Color.White.copy(alpha = 0.18f)
-                        } else {
-                            Color.Black.copy(alpha = 0.08f)
-                        },
-                    ),
-                    cardShape,
-                )
+                .background(cardFrostBase)
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -1654,10 +1652,6 @@ private fun NameDialog(
                                     ),
                                 ),
                             )
-                            .border(
-                                BorderStroke(1.dp, colors.accent.copy(alpha = 0.35f)),
-                                previewShape,
-                            )
                             .padding(horizontal = 16.dp, vertical = 20.dp),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -1676,15 +1670,15 @@ private fun NameDialog(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text(stringResource(AYMR.strings.aurora_nickname_field_label)) },
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = colors.accent,
-                            unfocusedBorderColor = colors.divider,
+                            focusedBorderColor = colors.accent.copy(alpha = 0.45f),
+                            unfocusedBorderColor = Color.Transparent,
                             focusedLabelColor = colors.accent,
                             unfocusedLabelColor = colors.textSecondary,
                             cursorColor = colors.accent,
                             focusedTextColor = colors.textPrimary,
                             unfocusedTextColor = colors.textPrimary,
-                            focusedContainerColor = Color.Transparent,
-                            unfocusedContainerColor = Color.Transparent,
+                            focusedContainerColor = fieldFill,
+                            unfocusedContainerColor = fieldFill,
                         ),
                         shape = RoundedCornerShape(14.dp),
                     )
@@ -1709,12 +1703,11 @@ private fun NameDialog(
                                     .clip(RoundedCornerShape(999.dp))
                                     .background(
                                         if (colors.isDark) {
-                                            Color.White.copy(alpha = 0.08f)
+                                            Color.White.copy(alpha = 0.10f)
                                         } else {
-                                            Color.Black.copy(alpha = 0.04f)
+                                            Color.Black.copy(alpha = 0.05f)
                                         },
                                     )
-                                    .border(1.dp, colors.divider, RoundedCornerShape(999.dp))
                                     .clickable {
                                         appHaptics.tap()
                                         isFontDropdownOpen = true
@@ -1815,13 +1808,16 @@ private fun NameDialog(
                             isError = !customColorValid,
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = colors.accent,
-                                unfocusedBorderColor = colors.divider,
+                                focusedBorderColor = colors.accent.copy(alpha = 0.45f),
+                                unfocusedBorderColor = Color.Transparent,
                                 focusedLabelColor = colors.accent,
                                 unfocusedLabelColor = colors.textSecondary,
                                 cursorColor = colors.accent,
                                 focusedTextColor = colors.textPrimary,
                                 unfocusedTextColor = colors.textPrimary,
+                                focusedContainerColor = fieldFill,
+                                unfocusedContainerColor = fieldFill,
+                                errorContainerColor = fieldFill,
                                 errorBorderColor = colors.error,
                             ),
                             shape = RoundedCornerShape(14.dp),
@@ -1869,61 +1865,50 @@ private fun NameDialog(
 
                     Spacer(Modifier.height(10.dp))
 
-                    // Effect picker
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(999.dp))
-                                .background(
-                                    if (colors.isDark) {
-                                        Color.White.copy(alpha = 0.08f)
-                                    } else {
-                                        Color.Black.copy(alpha = 0.04f)
-                                    },
-                                )
-                                .border(1.dp, colors.divider, RoundedCornerShape(999.dp))
-                                .clickable {
-                                    appHaptics.tap()
-                                    isEffectDropdownOpen = true
-                                }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = stringResource(AYMR.strings.aurora_nickname_effect),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = colors.textSecondary,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                text = selectedEffect.label(),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.textPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Icon(
-                                imageVector = Icons.Filled.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = colors.accent,
-                                modifier = Modifier
-                                    .padding(start = 4.dp)
-                                    .size(18.dp),
-                            )
+                    // Effect picker: inline chips instead of a popup menu (the popup
+                    // could open clipped / overflow the card). Treasury effects show up
+                    // only after they are actually unlocked.
+                    Text(
+                        text = stringResource(AYMR.strings.aurora_nickname_effect),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.textSecondary,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    val availableEffects = remember(unlockedUnlockables, selectedEffect) {
+                        nicknameEffectPickerPresets().filter { preset ->
+                            !preset.isTreasury() ||
+                                preset == selectedEffect ||
+                                "profile_nickname_effect_${preset.key}" in unlockedUnlockables
                         }
-                        DropdownMenu(
-                            expanded = isEffectDropdownOpen,
-                            onDismissRequest = { isEffectDropdownOpen = false },
-                        ) {
-                            nicknameEffectPickerPresets().forEach { preset ->
-                                DropdownMenuItem(
-                                    text = { Text(preset.label()) },
-                                    onClick = {
+                    }
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        availableEffects.forEach { preset ->
+                            val chipSelected = selectedEffect == preset
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .background(
+                                        when {
+                                            chipSelected -> colors.accent.copy(alpha = 0.22f)
+                                            colors.isDark -> Color.White.copy(alpha = 0.08f)
+                                            else -> Color.Black.copy(alpha = 0.05f)
+                                        },
+                                    )
+                                    .clickable {
                                         appHaptics.tap()
                                         selectedEffect = preset
-                                        isEffectDropdownOpen = false
-                                    },
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                            ) {
+                                Text(
+                                    text = preset.label(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (chipSelected) colors.accent else colors.textPrimary,
+                                    maxLines = 1,
                                 )
                             }
                         }
@@ -1941,7 +1926,13 @@ private fun NameDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(999.dp))
-                            .border(1.dp, colors.divider, RoundedCornerShape(999.dp))
+                            .background(
+                                if (colors.isDark) {
+                                    Color.White.copy(alpha = 0.08f)
+                                } else {
+                                    Color.Black.copy(alpha = 0.05f)
+                                },
+                            )
                             .clickable {
                                 appHaptics.tap()
                                 onDismiss()
@@ -2019,12 +2010,11 @@ private fun NicknameSizeStepper(
             .clip(shape)
             .background(
                 if (colors.isDark) {
-                    Color.White.copy(alpha = 0.08f)
+                    Color.White.copy(alpha = 0.10f)
                 } else {
-                    Color.Black.copy(alpha = 0.04f)
+                    Color.Black.copy(alpha = 0.05f)
                 },
             )
-            .border(1.dp, colors.divider, shape)
             .padding(horizontal = 4.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -2082,33 +2072,50 @@ private fun NicknameColorSwatch(
             .width(48.dp)
             .clickable(onClick = onClick),
     ) {
+        val haloColor = if (useRainbow) colors.accent else solidColor
         Box(
-            modifier = Modifier
-                .size(if (selected) 30.dp else 26.dp)
-                .clip(CircleShape)
-                .then(
-                    if (useRainbow) {
-                        Modifier.background(
-                            Brush.sweepGradient(
-                                listOf(
-                                    Color(0xFFFF6B6B),
-                                    Color(0xFFFFE66D),
-                                    Color(0xFF4ECDC4),
-                                    Color(0xFF5B8CFF),
-                                    Color(0xFFFF6B6B),
+            modifier = Modifier.size(36.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) {
+                // Soft halo instead of a selection stroke.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    haloColor.copy(alpha = 0.45f),
+                                    Color.Transparent,
                                 ),
                             ),
-                        )
-                    } else {
-                        Modifier.background(solidColor)
-                    },
+                            CircleShape,
+                        ),
                 )
-                .border(
-                    width = if (selected) 2.5.dp else 1.dp,
-                    color = if (selected) colors.accent else colors.divider,
-                    shape = CircleShape,
-                ),
-        )
+            }
+            Box(
+                modifier = Modifier
+                    .size(if (selected) 28.dp else 24.dp)
+                    .clip(CircleShape)
+                    .then(
+                        if (useRainbow) {
+                            Modifier.background(
+                                Brush.sweepGradient(
+                                    listOf(
+                                        Color(0xFFFF6B6B),
+                                        Color(0xFFFFE66D),
+                                        Color(0xFF4ECDC4),
+                                        Color(0xFF5B8CFF),
+                                        Color(0xFFFF6B6B),
+                                    ),
+                                ),
+                            )
+                        } else {
+                            Modifier.background(solidColor)
+                        },
+                    ),
+            )
+        }
         Text(
             text = preset.label(),
             style = MaterialTheme.typography.labelSmall,

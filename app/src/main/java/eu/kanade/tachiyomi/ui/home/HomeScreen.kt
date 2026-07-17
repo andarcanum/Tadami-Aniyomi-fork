@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,8 +47,10 @@ import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -131,6 +134,15 @@ import uy.kohesive.injekt.injectLazy
  */
 val LocalHomeHazeState = staticCompositionLocalOf<HazeState?> { null }
 
+/**
+ * Slot for overlays that must draw above the whole home scaffold but OUTSIDE the
+ * [LocalHomeHazeState] haze source. Content hosted here (e.g. the nickname editor)
+ * can use hazeEffect surfaces that sample and blur the real home content behind them
+ * — blurring only what sits under the surface instead of the entire screen.
+ */
+val LocalHomeOverlayHost =
+    staticCompositionLocalOf<MutableState<(@Composable () -> Unit)?>?> { null }
+
 object HomeScreen : Screen() {
     private val librarySearchEvent = Channel<String>()
     private val openTabEvent = Channel<Tab>()
@@ -180,6 +192,7 @@ object HomeScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val bottomNavVisibilityController = remember { BottomNavVisibilityController() }
         val hazeState = remember { HazeState() }
+        val homeOverlayContent = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
         eu.kanade.presentation.tutorial.TutorialHost {
             TabNavigator(
                 tab = defaultTab,
@@ -227,7 +240,9 @@ object HomeScreen : Screen() {
                     LocalNavigator provides navigator,
                     LocalBottomNavVisibilityController provides bottomNavVisibilityController,
                     LocalHomeHazeState provides hazeState,
+                    LocalHomeOverlayHost provides homeOverlayContent,
                 ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
                     Scaffold(
                         startBar = {
                             if (useNavigationRail) {
@@ -504,6 +519,11 @@ object HomeScreen : Screen() {
                                 }
                             }
                         }
+                    }
+                        // Overlay slot rendered OUTSIDE the hazeSource content above:
+                        // overlays hosted here (e.g. the nickname editor) can use
+                        // hazeEffect to blur the real home content behind their surface.
+                        homeOverlayContent.value?.invoke()
                     }
                 }
 
