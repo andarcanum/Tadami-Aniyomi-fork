@@ -5,8 +5,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import cafe.adriel.voyager.core.annotation.InternalVoyagerApi
@@ -64,12 +66,23 @@ fun NavigatorAdaptiveSheet(
  * and will not be able to dismissed with swipe gesture.
  *
  * Max width is handled by the core adaptive sheet implementation and scales up on tablets.
+ *
+ * @param containerColor sheet surface color (override for translucent / glass panels).
+ * @param scrimAlpha phone scrim opacity while the sheet is open (tablet uses fade only).
+ *                   Fades out with drag so revealed area is not left under a frozen veil.
+ * @param applyStatusBarsPadding when false, skips top status-bar inset on the phone sheet
+ *                               (avoids an empty cap above bottom-sheet content).
+ * @param onRevealChange 1f fully open → 0f fully dismissed (for progressive window blur, etc.).
  */
 @Composable
 fun AdaptiveSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     enableSwipeDismiss: Boolean = true,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    scrimAlpha: Float = 0.5f,
+    applyStatusBarsPadding: Boolean = true,
+    onRevealChange: (Float) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val isTabletUi = isTabletUi()
@@ -83,6 +96,10 @@ fun AdaptiveSheet(
             isTabletUi = isTabletUi,
             enableSwipeDismiss = enableSwipeDismiss,
             onDismissRequest = onDismissRequest,
+            containerColor = containerColor,
+            scrimAlpha = scrimAlpha,
+            applyStatusBarsPadding = applyStatusBarsPadding,
+            onRevealChange = onRevealChange,
         ) {
             content()
         }

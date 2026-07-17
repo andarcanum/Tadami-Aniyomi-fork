@@ -2757,6 +2757,10 @@
     <string name="achievement_secret_saitama_hint">Достаточно одного удара.</string>
     <string name="achievement_secret_jojo_hint">Невероятное приключение с угрожающей аурой.</string>
     <string name="achievement_secret_shadow_monarch_hint">Повелевай тенями. Собери достаточно темного фэнтези.</string>
+    <string name="aurora_reader_live_preview">Изменения применяются к странице в реальном времени</string>
+    <string name="aurora_reader_preview_title">Превью фильтров</string>
+    <string name="aurora_reader_preview_hint">Пример панели — фильтры сразу видны здесь</string>
+    <string name="aurora_reader_processing">Обработка изображения</string>
 </resources>
 
 

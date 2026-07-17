@@ -36,7 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -47,6 +49,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import androidx.compose.runtime.snapshotFlow
 import kotlin.math.roundToInt
 
 const val ADAPTIVE_SHEET_SCRIM_TEST_TAG = "adaptive_sheet_scrim"
@@ -61,6 +66,18 @@ fun AdaptiveSheet(
     enableSwipeDismiss: Boolean,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    scrimAlpha: Float = PHONE_SCRIM_ALPHA,
+    /**
+     * When false, the phone sheet does not apply [statusBarsPadding]. Bottom sheets that already
+     * sit below the status bar should set this false to avoid an empty "cap" above the content.
+     */
+    applyStatusBarsPadding: Boolean = true,
+    /**
+     * 1f = fully open (settled at top), 0f = fully dismissed.
+     * Used by callers that want window blur/dim to track the sheet, not freeze full-screen.
+     */
+    onRevealChange: (Float) -> Unit = {},
     content: @Composable () -> Unit,
 ) {
     val isLandscape = LocalConfiguration.current.orientation == ORIENTATION_LANDSCAPE
@@ -76,6 +93,7 @@ fun AdaptiveSheet(
             onDismissRequest = onDismissRequest,
             modifier = modifier,
             maxWidth = maxWidth,
+            containerColor = containerColor,
             content = content,
         )
     } else {
@@ -84,6 +102,10 @@ fun AdaptiveSheet(
             modifier = modifier,
             enableSwipeDismiss = enableSwipeDismiss,
             maxWidth = maxWidth,
+            containerColor = containerColor,
+            scrimAlpha = scrimAlpha,
+            applyStatusBarsPadding = applyStatusBarsPadding,
+            onRevealChange = onRevealChange,
             content = content,
         )
     }
@@ -94,6 +116,7 @@ private fun TabletAdaptiveSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier,
     maxWidth: androidx.compose.ui.unit.Dp,
+    containerColor: Color,
     content: @Composable () -> Unit,
 ) {
     var targetAlpha by remember { mutableFloatStateOf(0f) }
@@ -137,7 +160,7 @@ private fun TabletAdaptiveSheet(
                 .statusBarsPadding()
                 .padding(top = 16.dp),
             shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            color = containerColor,
         ) {
             BackHandler(enabled = !dismissRequested && alpha > 0f, onBack = internalOnDismissRequest)
             content()
@@ -155,6 +178,10 @@ private fun PhoneAdaptiveSheet(
     modifier: Modifier,
     enableSwipeDismiss: Boolean,
     maxWidth: androidx.compose.ui.unit.Dp,
+    containerColor: Color,
+    scrimAlpha: Float,
+    applyStatusBarsPadding: Boolean,
+    onRevealChange: (Float) -> Unit,
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
@@ -166,11 +193,16 @@ private fun PhoneAdaptiveSheet(
     var dismissRequestedByDrag by remember { mutableStateOf(false) }
     var isDragging by remember { mutableStateOf(false) }
     var sheetHeight by remember { mutableStateOf(-1) }
-    val scrimAlpha by animateFloatAsState(
+    // 1 when fully open, 0 when fully dragged off-screen. Start at 0 (closed) so callers
+    // do not flash full-screen blur/dim before the open animation begins.
+    var sheetReveal by remember { mutableFloatStateOf(0f) }
+    val animatedScrimAlpha by animateFloatAsState(
         targetValue = scrimTargetAlpha,
         animationSpec = SHEET_ANIMATION_SPEC,
         label = "alpha",
     )
+    // Visible scrim only over the still-open fraction of the sheet, not a frozen full-screen veil.
+    val visibleScrimAlpha = animatedScrimAlpha * sheetReveal
 
     val anchoredDraggableState = remember { AnchoredDraggableState(initialValue = 1) }
     val flingBehavior = AnchoredDraggableDefaults.flingBehavior(
@@ -186,6 +218,25 @@ private fun PhoneAdaptiveSheet(
         }
     }
 
+    LaunchedEffect(anchoredDraggableState) {
+        snapshotFlow {
+            val offset = anchoredDraggableState.offset
+            val max = anchoredDraggableState.anchors.maxPosition()
+            offset to max
+        }
+            .map { (offset, max) ->
+                when {
+                    !max.isFinite() || max <= 0f || !offset.isFinite() -> 1f
+                    else -> (1f - offset / max).coerceIn(0f, 1f)
+                }
+            }
+            .distinctUntilChanged()
+            .collect { reveal ->
+                sheetReveal = reveal
+                onRevealChange(reveal)
+            }
+    }
+
     Box(
         modifier = Modifier
             .testTag(ADAPTIVE_SHEET_SCRIM_TEST_TAG)
@@ -195,35 +246,18 @@ private fun PhoneAdaptiveSheet(
                 onClick = internalOnDismissRequest,
             )
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.scrim.copy(alpha = scrimAlpha)),
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = visibleScrimAlpha)),
         contentAlignment = Alignment.BottomCenter,
     ) {
+        val phoneSheetShape = MaterialTheme.shapes.extraLarge.copy(
+            bottomEnd = ZeroCornerSize,
+            bottomStart = ZeroCornerSize,
+        )
+        // CRITICAL modifier order: offset/drag must WRAP border+fill.
+        // If border/clip sit outside offset, the top rim stays fixed while the panel
+        // slides — exactly the "phantom top edge" ghost during dismiss/open.
         Surface(
             modifier = Modifier
-                .testTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG)
-                .sizeIn(
-                    maxWidth = maxWidth,
-                    maxHeight = maxHeight,
-                )
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {},
-                )
-                .then(modifier)
-                .navigationBarsPadding()
-                .statusBarsPadding()
-                .padding(top = 8.dp)
-                .onSizeChanged {
-                    if (it.height != sheetHeight) {
-                        sheetHeight = it.height
-                        val anchors = DraggableAnchors {
-                            0 at 0f
-                            1 at it.height.toFloat()
-                        }
-                        anchoredDraggableState.updateAnchors(anchors)
-                    }
-                }
                 .offset {
                     IntOffset(
                         0,
@@ -233,9 +267,9 @@ private fun PhoneAdaptiveSheet(
                             ?: 0,
                     )
                 }
-                .let { sheetModifier ->
+                .then(
                     if (enableSwipeDismiss) {
-                        sheetModifier
+                        Modifier
                             .nestedScroll(
                                 remember(anchoredDraggableState, flingBehavior) {
                                     anchoredDraggableState.preUpPostDownNestedScrollConnection(
@@ -251,14 +285,39 @@ private fun PhoneAdaptiveSheet(
                                 flingBehavior = flingBehavior,
                             )
                     } else {
-                        sheetModifier
-                    }
-                },
-            shape = MaterialTheme.shapes.extraLarge.copy(
-                bottomEnd = ZeroCornerSize,
-                bottomStart = ZeroCornerSize,
-            ),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        Modifier
+                    },
+                )
+                .testTag(ADAPTIVE_SHEET_SURFACE_TEST_TAG)
+                .sizeIn(
+                    maxWidth = maxWidth,
+                    maxHeight = maxHeight,
+                )
+                .onSizeChanged {
+                    val newHeight = it.height
+                    if (newHeight <= 0 || newHeight == sheetHeight) return@onSizeChanged
+                    // Re-anchoring mid-drag or on content-height flicker resets the gesture
+                    // ("have to yank several times"). Freeze while dragging; never shrink once open.
+                    if (isDragging) return@onSizeChanged
+                    if (sheetShown && sheetHeight > 0 && newHeight < sheetHeight) return@onSizeChanged
+                    sheetHeight = newHeight
+                    anchoredDraggableState.updateAnchors(
+                        DraggableAnchors {
+                            0 at 0f
+                            1 at newHeight.toFloat()
+                        },
+                    )
+                }
+                .navigationBarsPadding()
+                .then(if (applyStatusBarsPadding) Modifier.statusBarsPadding() else Modifier)
+                .padding(top = if (applyStatusBarsPadding) 8.dp else 0.dp)
+                .clip(phoneSheetShape)
+                .then(modifier),
+            shape = phoneSheetShape,
+            color = containerColor,
+            // Avoid elevation shadow trails that look like a ghost top edge while sliding.
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
         ) {
             BackHandler(
                 enabled = !dismissRequested,
@@ -280,25 +339,24 @@ private fun PhoneAdaptiveSheet(
                 }
                 onDismissRequest()
             } else {
-                scrimTargetAlpha = PHONE_SCRIM_ALPHA
+                scrimTargetAlpha = scrimAlpha
                 anchoredDraggableState.animateTo(0)
                 sheetShown = true
             }
         }
 
-        LaunchedEffect(sheetShown, dismissRequested, isDragging, anchoredDraggableState.offset) {
-            val maxPosition = anchoredDraggableState.anchors.maxPosition()
-            if (
-                sheetShown &&
-                !dismissRequested &&
-                !isDragging &&
-                maxPosition.isFinite() &&
-                maxPosition > 0f &&
-                anchoredDraggableState.offset >= maxPosition
-            ) {
-                dismissRequestedByDrag = true
-                dismissRequested = true
-            }
+        // Settle-based dismiss: more reliable than sampling offset only while !isDragging
+        // (fling can settle closed without a clean isDragging edge).
+        LaunchedEffect(anchoredDraggableState, sheetShown) {
+            if (!sheetShown) return@LaunchedEffect
+            snapshotFlow { anchoredDraggableState.settledValue }
+                .distinctUntilChanged()
+                .collect { settled ->
+                    if (settled == 1 && !dismissRequested) {
+                        dismissRequestedByDrag = true
+                        dismissRequested = true
+                    }
+                }
         }
     }
 }

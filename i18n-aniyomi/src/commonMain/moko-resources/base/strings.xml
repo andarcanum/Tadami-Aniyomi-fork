@@ -2738,4 +2738,8 @@
     <string name="achievement_secret_saitama_hint">One punch is all it takes.</string>
     <string name="achievement_secret_jojo_hint">A bizarre journey with a menacing aura.</string>
     <string name="achievement_secret_shadow_monarch_hint">Command the shadows. Collect enough dark fantasy.</string>
+    <string name="aurora_reader_live_preview">Changes are applied to the page in real time</string>
+    <string name="aurora_reader_preview_title">Filter preview</string>
+    <string name="aurora_reader_preview_hint">Sample panel — filters update this preview instantly</string>
+    <string name="aurora_reader_processing">Image processing</string>
 </resources>
