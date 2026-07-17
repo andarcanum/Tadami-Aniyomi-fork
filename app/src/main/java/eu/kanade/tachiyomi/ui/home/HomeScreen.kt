@@ -52,6 +52,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -122,6 +123,13 @@ import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+
+/**
+ * Shared [HazeState] for the home scaffold content source.
+ * Same state powers the Aurora bottom nav glass — overlays (e.g. nickname editor)
+ * should reuse it so blur samples the real tab surface.
+ */
+val LocalHomeHazeState = staticCompositionLocalOf<HazeState?> { null }
 
 object HomeScreen : Screen() {
     private val librarySearchEvent = Channel<String>()
@@ -214,10 +222,11 @@ object HomeScreen : Screen() {
                     }
                 }
 
-                // Provide usable navigator to content screen
+                // Provide usable navigator to content screen + shared haze for glass overlays
                 CompositionLocalProvider(
                     LocalNavigator provides navigator,
                     LocalBottomNavVisibilityController provides bottomNavVisibilityController,
+                    LocalHomeHazeState provides hazeState,
                 ) {
                     Scaffold(
                         startBar = {
