@@ -33,31 +33,79 @@ import java.text.NumberFormat
 @Composable
 internal fun ColumnScope.ReadingModePage(screenModel: ReaderSettingsScreenModel) {
     val manga by screenModel.mangaFlow.collectAsStateWithLifecycle()
+    val defaultReadingMode by screenModel.preferences.defaultReadingMode().collectAsStateWithLifecycle()
+    val defaultOrientation by screenModel.preferences.defaultOrientationType().collectAsStateWithLifecycle()
 
-    // Lightweight series header (no nested glass card — reduces double-frost slop).
-    manga?.title?.let { title ->
-        Text(
-            text = stringResource(MR.strings.pref_category_for_this_series),
-            style = MaterialTheme.typography.labelMedium,
-            color = AuroraTheme.colors.accent,
-            modifier = Modifier.padding(horizontal = 22.dp, vertical = 2.dp),
-        )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = AuroraTheme.colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 6.dp),
-        )
-    }
-
-    // Reading mode — 2-col grid, solid selected fill (stronger hierarchy).
-    val readingMode = remember(manga) {
+    val storedReadingMode = remember(manga) {
         ReadingMode.fromPreference(manga?.readingMode?.toInt())
     }
+    val storedOrientation = remember(manga) {
+        ReaderOrientation.fromPreference(manga?.readerOrientation?.toInt())
+    }
+    // Recompute from manga + toggle helper so UI tracks flag writes.
+    // Derived from manga flags so UI updates when override is toggled or modes change.
+    val seriesOverrideEnabled = remember(storedReadingMode, storedOrientation) {
+        storedReadingMode != ReadingMode.DEFAULT || storedOrientation != ReaderOrientation.DEFAULT
+    }
+
+    // Active values shown in the grids: series flags, or global defaults when not overridden.
+    val readingMode = remember(manga, defaultReadingMode, seriesOverrideEnabled) {
+        if (seriesOverrideEnabled && storedReadingMode != ReadingMode.DEFAULT) {
+            storedReadingMode
+        } else {
+            ReadingMode.fromPreference(defaultReadingMode)
+        }
+    }
+    val orientation = remember(manga, defaultOrientation, seriesOverrideEnabled) {
+        if (seriesOverrideEnabled && storedOrientation != ReaderOrientation.DEFAULT) {
+            storedOrientation
+        } else {
+            ReaderOrientation.fromPreference(defaultOrientation)
+        }
+    }
+
+    // Novel-like scope control: series override vs global defaults.
+    AuroraGlassSection(title = stringResource(MR.strings.pref_category_for_this_series)) {
+        manga?.title?.let { title ->
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = AuroraTheme.colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
+        AuroraToggleRow(
+            label = stringResource(MR.strings.reader_override_series),
+            subtitle = stringResource(MR.strings.reader_override_series_summary),
+            checked = seriesOverrideEnabled,
+            onClick = { screenModel.onSetSeriesViewerOverride(!seriesOverrideEnabled) },
+        )
+        Text(
+            text = if (seriesOverrideEnabled) {
+                stringResource(MR.strings.reader_editing_series)
+            } else {
+                stringResource(MR.strings.reader_editing_global_defaults)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = AuroraTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+        )
+        Text(
+            text = stringResource(MR.strings.reader_override_series_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = AuroraTheme.colors.textSecondary,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+        )
+    }
+
+    // Reading mode — exclude DEFAULT tile (scope is controlled by the toggle above).
+    val modeOptions = remember {
+        ReadingMode.entries.filter { it != ReadingMode.DEFAULT }
+    }
     AuroraGlassSection(title = stringResource(MR.strings.pref_category_reading_mode)) {
-        ReadingMode.entries.chunked(2).forEach { rowModes ->
+        modeOptions.chunked(2).forEach { rowModes ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -80,12 +128,12 @@ internal fun ColumnScope.ReadingModePage(screenModel: ReaderSettingsScreenModel)
         }
     }
 
-    // Orientation — 2-line labels so long RU strings are not mid-word clipped.
-    val orientation = remember(manga) {
-        ReaderOrientation.fromPreference(manga?.readerOrientation?.toInt())
+    // Orientation — same: no DEFAULT tile; toggle owns scope.
+    val orientationOptions = remember {
+        ReaderOrientation.entries.filter { it != ReaderOrientation.DEFAULT }
     }
     AuroraGlassSection(title = stringResource(MR.strings.rotation_type)) {
-        ReaderOrientation.entries.chunked(2).forEach { rowItems ->
+        orientationOptions.chunked(2).forEach { rowItems ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

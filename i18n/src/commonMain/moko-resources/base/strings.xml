@@ -1029,6 +1029,11 @@
     <string name="reader_page_actions_button_color">Button color</string>
     <string name="reader_page_actions_label_color">Title color</string>
     <string name="pref_category_for_this_series">For this series</string>
+    <string name="reader_override_series">Override for this series</string>
+    <string name="reader_override_series_summary">Use a custom reading mode and orientation for this series only</string>
+    <string name="reader_editing_series">Editing settings for this series</string>
+    <string name="reader_editing_global_defaults">Editing global defaults</string>
+    <string name="reader_override_series_hint">Other reader options stay global. Only reading mode and orientation can be overridden per series.</string>
     <string name="viewer">Reading mode</string>
     <string name="transition_finished">Finished:</string>
     <string name="transition_current">Current:</string>

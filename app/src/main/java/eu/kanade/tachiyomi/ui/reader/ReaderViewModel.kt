@@ -1055,6 +1055,92 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     /**
+     * True when this series has a non-default reading mode and/or orientation
+     * (series override is active). Mirrors novel "override for source" scope,
+     * but only for viewer flags stored on the manga entry.
+     */
+    fun isSeriesViewerOverrideEnabled(): Boolean {
+        val manga = manga ?: return false
+        val mode = ReadingMode.fromPreference(manga.readingMode.toInt())
+        val orientation = ReaderOrientation.fromPreference(manga.readerOrientation.toInt())
+        return mode != ReadingMode.DEFAULT || orientation != ReaderOrientation.DEFAULT
+    }
+
+    /**
+     * Enable series-specific viewer flags (seeded from current globals) or clear
+     * them back to DEFAULT so global defaults apply.
+     */
+    fun setSeriesViewerOverrideEnabled(enabled: Boolean) {
+        val manga = manga ?: return
+        if (enabled) {
+            val mode = ReadingMode.fromPreference(manga.readingMode.toInt())
+            val orientation = ReaderOrientation.fromPreference(manga.readerOrientation.toInt())
+            if (mode == ReadingMode.DEFAULT) {
+                val globalMode = ReadingMode.fromPreference(readerPreferences.defaultReadingMode().get())
+                if (globalMode != ReadingMode.DEFAULT) {
+                    setMangaReadingMode(globalMode)
+                } else {
+                    setMangaReadingMode(ReadingMode.RIGHT_TO_LEFT)
+                }
+            }
+            if (orientation == ReaderOrientation.DEFAULT) {
+                val globalOrientation = ReaderOrientation.fromPreference(
+                    readerPreferences.defaultOrientationType().get(),
+                )
+                if (globalOrientation != ReaderOrientation.DEFAULT) {
+                    setMangaOrientationType(globalOrientation)
+                } else {
+                    setMangaOrientationType(ReaderOrientation.FREE)
+                }
+            }
+        } else {
+            setMangaReadingMode(ReadingMode.DEFAULT)
+            setMangaOrientationType(ReaderOrientation.DEFAULT)
+        }
+    }
+
+    /**
+     * Apply reading mode either as a series override or as the app-wide default,
+     * depending on [isSeriesViewerOverrideEnabled].
+     */
+    fun setReadingModePreference(readingMode: ReadingMode) {
+        if (readingMode == ReadingMode.DEFAULT) {
+            setMangaReadingMode(ReadingMode.DEFAULT)
+            return
+        }
+        if (isSeriesViewerOverrideEnabled()) {
+            setMangaReadingMode(readingMode)
+        } else {
+            readerPreferences.defaultReadingMode().set(readingMode.flagValue)
+            // Manga stays on DEFAULT → resolved value changes; reload viewer.
+            viewModelScope.launchIO {
+                val currChapters = state.value.viewerChapters ?: return@launchIO
+                applySavedProgress(currChapters.currChapter)
+                eventChannel.send(Event.ReloadViewerChapters)
+            }
+        }
+    }
+
+    /**
+     * Apply orientation either as a series override or as the app-wide default.
+     */
+    fun setOrientationPreference(orientation: ReaderOrientation) {
+        if (orientation == ReaderOrientation.DEFAULT) {
+            setMangaOrientationType(ReaderOrientation.DEFAULT)
+            return
+        }
+        if (isSeriesViewerOverrideEnabled()) {
+            setMangaOrientationType(orientation)
+        } else {
+            readerPreferences.defaultOrientationType().set(orientation.flagValue)
+            viewModelScope.launchIO {
+                eventChannel.send(Event.SetOrientation(getMangaOrientation()))
+                eventChannel.send(Event.ReloadViewerChapters)
+            }
+        }
+    }
+
+    /**
      * Updates the viewer position for the open manga.
      */
     fun setMangaReadingMode(readingMode: ReadingMode) {

@@ -431,6 +431,11 @@
     <string name="restore_duration">%1$02d мин, %2$02d сек</string>
     <string name="viewer">Режим чтения</string>
     <string name="pref_category_for_this_series">Для этой серии</string>
+    <string name="reader_override_series">Переопределить для этой серии</string>
+    <string name="reader_override_series_summary">Свой режим чтения и ориентация только для этой серии</string>
+    <string name="reader_editing_series">Редактируются настройки этой серии</string>
+    <string name="reader_editing_global_defaults">Редактируются глобальные настройки по умолчанию</string>
+    <string name="reader_override_series_hint">Остальные параметры читалки остаются глобальными. Для серии можно переопределить только режим чтения и ориентацию.</string>
     <string name="gray_background">Серый</string>
     <string name="battery_optimization_setting_activity_not_found">Не удалось открыть настройки устройства</string>
     <string name="pref_refresh_library_covers">Обновить обложки серий</string>

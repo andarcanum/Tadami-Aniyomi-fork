@@ -451,8 +451,10 @@ class ReaderActivity : BaseActivity() {
                     ReaderSettingsScreenModel(
                         readerState = viewModel.state,
                         hasDisplayCutout = hasCutout,
-                        onChangeReadingMode = viewModel::setMangaReadingMode,
-                        onChangeOrientation = viewModel::setMangaOrientationType,
+                        onChangeReadingMode = viewModel::setReadingModePreference,
+                        onChangeOrientation = viewModel::setOrientationPreference,
+                        onSetSeriesViewerOverride = viewModel::setSeriesViewerOverrideEnabled,
+                        isSeriesViewerOverrideEnabled = viewModel::isSeriesViewerOverrideEnabled,
                     )
                 }
 
