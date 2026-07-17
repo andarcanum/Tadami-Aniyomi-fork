@@ -186,26 +186,41 @@ internal fun AuroraToggleRow(
     label: String,
     checked: Boolean,
     onClick: () -> Unit,
+    enabled: Boolean = true,
+    subtitle: String? = null,
 ) {
     val colors = AuroraTheme.colors
+    val contentAlpha = if (enabled) 1f else 0.38f
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.textPrimary,
+        Column(
             modifier = Modifier
                 .weight(1f)
                 .padding(end = 12.dp),
-        )
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textPrimary.copy(alpha = contentAlpha),
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textSecondary.copy(alpha = contentAlpha),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
         Switch(
             checked = checked,
             onCheckedChange = null,
+            enabled = enabled,
             modifier = Modifier.scale(0.85f),
         )
     }

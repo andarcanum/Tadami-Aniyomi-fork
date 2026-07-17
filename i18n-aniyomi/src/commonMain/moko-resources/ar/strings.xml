@@ -526,6 +526,7 @@
     <string name="novel_reader_advanced">متقدم</string>
     <string name="novel_reader_tab_general">عام</string>
     <string name="novel_reader_tab_reading">القراءة</string>
+    <string name="novel_reader_tab_behavior">السلوك</string>
     <string name="novel_reader_section_reading_behavior">وضع القراءة</string>
     <string name="novel_reader_section_gestures">إعدادات الإيماءات</string>
     <string name="novel_reader_section_translation">الترجمة</string>
