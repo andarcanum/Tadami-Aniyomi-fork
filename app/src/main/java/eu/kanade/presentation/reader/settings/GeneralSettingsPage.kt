@@ -138,7 +138,7 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         }
     }
 
-    // Section: toolbar action buttons + navigator sub-dialog.
+    // Section: top toolbar action buttons only.
     AuroraGlassSection(title = stringResource(AYMR.strings.reader_toolbar_heading)) {
         AuroraToggleRow(
             label = stringResource(AYMR.strings.reader_toolbar_show_webview),
@@ -148,8 +148,12 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
             label = stringResource(AYMR.strings.reader_toolbar_show_share),
             pref = screenModel.preferences.showToolbarShareButton(),
         )
+    }
+
+    // Section: page slider / scrollbar — separate from toolbar (own studio panel).
+    AuroraGlassSection(title = stringResource(MR.strings.pref_navigator_settings)) {
         AuroraNavRow(
-            label = stringResource(MR.strings.pref_navigator_settings),
+            label = stringResource(MR.strings.action_settings),
             onClick = { showNavigatorSettings = true },
         )
     }
