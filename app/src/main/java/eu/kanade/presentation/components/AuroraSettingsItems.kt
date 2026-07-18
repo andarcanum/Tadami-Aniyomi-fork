@@ -408,17 +408,33 @@ fun AuroraCheckboxItem(
 fun AuroraSwitchItem(
     label: String,
     pref: Preference<Boolean>,
+    enabled: Boolean = true,
 ) {
     val checked by pref.collectAsState()
+    AuroraSwitchItem(
+        label = label,
+        checked = checked,
+        enabled = enabled,
+        onClick = { if (enabled) pref.toggle() },
+    )
+}
+
+@Composable
+fun AuroraSwitchItem(
+    label: String,
+    checked: Boolean,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
     val appHaptics = LocalAppHaptics.current
     val colors = AuroraTheme.colors
     val accent = if (colors.isEInk) colors.textPrimary else colors.accent
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable {
+            .clickable(enabled = enabled) {
                 appHaptics.tap()
-                pref.toggle()
+                onClick()
             }
             .padding(
                 horizontal = SettingsItemsPaddings.Horizontal,
@@ -429,12 +445,12 @@ fun AuroraSwitchItem(
     ) {
         Text(
             text = label,
-            color = colors.textPrimary,
+            color = colors.textPrimary.copy(alpha = if (enabled) 1f else 0.4f),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
         )
         val trackColor = if (checked) {
-            if (colors.isEInk) colors.textPrimary else accent.copy(alpha = 0.45f)
+            if (colors.isEInk) colors.textPrimary else accent.copy(alpha = if (enabled) 0.45f else 0.25f)
         } else {
             colors.textPrimary.copy(alpha = if (colors.isEInk) 0.35f else 0.14f)
         }
@@ -454,7 +470,7 @@ fun AuroraSwitchItem(
                 modifier = Modifier
                     .padding(horizontal = 3.dp)
                     .size(16.dp)
-                    .background(knobColor, CircleShape),
+                    .background(knobColor.copy(alpha = if (enabled) 1f else 0.5f), CircleShape),
             )
         }
     }

@@ -112,7 +112,7 @@ fun TabbedDialog(
             snapshotFlow { revealState.value.coerceIn(0f, 1f) }
                 .map { reveal -> (reveal * 20f).roundToInt().coerceIn(0, 20) }
                 .distinctUntilChanged()
-                .collect { step -> applyTabbedSheetWindowFx(w, step / 20f) }
+                .collect { step -> applyAuroraSheetWindowFx(w, step / 20f) }
         }
 
         val scope = rememberCoroutineScope()
@@ -197,7 +197,11 @@ private fun CapsuleOverflowMenu(
     }
 }
 
-private fun applyTabbedSheetWindowFx(window: Window, reveal: Float) {
+/**
+ * Progressive Android 12+ blur/dim for Aurora bottom sheets (filters, EPUB, etc.).
+ * [reveal] is AdaptiveSheet open fraction: 0 dismissed → 1 fully open.
+ */
+fun applyAuroraSheetWindowFx(window: Window, reveal: Float) {
     // 0..~0.2 of travel = sheet still mostly off-screen, keep FX off.
     val glass = ((reveal - 0.18f) / 0.82f).coerceIn(0f, 1f)
     val radius = if (glass <= 0.02f) {
