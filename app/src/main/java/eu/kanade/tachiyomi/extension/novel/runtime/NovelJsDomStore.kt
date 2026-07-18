@@ -231,7 +231,11 @@ class NovelJsDomStore {
         return when (node) {
             is Element -> {
                 val tagName = node.tagName().lowercase()
-                if (tagName == "script" || tagName == "style") node.data() else node.text()
+                // Cheerio parity: cheerio .text() concatenates raw text nodes without
+                // inserting whitespace between elements. Jsoup Element.text() normalizes
+                // and inserts spaces, which changes regex matches in plugins (e.g.
+                // WTR-Lab chapter count parsing). Use wholeText() to match cheerio.
+                if (tagName == "script" || tagName == "style") node.data() else node.wholeText()
             }
             is TextNode -> node.wholeText
             else -> ""
