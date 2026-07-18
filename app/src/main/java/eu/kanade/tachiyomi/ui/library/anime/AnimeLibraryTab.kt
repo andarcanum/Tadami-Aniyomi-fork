@@ -134,6 +134,7 @@ import eu.kanade.presentation.library.novel.components.AddToSeriesDialog
 import eu.kanade.presentation.library.novel.components.CreateSeriesDialog
 import eu.kanade.presentation.more.onboarding.GETTING_STARTED_URL
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.LocalBottomNavVisibilityController
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
@@ -1746,18 +1747,13 @@ private fun AuroraLibraryPinnedHeader(
                         )
 
                         Row {
-                            val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-                                Color.White.copy(alpha = 0.05f)
-                            } else {
-                                Color.Black.copy(alpha = 0.03f)
-                            }
                             IconButton(
                                 onClick = {
                                     appHaptics.tap()
                                     isSearchExpanded = true
                                 },
                                 modifier = Modifier
-                                    .background(tabContainerColor, CircleShape)
+                                    .auroraHeaderIconSurface(colors)
                                     .size(44.dp),
                             ) {
                                 Icon(
@@ -1773,7 +1769,7 @@ private fun AuroraLibraryPinnedHeader(
                                     onFilterClick()
                                 },
                                 modifier = Modifier
-                                    .background(tabContainerColor, CircleShape)
+                                    .auroraHeaderIconSurface(colors)
                                     .size(44.dp),
                             ) {
                                 Icon(
@@ -1790,7 +1786,7 @@ private fun AuroraLibraryPinnedHeader(
                                         showMenu = true
                                     },
                                     modifier = Modifier
-                                        .background(tabContainerColor, CircleShape)
+                                        .auroraHeaderIconSurface(colors)
                                         .size(44.dp),
                                 ) {
                                     Icon(

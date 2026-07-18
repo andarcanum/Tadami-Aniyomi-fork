@@ -69,6 +69,7 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.more.settings.screen.LibraryUpdatePacingScreen
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.updates.anime.AnimeUpdatesAuroraContent
 import eu.kanade.presentation.updates.manga.MangaUpdatesAuroraContent
 import eu.kanade.presentation.updates.novel.NovelUpdatesAuroraContent
@@ -514,15 +515,10 @@ private fun AuroraUpdatesPinnedHeader(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-                    Color.White.copy(alpha = 0.05f)
-                } else {
-                    Color.Black.copy(alpha = 0.03f)
-                }
                 IconButton(
                     onClick = onRefreshCurrent,
                     modifier = Modifier
-                        .background(tabContainerColor, CircleShape)
+                        .auroraHeaderIconSurface(colors)
                         .size(44.dp),
                 ) {
                     Icon(
@@ -553,7 +549,7 @@ private fun AuroraUpdatesPinnedHeader(
                             pacingMenuExpanded = true
                         },
                         modifier = Modifier
-                            .background(tabContainerColor, CircleShape)
+                            .auroraHeaderIconSurface(colors)
                             .size(44.dp),
                     ) {
                         Icon(

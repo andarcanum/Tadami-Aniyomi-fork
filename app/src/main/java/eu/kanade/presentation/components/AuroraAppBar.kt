@@ -1,10 +1,8 @@
 package eu.kanade.presentation.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -21,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.theme.resolveAuroraIconSurfaceColor
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import kotlinx.collections.immutable.ImmutableList
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -49,7 +47,7 @@ fun RowScope.AuroraAppBarActions(
         val actionModifier = Modifier
             .padding(start = 4.dp)
             .size(40.dp)
-            .background(resolveAuroraIconSurfaceColor(colors), CircleShape)
+            .auroraHeaderIconSurface(colors)
         IconButton(
             onClick = {
                 appHaptics.tap()
@@ -71,7 +69,7 @@ fun RowScope.AuroraAppBarActions(
         val overflowModifier = Modifier
             .padding(start = 4.dp)
             .size(40.dp)
-            .background(resolveAuroraIconSurfaceColor(colors), CircleShape)
+            .auroraHeaderIconSurface(colors)
         IconButton(
             onClick = {
                 appHaptics.tap()

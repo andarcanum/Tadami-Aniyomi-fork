@@ -102,7 +102,7 @@ import eu.kanade.presentation.entries.components.aurora.AuroraGlassCtaSurface
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroCtaMode
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.theme.resolveAuroraTopBarIconSurfaceColor
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
@@ -771,13 +771,12 @@ private fun AuroraIconCircleButton(
     content: @Composable () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    // Same language as Settings / Browse / Library Aurora top bar:
-    // soft translucent circle, no rim brush, no haze.
+    // Shared Aurora header icon surface (Lens) — see AuroraHeaderIconStyle.kt.
     Box(
         modifier = modifier
             .size(HistoryIconCircleSize)
             .clip(CircleShape)
-            .background(resolveAuroraTopBarIconSurfaceColor(colors), CircleShape)
+            .auroraHeaderIconSurface(colors)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

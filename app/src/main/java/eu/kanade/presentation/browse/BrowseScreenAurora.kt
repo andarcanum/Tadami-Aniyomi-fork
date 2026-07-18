@@ -58,6 +58,7 @@ import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.auroraCardStyle
 import eu.kanade.presentation.theme.AuroraSurfaceLevel
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
@@ -201,8 +202,6 @@ private fun BrowseAuroraHeader(
     onSearchClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    val tabContainerColor = resolveAuroraControlContainerColor(colors)
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -227,7 +226,7 @@ private fun BrowseAuroraHeader(
         IconButton(
             onClick = onSearchClick,
             modifier = Modifier
-                .background(tabContainerColor, CircleShape)
+                .auroraHeaderIconSurface(colors)
                 .size(48.dp),
         ) {
             Icon(

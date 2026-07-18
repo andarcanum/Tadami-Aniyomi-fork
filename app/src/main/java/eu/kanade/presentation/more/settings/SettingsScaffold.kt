@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.theme.resolveAuroraTopBarIconSurfaceColor
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.theme.resolveAuroraTopBarScrimColor
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -263,7 +263,7 @@ internal fun AuroraTopBarIconButton(
         },
         modifier = modifier
             .size(44.dp)
-            .background(resolveAuroraTopBarIconSurfaceColor(colors), CircleShape),
+            .auroraHeaderIconSurface(colors),
     ) {
         Icon(
             imageVector = icon,

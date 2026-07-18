@@ -43,6 +43,7 @@ import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSE
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.resolveAuroraBorderColor
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.theme.resolveAuroraControlContainerColor
 import eu.kanade.presentation.theme.resolveAuroraIconSurfaceColor
 import tachiyomi.data.achievement.UnlockableManager
@@ -109,7 +110,7 @@ private fun SettingsAuroraHeader(onBackClick: () -> Unit) {
         IconButton(
             onClick = onBackClick,
             modifier = Modifier
-                .background(resolveAuroraControlContainerColor(colors), CircleShape)
+                .auroraHeaderIconSurface(colors)
                 .size(40.dp),
         ) {
             Icon(
