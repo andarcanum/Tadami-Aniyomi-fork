@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -57,14 +60,17 @@ fun mangaExtensionsTab(
         actions = persistentListOf(
             AppBar.OverflowAction(
                 title = stringResource(MR.strings.action_filter),
+                icon = Icons.Outlined.FilterList,
                 onClick = { navigator.push(MangaExtensionFilterScreen()) },
             ),
             AppBar.OverflowAction(
                 title = stringResource(MR.strings.label_extension_stores),
+                icon = Icons.Outlined.Inventory2,
                 onClick = { navigator.push(MangaExtensionStoreScreen()) },
             ),
             AppBar.OverflowAction(
-                title = "Installer diagnostics",
+                title = stringResource(MR.strings.ext_installer_diagnostics),
+                icon = Icons.Outlined.BugReport,
                 onClick = { showInstallerDiagnostics = true },
             ),
         ),
@@ -152,13 +158,14 @@ fun mangaExtensionsTab(
             if (showInstallerDiagnostics) {
                 val diagnostic = extensionsScreenModel.installerCompatibilityDiagnostic()
                 AlertDialog(
-                    title = { Text(text = "Installer diagnostics") },
+                    title = { Text(text = stringResource(MR.strings.ext_installer_diagnostics)) },
                     text = { Text(text = diagnostic) },
                     confirmButton = {
+                        val diagnosticsTitle = stringResource(MR.strings.ext_installer_diagnostics)
                         TextButton(
                             onClick = {
                                 context.copyToClipboard(
-                                    label = "Installer diagnostics",
+                                    label = diagnosticsTitle,
                                     content = diagnostic,
                                 )
                             },

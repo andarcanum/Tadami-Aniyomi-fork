@@ -9,8 +9,9 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.theme.AuroraTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -46,6 +48,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 object TabbedDialogPaddings {
     val Horizontal = 24.dp
@@ -113,29 +116,33 @@ fun TabbedDialog(
         }
 
         val scope = rememberCoroutineScope()
+        val hasOverflow = tabOverflowMenuContent != null || onOverflowMenuClicked != null
 
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AuroraCapsuleTabs(
-                    titles = tabTitles,
-                    selectedIndex = pagerState.currentPage,
-                    onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(
-                            start = 16.dp,
-                            top = 12.dp,
-                            bottom = 4.dp,
-                            end = if (tabOverflowMenuContent != null || onOverflowMenuClicked != null) {
-                                4.dp
-                            } else {
-                                16.dp
-                            },
-                        ),
-                )
-
-                MoreMenu(onOverflowMenuClicked, tabOverflowMenuContent, overflowIcon)
-            }
+            AuroraCapsuleTabs(
+                titles = tabTitles,
+                selectedIndex = pagerState.currentPage,
+                onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = 16.dp,
+                        top = 12.dp,
+                        bottom = 4.dp,
+                        end = 16.dp,
+                    ),
+                trailing = if (hasOverflow) {
+                    {
+                        CapsuleOverflowMenu(
+                            onClickIcon = onOverflowMenuClicked,
+                            content = tabOverflowMenuContent,
+                            overflowIcon = overflowIcon,
+                        )
+                    }
+                } else {
+                    null
+                },
+            )
 
             HorizontalPager(
                 modifier = Modifier.animateContentSize(),
@@ -148,25 +155,39 @@ fun TabbedDialog(
 }
 
 @Composable
-private fun MoreMenu(
+private fun CapsuleOverflowMenu(
     onClickIcon: (() -> Unit)?,
     content: @Composable (ColumnScope.(() -> Unit) -> Unit)?,
     overflowIcon: ImageVector? = null,
 ) {
     if (onClickIcon == null && content == null) return
 
+    val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     var expanded by remember { mutableStateOf(false) }
-    val onClick = onClickIcon ?: { expanded = true }
+    val onClick = onClickIcon ?: {
+        appHaptics.tap()
+        expanded = true
+    }
 
-    Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
-        IconButton(onClick = onClick) {
+    Box(
+        modifier = Modifier.wrapContentSize(Alignment.Center),
+        contentAlignment = Alignment.Center,
+    ) {
+        // No separate surface chip — ⋮ lives inside the shared capsule track.
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(30.dp),
+        ) {
             Icon(
                 imageVector = overflowIcon ?: Icons.Default.MoreVert,
                 contentDescription = stringResource(MR.strings.label_more),
+                tint = colors.textSecondary,
+                modifier = Modifier.size(18.dp),
             )
         }
         if (onClickIcon == null) {
-            DropdownMenu(
+            AuroraEntryDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
             ) {

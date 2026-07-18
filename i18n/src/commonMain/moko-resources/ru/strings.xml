@@ -918,6 +918,7 @@
     <string name="information_empty_repos">У вас нет репозиториев.</string>
     <string name="label_extension_repos">Хранилища расширений</string>
     <string name="label_extension_stores">Хранилища расширений</string>
+    <string name="ext_installer_diagnostics">Диагностика установщика</string>
     <string name="label_official_stores">Официальные хранилища</string>
     <string name="label_custom_stores">Пользовательские хранилища</string>
     <string name="action_open_discord">Discord</string>

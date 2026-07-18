@@ -11,10 +11,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.PeopleAlt
+import androidx.compose.material.icons.outlined.RestartAlt
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,19 +27,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.entries.manga.model.effectiveDownloadedFilter
+import eu.kanade.presentation.components.AuroraCheckboxItem
+import eu.kanade.presentation.components.AuroraRadioItem
+import eu.kanade.presentation.components.AuroraSortItem
+import eu.kanade.presentation.components.AuroraTriStateItem
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
+import eu.kanade.presentation.theme.AuroraTheme
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.LabeledCheckbox
-import tachiyomi.presentation.core.components.RadioItem
-import tachiyomi.presentation.core.components.SortItem
-import tachiyomi.presentation.core.components.TriStateItem
 import tachiyomi.presentation.core.i18n.stringResource
-import tachiyomi.presentation.core.theme.active
+import tachiyomi.presentation.core.util.LocalAppHaptics
+
 @Composable
 fun ChapterSettingsDialog(
     onDismissRequest: () -> Unit,
@@ -71,15 +75,17 @@ fun ChapterSettingsDialog(
             stringResource(MR.strings.action_display),
         ),
         tabOverflowMenuContent = { closeMenu ->
-            DropdownMenuItem(
-                text = { Text(stringResource(MR.strings.set_chapter_settings_as_default)) },
+            AuroraEntryDropdownMenuItem(
+                text = stringResource(MR.strings.set_chapter_settings_as_default),
+                leadingIcon = Icons.Outlined.Save,
                 onClick = {
                     showSetAsDefaultDialog = true
                     closeMenu()
                 },
             )
-            DropdownMenuItem(
-                text = { Text(stringResource(MR.strings.action_reset)) },
+            AuroraEntryDropdownMenuItem(
+                text = stringResource(MR.strings.action_reset),
+                leadingIcon = Icons.Outlined.RestartAlt,
                 onClick = {
                     onResetToDefault()
                     closeMenu()
@@ -135,17 +141,18 @@ private fun ColumnScope.FilterPage(
     scanlatorFilterActive: Boolean,
     onScanlatorFilterClicked: (() -> Unit),
 ) {
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.label_downloaded),
         state = downloadFilter,
+        enabled = onDownloadFilterChanged != null,
         onClick = onDownloadFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.action_filter_unread),
         state = unreadFilter,
         onClick = onUnreadFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.action_filter_bookmarked),
         state = bookmarkedFilter,
         onClick = onBookmarkedFilterChanged,
@@ -161,25 +168,27 @@ fun ScanlatorFilterItem(
     active: Boolean,
     onClick: () -> Unit,
 ) {
+    val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     Row(
         modifier = Modifier
-            .clickable(onClick = onClick)
+            .clickable {
+                appHaptics.tap()
+                onClick()
+            }
             .fillMaxWidth()
             .padding(horizontal = TabbedDialogPaddings.Horizontal, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Icon(
             imageVector = Icons.Outlined.PeopleAlt,
             contentDescription = null,
-            tint = if (active) {
-                MaterialTheme.colorScheme.active
-            } else {
-                LocalContentColor.current
-            },
+            tint = if (active) colors.accent else colors.textSecondary,
         )
         Text(
             text = stringResource(MR.strings.scanlator),
+            color = colors.textPrimary,
             style = MaterialTheme.typography.bodyMedium,
         )
     }
@@ -197,7 +206,7 @@ private fun ColumnScope.SortPage(
         MR.strings.sort_by_upload_date to Manga.CHAPTER_SORTING_UPLOAD_DATE,
         MR.strings.action_sort_alpha to Manga.CHAPTER_SORTING_ALPHABET,
     ).map { (titleRes, mode) ->
-        SortItem(
+        AuroraSortItem(
             label = stringResource(titleRes),
             sortDescending = sortDescending.takeIf { sortingMode == mode },
             onClick = { onItemSelected(mode) },
@@ -214,7 +223,7 @@ private fun ColumnScope.DisplayPage(
         MR.strings.show_title to Manga.CHAPTER_DISPLAY_NAME,
         MR.strings.show_chapter_number to Manga.CHAPTER_DISPLAY_NUMBER,
     ).map { (titleRes, mode) ->
-        RadioItem(
+        AuroraRadioItem(
             label = stringResource(titleRes),
             selected = displayMode == mode,
             onClick = { onItemSelected(mode) },

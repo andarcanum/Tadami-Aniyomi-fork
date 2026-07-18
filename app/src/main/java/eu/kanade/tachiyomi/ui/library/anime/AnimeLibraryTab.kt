@@ -7,7 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -112,10 +111,14 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.category.visualName
+import eu.kanade.presentation.components.AuroraTabLeadingStiffness
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.auroraTabEdgeSpring
+import eu.kanade.presentation.components.rememberAsymmetricTabEdgeSprings
+import eu.kanade.presentation.components.resolveAsymmetricTabStretchRadiusFactor
 import eu.kanade.presentation.components.resolveAuroraTabContainerColor
 import eu.kanade.presentation.components.resolveAuroraTabSelectionBorderColor
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
@@ -1923,11 +1926,6 @@ private fun AuroraLibraryCategoryTabs(
     val animTabPositionsX = remember(categories) { mutableStateMapOf<Int, Float>() }
     val animTabPositionsY = remember(categories) { mutableStateMapOf<Int, Float>() }
 
-    var prevSelectedIndex by remember { mutableIntStateOf(coercedSelected) }
-    LaunchedEffect(coercedSelected) {
-        prevSelectedIndex = coercedSelected
-    }
-
     val activeWidth = animTabWidths[coercedSelected] ?: 0f
     val activeHeight = animTabHeights[coercedSelected] ?: 0f
     val activeX = animTabPositionsX[coercedSelected] ?: 0f
@@ -1936,32 +1934,30 @@ private fun AuroraLibraryCategoryTabs(
     val activeLeft = activeX
     val activeRight = activeX + activeWidth
 
-    val leadingStiffness = 500f
-    val trailingStiffness = 250f
-    val damping = 0.78f
-
-    val isMovingRight = coercedSelected > prevSelectedIndex
-    val leftStiffness = if (isMovingRight) trailingStiffness else leadingStiffness
-    val rightStiffness = if (isMovingRight) leadingStiffness else trailingStiffness
+    // Asymmetric spring stretch (variant A): sticky leading/trailing for whole travel.
+    val (leftSpring, rightSpring) = rememberAsymmetricTabEdgeSprings(coercedSelected)
+    val bodySpring = remember {
+        auroraTabEdgeSpring(AuroraTabLeadingStiffness)
+    }
 
     val animatedLeft by animateFloatAsState(
         targetValue = activeLeft,
-        animationSpec = spring(dampingRatio = damping, stiffness = leftStiffness),
+        animationSpec = leftSpring,
         label = "tabLeft",
     )
     val animatedRight by animateFloatAsState(
         targetValue = activeRight,
-        animationSpec = spring(dampingRatio = damping, stiffness = rightStiffness),
+        animationSpec = rightSpring,
         label = "tabRight",
     )
     val animatedHeight by animateFloatAsState(
         targetValue = activeHeight,
-        animationSpec = spring(dampingRatio = damping, stiffness = leadingStiffness),
+        animationSpec = bodySpring,
         label = "tabHeight",
     )
     val animatedY by animateFloatAsState(
         targetValue = activeY,
-        animationSpec = spring(dampingRatio = damping, stiffness = leadingStiffness),
+        animationSpec = bodySpring,
         label = "tabY",
     )
 
@@ -2054,7 +2050,8 @@ private fun AuroraLibraryCategoryTabs(
                             animatedLeft
                         }
 
-                        val radiusPx = animatedHeight / 2f
+                        val radiusPx = (animatedHeight / 2f) *
+                            resolveAsymmetricTabStretchRadiusFactor(drawWidth, activeWidth.coerceAtLeast(1f))
                         drawRoundRect(
                             brush = selectedTabBrush,
                             topLeft = Offset(drawX, animatedY),

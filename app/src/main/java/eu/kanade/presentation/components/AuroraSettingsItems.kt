@@ -1,15 +1,20 @@
 package eu.kanade.presentation.components
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,12 +32,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -59,14 +71,23 @@ import tachiyomi.presentation.core.util.collectAsState
 
 private val AuroraRowShape = RoundedCornerShape(12.dp)
 
+/**
+ * Equal-weight capsule tab row with **variant A** asymmetric spring pill:
+ * leading edge snaps faster than trailing -> stretch-bounce transfer.
+ *
+ * Optional [trailing] sits inside the same capsule track (e.g. sheet ⋮ menu),
+ * so overflow no longer floats as a separate header icon chip.
+ */
 @Composable
 fun AuroraCapsuleTabs(
     titles: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = AuroraTheme.colors
+    val density = LocalDensity.current
     val containerColor = if (colors.isEInk) {
         Color.Transparent
     } else {
@@ -77,53 +98,158 @@ fun AuroraCapsuleTabs(
     } else {
         colors.textPrimary.copy(alpha = 0.10f)
     }
+    // Match section tabs (AuroraTabRow): soft moving pill only, no solid fill / white flash.
+    val selectedBrush = if (colors.isEInk) {
+        null
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                if (colors.isDark) {
+                    lerp(colors.accent, Color.White, 0.18f).copy(alpha = 0.32f)
+                } else {
+                    colors.accent.copy(alpha = 0.20f)
+                },
+                if (colors.isDark) {
+                    colors.accent.copy(alpha = 0.18f)
+                } else {
+                    Color.White.copy(alpha = 0.40f)
+                },
+            ),
+        )
+    }
+    val selectedSolid = if (colors.isEInk) colors.textPrimary else null
+    val selectedBorder = if (colors.isEInk) {
+        colors.textPrimary
+    } else if (colors.isDark) {
+        colors.accent.copy(alpha = 0.25f)
+    } else {
+        colors.accent.copy(alpha = 0.28f)
+    }
+
+    val safeIndex = selectedIndex.coerceIn(0, (titles.size - 1).coerceAtLeast(0))
+    val (leftSpring, rightSpring) = rememberAsymmetricTabEdgeSprings(safeIndex)
+    val trailingSlot = 34.dp
+
     Row(
         modifier = modifier
             .background(containerColor, CircleShape)
             .border(1.dp, borderColor, CircleShape)
-            .padding(3.dp),
+            .padding(3.dp)
+            .height(36.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        titles.forEachIndexed { index, title ->
-            val selected = index == selectedIndex
-            val selectedBackground = if (selected) {
-                if (colors.isEInk) {
-                    Modifier.background(colors.textPrimary, CircleShape)
-                } else {
-                    Modifier.background(
-                        Brush.verticalGradient(
-                            listOf(
-                                colors.accent.copy(alpha = 0.30f),
-                                colors.accent.copy(alpha = 0.16f),
-                            ),
-                        ),
-                        CircleShape,
-                    )
-                }
-            } else {
-                Modifier
-            }
+        BoxWithConstraints(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+        ) {
+            val count = titles.size.coerceAtLeast(1)
+            val segmentPx = with(density) { maxWidth.toPx() / count }
+            val targetLeft = segmentPx * safeIndex
+            val targetRight = targetLeft + segmentPx
+
+            val animatedLeft by animateFloatAsState(
+                targetValue = targetLeft,
+                animationSpec = leftSpring,
+                label = "capsuleTabLeft",
+            )
+            val animatedRight by animateFloatAsState(
+                targetValue = targetRight,
+                animationSpec = rightSpring,
+                label = "capsuleTabRight",
+            )
+
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .clip(CircleShape)
-                    .then(selectedBackground)
-                    .clickable { onSelect(index) }
-                    .padding(vertical = 8.dp, horizontal = 2.dp),
+                    .fillMaxSize()
+                    .drawBehind {
+                        val left = animatedLeft
+                        val right = animatedRight
+                        val pillWidth = (right - left).coerceAtLeast(0f)
+                        if (pillWidth <= 0f) return@drawBehind
+                        val pillHeight = this.size.height
+                        val radius = (pillHeight / 2f) *
+                            resolveAsymmetricTabStretchRadiusFactor(pillWidth, segmentPx)
+                        val origin = Offset(left, 0f)
+                        val pillSize = androidx.compose.ui.geometry.Size(pillWidth, pillHeight)
+                        val solid = selectedSolid
+                        val brush = selectedBrush
+                        if (solid != null) {
+                            drawRoundRect(
+                                color = solid,
+                                topLeft = origin,
+                                size = pillSize,
+                                cornerRadius = CornerRadius(radius, radius),
+                            )
+                        } else if (brush != null) {
+                            drawRoundRect(
+                                brush = brush,
+                                topLeft = origin,
+                                size = pillSize,
+                                cornerRadius = CornerRadius(radius, radius),
+                            )
+                            drawRoundRect(
+                                color = selectedBorder,
+                                topLeft = origin,
+                                size = pillSize,
+                                cornerRadius = CornerRadius(radius, radius),
+                                style = Stroke(width = 1.dp.toPx()),
+                            )
+                        }
+                    },
+            ) {
+                Row(Modifier.fillMaxSize()) {
+                    titles.forEachIndexed { index, title ->
+                        val selected = index == safeIndex
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clip(CircleShape)
+                                .clickable(
+                                    // No Material ripple — selection is the sliding pill only
+                                    // (same language as section AuroraTabRow).
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() },
+                                ) { onSelect(index) }
+                                .padding(vertical = 8.dp, horizontal = 2.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = title,
+                                color = when {
+                                    selected && colors.isEInk -> colors.background
+                                    selected -> colors.textPrimary
+                                    colors.isDark -> colors.textPrimary.copy(alpha = 0.65f)
+                                    else -> colors.textSecondary
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (trailing != null) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 2.dp)
+                    .width(1.dp)
+                    .height(14.dp)
+                    .background(colors.textPrimary.copy(alpha = if (colors.isEInk) 1f else 0.12f)),
+            )
+            Box(
+                modifier = Modifier
+                    .width(trailingSlot)
+                    .fillMaxHeight(),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = title,
-                    color = when {
-                        selected && colors.isEInk -> colors.background
-                        selected -> colors.textPrimary
-                        else -> colors.textSecondary
-                    },
-                    fontSize = 11.5.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                trailing()
             }
         }
     }

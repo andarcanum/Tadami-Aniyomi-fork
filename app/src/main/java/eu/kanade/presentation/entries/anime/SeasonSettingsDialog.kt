@@ -5,7 +5,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,22 +18,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import aniyomi.domain.anime.SeasonDisplayMode
 import eu.kanade.domain.entries.anime.model.effectiveSeasonDownloadedFilter
+import eu.kanade.presentation.components.AuroraCheckboxItem
+import eu.kanade.presentation.components.AuroraHeadingItem
+import eu.kanade.presentation.components.AuroraRadioItem
+import eu.kanade.presentation.components.AuroraSortItem
+import eu.kanade.presentation.components.AuroraTriStateItem
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.HeadingItem
-import tachiyomi.presentation.core.components.LabeledCheckbox
-import tachiyomi.presentation.core.components.RadioItem
 import tachiyomi.presentation.core.components.SettingsChipRow
 import tachiyomi.presentation.core.components.SettingsItemsPaddings
 import tachiyomi.presentation.core.components.SliderItem
-import tachiyomi.presentation.core.components.SortItem
-import tachiyomi.presentation.core.components.TriStateItem
 import tachiyomi.presentation.core.i18n.stringResource
+
 @Composable
 fun SeasonSettingsDialog(
     onDismissRequest: () -> Unit,
@@ -80,8 +83,9 @@ fun SeasonSettingsDialog(
             stringResource(MR.strings.action_display),
         ),
         tabOverflowMenuContent = { closeMenu ->
-            DropdownMenuItem(
-                text = { Text(stringResource(MR.strings.set_chapter_settings_as_default)) },
+            AuroraEntryDropdownMenuItem(
+                text = stringResource(MR.strings.set_chapter_settings_as_default),
+                leadingIcon = Icons.Outlined.Save,
                 onClick = {
                     showSetAsDefaultDialog = true
                     closeMenu()
@@ -159,32 +163,33 @@ private fun ColumnScope.SeasonFilterPage(
     fillermarkedFilter: TriState,
     onFillermarkedFilterChanged: (TriState) -> Unit,
 ) {
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.label_downloaded),
         state = downloadFilter,
+        enabled = onDownloadFilterChanged != null,
         onClick = onDownloadFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(AYMR.strings.action_filter_unseen),
         state = unseenFilter,
         onClick = onUnseenFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.label_started),
         state = startedFilter,
         onClick = onStartedFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.completed),
         state = completedFilter,
         onClick = onCompletedFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.action_filter_bookmarked),
         state = bookmarkedFilter,
         onClick = onBookmarkedFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(AYMR.strings.action_filter_fillermarked),
         state = fillermarkedFilter,
         onClick = onFillermarkedFilterChanged,
@@ -206,7 +211,7 @@ private fun ColumnScope.SeasonSortPage(
         AYMR.strings.action_sort_last_seen to Anime.SEASON_SORT_LAST_SEEN,
         AYMR.strings.action_sort_episode_fetch_date to Anime.SEASON_SORT_FETCHED,
     ).map { (titleRes, mode) ->
-        SortItem(
+        AuroraSortItem(
             label = stringResource(titleRes),
             sortDescending = sortDescending.takeIf { sortingMode == mode },
             onClick = { onItemSelected(mode) },
@@ -278,54 +283,39 @@ private fun ColumnScope.SeasonDisplayPage(
         )
     }
 
-    HeadingItem(MR.strings.overlay_header)
-    LabeledCheckbox(
+    AuroraHeadingItem(MR.strings.overlay_header)
+    AuroraCheckboxItem(
         label = stringResource(AYMR.strings.action_display_download_badge_anime),
         checked = overlayDownloaded,
-        onCheckedChange = overlayDownloadedChange,
-        modifier = Modifier.padding(
-            horizontal = SettingsItemsPaddings.Horizontal,
-        ),
+        onClick = { overlayDownloadedChange(!overlayDownloaded) },
     )
-    LabeledCheckbox(
+    AuroraCheckboxItem(
         label = stringResource(AYMR.strings.action_display_unseen_badge),
         checked = overlayUnseen,
-        onCheckedChange = overlayUnseenChange,
-        modifier = Modifier.padding(
-            horizontal = SettingsItemsPaddings.Horizontal,
-        ),
+        onClick = { overlayUnseenChange(!overlayUnseen) },
     )
-    LabeledCheckbox(
+    AuroraCheckboxItem(
         label = stringResource(MR.strings.action_display_local_badge),
         checked = overlayLocal,
-        onCheckedChange = overlayLocalChange,
-        modifier = Modifier.padding(
-            horizontal = SettingsItemsPaddings.Horizontal,
-        ),
+        onClick = { overlayLocalChange(!overlayLocal) },
     )
-    LabeledCheckbox(
+    AuroraCheckboxItem(
         label = stringResource(MR.strings.action_display_language_badge),
         checked = overlayLang,
-        onCheckedChange = overlayLangChange,
-        modifier = Modifier.padding(
-            horizontal = SettingsItemsPaddings.Horizontal,
-        ),
+        onClick = { overlayLangChange(!overlayLang) },
     )
-    LabeledCheckbox(
+    AuroraCheckboxItem(
         label = stringResource(AYMR.strings.action_display_show_continue_watching_button),
         checked = overlayContinue,
-        onCheckedChange = overlayContinueChange,
-        modifier = Modifier.padding(
-            horizontal = SettingsItemsPaddings.Horizontal,
-        ),
+        onClick = { overlayContinueChange(!overlayContinue) },
     )
 
-    HeadingItem(AYMR.strings.action_display_grid_mode)
+    AuroraHeadingItem(AYMR.strings.action_display_grid_mode)
     listOf(
         MR.strings.show_title to Anime.SEASON_DISPLAY_MODE_SOURCE,
         AYMR.strings.show_season_number to Anime.SEASON_DISPLAY_MODE_NUMBER,
     ).map { (titleRes, mode) ->
-        RadioItem(
+        AuroraRadioItem(
             label = stringResource(titleRes),
             selected = displayMode == mode,
             onClick = { displayModeChange(mode) },

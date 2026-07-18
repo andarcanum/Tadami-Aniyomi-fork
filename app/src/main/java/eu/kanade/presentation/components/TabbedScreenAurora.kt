@@ -1,7 +1,6 @@
 package eu.kanade.presentation.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -39,8 +38,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -101,6 +98,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.AuroraTopBarTitleText
 import eu.kanade.presentation.more.settings.auroraCardStyle
@@ -592,15 +591,15 @@ private fun AuroraTabHeader(
                             modifier = Modifier.padding(start = 4.dp),
                         )
 
-                        DropdownMenu(
+                        AuroraEntryDropdownMenu(
                             expanded = showOverflowMenu,
                             onDismissRequest = { showOverflowMenu = false },
                         ) {
                             overflowActions.forEach { action ->
-                                DropdownMenuItem(
-                                    text = { Text(action.title, fontWeight = FontWeight.Normal) },
+                                AuroraEntryDropdownMenuItem(
+                                    text = action.title,
+                                    leadingIcon = action.icon,
                                     onClick = {
-                                        appHaptics.tap()
                                         action.onClick()
                                         showOverflowMenu = false
                                     },
@@ -680,11 +679,6 @@ internal fun AuroraTabRow(
     }
     val selectedTabBorderColor = remember(colors) { resolveAuroraTabSelectionBorderColor(colors) }
 
-    var prevSelectedIndex by remember { mutableIntStateOf(selectedIndex) }
-    LaunchedEffect(selectedIndex) {
-        prevSelectedIndex = selectedIndex
-    }
-
     val activeWidth = tabWidths[selectedIndex] ?: 0f
     val activeHeight = tabHeights[selectedIndex] ?: 0f
     val activeX = tabPositionsX[selectedIndex] ?: 0f
@@ -693,32 +687,30 @@ internal fun AuroraTabRow(
     val activeLeft = activeX
     val activeRight = activeX + activeWidth
 
-    val leadingStiffness = 500f
-    val trailingStiffness = 250f
-    val damping = 0.78f
-
-    val isMovingRight = selectedIndex > prevSelectedIndex
-    val leftStiffness = if (isMovingRight) trailingStiffness else leadingStiffness
-    val rightStiffness = if (isMovingRight) leadingStiffness else trailingStiffness
+    // Asymmetric spring stretch (variant A): sticky leading/trailing for whole travel.
+    val (leftSpring, rightSpring) = rememberAsymmetricTabEdgeSprings(selectedIndex)
+    val bodySpring = remember {
+        auroraTabEdgeSpring(AuroraTabLeadingStiffness)
+    }
 
     val animatedLeft by animateFloatAsState(
         targetValue = activeLeft,
-        animationSpec = spring(dampingRatio = damping, stiffness = leftStiffness),
+        animationSpec = leftSpring,
         label = "tabLeft",
     )
     val animatedRight by animateFloatAsState(
         targetValue = activeRight,
-        animationSpec = spring(dampingRatio = damping, stiffness = rightStiffness),
+        animationSpec = rightSpring,
         label = "tabRight",
     )
     val animatedHeight by animateFloatAsState(
         targetValue = activeHeight,
-        animationSpec = spring(dampingRatio = damping, stiffness = leadingStiffness),
+        animationSpec = bodySpring,
         label = "tabHeight",
     )
     val animatedY by animateFloatAsState(
         targetValue = activeY,
-        animationSpec = spring(dampingRatio = damping, stiffness = leadingStiffness),
+        animationSpec = bodySpring,
         label = "tabY",
     )
 
@@ -910,7 +902,8 @@ internal fun AuroraTabRow(
                             animatedLeft
                         }
 
-                        val radiusPx = animatedHeight / 2f
+                        val radiusPx = (animatedHeight / 2f) *
+                            resolveAsymmetricTabStretchRadiusFactor(drawWidth, activeWidth.coerceAtLeast(1f))
                         drawRoundRect(
                             brush = selectedTabBrush,
                             topLeft = Offset(drawX, animatedY),

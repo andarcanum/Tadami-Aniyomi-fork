@@ -463,6 +463,7 @@
     <!-- Extension repos (legacy keys preserved for compat/migration; primary now uses store terminology) -->
     <string name="label_extension_repos">Extension stores</string>
     <string name="label_extension_stores">Extension stores</string>
+    <string name="ext_installer_diagnostics">Installer diagnostics</string>
     <string name="label_official_stores">Official stores</string>
     <string name="label_custom_stores">Custom stores</string>
     <string name="action_open_discord">Discord</string>
