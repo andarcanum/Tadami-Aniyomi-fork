@@ -20,6 +20,7 @@ data class ALManga(
     val totalChapters: Long,
     val averageScore: Int,
     val staff: ALStaff,
+    val genres: List<String> = emptyList(),
 ) {
     fun toTrack() = MangaTrackSearch.create(TrackerManager.ANILIST).apply {
         remote_id = remoteId
@@ -31,6 +32,7 @@ data class ALManga(
         tracking_url = AnilistApi.mangaUrl(remote_id)
         publishing_status = publishingStatus
         publishing_type = format
+        genres = this@ALManga.genres
         if (startDateFuzzy != 0L) {
             start_date = try {
                 val outputDf = SimpleDateFormat("yyyy-MM-dd", Locale.US)

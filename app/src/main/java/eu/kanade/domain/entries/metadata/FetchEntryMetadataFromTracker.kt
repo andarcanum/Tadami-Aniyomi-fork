@@ -106,7 +106,7 @@ class FetchEntryMetadataFromTracker(
         val mangaTracker = tracker as? MangaTracker
             ?: return TrackerMetadataFetchOutcome.Error(TrackerMetadataFetchError.Unexpected("Tracker does not support manga search"))
 
-        return searchMangaAndMap(
+        return resolveMangaMetadata(
             service = mangaTracker,
             trackerId = tracker.id,
             trackerName = tracker.name,
@@ -147,7 +147,7 @@ class FetchEntryMetadataFromTracker(
         val animeTracker = tracker as? AnimeTracker
             ?: return TrackerMetadataFetchOutcome.Error(TrackerMetadataFetchError.Unexpected("Tracker does not support anime search"))
 
-        return searchAnimeAndMap(
+        return resolveAnimeMetadata(
             service = animeTracker,
             trackerId = tracker.id,
             trackerName = tracker.name,
@@ -183,6 +183,67 @@ class FetchEntryMetadataFromTracker(
         } else {
             candidates.firstOrNull()
         }
+    }
+
+    /**
+     * Resolves metadata for a linked track. Prefers fetching by the already-linked
+     * remote id (exact, independent of search ranking and title formatting) and only
+     * falls back to search-based matching for trackers without a by-id endpoint.
+     */
+    private suspend fun resolveMangaMetadata(
+        service: MangaTracker,
+        trackerId: Long,
+        trackerName: String,
+        ref: LinkedRef,
+        fallbackTitle: String,
+    ): TrackerMetadataFetchOutcome {
+        if (ref.remoteId != 0L) {
+            try {
+                val draft = service.getMangaMetadata(ref.remoteId)?.toMetadataDraft(trackerName)
+                if (draft?.hasAnyField == true) {
+                    return TrackerMetadataFetchOutcome.Success(draft)
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) {
+                    "Failed to fetch manga metadata by remote id=${ref.remoteId} from tracker id=$trackerId, falling back to search"
+                }
+            }
+        }
+        return searchMangaAndMap(
+            service = service,
+            trackerId = trackerId,
+            trackerName = trackerName,
+            ref = ref,
+            fallbackTitle = fallbackTitle,
+        )
+    }
+
+    private suspend fun resolveAnimeMetadata(
+        service: AnimeTracker,
+        trackerId: Long,
+        trackerName: String,
+        ref: LinkedRef,
+        fallbackTitle: String,
+    ): TrackerMetadataFetchOutcome {
+        if (ref.remoteId != 0L) {
+            try {
+                val draft = service.getAnimeMetadata(ref.remoteId)?.toMetadataDraft(trackerName)
+                if (draft?.hasAnyField == true) {
+                    return TrackerMetadataFetchOutcome.Success(draft)
+                }
+            } catch (e: Exception) {
+                logcat(LogPriority.WARN, e) {
+                    "Failed to fetch anime metadata by remote id=${ref.remoteId} from tracker id=$trackerId, falling back to search"
+                }
+            }
+        }
+        return searchAnimeAndMap(
+            service = service,
+            trackerId = trackerId,
+            trackerName = trackerName,
+            ref = ref,
+            fallbackTitle = fallbackTitle,
+        )
     }
 
     private suspend fun searchMangaAndMap(
@@ -292,9 +353,19 @@ class FetchEntryMetadataFromTracker(
             results.firstOrNull { candidate ->
                 candidate.alternative_titles.any { it.equals(title, ignoreCase = true) }
             }?.let { return it }
+            val normalized = normalizeTitleForMatch(title)
+            if (normalized.isNotEmpty()) {
+                results.firstOrNull { candidate ->
+                    normalizeTitleForMatch(candidate.title) == normalized ||
+                        candidate.alternative_titles.any { normalizeTitleForMatch(it) == normalized }
+                }?.let { return it }
+            }
         }
         // Single result → safe enough for linked title
-        return results.singleOrNull()
+        results.singleOrNull()?.let { return it }
+        // The entry is already linked to this tracker and the import is user-initiated,
+        // so the top hit for the linked title is more useful than a hard "no match".
+        return if (title.isNotBlank()) results.firstOrNull() else null
     }
 
     private fun pickAnimeMatch(results: List<AnimeTrackSearch>, ref: LinkedRef): AnimeTrackSearch? {
@@ -305,8 +376,21 @@ class FetchEntryMetadataFromTracker(
             results.firstOrNull { candidate ->
                 candidate.alternative_titles.any { it.equals(title, ignoreCase = true) }
             }?.let { return it }
+            val normalized = normalizeTitleForMatch(title)
+            if (normalized.isNotEmpty()) {
+                results.firstOrNull { candidate ->
+                    normalizeTitleForMatch(candidate.title) == normalized ||
+                        candidate.alternative_titles.any { normalizeTitleForMatch(it) == normalized }
+                }?.let { return it }
+            }
         }
-        return results.singleOrNull()
+        results.singleOrNull()?.let { return it }
+        return if (title.isNotBlank()) results.firstOrNull() else null
+    }
+
+    /** Lowercases and collapses punctuation/whitespace so title variants compare equal. */
+    private fun normalizeTitleForMatch(value: String): String {
+        return value.lowercase().replace(Regex("[^\\p{L}\\p{Nd}]+"), " ").trim()
     }
 
     private data class LinkedRef(

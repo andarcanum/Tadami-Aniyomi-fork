@@ -44,6 +44,8 @@ class MangaTrackSearch : MangaTrack {
 
     var alternative_titles: List<String> = emptyList()
 
+    var genres: List<String> = emptyList()
+
     var publishing_status: String = ""
 
     var publishing_type: String = ""

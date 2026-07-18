@@ -54,7 +54,7 @@ internal fun MangaTrackSearch.toMetadataDraft(trackerName: String): TrackerMetad
         author = authors.joinToString(", ").takeIf { it.isNotBlank() },
         artist = artists.joinToString(", ").takeIf { it.isNotBlank() },
         description = summary.takeIf { it.isNotBlank() },
-        genres = null,
+        genres = genres.map { it.trim() }.filter { it.isNotEmpty() }.takeIf { it.isNotEmpty() },
         status = mapPublishingStatus(publishing_status),
         trackerName = trackerName,
     )
@@ -66,7 +66,7 @@ internal fun AnimeTrackSearch.toMetadataDraft(trackerName: String): TrackerMetad
         author = authors.joinToString(", ").takeIf { it.isNotBlank() },
         artist = artists.joinToString(", ").takeIf { it.isNotBlank() },
         description = summary.takeIf { it.isNotBlank() },
-        genres = null,
+        genres = genres.map { it.trim() }.filter { it.isNotEmpty() }.takeIf { it.isNotEmpty() },
         status = mapPublishingStatus(publishing_status),
         trackerName = trackerName,
     )

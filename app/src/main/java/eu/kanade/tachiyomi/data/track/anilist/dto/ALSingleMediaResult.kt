@@ -34,4 +34,5 @@ data class ALSingleMedia(
     val episodes: Long?,
     val averageScore: Int?,
     val studios: ALStudios,
+    val genres: List<String>? = null,
 )

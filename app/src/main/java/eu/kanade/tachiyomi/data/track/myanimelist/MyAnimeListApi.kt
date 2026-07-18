@@ -122,7 +122,7 @@ class MyAnimeListApi(
                 .appendPath(id.toString())
                 .appendQueryParameter(
                     "fields",
-                    "id,title,synopsis,num_chapters,mean,main_picture,status,media_type,start_date",
+                    "id,title,synopsis,num_chapters,mean,main_picture,status,media_type,start_date,genres",
                 )
                 .build()
             with(json) {
@@ -141,6 +141,7 @@ class MyAnimeListApi(
                             publishing_status = it.status.replace("_", " ")
                             publishing_type = it.mediaType.replace("_", " ")
                             start_date = it.startDate ?: ""
+                            genres = it.genres?.map { g -> g.name }.orEmpty()
                         }
                     }
             }
@@ -153,7 +154,7 @@ class MyAnimeListApi(
                 .appendPath(id.toString())
                 .appendQueryParameter(
                     "fields",
-                    "id,title,synopsis,num_episodes,mean,main_picture,status,media_type,start_date",
+                    "id,title,synopsis,num_episodes,mean,main_picture,status,media_type,start_date,genres",
                 )
                 .build()
             with(json) {
@@ -172,6 +173,7 @@ class MyAnimeListApi(
                             publishing_status = it.status.replace("_", " ")
                             publishing_type = it.mediaType.replace("_", " ")
                             start_date = it.startDate ?: ""
+                            genres = it.genres?.map { g -> g.name }.orEmpty()
                         }
                     }
             }

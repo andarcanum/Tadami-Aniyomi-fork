@@ -26,4 +26,5 @@ data class ALMangaSingleMedia(
     val chapters: Long?,
     val averageScore: Int?,
     val staff: ALStaff,
+    val genres: List<String>? = null,
 )

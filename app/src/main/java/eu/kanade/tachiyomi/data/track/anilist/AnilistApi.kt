@@ -676,6 +676,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                         |day
                     |}
                     |averageScore
+                    |genres
                 |}
             |}
             |
@@ -709,6 +710,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                                 totalEpisodes = media.episodes ?: 0,
                                 averageScore = media.averageScore ?: -1,
                                 studios = media.studios,
+                                genres = media.genres.orEmpty(),
                             )
                         } else {
                             null
@@ -754,6 +756,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                         |day
                     |}
                     |averageScore
+                    |genres
                 |}
             |}
             |
@@ -787,6 +790,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                                 totalChapters = media.chapters ?: 0,
                                 averageScore = media.averageScore ?: -1,
                                 staff = media.staff,
+                                genres = media.genres.orEmpty(),
                             )
                         } else {
                             null
