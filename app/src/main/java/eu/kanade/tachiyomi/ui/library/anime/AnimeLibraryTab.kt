@@ -251,7 +251,7 @@ data object AnimeLibraryTab : Tab {
         val novelReaderPreferences = remember { Injekt.get<NovelReaderPreferences>() }
         val isNovelTranslatorEnabled by novelReaderPreferences.geminiEnabled().collectAsStateWithLifecycle()
 
-        val uiPreferences = Injekt.get<UiPreferences>()
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
         val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
         val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
         val showMangaSection by uiPreferences.showMangaSection().collectAsStateWithLifecycle()
@@ -758,9 +758,16 @@ data object AnimeLibraryTab : Tab {
             }
         }
 
-        val isAnimeLibraryEmpty = state.searchQuery.isNullOrEmpty() && !state.hasActiveFilters && state.isLibraryEmpty
+        // Treat a section as empty only after its first library emission has arrived;
+        // otherwise a faster-loading current section briefly renders the global empty
+        // screen while the other sections are still loading.
+        val isAnimeLibraryEmpty = state.searchQuery.isNullOrEmpty() &&
+            !state.hasActiveFilters &&
+            !state.isLoading &&
+            state.isLibraryEmpty
         val isMangaLibraryEmpty = mangaState.searchQuery.isNullOrEmpty() &&
             !mangaState.hasActiveFilters &&
+            !mangaState.isLoading &&
             mangaState.isLibraryEmpty
         val isNovelLibraryEmpty =
             novelState.searchQuery.isNullOrEmpty() &&

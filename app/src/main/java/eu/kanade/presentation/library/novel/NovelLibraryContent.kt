@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.library.components.LibraryTabs
+import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
@@ -166,6 +167,8 @@ fun NovelLibraryContent(
                     return@HorizontalPager
                 }
 
+                val selectedIds = remember(selection) { selection.idsToHashSet { it.id } }
+
                 if (displayMode == LibraryDisplayMode.List) {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -176,7 +179,7 @@ fun NovelLibraryContent(
                         verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
                     ) {
                         items(library, key = { it.id }) { item ->
-                            val isSelected = selection.any { it.id == item.id }
+                            val isSelected = item.id in selectedIds
                             NovelLibraryListItem(
                                 item = item,
                                 badgeState = resolveNovelLibraryBadgeState(
@@ -211,7 +214,7 @@ fun NovelLibraryContent(
                         verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
                     ) {
                         items(library, key = { it.id }) { item ->
-                            val isSelected = selection.any { it.id == item.id }
+                            val isSelected = item.id in selectedIds
                             NovelLibraryGridItem(
                                 item = item,
                                 badgeState = resolveNovelLibraryBadgeState(

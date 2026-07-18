@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.util.fastAny
 import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.EntryComfortableGridItem
 import eu.kanade.presentation.library.components.LanguageBadge
@@ -13,6 +12,7 @@ import eu.kanade.presentation.library.components.LazyLibraryGrid
 import eu.kanade.presentation.library.components.PinnedBadge
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.globalSearchItem
+import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryItem
 import tachiyomi.domain.entries.anime.model.AnimeCover
@@ -24,6 +24,7 @@ internal fun AnimeLibraryComfortableGrid(
     columns: Int,
     contentPadding: PaddingValues,
     selection: List<LibraryAnime>,
+    selectedIds: Set<Long> = selection.idsToHashSet { it.id },
     onClick: (LibraryAnime) -> Unit,
     onLongClick: (LibraryAnime) -> Unit,
     onTogglePinned: (AnimeLibraryItem) -> Unit,
@@ -40,11 +41,12 @@ internal fun AnimeLibraryComfortableGrid(
 
         items(
             items = items,
+            key = { it.libraryAnime.id },
             contentType = { "anime_library_comfortable_grid_item" },
         ) { libraryItem ->
             val anime = libraryItem.libraryAnime.anime
             EntryComfortableGridItem(
-                isSelected = selection.fastAny { it.id == libraryItem.libraryAnime.id },
+                isSelected = selectedIds.contains(libraryItem.libraryAnime.id),
                 title = anime.title,
                 coverData = AnimeCover(
                     animeId = anime.id,

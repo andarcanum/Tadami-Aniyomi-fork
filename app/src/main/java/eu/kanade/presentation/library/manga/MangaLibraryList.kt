@@ -7,12 +7,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastAny
 import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.EntryListItem
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.LanguageBadge
 import eu.kanade.presentation.library.components.UnviewedBadge
+import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
 import eu.kanade.presentation.library.manga.components.SeriesStackedCoverCard
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
@@ -28,6 +28,7 @@ internal fun MangaLibraryList(
     containerHeight: Int,
     contentPadding: PaddingValues,
     selection: List<MangaLibraryItem>,
+    selectedIds: Set<Long> = selection.idsToHashSet { it.id },
     onClick: (MangaLibraryItem) -> Unit,
     onSeriesClicked: (Long) -> Unit,
     onLongClick: (MangaLibraryItem) -> Unit,
@@ -51,13 +52,14 @@ internal fun MangaLibraryList(
 
         items(
             items = items,
+            key = { it.id },
             contentType = { "manga_library_list_item" },
         ) { libraryItem ->
             val manga = libraryItem.coverManga ?: libraryItem.libraryManga.manga
             val isSeries = libraryItem is MangaLibraryItem.Series
             val notSelectionMode = selection.isEmpty()
             val title = if (isSeries) libraryItem.title else manga.title
-            val isSelected = selection.fastAny { it.id == libraryItem.id }
+            val isSelected = selectedIds.contains(libraryItem.id)
             val targetManga = if (isSeries) {
                 libraryItem.librarySeries.entries.firstOrNull {
                     it.manga.id == libraryItem.librarySeries.activeManga?.id
