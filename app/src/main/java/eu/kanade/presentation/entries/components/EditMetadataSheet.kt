@@ -1,55 +1,74 @@
 package eu.kanade.presentation.entries.components
 
-import androidx.compose.foundation.BorderStroke
+import android.graphics.Color as AndroidColor
+import android.graphics.drawable.ColorDrawable
+import android.os.Build
+import android.view.WindowManager
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.InputChip
-import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogWindowProvider
+import eu.kanade.presentation.components.AdaptiveSheet
+import eu.kanade.presentation.components.applyAuroraSheetWindowFx
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.source.model.SManga
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
+import kotlin.math.roundToInt
 
+/**
+ * Edit Info — variant E3: flat compact AdaptiveSheet form.
+ * Single scroll column, uppercase section labels, status chips, tags + sticky footer.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EditMetadataSheet(
     onDismissRequest: () -> Unit,
@@ -71,27 +90,32 @@ fun EditMetadataSheet(
     onReset: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    val accent = if (colors.isEInk) colors.textPrimary else colors.accent
+    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !colors.isEInk
+    var sheetReveal by remember { mutableFloatStateOf(0f) }
+
     var title by remember { mutableStateOf(currentTitle) }
     var author by remember { mutableStateOf(currentAuthor.orEmpty()) }
     var artist by remember { mutableStateOf(currentArtist.orEmpty()) }
     var description by remember { mutableStateOf(currentDescription.orEmpty()) }
     var tagsList by remember { mutableStateOf(currentGenre.orEmpty()) }
     var status by remember { mutableStateOf(currentStatus) }
-
-    var statusExpanded by remember { mutableStateOf(false) }
     var showResetDialog by remember { mutableStateOf(false) }
     var newTagText by remember { mutableStateOf("") }
 
-    val statusOptions = listOf(
-        null to stringResource(MR.strings.status_default),
-        SManga.ONGOING.toLong() to stringResource(MR.strings.status_ongoing),
-        SManga.COMPLETED.toLong() to stringResource(MR.strings.status_completed),
-        SManga.LICENSED.toLong() to stringResource(MR.strings.status_licensed),
-        SManga.PUBLISHING_FINISHED.toLong() to stringResource(MR.strings.status_publishing_finished),
-        SManga.CANCELLED.toLong() to stringResource(MR.strings.status_cancelled),
-        SManga.ON_HIATUS.toLong() to stringResource(MR.strings.status_on_hiatus),
-        SManga.UNKNOWN.toLong() to stringResource(MR.strings.status_unknown),
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = colors.textPrimary,
+        unfocusedTextColor = colors.textPrimary,
+        focusedBorderColor = accent.copy(alpha = 0.55f),
+        unfocusedBorderColor = colors.textPrimary.copy(alpha = 0.18f),
+        focusedLabelColor = accent,
+        unfocusedLabelColor = colors.textSecondary,
+        cursorColor = accent,
+        focusedContainerColor = Color.Transparent,
+        unfocusedContainerColor = Color.Transparent,
     )
+    val fieldShape = RoundedCornerShape(14.dp)
 
     if (showResetDialog) {
         AlertDialog(
@@ -121,7 +145,7 @@ fun EditMetadataSheet(
                 ) {
                     Text(
                         text = stringResource(MR.strings.action_reset_metadata),
-                        color = colors.accent,
+                        color = accent,
                     )
                 }
             },
@@ -138,270 +162,344 @@ fun EditMetadataSheet(
         )
     }
 
-    ModalBottomSheet(
+    AdaptiveSheet(
         onDismissRequest = onDismissRequest,
-        containerColor = colors.surface.copy(alpha = 0.98f),
-        dragHandle = null,
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        containerColor = when {
+            colors.isEInk -> MaterialTheme.colorScheme.surfaceContainerHigh
+            !supportsBlurBehind -> colors.surface
+            colors.isDark -> Color.Black.copy(alpha = 0.72f)
+            else -> Color.White.copy(alpha = 0.90f)
+        },
+        scrimAlpha = if (supportsBlurBehind) 0f else 0.5f,
+        onRevealChange = { sheetReveal = it },
     ) {
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        val revealState = rememberUpdatedState(sheetReveal)
+
+        DisposableEffect(window, supportsBlurBehind) {
+            val w = window
+            if (w != null && supportsBlurBehind) {
+                w.setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
+                w.setDimAmount(0f)
+                w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                w.attributes = w.attributes.apply { blurBehindRadius = 0 }
+            }
+            onDispose {
+                if (w != null && supportsBlurBehind) {
+                    w.attributes = w.attributes.apply { blurBehindRadius = 0 }
+                    w.setDimAmount(0f)
+                    w.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                }
+            }
+        }
+
+        LaunchedEffect(window, supportsBlurBehind) {
+            val w = window ?: return@LaunchedEffect
+            if (!supportsBlurBehind) return@LaunchedEffect
+            snapshotFlow { revealState.value.coerceIn(0f, 1f) }
+                .map { reveal -> (reveal * 20f).roundToInt().coerceIn(0, 20) }
+                .distinctUntilChanged()
+                .collect { step -> applyAuroraSheetWindowFx(w, step / 20f) }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(top = 28.dp, bottom = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = stringResource(MR.strings.action_edit_metadata),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.textPrimary,
-                fontSize = 22.sp,
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .size(width = 36.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(colors.textPrimary.copy(alpha = if (colors.isDark) 0.18f else 0.14f)),
             )
 
-            // Title OutlinedTextField
+            Text(
+                text = stringResource(MR.strings.action_edit_metadata),
+                color = colors.textPrimary,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 2.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            )
+
+            EditMetaFieldLabel(stringResource(MR.strings.label_custom_title))
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
-                label = { Text(stringResource(MR.strings.label_custom_title)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.accent,
-                    focusedLabelColor = colors.accent,
-                    cursorColor = colors.accent,
-                    focusedTextColor = colors.textPrimary,
-                    unfocusedTextColor = colors.textPrimary,
-                ),
+                shape = fieldShape,
+                colors = fieldColors,
             )
 
-            // Author OutlinedTextField
+            EditMetaFieldLabel(stringResource(MR.strings.label_custom_author))
             OutlinedTextField(
                 value = author,
                 onValueChange = { author = it },
-                label = { Text(stringResource(MR.strings.label_custom_author)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.accent,
-                    focusedLabelColor = colors.accent,
-                    cursorColor = colors.accent,
-                    focusedTextColor = colors.textPrimary,
-                    unfocusedTextColor = colors.textPrimary,
-                ),
+                shape = fieldShape,
+                colors = fieldColors,
             )
 
-            // Artist OutlinedTextField (only if hasArtist is true)
             if (hasArtist) {
+                EditMetaFieldLabel(stringResource(MR.strings.label_custom_artist))
                 OutlinedTextField(
                     value = artist,
                     onValueChange = { artist = it },
-                    label = { Text(stringResource(MR.strings.label_custom_artist)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = colors.accent,
-                        focusedLabelColor = colors.accent,
-                        cursorColor = colors.accent,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                    ),
+                    shape = fieldShape,
+                    colors = fieldColors,
                 )
             }
 
-            // Description OutlinedTextField
+            EditMetaFieldLabel(stringResource(MR.strings.label_custom_description))
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
-                label = { Text(stringResource(MR.strings.label_custom_description)) },
                 minLines = 3,
                 maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = colors.accent,
-                    focusedLabelColor = colors.accent,
-                    cursorColor = colors.accent,
-                    focusedTextColor = colors.textPrimary,
-                    unfocusedTextColor = colors.textPrimary,
-                ),
+                shape = fieldShape,
+                colors = fieldColors,
             )
 
-            // Status Dropdown Custom Picker
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = stringResource(MR.strings.label_custom_status),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textSecondary,
-                    fontWeight = FontWeight.Medium,
+            EditMetaFieldLabel(stringResource(MR.strings.label_custom_status))
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // Keep the most common statuses as chips for E3 density.
+                val chipStatuses = listOf(
+                    null to stringResource(MR.strings.status_default),
+                    SManga.ONGOING.toLong() to stringResource(MR.strings.status_ongoing),
+                    SManga.COMPLETED.toLong() to stringResource(MR.strings.status_completed),
+                    SManga.ON_HIATUS.toLong() to stringResource(MR.strings.status_on_hiatus),
+                    SManga.CANCELLED.toLong() to stringResource(MR.strings.status_cancelled),
+                    SManga.PUBLISHING_FINISHED.toLong() to stringResource(MR.strings.status_publishing_finished),
+                    SManga.LICENSED.toLong() to stringResource(MR.strings.status_licensed),
+                    SManga.UNKNOWN.toLong() to stringResource(MR.strings.status_unknown),
                 )
-                Box {
-                    val currentStatusLabel = statusOptions.firstOrNull { it.first == status }?.second
-                        ?: stringResource(MR.strings.status_default)
-                    OutlinedButton(
-                        onClick = { statusExpanded = true },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(4.dp),
-                        border = BorderStroke(1.dp, colors.textSecondary.copy(alpha = 0.5f)),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = colors.textPrimary,
-                        ),
+                chipStatuses.forEach { (value, label) ->
+                    val selected = status == value
+                    Box(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(
+                                if (selected) {
+                                    accent.copy(alpha = if (colors.isEInk) 0.18f else 0.16f)
+                                } else {
+                                    colors.textPrimary.copy(alpha = if (colors.isDark) 0.05f else 0.04f)
+                                },
+                            )
+                            .border(
+                                1.dp,
+                                if (selected) {
+                                    accent.copy(alpha = 0.45f)
+                                } else {
+                                    colors.textPrimary.copy(alpha = 0.12f)
+                                },
+                                CircleShape,
+                            )
+                            .clickable {
+                                appHaptics.tap()
+                                status = value
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
+                        Text(
+                            text = label,
+                            color = if (selected) colors.textPrimary else colors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                        )
+                    }
+                }
+            }
+
+            EditMetaFieldLabel(stringResource(MR.strings.label_custom_genres))
+            if (tagsList.isNotEmpty()) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    tagsList.forEach { tag ->
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .background(
+                                    colors.textPrimary.copy(alpha = if (colors.isDark) 0.06f else 0.05f),
+                                )
+                                .border(1.dp, colors.textPrimary.copy(alpha = 0.10f), CircleShape)
+                                .padding(start = 12.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Text(
-                                text = currentStatusLabel,
-                                style = MaterialTheme.typography.bodyLarge,
+                                text = tag,
+                                color = colors.textPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
                             )
                             Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
+                                imageVector = Icons.Default.Close,
                                 contentDescription = null,
                                 tint = colors.textSecondary,
-                            )
-                        }
-                    }
-
-                    DropdownMenu(
-                        expanded = statusExpanded,
-                        onDismissRequest = { statusExpanded = false },
-                        modifier = Modifier.fillMaxWidth(0.9f),
-                    ) {
-                        statusOptions.forEach { (value, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = {
-                                    status = value
-                                    statusExpanded = false
-                                },
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clickable {
+                                        appHaptics.tap()
+                                        tagsList = tagsList.filter { it != tag }
+                                    },
                             )
                         }
                     }
                 }
             }
 
-            // Tag/Genre Chip layout
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = stringResource(MR.strings.label_custom_genres),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.textSecondary,
-                    fontWeight = FontWeight.Medium,
-                )
-
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 OutlinedTextField(
                     value = newTagText,
                     onValueChange = { newTagText = it },
-                    label = { Text(stringResource(MR.strings.genre_input_placeholder)) },
+                    placeholder = {
+                        Text(
+                            text = stringResource(MR.strings.genre_input_placeholder),
+                            color = colors.textSecondary,
+                        )
+                    },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
+                    shape = fieldShape,
+                    colors = fieldColors,
                     keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(
                         onDone = {
-                            if (newTagText.isNotBlank()) {
-                                val trimmed = newTagText.trim()
-                                if (!tagsList.contains(trimmed)) {
-                                    tagsList = tagsList + trimmed
-                                }
+                            val trimmed = newTagText.trim()
+                            if (trimmed.isNotEmpty() && trimmed !in tagsList) {
+                                tagsList = tagsList + trimmed
                                 newTagText = ""
                             }
                         },
                     ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = colors.accent,
-                        focusedLabelColor = colors.accent,
-                        cursorColor = colors.accent,
-                        focusedTextColor = colors.textPrimary,
-                        unfocusedTextColor = colors.textPrimary,
-                    ),
                 )
-
-                if (tagsList.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        tagsList.forEach { tag ->
-                            InputChip(
-                                selected = false,
-                                onClick = {},
-                                label = { Text(tag, color = colors.textPrimary) },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Remove",
-                                        tint = colors.textSecondary,
-                                        modifier = Modifier.clickable {
-                                            tagsList = tagsList.filter { it != tag }
-                                        },
-                                    )
-                                },
-                                colors = InputChipDefaults.inputChipColors(
-                                    containerColor = colors.surface.copy(alpha = 0.5f),
-                                ),
-                            )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(accent)
+                        .clickable {
+                            appHaptics.tap()
+                            val trimmed = newTagText.trim()
+                            if (trimmed.isNotEmpty() && trimmed !in tagsList) {
+                                tagsList = tagsList + trimmed
+                                newTagText = ""
+                            }
                         }
-                    }
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                ) {
+                    Text(
+                        text = stringResource(MR.strings.action_add),
+                        color = if (colors.isEInk) colors.background else colors.textOnAccent,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Footer: Reset · Cancel · Save
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(MR.strings.action_reset_metadata),
+                    color = colors.error,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            appHaptics.tap()
+                            showResetDialog = true
+                        }
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                )
+                Text(
+                    text = stringResource(MR.strings.action_cancel),
+                    color = colors.textSecondary,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            appHaptics.tap()
+                            onDismissRequest()
+                        }
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(accent)
+                        .clickable {
+                            appHaptics.tap()
+                            val finalTitle = title.trim().takeIf { it.isNotBlank() }
+                            val finalAuthor = author.trim().takeIf { it.isNotBlank() }
+                            val finalArtist = artist.trim().takeIf { it.isNotBlank() }
+                            val finalDescription = description.trim().takeIf { it.isNotBlank() }
+                            onSave(
+                                finalTitle,
+                                finalAuthor,
+                                finalArtist,
+                                finalDescription,
+                                tagsList,
+                                status,
+                            )
+                            onDismissRequest()
+                        }
+                        .padding(vertical = 14.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(MR.strings.action_save),
+                        color = if (colors.isEInk) colors.background else colors.textOnAccent,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-
-            // Sheet bottom buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedButton(
-                    onClick = { showResetDialog = true },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) {
-                    Text(
-                        text = stringResource(MR.strings.action_reset_metadata),
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-
-                Button(
-                    onClick = {
-                        val finalTitle = title.trim().takeIf { it.isNotBlank() }
-                        val finalAuthor = author.trim().takeIf { it.isNotBlank() }
-                        val finalArtist = artist.trim().takeIf { it.isNotBlank() }
-                        val finalDescription = description.trim().takeIf { it.isNotBlank() }
-                        onSave(finalTitle, finalAuthor, finalArtist, finalDescription, tagsList, status)
-                        onDismissRequest()
-                    },
-                    modifier = Modifier.weight(1f).height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.accent,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                ) {
-                    Text(
-                        text = stringResource(MR.strings.action_save),
-                        fontWeight = FontWeight.Medium,
-                    )
-                }
-            }
-
-            TextButton(
-                onClick = onDismissRequest,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(
-                    text = stringResource(MR.strings.action_cancel),
-                    color = colors.textSecondary,
-                )
-            }
         }
     }
+}
+
+@Composable
+private fun EditMetaFieldLabel(text: String) {
+    val colors = AuroraTheme.colors
+    val accent = if (colors.isEInk) colors.textPrimary else colors.accent
+    Text(
+        text = text.uppercase(),
+        color = accent.copy(alpha = if (colors.isEInk) 1f else 0.85f),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.0.sp,
+        modifier = Modifier.padding(top = 2.dp, start = 2.dp),
+    )
 }
