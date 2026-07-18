@@ -82,11 +82,14 @@ class NovelJsSource internal constructor(
             if (isSiteUrlCached) {
                 return cachedSiteUrl
             }
-            return runBlocking {
-                mutex.withLock {
-                    if (isSiteUrlCached) {
-                        return@withLock cachedSiteUrl
-                    }
+            // resolveSiteUrl only reads plugin settings/manifest and never needs the JS
+            // runtime, so it must not queue behind the shared plugin mutex: this getter is
+            // reached from the main thread (reader composition, share/WebView actions) and
+            // blocking there while a chapter-list fetch holds the mutex froze the whole app.
+            return synchronized(siteUrlLock) {
+                if (isSiteUrlCached) {
+                    cachedSiteUrl
+                } else {
                     val resolvedSiteUrl = resolveSiteUrl()
                     cachedSiteUrl = resolvedSiteUrl
                     isSiteUrlCached = true
@@ -138,6 +141,8 @@ class NovelJsSource internal constructor(
     }
     private var settingsDiscoveryAttempted = false
     private var cachedHasSettings = false
+
+    private val siteUrlLock = Any()
 
     @Volatile
     private var cachedSiteUrl: String? = null

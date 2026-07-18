@@ -25,6 +25,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.sanitizeChapterHtmlForReader
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
 import tachiyomi.domain.entries.novel.interactor.GetNovel
@@ -199,8 +200,13 @@ class NovelTtsChapterRepository internal constructor(
         novelUrl: String,
         pluginSite: String?,
     ): String? {
-        val sourceResolved = (source as? NovelWebUrlSource)
-            ?.getChapterWebUrl(chapterPath = chapterUrl, novelPath = novelUrl)
+        // A busy plugin runtime (e.g. an ongoing chapter-list refresh holds the plugin
+        // mutex) must not delay showing already-downloaded/cached chapter text; give the
+        // source a short window and otherwise fall back to string-based resolution.
+        val sourceResolved = withTimeoutOrNull(1_500L) {
+            (source as? NovelWebUrlSource)
+                ?.getChapterWebUrl(chapterPath = chapterUrl, novelPath = novelUrl)
+        }
             ?.trim()
             ?.takeIf { it.isNotBlank() }
         if (sourceResolved != null) {

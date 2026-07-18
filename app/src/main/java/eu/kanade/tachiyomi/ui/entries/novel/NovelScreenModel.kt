@@ -1636,6 +1636,9 @@ class NovelScreenModel(
             manualFetch = manualFetch,
         )
         val syncMs = System.currentTimeMillis() - syncStart
+        // Remember that the chapter list was just checked against the source so repeated
+        // opens do not re-trigger the auto refresh (see isNovelChapterListStale).
+        NovelChapterCheckRegistry.recordCheck(state.novel.id)
         logcat(LogPriority.DEBUG) {
             "TADAMI_PERF_NOVEL_TITLE syncNovelChapters-done id=${state.novel.id} new=${newChapters.size} took=${syncMs}ms"
         }
@@ -1741,9 +1744,12 @@ class NovelScreenModel(
      * Manual refresh (button) always bypasses this via explicit call.
      */
     private fun isNovelChapterListStale(novel: Novel): Boolean {
-        val last = novel.lastUpdate
-        if (last <= 0L) return false
-        val ageMs = System.currentTimeMillis() - last
+        // novel.lastUpdate only moves when the chapter list actually CHANGES, so a title
+        // without new chapters would otherwise trigger a source refresh on every open.
+        // Track the last successful source check separately and respect both timestamps.
+        val lastChecked = maxOf(novel.lastUpdate, NovelChapterCheckRegistry.lastCheckAt(novel.id))
+        if (lastChecked <= 0L) return false
+        val ageMs = System.currentTimeMillis() - lastChecked
         // 20 minutes grace period is a good balance for novels (many sources are slow to parse 100s-1000s chapters).
         return ageMs > 20 * 60 * 1000L
     }
@@ -3320,4 +3326,18 @@ internal fun mergeDownloadBatchEvents(
 
 internal fun shouldApplyDefaultChapterFlags(novel: Novel): Boolean {
     return !novel.favorite && novel.chapterFlags == Novel.SHOW_ALL
+}
+
+/**
+ * Process-wide registry of the last successful chapter-list check per novel.
+ * Complements Novel.lastUpdate, which only changes when the chapter list itself changes.
+ */
+private object NovelChapterCheckRegistry {
+    private val lastCheckAtByNovelId = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+
+    fun lastCheckAt(novelId: Long): Long = lastCheckAtByNovelId[novelId] ?: 0L
+
+    fun recordCheck(novelId: Long) {
+        lastCheckAtByNovelId[novelId] = System.currentTimeMillis()
+    }
 }
