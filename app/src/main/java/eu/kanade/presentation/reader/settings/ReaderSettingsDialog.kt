@@ -68,7 +68,7 @@ fun ReaderSettingsDialog(
     val tabTitles = listOf(
         stringResource(MR.strings.pref_category_reading_mode),
         stringResource(MR.strings.pref_category_general),
-        stringResource(MR.strings.custom_filter),
+        stringResource(MR.strings.reader_settings_tab_color),
     )
     val pagerState = rememberPagerState { tabTitles.size }
     val scope = rememberCoroutineScope()
@@ -81,8 +81,8 @@ fun ReaderSettingsDialog(
     val sheetContainer = remember(aurora.isDark, aurora.isEInk) {
         when {
             aurora.isEInk -> baseScheme.surfaceContainerHigh
-            aurora.isDark -> Color.Black.copy(alpha = 0.58f)
-            else -> Color.White.copy(alpha = 0.82f)
+            aurora.isDark -> Color.Black.copy(alpha = 0.70f)
+            else -> Color.White.copy(alpha = 0.88f)
         }
     }
     val auroraScheme = remember(baseScheme, aurora) {

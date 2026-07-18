@@ -65,38 +65,17 @@ internal fun ColumnScope.ReadingModePage(screenModel: ReaderSettingsScreenModel)
     }
 
     // Novel-like scope control: series override vs global defaults.
+    // Compact scope control: series title as the switch label, state folded into the subtitle.
     AuroraGlassSection(title = stringResource(MR.strings.pref_category_for_this_series)) {
-        manga?.title?.let { title ->
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = AuroraTheme.colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-        }
         AuroraToggleRow(
-            label = stringResource(MR.strings.reader_override_series),
-            subtitle = stringResource(MR.strings.reader_override_series_summary),
-            checked = seriesOverrideEnabled,
-            onClick = { screenModel.onSetSeriesViewerOverride(!seriesOverrideEnabled) },
-        )
-        Text(
-            text = if (seriesOverrideEnabled) {
+            label = manga?.title ?: stringResource(MR.strings.reader_override_series),
+            subtitle = if (seriesOverrideEnabled) {
                 stringResource(MR.strings.reader_editing_series)
             } else {
-                stringResource(MR.strings.reader_editing_global_defaults)
+                stringResource(MR.strings.reader_override_series_summary)
             },
-            style = MaterialTheme.typography.bodySmall,
-            color = AuroraTheme.colors.textSecondary,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
-        )
-        Text(
-            text = stringResource(MR.strings.reader_override_series_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = AuroraTheme.colors.textSecondary,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+            checked = seriesOverrideEnabled,
+            onClick = { screenModel.onSetSeriesViewerOverride(!seriesOverrideEnabled) },
         )
     }
 

@@ -74,8 +74,8 @@ fun TabbedDialog(
         containerColor = when {
             auroraColors.isEInk -> MaterialTheme.colorScheme.surfaceContainerHigh
             !supportsBlurBehind -> auroraColors.surface
-            auroraColors.isDark -> Color.Black.copy(alpha = 0.58f)
-            else -> Color.White.copy(alpha = 0.82f)
+            auroraColors.isDark -> Color.Black.copy(alpha = 0.70f)
+            else -> Color.White.copy(alpha = 0.88f)
         },
         scrimAlpha = if (supportsBlurBehind) 0f else 0.5f,
         onRevealChange = { sheetReveal = it },

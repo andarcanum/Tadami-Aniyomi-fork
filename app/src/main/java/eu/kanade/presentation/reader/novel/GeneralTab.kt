@@ -107,9 +107,14 @@ fun GeneralTab(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         AuroraGlassSection(title = stringResource(AYMR.strings.novel_reader_settings_title)) {
+            // Compact: editing-state hint folded into the switch subtitle.
             AuroraToggleRow(
                 label = stringResource(AYMR.strings.novel_reader_override_source),
-                subtitle = stringResource(AYMR.strings.novel_reader_override_summary),
+                subtitle = if (overrideEnabled) {
+                    stringResource(AYMR.strings.novel_reader_editing_source)
+                } else {
+                    stringResource(AYMR.strings.novel_reader_override_summary)
+                },
                 checked = overrideEnabled,
                 onClick = {
                     if (overrideEnabled) {
@@ -117,13 +122,6 @@ fun GeneralTab(
                     } else {
                         preferences.enableSourceOverride(sourceId)
                     }
-                },
-            )
-            NovelGlassHint(
-                text = if (overrideEnabled) {
-                    stringResource(AYMR.strings.novel_reader_editing_source)
-                } else {
-                    stringResource(AYMR.strings.novel_reader_editing_global)
                 },
             )
             if (surfaceStrategy.globalOnlyFamilies.isNotEmpty()) {

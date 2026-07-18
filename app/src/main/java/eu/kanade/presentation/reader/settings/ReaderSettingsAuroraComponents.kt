@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.components.AuroraCapsuleTabs
 import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.toggle
@@ -333,7 +334,7 @@ internal fun AuroraModeCard(
             .clip(shape)
             .background(
                 when {
-                    selected -> colors.accent
+                    selected -> colors.accent.copy(alpha = if (colors.isDark) 0.16f else 0.12f)
                     colors.isDark -> Color.White.copy(alpha = 0.07f)
                     else -> Color.Black.copy(alpha = 0.05f)
                 },
@@ -341,7 +342,7 @@ internal fun AuroraModeCard(
             .border(
                 width = 1.dp,
                 color = when {
-                    selected -> colors.accent
+                    selected -> colors.accent.copy(alpha = 0.55f)
                     colors.isDark -> Color.White.copy(alpha = 0.10f)
                     else -> Color.Black.copy(alpha = 0.06f)
                 },
@@ -355,14 +356,14 @@ internal fun AuroraModeCard(
         Icon(
             painter = painter,
             contentDescription = null,
-            tint = if (selected) colors.background else colors.textSecondary,
+            tint = if (selected) colors.accent else colors.textSecondary,
             modifier = Modifier.size(26.dp),
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) colors.background else colors.textPrimary,
+            color = colors.textPrimary,
             textAlign = TextAlign.Center,
             minLines = 2,
             maxLines = 2,
@@ -392,7 +393,7 @@ internal fun AuroraMiniOption(
             .clip(shape)
             .background(
                 when {
-                    selected -> colors.accent
+                    selected -> colors.accent.copy(alpha = if (colors.isDark) 0.16f else 0.12f)
                     colors.isDark -> Color.White.copy(alpha = 0.07f)
                     else -> Color.Black.copy(alpha = 0.05f)
                 },
@@ -400,7 +401,7 @@ internal fun AuroraMiniOption(
             .border(
                 width = 1.dp,
                 color = when {
-                    selected -> colors.accent
+                    selected -> colors.accent.copy(alpha = 0.55f)
                     colors.isDark -> Color.White.copy(alpha = 0.10f)
                     else -> Color.Black.copy(alpha = 0.06f)
                 },
@@ -415,7 +416,7 @@ internal fun AuroraMiniOption(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (selected) colors.background else colors.textSecondary,
+                tint = if (selected) colors.accent else colors.textSecondary,
                 modifier = Modifier.size(16.dp),
             )
         }
@@ -423,7 +424,7 @@ internal fun AuroraMiniOption(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) colors.background else colors.textPrimary,
+            color = colors.textPrimary,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
@@ -431,47 +432,22 @@ internal fun AuroraMiniOption(
     }
 }
 
-/** Aurora tab row: accent label + short underline pill instead of M3 primary tabs. */
+/** Aurora tab row: shared capsule selector, same style as the library sheet tabs. */
 @Composable
 internal fun AuroraTabRow(
     titles: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
 ) {
-    val colors = AuroraTheme.colors
-    Row(
+    // Delegates to the app-wide capsule selector so every sheet shares one tab style.
+    AuroraCapsuleTabs(
+        titles = titles,
+        selectedIndex = selectedIndex,
+        onSelect = onSelect,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-    ) {
-        titles.forEachIndexed { index, title ->
-            val selected = index == selectedIndex
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .clickable { onSelect(index) }
-                    .padding(vertical = 10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (selected) colors.accent else colors.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .size(width = 28.dp, height = 3.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (selected) colors.accent else Color.Transparent),
-                )
-            }
-        }
-    }
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    )
 }
 
 /** Navigation row with trailing chevron for sub-dialogs. */

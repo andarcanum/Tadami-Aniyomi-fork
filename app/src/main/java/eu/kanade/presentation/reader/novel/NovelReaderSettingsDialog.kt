@@ -100,8 +100,8 @@ fun NovelReaderSettingsDialog(
     val sheetContainer = remember(aurora.isDark, aurora.isEInk) {
         when {
             aurora.isEInk -> baseScheme.surfaceContainerHigh
-            aurora.isDark -> Color.Black.copy(alpha = 0.58f)
-            else -> Color.White.copy(alpha = 0.82f)
+            aurora.isDark -> Color.Black.copy(alpha = 0.70f)
+            else -> Color.White.copy(alpha = 0.88f)
         }
     }
     val auroraScheme = remember(baseScheme, aurora) {
