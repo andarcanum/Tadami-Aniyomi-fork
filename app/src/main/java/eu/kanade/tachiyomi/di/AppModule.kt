@@ -11,11 +11,14 @@ import aniyomi.core.common.torrent.TorrentServerApi
 import aniyomi.core.common.torrent.TorrentServerUtils
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import com.tadami.aurora.BuildConfig
+import data.Chapters
 import data.History
 import data.Mangas
 import dataanime.Animehistory
 import dataanime.Animes
+import dataanime.Episodes
 import datanovel.Novel_history
+import datanovel.Novel_chapters
 import datanovel.Novels
 import eu.kanade.domain.extension.novel.interactor.TrustNovelExtension
 import eu.kanade.domain.sync.SyncPreferences
@@ -99,6 +102,7 @@ import tachiyomi.`data`.Database
 import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.FetchTypeColumnAdapter
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
+import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.achievement.database.AchievementsDatabase
 import tachiyomi.data.extension.novel.AndroidNovelPluginKeyValueStore
@@ -470,7 +474,9 @@ class AppModule(val app: Application) : InjektModule {
                 historyAdapter = History.Adapter(
                     last_readAdapter = DateColumnAdapter,
                 ),
+                chaptersAdapter = Chapters.Adapter(memoAdapter = MemoColumnAdapter),
                 mangasAdapter = Mangas.Adapter(
+                    memoAdapter = MemoColumnAdapter,
                     genreAdapter = StringListColumnAdapter,
                     custom_genreAdapter = StringListColumnAdapter,
                     update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
@@ -484,7 +490,9 @@ class AppModule(val app: Application) : InjektModule {
                 novel_historyAdapter = Novel_history.Adapter(
                     last_readAdapter = DateColumnAdapter,
                 ),
+                novel_chaptersAdapter = Novel_chapters.Adapter(memoAdapter = MemoColumnAdapter),
                 novelsAdapter = Novels.Adapter(
+                    memoAdapter = MemoColumnAdapter,
                     genreAdapter = StringListColumnAdapter,
                     custom_genreAdapter = StringListColumnAdapter,
                     update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
@@ -498,7 +506,9 @@ class AppModule(val app: Application) : InjektModule {
                 animehistoryAdapter = Animehistory.Adapter(
                     last_seenAdapter = DateColumnAdapter,
                 ),
+                episodesAdapter = Episodes.Adapter(memoAdapter = MemoColumnAdapter),
                 animesAdapter = Animes.Adapter(
+                    memoAdapter = MemoColumnAdapter,
                     genreAdapter = StringListColumnAdapter,
                     custom_genreAdapter = StringListColumnAdapter,
                     update_strategyAdapter = AnimeUpdateStrategyColumnAdapter,

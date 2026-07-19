@@ -2,6 +2,7 @@ package tachiyomi.data.entries.anime
 
 import aniyomi.domain.anime.SeasonAnime
 import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
+import kotlinx.serialization.json.JsonObject
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.library.anime.LibraryAnime
@@ -49,6 +50,7 @@ object AnimeMapper {
         customDescription: String?,
         customGenre: List<String>?,
         customStatus: Long?,
+        memo: JsonObject,
     ): Anime = Anime(
         id = id,
         source = source,
@@ -88,6 +90,7 @@ object AnimeMapper {
         customDescription = customDescription,
         customGenre = customGenre,
         customStatus = customStatus,
+        memo = memo,
     )
 
     fun mapLibraryAnime(
@@ -130,6 +133,7 @@ object AnimeMapper {
         customDescription: String?,
         customGenre: List<String>?,
         customStatus: Long?,
+        memo: JsonObject,
         totalCount: Long,
         seenCount: Double,
         latestUpload: Long,
@@ -179,6 +183,7 @@ object AnimeMapper {
             customDescription,
             customGenre,
             customStatus,
+            memo,
         ),
         category = category,
         totalCount = totalCount,
@@ -230,6 +235,7 @@ object AnimeMapper {
         customDescription: String?,
         customGenre: List<String>?,
         customStatus: Long?,
+        memo: JsonObject,
         totalCount: Long,
         seenCount: Double,
         latestUpload: Long,
@@ -278,6 +284,7 @@ object AnimeMapper {
             customDescription,
             customGenre,
             customStatus,
+            memo,
         ),
         totalCount = totalCount,
         seenCount = seenCount.toLong(),

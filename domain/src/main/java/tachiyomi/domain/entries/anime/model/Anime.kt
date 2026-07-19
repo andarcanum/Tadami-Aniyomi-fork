@@ -6,6 +6,8 @@ import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import tachiyomi.core.common.preference.TriState
+import kotlinx.serialization.json.JsonObject
+import mihon.core.common.extensions.EMPTY
 import java.io.Serializable
 import java.time.Instant
 import kotlin.math.pow
@@ -50,6 +52,7 @@ data class Anime(
     val customDescription: String? = null,
     val customGenre: List<String>? = null,
     val customStatus: Long? = null,
+    val memo: JsonObject = JsonObject.EMPTY,
 ) : Serializable {
 
     val displayTitle: String get() = customTitle ?: title

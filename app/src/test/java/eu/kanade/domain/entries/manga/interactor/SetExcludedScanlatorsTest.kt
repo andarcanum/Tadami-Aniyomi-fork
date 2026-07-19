@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test
 import tachiyomi.data.Database
 import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
+import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
 
@@ -47,7 +48,9 @@ class SetExcludedScanlatorsTest {
             historyAdapter = History.Adapter(
                 last_readAdapter = DateColumnAdapter,
             ),
+            chaptersAdapter = data.Chapters.Adapter(memoAdapter = MemoColumnAdapter),
             mangasAdapter = Mangas.Adapter(
+                memoAdapter = MemoColumnAdapter,
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
                 custom_genreAdapter = StringListColumnAdapter,

@@ -1,6 +1,7 @@
 package tachiyomi.data.items.episode
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.JsonObject
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
@@ -144,6 +145,7 @@ class EpisodeRepositoryImpl(
         summary: String?,
         previewUrl: String?,
         fillermark: Boolean,
+        memo: JsonObject,
     ): Episode = Episode(
         id = id,
         animeId = animeId,
@@ -163,5 +165,6 @@ class EpisodeRepositoryImpl(
         previewUrl = previewUrl,
         lastModifiedAt = lastModifiedAt,
         version = version,
+        memo = memo,
     )
 }

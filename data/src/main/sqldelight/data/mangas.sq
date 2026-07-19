@@ -1,4 +1,5 @@
 import eu.kanade.tachiyomi.source.model.UpdateStrategy;
+import kotlinx.serialization.json.JsonObject;
 import kotlin.Boolean;
 import kotlin.String;
 import kotlin.collections.List;
@@ -36,7 +37,8 @@ CREATE TABLE mangas(
     custom_author TEXT,
     custom_description TEXT,
     custom_genre TEXT AS List<String>,
-    custom_status INTEGER
+    custom_status INTEGER,
+    memo BLOB AS JsonObject NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX library_favorite_index ON mangas(favorite) WHERE favorite = 1;

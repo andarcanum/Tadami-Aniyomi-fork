@@ -1,5 +1,8 @@
 package tachiyomi.domain.items.novelchapter.model
 
+import kotlinx.serialization.json.JsonObject
+import mihon.core.common.extensions.EMPTY
+
 data class NovelChapter(
     val id: Long,
     val novelId: Long,
@@ -16,6 +19,7 @@ data class NovelChapter(
     val lastModifiedAt: Long,
     val version: Long,
     val dateUploadRaw: String? = null,
+    val memo: JsonObject = JsonObject.EMPTY,
 ) {
     val isRecognizedNumber: Boolean
         get() = chapterNumber >= 0f

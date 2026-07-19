@@ -4,6 +4,8 @@ import androidx.compose.runtime.Immutable
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import tachiyomi.core.common.preference.TriState
+import kotlinx.serialization.json.JsonObject
+import mihon.core.common.extensions.EMPTY
 import java.io.Serializable
 import java.time.Instant
 
@@ -38,6 +40,7 @@ data class Novel(
     val customDescription: String? = null,
     val customGenre: List<String>? = null,
     val customStatus: Long? = null,
+    val memo: JsonObject = JsonObject.EMPTY,
 ) : Serializable {
 
     val displayTitle: String get() = customTitle ?: title
