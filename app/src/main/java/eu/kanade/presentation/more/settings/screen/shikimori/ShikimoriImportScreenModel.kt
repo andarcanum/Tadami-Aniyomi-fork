@@ -3,7 +3,6 @@ package eu.kanade.presentation.more.settings.screen.shikimori
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import eu.kanade.presentation.more.settings.screen.anixart.AnixartImportScreenModel.SourceChoice
 import eu.kanade.tachiyomi.data.anixart.AnixartSourceSearcher
 import eu.kanade.tachiyomi.data.shikimori.FetchShikimoriImportEntries
 import eu.kanade.tachiyomi.data.shikimori.ImportShikimoriExecutor
@@ -29,6 +28,15 @@ import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+@Immutable
+data class SourceChoice(
+    val id: Long,
+    val name: String,
+    val lang: String,
+    val selected: Boolean,
+    val recommendation: AnixartSourceHints.Recommendation,
+)
 
 class ShikimoriImportScreenModel(
     private val animeSourceManager: AnimeSourceManager = Injekt.get(),
@@ -67,6 +75,9 @@ class ShikimoriImportScreenModel(
             val statusCategoryIds: Map<ShikimoriImportStatus, Long?>,
             val statusFilter: Set<ShikimoriImportStatus>,
             val largeImport: Boolean,
+            val searchQuery: String = "",
+            val collapsedLanguages: Set<String> = emptySet(),
+            val enabledLanguages: Set<String> = emptySet(),
         ) : State
         data class Matching(
             override val mediaType: ShikimoriImportMediaType,
@@ -131,6 +142,11 @@ class ShikimoriImportScreenModel(
                 }
                 val sources = catalogueSources(mediaType)
                 val categories = loadCategories(mediaType)
+                val defaultLangs = mutableSetOf("en", "ru")
+                val appLang = java.util.Locale.getDefault().language
+                if (appLang.isNotBlank()) {
+                    defaultLangs.add(appLang)
+                }
                 mutableState.update {
                     State.PickSources(
                         mediaType = mediaType,
@@ -140,6 +156,7 @@ class ShikimoriImportScreenModel(
                         statusCategoryIds = emptyMap(),
                         statusFilter = ShikimoriImportStatus.forMediaType(mediaType).toSet(),
                         largeImport = entries.size > MediaImportMatchingEngine.LARGE_IMPORT_THRESHOLD,
+                        enabledLanguages = defaultLangs,
                     )
                 }
             } catch (_: FetchShikimoriImportEntries.NotLoggedInException) {
@@ -157,6 +174,7 @@ class ShikimoriImportScreenModel(
             SourceChoice(
                 id = source.id,
                 name = source.name,
+                lang = source.lang,
                 selected = false,
                 recommendation = AnixartSourceHints.recommendation(source.name),
             )
@@ -165,6 +183,7 @@ class ShikimoriImportScreenModel(
             SourceChoice(
                 id = source.id,
                 name = source.name,
+                lang = source.lang,
                 selected = false,
                 recommendation = AnixartSourceHints.Recommendation.NEUTRAL,
             )
@@ -173,6 +192,7 @@ class ShikimoriImportScreenModel(
             SourceChoice(
                 id = source.id,
                 name = source.name,
+                lang = source.lang,
                 selected = false,
                 recommendation = AnixartSourceHints.Recommendation.NEUTRAL,
             )
@@ -189,6 +209,45 @@ class ShikimoriImportScreenModel(
         mutableState.update { s ->
             if (s !is State.PickSources) return@update s
             s.copy(sources = s.sources.map { if (it.id == id) it.copy(selected = !it.selected) else it })
+        }
+    }
+
+    fun search(query: String) {
+        mutableState.update { s ->
+            if (s !is State.PickSources) return@update s
+            s.copy(searchQuery = query)
+        }
+    }
+
+    fun toggleLanguage(language: String) {
+        mutableState.update { s ->
+            if (s !is State.PickSources) return@update s
+            val updated = s.collapsedLanguages.toMutableSet()
+            if (!updated.remove(language)) updated.add(language)
+            s.copy(collapsedLanguages = updated)
+        }
+    }
+
+    fun toggleLanguageSources(language: String, select: Boolean) {
+        mutableState.update { s ->
+            if (s !is State.PickSources) return@update s
+            val updatedSources = s.sources.map { source ->
+                if (source.lang == language) {
+                    source.copy(selected = select)
+                } else {
+                    source
+                }
+            }
+            s.copy(sources = updatedSources)
+        }
+    }
+
+    fun toggleLanguageEnabled(language: String) {
+        mutableState.update { s ->
+            if (s !is State.PickSources) return@update s
+            val updated = s.enabledLanguages.toMutableSet()
+            if (!updated.remove(language)) updated.add(language)
+            s.copy(enabledLanguages = updated)
         }
     }
 

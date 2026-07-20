@@ -115,9 +115,17 @@ class NovelCoverFetcher(
     }
 
     private suspend fun pluginImageLoader(url: String): FetchResult {
+        readPluginImageFromDiskCache(imageLoader, options, url)?.let {
+            debugTitleCoverFlow(
+                scope = "novel-fetcher",
+                message = "plugin-image-disk-cache-hit url=${previewTitleCoverUrl(url)}",
+            )
+            return it
+        }
         debugTitleCoverFlow(scope = "novel-fetcher", message = "plugin-image-fetch url=${previewTitleCoverUrl(url)}")
         val resolved = resolveNovelPluginImagePayload(url, resolver = pluginImageResolver)
             ?: throw IOException("Failed to resolve plugin image: $url")
+        writePluginImageToDiskCache(imageLoader, options, url, resolved.bytes, resolved.mimeType)?.let { return it }
         return SourceFetchResult(
             source = ImageSource(
                 source = Buffer().write(resolved.bytes),
@@ -141,18 +149,19 @@ class NovelCoverFetcher(
     }
 
     private suspend fun httpLoader(url: String): FetchResult {
-        val libraryCoverCacheFile = if (data.isNovelFavorite) {
-            coverFileLazy.value ?: error("No cover specified")
-        } else {
-            null
-        }
-        if (libraryCoverCacheFile?.exists() == true && options.diskCachePolicy.readEnabled) {
+        // The cover cache file may exist from an earlier favorite state or an
+        // older install, so it is readable for any entry, but it is only
+        // written for library items.
+        val coverCacheFile = coverFileLazy.value
+        if (data.isNovelFavorite && coverCacheFile == null) error("No cover specified")
+        if (coverCacheFile?.exists() == true && options.diskCachePolicy.readEnabled) {
             debugTitleCoverFlow(
                 scope = "novel-fetcher",
-                message = "library-cache-hit file=${libraryCoverCacheFile.name}",
+                message = "cover-cache-hit file=${coverCacheFile.name}",
             )
-            return fileLoader(libraryCoverCacheFile)
+            return fileLoader(coverCacheFile)
         }
+        val libraryCoverCacheFile = coverCacheFile.takeIf { data.isNovelFavorite }
 
         var snapshot = readFromDiskCache()
         try {
@@ -187,6 +196,9 @@ class NovelCoverFetcher(
                         scope = "novel-fetcher",
                         message = "network-response-written-to-library-cache file=${responseCoverCache.name}",
                     )
+                    // Mirror the response into Coil's disk cache as well so the
+                    // cover survives library cover cache invalidation.
+                    runCatching { writeToDiskCache(response)?.close() }
                     return fileLoader(responseCoverCache)
                 }
 
@@ -247,7 +259,9 @@ class NovelCoverFetcher(
                 fileSystem.source(snapshot.data).use { input ->
                     writeSourceToCoverCache(input, cacheFile)
                 }
-                remove(diskCacheKey)
+                // Keep the disk cache entry too; removing it made covers vanish
+                // on offline starts whenever the request later stopped resolving
+                // as a library item.
             }
             cacheFile.takeIf { it.exists() }
         } catch (e: Exception) {
@@ -351,7 +365,7 @@ class NovelCoverFetcher(
                 data = data,
                 options = options,
                 sourceSiteUrlLazy = lazy { (sourceManager.get(data.sourceId) as? NovelSiteSource)?.siteUrl },
-                coverFileLazy = lazy { coverCache.getCoverFile(data.url).takeIf { data.isNovelFavorite } },
+                coverFileLazy = lazy { coverCache.getCoverFile(data.url) },
                 customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.novelId) },
                 diskCacheKeyProvider = { effectiveUrl, lastModified ->
                     "novel;${data.novelId};$effectiveUrl;${lastModified ?: data.lastModified}"

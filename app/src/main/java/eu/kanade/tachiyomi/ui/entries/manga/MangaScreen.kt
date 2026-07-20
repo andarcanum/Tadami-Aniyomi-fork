@@ -424,6 +424,10 @@ class MangaScreen(
                 onReset = {
                     screenModel.resetMangaMetadata()
                 },
+                canFetchFromTracker = successState.trackingCount > 0,
+                onFetchFromTracker = { trackerId ->
+                    screenModel.fetchMetadataFromTracker(trackerId)
+                },
             )
         }
     }

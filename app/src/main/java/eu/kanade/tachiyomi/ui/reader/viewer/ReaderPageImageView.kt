@@ -294,6 +294,13 @@ open class ReaderPageImageView @JvmOverloads constructor(
             setDoubleTapZoomStyle(SubsamplingScaleImageView.ZOOM_FOCUS_CENTER)
             setPanLimit(SubsamplingScaleImageView.PAN_LIMIT_INSIDE)
             setMinimumTileDpi(180)
+            if (isWebtoon) {
+                // Defer high-res tile decoding until gestures/flings settle. This
+                // reduces decode churn while scrolling through long strips, which
+                // is a major source of dropped frames on high refresh rate
+                // displays (90/120Hz+).
+                setEagerLoadingEnabled(false)
+            }
             setOnStateChangedListener(
                 object : SubsamplingScaleImageView.OnStateChangedListener {
                     override fun onScaleChanged(newScale: Float, origin: Int) {
@@ -348,7 +355,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
         when (data) {
             is BitmapDrawable -> {
                 val bitmap = data.bitmap
-                if (config.webtoonSmartFit) {
+                if (config.webtoonSmartFit && scope != null) {
                     smartFitJob = scope?.launch {
                         val bounds = withContext(Dispatchers.Default) {
                             WebtoonBorderDetector.detectContentBounds(bitmap)
@@ -362,15 +369,16 @@ open class ReaderPageImageView @JvmOverloads constructor(
                 }
             }
             is BufferedSource -> {
-                val supportsHardwareBitmap = ImageUtil.canUseHardwareBitmap(data)
+                val supportsHardwareBitmap = config.canUseHardwareBitmap
+                    ?: ImageUtil.canUseHardwareBitmap(data)
                 if (
                     !isWebtoon ||
                     alwaysDecodeLongStripWithSSIV ||
-                    ImageUtil.isTallImage(data) ||
+                    (config.isTallImage ?: ImageUtil.isTallImage(data)) ||
                     !supportsHardwareBitmap
                 ) {
                     setHardwareConfig(supportsHardwareBitmap)
-                    if (config.webtoonSmartFit) {
+                    if (config.webtoonSmartFit && scope != null) {
                         smartFitJob = scope?.launch {
                             val bounds = withContext(Dispatchers.IO) {
                                 WebtoonBorderDetector.detectContentBounds(data.peek().inputStream())
@@ -393,7 +401,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
                         onSuccess = { result ->
                             val image = result as BitmapImage
                             val bitmap = image.bitmap
-                            if (config.webtoonSmartFit) {
+                            if (config.webtoonSmartFit && scope != null) {
                                 smartFitJob = scope?.launch {
                                     val bounds = withContext(Dispatchers.Default) {
                                         WebtoonBorderDetector.detectContentBounds(bitmap)
@@ -506,6 +514,13 @@ open class ReaderPageImageView @JvmOverloads constructor(
         val webtoonSmartFit: Boolean = false,
         val zoomStartPosition: ZoomStartPosition = ZoomStartPosition.CENTER,
         val landscapeZoom: Boolean = false,
+        /**
+         * Image traits precomputed off the UI thread by callers that already inspect the image
+         * on IO. When null, they are computed on demand (which touches image headers on the
+         * calling thread).
+         */
+        val isTallImage: Boolean? = null,
+        val canUseHardwareBitmap: Boolean? = null,
     )
 
     enum class ZoomStartPosition {

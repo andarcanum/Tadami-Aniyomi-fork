@@ -66,17 +66,6 @@ class ReleaseServiceImpl(
 
     companion object {
         private val BUILD_TYPES = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
-
-        /**
-         * Regular expression that matches a mention to a valid GitHub username, like it's
-         * done in GitHub Flavored Markdown. It follows these constraints:
-         *
-         * - Alphanumeric with single hyphens (no consecutive hyphens)
-         * - Cannot begin or end with a hyphen
-         * - Max length of 39 characters
-         *
-         * Reference: https://stackoverflow.com/a/30281147
-         */
     }
 }
 
@@ -92,5 +81,15 @@ internal fun GithubRelease.toRelease(downloadLink: String): Release {
     )
 }
 
+/**
+ * Regular expression that matches a mention to a valid GitHub username, like it's
+ * done in GitHub Flavored Markdown. It follows these constraints:
+ *
+ * - Alphanumeric with single hyphens (no consecutive hyphens)
+ * - Cannot begin or end with a hyphen
+ * - Max length of 39 characters
+ *
+ * Reference: https://stackoverflow.com/a/30281147
+ */
 private val gitHubUsernameMentionRegex = """\B@([a-z0-9](?:-(?=[a-z0-9])|[a-z0-9]){0,38}(?<=[a-z0-9]))"""
     .toRegex(RegexOption.IGNORE_CASE)

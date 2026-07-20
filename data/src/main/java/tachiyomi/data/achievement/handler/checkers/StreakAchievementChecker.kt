@@ -1,5 +1,10 @@
 package tachiyomi.data.achievement.handler.checkers
 
+import tachiyomi.data.achievement.Activity_log
+import tachiyomi.data.achievement.database.AchievementsDatabase
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+
 /**
  * Р В РЎСџР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’ВµР РЋР вЂљР РЋРІР‚В°Р В РЎвЂР В РЎвЂќ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р В РЎвЂР В Р’В¶Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В РІвЂћвЂ“ Р РЋР С“Р В Р’ВµР РЋР вЂљР В РЎвЂР В РІвЂћвЂ“ (streak).
  *
@@ -21,10 +26,6 @@ package tachiyomi.data.achievement.handler.checkers
  *
  * @see AchievementType.STREAK
  */
-import tachiyomi.data.achievement.Activity_log
-import tachiyomi.data.achievement.database.AchievementsDatabase
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 
 class StreakAchievementChecker(
     private val database: AchievementsDatabase,

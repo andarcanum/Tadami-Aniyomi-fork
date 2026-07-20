@@ -509,6 +509,10 @@ class AnimeScreen(
                 onReset = {
                     screenModel.resetAnimeMetadata()
                 },
+                canFetchFromTracker = successState.trackingCount > 0,
+                onFetchFromTracker = { trackerId ->
+                    screenModel.fetchMetadataFromTracker(trackerId)
+                },
             )
         }
     }

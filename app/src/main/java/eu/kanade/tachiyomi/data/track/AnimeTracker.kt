@@ -52,6 +52,13 @@ interface AnimeTracker {
 
     suspend fun searchAnime(query: String): List<AnimeTrackSearch>
 
+    /**
+     * Fetches remote metadata for an already-linked entry by its remote id.
+     * Returns null when the tracker cannot resolve entries by id; callers should
+     * fall back to search-based matching.
+     */
+    suspend fun getAnimeMetadata(remoteId: Long): AnimeTrackSearch? = null
+
     suspend fun refresh(track: AnimeTrack): AnimeTrack
 
     // TODO: move this to an interactor, and update all trackers based on common data

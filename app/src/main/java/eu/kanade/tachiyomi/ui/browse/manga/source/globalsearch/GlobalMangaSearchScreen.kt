@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -91,28 +92,30 @@ class GlobalMangaSearchScreen(
                     }
                 }
             } else {
-                GlobalMangaSearchScreen(
-                    state = state,
-                    navigateUp = navigator::pop,
-                    onChangeSearchQuery = screenModel::updateSearchQuery,
-                    onSearch = { enteredQuery ->
-                        val trimmed = enteredQuery.trim().lowercase()
-                        if (trimmed == "third impact" || trimmed == "третий удар") {
-                            meltdownTriggered = true
-                        }
-                        if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
-                            screenModel.search()
-                        }
-                    },
-                    getManga = { screenModel.getManga(it) },
-                    onChangeSearchFilter = screenModel::setSourceFilter,
-                    onToggleResults = screenModel::toggleFilterResults,
-                    onClickSource = {
-                        navigator.push(BrowseMangaSourceScreen(it.id, state.searchQuery))
-                    },
-                    onClickItem = { navigator.push(MangaScreen(it.id, true)) },
-                    onLongClickItem = { navigator.push(MangaScreen(it.id, true)) },
-                )
+                androidx.compose.foundation.layout.Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+                    GlobalMangaSearchScreen(
+                        state = state,
+                        navigateUp = navigator::pop,
+                        onChangeSearchQuery = screenModel::updateSearchQuery,
+                        onSearch = { enteredQuery ->
+                            val trimmed = enteredQuery.trim().lowercase()
+                            if (trimmed == "third impact" || trimmed == "третий удар") {
+                                meltdownTriggered = true
+                            }
+                            if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
+                                screenModel.search()
+                            }
+                        },
+                        getManga = { screenModel.getManga(it) },
+                        onChangeSearchFilter = screenModel::setSourceFilter,
+                        onToggleResults = screenModel::toggleFilterResults,
+                        onClickSource = {
+                            navigator.push(BrowseMangaSourceScreen(it.id, state.searchQuery))
+                        },
+                        onClickItem = { navigator.push(MangaScreen(it.id, true)) },
+                        onLongClickItem = { navigator.push(MangaScreen(it.id, true)) },
+                    )
+                }
             }
         }
     }

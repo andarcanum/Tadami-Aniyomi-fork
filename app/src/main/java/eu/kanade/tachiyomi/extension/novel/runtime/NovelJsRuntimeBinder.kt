@@ -1,665 +1,243 @@
 package eu.kanade.tachiyomi.extension.novel.runtime
 
-import com.eclipsesource.v8.JavaCallback
-import com.eclipsesource.v8.V8
-import com.eclipsesource.v8.V8Array
-import com.eclipsesource.v8.V8Object
+import app.cash.quickjs.QuickJs
 
 private const val NATIVE_OBJECT_NAME = "__native"
+private const val NATIVE_BRIDGE_NAME = "__nativeBridge"
 
-@Suppress("DEPRECATION")
+/**
+ * Binds the flat [NovelJsRuntime.NativeApi] bridge into a QuickJS runtime.
+ *
+ * The whole interface is bound once under [NATIVE_BRIDGE_NAME] (QuickJS marshals
+ * String/Int/Boolean/void natively). A generated JS shim then exposes
+ * [NATIVE_OBJECT_NAME] with the lenient argument coercion the previous J2V8 binder
+ * provided: missing/null required strings become "", nullable strings stay null,
+ * and numeric handles are truncated to integers.
+ */
 fun bindNativeApi(
-    runtime: V8,
+    runtime: QuickJs,
     nativeApi: NovelJsRuntime.NativeApi,
     compatibilityLogger: CompatibilityLogger,
 ) {
-    val nativeObject = V8Object(runtime)
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return run {
-                    val url = parameters.stringArg(0)
-                    compatibilityLogger.logOperation("fetch", "network", "url=$url")
-                    try {
-                        nativeApi.fetch(url, parameters.stringArgOrNull(1))
-                    } catch (e: Exception) {
-                        compatibilityLogger.logFailure("fetch", "network", "request_failed", e)
-                        throw e
-                    }
-                }
-            }
-        },
-        "fetch",
+    runtime.set(
+        NATIVE_BRIDGE_NAME,
+        NovelJsRuntime.NativeApi::class.java,
+        LoggingNativeApi(nativeApi, compatibilityLogger),
     )
+    runtime.evaluate(buildNativeBridgeShim(), "novel-js-native-bridge.js")
+}
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val url = parameters.stringArg(0)
-                compatibilityLogger.logOperation("fetchBinary", "network", "url=$url")
-                return nativeApi.fetchBinary(url, parameters.stringArgOrNull(1))
-            }
-        },
-        "fetchBinary",
-    )
+internal enum class BridgeArg(val coercion: String) {
+    RequiredString("__s"),
+    NullableString("__sn"),
+    IntHandle("__i"),
+}
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.fetchProto(
-                    parameters.stringArg(0),
-                    parameters.stringArg(1),
-                    parameters.stringArgOrNull(2),
-                )
-            }
-        },
-        "fetchProto",
-    )
+internal data class BridgeMethod(val name: String, val args: List<BridgeArg>)
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val key = parameters.stringArg(0)
-                compatibilityLogger.logOperation("storageGet", "storage", "key=$key")
-                return nativeApi.storageGet(key)
-            }
-        },
-        "storageGet",
-    )
+private val S = BridgeArg.RequiredString
+private val SN = BridgeArg.NullableString
+private val I = BridgeArg.IntHandle
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val key = parameters.stringArg(0)
-                compatibilityLogger.logOperation("storageSet", "storage", "key=$key")
-                nativeApi.storageSet(key, parameters.stringArg(1))
-                return null
-            }
-        },
-        "storageSet",
-    )
+/**
+ * One entry per [NovelJsRuntime.NativeApi] method. Arities and coercions mirror the
+ * interface signatures; NovelJsRuntimeBinderTest verifies the table stays in sync
+ * via reflection when methods are added or removed.
+ */
+internal val nativeBridgeMethods: List<BridgeMethod> = listOf(
+    BridgeMethod("fetch", listOf(S, SN)),
+    BridgeMethod("fetchBinary", listOf(S, SN)),
+    BridgeMethod("fetchProto", listOf(S, S, SN)),
+    BridgeMethod("storageGet", listOf(S)),
+    BridgeMethod("storageSet", listOf(S, S)),
+    BridgeMethod("storageRemove", listOf(S)),
+    BridgeMethod("storageClear", emptyList()),
+    BridgeMethod("storageKeys", emptyList()),
+    BridgeMethod("localStorageGet", listOf(S)),
+    BridgeMethod("localStorageSet", listOf(S, S)),
+    BridgeMethod("localStorageRemove", listOf(S)),
+    BridgeMethod("localStorageClear", emptyList()),
+    BridgeMethod("localStorageKeys", emptyList()),
+    BridgeMethod("sessionStorageGet", listOf(S)),
+    BridgeMethod("sessionStorageSet", listOf(S, S)),
+    BridgeMethod("sessionStorageRemove", listOf(S)),
+    BridgeMethod("sessionStorageClear", emptyList()),
+    BridgeMethod("sessionStorageKeys", emptyList()),
+    BridgeMethod("resolveUrl", listOf(S, SN)),
+    BridgeMethod("getPathname", listOf(S)),
+    BridgeMethod("select", listOf(S, S)),
+    BridgeMethod("aesGcmDecrypt", listOf(S, S, S)),
+    BridgeMethod("urlEncode", listOf(S, SN)),
+    BridgeMethod("urlDecode", listOf(S, SN)),
+    BridgeMethod("domLoad", listOf(S)),
+    BridgeMethod("domSelect", listOf(I, S)),
+    BridgeMethod("domParent", listOf(I)),
+    BridgeMethod("domChildren", listOf(I, SN)),
+    BridgeMethod("domNext", listOf(I, SN)),
+    BridgeMethod("domPrev", listOf(I, SN)),
+    BridgeMethod("domNextAll", listOf(I, SN)),
+    BridgeMethod("domPrevAll", listOf(I, SN)),
+    BridgeMethod("domSiblings", listOf(I, SN)),
+    BridgeMethod("domClosest", listOf(I, S)),
+    BridgeMethod("domContents", listOf(I)),
+    BridgeMethod("domIs", listOf(I, S)),
+    BridgeMethod("domHas", listOf(I, S)),
+    BridgeMethod("domNot", listOf(I, S)),
+    BridgeMethod("domHtml", listOf(I)),
+    BridgeMethod("domOuterHtml", listOf(I)),
+    BridgeMethod("domXml", listOf(I)),
+    BridgeMethod("domText", listOf(I)),
+    BridgeMethod("domAttr", listOf(I, S)),
+    BridgeMethod("domSetAttr", listOf(I, S, S)),
+    BridgeMethod("domRemoveAttr", listOf(I, S)),
+    BridgeMethod("domAttrs", listOf(I)),
+    BridgeMethod("domHasClass", listOf(I, S)),
+    BridgeMethod("domData", listOf(I, S)),
+    BridgeMethod("domVal", listOf(I)),
+    BridgeMethod("domTagName", listOf(I)),
+    BridgeMethod("domIsTextNode", listOf(I)),
+    BridgeMethod("domReplaceWith", listOf(I, S)),
+    BridgeMethod("domBefore", listOf(I, S)),
+    BridgeMethod("domAfter", listOf(I, S)),
+    BridgeMethod("domAppend", listOf(I, S)),
+    BridgeMethod("domPrepend", listOf(I, S)),
+    BridgeMethod("domEmpty", listOf(I)),
+    BridgeMethod("domRemove", listOf(I)),
+    BridgeMethod("domAddClass", listOf(I, S)),
+    BridgeMethod("domRemoveClass", listOf(I, S)),
+    BridgeMethod("domRelease", listOf(I)),
+    BridgeMethod("domReleaseAll", emptyList()),
+    BridgeMethod("consoleLog", listOf(S)),
+    BridgeMethod("consoleError", listOf(S)),
+    BridgeMethod("consoleWarn", listOf(S)),
+)
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val key = parameters.stringArg(0)
-                compatibilityLogger.logOperation("storageRemove", "storage", "key=$key")
-                nativeApi.storageRemove(key)
-                return null
-            }
-        },
-        "storageRemove",
-    )
+internal fun buildNativeBridgeShim(): String {
+    val bindings = nativeBridgeMethods.joinToString("\n") { method ->
+        val params = List(method.args.size) { index -> "a$index" }.joinToString(", ")
+        val coerced = method.args
+            .mapIndexed { index, arg -> "${arg.coercion}(a$index)" }
+            .joinToString(", ")
+        "  native[\"${method.name}\"] = function($params) " +
+            "{ return bridge[\"${method.name}\"]($coerced); };"
+    }
+    return buildString {
+        appendLine("(function(global) {")
+        appendLine("  var bridge = global.$NATIVE_BRIDGE_NAME;")
+        appendLine("  function __s(v) { return v === null || v === undefined ? \"\" : String(v); }")
+        appendLine("  function __sn(v) { return v === null || v === undefined ? null : String(v); }")
+        appendLine(
+            "  function __i(v) { var n = Number(v); " +
+                "return isNaN(n) ? 0 : (n < 0 ? Math.ceil(n) : Math.floor(n)); }",
+        )
+        appendLine("  var native = {};")
+        appendLine(bindings)
+        appendLine("  global.$NATIVE_OBJECT_NAME = native;")
+        append("})(this);")
+    }
+}
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, @Suppress("UNUSED_PARAMETER") parameters: V8Array): Any? {
-                compatibilityLogger.logOperation("storageClear", "storage")
-                nativeApi.storageClear()
-                return null
-            }
-        },
-        "storageClear",
-    )
+/**
+ * Engine-agnostic logging decorator that reproduces the per-operation compatibility
+ * logging the previous J2V8 binder performed inline.
+ */
+internal class LoggingNativeApi(
+    private val delegate: NovelJsRuntime.NativeApi,
+    private val logger: CompatibilityLogger,
+) : NovelJsRuntime.NativeApi by delegate {
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, @Suppress("UNUSED_PARAMETER") parameters: V8Array): Any? {
-                compatibilityLogger.logOperation("storageKeys", "storage")
-                return nativeApi.storageKeys()
-            }
-        },
-        "storageKeys",
-    )
+    override fun fetch(url: String, optionsJson: String?): String {
+        logger.logOperation("fetch", "network", "url=$url")
+        return try {
+            delegate.fetch(url, optionsJson)
+        } catch (e: Exception) {
+            logger.logFailure("fetch", "network", "request_failed", e)
+            throw e
+        }
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val key = parameters.stringArg(0)
-                compatibilityLogger.logOperation("localStorageGet", "storage", "key=$key")
-                return nativeApi.localStorageGet(key)
-            }
-        },
-        "localStorageGet",
-    )
+    override fun fetchBinary(url: String, optionsJson: String?): String {
+        logger.logOperation("fetchBinary", "network", "url=$url")
+        return delegate.fetchBinary(url, optionsJson)
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val key = parameters.stringArg(0)
-                compatibilityLogger.logOperation("localStorageSet", "storage", "key=$key")
-                nativeApi.localStorageSet(key, parameters.stringArg(1))
-                return null
-            }
-        },
-        "localStorageSet",
-    )
+    override fun storageGet(key: String): String? {
+        logger.logOperation("storageGet", "storage", "key=$key")
+        return delegate.storageGet(key)
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val key = parameters.stringArg(0)
-                compatibilityLogger.logOperation("localStorageRemove", "storage", "key=$key")
-                nativeApi.localStorageRemove(key)
-                return null
-            }
-        },
-        "localStorageRemove",
-    )
+    override fun storageSet(key: String, value: String) {
+        logger.logOperation("storageSet", "storage", "key=$key")
+        delegate.storageSet(key, value)
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, @Suppress("UNUSED_PARAMETER") parameters: V8Array): Any? {
-                compatibilityLogger.logOperation("localStorageClear", "storage")
-                nativeApi.localStorageClear()
-                return null
-            }
-        },
-        "localStorageClear",
-    )
+    override fun storageRemove(key: String) {
+        logger.logOperation("storageRemove", "storage", "key=$key")
+        delegate.storageRemove(key)
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, @Suppress("UNUSED_PARAMETER") parameters: V8Array): Any? {
-                compatibilityLogger.logOperation("localStorageKeys", "storage")
-                return nativeApi.localStorageKeys()
-            }
-        },
-        "localStorageKeys",
-    )
+    override fun storageClear() {
+        logger.logOperation("storageClear", "storage")
+        delegate.storageClear()
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val key = parameters.stringArg(0)
-                compatibilityLogger.logOperation("sessionStorageGet", "storage", "key=$key")
-                return nativeApi.sessionStorageGet(key)
-            }
-        },
-        "sessionStorageGet",
-    )
+    override fun storageKeys(): String {
+        logger.logOperation("storageKeys", "storage")
+        return delegate.storageKeys()
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val key = parameters.stringArg(0)
-                compatibilityLogger.logOperation("sessionStorageSet", "storage", "key=$key")
-                nativeApi.sessionStorageSet(key, parameters.stringArg(1))
-                return null
-            }
-        },
-        "sessionStorageSet",
-    )
+    override fun localStorageGet(key: String): String? {
+        logger.logOperation("localStorageGet", "storage", "key=$key")
+        return delegate.localStorageGet(key)
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                val key = parameters.stringArg(0)
-                compatibilityLogger.logOperation("sessionStorageRemove", "storage", "key=$key")
-                nativeApi.sessionStorageRemove(key)
-                return null
-            }
-        },
-        "sessionStorageRemove",
-    )
+    override fun localStorageSet(key: String, value: String) {
+        logger.logOperation("localStorageSet", "storage", "key=$key")
+        delegate.localStorageSet(key, value)
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, @Suppress("UNUSED_PARAMETER") parameters: V8Array): Any? {
-                compatibilityLogger.logOperation("sessionStorageClear", "storage")
-                nativeApi.sessionStorageClear()
-                return null
-            }
-        },
-        "sessionStorageClear",
-    )
+    override fun localStorageRemove(key: String) {
+        logger.logOperation("localStorageRemove", "storage", "key=$key")
+        delegate.localStorageRemove(key)
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, @Suppress("UNUSED_PARAMETER") parameters: V8Array): Any? {
-                compatibilityLogger.logOperation("sessionStorageKeys", "storage")
-                return nativeApi.sessionStorageKeys()
-            }
-        },
-        "sessionStorageKeys",
-    )
+    override fun localStorageClear() {
+        logger.logOperation("localStorageClear", "storage")
+        delegate.localStorageClear()
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.resolveUrl(
-                    parameters.stringArg(0),
-                    parameters.stringArgOrNull(1),
-                )
-            }
-        },
-        "resolveUrl",
-    )
+    override fun localStorageKeys(): String {
+        logger.logOperation("localStorageKeys", "storage")
+        return delegate.localStorageKeys()
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.getPathname(parameters.stringArg(0))
-            }
-        },
-        "getPathname",
-    )
+    override fun sessionStorageGet(key: String): String? {
+        logger.logOperation("sessionStorageGet", "storage", "key=$key")
+        return delegate.sessionStorageGet(key)
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.select(
-                    parameters.stringArg(0),
-                    parameters.stringArg(1),
-                )
-            }
-        },
-        "select",
-    )
+    override fun sessionStorageSet(key: String, value: String) {
+        logger.logOperation("sessionStorageSet", "storage", "key=$key")
+        delegate.sessionStorageSet(key, value)
+    }
 
-    // DOM Store methods
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                compatibilityLogger.logOperation("domLoad", "dom")
-                return nativeApi.domLoad(parameters.stringArg(0))
-            }
-        },
-        "domLoad",
-    )
+    override fun sessionStorageRemove(key: String) {
+        logger.logOperation("sessionStorageRemove", "storage", "key=$key")
+        delegate.sessionStorageRemove(key)
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domSelect(parameters.intArg(0), parameters.stringArg(1))
-            }
-        },
-        "domSelect",
-    )
+    override fun sessionStorageClear() {
+        logger.logOperation("sessionStorageClear", "storage")
+        delegate.sessionStorageClear()
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domParent(parameters.intArg(0))
-            }
-        },
-        "domParent",
-    )
+    override fun sessionStorageKeys(): String {
+        logger.logOperation("sessionStorageKeys", "storage")
+        return delegate.sessionStorageKeys()
+    }
 
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domChildren(parameters.intArg(0), parameters.stringArgOrNull(1))
-            }
-        },
-        "domChildren",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domNext(parameters.intArg(0), parameters.stringArgOrNull(1))
-            }
-        },
-        "domNext",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domPrev(parameters.intArg(0), parameters.stringArgOrNull(1))
-            }
-        },
-        "domPrev",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domNextAll(parameters.intArg(0), parameters.stringArgOrNull(1))
-            }
-        },
-        "domNextAll",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domPrevAll(parameters.intArg(0), parameters.stringArgOrNull(1))
-            }
-        },
-        "domPrevAll",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domSiblings(parameters.intArg(0), parameters.stringArgOrNull(1))
-            }
-        },
-        "domSiblings",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domClosest(parameters.intArg(0), parameters.stringArg(1))
-            }
-        },
-        "domClosest",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domContents(parameters.intArg(0))
-            }
-        },
-        "domContents",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domIs(parameters.intArg(0), parameters.stringArg(1))
-            }
-        },
-        "domIs",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domHas(parameters.intArg(0), parameters.stringArg(1))
-            }
-        },
-        "domHas",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domNot(parameters.intArg(0), parameters.stringArg(1))
-            }
-        },
-        "domNot",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domHtml(parameters.intArg(0))
-            }
-        },
-        "domHtml",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domOuterHtml(parameters.intArg(0))
-            }
-        },
-        "domOuterHtml",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domXml(parameters.intArg(0))
-            }
-        },
-        "domXml",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domText(parameters.intArg(0))
-            }
-        },
-        "domText",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domAttr(parameters.intArg(0), parameters.stringArg(1))
-            }
-        },
-        "domAttr",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domSetAttr(parameters.intArg(0), parameters.stringArg(1), parameters.stringArg(2))
-                return receiver
-            }
-        },
-        "domSetAttr",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domAttrs(parameters.intArg(0))
-            }
-        },
-        "domAttrs",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domHasClass(parameters.intArg(0), parameters.stringArg(1))
-            }
-        },
-        "domHasClass",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domData(parameters.intArg(0), parameters.stringArg(1))
-            }
-        },
-        "domData",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domVal(parameters.intArg(0))
-            }
-        },
-        "domVal",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domTagName(parameters.intArg(0))
-            }
-        },
-        "domTagName",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.domIsTextNode(parameters.intArg(0))
-            }
-        },
-        "domIsTextNode",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domReplaceWith(parameters.intArg(0), parameters.stringArg(1))
-                return null
-            }
-        },
-        "domReplaceWith",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domBefore(parameters.intArg(0), parameters.stringArg(1))
-                return null
-            }
-        },
-        "domBefore",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domAfter(parameters.intArg(0), parameters.stringArg(1))
-                return null
-            }
-        },
-        "domAfter",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domAppend(parameters.intArg(0), parameters.stringArg(1))
-                return null
-            }
-        },
-        "domAppend",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domPrepend(parameters.intArg(0), parameters.stringArg(1))
-                return null
-            }
-        },
-        "domPrepend",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domEmpty(parameters.intArg(0))
-                return null
-            }
-        },
-        "domEmpty",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domRemove(parameters.intArg(0))
-                return null
-            }
-        },
-        "domRemove",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domAddClass(parameters.intArg(0), parameters.stringArg(1))
-                return null
-            }
-        },
-        "domAddClass",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domRemoveAttr(parameters.intArg(0), parameters.stringArg(1))
-                return null
-            }
-        },
-        "domRemoveAttr",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domRemoveClass(parameters.intArg(0), parameters.stringArg(1))
-                return null
-            }
-        },
-        "domRemoveClass",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.domRelease(parameters.intArg(0))
-                return null
-            }
-        },
-        "domRelease",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, @Suppress("UNUSED_PARAMETER") parameters: V8Array): Any? {
-                nativeApi.domReleaseAll()
-                return null
-            }
-        },
-        "domReleaseAll",
-    )
-
-    // Crypto
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                return nativeApi.aesGcmDecrypt(
-                    parameters.stringArg(0),
-                    parameters.stringArg(1),
-                    parameters.stringArg(2),
-                )
-            }
-        },
-        "__aesGcmDecrypt",
-    )
-
-    // Console methods
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.consoleLog(parameters.stringArg(0))
-                return null
-            }
-        },
-        "consoleLog",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.consoleError(parameters.stringArg(0))
-                return null
-            }
-        },
-        "consoleError",
-    )
-
-    nativeObject.registerJavaMethod(
-        object : JavaCallback {
-            override fun invoke(receiver: V8Object, parameters: V8Array): Any? {
-                nativeApi.consoleWarn(parameters.stringArg(0))
-                return null
-            }
-        },
-        "consoleWarn",
-    )
-
-    runtime.add(NATIVE_OBJECT_NAME, nativeObject)
-    nativeObject.release()
+    override fun domLoad(html: String): Int {
+        logger.logOperation("domLoad", "dom")
+        return delegate.domLoad(html)
+    }
 }

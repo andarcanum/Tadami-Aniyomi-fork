@@ -12,12 +12,17 @@ class TrustMangaExtension(
 ) {
 
     suspend fun getTrustedFingerprints(): Set<String> {
-        return mangaExtensionStoreRepository.getAll().map { it.signingKey }.toHashSet()
+        return mangaExtensionStoreRepository.getAll()
+            .asSequence()
+            .map { it.signingKey.trim().lowercase() }
+            .filter { it.isNotEmpty() && it != NO_SIGNING_KEY && !it.startsWith(PLACEHOLDER_FINGERPRINT_PREFIX) }
+            .toHashSet()
     }
 
     fun isTrusted(pkgInfo: PackageInfo, fingerprints: List<String>, trustedFingerprints: Set<String>): Boolean {
         val key = "${pkgInfo.packageName}:${PackageInfoCompat.getLongVersionCode(pkgInfo)}:${fingerprints.last()}"
-        return trustedFingerprints.any { fingerprints.contains(it) } || key in preferences.trustedExtensions().get()
+        return fingerprints.any { it.trim().lowercase() in trustedFingerprints } ||
+            key in preferences.trustedExtensions().get()
     }
 
     suspend fun isTrusted(pkgInfo: PackageInfo, fingerprints: List<String>): Boolean {
@@ -35,5 +40,10 @@ class TrustMangaExtension(
 
     fun revokeAll() {
         preferences.trustedExtensions().delete()
+    }
+
+    private companion object {
+        const val NO_SIGNING_KEY = "no_signing_key"
+        const val PLACEHOLDER_FINGERPRINT_PREFIX = "nofingerprint-"
     }
 }

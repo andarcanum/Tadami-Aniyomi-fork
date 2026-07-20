@@ -1,6 +1,7 @@
 package tachiyomi.data.entries.novel
 
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import kotlinx.serialization.json.JsonObject
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.library.novel.LibraryNovel
 
@@ -37,6 +38,7 @@ object NovelMapper {
         customDescription: String?,
         customGenre: List<String>?,
         customStatus: Long?,
+        memo: JsonObject,
     ): Novel = Novel(
         id = id,
         source = source,
@@ -67,6 +69,7 @@ object NovelMapper {
         customDescription = customDescription,
         customGenre = customGenre,
         customStatus = customStatus,
+        memo = memo,
     )
 
     fun mapLibraryNovel(
@@ -100,6 +103,7 @@ object NovelMapper {
         customDescription: String?,
         customGenre: List<String>?,
         customStatus: Long?,
+        memo: JsonObject,
         totalCount: Long,
         readCount: Double,
         latestUpload: Long,
@@ -139,6 +143,7 @@ object NovelMapper {
             customDescription,
             customGenre,
             customStatus,
+            memo,
         ),
         category = category,
         totalChapters = totalCount,

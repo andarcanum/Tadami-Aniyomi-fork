@@ -32,11 +32,16 @@ internal suspend fun resolveNovelPluginImagePayload(
 class NovelPluginImageFetcher(
     private val data: NovelPluginImage,
     private val options: Options,
+    private val imageLoader: ImageLoader,
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult {
+        readPluginImageFromDiskCache(imageLoader, options, data.url)?.let { return it }
         val resolved = resolveNovelPluginImagePayload(data.url)
             ?: throw IOException("Failed to resolve plugin image: ${data.url}")
+        writePluginImageToDiskCache(imageLoader, options, data.url, resolved.bytes, resolved.mimeType)?.let {
+            return it
+        }
         return SourceFetchResult(
             source = ImageSource(
                 source = Buffer().write(resolved.bytes),
@@ -53,7 +58,64 @@ class NovelPluginImageFetcher(
             options: Options,
             imageLoader: ImageLoader,
         ): Fetcher {
-            return NovelPluginImageFetcher(data, options)
+            return NovelPluginImageFetcher(data, options, imageLoader)
         }
     }
+}
+
+/**
+ * Plugin images are resolved through the plugin runtime (JS + network), which
+ * is unavailable offline, so the resolved bytes are persisted in Coil's disk
+ * cache keyed by the raw plugin image URL. NovelPluginImageFetcher and
+ * NovelCoverFetcher share these entries.
+ */
+internal fun readPluginImageFromDiskCache(
+    imageLoader: ImageLoader,
+    options: Options,
+    key: String,
+): SourceFetchResult? {
+    if (!options.diskCachePolicy.readEnabled) return null
+    val diskCache = imageLoader.diskCache ?: return null
+    val snapshot = runCatching { diskCache.openSnapshot(key) }.getOrNull() ?: return null
+    return SourceFetchResult(
+        source = ImageSource(
+            file = snapshot.data,
+            fileSystem = diskCache.fileSystem,
+            diskCacheKey = key,
+            closeable = snapshot,
+        ),
+        mimeType = "image/*",
+        dataSource = DataSource.DISK,
+    )
+}
+
+internal fun writePluginImageToDiskCache(
+    imageLoader: ImageLoader,
+    options: Options,
+    key: String,
+    bytes: ByteArray,
+    mimeType: String?,
+): SourceFetchResult? {
+    if (!options.diskCachePolicy.writeEnabled) return null
+    val diskCache = imageLoader.diskCache ?: return null
+    val snapshot = runCatching {
+        val editor = diskCache.openEditor(key) ?: return@runCatching null
+        try {
+            diskCache.fileSystem.write(editor.data) { write(bytes) }
+            editor.commitAndOpenSnapshot()
+        } catch (e: Exception) {
+            runCatching { editor.abort() }
+            null
+        }
+    }.getOrNull() ?: return null
+    return SourceFetchResult(
+        source = ImageSource(
+            file = snapshot.data,
+            fileSystem = diskCache.fileSystem,
+            diskCacheKey = key,
+            closeable = snapshot,
+        ),
+        mimeType = mimeType,
+        dataSource = DataSource.NETWORK,
+    )
 }

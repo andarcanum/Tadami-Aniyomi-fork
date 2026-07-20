@@ -28,6 +28,7 @@ import tachiyomi.data.AnimeUpdateStrategyColumnAdapter
 import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.FetchTypeColumnAdapter
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
+import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.handlers.anime.AndroidAnimeDatabaseHandler
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
@@ -67,7 +68,9 @@ class ExtensionRepoToStoreMigrationIntegrationTest {
         mangaDatabase = MangaDatabase(
             driver = mangaDriver,
             historyAdapter = History.Adapter(last_readAdapter = DateColumnAdapter),
+            chaptersAdapter = data.Chapters.Adapter(memoAdapter = MemoColumnAdapter),
             mangasAdapter = Mangas.Adapter(
+                memoAdapter = MemoColumnAdapter,
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
                 custom_genreAdapter = StringListColumnAdapter,
@@ -76,7 +79,9 @@ class ExtensionRepoToStoreMigrationIntegrationTest {
         animeDatabase = AnimeDatabase(
             driver = animeDriver,
             animehistoryAdapter = Animehistory.Adapter(last_seenAdapter = DateColumnAdapter),
+            episodesAdapter = dataanime.Episodes.Adapter(memoAdapter = MemoColumnAdapter),
             animesAdapter = Animes.Adapter(
+                memoAdapter = MemoColumnAdapter,
                 genreAdapter = StringListColumnAdapter,
                 custom_genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = AnimeUpdateStrategyColumnAdapter,
@@ -86,7 +91,9 @@ class ExtensionRepoToStoreMigrationIntegrationTest {
         novelDatabase = NovelDatabase(
             driver = novelDriver,
             novel_historyAdapter = Novel_history.Adapter(last_readAdapter = DateColumnAdapter),
+            novel_chaptersAdapter = datanovel.Novel_chapters.Adapter(memoAdapter = MemoColumnAdapter),
             novelsAdapter = Novels.Adapter(
+                memoAdapter = MemoColumnAdapter,
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
                 custom_genreAdapter = StringListColumnAdapter,

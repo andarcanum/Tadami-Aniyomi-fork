@@ -93,17 +93,46 @@ class WebtoonPageHolder(
         loadJob?.cancel()
         loadJob = scope.launch { loadPageAndProcessStatus() }
         refreshLayoutParams()
+        refreshPlaceholderHeight()
     }
 
     private fun refreshLayoutParams() {
-        frame.layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
-            if (!viewer.isContinuous) {
-                bottomMargin = 15.dpToPx
-            }
+        val margin = (Resources.getSystem().displayMetrics.widthPixels * (viewer.config.sidePadding / 100f)).toInt()
+        val bottomMargin = if (!viewer.isContinuous) 15.dpToPx else 0
 
-            val margin = Resources.getSystem().displayMetrics.widthPixels * (viewer.config.sidePadding / 100f)
-            marginEnd = margin.toInt()
-            marginStart = margin.toInt()
+        // Avoid layout thrash: rebinds while scrolling must not trigger a requestLayout
+        // when nothing about the layout params actually changed.
+        val current = frame.layoutParams as? FrameLayout.LayoutParams
+        if (current != null &&
+            current.marginStart == margin &&
+            current.marginEnd == margin &&
+            current.bottomMargin == bottomMargin
+        ) {
+            return
+        }
+
+        frame.layoutParams = FrameLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply {
+            this.bottomMargin = bottomMargin
+            marginEnd = margin
+            marginStart = margin
+        }
+    }
+
+    /**
+     * Keeps the loading placeholder matched to the current viewport height. The container is
+     * sized once at holder creation, when the recycler may not be measured yet (height 0) or may
+     * have been resized since (rotation, split screen). A zero or stale placeholder height makes
+     * the layout manager create and bind far more holders than needed and makes content jump
+     * when the real image height arrives.
+     */
+    private fun refreshPlaceholderHeight() {
+        val height = parentHeight
+        val params = progressContainer.layoutParams ?: return
+        if (height > 0 && params.height != height) {
+            progressContainer.updateLayoutParams { this.height = height }
+            progressIndicator.updateLayoutParams<FrameLayout.LayoutParams> {
+                updateMargins(top = height / 4)
+            }
         }
     }
 
@@ -187,10 +216,14 @@ class WebtoonPageHolder(
         val streamFn = page?.stream ?: return
 
         try {
-            val (source, isAnimated) = withIOContext {
+            val (source, isAnimated, isTall, canUseHardware) = withIOContext {
                 val source = streamFn().use { process(Buffer().readFrom(it)) }
                 val isAnimated = ImageUtil.isAnimatedAndSupported(source)
-                Pair(source, isAnimated)
+                // Sniff image headers here so the UI thread does not have to instantiate
+                // native decoders per page while the user is scrolling.
+                val isTall = !isAnimated && ImageUtil.isTallImage(source)
+                val canUseHardware = !isAnimated && ImageUtil.canUseHardwareBitmap(source)
+                PageImageData(source, isAnimated, isTall, canUseHardware)
             }
             withUIContext {
                 frame.setImage(
@@ -201,6 +234,8 @@ class WebtoonPageHolder(
                         minimumScaleType = SubsamplingScaleImageView.SCALE_TYPE_FIT_WIDTH,
                         cropBorders = viewer.config.imageCropBorders,
                         webtoonSmartFit = viewer.config.webtoonSmartFit,
+                        isTallImage = isTall,
+                        canUseHardwareBitmap = canUseHardware,
                     ),
                 )
                 removeErrorLayout()
@@ -311,3 +346,10 @@ class WebtoonPageHolder(
         }
     }
 }
+
+private data class PageImageData(
+    val source: BufferedSource,
+    val isAnimated: Boolean,
+    val isTall: Boolean,
+    val canUseHardware: Boolean,
+)

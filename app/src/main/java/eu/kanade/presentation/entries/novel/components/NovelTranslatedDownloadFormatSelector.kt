@@ -1,23 +1,29 @@
 package eu.kanade.presentation.entries.novel.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 
 @Composable
 internal fun NovelTranslatedDownloadFormatSelector(
@@ -25,64 +31,89 @@ internal fun NovelTranslatedDownloadFormatSelector(
     onFormatSelected: (NovelTranslatedDownloadFormat) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val accentColor = colorScheme.primary
-    val onAccentColor = colorScheme.onPrimary
+    val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    val track = if (colors.isEInk) {
+        colors.surface
+    } else {
+        colors.textPrimary.copy(alpha = if (colors.isDark) 0.06f else 0.05f)
+    }
+    val rim = if (colors.isEInk) {
+        colors.textPrimary
+    } else {
+        colors.textPrimary.copy(alpha = 0.10f)
+    }
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(
-                color = colorScheme.surfaceVariant.copy(alpha = 0.75f),
-                shape = RoundedCornerShape(12.dp),
-            )
-            .padding(2.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .background(track, CircleShape)
+            .border(1.dp, rim, CircleShape)
+            .padding(3.dp),
     ) {
-        FormatButton(
+        FormatSegment(
             selected = format == NovelTranslatedDownloadFormat.TXT,
             text = stringResource(AYMR.strings.novel_translated_download_format_txt),
-            onClick = { onFormatSelected(NovelTranslatedDownloadFormat.TXT) },
-            selectedColor = accentColor,
-            selectedContentColor = onAccentColor,
-            unselectedContentColor = colorScheme.onSurface,
+            onClick = {
+                appHaptics.tap()
+                onFormatSelected(NovelTranslatedDownloadFormat.TXT)
+            },
             modifier = Modifier.weight(1f),
         )
-        FormatButton(
+        FormatSegment(
             selected = format == NovelTranslatedDownloadFormat.DOCX,
             text = stringResource(AYMR.strings.novel_translated_download_format_docx),
-            onClick = { onFormatSelected(NovelTranslatedDownloadFormat.DOCX) },
-            selectedColor = accentColor,
-            selectedContentColor = onAccentColor,
-            unselectedContentColor = colorScheme.onSurface,
+            onClick = {
+                appHaptics.tap()
+                onFormatSelected(NovelTranslatedDownloadFormat.DOCX)
+            },
             modifier = Modifier.weight(1f),
         )
     }
 }
 
 @Composable
-private fun FormatButton(
+private fun FormatSegment(
     selected: Boolean,
     text: String,
     onClick: () -> Unit,
-    selectedColor: Color,
-    selectedContentColor: Color,
-    unselectedContentColor: Color,
     modifier: Modifier = Modifier,
 ) {
-    Button(
-        modifier = modifier,
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (selected) selectedColor else Color.Transparent,
-            contentColor = if (selected) selectedContentColor else unselectedContentColor,
-        ),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp),
+    val colors = AuroraTheme.colors
+    val accent = if (colors.isEInk) colors.textPrimary else colors.accent
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .then(
+                if (selected) {
+                    Modifier
+                        .background(accent, CircleShape)
+                        .border(
+                            1.dp,
+                            if (colors.isEInk) colors.textPrimary else accent.copy(alpha = 0.45f),
+                            CircleShape,
+                        )
+                } else {
+                    Modifier
+                },
+            )
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onClick,
+            )
+            .padding(vertical = 9.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = if (selected) "* $text" else text,
-            style = MaterialTheme.typography.bodyMedium,
+            text = text,
+            color = when {
+                selected && colors.isEInk -> colors.background
+                selected -> colors.textOnAccent
+                else -> colors.textSecondary
+            },
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             textAlign = TextAlign.Center,
         )
     }

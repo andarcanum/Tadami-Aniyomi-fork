@@ -185,10 +185,6 @@ class MainActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val isLaunch = savedInstanceState == null
-        val activityStart = System.currentTimeMillis()
-        if (isLaunch) {
-            logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH mainactivity-oncreate-start" }
-        }
 
         // Prevent splash screen showing up on configuration changes
         val splashScreen = if (isLaunch) installSplashScreen() else null
@@ -231,20 +227,13 @@ class MainActivity : BaseActivity() {
             return
         }
 
-        logcat(LogPriority.DEBUG) {
-            "TADAMI_PERF_LAUNCH mainactivity-before-setcompose took=${System.currentTimeMillis() - activityStart}ms"
-        }
-
         setComposeContent {
-            logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH setcompose-content-lambda-start" }
             val context = LocalContext.current
 
             // Get haptic/eInk for provider (light), theme moved inside for launch perf
             val uiPreferencesHaptic = remember { Injekt.get<UiPreferences>() }
             val hapticFeedbackMode by uiPreferencesHaptic.hapticFeedbackMode().collectAsStateWithLifecycle()
             val eInkProfile by uiPreferencesHaptic.eInkProfile().collectAsStateWithLifecycle()
-
-            logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH before-haptics-provider" }
 
             AppHapticsProvider(
                 hapticFeedbackMode = hapticFeedbackMode,
@@ -255,8 +244,6 @@ class MainActivity : BaseActivity() {
                 val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
                 val isAurora = theme.isAuroraStyle
 
-                logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH before-navigator" }
-                logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH navigator-start" }
                 Navigator(
                     screen = HomeScreen,
                     disposeBehavior = NavigatorDisposeBehavior(
@@ -264,13 +251,11 @@ class MainActivity : BaseActivity() {
                         disposeSteps = true,
                     ),
                 ) { navigator ->
-                    logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH navigator-lambda-start" }
 
                     // Make splash dismiss as soon as the main home content starts rendering its first (light) frame.
                     // Previously ready was set only at the end of handleIntentAction, which delayed splash removal.
                     if (isLaunch) {
                         ready = true
-                        logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH ready-set-early" }
                     }
 
                     // PERF: move incognito and download/indexing inside to reduce root composition cost on app launch
@@ -393,7 +378,6 @@ class MainActivity : BaseActivity() {
                         }
                     }
                     val scaffoldInsets = WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal)
-                    logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH before-scaffold-in-navigator" }
                     Scaffold(
                         containerColor = readerBackdropColor ?: MaterialTheme.colorScheme.background,
                         topBar = {
@@ -459,6 +443,8 @@ class MainActivity : BaseActivity() {
                                         .background(MaterialTheme.colorScheme.surfaceContainer),
                                 )
                             }
+                            // Aurora easter egg overlay
+                            eu.kanade.presentation.easteregg.aurora.AuroraEchoOverlay()
                         }
                     }
 
@@ -566,7 +552,8 @@ class MainActivity : BaseActivity() {
         val startTime = System.currentTimeMillis()
         splashScreen?.setKeepOnScreenCondition {
             val elapsed = System.currentTimeMillis() - startTime
-            elapsed <= SPLASH_MIN_DURATION || (!ready || !migrationReady.value) && elapsed <= SPLASH_MAX_DURATION
+            elapsed <= SPLASH_MIN_DURATION ||
+                ((!ready || !migrationReady.value) && elapsed <= SPLASH_MAX_DURATION)
         }
         setSplashScreenExitAnimation(splashScreen)
 

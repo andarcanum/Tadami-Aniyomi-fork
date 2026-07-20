@@ -53,7 +53,7 @@ class ShikimoriImportJob(
             val plan = payload.toPlan()
             val executor = Injekt.get<ImportShikimoriExecutor>()
             val report = executor.await(mediaType, plan) { current, total ->
-                notifier.showProgress(current, total)
+                notifier.notifyProgress(current, total)
             }
             notifier.showComplete(report)
             planFile.delete()

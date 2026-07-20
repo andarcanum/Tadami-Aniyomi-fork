@@ -7,6 +7,8 @@ import eu.kanade.tachiyomi.data.database.models.manga.MangaTrack
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALAddEntryResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALAnime
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALCurrentUserResult
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALImportListEntry
+import eu.kanade.tachiyomi.data.track.anilist.dto.ALImportListResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALManga
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALMangaSingleMediaResult
 import eu.kanade.tachiyomi.data.track.anilist.dto.ALOAuth
@@ -564,6 +566,64 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
         }
     }
 
+    /**
+     * Fetches every custom list entry for [userId] and [mediaType]
+     * (`ANIME` / `MANGA`) via a single MediaListCollection query.
+     * Used by the AniList library import wizard.
+     */
+    suspend fun getUserMediaList(userId: Int, mediaType: String): List<ALImportListEntry> {
+        return withIOContext {
+            val query = """
+            |query ImportList(${'$'}userId: Int, ${'$'}type: MediaType) {
+                |MediaListCollection(userId: ${'$'}userId, type: ${'$'}type) {
+                    |lists {
+                        |entries {
+                            |id
+                            |status
+                            |scoreRaw: score(format: POINT_100)
+                            |progress
+                            |media {
+                                |id
+                                |title {
+                                    |romaji
+                                    |english
+                                |}
+                                |episodes
+                                |chapters
+                                |coverImage {
+                                    |large
+                                |}
+                            |}
+                        |}
+                    |}
+                |}
+            |}
+            |
+            """.trimMargin()
+            val payload = buildJsonObject {
+                put("query", query)
+                putJsonObject("variables") {
+                    put("userId", userId)
+                    put("type", mediaType)
+                }
+            }
+            with(json) {
+                authClient.newCall(
+                    POST(
+                        API_URL,
+                        body = payload.toString().toRequestBody(jsonMime),
+                    ),
+                )
+                    .awaitSuccess()
+                    .parseAs<ALImportListResult>()
+                    .data.mediaListCollection
+                    ?.lists
+                    .orEmpty()
+                    .flatMap { it.entries }
+            }
+        }
+    }
+
     private fun createDate(dateValue: Long): JsonObject {
         if (dateValue == 0L) {
             return buildJsonObject {
@@ -616,6 +676,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                         |day
                     |}
                     |averageScore
+                    |genres
                 |}
             |}
             |
@@ -649,6 +710,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                                 totalEpisodes = media.episodes ?: 0,
                                 averageScore = media.averageScore ?: -1,
                                 studios = media.studios,
+                                genres = media.genres.orEmpty(),
                             )
                         } else {
                             null
@@ -694,6 +756,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                         |day
                     |}
                     |averageScore
+                    |genres
                 |}
             |}
             |
@@ -727,6 +790,7 @@ class AnilistApi(val client: OkHttpClient, interceptor: AnilistInterceptor) {
                                 totalChapters = media.chapters ?: 0,
                                 averageScore = media.averageScore ?: -1,
                                 staff = media.staff,
+                                genres = media.genres.orEmpty(),
                             )
                         } else {
                             null

@@ -130,10 +130,21 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
         recycler.adapter = adapter
         recycler.addOnScrollListener(
             object : RecyclerView.OnScrollListener() {
+                // Progress tracking is throttled: computing the scroll progress and
+                // scheduling its persistence on every scrolled frame causes dropped
+                // frames on high refresh rate displays (90/120Hz+). The exact final
+                // position is always flushed once scrolling settles (see
+                // onScrollStateChanged below), so throttling never loses precision.
+                private var lastProgressUpdateMs = 0L
+
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
                     onScrolled()
                     applyPendingRelativeRestore(clearWhenApplied = false)
-                    getCurrentScrollProgress()?.let(activity.viewModel::onWebtoonScrollProgressChanged)
+                    val now = SystemClock.uptimeMillis()
+                    if (now - lastProgressUpdateMs >= SCROLL_PROGRESS_UPDATE_INTERVAL_MS) {
+                        lastProgressUpdateMs = now
+                        getCurrentScrollProgress()?.let(activity.viewModel::onWebtoonScrollProgressChanged)
+                    }
 
                     if ((dy > threshold || dy < -threshold) && activity.viewModel.state.value.menuVisible) {
                         activity.hideMenu()
@@ -152,6 +163,14 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
                     if (dy > 0 && lastItem is ChapterTransition.Next && lastItem.to == null) {
                         activity.showMenu()
                         activity.onMeltdownTransitionActivated()
+                    }
+                }
+
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                        // Persist the exact resting position once scrolling settles
+                        lastProgressUpdateMs = SystemClock.uptimeMillis()
+                        getCurrentScrollProgress()?.let(activity.viewModel::onWebtoonScrollProgressChanged)
                     }
                 }
             },
@@ -652,6 +671,9 @@ private data class PendingRelativeRestore(
 )
 
 private const val MAX_PENDING_RELATIVE_RESTORE_DURATION_MS = 30_000L
+
+// Minimum interval between webtoon scroll progress reports while actively scrolling.
+private const val SCROLL_PROGRESS_UPDATE_INTERVAL_MS = 150L
 private const val MIN_STABLE_HEIGHT_FRAMES = 2
 private const val RESTORE_SETTLE_TOLERANCE_PX = 2
 private const val MIN_READY_STATE_FRAMES_FALLBACK = 30

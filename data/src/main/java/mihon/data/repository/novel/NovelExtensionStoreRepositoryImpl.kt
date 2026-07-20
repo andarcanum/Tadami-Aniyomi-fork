@@ -1,6 +1,9 @@
 package mihon.data.repository.novel
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.supervisorScope
 import logcat.LogPriority
 import mihon.data.extension.repository.extensionStoreMapper
 import mihon.data.extension.service.ExtensionStoreService
@@ -35,9 +38,11 @@ class NovelExtensionStoreRepositoryImpl(
 
     override suspend fun refreshAll() {
         try {
-            handler.awaitList { db -> db.extension_storeQueries.getAll(::extensionStoreMapper) }
-                .forEach { store ->
-                    if (!store.isLegacy) {
+            val stores = handler.awaitList { db -> db.extension_storeQueries.getAll(::extensionStoreMapper) }
+                .filterNot { it.isLegacy }
+            supervisorScope {
+                stores.map { store ->
+                    async {
                         service.fetch(store.indexUrl)
                             .mapCatching { fetched ->
                                 handler.await(inTransaction = true) { db ->
@@ -53,7 +58,8 @@ class NovelExtensionStoreRepositoryImpl(
                                 }
                             }
                     }
-                }
+                }.awaitAll()
+            }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
         }

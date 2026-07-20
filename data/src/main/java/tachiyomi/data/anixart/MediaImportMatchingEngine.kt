@@ -1,5 +1,7 @@
 package tachiyomi.data.anixart
 
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -41,13 +43,18 @@ object MediaImportMatchingEngine {
         }
 
         return coroutineScope {
-            val searchCache = ConcurrentHashMap<String, List<AnixartMatcher.SearchCandidate>>()
+            // Deferred-based cache: concurrent rows that share a query await a
+            // single in-flight search instead of firing duplicate requests
+            // (a plain getOrPut with a suspend body is not atomic).
+            val searchCache = ConcurrentHashMap<String, Deferred<List<AnixartMatcher.SearchCandidate>>>()
             val semaphore = Semaphore(concurrency)
             val matchedCount = AtomicInteger(0)
             val total = rows.size
 
             suspend fun cachedSearch(query: String) =
-                searchCache.getOrPut(query) { search(query) }
+                searchCache.computeIfAbsent(query) {
+                    async(start = CoroutineStart.LAZY) { search(query) }
+                }.await()
 
             val results = rows.map { row ->
                 async {

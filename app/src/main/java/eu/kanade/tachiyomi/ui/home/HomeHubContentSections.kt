@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -63,9 +64,10 @@ import com.tadami.aurora.R
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
+import eu.kanade.presentation.components.CoverReloadSignal
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
-import eu.kanade.presentation.components.resolveAuroraCoverModel
 import eu.kanade.presentation.components.resolveAuroraCtaLabelShadowSpec
 import eu.kanade.presentation.components.resolveAuroraHomeIconShadowSpec
 import eu.kanade.presentation.components.resolveAuroraTabContainerColor
@@ -238,8 +240,13 @@ internal fun HeroSection(
             },
     ) {
         val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
+        val heroContext = LocalContext.current
+        val heroCoverReloadTick = CoverReloadSignal.tick.value
+        val heroCoverRequest = remember(heroContext, hero.coverData, heroCoverReloadTick) {
+            buildAuroraCoverImageRequest(heroContext, hero.coverData)
+        }
         AsyncImage(
-            model = hero.coverData,
+            model = heroCoverRequest,
             contentDescription = null,
             contentScale = ContentScale.Crop,
             colorFilter = rememberAuroraPosterColorFilter(),
@@ -695,8 +702,13 @@ internal fun HomeHubRecentPosterCard(
                         },
                     ),
             ) {
+                val posterContext = LocalContext.current
+                val posterCoverReloadTick = CoverReloadSignal.tick.value
+                val posterCoverRequest = remember(posterContext, coverData, posterCoverReloadTick) {
+                    buildAuroraCoverImageRequest(posterContext, coverData)
+                }
                 AsyncImage(
-                    model = resolveAuroraCoverModel(coverData),
+                    model = posterCoverRequest,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     colorFilter = rememberAuroraPosterColorFilter(),

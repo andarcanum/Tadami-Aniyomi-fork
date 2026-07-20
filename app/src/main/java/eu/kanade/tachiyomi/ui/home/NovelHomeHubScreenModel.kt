@@ -7,9 +7,7 @@ import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
-import logcat.LogPriority
 import tachiyomi.core.common.util.lang.launchIO
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovelWithChapters
@@ -39,7 +37,7 @@ internal class NovelHomeHubScreenModel(
                         entryId = h.entryId,
                         title = h.title,
                         progressNumber = h.progressNumber,
-                        coverData = NovelCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                        coverData = NovelCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                     )
                 },
                 history = cached.history.map { h ->
@@ -47,7 +45,7 @@ internal class NovelHomeHubScreenModel(
                         entryId = h.entryId,
                         title = h.title,
                         progressNumber = h.progressNumber,
-                        coverData = NovelCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                        coverData = NovelCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                         section = HomeHubSection.Novel,
                     )
                 },
@@ -55,7 +53,7 @@ internal class NovelHomeHubScreenModel(
                     HomeHubRecommendation(
                         entryId = r.entryId,
                         title = r.title,
-                        coverData = NovelCover(r.entryId, -1, true, r.coverUrl, r.coverLastModified),
+                        coverData = NovelCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
                         section = HomeHubSection.Novel,
                         progressNumerator = r.progressNumerator,
                         progressDenominator = r.totalCount,
@@ -121,7 +119,7 @@ internal class NovelHomeHubScreenModel(
                             entryId = h.entryId,
                             title = h.title,
                             progressNumber = h.progressNumber,
-                            coverData = NovelCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                            coverData = NovelCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                         )
                     },
                     history = cached.history.map { h ->
@@ -129,7 +127,7 @@ internal class NovelHomeHubScreenModel(
                             entryId = h.entryId,
                             title = h.title,
                             progressNumber = h.progressNumber,
-                            coverData = NovelCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                            coverData = NovelCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                             section = HomeHubSection.Novel,
                         )
                     },
@@ -137,7 +135,7 @@ internal class NovelHomeHubScreenModel(
                         HomeHubRecommendation(
                             entryId = r.entryId,
                             title = r.title,
-                            coverData = NovelCover(r.entryId, -1, true, r.coverUrl, r.coverLastModified),
+                            coverData = NovelCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
                             section = HomeHubSection.Novel,
                             progressNumerator = r.progressNumerator,
                             progressDenominator = r.totalCount,
@@ -150,9 +148,6 @@ internal class NovelHomeHubScreenModel(
                     showFilteredEmpty = cached.isInitialized && cached.isEmpty,
                 )
             }
-            logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH home-cache-applied novel hadCache=true" }
-        } else {
-            logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH home-cache-applied novel hadCache=false" }
         }
 
         // PERF: Defer expensive DB work until after first frame
@@ -307,6 +302,13 @@ internal class NovelHomeHubScreenModel(
 
     fun saveCache() {
         val currentState = state.value
+        prefetchHomeHubCovers(
+            buildList {
+                add(currentState.hero?.coverData)
+                currentState.history.forEach { add(it.coverData) }
+                currentState.recommendations.forEach { add(it.coverData) }
+            },
+        )
         fastCache.save(
             CachedHomeState(
                 hero = currentState.hero?.let { hero ->
@@ -316,6 +318,8 @@ internal class NovelHomeHubScreenModel(
                         progressNumber = hero.progressNumber,
                         coverUrl = (hero.coverData as? NovelCover)?.url,
                         coverLastModified = (hero.coverData as? NovelCover)?.lastModified ?: 0L,
+                        sourceId = (hero.coverData as? NovelCover)?.sourceId ?: -1L,
+                        favorite = (hero.coverData as? NovelCover)?.isNovelFavorite ?: false,
                         subId = originalHeroChapterId ?: 0L,
                     )
                 },
@@ -326,6 +330,8 @@ internal class NovelHomeHubScreenModel(
                         progressNumber = h.progressNumber,
                         coverUrl = (h.coverData as? NovelCover)?.url,
                         coverLastModified = (h.coverData as? NovelCover)?.lastModified ?: 0L,
+                        sourceId = (h.coverData as? NovelCover)?.sourceId ?: -1L,
+                        favorite = (h.coverData as? NovelCover)?.isNovelFavorite ?: false,
                     )
                 },
                 recommendations = currentState.recommendations.map { r ->
@@ -334,6 +340,8 @@ internal class NovelHomeHubScreenModel(
                         title = r.title,
                         coverUrl = (r.coverData as? NovelCover)?.url,
                         coverLastModified = (r.coverData as? NovelCover)?.lastModified ?: 0L,
+                        sourceId = (r.coverData as? NovelCover)?.sourceId ?: -1L,
+                        favorite = (r.coverData as? NovelCover)?.isNovelFavorite ?: false,
                         totalCount = r.progressDenominator,
                         progressCount = r.progressNumerator,
                     )

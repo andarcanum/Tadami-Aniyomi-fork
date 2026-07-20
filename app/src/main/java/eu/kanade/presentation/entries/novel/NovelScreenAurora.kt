@@ -304,6 +304,7 @@ fun NovelScreenAuroraImpl(
     val entrySuggestionsEnabled by sourcePreferences.entrySuggestionsEnabled().collectAsState()
     val entrySuggestionsExpandInline by uiPreferences.entrySuggestionsExpandInline().collectAsState()
     val entrySuggestionsInOverflow by uiPreferences.entrySuggestionsInOverflow().collectAsState()
+    val alwaysShowFullChapterList by uiPreferences.alwaysShowFullChapterListNovel().collectAsState()
     val auroraEntryTranslationEnabled by uiPreferences
         .auroraEntryTranslationEnabled()
         .collectAsState()
@@ -322,7 +323,7 @@ fun NovelScreenAuroraImpl(
     val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
     val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
 
-    var chaptersExpanded by remember { mutableStateOf(false) }
+    var chaptersExpanded by remember(alwaysShowFullChapterList) { mutableStateOf(alwaysShowFullChapterList) }
     var isReverseScrollingOverlay by remember { mutableStateOf(false) }
     LaunchedEffect(chaptersExpanded) {
         if (chaptersExpanded) {
@@ -896,7 +897,9 @@ fun NovelScreenAuroraImpl(
                                         }
                                     }
 
-                                    if (listChapterCount > NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT) {
+                                    if (listChapterCount > NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT &&
+                                        !alwaysShowFullChapterList
+                                    ) {
                                         item {
                                             Box(
                                                 modifier = Modifier
@@ -1585,7 +1588,7 @@ fun NovelScreenAuroraImpl(
                             }
                         }
 
-                        if (listChapterCount > NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT) {
+                        if (listChapterCount > NOVEL_AURORA_COLLAPSED_PREVIEW_COUNT && !alwaysShowFullChapterList) {
                             item {
                                 Box(
                                     modifier = Modifier

@@ -8,9 +8,7 @@ import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
-import logcat.LogPriority
 import tachiyomi.core.common.util.lang.launchIO
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
 import tachiyomi.domain.entries.anime.model.AnimeCover
@@ -41,7 +39,7 @@ internal class HomeHubScreenModel(
                         entryId = h.entryId,
                         title = h.title,
                         progressNumber = h.progressNumber,
-                        coverData = AnimeCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                        coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                     )
                 },
                 history = cached.history.map { h ->
@@ -49,7 +47,7 @@ internal class HomeHubScreenModel(
                         entryId = h.entryId,
                         title = h.title,
                         progressNumber = h.progressNumber,
-                        coverData = AnimeCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                        coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                         section = HomeHubSection.Anime,
                     )
                 },
@@ -57,7 +55,7 @@ internal class HomeHubScreenModel(
                     HomeHubRecommendation(
                         entryId = r.entryId,
                         title = r.title,
-                        coverData = AnimeCover(r.entryId, -1, true, r.coverUrl, r.coverLastModified),
+                        coverData = AnimeCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
                         section = HomeHubSection.Anime,
                         progressNumerator = r.progressNumerator,
                         progressDenominator = r.totalCount,
@@ -140,7 +138,7 @@ internal class HomeHubScreenModel(
                             entryId = h.entryId,
                             title = h.title,
                             progressNumber = h.progressNumber,
-                            coverData = AnimeCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                            coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                         )
                     },
                     history = cached.history.map { h ->
@@ -148,7 +146,7 @@ internal class HomeHubScreenModel(
                             entryId = h.entryId,
                             title = h.title,
                             progressNumber = h.progressNumber,
-                            coverData = AnimeCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                            coverData = AnimeCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                             section = HomeHubSection.Anime,
                         )
                     },
@@ -156,7 +154,7 @@ internal class HomeHubScreenModel(
                         HomeHubRecommendation(
                             entryId = r.entryId,
                             title = r.title,
-                            coverData = AnimeCover(r.entryId, -1, true, r.coverUrl, r.coverLastModified),
+                            coverData = AnimeCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
                             section = HomeHubSection.Anime,
                             progressNumerator = r.progressNumerator,
                             progressDenominator = r.totalCount,
@@ -169,9 +167,6 @@ internal class HomeHubScreenModel(
                     showFilteredEmpty = cached.isInitialized && cached.isEmpty,
                 )
             }
-            logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH home-cache-applied anime hadCache=true" }
-        } else {
-            logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH home-cache-applied anime hadCache=false" }
         }
 
         // PERF: Defer expensive DB work (library + history + streaks + greeting) until after first frame.
@@ -325,6 +320,13 @@ internal class HomeHubScreenModel(
 
     fun saveCache() {
         val currentState = state.value
+        prefetchHomeHubCovers(
+            buildList {
+                add(currentState.hero?.coverData)
+                currentState.history.forEach { add(it.coverData) }
+                currentState.recommendations.forEach { add(it.coverData) }
+            },
+        )
         fastCache.save(
             CachedHomeState(
                 hero = currentState.hero?.let { hero ->
@@ -334,6 +336,8 @@ internal class HomeHubScreenModel(
                         progressNumber = hero.progressNumber,
                         coverUrl = (hero.coverData as? AnimeCover)?.url,
                         coverLastModified = (hero.coverData as? AnimeCover)?.lastModified ?: 0L,
+                        sourceId = (hero.coverData as? AnimeCover)?.sourceId ?: -1L,
+                        favorite = (hero.coverData as? AnimeCover)?.isAnimeFavorite ?: false,
                         subId = originalHeroEpisodeId ?: 0L,
                     )
                 },
@@ -344,6 +348,8 @@ internal class HomeHubScreenModel(
                         progressNumber = h.progressNumber,
                         coverUrl = (h.coverData as? AnimeCover)?.url,
                         coverLastModified = (h.coverData as? AnimeCover)?.lastModified ?: 0L,
+                        sourceId = (h.coverData as? AnimeCover)?.sourceId ?: -1L,
+                        favorite = (h.coverData as? AnimeCover)?.isAnimeFavorite ?: false,
                     )
                 },
                 recommendations = currentState.recommendations.map { r ->
@@ -352,6 +358,8 @@ internal class HomeHubScreenModel(
                         title = r.title,
                         coverUrl = (r.coverData as? AnimeCover)?.url,
                         coverLastModified = (r.coverData as? AnimeCover)?.lastModified ?: 0L,
+                        sourceId = (r.coverData as? AnimeCover)?.sourceId ?: -1L,
+                        favorite = (r.coverData as? AnimeCover)?.isAnimeFavorite ?: false,
                         totalCount = r.progressDenominator,
                         progressCount = r.progressNumerator,
                     )

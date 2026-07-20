@@ -7,7 +7,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -69,6 +68,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -111,10 +111,14 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.category.visualName
+import eu.kanade.presentation.components.AURORA_TAB_LEADING_STIFFNESS
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.auroraTabEdgeSpring
+import eu.kanade.presentation.components.rememberAsymmetricTabEdgeSprings
+import eu.kanade.presentation.components.resolveAsymmetricTabStretchRadiusFactor
 import eu.kanade.presentation.components.resolveAuroraTabContainerColor
 import eu.kanade.presentation.components.resolveAuroraTabSelectionBorderColor
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
@@ -133,17 +137,18 @@ import eu.kanade.presentation.library.novel.components.AddToSeriesDialog
 import eu.kanade.presentation.library.novel.components.CreateSeriesDialog
 import eu.kanade.presentation.more.onboarding.GETTING_STARTED_URL
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.LocalBottomNavVisibilityController
 import eu.kanade.presentation.util.Tab
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
-import eu.kanade.tachiyomi.ui.browse.anime.migration.search.MigrateAnimeSearchScreen
+import eu.kanade.tachiyomi.ui.browse.anime.migration.config.AnimeMigrationConfigScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.migration.config.MigrationConfigScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
-import eu.kanade.tachiyomi.ui.browse.novel.migration.search.MigrateNovelSearchScreen
+import eu.kanade.tachiyomi.ui.browse.novel.migration.config.NovelMigrationConfigScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
@@ -250,7 +255,7 @@ data object AnimeLibraryTab : Tab {
         val novelReaderPreferences = remember { Injekt.get<NovelReaderPreferences>() }
         val isNovelTranslatorEnabled by novelReaderPreferences.geminiEnabled().collectAsStateWithLifecycle()
 
-        val uiPreferences = Injekt.get<UiPreferences>()
+        val uiPreferences = remember { Injekt.get<UiPreferences>() }
         val theme by uiPreferences.appTheme().collectAsStateWithLifecycle()
         val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
         val showMangaSection by uiPreferences.showMangaSection().collectAsStateWithLifecycle()
@@ -510,22 +515,21 @@ data object AnimeLibraryTab : Tab {
                     initialPage = animeCategoryIndex,
                     pageCount = { state.categories.size },
                 )
-                val isProgrammaticScroll = remember { mutableStateOf(false) }
-                // When pager changes from user swipe → sync to model
-                LaunchedEffect(pagerState.currentPage) {
-                    if (!isProgrammaticScroll.value) {
-                        screenModel.activeCategoryIndex = pagerState.currentPage
-                    }
+                // Sync pager → model only when the pager has settled: this cannot
+                // interleave with programmatic animations and never drops a user
+                // swipe performed mid-animation (the old flag-based sync could).
+                LaunchedEffect(pagerState) {
+                    snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
+                        .collect { (page, scrolling) ->
+                            if (!scrolling) {
+                                screenModel.activeCategoryIndex = page
+                            }
+                        }
                 }
                 // When model changes from tap → animate pager
                 LaunchedEffect(animeCategoryIndex) {
                     if (animeCategoryIndex != pagerState.currentPage) {
-                        try {
-                            isProgrammaticScroll.value = true
-                            pagerState.animateScrollToPage(animeCategoryIndex)
-                        } finally {
-                            isProgrammaticScroll.value = false
-                        }
+                        pagerState.animateScrollToPage(animeCategoryIndex)
                     }
                 }
                 HorizontalPager(
@@ -574,20 +578,18 @@ data object AnimeLibraryTab : Tab {
                     initialPage = mangaCategoryIndex,
                     pageCount = { mangaState.categories.size },
                 )
-                val isProgrammaticScroll = remember { mutableStateOf(false) }
-                LaunchedEffect(pagerState.currentPage) {
-                    if (!isProgrammaticScroll.value) {
-                        mangaScreenModel.activeCategoryIndex = pagerState.currentPage
-                    }
+                // Settled-page sync (see anime tab comment): race-free pager → model.
+                LaunchedEffect(pagerState) {
+                    snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
+                        .collect { (page, scrolling) ->
+                            if (!scrolling) {
+                                mangaScreenModel.activeCategoryIndex = page
+                            }
+                        }
                 }
                 LaunchedEffect(mangaCategoryIndex) {
                     if (mangaCategoryIndex != pagerState.currentPage) {
-                        try {
-                            isProgrammaticScroll.value = true
-                            pagerState.animateScrollToPage(mangaCategoryIndex)
-                        } finally {
-                            isProgrammaticScroll.value = false
-                        }
+                        pagerState.animateScrollToPage(mangaCategoryIndex)
                     }
                 }
                 HorizontalPager(
@@ -648,20 +650,18 @@ data object AnimeLibraryTab : Tab {
                     initialPage = novelCategoryIndex,
                     pageCount = { novelState.categories.size },
                 )
-                val isProgrammaticScroll = remember { mutableStateOf(false) }
-                LaunchedEffect(pagerState.currentPage) {
-                    if (!isProgrammaticScroll.value) {
-                        novelScreenModel.activeCategoryIndex = pagerState.currentPage
-                    }
+                // Settled-page sync (see anime tab comment): race-free pager → model.
+                LaunchedEffect(pagerState) {
+                    snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
+                        .collect { (page, scrolling) ->
+                            if (!scrolling) {
+                                activeNovelScreenModel.activeCategoryIndex = page
+                            }
+                        }
                 }
                 LaunchedEffect(novelCategoryIndex) {
                     if (novelCategoryIndex != pagerState.currentPage) {
-                        try {
-                            isProgrammaticScroll.value = true
-                            pagerState.animateScrollToPage(novelCategoryIndex)
-                        } finally {
-                            isProgrammaticScroll.value = false
-                        }
+                        pagerState.animateScrollToPage(novelCategoryIndex)
                     }
                 }
                 HorizontalPager(
@@ -732,8 +732,6 @@ data object AnimeLibraryTab : Tab {
                         onImportEpub = { epubImportLauncher.launch(arrayOf("application/epub+zip")) },
                         showInlineHeader = false,
                         libraryPreferences = activeNovelScreenModel.libraryPreferences,
-                        sourceManager = activeNovelScreenModel.sourceManager,
-                        downloadCache = activeNovelScreenModel.downloadCache,
                     )
                 }
             },
@@ -764,9 +762,16 @@ data object AnimeLibraryTab : Tab {
             }
         }
 
-        val isAnimeLibraryEmpty = state.searchQuery.isNullOrEmpty() && !state.hasActiveFilters && state.isLibraryEmpty
+        // Treat a section as empty only after its first library emission has arrived;
+        // otherwise a faster-loading current section briefly renders the global empty
+        // screen while the other sections are still loading.
+        val isAnimeLibraryEmpty = state.searchQuery.isNullOrEmpty() &&
+            !state.hasActiveFilters &&
+            !state.isLoading &&
+            state.isLibraryEmpty
         val isMangaLibraryEmpty = mangaState.searchQuery.isNullOrEmpty() &&
             !mangaState.hasActiveFilters &&
+            !mangaState.isLoading &&
             mangaState.isLibraryEmpty
         val isNovelLibraryEmpty =
             novelState.searchQuery.isNullOrEmpty() &&
@@ -1042,11 +1047,11 @@ data object AnimeLibraryTab : Tab {
                             onDownloadClicked = screenModel::runDownloadActionSelection
                                 .takeIf { state.selection.fastAll { !it.anime.isLocal() } },
                             onMigrateClicked = {
-                                val animeId = state.selection.single().anime.id
+                                val selectedAnimeIds = state.selection.map { it.anime.id }
                                 screenModel.clearSelection()
-                                navigator.push(MigrateAnimeSearchScreen(animeId))
+                                navigator.push(AnimeMigrationConfigScreen(selectedAnimeIds))
                             }.takeIf {
-                                state.selection.size == 1 && state.selection.single().anime.id > 0L
+                                state.selection.isNotEmpty() && state.selection.fastAll { it.anime.id > 0L }
                             },
                             onDeleteClicked = screenModel::openDeleteAnimeDialog,
                             isManga = false,
@@ -1109,10 +1114,8 @@ data object AnimeLibraryTab : Tab {
                             onMigrateClicked = {
                                 val selectionIds = novelState.selection.map { it.id }
                                 novelScreenModel?.clearSelection()
-                                if (selectionIds.size == 1) {
-                                    navigator.push(MigrateNovelSearchScreen(selectionIds.single()))
-                                }
-                            }.takeIf { novelState.selection.size == 1 },
+                                navigator.push(NovelMigrationConfigScreen(selectionIds))
+                            }.takeIf { novelState.selection.isNotEmpty() },
                             onTranslatedDownloadClicked = {
                                 showNovelTranslatedDownloadDialog = true
                             }.takeIf { isNovelTranslatorEnabled },
@@ -1747,18 +1750,13 @@ private fun AuroraLibraryPinnedHeader(
                         )
 
                         Row {
-                            val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-                                Color.White.copy(alpha = 0.05f)
-                            } else {
-                                Color.Black.copy(alpha = 0.03f)
-                            }
                             IconButton(
                                 onClick = {
                                     appHaptics.tap()
                                     isSearchExpanded = true
                                 },
                                 modifier = Modifier
-                                    .background(tabContainerColor, CircleShape)
+                                    .auroraHeaderIconSurface(colors)
                                     .size(44.dp),
                             ) {
                                 Icon(
@@ -1774,7 +1772,7 @@ private fun AuroraLibraryPinnedHeader(
                                     onFilterClick()
                                 },
                                 modifier = Modifier
-                                    .background(tabContainerColor, CircleShape)
+                                    .auroraHeaderIconSurface(colors)
                                     .size(44.dp),
                             ) {
                                 Icon(
@@ -1791,7 +1789,7 @@ private fun AuroraLibraryPinnedHeader(
                                         showMenu = true
                                     },
                                     modifier = Modifier
-                                        .background(tabContainerColor, CircleShape)
+                                        .auroraHeaderIconSurface(colors)
                                         .size(44.dp),
                                 ) {
                                     Icon(
@@ -1928,11 +1926,6 @@ private fun AuroraLibraryCategoryTabs(
     val animTabPositionsX = remember(categories) { mutableStateMapOf<Int, Float>() }
     val animTabPositionsY = remember(categories) { mutableStateMapOf<Int, Float>() }
 
-    var prevSelectedIndex by remember { mutableIntStateOf(coercedSelected) }
-    LaunchedEffect(coercedSelected) {
-        prevSelectedIndex = coercedSelected
-    }
-
     val activeWidth = animTabWidths[coercedSelected] ?: 0f
     val activeHeight = animTabHeights[coercedSelected] ?: 0f
     val activeX = animTabPositionsX[coercedSelected] ?: 0f
@@ -1941,32 +1934,30 @@ private fun AuroraLibraryCategoryTabs(
     val activeLeft = activeX
     val activeRight = activeX + activeWidth
 
-    val leadingStiffness = 500f
-    val trailingStiffness = 250f
-    val damping = 0.78f
-
-    val isMovingRight = coercedSelected > prevSelectedIndex
-    val leftStiffness = if (isMovingRight) trailingStiffness else leadingStiffness
-    val rightStiffness = if (isMovingRight) leadingStiffness else trailingStiffness
+    // Asymmetric spring stretch (variant A): sticky leading/trailing for whole travel.
+    val (leftSpring, rightSpring) = rememberAsymmetricTabEdgeSprings(coercedSelected)
+    val bodySpring = remember {
+        auroraTabEdgeSpring(AURORA_TAB_LEADING_STIFFNESS)
+    }
 
     val animatedLeft by animateFloatAsState(
         targetValue = activeLeft,
-        animationSpec = spring(dampingRatio = damping, stiffness = leftStiffness),
+        animationSpec = leftSpring,
         label = "tabLeft",
     )
     val animatedRight by animateFloatAsState(
         targetValue = activeRight,
-        animationSpec = spring(dampingRatio = damping, stiffness = rightStiffness),
+        animationSpec = rightSpring,
         label = "tabRight",
     )
     val animatedHeight by animateFloatAsState(
         targetValue = activeHeight,
-        animationSpec = spring(dampingRatio = damping, stiffness = leadingStiffness),
+        animationSpec = bodySpring,
         label = "tabHeight",
     )
     val animatedY by animateFloatAsState(
         targetValue = activeY,
-        animationSpec = spring(dampingRatio = damping, stiffness = leadingStiffness),
+        animationSpec = bodySpring,
         label = "tabY",
     )
 
@@ -2059,7 +2050,8 @@ private fun AuroraLibraryCategoryTabs(
                             animatedLeft
                         }
 
-                        val radiusPx = animatedHeight / 2f
+                        val radiusPx = (animatedHeight / 2f) *
+                            resolveAsymmetricTabStretchRadiusFactor(drawWidth, activeWidth.coerceAtLeast(1f))
                         drawRoundRect(
                             brush = selectedTabBrush,
                             topLeft = Offset(drawX, animatedY),

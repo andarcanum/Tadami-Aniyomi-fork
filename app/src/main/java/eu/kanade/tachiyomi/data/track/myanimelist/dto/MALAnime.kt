@@ -18,6 +18,7 @@ data class MALAnime(
     val mediaType: String,
     @SerialName("start_date")
     val startDate: String?,
+    val genres: List<MALGenre>? = null,
 )
 
 @Serializable

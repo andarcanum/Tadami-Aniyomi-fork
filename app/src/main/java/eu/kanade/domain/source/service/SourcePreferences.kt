@@ -45,7 +45,15 @@ class SourcePreferences(
 
     fun migrationFlags() = preferenceStore.getInt("migrate_flags", Int.MAX_VALUE)
 
+    fun migrationFlagsAnime() = preferenceStore.getInt("migrate_flags_anime", Int.MAX_VALUE)
+
+    fun migrationFlagsNovel() = preferenceStore.getInt("migrate_flags_novel", Int.MAX_VALUE)
+
     fun migrationSources() = preferenceStore.getStringSet("migration_sources", emptySet())
+
+    fun migrationSourcesAnime() = preferenceStore.getStringSet("migration_sources_anime", emptySet())
+
+    fun migrationSourcesNovel() = preferenceStore.getStringSet("migration_sources_novel", emptySet())
 
     fun migrationStrategy() = if (migrationPrioritizeByChapters().get()) {
         MigrationStrategy.MOST_CHAPTERS

@@ -6,8 +6,9 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -18,19 +19,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.entries.anime.model.effectiveDownloadedFilter
+import eu.kanade.presentation.components.AuroraCheckboxItem
+import eu.kanade.presentation.components.AuroraRadioItem
+import eu.kanade.presentation.components.AuroraSortItem
+import eu.kanade.presentation.components.AuroraTriStateItem
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import kotlinx.collections.immutable.persistentListOf
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.CheckboxItem
 import tachiyomi.presentation.core.components.LabeledCheckbox
-import tachiyomi.presentation.core.components.RadioItem
-import tachiyomi.presentation.core.components.SortItem
-import tachiyomi.presentation.core.components.TriStateItem
 import tachiyomi.presentation.core.i18n.stringResource
+
 @Composable
 fun EpisodeSettingsDialog(
     onDismissRequest: () -> Unit,
@@ -62,8 +65,9 @@ fun EpisodeSettingsDialog(
             stringResource(MR.strings.action_display),
         ),
         tabOverflowMenuContent = { closeMenu ->
-            DropdownMenuItem(
-                text = { Text(stringResource(MR.strings.set_chapter_settings_as_default)) },
+            AuroraEntryDropdownMenuItem(
+                text = stringResource(MR.strings.set_chapter_settings_as_default),
+                leadingIcon = Icons.Outlined.Save,
                 onClick = {
                     showSetAsDefaultDialog = true
                     closeMenu()
@@ -123,22 +127,23 @@ private fun ColumnScope.FilterPage(
     fillermarkedFilter: TriState,
     onFillermarkedFilterChanged: (TriState) -> Unit,
 ) {
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.label_downloaded),
         state = downloadFilter,
+        enabled = onDownloadFilterChanged != null,
         onClick = onDownloadFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(AYMR.strings.action_filter_unseen),
         state = unseenFilter,
         onClick = onUnseenFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.action_filter_bookmarked),
         state = bookmarkedFilter,
         onClick = onBookmarkedFilterChanged,
     )
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(AYMR.strings.action_filter_fillermarked),
         state = fillermarkedFilter,
         onClick = onFillermarkedFilterChanged,
@@ -157,7 +162,7 @@ private fun ColumnScope.SortPage(
         MR.strings.sort_by_upload_date to Anime.EPISODE_SORTING_UPLOAD_DATE,
         MR.strings.action_sort_alpha to Anime.EPISODE_SORTING_ALPHABET,
     ).map { (titleRes, mode) ->
-        SortItem(
+        AuroraSortItem(
             label = stringResource(titleRes),
             sortDescending = sortDescending.takeIf { sortingMode == mode },
             onClick = { onItemSelected(mode) },
@@ -178,20 +183,20 @@ private fun ColumnScope.DisplayPage(
         MR.strings.show_title to Anime.EPISODE_DISPLAY_NAME,
         AYMR.strings.show_episode_number to Anime.EPISODE_DISPLAY_NUMBER,
     ).map { (titleRes, mode) ->
-        RadioItem(
+        AuroraRadioItem(
             label = stringResource(titleRes),
             selected = displayMode == mode,
             onClick = { onDisplayModeChanged(mode) },
         )
     }
     val showPreviewsFlag = if (showPreviews) Anime.EPISODE_SHOW_NOT_PREVIEWS else Anime.EPISODE_SHOW_PREVIEWS
-    CheckboxItem(
+    AuroraCheckboxItem(
         label = stringResource(AYMR.strings.show_episode_previews),
         checked = showPreviews,
         onClick = { onShowPreviewsEnabled(showPreviewsFlag) },
     )
     val showSummariesFlag = if (showSummaries) Anime.EPISODE_SHOW_NOT_SUMMARIES else Anime.EPISODE_SHOW_SUMMARIES
-    CheckboxItem(
+    AuroraCheckboxItem(
         label = stringResource(AYMR.strings.show_episode_summaries),
         checked = showSummaries,
         onClick = { onShowSummariesEnabled(showSummariesFlag) },

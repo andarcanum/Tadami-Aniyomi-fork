@@ -68,7 +68,14 @@ class AnimeCategoryScreenModel(
                     AnimeCategoryEvent.InternalError,
                 )
 
-                else -> {}
+                else -> {
+                    runCatching {
+                        val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
+                        if (!manager.state.value.unlocked) {
+                            manager.offer(eu.kanade.domain.easteregg.aurora.AuroraChannels.named("категория", name))
+                        }
+                    }
+                }
             }
         }
     }
@@ -128,7 +135,15 @@ class AnimeCategoryScreenModel(
                 is RenameAnimeCategory.Result.InternalError -> _events.send(
                     AnimeCategoryEvent.InternalError,
                 )
-                else -> {}
+
+                else -> {
+                    runCatching {
+                        val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
+                        if (!manager.state.value.unlocked) {
+                            manager.offer(eu.kanade.domain.easteregg.aurora.AuroraChannels.named("категория", name))
+                        }
+                    }
+                }
             }
         }
     }

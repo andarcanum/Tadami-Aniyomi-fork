@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -11,10 +12,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForwardIos
 import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -27,14 +26,13 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderSettingsScreenModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.CheckboxItem
-import tachiyomi.presentation.core.components.SettingsChipRow
-import tachiyomi.presentation.core.components.SliderItem
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.LocalAppHaptics
@@ -77,93 +75,86 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         )
     }
 
-    SettingsChipRow(MR.strings.pref_reader_theme) {
-        themes.map { (labelRes, value) ->
-            FilterChip(
-                selected = readerTheme == value,
-                onClick = { screenModel.preferences.readerTheme().set(value) },
-                label = { Text(stringResource(labelRes)) },
+    // Section: display.
+    AuroraGlassSection(title = stringResource(MR.strings.pref_category_display)) {
+        AuroraFieldLabel(stringResource(MR.strings.pref_reader_theme))
+        AuroraSegmentedRow(
+            options = themes.map { stringResource(it.first) },
+            selectedIndex = themes.indexOfFirst { it.second == readerTheme },
+            onSelect = { screenModel.preferences.readerTheme().set(themes[it].second) },
+        )
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_fullscreen),
+            pref = screenModel.preferences.fullscreen(),
+        )
+        if (screenModel.hasDisplayCutout && screenModel.preferences.fullscreen().get()) {
+            AuroraToggleRow(
+                label = stringResource(MR.strings.pref_cutout_short),
+                pref = screenModel.preferences.cutoutShort(),
+            )
+        }
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_keep_screen_on),
+            pref = screenModel.preferences.keepScreenOn(),
+        )
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_show_page_number),
+            pref = screenModel.preferences.showPageNumber(),
+        )
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_show_reading_time_left),
+            pref = screenModel.preferences.showReadingTimeLeft(),
+        )
+    }
+
+    // Section: reading behavior.
+    val joinDoublePages by screenModel.preferences.joinDoublePages().collectAsState()
+    AuroraGlassSection(title = stringResource(MR.strings.pref_category_reading)) {
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_auto_webtoon_mode),
+            pref = screenModel.preferences.useAutoWebtoon(),
+        )
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_read_with_long_tap),
+            pref = screenModel.preferences.readWithLongTap(),
+        )
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_always_show_chapter_transition),
+            pref = screenModel.preferences.alwaysShowChapterTransition(),
+        )
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_page_transitions),
+            pref = screenModel.preferences.pageTransitions(),
+        )
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_join_double_pages),
+            pref = screenModel.preferences.joinDoublePages(),
+        )
+        if (joinDoublePages) {
+            AuroraToggleRow(
+                label = stringResource(MR.strings.pref_shift_double_pages),
+                pref = screenModel.preferences.shiftDoublePages(),
             )
         }
     }
 
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_show_page_number),
-        pref = screenModel.preferences.showPageNumber(),
-    )
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_show_reading_time_left),
-        pref = screenModel.preferences.showReadingTimeLeft(),
-    )
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_auto_webtoon_mode),
-        pref = screenModel.preferences.useAutoWebtoon(),
-    )
-
-    // Navigator settings button
-    Row(
-        modifier = Modifier
-            .clickable { showNavigatorSettings = true }
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = stringResource(MR.strings.pref_navigator_settings),
-            style = MaterialTheme.typography.bodyMedium,
+    // Section: top toolbar action buttons only.
+    AuroraGlassSection(title = stringResource(AYMR.strings.reader_toolbar_heading)) {
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.reader_toolbar_show_webview),
+            pref = screenModel.preferences.showToolbarWebViewButton(),
         )
-        Icon(
-            imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        AuroraToggleRow(
+            label = stringResource(AYMR.strings.reader_toolbar_show_share),
+            pref = screenModel.preferences.showToolbarShareButton(),
         )
     }
 
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_fullscreen),
-        pref = screenModel.preferences.fullscreen(),
-    )
-
-    if (screenModel.hasDisplayCutout && screenModel.preferences.fullscreen().get()) {
-        CheckboxItem(
-            label = stringResource(MR.strings.pref_cutout_short),
-            pref = screenModel.preferences.cutoutShort(),
-        )
-    }
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_keep_screen_on),
-        pref = screenModel.preferences.keepScreenOn(),
-    )
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_read_with_long_tap),
-        pref = screenModel.preferences.readWithLongTap(),
-    )
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_always_show_chapter_transition),
-        pref = screenModel.preferences.alwaysShowChapterTransition(),
-    )
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_page_transitions),
-        pref = screenModel.preferences.pageTransitions(),
-    )
-
-    val joinDoublePages by screenModel.preferences.joinDoublePages().collectAsState()
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_join_double_pages),
-        pref = screenModel.preferences.joinDoublePages(),
-    )
-
-    if (joinDoublePages) {
-        CheckboxItem(
-            label = stringResource(MR.strings.pref_shift_double_pages),
-            pref = screenModel.preferences.shiftDoublePages(),
+    // Section: page slider / scrollbar — separate from toolbar (own studio panel).
+    AuroraGlassSection(title = stringResource(MR.strings.pref_navigator_settings)) {
+        AuroraNavRow(
+            label = stringResource(MR.strings.action_settings),
+            onClick = { showNavigatorSettings = true },
         )
     }
 
@@ -183,100 +174,94 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         screenModel.preferences.bottomBarButtonsOrder().set(newList.joinToString(","))
     }
 
-    Text(
-        text = stringResource(MR.strings.pref_bottom_bar),
-        style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-    )
+    // Section: bottom bar actions (reorderable).
+    AuroraGlassSection(title = stringResource(MR.strings.pref_bottom_bar)) {
+        val lazyListState = rememberLazyListState()
+        val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
+            val item = orderListState.removeAt(from.index)
+            orderListState.add(to.index, item)
+            updateOrder(orderListState)
+        }
 
-    val lazyListState = rememberLazyListState()
-    val reorderableState = rememberReorderableLazyListState(lazyListState) { from, to ->
-        val item = orderListState.removeAt(from.index)
-        orderListState.add(to.index, item)
-        updateOrder(orderListState)
+        LazyColumn(
+            state = lazyListState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(240.dp),
+            userScrollEnabled = false,
+        ) {
+            items(
+                items = orderListState,
+                key = { it },
+            ) { buttonId ->
+                ReorderableItem(reorderableState, buttonId) { isDragging ->
+                    val label = when (buttonId) {
+                        "reading_mode" -> stringResource(MR.strings.pref_bottom_bar_show_reading_mode)
+                        "orientation" -> stringResource(MR.strings.pref_bottom_bar_show_orientation)
+                        "crop_borders" -> stringResource(MR.strings.pref_bottom_bar_show_crop_borders)
+                        "chapter_list" -> stringResource(MR.strings.pref_bottom_bar_show_chapter_list)
+                        "settings" -> stringResource(MR.strings.pref_bottom_bar_show_settings)
+                        else -> ""
+                    }
+                    val pref = when (buttonId) {
+                        "reading_mode" -> screenModel.preferences.showBottomBarReadingMode()
+                        "orientation" -> screenModel.preferences.showBottomBarOrientation()
+                        "crop_borders" -> screenModel.preferences.showBottomBarCropBorders()
+                        "chapter_list" -> screenModel.preferences.showBottomBarChapterList()
+                        "settings" -> screenModel.preferences.showBottomBarSettings()
+                        else -> null
+                    }
+                    if (pref != null) {
+                        val checked by pref.collectAsState()
+                        BottomBarReorderItem(
+                            modifier = Modifier.animateItem(),
+                            label = label,
+                            checked = checked,
+                            onCheckedChange = { pref.set(!checked) },
+                            dragHandleModifier = Modifier.draggableHandle(),
+                        )
+                    }
+                }
+            }
+        }
     }
 
-    LazyColumn(
-        state = lazyListState,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(270.dp),
-        userScrollEnabled = false,
-    ) {
-        items(
-            items = orderListState,
-            key = { it },
-        ) { buttonId ->
-            ReorderableItem(reorderableState, buttonId) { isDragging ->
-                val label = when (buttonId) {
-                    "reading_mode" -> stringResource(MR.strings.pref_bottom_bar_show_reading_mode)
-                    "orientation" -> stringResource(MR.strings.pref_bottom_bar_show_orientation)
-                    "crop_borders" -> stringResource(MR.strings.pref_bottom_bar_show_crop_borders)
-                    "chapter_list" -> stringResource(MR.strings.pref_bottom_bar_show_chapter_list)
-                    "settings" -> stringResource(MR.strings.pref_bottom_bar_show_settings)
-                    else -> ""
-                }
-                val pref = when (buttonId) {
-                    "reading_mode" -> screenModel.preferences.showBottomBarReadingMode()
-                    "orientation" -> screenModel.preferences.showBottomBarOrientation()
-                    "crop_borders" -> screenModel.preferences.showBottomBarCropBorders()
-                    "chapter_list" -> screenModel.preferences.showBottomBarChapterList()
-                    "settings" -> screenModel.preferences.showBottomBarSettings()
-                    else -> null
-                }
-                if (pref != null) {
-                    val checked by pref.collectAsState()
-                    BottomBarReorderItem(
-                        modifier = Modifier.animateItem(),
-                        label = label,
-                        checked = checked,
-                        onCheckedChange = { pref.set(!checked) },
-                        dragHandleModifier = Modifier.draggableHandle(),
+    // Section: E-Ink.
+    AuroraGlassSection(title = stringResource(MR.strings.pref_category_eink)) {
+        AuroraToggleRow(
+            label = stringResource(MR.strings.pref_flash_page),
+            pref = screenModel.preferences.flashOnPageChange(),
+        )
+        if (flashPageState) {
+            AuroraSliderRow(
+                label = stringResource(MR.strings.pref_flash_duration),
+                value = flashMillis / ReaderPreferences.MILLI_CONVERSION,
+                valueRange = 1..15,
+                valueText = stringResource(MR.strings.pref_flash_duration_summary, flashMillis),
+                onChange = { flashMillisPref.set(it * ReaderPreferences.MILLI_CONVERSION) },
+            )
+            AuroraSliderRow(
+                label = stringResource(MR.strings.pref_flash_page_interval),
+                value = flashInterval,
+                valueRange = 1..10,
+                valueText = pluralStringResource(MR.plurals.pref_pages, flashInterval, flashInterval),
+                onChange = {
+                    flashIntervalPref.set(it)
+                },
+            )
+            AuroraFieldLabel(stringResource(MR.strings.pref_flash_with))
+            AuroraChipFlow {
+                flashColors.forEach { (labelRes, value) ->
+                    AuroraChip(
+                        selected = flashColor == value,
+                        onClick = { flashColorPref.set(value) },
+                        label = stringResource(labelRes),
                     )
                 }
             }
         }
     }
-
-    Text(
-        text = stringResource(MR.strings.pref_category_eink),
-        style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
-    )
-
-    CheckboxItem(
-        label = stringResource(MR.strings.pref_flash_page),
-        pref = screenModel.preferences.flashOnPageChange(),
-    )
-    if (flashPageState) {
-        SliderItem(
-            value = flashMillis / ReaderPreferences.MILLI_CONVERSION,
-            valueRange = 1..15,
-            label = stringResource(MR.strings.pref_flash_duration),
-            valueText = stringResource(MR.strings.pref_flash_duration_summary, flashMillis),
-            onChange = { flashMillisPref.set(it * ReaderPreferences.MILLI_CONVERSION) },
-            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
-        SliderItem(
-            value = flashInterval,
-            valueRange = 1..10,
-            label = stringResource(MR.strings.pref_flash_page_interval),
-            valueText = pluralStringResource(MR.plurals.pref_pages, flashInterval, flashInterval),
-            onChange = {
-                flashIntervalPref.set(it)
-            },
-            pillColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
-        SettingsChipRow(MR.strings.pref_flash_with) {
-            flashColors.map { (labelRes, value) ->
-                FilterChip(
-                    selected = flashColor == value,
-                    onClick = { flashColorPref.set(value) },
-                    label = { Text(stringResource(labelRes)) },
-                )
-            }
-        }
-    }
+    Spacer(Modifier.height(8.dp))
 }
 
 @Composable
@@ -296,15 +281,15 @@ private fun BottomBarReorderItem(
             })
             .fillMaxWidth()
             .padding(
-                horizontal = 24.dp,
-                vertical = 12.dp,
+                horizontal = 16.dp,
+                vertical = 8.dp,
             ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.weight(1f),
         ) {
             Checkbox(
@@ -314,12 +299,13 @@ private fun BottomBarReorderItem(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
+                color = AuroraTheme.colors.textPrimary,
             )
         }
         Icon(
             imageVector = Icons.Outlined.DragHandle,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = AuroraTheme.colors.textSecondary,
             modifier = dragHandleModifier.padding(horizontal = 8.dp),
         )
     }

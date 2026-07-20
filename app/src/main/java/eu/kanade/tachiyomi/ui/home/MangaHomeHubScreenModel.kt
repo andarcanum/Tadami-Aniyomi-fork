@@ -39,7 +39,7 @@ internal class MangaHomeHubScreenModel(
                         entryId = h.entryId,
                         title = h.title,
                         progressNumber = h.progressNumber,
-                        coverData = MangaCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                        coverData = MangaCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                     )
                 },
                 history = cached.history.map { h ->
@@ -47,7 +47,7 @@ internal class MangaHomeHubScreenModel(
                         entryId = h.entryId,
                         title = h.title,
                         progressNumber = h.progressNumber,
-                        coverData = MangaCover(h.entryId, -1, true, h.coverUrl, h.coverLastModified),
+                        coverData = MangaCover(h.entryId, h.sourceId, h.favorite, h.coverUrl, h.coverLastModified),
                         section = HomeHubSection.Manga,
                     )
                 },
@@ -55,7 +55,7 @@ internal class MangaHomeHubScreenModel(
                     HomeHubRecommendation(
                         entryId = r.entryId,
                         title = r.title,
-                        coverData = MangaCover(r.entryId, -1, true, r.coverUrl, r.coverLastModified),
+                        coverData = MangaCover(r.entryId, r.sourceId, r.favorite, r.coverUrl, r.coverLastModified),
                         section = HomeHubSection.Manga,
                         progressNumerator = r.progressNumerator,
                         progressDenominator = r.totalCount,
@@ -266,6 +266,13 @@ internal class MangaHomeHubScreenModel(
 
     fun saveCache() {
         val currentState = state.value
+        prefetchHomeHubCovers(
+            buildList {
+                add(currentState.hero?.coverData)
+                currentState.history.forEach { add(it.coverData) }
+                currentState.recommendations.forEach { add(it.coverData) }
+            },
+        )
         fastCache.save(
             CachedHomeState(
                 hero = currentState.hero?.let { hero ->
@@ -275,6 +282,8 @@ internal class MangaHomeHubScreenModel(
                         progressNumber = hero.progressNumber,
                         coverUrl = (hero.coverData as? MangaCover)?.url,
                         coverLastModified = (hero.coverData as? MangaCover)?.lastModified ?: 0L,
+                        sourceId = (hero.coverData as? MangaCover)?.sourceId ?: -1L,
+                        favorite = (hero.coverData as? MangaCover)?.isMangaFavorite ?: false,
                         subId = originalHeroChapterId ?: 0L,
                     )
                 },
@@ -285,6 +294,8 @@ internal class MangaHomeHubScreenModel(
                         progressNumber = h.progressNumber,
                         coverUrl = (h.coverData as? MangaCover)?.url,
                         coverLastModified = (h.coverData as? MangaCover)?.lastModified ?: 0L,
+                        sourceId = (h.coverData as? MangaCover)?.sourceId ?: -1L,
+                        favorite = (h.coverData as? MangaCover)?.isMangaFavorite ?: false,
                     )
                 },
                 recommendations = currentState.recommendations.map { r ->
@@ -293,6 +304,8 @@ internal class MangaHomeHubScreenModel(
                         title = r.title,
                         coverUrl = (r.coverData as? MangaCover)?.url,
                         coverLastModified = (r.coverData as? MangaCover)?.lastModified ?: 0L,
+                        sourceId = (r.coverData as? MangaCover)?.sourceId ?: -1L,
+                        favorite = (r.coverData as? MangaCover)?.isMangaFavorite ?: false,
                         totalCount = r.progressDenominator,
                         progressCount = r.progressNumerator,
                     )

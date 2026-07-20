@@ -451,8 +451,10 @@ class ReaderActivity : BaseActivity() {
                     ReaderSettingsScreenModel(
                         readerState = viewModel.state,
                         hasDisplayCutout = hasCutout,
-                        onChangeReadingMode = viewModel::setMangaReadingMode,
-                        onChangeOrientation = viewModel::setMangaOrientationType,
+                        onChangeReadingMode = viewModel::setReadingModePreference,
+                        onChangeOrientation = viewModel::setOrientationPreference,
+                        onSetSeriesViewerOverride = viewModel::setSeriesViewerOverrideEnabled,
+                        isSeriesViewerOverrideEnabled = viewModel::isSeriesViewerOverrideEnabled,
                     )
                 }
 
@@ -516,6 +518,12 @@ class ReaderActivity : BaseActivity() {
                     val bottomBarButtonsOrder by readerPreferences
                         .bottomBarButtonsOrder()
                         .collectAsStateWithLifecycle()
+                    val showToolbarWebViewButton by readerPreferences
+                        .showToolbarWebViewButton()
+                        .collectAsStateWithLifecycle()
+                    val showToolbarShareButton by readerPreferences
+                        .showToolbarShareButton()
+                        .collectAsStateWithLifecycle()
                     val buttonsOrderList = remember(bottomBarButtonsOrder) {
                         bottomBarButtonsOrder.split(",").filter { it.isNotBlank() }
                     }
@@ -563,6 +571,8 @@ class ReaderActivity : BaseActivity() {
                         bookmarked = state.bookmarked,
                         onToggleBookmarked = viewModel::toggleChapterBookmark,
                         onOpenInWebView = ::openChapterInWebView.takeIf { isHttpSource },
+                        showWebViewButton = showToolbarWebViewButton,
+                        showShareButton = showToolbarShareButton,
                         onOpenInBrowser = ::openChapterInBrowser.takeIf { isHttpSource },
                         onShare = ::shareChapter.takeIf { isHttpSource },
 
@@ -1167,9 +1177,7 @@ class ReaderActivity : BaseActivity() {
 
         private val grayBackgroundColor = Color.rgb(0x20, 0x21, 0x25)
 
-        /**
-         * Initializes the reader subscriptions.
-         */
+        // Initializes the reader subscriptions.
         init {
             readerPreferences.readerTheme().changes()
                 .onEach { theme ->

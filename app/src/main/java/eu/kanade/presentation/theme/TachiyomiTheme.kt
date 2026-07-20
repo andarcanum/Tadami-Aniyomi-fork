@@ -1,5 +1,7 @@
 package eu.kanade.presentation.theme
 
+import android.content.Context
+import android.os.PowerManager
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.ColorScheme
@@ -17,6 +19,8 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.domain.ui.model.EInkThemeMode
+import eu.kanade.presentation.easteregg.aurora.AuroraPrimeColors
+import eu.kanade.presentation.easteregg.aurora.rememberAuroraPrimeColors
 import eu.kanade.presentation.theme.colorscheme.AuroraColorScheme
 import eu.kanade.presentation.theme.colorscheme.BaseColorScheme
 import eu.kanade.presentation.theme.colorscheme.CloudflareColorScheme
@@ -100,12 +104,17 @@ private fun BaseTachiyomiTheme(
     content: @Composable () -> Unit,
 ) {
     val isEInkMode = eInkProfile.isEnabled
-    val colorScheme = getThemeColorScheme(
+    val baseColorScheme = getThemeColorScheme(
         appTheme = appTheme,
         isAmoled = isAmoled,
         eInkProfile = eInkProfile,
         isDark = isDark,
     )
+    val colorScheme = if (appTheme == AppTheme.AURORA_PRIME) {
+        auroraPrimeOverlay(base = baseColorScheme, isAmoled = isAmoled, isDark = isDark)
+    } else {
+        baseColorScheme
+    }
     val appFontFamily = rememberAppFontFamily(appUiFontId)
     val coverTitleFontFamily = rememberAppFontFamily(coverTitleFontId)
     val typography = remember(appFontFamily) {
@@ -217,4 +226,70 @@ private val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
     AppTheme.NEBULA_TIDE to NebulaTideColorScheme,
     AppTheme.EVENT_HORIZON to EventHorizonColorScheme,
     AppTheme.VOID_RED to VoidRedColorScheme,
+    AppTheme.AURORA_PRIME to AuroraColorScheme,
 )
+
+@Composable
+private fun auroraPrimeOverlay(base: ColorScheme, isAmoled: Boolean, isDark: Boolean): ColorScheme {
+    val context = LocalContext.current
+    val manager = remember { eu.kanade.domain.easteregg.aurora.AuroraHeartManager.get(context) }
+    val payload = remember { manager.unlockedPayload() }
+    val powerSave = remember {
+        (context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager)?.isPowerSaveMode == true
+    }
+    val live = rememberAuroraPrimeColors(payload, animated = !powerSave) ?: return base
+    return applyAuroraPrimeOverlay(
+        base = base,
+        live = live,
+        isAmoled = isAmoled,
+        isDark = isDark,
+    )
+}
+
+/**
+ * AURORA_PRIME overlay: living accents always; night surfaces only in dark mode.
+ *
+ * Payload themeColors ship dark-only background/surface (night sky). Applying them
+ * under light theme mode mixed light surfaceContainer* with forced dark bg and
+ * pale on* text — the broken "dark-in-light" look. Light mode keeps base light
+ * surfaces and only tints accents/outlines.
+ */
+internal fun applyAuroraPrimeOverlay(
+    base: ColorScheme,
+    live: AuroraPrimeColors,
+    isAmoled: Boolean,
+    isDark: Boolean,
+): ColorScheme {
+    val withAccents = base.copy(
+        primary = live.primary,
+        onPrimary = Color.Black,
+        primaryContainer = live.primary.copy(alpha = 0.2f),
+        onPrimaryContainer = live.primary,
+        secondary = live.secondary,
+        onSecondary = Color.White,
+        secondaryContainer = live.secondary.copy(alpha = 0.2f),
+        onSecondaryContainer = live.secondary,
+        tertiary = live.accent,
+        onTertiary = Color.Black,
+        tertiaryContainer = live.accent.copy(alpha = 0.2f),
+        onTertiaryContainer = live.accent,
+        surfaceTint = live.primary,
+        outline = live.primary.copy(alpha = if (isDark) 0.5f else 0.35f),
+        outlineVariant = live.primary.copy(alpha = if (isDark) 0.2f else 0.15f),
+    )
+
+    if (!isDark) {
+        // Light: keep bright surfaces from AuroraColorScheme.lightScheme
+        return withAccents
+    }
+
+    return withAccents.copy(
+        // При AMOLED фон/поверхности оставляем чёрными (так делает BaseColorScheme)
+        background = if (isAmoled) base.background else live.background,
+        onBackground = Color(0xFFDCEBFF),
+        surface = if (isAmoled) base.surface else live.surface,
+        onSurface = Color(0xFFDCEBFF),
+        surfaceVariant = (if (isAmoled) base.surface else live.surface).copy(alpha = 0.8f),
+        onSurfaceVariant = Color(0xCCDCEBFF),
+    )
+}

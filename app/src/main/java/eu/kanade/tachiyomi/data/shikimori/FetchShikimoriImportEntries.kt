@@ -9,6 +9,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.shikimori.ShikimoriImportEntry
 import tachiyomi.data.shikimori.ShikimoriImportMediaType
 import java.io.IOException
@@ -57,8 +59,8 @@ class FetchShikimoriImportEntries(
         val animeById = rates
             .map { it.targetId }
             .distinct()
-            .chunked(50)
-            .flatMap { chunk -> api.getAnimesByIds(chunk) }
+            .chunked(BULK_CHUNK_SIZE)
+            .flatMap { chunk -> rateLimiter.withRateLimit { api.getAnimesByIds(chunk) } }
             .associateBy { it.id }
 
         return rates.mapNotNull { rate ->
@@ -86,20 +88,20 @@ class FetchShikimoriImportEntries(
         val rates = api.getAllUserMangaRates(userId)
         val targetIds = rates.map { it.targetId }.distinct()
 
-        val mangaById = if (ranobeOnly) {
-            fetchMangaByIdsParallel(api, targetIds)
-        } else {
-            val bulk = targetIds
-                .chunked(50)
-                .flatMap { chunk -> api.getMangasByIds(chunk) }
-                .associateBy { it.id }
-                .toMutableMap()
-            val stillMissing = targetIds.filter { it !in bulk }
-            if (stillMissing.isNotEmpty()) {
-                bulk.putAll(fetchMangaByIdsParallel(api, stillMissing))
-            }
-            bulk
+        // Bulk-first for BOTH manga and ranobe: /mangas?ids= costs one request
+        // per 50 entries. Ids missing from the bulk response (ranobe kinds are
+        // often excluded from it) are fetched individually as a fallback,
+        // instead of doing one request per entry upfront for ranobe.
+        val bulk = targetIds
+            .chunked(BULK_CHUNK_SIZE)
+            .flatMap { chunk -> rateLimiter.withRateLimit { api.getMangasByIds(chunk) } }
+            .associateBy { it.id }
+            .toMutableMap()
+        val stillMissing = targetIds.filter { it !in bulk }
+        if (stillMissing.isNotEmpty()) {
+            bulk.putAll(fetchMangaByIdsParallel(api, stillMissing))
         }
+        val mangaById: Map<Long, SMEntry> = bulk
 
         return rates.mapNotNull { rate ->
             val manga = mangaById[rate.targetId] ?: return@mapNotNull null
@@ -138,10 +140,16 @@ class FetchShikimoriImportEntries(
                         }
                     } catch (e: HttpException) {
                         if (e.code == 429) throw RateLimitedException()
+                        // Don't silently drop the entry on other HTTP errors.
+                        logcat(LogPriority.WARN, e) { "Shikimori entry fetch failed for id=$id" }
                     }
                 }
             }
         }.awaitAll()
         result
+    }
+
+    companion object {
+        private const val BULK_CHUNK_SIZE = 50
     }
 }

@@ -86,17 +86,25 @@ class ImportShikimoriNovelEntries(
                 }
 
                 if (shikimori.isLoggedIn) {
-                    val track = MangaTrack.create(shikimori.id).apply {
-                        manga_id = localNovel.id
-                        remote_id = action.entry.remoteId
-                        title = action.entry.name
-                        total_chapters = action.entry.totalCount ?: 0L
-                        score = action.entry.score.toDouble()
-                        status = toTrackStatus(action.entry.status)
-                        last_chapter_read = action.entry.progress.toDouble()
+                    // Tracker binding is best-effort: a Shikimori API hiccup must
+                    // not mark an already successful library import as failed.
+                    try {
+                        val track = MangaTrack.create(shikimori.id).apply {
+                            manga_id = localNovel.id
+                            remote_id = action.entry.remoteId
+                            title = action.entry.name
+                            total_chapters = action.entry.totalCount ?: 0L
+                            score = action.entry.score.toDouble()
+                            status = toTrackStatus(action.entry.status)
+                            last_chapter_read = action.entry.progress.toDouble()
+                        }
+                        addNovelTracks.bind(shikimori, track, localNovel.id)
+                        trackerBound++
+                    } catch (e: Exception) {
+                        logcat(LogPriority.WARN, e) {
+                            "Shikimori tracker bind failed for '${action.entry.name}'"
+                        }
                     }
-                    addNovelTracks.bind(shikimori, track, localNovel.id)
-                    trackerBound++
                 }
 
                 if (wasInLibrary) alreadyInLibrary++ else added++

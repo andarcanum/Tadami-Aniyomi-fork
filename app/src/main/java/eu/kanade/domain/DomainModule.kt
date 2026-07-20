@@ -447,6 +447,24 @@ class DomainModule : InjektModule {
         addFactory {
             eu.kanade.tachiyomi.data.shikimori.ImportShikimoriExecutor(get(), get(), get())
         }
+        addFactory { eu.kanade.tachiyomi.data.anilist.FetchAnilistImportEntries(get()) }
+        addFactory {
+            eu.kanade.tachiyomi.data.anilist.ImportAnilistEntries(get(), get(), get(), get(), get(), get(), get())
+        }
+        addFactory {
+            eu.kanade.tachiyomi.data.anilist.ImportAnilistMangaEntries(
+                get(),
+                get(),
+                get(),
+                get(),
+                get(),
+                get(),
+                get(),
+            )
+        }
+        addFactory {
+            eu.kanade.tachiyomi.data.anilist.ImportAnilistExecutor(get(), get())
+        }
         addFactory { UpdateAnime(get(), get()) }
         addFactory { SetAnimeCategories(get()) }
         addFactory { ShouldUpdateDbSeason() }

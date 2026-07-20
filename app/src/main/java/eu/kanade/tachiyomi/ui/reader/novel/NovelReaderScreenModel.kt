@@ -29,6 +29,9 @@ import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.novel.sortedByNovelReadingOrder
+import eu.kanade.tachiyomi.ui.reader.novel.dictionary.CompositeNovelDictionaryProvider
+import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistory
+import eu.kanade.tachiyomi.ui.reader.novel.dictionary.OfflineStarDictDictionaryProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
@@ -327,9 +330,22 @@ class NovelReaderScreenModel(
     private val novelDictionaryProvider: NovelDictionaryProvider = run {
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
-        OnlineDictionaryProvider(
-            client = networkHelper.client,
-            json = json,
+        val prefs = Injekt.get<NovelReaderPreferences>()
+        CompositeNovelDictionaryProvider(
+            modeProvider = { prefs.novelDictionarySource().get() },
+            online = OnlineDictionaryProvider(
+                client = networkHelper.client,
+                json = json,
+            ),
+            offline = OfflineStarDictDictionaryProvider(
+                context = Injekt.get<Application>(),
+                disabledIdsProvider = {
+                    prefs.novelDictionaryDisabledOfflineIds().get()
+                        .split(",")
+                        .mapNotNull { id -> id.trim().takeIf(String::isNotEmpty) }
+                        .toSet()
+                },
+            ),
         )
     },
     private val googleTranslationService: GoogleTranslationService = run {
@@ -1831,6 +1847,11 @@ class NovelReaderScreenModel(
             )
 
             if (nextUpdate.emitReadEvent) {
+                if (eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin()) {
+                    val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
+                    manager.registerNightAction()
+                    manager.revealHint()
+                }
                 eventBus?.tryEmit(
                     AchievementEvent.NovelChapterRead(
                         novelId = nextUpdate.novelId,
@@ -2970,6 +2991,7 @@ class NovelReaderScreenModel(
         )
         novelDictionarySessionCache.get(cacheKey)?.let { cached ->
             novelDictionaryUiState = NovelDictionaryUiState.Result(selection, cached)
+            recordDictionaryHistory(term, wordLang, targetLangCode, cached)
             refreshSelectedTextTranslationUi()
             return
         }
@@ -2991,6 +3013,7 @@ class NovelReaderScreenModel(
             when (outcome) {
                 is NovelDictionaryProviderOutcome.Success -> {
                     novelDictionarySessionCache.put(cacheKey, outcome.result)
+                    recordDictionaryHistory(term, wordLang, targetLangCode, outcome.result)
                     novelDictionaryUiState = NovelDictionaryUiState.Result(selection, outcome.result)
                 }
                 is NovelDictionaryProviderOutcome.Unavailable -> {
@@ -3027,6 +3050,30 @@ class NovelReaderScreenModel(
         novelDictionaryJob = null
         novelDictionarySessionCache.clear()
         novelDictionaryUiState = NovelDictionaryUiState.Idle
+    }
+
+    private fun recordDictionaryHistory(
+        term: String,
+        language: String?,
+        targetLanguage: String?,
+        result: NovelDictionaryResult,
+    ) {
+        val novelTitle = currentNovel?.title
+        val chapterName = currentChapter?.name
+        screenModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                NovelDictionaryHistory.record(
+                    context = Injekt.get<Application>(),
+                    term = term,
+                    language = language,
+                    targetLanguage = targetLanguage,
+                    preview = NovelDictionaryHistory.previewOf(result),
+                    novelTitle = novelTitle,
+                    chapterName = chapterName,
+                    provider = result.attribution,
+                )
+            }
+        }
     }
 
     private var dictionaryTts: android.speech.tts.TextToSpeech? = null

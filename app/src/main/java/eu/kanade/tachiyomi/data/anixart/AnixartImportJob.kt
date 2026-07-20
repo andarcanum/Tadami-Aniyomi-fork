@@ -18,11 +18,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import logcat.LogPriority
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.anixart.AnixartImportPlanner
 import tachiyomi.data.anixart.AnixartMatcher
 import tachiyomi.data.anixart.AnixartRow
 import tachiyomi.data.anixart.AnixartStatus
+import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
@@ -51,7 +53,7 @@ class AnixartImportJob(
             val plan = payload.toPlan()
             val importEntries = Injekt.get<ImportAnixartEntries>()
             val report = importEntries.await(plan) { current, total ->
-                notifier.showProgress(current, total)
+                notifier.notifyProgress(current, total)
             }
             val trackerReport = if (syncToShikimori) {
                 val trackerSync = Injekt.get<AnixartTrackerSync>()
@@ -69,11 +71,11 @@ class AnixartImportJob(
             Result.success()
         } catch (e: Exception) {
             if (e is CancellationException) {
-                notifier.showError("Import canceled")
+                notifier.showError(context.stringResource(AYMR.strings.shikimori_import_error_canceled))
                 Result.success()
             } else {
                 logcat(LogPriority.ERROR, e)
-                notifier.showError(e.message ?: "Import failed")
+                notifier.showError(e.message ?: context.stringResource(AYMR.strings.shikimori_import_error_failed))
                 Result.failure()
             }
         }

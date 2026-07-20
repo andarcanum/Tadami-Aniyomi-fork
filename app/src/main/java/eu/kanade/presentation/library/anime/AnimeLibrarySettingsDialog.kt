@@ -9,9 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -19,6 +17,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import eu.kanade.presentation.components.AuroraBaseSortItem
+import eu.kanade.presentation.components.AuroraCheckboxItem
+import eu.kanade.presentation.components.AuroraChipRow
+import eu.kanade.presentation.components.AuroraDisplayModeTiles
+import eu.kanade.presentation.components.AuroraFilterChip
+import eu.kanade.presentation.components.AuroraHeadingItem
+import eu.kanade.presentation.components.AuroraSortItem
+import eu.kanade.presentation.components.AuroraSwitchItem
+import eu.kanade.presentation.components.AuroraTriStateItem
 import eu.kanade.presentation.components.TabbedDialog
 import eu.kanade.presentation.components.TabbedDialogPaddings
 import eu.kanade.presentation.library.auroraLibraryCardStyleOptions
@@ -34,13 +41,7 @@ import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.BaseSortItem
-import tachiyomi.presentation.core.components.CheckboxItem
-import tachiyomi.presentation.core.components.HeadingItem
-import tachiyomi.presentation.core.components.SettingsChipRow
 import tachiyomi.presentation.core.components.SliderItem
-import tachiyomi.presentation.core.components.SortItem
-import tachiyomi.presentation.core.components.TriStateItem
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 
@@ -99,7 +100,7 @@ private fun ColumnScope.FilterPage(
         .autoUpdateItemRestrictions()
         .collectAsStateWithLifecycle()
 
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.label_downloaded),
         state = if (downloadedOnly) {
             TriState.ENABLED_IS
@@ -110,25 +111,25 @@ private fun ColumnScope.FilterPage(
         onClick = { screenModel.toggleFilter(LibraryPreferences::filterDownloadedAnime) },
     )
     val filterUnseen by screenModel.libraryPreferences.filterUnseen().collectAsStateWithLifecycle()
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(AYMR.strings.action_filter_unseen),
         state = filterUnseen,
         onClick = { screenModel.toggleFilter(LibraryPreferences::filterUnseen) },
     )
     val filterStarted by screenModel.libraryPreferences.filterStartedAnime().collectAsStateWithLifecycle()
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.label_started),
         state = filterStarted,
         onClick = { screenModel.toggleFilter(LibraryPreferences::filterStartedAnime) },
     )
     val filterBookmarked by screenModel.libraryPreferences.filterBookmarkedAnime().collectAsStateWithLifecycle()
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.action_filter_bookmarked),
         state = filterBookmarked,
         onClick = { screenModel.toggleFilter(LibraryPreferences::filterBookmarkedAnime) },
     )
     val filterCompleted by screenModel.libraryPreferences.filterCompletedAnime().collectAsStateWithLifecycle()
-    TriStateItem(
+    AuroraTriStateItem(
         label = stringResource(MR.strings.completed),
         state = filterCompleted,
         onClick = { screenModel.toggleFilter(LibraryPreferences::filterCompletedAnime) },
@@ -136,7 +137,7 @@ private fun ColumnScope.FilterPage(
     // TODO: re-enable when custom intervals are ready for stable
     if ((!isReleaseBuildType) && LibraryPreferences.ENTRY_OUTSIDE_RELEASE_PERIOD in autoUpdateAnimeRestrictions) {
         val filterIntervalCustom by screenModel.libraryPreferences.filterIntervalCustom().collectAsStateWithLifecycle()
-        TriStateItem(
+        AuroraTriStateItem(
             label = stringResource(MR.strings.action_filter_interval_custom),
             state = filterIntervalCustom,
             onClick = { screenModel.toggleFilter(LibraryPreferences::filterIntervalCustom) },
@@ -153,19 +154,19 @@ private fun ColumnScope.FilterPage(
             val filterTracker by screenModel.libraryPreferences.filterTrackedAnime(
                 service.id.toInt(),
             ).collectAsStateWithLifecycle()
-            TriStateItem(
+            AuroraTriStateItem(
                 label = stringResource(MR.strings.action_filter_tracked),
                 state = filterTracker,
                 onClick = { screenModel.toggleTracker(service.id.toInt()) },
             )
         }
         else -> {
-            HeadingItem(MR.strings.action_filter_tracked)
+            AuroraHeadingItem(MR.strings.action_filter_tracked)
             trackers.map { service ->
                 val filterTracker by screenModel.libraryPreferences.filterTrackedAnime(
                     service.id.toInt(),
                 ).collectAsStateWithLifecycle()
-                TriStateItem(
+                AuroraTriStateItem(
                     label = service.name,
                     state = filterTracker,
                     onClick = { screenModel.toggleTracker(service.id.toInt()) },
@@ -207,7 +208,7 @@ private fun ColumnScope.SortPage(
 
     options.map { (titleRes, mode) ->
         if (mode == AnimeLibrarySort.Type.Random) {
-            BaseSortItem(
+            AuroraBaseSortItem(
                 label = stringResource(titleRes),
                 icon = Icons.Default.Refresh
                     .takeIf { sortingMode == AnimeLibrarySort.Type.Random },
@@ -217,7 +218,7 @@ private fun ColumnScope.SortPage(
             )
             return@map
         }
-        SortItem(
+        AuroraSortItem(
             label = stringResource(titleRes),
             sortDescending = sortDescending.takeIf { sortingMode == mode },
             onClick = {
@@ -255,7 +256,7 @@ private fun ColumnScope.DisplayPage(
         .libraryPreferences
         .separateDisplayModePerMedia()
         .collectAsStateWithLifecycle()
-    CheckboxItem(
+    AuroraSwitchItem(
         label = stringResource(MR.strings.pref_library_display_mode_per_media),
         pref = screenModel.libraryPreferences.separateDisplayModePerMedia(),
     )
@@ -268,24 +269,21 @@ private fun ColumnScope.DisplayPage(
         }
     }
     val displayMode by displayModePref.collectAsStateWithLifecycle()
-    SettingsChipRow(MR.strings.action_display_mode) {
-        displayModes.map { (titleRes, mode) ->
-            FilterChip(
-                selected = displayMode == mode,
-                onClick = { screenModel.setDisplayMode(mode) },
-                label = { Text(stringResource(titleRes)) },
-            )
-        }
-    }
+    AuroraHeadingItem(MR.strings.action_display_mode)
+    AuroraDisplayModeTiles(
+        options = displayModes,
+        selected = displayMode,
+        onSelect = { screenModel.setDisplayMode(it) },
+    )
 
     val auroraCardStylePref = screenModel.libraryPreferences.auroraLibraryCardStyle()
     val auroraCardStyle by auroraCardStylePref.collectAsStateWithLifecycle()
-    SettingsChipRow(MR.strings.pref_aurora_library_card_style) {
+    AuroraChipRow(MR.strings.pref_aurora_library_card_style) {
         auroraLibraryCardStyleOptions().map { (titleRes, style) ->
-            FilterChip(
+            AuroraFilterChip(
                 selected = auroraCardStyle == style,
                 onClick = { auroraCardStylePref.set(style) },
-                label = { Text(stringResource(titleRes)) },
+                label = stringResource(titleRes),
             )
         }
     }
@@ -328,34 +326,34 @@ private fun ColumnScope.DisplayPage(
         )
     }
 
-    HeadingItem(MR.strings.overlay_header)
-    CheckboxItem(
+    AuroraHeadingItem(MR.strings.overlay_header)
+    AuroraCheckboxItem(
         label = stringResource(AYMR.strings.action_display_download_badge_anime),
         pref = screenModel.libraryPreferences.downloadBadge(),
     )
-    CheckboxItem(
+    AuroraCheckboxItem(
         label = stringResource(AYMR.strings.action_display_unseen_badge),
         pref = screenModel.libraryPreferences.unreadBadge(),
     )
-    CheckboxItem(
+    AuroraCheckboxItem(
         label = stringResource(MR.strings.action_display_local_badge),
         pref = screenModel.libraryPreferences.localBadge(),
     )
-    CheckboxItem(
+    AuroraCheckboxItem(
         label = stringResource(MR.strings.action_display_language_badge),
         pref = screenModel.libraryPreferences.languageBadge(),
     )
-    CheckboxItem(
+    AuroraCheckboxItem(
         label = stringResource(AYMR.strings.action_display_show_continue_reading_button),
         pref = screenModel.libraryPreferences.showContinueViewingButton(),
     )
 
-    HeadingItem(MR.strings.tabs_header)
-    CheckboxItem(
+    AuroraHeadingItem(MR.strings.tabs_header)
+    AuroraCheckboxItem(
         label = stringResource(MR.strings.action_display_show_tabs),
         pref = screenModel.libraryPreferences.categoryTabs(),
     )
-    CheckboxItem(
+    AuroraCheckboxItem(
         label = stringResource(MR.strings.action_display_show_number_of_items),
         pref = screenModel.libraryPreferences.categoryNumberOfItems(),
     )

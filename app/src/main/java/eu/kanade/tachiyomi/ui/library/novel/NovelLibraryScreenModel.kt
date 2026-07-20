@@ -211,7 +211,7 @@ class NovelLibraryScreenModel(
 
                         combine(
                             baseLibraryFlow,
-                            state.map { it.searchQuery }.debounce(searchDebounceMillis),
+                            state.map { it.searchQuery }.distinctUntilChanged().debounce(searchDebounceMillis),
                         ) { baseLibrary, searchQuery ->
                             val librarySearchQuery = searchQuery?.let(::LibrarySearchQuery)
                             baseLibrary.library

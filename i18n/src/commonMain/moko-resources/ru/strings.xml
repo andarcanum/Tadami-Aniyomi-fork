@@ -7,7 +7,7 @@
     <string name="action_bookmark">Добавить закладку</string>
     <string name="action_cancel">Отмена</string>
     <string name="action_delete">Удалить</string>
-    <string name="action_display">Отображение</string>
+    <string name="action_display">Вид</string>
     <string name="action_display_grid">Компактная сетка</string>
     <string name="action_display_list">Список</string>
     <string name="action_display_mode">Режим отображения</string>
@@ -15,7 +15,7 @@
     <string name="action_edit">Изменить</string>
     <string name="action_edit_categories">Изменить категории</string>
     <string name="action_edit_cover">Изменить обложку</string>
-    <string name="action_filter">Фильтрация</string>
+    <string name="action_filter">Фильтр</string>
     <string name="action_filter_bookmarked">В закладках</string>
     <string name="action_filter_empty">Удалить фильтр</string>
     <string name="action_filter_unread">Не прочитано</string>
@@ -65,6 +65,7 @@
     <string name="cookies_cleared">Cookies очищены</string>
     <string name="cover_updated">Обложка обновлена</string>
     <string name="custom_filter">Пользовательский фильтр</string>
+    <string name="reader_settings_tab_color">Цвет</string>
     <string name="decode_image_error">Не удалось загрузить изображение</string>
     <string name="dialog_with_checkbox_remove_description">Это действие удалит дату прочтения этой главы. Вы уверены?</string>
     <string name="dialog_with_checkbox_reset">Сбросить все главы для этой серии</string>
@@ -431,6 +432,11 @@
     <string name="restore_duration">%1$02d мин, %2$02d сек</string>
     <string name="viewer">Режим чтения</string>
     <string name="pref_category_for_this_series">Для этой серии</string>
+    <string name="reader_override_series">Переопределить для этой серии</string>
+    <string name="reader_override_series_summary">Свой режим чтения и ориентация только для этой серии</string>
+    <string name="reader_editing_series">Редактируются настройки этой серии</string>
+    <string name="reader_editing_global_defaults">Редактируются глобальные настройки по умолчанию</string>
+    <string name="reader_override_series_hint">Остальные параметры читалки остаются глобальными. Для серии можно переопределить только режим чтения и ориентацию.</string>
     <string name="gray_background">Серый</string>
     <string name="battery_optimization_setting_activity_not_found">Не удалось открыть настройки устройства</string>
     <string name="pref_refresh_library_covers">Обновить обложки серий</string>
@@ -912,6 +918,7 @@
     <string name="information_empty_repos">У вас нет репозиториев.</string>
     <string name="label_extension_repos">Хранилища расширений</string>
     <string name="label_extension_stores">Хранилища расширений</string>
+    <string name="ext_installer_diagnostics">Диагностика установщика</string>
     <string name="label_official_stores">Официальные хранилища</string>
     <string name="label_custom_stores">Пользовательские хранилища</string>
     <string name="action_open_discord">Discord</string>
@@ -1239,6 +1246,15 @@
     <string name="status_on_hiatus">Приостановлено</string>
     <string name="status_unknown">Неизвестно</string>
     <string name="metadata_saved_successfully">Метаданные успешно сохранены</string>
+    <string name="action_fetch_from_tracker">Получить из трекера</string>
+    <string name="action_fetch_from_tracker_choose">Выберите трекер</string>
+    <string name="fetch_from_tracker_applied">Поля заполнены из %1$s. Проверьте и сохраните.</string>
+    <string name="fetch_from_tracker_no_linked">К этому тайтлу не привязан трекер</string>
+    <string name="fetch_from_tracker_not_logged_in">Трекер привязан, но вы не вошли в аккаунт</string>
+    <string name="fetch_from_tracker_no_results">Трекер не вернул результатов</string>
+    <string name="fetch_from_tracker_no_match">Не удалось найти этот тайтл в трекере</string>
+    <string name="fetch_from_tracker_empty">В трекере нет полезных метаданных для этого тайтла</string>
+    <string name="fetch_from_tracker_failed">Не удалось получить метаданные из трекера</string>
     <string name="suggestions_similar_titles">Похожие произведения</string>
     <string name="suggestions_group_top_picks">Лучшие варианты</string>
     <string name="suggestions_group_recommendation_databases">Базы рекомендаций</string>
@@ -1498,6 +1514,8 @@
     <string name="unlockable_aura_void_broadcast_red">Аура «Плавление Ядра»</string>
     <string name="unlockable_profile_nickname_effect_glitch_rune_red">Эффект ника "Багровый глитч"</string>
     <string name="unlockable_avatar_frame_glitch_red">Багровая рамка аватара</string>
+    <string name="unlockable_theme_AURORA_PRIME">Тема «Aurora Prime»</string>
+    <string name="unlockable_special_navbar_aurora_celestial">Свечение «Celestial Navigation»</string>
 
     <!-- Onboarding: legal disclaimer step -->
     <string name="onboarding_disclaimer_title">Прежде чем начать</string>
@@ -1547,4 +1565,6 @@
     <string name="achievement_time_paradox_desc">Почитайте или посмотрите что-то ровно в 11:11</string>
     <string name="reward_special_tab_glow_title">Нижняя подсветка табов</string>
     <string name="reward_special_tab_glow_desc">Акцентная подсветка под панелью переключения вкладок</string>
+    <string name="reward_special_navbar_aurora_celestial_title">Celestial Navigation</string>
+    <string name="reward_special_navbar_aurora_celestial_desc">Ночное небо, бегущие волны света и полярное гало для навигационной панели</string>
 </resources>

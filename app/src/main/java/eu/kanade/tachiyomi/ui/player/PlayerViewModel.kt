@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
-/**
- * Code is a mix between PlayerViewModel from mpvKt and the former
- * PlayerViewModel from Aniyomi.
- */
-
 package eu.kanade.tachiyomi.ui.player
+
+// Code is a mix between PlayerViewModel from mpvKt and the former
+// PlayerViewModel from Aniyomi.
 
 import android.app.Application
 import android.content.Context
@@ -1302,7 +1300,9 @@ class PlayerViewModel @JvmOverloads constructor(
     }
 
     private fun seekByWithText(value: Int, text: String?) {
-        _doubleTapSeekAmount.update { if (value < 0 && it < 0 || pos.value + value > duration.value) 0 else it + value }
+        _doubleTapSeekAmount.update {
+            if ((value < 0 && it < 0) || pos.value + value > duration.value) 0 else it + value
+        }
         _seekText.update { text }
         _isSeekingForwards.value = value > 0
         seekBy(value, preciseSeek)
@@ -1475,32 +1475,30 @@ class PlayerViewModel @JvmOverloads constructor(
             ?: error("Requested episode of id $episodeId not found in episode list")
 
         val episodesForPlayer = episodes.filterNot {
-            anime.unseenFilterRaw == Anime.EPISODE_SHOW_SEEN &&
-                !it.seen ||
-                anime.unseenFilterRaw == Anime.EPISODE_SHOW_UNSEEN &&
-                it.seen ||
-                anime.downloadedFilterRaw == Anime.EPISODE_SHOW_DOWNLOADED &&
-                !downloadManager.isEpisodeDownloaded(
-                    it.name,
-                    it.scanlator,
-                    anime.title,
-                    anime.source,
-                ) ||
-                anime.downloadedFilterRaw == Anime.EPISODE_SHOW_NOT_DOWNLOADED &&
-                downloadManager.isEpisodeDownloaded(
-                    it.name,
-                    it.scanlator,
-                    anime.title,
-                    anime.source,
-                ) ||
-                anime.bookmarkedFilterRaw == Anime.EPISODE_SHOW_BOOKMARKED &&
-                !it.bookmark ||
-                anime.bookmarkedFilterRaw == Anime.EPISODE_SHOW_NOT_BOOKMARKED &&
-                it.bookmark ||
-                anime.fillermarkedFilterRaw == Anime.EPISODE_SHOW_FILLERMARKED &&
-                !it.fillermark ||
-                anime.fillermarkedFilterRaw == Anime.EPISODE_SHOW_NOT_FILLERMARKED &&
-                it.fillermark
+            (anime.unseenFilterRaw == Anime.EPISODE_SHOW_SEEN && !it.seen) ||
+                (anime.unseenFilterRaw == Anime.EPISODE_SHOW_UNSEEN && it.seen) ||
+                (
+                    anime.downloadedFilterRaw == Anime.EPISODE_SHOW_DOWNLOADED &&
+                        !downloadManager.isEpisodeDownloaded(
+                            it.name,
+                            it.scanlator,
+                            anime.title,
+                            anime.source,
+                        )
+                    ) ||
+                (
+                    anime.downloadedFilterRaw == Anime.EPISODE_SHOW_NOT_DOWNLOADED &&
+                        downloadManager.isEpisodeDownloaded(
+                            it.name,
+                            it.scanlator,
+                            anime.title,
+                            anime.source,
+                        )
+                    ) ||
+                (anime.bookmarkedFilterRaw == Anime.EPISODE_SHOW_BOOKMARKED && !it.bookmark) ||
+                (anime.bookmarkedFilterRaw == Anime.EPISODE_SHOW_NOT_BOOKMARKED && it.bookmark) ||
+                (anime.fillermarkedFilterRaw == Anime.EPISODE_SHOW_FILLERMARKED && !it.fillermark) ||
+                (anime.fillermarkedFilterRaw == Anime.EPISODE_SHOW_NOT_FILLERMARKED && it.fillermark)
         }.toMutableList()
 
         if (episodesForPlayer.all { it.id != episodeId }) {
@@ -2221,6 +2219,11 @@ class PlayerViewModel @JvmOverloads constructor(
                 episodeNumber = currentEp.episode_number.toInt(),
             ),
         )
+        if (eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin()) {
+            val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
+            manager.registerNightAction()
+            manager.revealHint()
+        }
 
         // Record watching activity for stats
         val episodeId = currentEp.id ?: 0L

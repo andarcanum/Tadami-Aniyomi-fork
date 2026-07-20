@@ -30,55 +30,61 @@ class CloudflareInterceptor(
     )
 
     override fun shouldIntercept(response: Response): Boolean {
-        if (response.code !in ERROR_CODES || response.header("Server") !in SERVER_CHECK) {
+        if (response.code !in ERROR_CODES ||
+            !CloudflareChallengeDetector.isCloudflareServer(response.header("Server"))
+        ) {
             return false
         }
-        if (response.header("cf-mitigated")?.equals("challenge", ignoreCase = true) == true) {
+        // The cf-mitigated header is authoritative for managed/interactive challenges.
+        if (CloudflareChallengeDetector.isManagedChallenge(response.header("cf-mitigated"))) {
             return true
         }
         // Limit body inspection to a small prefix; challenge markup is at the top of the
-        // document and full body parsing wastes memory on large pages.
+        // document and full body parsing wastes memory on large pages. The detector covers
+        // the full family of challenge markers (interstitial, interactive, error), not just
+        // the two error markers the interceptor used to look for.
         val bodyPeek = response.peekBody(CHALLENGE_PEEK_BYTES).string()
-        if (!CHALLENGE_HTML_MARKERS.any { it in bodyPeek }) {
-            return false
-        }
-        return true
+        return CloudflareChallengeDetector.hasChallengeMarkers(bodyPeek)
     }
 
     override fun intercept(chain: Interceptor.Chain, request: Request, response: Response): Response {
         val host = request.url.host
         try {
             response.close()
+            // One lock object per host is kept for the process lifetime so concurrent
+            // requests to the same host coalesce onto a single WebView solve and then
+            // reuse the resulting cf_clearance. Removing it eagerly (as before) reintroduced
+            // a race: a late arrival would create a *fresh* lock and solve in parallel,
+            // spinning up duplicate WebViews and racing on the cookie. Hosts are few, so the
+            // retained lock objects are negligible.
             val hostLock = challengeLockByHost.getOrPut(host) { Any() }
-            try {
-                synchronized(hostLock) {
-                    val oldCookie = cookieManager.get(request.url)
-                        .firstOrNull { it.name == "cf_clearance" }
+            synchronized(hostLock) {
+                val oldCookie = cookieManager.get(request.url)
+                    .firstOrNull { it.name == "cf_clearance" }
 
-                    // Only pay for an immediate network retry when there is a clearance to try.
-                    // With no cookie this was just an extra blocked request before WebView.
-                    if (oldCookie != null) {
-                        val immediateRetry = chain.proceed(request)
-                        if (!shouldIntercept(immediateRetry)) {
-                            return immediateRetry
-                        }
-                        immediateRetry.close()
-                        cookieManager.remove(request.url, COOKIE_NAMES, 0)
+                // Only pay for an immediate network retry when there is a clearance to try.
+                // With no cookie this was just an extra blocked request before WebView.
+                // For coalesced followers this is the fast path: the leader already solved
+                // the challenge, so the fresh clearance usually clears them without WebView.
+                if (oldCookie != null) {
+                    val immediateRetry = chain.proceed(request)
+                    if (!shouldIntercept(immediateRetry)) {
+                        return immediateRetry
                     }
-
-                    webViewChallengeResolver.resolve(request, oldCookie)
-
-                    val firstAttempt = chain.proceed(request)
-                    if (!shouldIntercept(firstAttempt)) {
-                        return firstAttempt
-                    }
-                    // The cookie set on CookieManager may not have propagated to OkHttp's
-                    // CookieJar yet for the in-flight connection; close and retry once.
-                    firstAttempt.close()
-                    return chain.proceed(request)
+                    immediateRetry.close()
+                    cookieManager.remove(request.url, COOKIE_NAMES, 0)
                 }
-            } finally {
-                challengeLockByHost.remove(host, hostLock)
+
+                webViewChallengeResolver.resolve(request, oldCookie)
+
+                val firstAttempt = chain.proceed(request)
+                if (!shouldIntercept(firstAttempt)) {
+                    return firstAttempt
+                }
+                // The cookie set on CookieManager may not have propagated to OkHttp's
+                // CookieJar yet for the in-flight connection; close and retry once.
+                firstAttempt.close()
+                return chain.proceed(request)
             }
         }
         // Because OkHttp's enqueue only handles IOExceptions, wrap the exception so that
@@ -97,13 +103,8 @@ class CloudflareInterceptor(
 }
 
 internal val ERROR_CODES = listOf(403, 503)
-private val SERVER_CHECK = arrayOf("cloudflare-nginx", "cloudflare")
 private val COOKIE_NAMES = listOf("cf_clearance")
 
-// Just enough to capture the challenge headers/error markers; the page body is larger
+// Just enough to capture the challenge headers/markers; the page body is larger
 // but the challenge identifiers always appear near the top.
 private const val CHALLENGE_PEEK_BYTES = 8L * 1024L
-private val CHALLENGE_HTML_MARKERS = arrayOf(
-    "challenge-error-title",
-    "challenge-error-text",
-)

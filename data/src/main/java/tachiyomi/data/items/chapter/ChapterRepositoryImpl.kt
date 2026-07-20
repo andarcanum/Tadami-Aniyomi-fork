@@ -1,6 +1,7 @@
 package tachiyomi.data.items.chapter
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.JsonObject
 import logcat.LogPriority
 import tachiyomi.core.common.util.lang.toLong
 import tachiyomi.core.common.util.system.logcat
@@ -144,6 +145,7 @@ class ChapterRepositoryImpl(
         version: Long,
         @Suppress("UNUSED_PARAMETER")
         isSyncing: Long,
+        memo: JsonObject,
     ): Chapter = Chapter(
         id = id,
         mangaId = mangaId,
@@ -159,5 +161,6 @@ class ChapterRepositoryImpl(
         scanlator = scanlator,
         lastModifiedAt = lastModifiedAt,
         version = version,
+        memo = memo,
     )
 }

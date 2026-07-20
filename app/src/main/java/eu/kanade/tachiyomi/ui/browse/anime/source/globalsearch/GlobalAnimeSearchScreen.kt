@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -91,28 +92,30 @@ data class GlobalAnimeSearchScreen(
                     }
                 }
             } else {
-                GlobalAnimeSearchScreen(
-                    state = state,
-                    navigateUp = navigator::pop,
-                    onChangeSearchQuery = screenModel::updateSearchQuery,
-                    onSearch = { enteredQuery ->
-                        val trimmed = enteredQuery.trim().lowercase()
-                        if (trimmed == "third impact" || trimmed == "третий удар") {
-                            meltdownTriggered = true
-                        }
-                        if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
-                            screenModel.search()
-                        }
-                    },
-                    getAnime = { screenModel.getAnime(it) },
-                    onChangeSearchFilter = screenModel::setSourceFilter,
-                    onToggleResults = screenModel::toggleFilterResults,
-                    onClickSource = {
-                        navigator.push(BrowseAnimeSourceScreen(it.id, state.searchQuery ?: ""))
-                    },
-                    onClickItem = { navigator.push(AnimeScreen(it.id, true)) },
-                    onLongClickItem = { navigator.push(AnimeScreen(it.id, true)) },
-                )
+                androidx.compose.foundation.layout.Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+                    GlobalAnimeSearchScreen(
+                        state = state,
+                        navigateUp = navigator::pop,
+                        onChangeSearchQuery = screenModel::updateSearchQuery,
+                        onSearch = { enteredQuery ->
+                            val trimmed = enteredQuery.trim().lowercase()
+                            if (trimmed == "third impact" || trimmed == "третий удар") {
+                                meltdownTriggered = true
+                            }
+                            if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
+                                screenModel.search()
+                            }
+                        },
+                        getAnime = { screenModel.getAnime(it) },
+                        onChangeSearchFilter = screenModel::setSourceFilter,
+                        onToggleResults = screenModel::toggleFilterResults,
+                        onClickSource = {
+                            navigator.push(BrowseAnimeSourceScreen(it.id, state.searchQuery ?: ""))
+                        },
+                        onClickItem = { navigator.push(AnimeScreen(it.id, true)) },
+                        onLongClickItem = { navigator.push(AnimeScreen(it.id, true)) },
+                    )
+                }
             }
         }
     }

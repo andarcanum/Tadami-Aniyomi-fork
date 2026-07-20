@@ -24,13 +24,6 @@ package tachiyomi.presentation.core.util
  * SOFTWARE.
  */
 
-/**
- * Code taken from https://gist.github.com/mxalbert1996/33a360fcab2105a31e5355af98216f5a
- * with some modifications to handle contentPadding.
- *
- * Modifiers for regular scrollable list is omitted.
- */
-
 import android.view.ViewConfiguration
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -70,6 +63,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.sample
 import tachiyomi.presentation.core.components.Scroller.STICKY_HEADER_KEY_PREFIX
+
+// Code taken from https://gist.github.com/mxalbert1996/33a360fcab2105a31e5355af98216f5a
+// with some modifications to handle contentPadding.
+// Modifiers for regular scrollable list is omitted.
 
 /**
  * Draws horizontal scrollbar to a LazyList.

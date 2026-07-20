@@ -45,8 +45,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -69,6 +67,7 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.more.settings.screen.LibraryUpdatePacingScreen
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.updates.anime.AnimeUpdatesAuroraContent
 import eu.kanade.presentation.updates.manga.MangaUpdatesAuroraContent
 import eu.kanade.presentation.updates.novel.NovelUpdatesAuroraContent
@@ -514,15 +513,10 @@ private fun AuroraUpdatesPinnedHeader(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val tabContainerColor = if (colors.background.luminance() < 0.5f) {
-                    Color.White.copy(alpha = 0.05f)
-                } else {
-                    Color.Black.copy(alpha = 0.03f)
-                }
                 IconButton(
                     onClick = onRefreshCurrent,
                     modifier = Modifier
-                        .background(tabContainerColor, CircleShape)
+                        .auroraHeaderIconSurface(colors)
                         .size(44.dp),
                 ) {
                     Icon(
@@ -553,7 +547,7 @@ private fun AuroraUpdatesPinnedHeader(
                             pacingMenuExpanded = true
                         },
                         modifier = Modifier
-                            .background(tabContainerColor, CircleShape)
+                            .auroraHeaderIconSurface(colors)
                             .size(44.dp),
                     ) {
                         Icon(

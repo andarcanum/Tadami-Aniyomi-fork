@@ -16,6 +16,7 @@ import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -35,6 +36,11 @@ class NovelDownloadManager(
 
     @Volatile
     private var cachedTotalSize: Long? = null
+
+    // Last known on-disk novel directory per novel id, remembered on write or found by scan.
+    // Protects reads against READABLE directory-name drift (stub source name when the source
+    // is not registered at read time, renamed novel title, etc.). See issue #143.
+    private val resolvedNovelDirCache = ConcurrentHashMap<Long, UniFile>()
 
     fun invalidateCache() {
         cachedTotalCount = null
@@ -129,6 +135,7 @@ class NovelDownloadManager(
         } ?: return false
         coroutineContext.ensureActive()
         val file = chapterFile(novel, chapter.id, create = true) ?: return false
+        file.parentFile?.let { resolvedNovelDirCache[novel.id] = it }
         var writeElapsed = 0L
         writeElapsed = measureTimeMillis {
             val outputStream = file.openOutputStream()
@@ -198,6 +205,7 @@ class NovelDownloadManager(
             legacyDir.deleteRecursively()
         }
 
+        resolvedNovelDirCache.remove(novel.id)
         invalidateCache()
         cleanupDirectories(novel)
         downloadCache?.onNovelRemoved(novel)
@@ -236,7 +244,8 @@ class NovelDownloadManager(
 
     private fun resolveChapterFile(novel: Novel, chapterId: Long): UniFile? {
         chapterFile(novel, chapterId)?.let { return it }
-        val stableFile = chapterFile(novel, chapterId, path = NovelDownloadPath.STABLE_ID) ?: return null
+        val stableFile = chapterFile(novel, chapterId, path = NovelDownloadPath.STABLE_ID)
+            ?: return findChapterFileByScan(novel, chapterId)
         val readableFile = chapterFile(novel, chapterId, create = true) ?: return stableFile
         return runCatching {
             stableFile.openInputStream().use { input ->
@@ -254,7 +263,44 @@ class NovelDownloadManager(
     }
 
     private fun findChapterFile(novel: Novel, chapterId: Long): UniFile? {
-        return chapterFile(novel, chapterId) ?: chapterFile(novel, chapterId, path = NovelDownloadPath.STABLE_ID)
+        return chapterFile(novel, chapterId)
+            ?: chapterFile(novel, chapterId, path = NovelDownloadPath.STABLE_ID)
+            ?: findChapterFileByScan(novel, chapterId)
+    }
+
+    /**
+     * Name-independent lookup: walks the downloads root
+     * ("novels/<source dir>/<novel dir>/<chapterId>.html") looking for the chapter file.
+     * Chapter ids are globally unique database ids, so the first match is guaranteed to
+     * belong to this chapter even if the parent directory names have drifted (e.g. the
+     * source was not registered at read time and getOrStub() produced a stub name, or the
+     * novel title changed after the download). Only runs when the regular READABLE and
+     * STABLE_ID lookups miss; the found directory is memoized per novel to avoid rescans.
+     */
+    private fun findChapterFileByScan(novel: Novel, chapterId: Long): UniFile? {
+        val chapterName = "$chapterId.html"
+
+        resolvedNovelDirCache[novel.id]?.let { cachedDir ->
+            if (cachedDir.exists()) {
+                cachedDir.findFile(chapterName)?.takeIf { it.isFile }?.let { return it }
+            } else {
+                resolvedNovelDirCache.remove(novel.id)
+            }
+        }
+
+        val baseDir = rootDir ?: return null
+        baseDir.listFiles()?.forEach { sourceDir ->
+            if (!sourceDir.isDirectory) return@forEach
+            sourceDir.listFiles()?.forEach { novelDir ->
+                if (!novelDir.isDirectory) return@forEach
+                val file = novelDir.findFile(chapterName)
+                if (file != null && file.isFile) {
+                    resolvedNovelDirCache[novel.id] = novelDir
+                    return file
+                }
+            }
+        }
+        return null
     }
 
     private fun legacyChapterFile(novel: Novel, chapterId: Long): File? {
@@ -308,8 +354,10 @@ class NovelDownloadManager(
     }
 
     private fun scopedNovelDirectories(novel: Novel): List<UniFile> {
-        return NovelDownloadPath.entries
+        val namedDirectories = NovelDownloadPath.entries
             .mapNotNull { path -> novelDirectory(novel, create = false, path = path) }
+        val cachedDirectory = resolvedNovelDirCache[novel.id]?.takeIf { it.exists() }
+        return (namedDirectories + listOfNotNull(cachedDirectory))
             .distinctBy { directory -> directory.filePath ?: directory.name }
     }
 

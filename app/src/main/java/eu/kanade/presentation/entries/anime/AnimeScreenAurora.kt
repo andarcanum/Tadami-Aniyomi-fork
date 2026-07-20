@@ -208,6 +208,8 @@ fun AnimeScreenAuroraImpl(
     val entrySuggestionsEnabled by sourcePreferences.entrySuggestionsEnabled().collectAsState()
     val entrySuggestionsExpandInline by uiPreferences.entrySuggestionsExpandInline().collectAsState()
     val entrySuggestionsInOverflow by uiPreferences.entrySuggestionsInOverflow().collectAsState()
+    val showSeasonTabs by uiPreferences.showSeasonTabs().collectAsState()
+    val alwaysShowFullEpisodeList by uiPreferences.alwaysShowFullEpisodeList().collectAsState()
     val globalSearchQuery = remember(anime.displayTitle) { normalizeAuroraGlobalSearchQuery(anime.displayTitle) }
     val episodes = state.episodeListItems
     val selectedEpisodes = remember(episodes) {
@@ -327,8 +329,14 @@ fun AnimeScreenAuroraImpl(
         mutableStateOf(distinctVirtualSeasons.firstOrNull() ?: "")
     }
 
-    val filteredEpisodes = remember(episodes, selectedVirtualSeason, episodeIdToVirtualSeason, distinctVirtualSeasons) {
-        if (distinctVirtualSeasons.size <= 1) {
+    val filteredEpisodes = remember(
+        episodes,
+        selectedVirtualSeason,
+        episodeIdToVirtualSeason,
+        distinctVirtualSeasons,
+        showSeasonTabs,
+    ) {
+        if (!showSeasonTabs || distinctVirtualSeasons.size <= 1) {
             episodes
         } else {
             episodes.filter { item ->
@@ -424,7 +432,7 @@ fun AnimeScreenAuroraImpl(
     }
 
     // State for episodes expansion
-    var episodesExpanded by remember { mutableStateOf(false) }
+    var episodesExpanded by remember(alwaysShowFullEpisodeList) { mutableStateOf(alwaysShowFullEpisodeList) }
     var isReverseScrollingOverlay by remember { mutableStateOf(false) }
     LaunchedEffect(episodesExpanded) {
         if (episodesExpanded) {
@@ -829,7 +837,7 @@ fun AnimeScreenAuroraImpl(
                                 }
 
                                 item {
-                                    if (seasonSwitcherItems.size > 1) {
+                                    if (showSeasonTabs && seasonSwitcherItems.size > 1) {
                                         AnimeSeasonSwitcherAurora(
                                             items = seasonSwitcherItems,
                                             onSeasonClicked = { onSeasonClicked?.invoke(it) },
@@ -841,7 +849,7 @@ fun AnimeScreenAuroraImpl(
                                 }
 
                                 item {
-                                    if (distinctVirtualSeasons.size > 1) {
+                                    if (showSeasonTabs && distinctVirtualSeasons.size > 1) {
                                         VirtualSeasonSwitcherAurora(
                                             seasons = distinctVirtualSeasons,
                                             selectedSeason = selectedVirtualSeason,
@@ -966,7 +974,7 @@ fun AnimeScreenAuroraImpl(
                                     }
                                 }
 
-                                if (realEpisodeCount > 5) {
+                                if (realEpisodeCount > 5 && !alwaysShowFullEpisodeList) {
                                     item {
                                         Box(
                                             modifier = Modifier
@@ -1188,7 +1196,7 @@ fun AnimeScreenAuroraImpl(
                             key = "anime-aurora-seasons-switcher",
                             contentType = "anime-aurora-seasons-switcher",
                         ) {
-                            if (seasonSwitcherItems.size > 1) {
+                            if (showSeasonTabs && seasonSwitcherItems.size > 1) {
                                 AnimeSeasonSwitcherAurora(
                                     items = seasonSwitcherItems,
                                     onSeasonClicked = { onSeasonClicked?.invoke(it) },
@@ -1203,7 +1211,7 @@ fun AnimeScreenAuroraImpl(
                             key = "anime-aurora-virtual-seasons-switcher",
                             contentType = "anime-aurora-virtual-seasons-switcher",
                         ) {
-                            if (distinctVirtualSeasons.size > 1) {
+                            if (showSeasonTabs && distinctVirtualSeasons.size > 1) {
                                 VirtualSeasonSwitcherAurora(
                                     seasons = distinctVirtualSeasons,
                                     selectedSeason = selectedVirtualSeason,
@@ -1335,7 +1343,7 @@ fun AnimeScreenAuroraImpl(
                         }
 
                         // Show More button if there are more than 5 episodes
-                        if (realEpisodeCount > 5) {
+                        if (realEpisodeCount > 5 && !alwaysShowFullEpisodeList) {
                             item {
                                 Box(
                                     modifier = Modifier

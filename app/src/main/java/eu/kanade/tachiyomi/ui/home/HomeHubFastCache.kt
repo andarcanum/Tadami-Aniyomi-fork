@@ -116,6 +116,8 @@ data class CachedHeroItem(
     val coverLastModified: Long,
     @JsonNames("episodeId", "chapterId")
     val subId: Long,
+    val sourceId: Long = -1L,
+    val favorite: Boolean = false,
 )
 
 @Serializable
@@ -127,6 +129,8 @@ data class CachedHistoryItem(
     val progressNumber: Double,
     val coverUrl: String?,
     val coverLastModified: Long,
+    val sourceId: Long = -1L,
+    val favorite: Boolean = false,
 )
 
 @Serializable
@@ -140,6 +144,8 @@ data class CachedRecommendationItem(
     @JsonNames("seenCount", "readCount")
     val progressCount: Long = 0,
     val unreadCount: Long? = null,
+    val sourceId: Long = -1L,
+    val favorite: Boolean = false,
 ) {
     val progressNumerator: Long
         get() = unreadCount?.let { totalCount - it } ?: progressCount

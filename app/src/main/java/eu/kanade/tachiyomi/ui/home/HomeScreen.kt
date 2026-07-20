@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -46,12 +47,15 @@ import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,7 +84,10 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.BottomNavAppearance
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.presentation.components.LocalHostScaffoldContentPadding
+import eu.kanade.presentation.components.auroraCelestialBar
+import eu.kanade.presentation.components.auroraCelestialHalo
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
+import eu.kanade.presentation.components.rememberAuroraCelestialNavbarUnlocked
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.presentation.tutorial.coachAnchorForTab
@@ -106,10 +113,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import logcat.LogPriority
 import soup.compose.material.motion.animation.materialFadeThroughIn
 import soup.compose.material.motion.animation.materialFadeThroughOut
-import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.NavigationBar
@@ -121,6 +126,22 @@ import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
+
+/**
+ * Shared [HazeState] for the home scaffold content source.
+ * Same state powers the Aurora bottom nav glass — overlays (e.g. nickname editor)
+ * should reuse it so blur samples the real tab surface.
+ */
+val LocalHomeHazeState = staticCompositionLocalOf<HazeState?> { null }
+
+/**
+ * Slot for overlays that must draw above the whole home scaffold but OUTSIDE the
+ * [LocalHomeHazeState] haze source. Content hosted here (e.g. the nickname editor)
+ * can use hazeEffect surfaces that sample and blur the real home content behind them
+ * — blurring only what sits under the surface instead of the entire screen.
+ */
+val LocalHomeOverlayHost =
+    staticCompositionLocalOf<MutableState<(@Composable () -> Unit)?>?> { null }
 
 object HomeScreen : Screen() {
     private val librarySearchEvent = Channel<String>()
@@ -140,7 +161,6 @@ object HomeScreen : Screen() {
     @Composable
     override fun Content() {
         val context = LocalContext.current
-        logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homescreen-content-start" }
 
         val navStyle by uiPreferences.navStyle().collectAsState()
         val bottomNavAppearance by uiPreferences.bottomNavAppearance().collectAsState()
@@ -172,7 +192,7 @@ object HomeScreen : Screen() {
         val navigator = LocalNavigator.currentOrThrow
         val bottomNavVisibilityController = remember { BottomNavVisibilityController() }
         val hazeState = remember { HazeState() }
-        logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homescreen-pre-tabnavigator" }
+        val homeOverlayContent = remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
         eu.kanade.presentation.tutorial.TutorialHost {
             TabNavigator(
                 tab = defaultTab,
@@ -214,274 +234,300 @@ object HomeScreen : Screen() {
                         }
                     }
                 }
-                logcat(LogPriority.DEBUG) {
-                    "TADAMI_PERF_LAUNCH homescreen-tabnavigator-ready current=${tabNavigator.current}"
-                }
-                logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homescreen-tabnavigator-inside" }
-                // Provide usable navigator to content screen
+
+                // Provide usable navigator to content screen + shared haze for glass overlays
                 CompositionLocalProvider(
                     LocalNavigator provides navigator,
                     LocalBottomNavVisibilityController provides bottomNavVisibilityController,
+                    LocalHomeHazeState provides hazeState,
+                    LocalHomeOverlayHost provides homeOverlayContent,
                 ) {
-                    logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH homescreen-before-scaffold" }
-                    Scaffold(
-                        startBar = {
-                            if (useNavigationRail) {
-                                NavigationRail {
-                                    navStyle.tabs.fastForEach {
-                                        NavigationRailItem(it)
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Scaffold(
+                            startBar = {
+                                if (useNavigationRail) {
+                                    NavigationRail {
+                                        navStyle.tabs.fastForEach {
+                                            NavigationRailItem(it)
+                                        }
                                     }
                                 }
-                            }
-                        },
-                        bottomBar = {
-                            if (!useNavigationRail) {
-                                val bottomNavVisible by produceState(initialValue = true) {
-                                    showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
-                                }
-                                val showBottomNav = bottomNavVisible &&
-                                    bottomNavVisibilityController.isVisible &&
-                                    tabNavigator.current != currentMoreTab
-                                LaunchedEffect(showBottomNav) {
-                                    coachMarkState.isBottomBarVisible = showBottomNav
-                                }
-                                val auroraColors = if (useAuroraBottomNav) AuroraTheme.colorsForCurrentTheme() else null
-                                val navBarShape = if (useAuroraBottomNav) {
-                                    CircleShape
-                                } else {
-                                    RoundedCornerShape(
-                                        topStart = 20.dp,
-                                        topEnd = 20.dp,
-                                    )
-                                }
-                                val navContainerColor = if (useAuroraBottomNav) {
-                                    if (auroraColors!!.isDark) {
-                                        Color.Transparent
-                                    } else {
-                                        Color.Transparent
+                            },
+                            bottomBar = {
+                                if (!useNavigationRail) {
+                                    val bottomNavVisible by produceState(initialValue = true) {
+                                        showBottomNavEvent.receiveAsFlow().collectLatest { value = it }
                                     }
-                                } else {
-                                    MaterialTheme.colorScheme.surfaceContainer
-                                }
-                                val navShadowElevation = 0.dp
-                                val navTonalElevation = if (useAuroraBottomNav) {
-                                    if (auroraColors!!.isDark) 0.dp else 0.dp
-                                } else {
-                                    0.dp
-                                }
-                                val navModifier = if (useAuroraBottomNav) {
-                                    val baseModifier = Modifier
-                                        .windowInsetsPadding(NavigationBarDefaults.windowInsets)
-                                        .padding(horizontal = 12.dp, vertical = 10.dp)
-                                    if (auroraColors!!.isDark) {
-                                        baseModifier
-                                            .shadow(
-                                                elevation = 10.dp,
-                                                shape = navBarShape,
-                                                ambientColor = Color.White.copy(alpha = 0.12f),
-                                                spotColor = Color.White.copy(alpha = 0.08f),
-                                            )
-                                            .shadow(
-                                                elevation = 3.dp,
-                                                shape = navBarShape,
-                                                ambientColor = Color.White.copy(alpha = 0.18f),
-                                                spotColor = Color.White.copy(alpha = 0.12f),
-                                            )
-                                            .clip(navBarShape)
-                                            .hazeEffect(
-                                                state = hazeState,
-                                                style = HazeStyle(
-                                                    backgroundColor = auroraColors.background,
-                                                    tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
-                                                    blurRadius = 24.dp,
-                                                    noiseFactor = 0.12f,
-                                                ),
-                                            )
-                                            .border(
-                                                BorderStroke(
-                                                    width = 1.dp,
-                                                    brush = auroraMenuRimLightBrush(auroraColors),
-                                                ),
-                                                shape = navBarShape,
-                                            )
+                                    val showBottomNav = bottomNavVisible &&
+                                        bottomNavVisibilityController.isVisible &&
+                                        tabNavigator.current != currentMoreTab
+                                    LaunchedEffect(showBottomNav) {
+                                        coachMarkState.isBottomBarVisible = showBottomNav
+                                    }
+                                    val auroraColors = if (useAuroraBottomNav) {
+                                        AuroraTheme.colorsForCurrentTheme()
                                     } else {
-                                        baseModifier
-                                            .shadow(
-                                                elevation = 8.dp,
-                                                shape = navBarShape,
-                                            )
-                                            .clip(navBarShape)
-                                            .hazeEffect(
-                                                state = hazeState,
-                                                style = HazeStyle(
-                                                    backgroundColor = auroraColors.background,
-                                                    tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
-                                                    blurRadius = 24.dp,
-                                                    noiseFactor = 0.12f,
-                                                ),
-                                            )
-                                            .border(
-                                                BorderStroke(
-                                                    width = 1.dp,
-                                                    brush = Brush.verticalGradient(
-                                                        listOf(
-                                                            Color.White.copy(alpha = 0.80f),
-                                                            Color.White.copy(alpha = 0.20f),
+                                        null
+                                    }
+                                    val navBarShape = if (useAuroraBottomNav) {
+                                        CircleShape
+                                    } else {
+                                        RoundedCornerShape(
+                                            topStart = 20.dp,
+                                            topEnd = 20.dp,
+                                        )
+                                    }
+                                    val navContainerColor = if (useAuroraBottomNav) {
+                                        if (auroraColors!!.isDark) {
+                                            Color.Transparent
+                                        } else {
+                                            Color.Transparent
+                                        }
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainer
+                                    }
+                                    val navShadowElevation = 0.dp
+                                    val navTonalElevation = if (useAuroraBottomNav) {
+                                        if (auroraColors!!.isDark) 0.dp else 0.dp
+                                    } else {
+                                        0.dp
+                                    }
+                                    val navModifier = if (useAuroraBottomNav) {
+                                        val baseModifier = Modifier
+                                            .windowInsetsPadding(NavigationBarDefaults.windowInsets)
+                                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                                        if (auroraColors!!.isDark) {
+                                            baseModifier
+                                                .shadow(
+                                                    elevation = 10.dp,
+                                                    shape = navBarShape,
+                                                    ambientColor = Color.White.copy(alpha = 0.12f),
+                                                    spotColor = Color.White.copy(alpha = 0.08f),
+                                                )
+                                                .shadow(
+                                                    elevation = 3.dp,
+                                                    shape = navBarShape,
+                                                    ambientColor = Color.White.copy(alpha = 0.18f),
+                                                    spotColor = Color.White.copy(alpha = 0.12f),
+                                                )
+                                                .clip(navBarShape)
+                                                .hazeEffect(
+                                                    state = hazeState,
+                                                    style = HazeStyle(
+                                                        backgroundColor = auroraColors.background,
+                                                        tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
+                                                        blurRadius = 24.dp,
+                                                        noiseFactor = 0.12f,
+                                                    ),
+                                                )
+                                                .border(
+                                                    BorderStroke(
+                                                        width = 1.dp,
+                                                        brush = auroraMenuRimLightBrush(auroraColors),
+                                                    ),
+                                                    shape = navBarShape,
+                                                )
+                                        } else {
+                                            baseModifier
+                                                .shadow(
+                                                    elevation = 8.dp,
+                                                    shape = navBarShape,
+                                                )
+                                                .clip(navBarShape)
+                                                .hazeEffect(
+                                                    state = hazeState,
+                                                    style = HazeStyle(
+                                                        backgroundColor = auroraColors.background,
+                                                        tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
+                                                        blurRadius = 24.dp,
+                                                        noiseFactor = 0.12f,
+                                                    ),
+                                                )
+                                                .border(
+                                                    BorderStroke(
+                                                        width = 1.dp,
+                                                        brush = Brush.verticalGradient(
+                                                            listOf(
+                                                                Color.White.copy(alpha = 0.80f),
+                                                                Color.White.copy(alpha = 0.20f),
+                                                            ),
                                                         ),
                                                     ),
-                                                ),
+                                                    shape = navBarShape,
+                                                )
+                                        }
+                                    } else {
+                                        Modifier
+                                    }
+                                    val celestialNavbar =
+                                        useAuroraBottomNav && !isEInkMode && rememberAuroraCelestialNavbarUnlocked()
+                                    val celestialTabNavigator = if (celestialNavbar) LocalTabNavigator.current else null
+                                    val celestialSelectedIndex = celestialTabNavigator?.let { tn ->
+                                        navStyle.tabs.indexOfFirst { it::class == tn.current::class }
+                                    } ?: -1
+                                    val decoratedNavModifier = if (celestialNavbar && auroraColors != null) {
+                                        navModifier.auroraCelestialBar(
+                                            accent = auroraColors.accent,
+                                            accentVariant = auroraColors.accentVariant,
+                                            isDark = auroraColors.isDark,
+                                            selectedIndex = celestialSelectedIndex,
+                                            tabCount = navStyle.tabs.size,
+                                        )
+                                    } else {
+                                        navModifier
+                                    }
+
+                                    if (isEInkMode) {
+                                        if (showBottomNav) {
+                                            NavigationBar(
+                                                containerColor = navContainerColor,
+                                                contentColor = if (useAuroraBottomNav) {
+                                                    auroraColors!!.textPrimary
+                                                } else {
+                                                    MaterialTheme.colorScheme.contentColorFor(navContainerColor)
+                                                },
+                                                shadowElevation = navShadowElevation,
+                                                tonalElevation = navTonalElevation,
+                                                windowInsets = if (useAuroraBottomNav) {
+                                                    WindowInsets(
+                                                        0,
+                                                    )
+                                                } else {
+                                                    NavigationBarDefaults.windowInsets
+                                                },
+                                                modifier = decoratedNavModifier,
                                                 shape = navBarShape,
-                                            )
-                                    }
-                                } else {
-                                    Modifier
-                                }
-                                if (isEInkMode) {
-                                    if (showBottomNav) {
-                                        NavigationBar(
-                                            containerColor = navContainerColor,
-                                            contentColor = if (useAuroraBottomNav) {
-                                                auroraColors!!.textPrimary
-                                            } else {
-                                                MaterialTheme.colorScheme.contentColorFor(navContainerColor)
-                                            },
-                                            shadowElevation = navShadowElevation,
-                                            tonalElevation = navTonalElevation,
-                                            windowInsets = if (useAuroraBottomNav) {
-                                                WindowInsets(
-                                                    0,
-                                                )
-                                            } else {
-                                                NavigationBarDefaults.windowInsets
-                                            },
-                                            modifier = navModifier,
-                                            shape = navBarShape,
-                                            contentPadding = if (useAuroraBottomNav) {
-                                                PaddingValues(horizontal = 8.dp)
-                                            } else {
-                                                PaddingValues(0.dp)
-                                            },
-                                        ) {
-                                            navStyle.tabs.fastForEach {
-                                                NavigationBarItem(it, useAuroraBottomNav)
+                                                contentPadding = if (useAuroraBottomNav) {
+                                                    PaddingValues(horizontal = 8.dp)
+                                                } else {
+                                                    PaddingValues(0.dp)
+                                                },
+                                            ) {
+                                                navStyle.tabs.fastForEach {
+                                                    NavigationBarItem(it, useAuroraBottomNav)
+                                                }
                                             }
                                         }
-                                    }
-                                } else {
-                                    AnimatedVisibility(
-                                        visible = showBottomNav,
-                                        enter = expandVertically(expandFrom = Alignment.Bottom),
-                                        exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
-                                    ) {
-                                        NavigationBar(
-                                            containerColor = navContainerColor,
-                                            contentColor = if (useAuroraBottomNav) {
-                                                auroraColors!!.textPrimary
-                                            } else {
-                                                MaterialTheme.colorScheme.contentColorFor(navContainerColor)
-                                            },
-                                            shadowElevation = navShadowElevation,
-                                            tonalElevation = navTonalElevation,
-                                            windowInsets = if (useAuroraBottomNav) {
-                                                WindowInsets(
-                                                    0,
-                                                )
-                                            } else {
-                                                NavigationBarDefaults.windowInsets
-                                            },
-                                            modifier = navModifier,
-                                            shape = navBarShape,
-                                            contentPadding = if (useAuroraBottomNav) {
-                                                PaddingValues(horizontal = 8.dp)
-                                            } else {
-                                                PaddingValues(0.dp)
-                                            },
+                                    } else {
+                                        AnimatedVisibility(
+                                            visible = showBottomNav,
+                                            enter = expandVertically(expandFrom = Alignment.Bottom),
+                                            exit = shrinkVertically(shrinkTowards = Alignment.Bottom),
                                         ) {
-                                            navStyle.tabs.fastForEach {
-                                                NavigationBarItem(it, useAuroraBottomNav)
+                                            NavigationBar(
+                                                containerColor = navContainerColor,
+                                                contentColor = if (useAuroraBottomNav) {
+                                                    auroraColors!!.textPrimary
+                                                } else {
+                                                    MaterialTheme.colorScheme.contentColorFor(navContainerColor)
+                                                },
+                                                shadowElevation = navShadowElevation,
+                                                tonalElevation = navTonalElevation,
+                                                windowInsets = if (useAuroraBottomNav) {
+                                                    WindowInsets(
+                                                        0,
+                                                    )
+                                                } else {
+                                                    NavigationBarDefaults.windowInsets
+                                                },
+                                                modifier = decoratedNavModifier,
+                                                shape = navBarShape,
+                                                contentPadding = if (useAuroraBottomNav) {
+                                                    PaddingValues(horizontal = 8.dp)
+                                                } else {
+                                                    PaddingValues(0.dp)
+                                                },
+                                            ) {
+                                                navStyle.tabs.fastForEach {
+                                                    NavigationBarItem(it, useAuroraBottomNav)
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
-                        },
-                        contentWindowInsets = WindowInsets(0),
-                    ) { contentPadding ->
-                        Box(
-                            modifier = Modifier
-                                .padding(top = contentPadding.calculateTopPadding())
-                                .consumeWindowInsets(contentPadding)
-                                .hazeSource(hazeState),
-                        ) {
-                            CompositionLocalProvider(
-                                LocalHostScaffoldContentPadding provides contentPadding,
+                            },
+                            contentWindowInsets = WindowInsets(0),
+                        ) { contentPadding ->
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = contentPadding.calculateTopPadding())
+                                    .consumeWindowInsets(contentPadding)
+                                    .hazeSource(hazeState),
                             ) {
-                                if (resolvedTransitionMode == ResolvedNavigationTransitionMode.NONE) {
-                                    val currentTab = tabNavigator.current
-                                    tabNavigator.saveableState(key = "currentTab", currentTab) {
-                                        currentTab.Content()
-                                    }
-                                } else {
-                                    AnimatedContent(
-                                        targetState = tabNavigator.current,
-                                        transitionSpec = {
-                                            when (resolvedTransitionMode) {
-                                                ResolvedNavigationTransitionMode.NONE -> {
-                                                    EnterTransition.None togetherWith ExitTransition.None
-                                                }
-                                                ResolvedNavigationTransitionMode.LEGACY -> {
-                                                    materialFadeThroughIn(
-                                                        initialScale = 1f,
-                                                        durationMillis = TAB_FADE_DURATION,
-                                                    ) togetherWith
-                                                        materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
-                                                }
-                                                ResolvedNavigationTransitionMode.MODERN -> {
-                                                    val direction = tabDirection(
-                                                        initialTab = initialState,
-                                                        targetTab = targetState,
-                                                        currentMoreTab = currentMoreTab,
-                                                        navStyle = navStyle,
-                                                    )
-                                                    val enter = slideInHorizontally(
-                                                        animationSpec = tween(
-                                                            durationMillis = TAB_MODERN_ENTER_DURATION,
-                                                            easing = AURORA_EASING,
-                                                        ),
-                                                        initialOffsetX = { width -> direction * (width / 4) },
-                                                    ) + fadeIn(
-                                                        animationSpec = tween(
-                                                            durationMillis = TAB_MODERN_ENTER_DURATION,
-                                                            easing = AURORA_EASING,
-                                                        ),
-                                                    )
-                                                    val exit = slideOutHorizontally(
-                                                        animationSpec = tween(
-                                                            durationMillis = TAB_MODERN_EXIT_DURATION,
-                                                            easing = AURORA_EASING,
-                                                        ),
-                                                        targetOffsetX = { width -> -direction * (width / 5) },
-                                                    ) + fadeOut(
-                                                        animationSpec = tween(
-                                                            durationMillis = TAB_MODERN_EXIT_DURATION,
-                                                            easing = AURORA_EASING,
-                                                        ),
-                                                    )
-                                                    (enter togetherWith exit).apply {
-                                                        targetContentZIndex = 1f
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        label = "tabContent",
-                                    ) { currentTab ->
+                                CompositionLocalProvider(
+                                    LocalHostScaffoldContentPadding provides contentPadding,
+                                ) {
+                                    if (resolvedTransitionMode == ResolvedNavigationTransitionMode.NONE) {
+                                        val currentTab = tabNavigator.current
                                         tabNavigator.saveableState(key = "currentTab", currentTab) {
                                             currentTab.Content()
+                                        }
+                                    } else {
+                                        AnimatedContent(
+                                            targetState = tabNavigator.current,
+                                            transitionSpec = {
+                                                when (resolvedTransitionMode) {
+                                                    ResolvedNavigationTransitionMode.NONE -> {
+                                                        EnterTransition.None togetherWith ExitTransition.None
+                                                    }
+                                                    ResolvedNavigationTransitionMode.LEGACY -> {
+                                                        materialFadeThroughIn(
+                                                            initialScale = 1f,
+                                                            durationMillis = TAB_FADE_DURATION,
+                                                        ) togetherWith
+                                                            materialFadeThroughOut(durationMillis = TAB_FADE_DURATION)
+                                                    }
+                                                    ResolvedNavigationTransitionMode.MODERN -> {
+                                                        val direction = tabDirection(
+                                                            initialTab = initialState,
+                                                            targetTab = targetState,
+                                                            currentMoreTab = currentMoreTab,
+                                                            navStyle = navStyle,
+                                                        )
+                                                        val enter = slideInHorizontally(
+                                                            animationSpec = tween(
+                                                                durationMillis = TAB_MODERN_ENTER_DURATION,
+                                                                easing = AURORA_EASING,
+                                                            ),
+                                                            initialOffsetX = { width -> direction * (width / 4) },
+                                                        ) + fadeIn(
+                                                            animationSpec = tween(
+                                                                durationMillis = TAB_MODERN_ENTER_DURATION,
+                                                                easing = AURORA_EASING,
+                                                            ),
+                                                        )
+                                                        val exit = slideOutHorizontally(
+                                                            animationSpec = tween(
+                                                                durationMillis = TAB_MODERN_EXIT_DURATION,
+                                                                easing = AURORA_EASING,
+                                                            ),
+                                                            targetOffsetX = { width -> -direction * (width / 5) },
+                                                        ) + fadeOut(
+                                                            animationSpec = tween(
+                                                                durationMillis = TAB_MODERN_EXIT_DURATION,
+                                                                easing = AURORA_EASING,
+                                                            ),
+                                                        )
+                                                        (enter togetherWith exit).apply {
+                                                            targetContentZIndex = 1f
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            label = "tabContent",
+                                        ) { currentTab ->
+                                            tabNavigator.saveableState(key = "currentTab", currentTab) {
+                                                currentTab.Content()
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
+                        // Overlay slot rendered OUTSIDE the hazeSource content above:
+                        // overlays hosted here (e.g. the nickname editor) can use
+                        // hazeEffect to blur the real home content behind their surface.
+                        homeOverlayContent.value?.invoke()
                     }
                 }
 
@@ -645,6 +691,7 @@ object HomeScreen : Screen() {
             null
         }
         val iconShape = RoundedCornerShape(999.dp)
+        val celestialHalo = rememberAuroraCelestialNavbarUnlocked()
 
         Box(
             modifier = Modifier
@@ -678,6 +725,13 @@ object HomeScreen : Screen() {
                         .then(
                             if (selected) {
                                 Modifier
+                                    .auroraCelestialHalo(
+                                        accent = auroraColors.accent,
+                                        accentVariant = auroraColors.accentVariant,
+                                        isDark = auroraColors.isDark,
+                                        shape = iconShape,
+                                        enabled = celestialHalo,
+                                    )
                                     .background(iconBackgroundBrush!!, iconShape)
                                     .border(
                                         BorderStroke(

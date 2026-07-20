@@ -11,6 +11,8 @@ import androidx.lifecycle.flowWithLifecycle
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.entries.metadata.FetchEntryMetadataFromTracker
+import eu.kanade.domain.entries.metadata.TrackerMetadataFetchOutcome
 import eu.kanade.domain.entries.novel.interactor.GetNovelExcludedScanlators
 import eu.kanade.domain.entries.novel.interactor.NovelRatingFetcher
 import eu.kanade.domain.entries.novel.interactor.SetNovelExcludedScanlators
@@ -61,6 +63,7 @@ import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.data.translation.toTranslationQueueProfileSnapshot
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
+import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
@@ -197,6 +200,7 @@ class NovelScreenModel(
     private val novelRatingFetcher: NovelRatingFetcher = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
     private val getTracks: GetNovelTracks = Injekt.get(),
+    private val fetchEntryMetadataFromTracker: FetchEntryMetadataFromTracker = Injekt.get(),
     private val refreshNovelTracks: RefreshNovelTracks = Injekt.get(),
     private val trackNovelChapter: TrackNovelChapter = Injekt.get(),
     private val trackPreferences: TrackPreferences = Injekt.get(),
@@ -301,7 +305,8 @@ class NovelScreenModel(
     }
 
     init {
-        restoreStateFromCache(novelId)?.let {
+        val restoredState = restoreStateFromCache(novelId)
+        restoredState?.let {
             mutableState.value = it
             // Refresh chapter action states (translate/download icons) asynchronously
             // to avoid blocking the main thread with SAF filesystem operations.
@@ -451,21 +456,23 @@ class NovelScreenModel(
             val translatedDownloadFormat = novelReaderPreferences.translatedDownloadFormat(novel.id)
             val isJaomixPagedSource = source.isJaomixPagedSource()
             val shouldAutoRefreshNovel = !novel.initialized || chapters.isEmpty()
-            // PERF: avoid expensive source chapter list fetch + parse on most repeated opens.
-            // We still allow manual refresh (user button) and respect paged sources.
-            val shouldAutoRefreshChapters = chapters.isEmpty() ||
-                isJaomixPagedSource ||
-                isNovelChapterListStale(novel)
+            // Manga parity: an initialized entry with cached chapters opens instantly from the
+            // database and never hits the source on open (survives process restarts). New
+            // chapters come from library updates or the manual refresh action; paged (jaomix)
+            // sources are the only exception because they cannot cache a full list.
+            val shouldAutoRefreshChapters = chapters.isEmpty() || isJaomixPagedSource
             val currentDownloadedIds = (state.value as? State.Success)
                 ?.downloadedChapterIds
                 ?.intersect(chapters.mapTo(mutableSetOf()) { it.id })
                 .orEmpty()
-            val isSourceConfigurable = source.hasVisiblePluginSettingsByDiscovery()
+            // PERF: runtime discovery boots the plugin runtime (QuickJS) and must not delay
+            // the first frame; run the cheap manifest check now and discover asynchronously.
+            val isSourceConfigurable = source.hasVisiblePluginSettings()
             val initialState = State.Success(
                 novel = novel,
                 source = source,
                 isSourceConfigurable = isSourceConfigurable,
-                rating = null,
+                rating = restoredState?.rating,
                 chapters = chapters,
                 availableScanlators = availableScanlators,
                 scanlatorChapterCounts = scanlatorChapterCounts,
@@ -494,13 +501,21 @@ class NovelScreenModel(
                 resumeChapterId = resumeChapterId,
                 hasCompletedChapterRefresh = chapters.isNotEmpty(),
                 suggestions = if (sourcePreferences.entrySuggestionsEnabled().get()) {
-                    SuggestionState.Loading
+                    NovelSuggestionsSessionCache.get(novelId) ?: SuggestionState.Loading
                 } else {
                     SuggestionState.Disabled
                 },
             )
             mutableState.update {
                 initialState
+            }
+
+            if (!isSourceConfigurable) {
+                screenModelScope.launchIO {
+                    if (source.hasVisiblePluginSettingsByDiscovery()) {
+                        updateSuccessState { current -> current.copy(isSourceConfigurable = true) }
+                    }
+                }
             }
 
             // Fetch suggestions asynchronously
@@ -638,6 +653,20 @@ class NovelScreenModel(
         }
     }
 
+    suspend fun fetchMetadataFromTracker(
+        trackerId: Long? = null,
+    ): TrackerMetadataFetchOutcome {
+        val novel = successState?.novel
+        val fallbackTitle = novel?.title?.takeIf { it.isNotBlank() }
+            ?: novel?.displayTitle
+            ?: ""
+        return fetchEntryMetadataFromTracker.fetchNovel(
+            novelId = novelId,
+            trackerId = trackerId,
+            fallbackTitle = fallbackTitle,
+        )
+    }
+
     fun updateNovelMetadata(
         customTitle: String?,
         customAuthor: String?,
@@ -767,6 +796,13 @@ class NovelScreenModel(
         if (!force && suggestionSeedUsed == seed) {
             return
         }
+        if (!force) {
+            NovelSuggestionsSessionCache.get(novelId, seed)?.let { cached ->
+                suggestionSeedUsed = seed
+                updateSuccessState { it.copy(suggestions = cached) }
+                return
+            }
+        }
         suggestionSeedUsed = seed
 
         val currentNovel = novel ?: successState?.novel
@@ -889,21 +925,22 @@ class NovelScreenModel(
                         .take(20)
                 }
 
-                updateSuccessState {
-                    val nextState = when {
-                        finalCombined.isEmpty() -> {
-                            val anyMatched = externalMatchedBase.get() || pluginFetchedAny.get()
-                            val message = if (anyMatched) {
-                                context.stringResource(MR.strings.suggestions_empty_state_novel)
-                            } else {
-                                context.stringResource(MR.strings.suggestions_no_match_novel)
-                            }
-                            SuggestionState.Empty(message)
+                val nextState = when {
+                    finalCombined.isEmpty() -> {
+                        val anyMatched = externalMatchedBase.get() || pluginFetchedAny.get()
+                        val message = if (anyMatched) {
+                            context.stringResource(MR.strings.suggestions_empty_state_novel)
+                        } else {
+                            context.stringResource(MR.strings.suggestions_no_match_novel)
                         }
-                        else -> SuggestionState.Success(finalCombined)
+                        SuggestionState.Empty(message)
                     }
-                    it.copy(suggestions = nextState)
+                    else -> SuggestionState.Success(finalCombined)
                 }
+                if (nextState is SuggestionState.Success) {
+                    NovelSuggestionsSessionCache.put(novelId, seed, nextState)
+                }
+                updateSuccessState { it.copy(suggestions = nextState) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1719,18 +1756,6 @@ class NovelScreenModel(
         return (this as? NovelJsSource)?.isJaomixPagedPlugin() == true
     }
 
-    /**
-     * PERF: Conservative staleness check to avoid repeated expensive getChapterList + full sync/parse.
-     * Manual refresh (button) always bypasses this via explicit call.
-     */
-    private fun isNovelChapterListStale(novel: Novel): Boolean {
-        val last = novel.lastUpdate
-        if (last <= 0L) return false
-        val ageMs = System.currentTimeMillis() - last
-        // 20 minutes grace period is a good balance for novels (many sources are slow to parse 100s-1000s chapters).
-        return ageMs > 20 * 60 * 1000L
-    }
-
     fun toggleChapterRead(chapterId: Long) {
         val chapter = successState?.chapters?.firstOrNull { it.id == chapterId } ?: return
         val newRead = !chapter.read
@@ -1749,6 +1774,11 @@ class NovelScreenModel(
                 updateNewChapterIds(clearedIds = listOf(chapterId))
             }
             if (shouldEmitReadEvent) {
+                if (eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin()) {
+                    val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
+                    manager.registerNightAction()
+                    manager.revealHint()
+                }
                 eventBus?.tryEmit(
                     AchievementEvent.NovelChapterRead(
                         novelId = chapter.novelId,
@@ -3298,4 +3328,34 @@ internal fun mergeDownloadBatchEvents(
 
 internal fun shouldApplyDefaultChapterFlags(novel: Novel): Boolean {
     return !novel.favorite && novel.chapterFlags == Novel.SHOW_ALL
+}
+
+/**
+ * Process-wide cache of resolved "similar titles" so reopening an entry does not re-run
+ * the multi-source suggestion pipeline (external APIs + plugin searches) every time.
+ */
+private object NovelSuggestionsSessionCache {
+    private const val TTL_MS = 12 * 60 * 60 * 1000L
+
+    private data class Entry(
+        val seed: SuggestionSeed,
+        val state: SuggestionState.Success,
+        val cachedAt: Long,
+    )
+
+    private val entries = java.util.concurrent.ConcurrentHashMap<Long, Entry>()
+
+    fun get(novelId: Long, seed: SuggestionSeed? = null): SuggestionState.Success? {
+        val entry = entries[novelId] ?: return null
+        if (System.currentTimeMillis() - entry.cachedAt > TTL_MS) {
+            entries.remove(novelId)
+            return null
+        }
+        if (seed != null && entry.seed != seed) return null
+        return entry.state
+    }
+
+    fun put(novelId: Long, seed: SuggestionSeed, state: SuggestionState.Success) {
+        entries[novelId] = Entry(seed, state, System.currentTimeMillis())
+    }
 }

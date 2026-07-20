@@ -107,8 +107,10 @@ class SecureActivityDelegateImpl : SecureActivityDelegate, DefaultLifecycleObser
                 foregroundIncognito,
             ->
             secureScreen == SecurityPreferences.SecureScreenMode.ALWAYS ||
-                secureScreen == SecurityPreferences.SecureScreenMode.INCOGNITO &&
-                (globalIncognito || foregroundIncognito)
+                (
+                    secureScreen == SecurityPreferences.SecureScreenMode.INCOGNITO &&
+                        (globalIncognito || foregroundIncognito)
+                    )
         }
             .onEach(activity.window::setSecureScreen)
             .launchIn(activity.lifecycleScope)

@@ -4,6 +4,9 @@ import app.cash.sqldelight.ColumnAdapter
 import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import java.util.Date
 
 object DateColumnAdapter : ColumnAdapter<Date, Long> {
@@ -43,4 +46,23 @@ object FetchTypeColumnAdapter : ColumnAdapter<FetchType, Long> {
         FetchType.entries.getOrElse(databaseValue.toInt()) { FetchType.Episodes }
 
     override fun encode(value: FetchType): Long = value.ordinal.toLong()
+}
+
+object MemoColumnAdapter : ColumnAdapter<JsonObject, ByteArray> {
+    private val emptyJsonObject = JsonObject(emptyMap())
+
+    override fun decode(databaseValue: ByteArray): JsonObject {
+        // Rows written by the ALTER TABLE migrations store the DEFAULT '{}' literal as TEXT.
+        // Android's Cursor.getBlob() returns TEXT values with a trailing NUL terminator (and
+        // possibly other garbage bytes), so trim those before parsing and never crash on reads.
+        val text = databaseValue.decodeToString().trim { it.code <= 0x20 || it == '\uFFFD' }
+        if (text.isEmpty()) return emptyJsonObject
+        return try {
+            Json.decodeFromString(text)
+        } catch (_: SerializationException) {
+            emptyJsonObject
+        }
+    }
+
+    override fun encode(value: JsonObject): ByteArray = value.toString().encodeToByteArray()
 }

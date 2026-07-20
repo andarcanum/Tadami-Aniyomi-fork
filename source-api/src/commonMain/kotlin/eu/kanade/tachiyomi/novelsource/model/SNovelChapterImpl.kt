@@ -2,6 +2,8 @@
 
 package eu.kanade.tachiyomi.novelsource.model
 
+import kotlinx.serialization.json.JsonObject
+
 class SNovelChapterImpl : SNovelChapter {
 
     override lateinit var url: String
@@ -15,4 +17,6 @@ class SNovelChapterImpl : SNovelChapter {
     override var chapter_number: Float = 0f
 
     override var scanlator: String? = null
+
+    override var memo: JsonObject = JsonObject(emptyMap())
 }

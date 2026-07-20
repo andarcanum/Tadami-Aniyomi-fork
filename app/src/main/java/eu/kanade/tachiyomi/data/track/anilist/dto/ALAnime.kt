@@ -20,6 +20,7 @@ data class ALAnime(
     val totalEpisodes: Long,
     val averageScore: Int,
     val studios: ALStudios,
+    val genres: List<String> = emptyList(),
 ) {
     /**
      * Convert medium cover URL to large for better quality.
@@ -39,6 +40,7 @@ data class ALAnime(
         tracking_url = AnilistApi.animeUrl(remote_id)
         publishing_status = publishingStatus
         publishing_type = format
+        genres = this@ALAnime.genres
         if (startDateFuzzy != 0L) {
             start_date = try {
                 val outputDf = SimpleDateFormat("yyyy-MM-dd", Locale.US)

@@ -70,6 +70,7 @@ import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
+import eu.kanade.presentation.more.settings.screen.anilist.AnilistImportScreen
 import eu.kanade.presentation.more.settings.screen.anixart.AnixartImportScreen
 import eu.kanade.presentation.more.settings.screen.data.CloudSyncOptionsScreen
 import eu.kanade.presentation.more.settings.screen.data.CreateBackupScreen
@@ -779,6 +780,12 @@ object SettingsDataScreen : SearchableSettings {
                     subtitle = stringResource(AYMR.strings.shikimori_import_summary),
                     icon = Icons.Outlined.CloudDownload,
                     onClick = { navigator.push(ShikimoriImportScreen()) },
+                ),
+                Preference.PreferenceItem.TextPreference(
+                    title = stringResource(AYMR.strings.anilist_import_title),
+                    subtitle = stringResource(AYMR.strings.anilist_import_summary),
+                    icon = Icons.Outlined.CloudDownload,
+                    onClick = { navigator.push(AnilistImportScreen()) },
                 ),
             ),
         )

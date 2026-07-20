@@ -132,6 +132,7 @@ object SettingsTreasuryScreen : SearchableSettings {
         val specialBackgroundStyleKey by uiPreferences.specialBackgroundStyle().collectAsStateWithLifecycle()
         val amoled by uiPreferences.themeDarkAmoled().collectAsStateWithLifecycle()
         val showTabGlow by uiPreferences.showTabGlow().collectAsStateWithLifecycle()
+        val showCelestialNavbar by uiPreferences.showCelestialNavbar().collectAsStateWithLifecycle()
 
         val rawUnlockedUnlockables by remember {
             unlockableManager.observeUnlockedUnlockables()
@@ -575,6 +576,15 @@ object SettingsTreasuryScreen : SearchableSettings {
                 isActive = { showTabGlow },
                 onApply = { uiPreferences.showTabGlow().set(true) },
                 onDeactivate = { uiPreferences.showTabGlow().set(false) },
+            ),
+            TreasuryPreset(
+                unlockableId = "special_navbar_aurora_celestial",
+                title = stringResource(MR.strings.reward_special_navbar_aurora_celestial_title),
+                description = stringResource(MR.strings.reward_special_navbar_aurora_celestial_desc),
+                accentColor = Color(0xFF7C4DFF),
+                isActive = { showCelestialNavbar },
+                onApply = { uiPreferences.showCelestialNavbar().set(true) },
+                onDeactivate = { uiPreferences.showCelestialNavbar().set(false) },
             ),
         )
 
@@ -1723,6 +1733,7 @@ private data class TreasuryExclusiveThemeSpec(
     val tagline: StringResource,
     val accentColor: Color,
     val lockedRiddle: StringResource? = null,
+    val isSecret: Boolean = false,
 )
 
 @Composable
@@ -1766,6 +1777,13 @@ private fun TreasuryThemeSelector(
             tagline = AYMR.strings.treasury_tagline_void_red,
             accentColor = Color(0xFF9E0B14),
             lockedRiddle = AYMR.strings.achievement_void_broadcast_unlocked_hint_vague,
+        ),
+        TreasuryExclusiveThemeSpec(
+            theme = AppTheme.AURORA_PRIME,
+            rarity = AYMR.strings.treasury_exclusive_rarity_mythic,
+            tagline = AYMR.strings.treasury_tagline_aurora_prime,
+            accentColor = Color(0xFF3DDC97), // Prime greenish (matches actual Aurora Prime primary)
+            isSecret = true,
         ),
     )
 
@@ -1839,6 +1857,10 @@ private fun TreasuryThemePoster(
         label = "poster-pulse-${spec.theme.name}",
     )
     val title = spec.theme.titleRes?.let { stringResource(it) } ?: spec.theme.name
+
+    val isSecretLocked = !isUnlocked && spec.isSecret
+    val displayTitle = if (isSecretLocked) "???" else title.uppercase()
+    val displayTagline = if (isSecretLocked) null else stringResource(spec.tagline)
 
     var itemCenterOffsetX by remember { mutableStateOf(0f) }
     val parentWidth = parentLayoutCoordinates?.size?.width?.toFloat() ?: 0f
@@ -1951,14 +1973,21 @@ private fun TreasuryThemePoster(
                         ),
                 )
                 if (!isUnlocked) {
-                    val veilText = spec.lockedRiddle?.let { stringResource(it) } ?: achievementTitle
+                    val veilText = if (isSecretLocked) {
+                        null
+                    } else {
+                        (
+                            spec.lockedRiddle?.let { stringResource(it) }
+                                ?: achievementTitle
+                            )
+                    }
                     TreasuryLockVeil(achievementTitle = veilText)
                 }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = title.uppercase(),
+                    text = displayTitle,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -1966,14 +1995,16 @@ private fun TreasuryThemePoster(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = stringResource(spec.tagline),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.68f),
-                    lineHeight = 17.sp,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (displayTagline != null) {
+                    Text(
+                        text = displayTagline,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.68f),
+                        lineHeight = 17.sp,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Text(
                     text = if (isUnlocked) {
                         if (isSelected) {
@@ -1981,6 +2012,8 @@ private fun TreasuryThemePoster(
                         } else {
                             stringResource(AYMR.strings.treasury_exclusive_unlocked)
                         }
+                    } else if (isSecretLocked) {
+                        "???"
                     } else {
                         spec.lockedRiddle?.let { stringResource(it) }
                             ?: stringResource(AYMR.strings.treasury_requires_achievement, achievementTitle)
@@ -2037,7 +2070,7 @@ private fun TreasuryPosterBackdrop(
 
 @Composable
 private fun TreasuryLockVeil(
-    achievementTitle: String,
+    achievementTitle: String?,
 ) {
     Box(
         modifier = Modifier
@@ -2056,15 +2089,17 @@ private fun TreasuryLockVeil(
                 tint = Color.White,
                 modifier = Modifier.size(34.dp),
             )
-            Text(
-                text = achievementTitle,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (!achievementTitle.isNullOrBlank()) {
+                Text(
+                    text = achievementTitle,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
@@ -2445,18 +2480,28 @@ private fun TreasuryToggleSelector(
                     getRewardIconResourceId(preset.unlockableId, context)
                 }
 
+                val isCelestialSecretLocked = !isUnlocked && preset.unlockableId == "special_navbar_aurora_celestial"
+                val displayIconResId = if (isCelestialSecretLocked) {
+                    com.tadami.aurora.R.drawable.ic_badge_default
+                } else {
+                    rewardIconResId
+                }
+                val description = if (isUnlocked) {
+                    preset.description
+                } else if (isCelestialSecretLocked) {
+                    "???"
+                } else {
+                    preset.lockedRiddle
+                        ?: stringResource(AYMR.strings.treasury_requires_achievement, achievementTitle)
+                }
+
                 TreasuryArtifactShard(
                     index = index,
                     preset = preset,
-                    iconResId = rewardIconResId,
+                    iconResId = displayIconResId,
                     isUnlocked = isUnlocked,
                     isActive = isActive,
-                    description = if (isUnlocked) {
-                        preset.description
-                    } else {
-                        preset.lockedRiddle
-                            ?: stringResource(AYMR.strings.treasury_requires_achievement, achievementTitle)
-                    },
+                    description = description,
                     amoled = amoled,
                     onToggle = {
                         if (isActive) {
@@ -2482,6 +2527,9 @@ private fun TreasuryArtifactShard(
     amoled: Boolean,
     onToggle: () -> Unit,
 ) {
+    val isCelestialSecretLocked = !isUnlocked && preset.unlockableId == "special_navbar_aurora_celestial"
+    val effectiveTitle = if (isCelestialSecretLocked) "???" else preset.title
+
     val infiniteTransition = rememberInfiniteTransition(label = "artifact-${preset.unlockableId}")
     val glow by infiniteTransition.animateFloat(
         initialValue = 0.42f,
@@ -2603,7 +2651,7 @@ private fun TreasuryArtifactShard(
             )
             .semantics(mergeDescendants = true) {
                 contentDescription =
-                    "${preset.title}, " +
+                    "$effectiveTitle, " +
                     if (isActive) {
                         activeDesc
                     } else if (isUnlocked) {
@@ -2714,7 +2762,7 @@ private fun TreasuryArtifactShard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        text = preset.title,
+                        text = effectiveTitle,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
                         color = settingsTitleColor(),
@@ -2876,6 +2924,7 @@ private fun getRewardIconResourceId(rewardId: String, context: android.content.C
         "special_background_event_horizon_library" -> "ic_reward_background_event_horizon_library"
         "special_background_void_weeping_red" -> "ic_reward_background_void_weeping_red"
         "special_tab_glow" -> "ic_reward_tab_glow"
+        "special_navbar_aurora_celestial" -> "ic_reward_navbar_aurora_celestial"
         else -> "ic_reward_$rewardId"
     }
 

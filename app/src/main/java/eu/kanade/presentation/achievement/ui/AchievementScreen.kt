@@ -22,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,6 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import eu.kanade.domain.easteregg.aurora.AuroraHeartManager
+import eu.kanade.domain.easteregg.aurora.AuroraLocalization
 import eu.kanade.presentation.achievement.components.AchievementActivityGraph
 import eu.kanade.presentation.achievement.components.AchievementCard
 import eu.kanade.presentation.achievement.components.AchievementCategoryTabs
@@ -48,6 +51,8 @@ import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 /**
  * Aurora-themed Achievement Screen with custom top bar and floating stats
@@ -333,12 +338,30 @@ private fun BentoLevelCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.Bottom,
                     ) {
-                        Text(
-                            text = stringResource(AYMR.strings.achievement_bento_level, levelInfo.level),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.accent,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = stringResource(AYMR.strings.achievement_bento_level, levelInfo.level),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = colors.accent,
+                            )
+                            val manager =
+                                remember { Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>() }
+                            val holderTitle = manager.unlockedPayload()?.holderTitle
+                            if (holderTitle != null) {
+                                Text(
+                                    text = "• ${AuroraLocalization.translate(holderTitle)}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.accent,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
                         Text(
                             text = "${levelInfo.currentXp}/${levelInfo.requiredXpForNext} XP",
                             fontSize = 8.sp,

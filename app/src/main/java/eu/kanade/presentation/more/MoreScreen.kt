@@ -58,6 +58,7 @@ fun MoreScreen(
     onClickHelp: () -> Unit,
     onClickDebugAppUpdatePreview: () -> Unit,
     onClickDebugUpdatedChangelogPreview: () -> Unit,
+    onClickDebugResetAuroraHeart: () -> Unit,
 ) {
     TutorialScreenEntry(TipAnchor.MORE_TAB)
     Scaffold { contentPadding ->
@@ -213,6 +214,14 @@ fun MoreScreen(
                         subtitle = stringResource(AYMR.strings.debug_updated_changelog_preview_summary),
                         icon = Icons.Outlined.NewReleases,
                         onPreferenceClick = onClickDebugUpdatedChangelogPreview,
+                    )
+                }
+                item {
+                    TextPreferenceWidget(
+                        title = stringResource(AYMR.strings.debug_reset_aurora_heart),
+                        subtitle = stringResource(AYMR.strings.debug_reset_aurora_heart_summary),
+                        icon = Icons.Outlined.ReportProblem,
+                        onPreferenceClick = onClickDebugResetAuroraHeart,
                     )
                 }
             }

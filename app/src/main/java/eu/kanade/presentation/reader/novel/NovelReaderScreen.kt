@@ -49,16 +49,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Pause
@@ -69,6 +70,8 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChevronLeft
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Pause
+import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SettingsVoice
 import androidx.compose.material3.AlertDialog
@@ -120,6 +123,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -331,6 +335,7 @@ fun NovelReaderScreen(
     onBack: () -> Unit,
     onReadingProgress: (currentIndex: Int, totalItems: Int, persistedProgress: Long?) -> Unit,
     onToggleBookmark: () -> Unit = {},
+    onOpenDictionaryHistory: (() -> Unit)? = null,
     onStartGeminiTranslation: () -> Unit = {},
     onStopGeminiTranslation: () -> Unit = {},
     onToggleGeminiTranslationVisibility: () -> Unit = {},
@@ -3716,318 +3721,345 @@ fun NovelReaderScreen(
                         },
                     )
 
-                    if (autoScrollExpanded) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                        )
-                    }
                     AnimatedVisibility(visible = autoScrollExpanded) {
+                        // Flat panel matching manga AutoScrollControlsPanel — no nested card.
+                        val scheme = MaterialTheme.colorScheme
+                        val isDark = isSystemInDarkTheme()
+                        val valuePillBg = if (isDark) {
+                            Color.White.copy(alpha = 0.10f)
+                        } else {
+                            Color.Black.copy(alpha = 0.06f)
+                        }
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Column {
-                                if (usePageReader) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = stringResource(AYMR.strings.novel_reader_auto_scroll_page_delay),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.secondary,
-                                        )
-                                        Text(
-                                            text = stringResource(
-                                                AYMR.strings.reader_auto_scroll_page_time_fixed,
-                                                state.readerSettings.autoScrollInterval,
-                                            ),
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                    }
-                                    Slider(
-                                        value = state.readerSettings.autoScrollInterval.toFloat().coerceIn(2f, 60f),
-                                        onValueChange = {
-                                            persistAutoScrollIntervalPreference(it.roundToInt())
-                                        },
-                                        valueRange = 2f..60f,
-                                        steps = 58,
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    )
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable {
-                                                persistAutoScrollAdaptiveDelayPreference(
-                                                    !state.readerSettings.autoScrollAdaptiveDelay,
-                                                )
-                                            },
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = stringResource(AYMR.strings.novel_reader_auto_scroll_adaptive_delay),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.weight(1f),
-                                        )
-                                        Switch(
-                                            checked = state.readerSettings.autoScrollAdaptiveDelay,
-                                            onCheckedChange = {
-                                                persistAutoScrollAdaptiveDelayPreference(it)
-                                            },
-                                            modifier = Modifier.padding(start = 8.dp),
-                                        )
-                                    }
-                                    if (state.readerSettings.autoScrollAdaptiveDelay) {
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = stringResource(
-                                                AYMR.strings.reader_auto_scroll_page_time,
-                                                autoScrollPageDelayMsForCharacterCount(
-                                                    intervalSeconds = state.readerSettings.autoScrollInterval,
-                                                    characterCount =
-                                                    pageReaderCharacterCounts.getOrNull(pageReaderProgressPageIndex)
-                                                        ?: 0,
-                                                    adaptiveEnabled = true,
-                                                ) / 1000,
-                                            ),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.align(androidx.compose.ui.Alignment.CenterHorizontally),
-                                        )
-                                    }
-                                } else {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.secondary,
-                                        )
-                                        Text(
-                                            text = "$autoScrollSpeed",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                    }
-                                    Slider(
-                                        value = autoScrollSpeed.toFloat(),
-                                        onValueChange = {
-                                            val newSpeed = it.roundToInt().coerceIn(1, 100)
-                                            autoScrollSpeed = newSpeed
-                                            persistAutoScrollIntervalPreference(
-                                                interval = autoScrollSpeedToInterval(newSpeed),
-                                            )
-                                        },
-                                        valueRange = 1f..100f,
-                                        steps = 98,
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    )
-                                }
-                            }
-
-                            // Chapter End Behavior Settings
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
+                            if (usePageReader) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
+                                        text = stringResource(AYMR.strings.novel_reader_auto_scroll_page_delay),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = scheme.primary,
+                                    )
+                                    Text(
                                         text = stringResource(
-                                            AYMR.strings.novel_reader_auto_scroll_chapter_end_behavior,
+                                            AYMR.strings.reader_auto_scroll_page_time_fixed,
+                                            state.readerSettings.autoScrollInterval,
                                         ),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.secondary,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = scheme.onSurface,
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(valuePillBg)
+                                            .padding(horizontal = 10.dp, vertical = 4.dp),
                                     )
-                                    var dropdownExpanded by remember { mutableStateOf(false) }
-                                    val behaviorEntries = novelAutoScrollChapterEndBehaviorEntries()
-                                    Box {
-                                        Text(
-                                            text =
-                                            behaviorEntries[state.readerSettings.autoScrollChapterEndBehavior] ?: "",
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            modifier = Modifier
-                                                .clickable { dropdownExpanded = true }
-                                                .padding(8.dp),
-                                        )
-                                        DropdownMenu(
-                                            expanded = dropdownExpanded,
-                                            onDismissRequest = { dropdownExpanded = false },
-                                        ) {
-                                            behaviorEntries.forEach { (behavior, label) ->
-                                                DropdownMenuItem(
-                                                    text = {
-                                                        Text(text = label, style = MaterialTheme.typography.bodyMedium)
-                                                    },
-                                                    onClick = {
-                                                        dropdownExpanded = false
-                                                        persistAutoScrollChapterEndBehaviorPreference(behavior)
-                                                    },
-                                                )
-                                            }
+                                }
+                                Slider(
+                                    value = state.readerSettings.autoScrollInterval.toFloat().coerceIn(2f, 60f),
+                                    onValueChange = {
+                                        persistAutoScrollIntervalPreference(it.roundToInt())
+                                    },
+                                    valueRange = 2f..60f,
+                                    steps = 58,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            appHaptics.tap()
+                                            persistAutoScrollAdaptiveDelayPreference(
+                                                !state.readerSettings.autoScrollAdaptiveDelay,
+                                            )
                                         }
-                                    }
-                                }
-
-                                if (state.readerSettings.autoScrollChapterEndBehavior !=
-                                    NovelAutoScrollChapterEndBehavior.StopAtEnd
+                                        .padding(vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    val currentPauseSec = (state.readerSettings.autoScrollEndPauseMs / 1000L).toInt()
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = stringResource(AYMR.strings.novel_reader_auto_scroll_end_pause),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.secondary,
-                                        )
-                                        Text(
-                                            text = stringResource(
-                                                AYMR.strings.novel_reader_auto_scroll_end_pause_value,
-                                                currentPauseSec,
-                                            ),
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                    }
-                                    Slider(
-                                        value = currentPauseSec.toFloat().coerceIn(0f, 10f),
-                                        onValueChange = {
-                                            val seconds = it.roundToInt().coerceIn(0, 10)
-                                            persistAutoScrollEndPauseMsPreference(seconds * 1000L)
+                                    Text(
+                                        text = stringResource(AYMR.strings.novel_reader_auto_scroll_adaptive_delay),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = scheme.onSurface,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Switch(
+                                        checked = state.readerSettings.autoScrollAdaptiveDelay,
+                                        onCheckedChange = {
+                                            appHaptics.tap()
+                                            persistAutoScrollAdaptiveDelayPreference(it)
                                         },
-                                        valueRange = 0f..10f,
-                                        steps = 10,
-                                        modifier = Modifier.padding(top = 4.dp),
                                     )
                                 }
+                                if (state.readerSettings.autoScrollAdaptiveDelay) {
+                                    Text(
+                                        text = stringResource(
+                                            AYMR.strings.reader_auto_scroll_page_time,
+                                            autoScrollPageDelayMsForCharacterCount(
+                                                intervalSeconds = state.readerSettings.autoScrollInterval,
+                                                characterCount =
+                                                pageReaderCharacterCounts.getOrNull(pageReaderProgressPageIndex)
+                                                    ?: 0,
+                                                adaptiveEnabled = true,
+                                            ) / 1000,
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = scheme.onSurfaceVariant,
+                                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = stringResource(AYMR.strings.novel_reader_auto_scroll_speed),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = scheme.primary,
+                                    )
+                                    Text(
+                                        text = "$autoScrollSpeed",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = scheme.onSurface,
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(valuePillBg)
+                                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                                    )
+                                }
+                                Slider(
+                                    value = autoScrollSpeed.toFloat(),
+                                    onValueChange = {
+                                        val newSpeed = it.roundToInt().coerceIn(1, 100)
+                                        autoScrollSpeed = newSpeed
+                                        persistAutoScrollIntervalPreference(
+                                            interval = autoScrollSpeedToInterval(newSpeed),
+                                        )
+                                    },
+                                    valueRange = 1f..100f,
+                                    steps = 98,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
                             }
 
-                            // Play/Pause + FAB toggle
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Surface(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .clickable {
-                                            val nextState = resolveAutoScrollUiStateOnToggle(
-                                                currentEnabled = autoScrollEnabled,
-                                                showReaderUi = showReaderUi,
-                                                autoScrollExpanded = autoScrollExpanded,
-                                            )
-                                            autoScrollEnabled = nextState.autoScrollEnabled
-                                            if (!nextState.autoScrollEnabled) {
-                                                onCancelAutoScrollHandoff()
-                                                autoScrollEndStableFrames = 0
-                                                autoScrollEndDwellActive = false
-                                            }
-                                            onSetShowReaderUi(nextState.showReaderUi)
-                                            autoScrollExpanded = nextState.autoScrollExpanded
-                                        },
-                                    color = if (autoScrollEnabled) {
-                                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
-                                    } else {
-                                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-                                    },
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                                Text(
+                                    text = stringResource(
+                                        AYMR.strings.novel_reader_auto_scroll_chapter_end_behavior,
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = scheme.onSurface,
+                                    modifier = Modifier.weight(1f).padding(end = 12.dp),
+                                )
+                                var dropdownExpanded by remember { mutableStateOf(false) }
+                                val behaviorEntries = novelAutoScrollChapterEndBehaviorEntries()
+                                Box {
+                                    Text(
+                                        text = behaviorEntries[state.readerSettings.autoScrollChapterEndBehavior]
+                                            ?: "",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = scheme.primary,
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(valuePillBg)
+                                            .clickable { dropdownExpanded = true }
+                                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                                    )
+                                    DropdownMenu(
+                                        expanded = dropdownExpanded,
+                                        onDismissRequest = { dropdownExpanded = false },
                                     ) {
-                                        Icon(
-                                            imageVector = if (autoScrollEnabled) {
-                                                Icons.Filled.Pause
-                                            } else {
-                                                Icons.Filled.PlayArrow
-                                            },
-                                            contentDescription = stringResource(
-                                                if (autoScrollEnabled) {
-                                                    AYMR.strings.novel_reader_auto_scroll_pause_description
-                                                } else {
-                                                    AYMR.strings.novel_reader_auto_scroll_play_description
+                                        behaviorEntries.forEach { (behavior, label) ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        text = label,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                    )
                                                 },
-                                            ),
-                                            tint = Color.White,
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(
-                                            text = stringResource(
-                                                if (autoScrollEnabled) {
-                                                    MR.strings.action_pause
-                                                } else {
-                                                    MR.strings.action_start
+                                                onClick = {
+                                                    dropdownExpanded = false
+                                                    persistAutoScrollChapterEndBehaviorPreference(behavior)
                                                 },
-                                            ),
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = Color.White,
-                                        )
+                                            )
+                                        }
                                     }
                                 }
+                            }
+
+                            if (state.readerSettings.autoScrollChapterEndBehavior !=
+                                NovelAutoScrollChapterEndBehavior.StopAtEnd
+                            ) {
+                                val currentPauseSec =
+                                    (state.readerSettings.autoScrollEndPauseMs / 1000L).toInt()
                                 Row(
-                                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                                    modifier = Modifier
-                                        .padding(start = 12.dp, end = 4.dp)
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                        ) {
-                                            readerPreferences.showAutoScrollFloatingButton().set(
-                                                !state.readerSettings.showAutoScrollFloatingButton,
-                                            )
-                                        },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
-                                        text = stringResource(AYMR.strings.reader_auto_scroll_floating_button),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.widthIn(max = 180.dp),
+                                        text = stringResource(AYMR.strings.novel_reader_auto_scroll_end_pause),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = scheme.primary,
                                     )
-                                    Switch(
-                                        checked = state.readerSettings.showAutoScrollFloatingButton,
-                                        onCheckedChange = {
-                                            readerPreferences.showAutoScrollFloatingButton().set(it)
-                                        },
-                                        modifier = Modifier.padding(start = 8.dp),
+                                    Text(
+                                        text = stringResource(
+                                            AYMR.strings.novel_reader_auto_scroll_end_pause_value,
+                                            currentPauseSec,
+                                        ),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = scheme.onSurface,
+                                        modifier = Modifier
+                                            .clip(CircleShape)
+                                            .background(valuePillBg)
+                                            .padding(horizontal = 10.dp, vertical = 4.dp),
                                     )
                                 }
+                                Slider(
+                                    value = currentPauseSec.toFloat().coerceIn(0f, 10f),
+                                    onValueChange = {
+                                        val seconds = it.roundToInt().coerceIn(0, 10)
+                                        persistAutoScrollEndPauseMsPreference(seconds * 1000L)
+                                    },
+                                    valueRange = 0f..10f,
+                                    steps = 10,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        if (autoScrollEnabled) {
+                                            scheme.primary
+                                        } else {
+                                            scheme.primary.copy(alpha = 0.18f)
+                                        },
+                                    )
+                                    .clickable {
+                                        appHaptics.tap()
+                                        val nextState = resolveAutoScrollUiStateOnToggle(
+                                            currentEnabled = autoScrollEnabled,
+                                            showReaderUi = showReaderUi,
+                                            autoScrollExpanded = autoScrollExpanded,
+                                        )
+                                        autoScrollEnabled = nextState.autoScrollEnabled
+                                        if (!nextState.autoScrollEnabled) {
+                                            onCancelAutoScrollHandoff()
+                                            autoScrollEndStableFrames = 0
+                                            autoScrollEndDwellActive = false
+                                        }
+                                        onSetShowReaderUi(nextState.showReaderUi)
+                                        autoScrollExpanded = nextState.autoScrollExpanded
+                                    }
+                                    .padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                Icon(
+                                    imageVector = if (autoScrollEnabled) {
+                                        Icons.Outlined.Pause
+                                    } else {
+                                        Icons.Outlined.PlayArrow
+                                    },
+                                    contentDescription = stringResource(
+                                        if (autoScrollEnabled) {
+                                            AYMR.strings.novel_reader_auto_scroll_pause_description
+                                        } else {
+                                            AYMR.strings.novel_reader_auto_scroll_play_description
+                                        },
+                                    ),
+                                    tint = if (autoScrollEnabled) scheme.onPrimary else scheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text = stringResource(
+                                        if (autoScrollEnabled) {
+                                            MR.strings.action_pause
+                                        } else {
+                                            MR.strings.action_start
+                                        },
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (autoScrollEnabled) scheme.onPrimary else scheme.primary,
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                        appHaptics.tap()
+                                        readerPreferences.showAutoScrollFloatingButton().set(
+                                            !state.readerSettings.showAutoScrollFloatingButton,
+                                        )
+                                    }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = stringResource(AYMR.strings.reader_auto_scroll_floating_button),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = scheme.onSurface,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Switch(
+                                    checked = state.readerSettings.showAutoScrollFloatingButton,
+                                    onCheckedChange = {
+                                        appHaptics.tap()
+                                        readerPreferences.showAutoScrollFloatingButton().set(it)
+                                    },
+                                )
                             }
                         }
                     }
                     Box(
                         modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = androidx.compose.ui.Alignment.Center,
+                        contentAlignment = Alignment.Center,
                     ) {
-                        IconButton(onClick = { autoScrollExpanded = !autoScrollExpanded }) {
+                        IconButton(
+                            onClick = {
+                                appHaptics.tap()
+                                autoScrollExpanded = !autoScrollExpanded
+                            },
+                        ) {
                             Icon(
                                 imageVector = if (autoScrollExpanded) {
                                     Icons.Filled.KeyboardArrowUp
                                 } else {
                                     Icons.Filled.KeyboardArrowDown
                                 },
-                                contentDescription = null,
+                                contentDescription = if (autoScrollExpanded) {
+                                    "Collapse auto-scroll"
+                                } else {
+                                    "Expand auto-scroll"
+                                },
+                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                             )
                         }
                     }
@@ -4145,6 +4177,22 @@ fun NovelReaderScreen(
                         }
                         IconButton(onClick = { showSettings = true }) {
                             Icon(imageVector = Icons.Outlined.Settings, contentDescription = null)
+                        }
+                        if (onOpenDictionaryHistory != null) {
+                            val dictionaryQuickAccess by remember {
+                                Injekt.get<NovelReaderPreferences>().novelDictionaryQuickAccess()
+                            }
+                                .collectAsState()
+                            if (dictionaryQuickAccess) {
+                                IconButton(onClick = { onOpenDictionaryHistory() }) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Outlined.MenuBook,
+                                        contentDescription = stringResource(
+                                            AYMR.strings.novel_reader_dictionary_history,
+                                        ),
+                                    )
+                                }
+                            }
                         }
                         if (ttsPlacement.showFooterEntry) {
                             IconButton(onClick = { showTtsBehaviorSettings = true }) {

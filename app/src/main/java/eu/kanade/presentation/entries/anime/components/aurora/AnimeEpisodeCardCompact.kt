@@ -125,7 +125,7 @@ fun AnimeEpisodeCardCompact(
                 ) {
                     val showPreviewImage = showPreviews
                     if (showPreviewImage) {
-                        val targetWidth = 56.dp
+                        val targetWidth = 112.dp
                         val imageData = if (!episode.previewUrl.isNullOrBlank()) {
                             episode.previewUrl
                         } else {
@@ -137,7 +137,7 @@ fun AnimeEpisodeCardCompact(
                                 lastModified = anime.coverLastModified,
                             )
                         }
-                        ItemCover.Book(
+                        ItemCover.Thumb(
                             data = imageData,
                             modifier = Modifier
                                 .width(targetWidth)

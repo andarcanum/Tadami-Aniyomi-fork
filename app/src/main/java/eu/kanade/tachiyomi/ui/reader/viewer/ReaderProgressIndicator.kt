@@ -9,6 +9,7 @@ import androidx.annotation.IntRange
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.AbstractComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -37,8 +38,22 @@ class ReaderProgressIndicator @JvmOverloads constructor(
 
     private var progress by mutableFloatStateOf(0f)
 
+    /**
+     * Whether this indicator is effectively visible (accounts for ancestor visibility). Compose
+     * keeps ticking infinite transitions of composed-but-hidden views on every frame, so without
+     * this guard every bound page holder keeps animating its (GONE) spinner for the whole
+     * reading session, wasting main-thread time on each frame.
+     */
+    private var effectivelyVisible by mutableStateOf(true)
+
+    override fun onVisibilityAggregated(isVisible: Boolean) {
+        super.onVisibilityAggregated(isVisible)
+        effectivelyVisible = isVisible
+    }
+
     @Composable
     override fun Content() {
+        if (!effectivelyVisible) return
         TachiyomiTheme {
             CombinedCircularProgressIndicator(progress = { progress })
         }

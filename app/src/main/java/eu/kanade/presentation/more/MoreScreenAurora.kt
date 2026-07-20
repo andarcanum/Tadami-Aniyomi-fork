@@ -87,6 +87,7 @@ fun MoreScreenAurora(
     onAboutClick: () -> Unit,
     onDebugAppUpdatePreviewClick: () -> Unit,
     onDebugUpdatedChangelogPreviewClick: () -> Unit,
+    onDebugResetAuroraHeartClick: () -> Unit,
     onStatsClick: () -> Unit,
     onLibraryUpdateErrorsClick: () -> Unit,
     onAchievementsClick: () -> Unit,
@@ -263,6 +264,13 @@ fun MoreScreenAurora(
                         subtitle = stringResource(AYMR.strings.debug_updated_changelog_preview_summary),
                         icon = Icons.Outlined.NewReleases,
                         onClick = onDebugUpdatedChangelogPreviewClick,
+                        darkRimLightEnabled = darkRimLightEnabled,
+                    )
+                    AuroraSettingItem(
+                        title = stringResource(AYMR.strings.debug_reset_aurora_heart),
+                        subtitle = stringResource(AYMR.strings.debug_reset_aurora_heart_summary),
+                        icon = Icons.Outlined.ReportProblem,
+                        onClick = onDebugResetAuroraHeartClick,
                         darkRimLightEnabled = darkRimLightEnabled,
                     )
                 }

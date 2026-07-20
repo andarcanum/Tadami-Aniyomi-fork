@@ -463,6 +463,7 @@
     <!-- Extension repos (legacy keys preserved for compat/migration; primary now uses store terminology) -->
     <string name="label_extension_repos">Extension stores</string>
     <string name="label_extension_stores">Extension stores</string>
+    <string name="ext_installer_diagnostics">Installer diagnostics</string>
     <string name="label_official_stores">Official stores</string>
     <string name="label_custom_stores">Custom stores</string>
     <string name="action_open_discord">Discord</string>
@@ -1018,6 +1019,7 @@
 
     <!-- Reader activity -->
     <string name="custom_filter">Custom filter</string>
+    <string name="reader_settings_tab_color">Color</string>
     <string name="set_as_cover">Set as cover</string>
     <string name="cover_updated">Cover updated</string>
     <string name="share_page_info">%1$s: %2$s, page %3$d</string>
@@ -1029,6 +1031,11 @@
     <string name="reader_page_actions_button_color">Button color</string>
     <string name="reader_page_actions_label_color">Title color</string>
     <string name="pref_category_for_this_series">For this series</string>
+    <string name="reader_override_series">Override for this series</string>
+    <string name="reader_override_series_summary">Use a custom reading mode and orientation for this series only</string>
+    <string name="reader_editing_series">Editing settings for this series</string>
+    <string name="reader_editing_global_defaults">Editing global defaults</string>
+    <string name="reader_override_series_hint">Other reader options stay global. Only reading mode and orientation can be overridden per series.</string>
     <string name="viewer">Reading mode</string>
     <string name="transition_finished">Finished:</string>
     <string name="transition_current">Current:</string>
@@ -1427,6 +1434,15 @@
     <string name="status_on_hiatus">On hiatus</string>
     <string name="status_unknown">Unknown</string>
     <string name="metadata_saved_successfully">Metadata saved successfully</string>
+    <string name="action_fetch_from_tracker">Import from tracker</string>
+    <string name="action_fetch_from_tracker_choose">Choose tracker</string>
+    <string name="fetch_from_tracker_applied">Fields filled from %1$s. Review and save.</string>
+    <string name="fetch_from_tracker_no_linked">No trackers linked to this title</string>
+    <string name="fetch_from_tracker_not_logged_in">Linked tracker is not logged in</string>
+    <string name="fetch_from_tracker_no_results">Tracker returned no results</string>
+    <string name="fetch_from_tracker_no_match">Could not find this title on the tracker</string>
+    <string name="fetch_from_tracker_empty">Tracker has no usable metadata for this title</string>
+    <string name="fetch_from_tracker_failed">Failed to fetch metadata from tracker</string>
     <string name="suggestions_similar_titles">Similar Titles</string>
     <string name="suggestions_group_top_picks">Top picks</string>
     <string name="suggestions_group_recommendation_databases">Recommendation databases</string>
@@ -1691,6 +1707,8 @@
     <string name="unlockable_aura_void_broadcast_red">Core Melt Aura</string>
     <string name="unlockable_profile_nickname_effect_glitch_rune_red">Crimson Glitch Nickname Effect</string>
     <string name="unlockable_avatar_frame_glitch_red">Crimson Avatar Frame</string>
+    <string name="unlockable_theme_AURORA_PRIME">Aurora Prime Theme</string>
+    <string name="unlockable_special_navbar_aurora_celestial">Celestial Navigation</string>
 
     <!-- Download engine -->
     <string name="download_engine_title">Download Engine</string>
@@ -1750,4 +1768,6 @@
     <string name="achievement_time_paradox_desc">Read or watch at exactly 11:11</string>
     <string name="reward_special_tab_glow_title">Tab Bottom Glow</string>
     <string name="reward_special_tab_glow_desc">An accent-colored glow below the tab switcher</string>
+    <string name="reward_special_navbar_aurora_celestial_title">Celestial Navigation</string>
+    <string name="reward_special_navbar_aurora_celestial_desc">Night sky, travelling light wave and polar halo for the Aurora bottom bar</string>
 </resources>

@@ -1,9 +1,12 @@
 package eu.kanade.presentation.reader.novel
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -15,7 +18,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.theme.AuroraTheme
 import kotlin.math.abs
 
 @Composable
@@ -27,6 +33,7 @@ fun LnReaderSliderRow(
     steps: Int,
     enabled: Boolean = true,
     onCommit: (Float) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var draftValue by rememberSaveable { mutableStateOf(committedValue) }
     var previousCommittedValue by rememberSaveable { mutableStateOf(committedValue) }
@@ -41,17 +48,37 @@ fun LnReaderSliderRow(
         previousCommittedValue = synced.committedValue
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val colors = AuroraTheme.colors
+    val contentAlpha = if (enabled) 1f else 0.38f
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = NovelGlassContentPadding, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = label, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.textPrimary.copy(alpha = contentAlpha),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp),
+            )
             Text(
                 text = valueText(draftValue),
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = colors.textSecondary.copy(alpha = contentAlpha),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        if (colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.05f),
+                    )
+                    .padding(horizontal = 10.dp, vertical = 3.dp),
             )
         }
         Slider(
@@ -67,9 +94,11 @@ fun LnReaderSliderRow(
             valueRange = range,
             steps = steps,
             colors = androidx.compose.material3.SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.24f),
+                thumbColor = colors.accent,
+                activeTrackColor = colors.accent,
+                inactiveTrackColor = colors.textSecondary.copy(alpha = 0.24f),
+                disabledThumbColor = colors.accent.copy(alpha = 0.38f),
+                disabledActiveTrackColor = colors.accent.copy(alpha = 0.24f),
             ),
         )
     }

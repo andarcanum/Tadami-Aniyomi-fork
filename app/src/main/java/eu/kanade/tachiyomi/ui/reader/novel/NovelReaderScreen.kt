@@ -41,6 +41,7 @@ import eu.kanade.presentation.reader.novel.resolveReaderBackgroundImageModel
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundSelection
 import eu.kanade.presentation.reader.novel.resolveReaderSystemUiFlag
 import eu.kanade.presentation.reader.novel.safeEnum
+import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistoryScreen
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
@@ -234,6 +235,7 @@ class NovelReaderScreen(
                     },
                     onReadingProgress = screenModel::updateReadingProgress,
                     onToggleBookmark = screenModel::toggleChapterBookmark,
+                    onOpenDictionaryHistory = { navigator.push(NovelDictionaryHistoryScreen()) },
                     onStartGeminiTranslation = screenModel::startGeminiTranslation,
                     onStopGeminiTranslation = screenModel::stopGeminiTranslation,
                     onToggleGeminiTranslationVisibility = screenModel::toggleGeminiTranslationVisibility,

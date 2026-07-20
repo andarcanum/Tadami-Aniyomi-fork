@@ -3,6 +3,8 @@ package tachiyomi.domain.entries.manga.model
 import androidx.compose.runtime.Immutable
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import kotlinx.serialization.json.JsonObject
+import mihon.core.common.extensions.EMPTY
 import tachiyomi.core.common.preference.TriState
 import java.io.Serializable
 import java.time.Instant
@@ -41,6 +43,7 @@ data class Manga(
     val customDescription: String? = null,
     val customGenre: List<String>? = null,
     val customStatus: Long? = null,
+    val memo: JsonObject = JsonObject.EMPTY,
 ) : Serializable {
 
     val displayTitle: String get() = customTitle ?: title

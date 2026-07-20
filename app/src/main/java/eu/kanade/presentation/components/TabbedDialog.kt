@@ -1,38 +1,54 @@
 package eu.kanade.presentation.components
 
+import android.graphics.drawable.ColorDrawable
+import android.os.Build
+import android.view.Window
+import android.view.WindowManager
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastForEachIndexed
+import androidx.compose.ui.window.DialogWindowProvider
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
+import eu.kanade.presentation.theme.AuroraTheme
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
-import tachiyomi.presentation.core.components.material.TabText
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
+import kotlin.math.roundToInt
+import android.graphics.Color as AndroidColor
 
 object TabbedDialogPaddings {
     val Horizontal = 24.dp
@@ -51,34 +67,82 @@ fun TabbedDialog(
     pagerState: PagerState = rememberPagerState { tabTitles.size },
     content: @Composable (Int) -> Unit,
 ) {
+    val auroraColors = AuroraTheme.colors
+    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !auroraColors.isEInk
+    var sheetReveal by remember { mutableFloatStateOf(0f) }
     AdaptiveSheet(
         modifier = modifier,
         enableSwipeDismiss = enableSwipeDismiss,
         onDismissRequest = onDismissRequest,
+        containerColor = when {
+            auroraColors.isEInk -> MaterialTheme.colorScheme.surfaceContainerHigh
+            !supportsBlurBehind -> auroraColors.surface
+            auroraColors.isDark -> Color.Black.copy(alpha = 0.70f)
+            else -> Color.White.copy(alpha = 0.88f)
+        },
+        scrimAlpha = if (supportsBlurBehind) 0f else 0.5f,
+        onRevealChange = { sheetReveal = it },
     ) {
+        val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        val revealState = rememberUpdatedState(sheetReveal)
+
+        // One-shot window chrome setup - never add/clear BLUR flags per frame (flicker source).
+        DisposableEffect(window, supportsBlurBehind) {
+            val w = window
+            if (w != null && supportsBlurBehind) {
+                w.setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
+                w.setDimAmount(0f)
+                w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                w.attributes = w.attributes.apply { blurBehindRadius = 0 }
+            }
+            onDispose {
+                if (w != null && supportsBlurBehind) {
+                    // Reset so the next dialog does not inherit a residual blur edge.
+                    w.attributes = w.attributes.apply { blurBehindRadius = 0 }
+                    w.setDimAmount(0f)
+                    w.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                }
+            }
+        }
+
+        // Progressive radius/dim, quantized to cut attribute spam / edge ghosts.
+        LaunchedEffect(window, supportsBlurBehind) {
+            val w = window ?: return@LaunchedEffect
+            if (!supportsBlurBehind) return@LaunchedEffect
+            snapshotFlow { revealState.value.coerceIn(0f, 1f) }
+                .map { reveal -> (reveal * 20f).roundToInt().coerceIn(0, 20) }
+                .distinctUntilChanged()
+                .collect { step -> applyAuroraSheetWindowFx(w, step / 20f) }
+        }
+
         val scope = rememberCoroutineScope()
+        val hasOverflow = tabOverflowMenuContent != null || onOverflowMenuClicked != null
 
         Column {
-            Row {
-                PrimaryTabRow(
-                    modifier = Modifier.weight(1f),
-                    selectedTabIndex = pagerState.currentPage,
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    divider = {},
-                ) {
-                    tabTitles.fastForEachIndexed { index, tab ->
-                        Tab(
-                            selected = pagerState.currentPage == index,
-                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                            text = { TabText(text = tab) },
-                            unselectedContentColor = MaterialTheme.colorScheme.onSurface,
+            AuroraCapsuleTabs(
+                titles = tabTitles,
+                selectedIndex = pagerState.currentPage,
+                onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        start = 16.dp,
+                        top = 12.dp,
+                        bottom = 4.dp,
+                        end = 16.dp,
+                    ),
+                trailing = if (hasOverflow) {
+                    {
+                        CapsuleOverflowMenu(
+                            onClickIcon = onOverflowMenuClicked,
+                            content = tabOverflowMenuContent,
+                            overflowIcon = overflowIcon,
                         )
                     }
-                }
-
-                MoreMenu(onOverflowMenuClicked, tabOverflowMenuContent, overflowIcon)
-            }
-            HorizontalDivider()
+                } else {
+                    null
+                },
+            )
 
             HorizontalPager(
                 modifier = Modifier.animateContentSize(),
@@ -91,25 +155,39 @@ fun TabbedDialog(
 }
 
 @Composable
-private fun MoreMenu(
+private fun CapsuleOverflowMenu(
     onClickIcon: (() -> Unit)?,
     content: @Composable (ColumnScope.(() -> Unit) -> Unit)?,
     overflowIcon: ImageVector? = null,
 ) {
     if (onClickIcon == null && content == null) return
 
+    val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     var expanded by remember { mutableStateOf(false) }
-    val onClick = onClickIcon ?: { expanded = true }
+    val onClick = onClickIcon ?: {
+        appHaptics.tap()
+        expanded = true
+    }
 
-    Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
-        IconButton(onClick = onClick) {
+    Box(
+        modifier = Modifier.wrapContentSize(Alignment.Center),
+        contentAlignment = Alignment.Center,
+    ) {
+        // No separate surface chip — ⋮ lives inside the shared capsule track.
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(30.dp),
+        ) {
             Icon(
                 imageVector = overflowIcon ?: Icons.Default.MoreVert,
                 contentDescription = stringResource(MR.strings.label_more),
+                tint = colors.textSecondary,
+                modifier = Modifier.size(18.dp),
             )
         }
         if (onClickIcon == null) {
-            DropdownMenu(
+            AuroraEntryDropdownMenu(
                 expanded = expanded,
                 onDismissRequest = { expanded = false },
             ) {
@@ -117,4 +195,23 @@ private fun MoreMenu(
             }
         }
     }
+}
+
+/**
+ * Progressive Android 12+ blur/dim for Aurora bottom sheets (filters, EPUB, etc.).
+ * [reveal] is AdaptiveSheet open fraction: 0 dismissed → 1 fully open.
+ */
+fun applyAuroraSheetWindowFx(window: Window, reveal: Float) {
+    // 0..~0.2 of travel = sheet still mostly off-screen, keep FX off.
+    val glass = ((reveal - 0.18f) / 0.82f).coerceIn(0f, 1f)
+    val radius = if (glass <= 0.02f) {
+        0
+    } else {
+        (44f * glass).roundToInt().coerceIn(1, 48)
+    }
+    val attrs = window.attributes
+    if (attrs.blurBehindRadius != radius) {
+        window.attributes = attrs.apply { blurBehindRadius = radius }
+    }
+    window.setDimAmount(0.22f * glass)
 }

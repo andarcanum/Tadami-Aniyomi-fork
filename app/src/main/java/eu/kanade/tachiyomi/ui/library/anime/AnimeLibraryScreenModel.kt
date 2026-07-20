@@ -47,7 +47,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
@@ -148,7 +147,7 @@ class AnimeLibraryScreenModel(
                     groupType = groupType,
                     hasActiveFilters = hasActiveFilters,
                     library = library
-                        .applyFilters(tracks, trackingFilter)
+                        .applyFilters(itemPreferences, tracks, trackingFilter)
                         .applySort(tracks, trackingFilter.keys)
                         .applyGrouping(groupType, tracks)
                         .withFilteredEmptyPlaceholder(sourceCategories, hasActiveFilters),
@@ -157,7 +156,7 @@ class AnimeLibraryScreenModel(
 
             combine(
                 baseLibraryFlow,
-                state.map { it.searchQuery }.debounce(SEARCH_DEBOUNCE_MILLIS),
+                state.map { it.searchQuery }.distinctUntilChanged().debounce(SEARCH_DEBOUNCE_MILLIS),
             ) { baseLibrary, searchQuery ->
                 val librarySearchQuery = searchQuery?.let(::LibrarySearchQuery)
                 baseLibrary.library
@@ -268,10 +267,10 @@ class AnimeLibraryScreenModel(
     }
 
     private suspend fun AnimeLibraryMap.applyFilters(
+        prefs: ItemPreferences,
         trackMap: Map<Long, List<AnimeTrack>>,
         trackingFilter: Map<Long, TriState>,
     ): AnimeLibraryMap {
-        val prefs = getAnimelibItemPreferencesFlow().first()
         val downloadedOnly = prefs.globalFilterDownloaded
         val skipOutsideReleasePeriod = prefs.skipOutsideReleasePeriod
         val filterDownloaded = if (downloadedOnly) TriState.ENABLED_IS else prefs.filterDownloaded

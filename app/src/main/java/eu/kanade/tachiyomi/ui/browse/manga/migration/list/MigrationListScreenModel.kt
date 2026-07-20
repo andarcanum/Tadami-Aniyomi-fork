@@ -402,12 +402,7 @@ class MigrationListScreenModel(
         screenModelScope.launchIO {
             val item = items.find { it.manga.id == mangaId } ?: return@launchIO
             val target = (item.searchResult as? SearchResult.Success)?.manga ?: return@launchIO
-            val defaultFlags = MangaMigrationFlags.getFlags(item.manga, migrateFlags.get())
-            val flags = MangaMigrationFlags.getSelectedFlagsBitMap(
-                selectedFlags = defaultFlags.map { it.isDefaultSelected },
-                flags = defaultFlags,
-            )
-            migrateFlags.set(flags)
+            val flags = getMigrationFlags(item.manga)
             migrateManga.migrateManga(item.manga, target, replace, flags)
             markUpdateErrorResolved(item.manga.id, replace)
             removeManga(item)
@@ -476,12 +471,7 @@ class MigrationListScreenModel(
             try {
                 items.forEachIndexed { index, item ->
                     val target = (item.searchResult as? SearchResult.Success)?.manga ?: return@forEachIndexed
-                    val defaultFlags = MangaMigrationFlags.getFlags(item.manga, migrateFlags.get())
-                    val flags = MangaMigrationFlags.getSelectedFlagsBitMap(
-                        selectedFlags = defaultFlags.map { it.isDefaultSelected },
-                        flags = defaultFlags,
-                    )
-                    migrateFlags.set(flags)
+                    val flags = getMigrationFlags(item.manga)
                     migrateManga.migrateManga(item.manga, target, replace, flags)
                     markUpdateErrorResolved(item.manga.id, replace)
                     migratedItems += item
@@ -495,6 +485,20 @@ class MigrationListScreenModel(
                 migrateJob = null
             }
         }
+    }
+
+    /**
+     * Computes the effective migration flags for a single entry without writing the narrowed
+     * bitmap back to preferences. Persisting the per-entry bitmap would permanently drop flags
+     * that merely don't apply to that particular entry (e.g. custom cover, delete downloaded)
+     * and the narrowing would compound across entries during bulk migration.
+     */
+    private fun getMigrationFlags(manga: Manga): Int {
+        val applicableFlags = MangaMigrationFlags.getFlags(manga, migrateFlags.get())
+        return MangaMigrationFlags.getSelectedFlagsBitMap(
+            selectedFlags = applicableFlags.map { it.isDefaultSelected },
+            flags = applicableFlags,
+        )
     }
 
     fun cancelMigrate() {

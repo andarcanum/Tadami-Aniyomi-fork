@@ -74,7 +74,14 @@ class MangaCoverFetcher(
             }
         }
 
-        var effectiveUrl = metadataCoverUrlProvider()?.takeIf { it.isNotBlank() } ?: url
+        // Metadata covers are only maintained for library entries; skip the
+        // per-cover metadata DB lookup for browse/search items.
+        val metadataCoverUrl = if (isLibraryManga) {
+            metadataCoverUrlProvider()?.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+        var effectiveUrl = metadataCoverUrl ?: url
         var lastModified: Long? = null
 
         if (effectiveUrl.isNullOrBlank()) {
@@ -123,19 +130,19 @@ class MangaCoverFetcher(
     }
 
     private suspend fun httpLoader(url: String, diskCacheKey: String): FetchResult {
-        // Only cache separately if it's a library item
-        val libraryCoverCacheFile = if (isLibraryManga) {
-            coverFileProvider(url) ?: error("No cover specified")
-        } else {
-            null
-        }
-        if (libraryCoverCacheFile?.exists() == true && options.diskCachePolicy.readEnabled) {
+        // The cover cache file may exist from an earlier favorite state or an
+        // older install, so it is readable for any entry, but it is only
+        // written for library items.
+        val coverCacheFile = coverFileProvider(url)
+        if (isLibraryManga && coverCacheFile == null) error("No cover specified")
+        if (coverCacheFile?.exists() == true && options.diskCachePolicy.readEnabled) {
             debugTitleCoverFlow(
                 scope = "manga-fetcher",
-                message = "library-cache-hit file=${libraryCoverCacheFile.name}",
+                message = "cover-cache-hit file=${coverCacheFile.name}",
             )
-            return fileLoader(libraryCoverCacheFile, diskCacheKey)
+            return fileLoader(coverCacheFile, diskCacheKey)
         }
+        val libraryCoverCacheFile = coverCacheFile.takeIf { isLibraryManga }
 
         var snapshot = readFromDiskCache(diskCacheKey)
         try {
@@ -175,6 +182,9 @@ class MangaCoverFetcher(
                         scope = "manga-fetcher",
                         message = "network-response-written-to-library-cache file=${responseCoverCache.name}",
                     )
+                    // Mirror the response into Coil's disk cache as well so the
+                    // cover survives library cover cache invalidation.
+                    runCatching { writeToDiskCache(response, diskCacheKey)?.close() }
                     return fileLoader(responseCoverCache, diskCacheKey)
                 }
 
@@ -213,7 +223,7 @@ class MangaCoverFetcher(
         val response = client.newCall(newRequest(url)).await()
         if (!response.isSuccessful && response.code != HTTP_NOT_MODIFIED) {
             response.close()
-            throw IOException(response.message)
+            throw IOException("HTTP ${response.code}: ${response.message.ifBlank { "No response message" }}")
         }
         return response
     }
@@ -253,7 +263,9 @@ class MangaCoverFetcher(
                 fileSystem.source(snapshot.data).use { input ->
                     writeSourceToCoverCache(input, cacheFile)
                 }
-                remove(diskCacheKey)
+                // Keep the disk cache entry too; removing it made covers vanish
+                // on offline starts whenever the request later stopped resolving
+                // as a library item.
             }
             cacheFile.takeIf { it.exists() }
         } catch (e: Exception) {

@@ -24,7 +24,7 @@ import eu.kanade.tachiyomi.ui.base.delegate.ThemingDelegate
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.lang.truncateCenter
 import logcat.LogPriority
-import rikka.sui.Sui
+import rikka.shizuku.ShizukuProvider
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
@@ -171,7 +171,13 @@ fun Context.isPackageInstalled(packageName: String): Boolean {
 
 val Context.hasMiuiPackageInstaller get() = DeviceUtil.isMiui || isPackageInstalled("com.miui.packageinstaller")
 
-val Context.isShizukuInstalled get() = isPackageInstalled("moe.shizuku.privileged.api") || Sui.isSui()
+val Context.isShizukuInstalled: Boolean
+    get() = try {
+        packageManager.getPermissionInfo(ShizukuProvider.PERMISSION, 0)
+        true
+    } catch (e: PackageManager.NameNotFoundException) {
+        false
+    }
 
 val Context.isDhizukuInstalled get() = isPackageInstalled("com.rosan.dhizuku")
 

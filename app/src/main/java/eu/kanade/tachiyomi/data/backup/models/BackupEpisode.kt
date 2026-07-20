@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.data.backup.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.protobuf.ProtoNumber
 import tachiyomi.domain.items.episode.model.Episode
 
@@ -74,6 +75,7 @@ val backupEpisodeMapper = {
         summary: String?,
         previewUrl: String?,
         fillermark: Boolean,
+        _: JsonObject,
     ->
     BackupEpisode(
         url = url,

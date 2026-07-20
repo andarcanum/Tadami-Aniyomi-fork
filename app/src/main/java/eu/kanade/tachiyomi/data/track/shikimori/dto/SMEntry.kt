@@ -21,6 +21,9 @@ data class SMEntry(
     val kind: String?,
     @SerialName("aired_on")
     val airedOn: String?,
+    // Only present in the by-id endpoints; search results omit these fields.
+    val description: String? = null,
+    val genres: List<SMGenre>? = null,
 ) {
     fun toMangaTrack(trackId: Long): MangaTrackSearch {
         return MangaTrackSearch.create(trackId).apply {
@@ -28,7 +31,8 @@ data class SMEntry(
             title = name
             total_chapters = chapters!!
             cover_url = ShikimoriApi.BASE_URL + image.original
-            summary = ""
+            summary = description?.replace(SM_DESCRIPTION_TAG_REGEX, "")?.trim().orEmpty()
+            genres = this@SMEntry.genres?.map { g -> g.russian?.takeIf { r -> r.isNotBlank() } ?: g.name }.orEmpty()
             alternative_titles = listOfNotNull(russian?.takeIf { it.isNotBlank() }?.takeIf { it != name })
             score = this@SMEntry.score
             tracking_url = ShikimoriApi.BASE_URL + url
@@ -44,7 +48,8 @@ data class SMEntry(
             title = name
             total_episodes = episodes!!
             cover_url = ShikimoriApi.BASE_URL + image.original
-            summary = ""
+            summary = description?.replace(SM_DESCRIPTION_TAG_REGEX, "")?.trim().orEmpty()
+            genres = this@SMEntry.genres?.map { g -> g.russian?.takeIf { r -> r.isNotBlank() } ?: g.name }.orEmpty()
             alternative_titles = listOfNotNull(russian?.takeIf { it.isNotBlank() }?.takeIf { it != name })
             score = this@SMEntry.score
             tracking_url = ShikimoriApi.BASE_URL + url
@@ -59,4 +64,13 @@ data class SMEntry(
 data class SUEntryCover(
     val original: String,
     val preview: String,
+)
+
+/** Strips Shikimori bb-code style markup like [b], [/b], [character=123 Name]. */
+private val SM_DESCRIPTION_TAG_REGEX = Regex("\\[[^\\]]*]")
+
+@Serializable
+data class SMGenre(
+    val name: String = "",
+    val russian: String? = null,
 )

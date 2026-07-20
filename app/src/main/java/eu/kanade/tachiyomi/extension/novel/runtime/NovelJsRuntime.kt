@@ -1,8 +1,7 @@
 package eu.kanade.tachiyomi.extension.novel.runtime
 
 import android.util.Log
-import com.eclipsesource.v8.V8
-import com.eclipsesource.v8.V8Value
+import app.cash.quickjs.QuickJs
 import java.io.Closeable
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
@@ -53,7 +52,7 @@ class CompatibilityLogger(
     }
 }
 
-// Runtime boundary: keep J2V8-specific details inside this class so callers only see the plugin API.
+// Runtime boundary: keep QuickJS-specific details inside this class so callers only see the plugin API.
 class NovelJsRuntime(
     private val pluginId: String,
     private val nativeApi: NativeApi,
@@ -69,12 +68,12 @@ class NovelJsRuntime(
         Thread(runnable, "NovelJsRuntime-$pluginId").apply { isDaemon = true }
     }
 
-    private val v8: V8 = runOnRuntimeThread {
-        V8.createV8Runtime().apply {
-            Log.i(LOG_TAG, "Using J2V8 runtime for plugin id=$pluginId")
-            compatibilityLogger.logOperation("init", "runtime", "J2V8")
+    private val quickJs: QuickJs = runOnRuntimeThread {
+        QuickJs.create().apply {
+            Log.i(LOG_TAG, "Using QuickJS runtime for plugin id=$pluginId")
+            compatibilityLogger.logOperation("init", "runtime", "QuickJS")
             bindNativeApi(this, nativeApi, compatibilityLogger)
-            executeVoidScript(bootstrapScript, "novel-js-runtime-bootstrap.js", 0)
+            evaluate(bootstrapScript, "novel-js-runtime-bootstrap.js")
             moduleRegistry.registerModules(this)
             compatibilityLogger.logOperation("init", "modules", "registered=${moduleRegistry.modules().size}")
         }
@@ -86,7 +85,15 @@ class NovelJsRuntime(
         timeoutMs: Long? = null,
     ): Any? {
         return runOnRuntimeThread(timeoutMs) {
-            val value = v8.executeScript(script, fileName, 0)
+            val value = try {
+                quickJs.evaluate(script, fileName)
+            } catch (e: Exception) {
+                // J2V8 surfaced non-primitive completion values as V8Value handles and
+                // normalizeValue collapsed them to null. QuickJS instead throws when the
+                // completion value cannot be marshalled to a JVM type, so map that specific
+                // failure back to null and let genuine script errors propagate.
+                if (isUnsupportedResultTypeError(e)) null else throw e
+            }
             normalizeValue(value)
         }
     }
@@ -95,7 +102,7 @@ class NovelJsRuntime(
         released = true
         runOnRuntimeThread {
             nativeApi.domReleaseAll()
-            v8.release(true)
+            quickJs.close()
             Unit
         }
         runtimeExecutor.shutdown()
@@ -124,6 +131,8 @@ class NovelJsRuntime(
         fun getPathname(url: String): String
         fun select(html: String, selector: String): String
         fun aesGcmDecrypt(keyB64: String, ivB64: String, cipherB64: String): String
+        fun urlEncode(value: String, charsetName: String?): String
+        fun urlDecode(value: String, charsetName: String?): String
 
         // DOM Store methods
         fun domLoad(html: String): Int
@@ -171,14 +180,17 @@ class NovelJsRuntime(
         fun consoleWarn(message: String)
     }
 
-    @Suppress("DEPRECATION")
     private fun normalizeValue(value: Any?): Any? {
-        if (value !is V8Value) return value
-        return try {
-            null
-        } finally {
-            value.release()
+        return when (value) {
+            null, is String, is Boolean, is Number -> value
+            else -> null
         }
+    }
+
+    private fun isUnsupportedResultTypeError(error: Exception): Boolean {
+        val message = error.message ?: return false
+        return message.contains("marshal", ignoreCase = true) ||
+            message.contains("cannot convert", ignoreCase = true)
     }
 
     private fun <T> runOnRuntimeThread(timeoutMs: Long? = null, block: () -> T): T {
@@ -199,18 +211,17 @@ class NovelJsRuntime(
         } catch (e: TimeoutException) {
             future.cancel(true)
             throw RuntimeException(
-                "J2V8 runtime call timed out after ${timeoutMs ?: 0L}ms for plugin id=$pluginId",
+                "JS runtime call timed out after ${timeoutMs ?: 0L}ms for plugin id=$pluginId",
                 e,
             )
         } catch (e: InterruptedException) {
             Thread.currentThread().interrupt()
-            throw RuntimeException("J2V8 runtime call interrupted for plugin id=$pluginId", e)
+            throw RuntimeException("JS runtime call interrupted for plugin id=$pluginId", e)
         }
     }
 
     companion object {
         private const val LOG_TAG = "NovelJsRuntime"
-        private const val NATIVE_OBJECT_NAME = "__native"
 
         private val bootstrapScript = listOf(
             NovelJsPromiseShim.script,
@@ -306,6 +317,90 @@ class NovelJsRuntime(
                       .join("&");
                   };
                   global.URLSearchParams = URLSearchParams;
+
+                  var B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+                  function btoaPolyfill(input) {
+                    var str = String(input);
+                    var out = "";
+                    for (var i = 0; i < str.length; i += 3) {
+                      var c1 = str.charCodeAt(i);
+                      var c2 = i + 1 < str.length ? str.charCodeAt(i + 1) : NaN;
+                      var c3 = i + 2 < str.length ? str.charCodeAt(i + 2) : NaN;
+                      if (c1 > 255 || c2 > 255 || c3 > 255) {
+                        throw new Error("btoa: invalid character");
+                      }
+                      var e1 = c1 >> 2;
+                      var e2 = ((c1 & 3) << 4) | (isNaN(c2) ? 0 : (c2 >> 4));
+                      var e3 = isNaN(c2) ? 64 : (((c2 & 15) << 2) | (isNaN(c3) ? 0 : (c3 >> 6)));
+                      var e4 = isNaN(c3) ? 64 : (c3 & 63);
+                      out += B64_ALPHABET.charAt(e1) + B64_ALPHABET.charAt(e2) +
+                        (e3 === 64 ? "=" : B64_ALPHABET.charAt(e3)) +
+                        (e4 === 64 ? "=" : B64_ALPHABET.charAt(e4));
+                    }
+                    return out;
+                  }
+                  function atobPolyfill(input) {
+                    var str = String(input).replace(/[\t\n\f\r ]+/g, "");
+                    if (str.length % 4 === 1) throw new Error("atob: invalid input");
+                    str = str.replace(/=+$/, "");
+                    var out = "";
+                    var buffer = 0;
+                    var bits = 0;
+                    for (var i = 0; i < str.length; i++) {
+                      var idx = B64_ALPHABET.indexOf(str.charAt(i));
+                      if (idx === -1) throw new Error("atob: invalid character");
+                      buffer = (buffer << 6) | idx;
+                      bits += 6;
+                      if (bits >= 8) {
+                        bits -= 8;
+                        out += String.fromCharCode((buffer >> bits) & 255);
+                      }
+                    }
+                    return out;
+                  }
+                  if (typeof global.btoa !== "function") global.btoa = btoaPolyfill;
+                  if (typeof global.atob !== "function") global.atob = atobPolyfill;
+
+                  function TextEncoderPolyfill() {}
+                  TextEncoderPolyfill.prototype.encode = function(input) {
+                    var text = String(input == null ? "" : input);
+                    var bytes = [];
+                    for (var i = 0; i < text.length; i++) {
+                      var code = text.codePointAt(i);
+                      if (code > 0xffff) i++;
+                      if (code < 0x80) bytes.push(code);
+                      else if (code < 0x800) bytes.push(0xc0 | (code >> 6), 0x80 | (code & 63));
+                      else if (code < 0x10000) bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63));
+                      else bytes.push(0xf0 | (code >> 18), 0x80 | ((code >> 12) & 63), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63));
+                    }
+                    return new Uint8Array(bytes);
+                  };
+                  function TextDecoderPolyfill(label) {
+                    this.encoding = label || "utf-8";
+                  }
+                  TextDecoderPolyfill.prototype.decode = function(input) {
+                    if (input == null) return "";
+                    var bytes = input instanceof Uint8Array ? input : new Uint8Array(input.buffer || input);
+                    var out = "";
+                    var i = 0;
+                    while (i < bytes.length) {
+                      var b = bytes[i++];
+                      var code;
+                      if (b < 0x80) code = b;
+                      else if ((b & 0xe0) === 0xc0) code = ((b & 31) << 6) | (bytes[i++] & 63);
+                      else if ((b & 0xf0) === 0xe0) code = ((b & 15) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63);
+                      else code = ((b & 7) << 18) | ((bytes[i++] & 63) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63);
+                      if (code > 0xffff) {
+                        code -= 0x10000;
+                        out += String.fromCharCode(0xd800 + (code >> 10), 0xdc00 + (code & 0x3ff));
+                      } else {
+                        out += String.fromCharCode(code);
+                      }
+                    }
+                    return out;
+                  };
+                  if (typeof global.TextEncoder !== "function") global.TextEncoder = TextEncoderPolyfill;
+                  if (typeof global.TextDecoder !== "function") global.TextDecoder = TextDecoderPolyfill;
 
                   function Headers(init) {
                     this._headers = {};
@@ -627,9 +722,9 @@ class NovelJsRuntime(
 class NovelJsModuleRegistry(
     private val assetLoader: ((String) -> String)? = null,
 ) {
-    fun registerModules(runtime: V8) {
+    fun registerModules(runtime: QuickJs) {
         modules().forEach { module ->
-            runtime.executeVoidScript(module.script, module.name, 0)
+            runtime.evaluate(module.script, module.name)
         }
     }
 
@@ -644,6 +739,7 @@ class NovelJsModuleRegistry(
             NovelJsModule("isAbsoluteUrl.js", isAbsoluteUrlModule),
             NovelJsModule("typesConstants.js", typesConstantsModule),
             NovelJsModule("aes.js", aesModule),
+            NovelJsModule("utils.js", utilsModule),
             NovelJsModule("urlencode.js", urlEncodeModule),
             NovelJsModule("cheerio.js", cheerioModule),
             NovelJsModule("htmlparser2.js", htmlParserModule()),
@@ -785,7 +881,7 @@ class NovelJsModuleRegistry(
     private val defaultCoverModule = """
         __defineModule("@libs/defaultCover", function(module, exports) {
           module.exports = {
-            defaultCover: "https://github.com/LNReader/lnreader-plugins/blob/main/icons/src/coverNotAvailable.jpg?raw=true"
+            defaultCover: "https://github.com/lnreader/lnreader-plugins/blob/master/public/static/coverNotAvailable.webp?raw=true"
           };
         });
     """.trimIndent()
@@ -981,7 +1077,8 @@ class NovelJsModuleRegistry(
               body: body,
               formEntries: formEntries,
               referrer: referrer == null ? null : String(referrer),
-              origin: origin == null ? null : String(origin)
+              origin: origin == null ? null : String(origin),
+              textEncoding: init.textEncoding == null ? null : String(init.textEncoding)
             };
           }
           function normalizeFetchInput(url, options) {
@@ -1044,7 +1141,23 @@ class NovelJsModuleRegistry(
             return Promise.resolve(makeResponse(response));
           }
           function fetchText(url, options, encoding) {
-            return fetchApi(url, options).then(function(res) { return res.text(); });
+            var mergedOptions = options;
+            if (encoding != null) {
+              mergedOptions = {};
+              if (options) {
+                for (var key in options) {
+                  if (Object.prototype.hasOwnProperty.call(options, key)) mergedOptions[key] = options[key];
+                }
+              }
+              mergedOptions.textEncoding = String(encoding);
+            }
+            try {
+              return fetchApi(url, mergedOptions)
+                .then(function(res) { return res.ok ? res.text() : ""; })
+                .catch(function() { return ""; });
+            } catch (e) {
+              return Promise.resolve("");
+            }
           }
           function fetchFile(url, options) {
             return fetchApi(url, options).then(function(res) { return res.text(); });
@@ -1065,7 +1178,16 @@ class NovelJsModuleRegistry(
         __defineModule("@libs/isAbsoluteUrl", function(module, exports) {
           function isUrlAbsolute(value) {
             if (value == null) return false;
-            return /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(String(value));
+            var url = String(value);
+            if (url) {
+              if (url.indexOf("//") === 0) { return true; }
+              if (url.indexOf("://") === -1) { return false; }
+              if (url.indexOf(".") === -1) { return false; }
+              if (url.indexOf("/") === -1) { return false; }
+              if (url.indexOf(":") > url.indexOf("/")) { return false; }
+              if (url.indexOf("://") < url.indexOf(".")) { return true; }
+            }
+            return false;
           }
           module.exports = { isUrlAbsolute: isUrlAbsolute };
         });
@@ -1102,7 +1224,7 @@ class NovelJsModuleRegistry(
                   var keyB64 = toB64(keyBytes);
                   var ivB64 = toB64(ivBytes);
                   var cipherB64 = toB64(cipherBytes);
-                  var plainB64 = __native.__aesGcmDecrypt(keyB64, ivB64, cipherB64);
+                  var plainB64 = __native.aesGcmDecrypt(keyB64, ivB64, cipherB64);
                   if (!plainB64) throw new Error("AES-GCM decrypt failed");
                   return fromB64(plainB64);
                 }
@@ -1112,12 +1234,75 @@ class NovelJsModuleRegistry(
         });
     """.trimIndent()
 
+    private val utilsModule = """
+        __defineModule("@libs/utils", function(module, exports) {
+          function utf8ToBytes(input) {
+            var text = String(input);
+            var bytes = [];
+            for (var i = 0; i < text.length; i++) {
+              var code = text.codePointAt(i);
+              if (code > 0xffff) i++;
+              if (code < 0x80) {
+                bytes.push(code);
+              } else if (code < 0x800) {
+                bytes.push(0xc0 | (code >> 6), 0x80 | (code & 63));
+              } else if (code < 0x10000) {
+                bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 63), 0x80 | (code & 63));
+              } else {
+                bytes.push(
+                  0xf0 | (code >> 18),
+                  0x80 | ((code >> 12) & 63),
+                  0x80 | ((code >> 6) & 63),
+                  0x80 | (code & 63)
+                );
+              }
+            }
+            return new Uint8Array(bytes);
+          }
+          function bytesToUtf8(bytes) {
+            var out = "";
+            var i = 0;
+            while (i < bytes.length) {
+              var b = bytes[i++];
+              var code;
+              if (b < 0x80) {
+                code = b;
+              } else if ((b & 0xe0) === 0xc0) {
+                code = ((b & 31) << 6) | (bytes[i++] & 63);
+              } else if ((b & 0xf0) === 0xe0) {
+                code = ((b & 15) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63);
+              } else {
+                code = ((b & 7) << 18) | ((bytes[i++] & 63) << 12) | ((bytes[i++] & 63) << 6) | (bytes[i++] & 63);
+              }
+              if (code > 0xffff) {
+                code -= 0x10000;
+                out += String.fromCharCode(0xd800 + (code >> 10), 0xdc00 + (code & 0x3ff));
+              } else {
+                out += String.fromCharCode(code);
+              }
+            }
+            return out;
+          }
+          module.exports = { utf8ToBytes: utf8ToBytes, bytesToUtf8: bytesToUtf8 };
+        });
+    """.trimIndent()
+
     private val urlEncodeModule = """
         __defineModule("urlencode", function(module, exports) {
-          module.exports = {
-            encode: function(value) { return encodeURIComponent(String(value)); },
-            decode: function(value) { return decodeURIComponent(String(value)); }
-          };
+          function isUtf8(charset) {
+            if (charset == null) return true;
+            var normalized = String(charset).toLowerCase().replace(/[^a-z0-9]/g, "");
+            return normalized === "" || normalized === "utf8";
+          }
+          function encode(value, charset) {
+            if (isUtf8(charset)) return encodeURIComponent(String(value));
+            return __native.urlEncode(String(value), String(charset));
+          }
+          function decode(value, charset) {
+            if (isUtf8(charset)) return decodeURIComponent(String(value));
+            return __native.urlDecode(String(value), String(charset));
+          }
+          module.exports = { encode: encode, decode: decode };
         });
     """.trimIndent()
 

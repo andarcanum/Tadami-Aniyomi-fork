@@ -16,22 +16,13 @@
 -keep,allowoptimization class okio.** { public protected *; }
 -keep,allowoptimization class org.jsoup.** { public protected *; }
 -keep,allowoptimization class rx.** { public protected *; }
--keep,allowoptimization class app.cash.quickjs.** { public protected *; }
--keep class com.eclipsesource.v8.** { *; }
+-keep class app.cash.quickjs.** { *; }
 
-# J2V8 native bridge — the broad `allowoptimization` on eu.kanade.** (line 3)
-# allows R8 to apply lambda-class merging to the 50+ JavaCallback lambdas in
-# NovelJsRuntime.bindNativeApi(). R8 merges structurally-similar lambdas into
-# one class with a discriminator field; if the discriminator is set incorrectly
-# (known R8 regression), the wrong native method gets dispatched
-# (e.g. domSelect → domParent, domText → domIsTextNode).
-# Symptom: JavaScript TypeError / wrong return values only in release builds.
-#
-# Fix: prevent ALL R8 optimisation on the entire novel runtime package.
-# Using $** (double star) to capture deeply nested anonymous lambdas and
-# companion objects, not just direct inner classes ($*).
-# The -keep without allowoptimization overrides the broader allowoptimization
-# rule on line 3 for these specific classes.
+# QuickJS native bridge: NativeApi methods are bound reflectively via QuickJs.set(),
+# so R8 sees no direct Kotlin callers of the bridge interface methods. Keep the
+# whole novel runtime package unoptimized so the bridge interface, its
+# implementations and the generated JS shim stay in sync (method names are the
+# JS contract), and nothing gets inlined away or merged incorrectly.
 -keep class eu.kanade.tachiyomi.extension.novel.runtime.** { *; }
 -keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
 -keep,allowoptimization class is.xyz.mpv.** { public protected *; }

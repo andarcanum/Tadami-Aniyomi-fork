@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Extension
@@ -62,6 +61,7 @@ import eu.kanade.presentation.theme.LocalIsDefaultAppUiFont
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.theme.resolveAuroraBorderColor
 import eu.kanade.presentation.theme.resolveAuroraControlContainerColor
 import eu.kanade.presentation.theme.resolveAuroraElevation
@@ -201,8 +201,6 @@ private fun BrowseAuroraHeader(
     onSearchClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    val tabContainerColor = resolveAuroraControlContainerColor(colors)
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -227,7 +225,7 @@ private fun BrowseAuroraHeader(
         IconButton(
             onClick = onSearchClick,
             modifier = Modifier
-                .background(tabContainerColor, CircleShape)
+                .auroraHeaderIconSurface(colors)
                 .size(48.dp),
         ) {
             Icon(

@@ -18,6 +18,7 @@ import kotlinx.serialization.json.decodeFromStream
 import logcat.LogPriority
 import mihon.core.archive.archiveReader
 import mihon.core.archive.epubReader
+import mihon.core.archive.pdfReader
 import nl.adaptivity.xmlutil.core.AndroidXmlReader
 import nl.adaptivity.xmlutil.serialization.XML
 import tachiyomi.core.common.i18n.stringResource
@@ -277,7 +278,12 @@ actual class LocalMangaSource(
         val chapters = fileSystem.getFilesInMangaDirectory(manga.url)
             // Only keep supported formats
             .filterNot { it.name.orEmpty().startsWith('.') }
-            .filter { it.isDirectory || ArchiveManga.isSupported(it) || it.extension.equals("epub", true) }
+            .filter {
+                it.isDirectory ||
+                    ArchiveManga.isSupported(it) ||
+                    it.extension.equals("epub", true) ||
+                    it.extension.equals("pdf", true)
+            }
             .map { chapterFile ->
                 SChapter.create().apply {
                     url = "${manga.url}/${chapterFile.name}"
@@ -300,6 +306,8 @@ actual class LocalMangaSource(
                                 epub.fillMetadata(manga, this)
                             }
                         }
+                        // PDFs carry no ComicInfo.xml and must not be opened as archives.
+                        is Format.Pdf -> Unit
                         else -> {
                             getComicInfoForChapter(chapterFile) { stream ->
                                 setChapterDetailsFromComicInfoFile(stream, this)
@@ -395,6 +403,15 @@ actual class LocalMangaSource(
                         val entry = epub.getImagesFromPages().firstOrNull()
 
                         entry?.let { coverManager.update(manga, epub.getInputStream(it)!!) }
+                    }
+                }
+                is Format.Pdf -> {
+                    format.file.pdfReader(context).use { pdf ->
+                        if (pdf.pageCount > 0) {
+                            coverManager.update(manga, pdf.getPageStream(0))
+                        } else {
+                            null
+                        }
                     }
                 }
                 is Format.Text, is Format.Html -> null

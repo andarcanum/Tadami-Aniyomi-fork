@@ -333,9 +333,10 @@ private val swipeActionThreshold = 56.dp
 private fun EpisodeThumbnail(
     previewUrl: String?,
 ) {
-    val targetWidth = 64.dp
+    // 16:9 — реальный формат кадра серии (112 x 63 dp)
+    val targetWidth = 112.dp
     if (previewUrl != null) {
-        ItemCover.Book(
+        ItemCover.Thumb(
             modifier = Modifier
                 .width(targetWidth),
             data = ImageRequest.Builder(LocalContext.current)

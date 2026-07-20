@@ -158,6 +158,14 @@ class Shikimori(id: Long) :
         return api.searchAnime(query)
     }
 
+    override suspend fun getMangaMetadata(remoteId: Long): MangaTrackSearch? {
+        return api.getMangaById(remoteId).toMangaTrack(id)
+    }
+
+    override suspend fun getAnimeMetadata(remoteId: Long): AnimeTrackSearch? {
+        return api.getAnimeById(remoteId).toAnimeTrack(id)
+    }
+
     override suspend fun refresh(track: MangaTrack): MangaTrack {
         api.findLibManga(track, getUsername())?.let { remoteTrack ->
             track.library_id = remoteTrack.library_id

@@ -11,11 +11,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.system.logcat
 
-private const val SPEED_FACTOR_DELTA = 0.05f
+/**
+ * Duration of the speed ramp (in milliseconds) used to smoothly decelerate into
+ * and accelerate out of a touch cooldown.
+ */
+private const val SPEED_RAMP_DURATION_MS = 300f
 
 /**
- * Auto-scroll manager for [WebtoonViewer] that uses a [ValueAnimator] to smoothly scroll
- * the webtoon content at a continuous rate based on the configured speed.
+ * Maximum frame delta used for scroll calculations. Prevents huge jumps after
+ * dropped frames or when the app returns from the background.
+ */
+private const val MAX_FRAME_DELTA_MS = 64L
+
+/**
+ * Auto-scroll manager for [WebtoonViewer] that scrolls the webtoon content at a
+ * continuous, frame rate independent speed.
+ *
+ * Scrolling is computed from real frame delta times (px/second), so the perceived
+ * speed is identical on 60Hz, 90Hz and 120Hz+ displays. Fractional pixels are
+ * accumulated between frames to avoid the "stair-step" effect caused by
+ * truncating the scroll amount on every frame.
  *
  * @property viewer The [WebtoonViewer] instance to control.
  */
@@ -31,24 +46,35 @@ class WebtoonAutoScrollManager(
     private var currentSpeedFactor: Float = 1f
 
     /**
+     * Timestamp of the previous animation frame, used to compute frame deltas.
+     */
+    private var lastFrameTimeMs: Long = 0L
+
+    /**
+     * Accumulates fractional pixels that cannot be scrolled within a single frame.
+     * Carrying the remainder over keeps slow speeds perfectly smooth instead of
+     * alternating between e.g. 1px and 2px steps.
+     */
+    private var scrollRemainder: Float = 0f
+
+    /**
      * The recycler view from the webtoon viewer that will be scrolled.
      */
     private val recyclerView: WebtoonRecyclerView
         get() = viewer.recycler
 
     /**
-     * Calculates the scroll speed in pixels per frame based on the speed setting.
+     * Calculates the scroll speed in pixels per second based on the speed setting.
      * Higher speed values result in faster scrolling.
      *
      * @param speed The speed value (1-100).
-     * @return The scroll speed in pixels per frame (at 60fps).
+     * @return The scroll speed in pixels per second.
      */
-    private fun calculateScrollSpeed(speed: Int): Float {
-        // Map speed (1-100) to pixels per frame at 60fps
-        // Speed 1 = 1.5 px/frame = 90 px/s
-        // Speed 100 = 10 px/frame = 600 px/s
+    private fun calculateScrollSpeedPxPerSecond(speed: Int): Float {
+        // Speed 1 = 90 px/s, Speed 100 = 600 px/s
+        // (Matches the previous frame-based values calibrated at 60fps.)
         val clampedSpeed = speed.coerceIn(1, 100)
-        return 1.5f + (clampedSpeed - 1) * (8.5f / 99f)
+        return 90f + (clampedSpeed - 1) * (510f / 99f)
     }
 
     override fun setCooldown(delayMs: Long) {
@@ -124,31 +150,49 @@ class WebtoonAutoScrollManager(
 
     /**
      * Starts the value animator with the current speed setting.
-     * Uses an infinite animation that scrolls the recycler view smoothly.
+     * The animator is only used as a per-frame callback source; the actual scroll
+     * amount is derived from real elapsed time between frames, which makes the
+     * scroll speed independent of the display refresh rate.
      */
     private fun startAnimator() {
-        val scrollSpeed = calculateScrollSpeed(_state.value.speed)
+        val pxPerSecond = calculateScrollSpeedPxPerSecond(_state.value.speed)
 
-        // Use a simple frame-based animation
-        // We'll animate a counter and scroll by fixed amount each frame
+        lastFrameTimeMs = 0L
+        scrollRemainder = 0f
+
         valueAnimator = ValueAnimator.ofInt(0, Int.MAX_VALUE).apply {
             duration = Long.MAX_VALUE
             interpolator = LinearInterpolator()
 
-            addUpdateListener { animator ->
-                val inCooldown = SystemClock.elapsedRealtime() < cooldownUntilMs
+            addUpdateListener {
+                val now = SystemClock.elapsedRealtime()
+                val deltaMs = if (lastFrameTimeMs == 0L) {
+                    0L
+                } else {
+                    (now - lastFrameTimeMs).coerceAtMost(MAX_FRAME_DELTA_MS)
+                }
+                lastFrameTimeMs = now
+                if (deltaMs <= 0L) return@addUpdateListener
 
-                // Smooth acceleration/deceleration during cooldown
+                val inCooldown = now < cooldownUntilMs
+
+                // Smooth, time-based deceleration into / acceleration out of cooldown
+                val rampDelta = deltaMs / SPEED_RAMP_DURATION_MS
                 currentSpeedFactor = when {
-                    inCooldown -> (currentSpeedFactor - SPEED_FACTOR_DELTA).coerceAtLeast(0f)
-                    currentSpeedFactor < 1f -> (currentSpeedFactor + SPEED_FACTOR_DELTA).coerceAtMost(1f)
+                    inCooldown -> (currentSpeedFactor - rampDelta).coerceAtLeast(0f)
+                    currentSpeedFactor < 1f -> (currentSpeedFactor + rampDelta).coerceAtMost(1f)
                     else -> 1f
                 }
 
-                if (currentSpeedFactor <= 0f) return@addUpdateListener
+                if (currentSpeedFactor <= 0f) {
+                    scrollRemainder = 0f
+                    return@addUpdateListener
+                }
 
-                val adjustedSpeed = scrollSpeed * currentSpeedFactor
-                val deltaY = adjustedSpeed.toInt()
+                // Frame rate independent scroll amount with sub-pixel accumulation
+                val exactDelta = pxPerSecond * currentSpeedFactor * (deltaMs / 1000f) + scrollRemainder
+                val deltaY = exactDelta.toInt()
+                scrollRemainder = exactDelta - deltaY
 
                 if (deltaY > 0) {
                     recyclerView.scrollBy(0, deltaY)

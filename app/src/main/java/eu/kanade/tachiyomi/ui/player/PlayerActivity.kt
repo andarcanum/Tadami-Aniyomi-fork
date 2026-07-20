@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
-/**
- * Code is a mix between PlayerActivity from mpvKt and the former
- * PlayerActivity from Aniyomi.
- */
-
 package eu.kanade.tachiyomi.ui.player
+
+// Code is a mix between PlayerActivity from mpvKt and the former
+// PlayerActivity from Aniyomi.
 
 import android.annotation.SuppressLint
 import android.app.PictureInPictureParams

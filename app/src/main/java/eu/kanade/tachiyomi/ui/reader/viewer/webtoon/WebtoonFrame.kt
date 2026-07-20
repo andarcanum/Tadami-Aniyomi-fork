@@ -46,6 +46,12 @@ class WebtoonFrame(context: Context) : FrameLayout(context) {
         get() = getChildAt(0) as? WebtoonRecyclerView
 
     /**
+     * Reused hit rect to avoid allocating on every touch event (hundreds per second on
+     * high-sample-rate touch screens).
+     */
+    private val recyclerRect = Rect()
+
+    /**
      * Dispatches a touch event to the detectors.
      */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
@@ -54,7 +60,6 @@ class WebtoonFrame(context: Context) : FrameLayout(context) {
 
         // Get the bounding box of the recyclerview and translate any motion events to be within it.
         // Used to allow scrolling outside the recyclerview.
-        val recyclerRect = Rect()
         recycler?.getHitRect(recyclerRect) ?: return super.dispatchTouchEvent(ev)
         // Shrink the box to account for any rounding issues.
         recyclerRect.inset(1, 1)

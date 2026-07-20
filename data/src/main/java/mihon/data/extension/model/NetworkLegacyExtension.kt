@@ -13,8 +13,8 @@ data class NetworkLegacyExtension(
     val lang: String,
     val code: Long,
     val version: String,
-    val nsfw: Int,
-    val sources: List<Source>?,
+    val nsfw: Int = 0,
+    val sources: List<Source>? = null,
 ) {
     @Serializable
     data class Source(

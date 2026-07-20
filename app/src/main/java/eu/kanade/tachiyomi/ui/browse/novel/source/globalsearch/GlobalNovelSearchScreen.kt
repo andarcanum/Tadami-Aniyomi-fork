@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,28 +64,30 @@ class GlobalNovelSearchScreen(
                 meltdownTriggered = false
             },
         ) {
-            GlobalNovelSearchScreen(
-                state = state,
-                navigateUp = navigator::pop,
-                onChangeSearchQuery = screenModel::updateSearchQuery,
-                onSearch = { enteredQuery ->
-                    val trimmed = enteredQuery.trim().lowercase()
-                    if (trimmed == "third impact" || trimmed == "третий удар") {
-                        meltdownTriggered = true
-                    }
-                    if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
-                        screenModel.search()
-                    }
-                },
-                onChangeSearchFilter = screenModel::setSourceFilter,
-                onToggleResults = screenModel::toggleFilterResults,
-                getNovel = { screenModel.getNovel(it) },
-                onClickSource = {
-                    navigator.push(BrowseNovelSourceScreen(it.id, state.searchQuery))
-                },
-                onClickItem = { navigator.push(NovelScreen(it.id, true)) },
-                onLongClickItem = { navigator.push(NovelScreen(it.id, true)) },
-            )
+            androidx.compose.foundation.layout.Box(modifier = androidx.compose.ui.Modifier.fillMaxSize()) {
+                GlobalNovelSearchScreen(
+                    state = state,
+                    navigateUp = navigator::pop,
+                    onChangeSearchQuery = screenModel::updateSearchQuery,
+                    onSearch = { enteredQuery ->
+                        val trimmed = enteredQuery.trim().lowercase()
+                        if (trimmed == "third impact" || trimmed == "третий удар") {
+                            meltdownTriggered = true
+                        }
+                        if (!openSecretHallIfNeeded(navigator, enteredQuery)) {
+                            screenModel.search()
+                        }
+                    },
+                    onChangeSearchFilter = screenModel::setSourceFilter,
+                    onToggleResults = screenModel::toggleFilterResults,
+                    getNovel = { screenModel.getNovel(it) },
+                    onClickSource = {
+                        navigator.push(BrowseNovelSourceScreen(it.id, state.searchQuery))
+                    },
+                    onClickItem = { navigator.push(NovelScreen(it.id, true)) },
+                    onLongClickItem = { navigator.push(NovelScreen(it.id, true)) },
+                )
+            }
         }
     }
 }

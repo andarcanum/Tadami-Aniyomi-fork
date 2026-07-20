@@ -171,7 +171,7 @@ class MangaLibraryScreenModel(
                                 groupType = groupType,
                                 hasActiveFilters = hasActiveFilters,
                                 library = library
-                                    .applyFilters(tracks, trackingFilter)
+                                    .applyFilters(itemPreferences, tracks, trackingFilter)
                                     .applySort(tracks, trackingFilter.keys)
                                     .applyGrouping(groupType, tracks)
                                     .withFilteredEmptyPlaceholder(sourceCategories, hasActiveFilters),
@@ -180,7 +180,7 @@ class MangaLibraryScreenModel(
 
                         combine(
                             baseLibraryFlow,
-                            state.map { it.searchQuery }.debounce(SEARCH_DEBOUNCE_MILLIS),
+                            state.map { it.searchQuery }.distinctUntilChanged().debounce(SEARCH_DEBOUNCE_MILLIS),
                         ) { baseLibrary, searchQuery ->
                             val librarySearchQuery = searchQuery?.let(::LibrarySearchQuery)
                             baseLibrary.library
@@ -293,10 +293,10 @@ class MangaLibraryScreenModel(
     }
 
     private suspend fun MangaLibraryMap.applyFilters(
+        prefs: ItemPreferences,
         trackMap: Map<Long, List<MangaTrack>>,
         trackingFilter: Map<Long, TriState>,
     ): MangaLibraryMap {
-        val prefs = getLibraryItemPreferencesFlow().first()
         val downloadedOnly = prefs.globalFilterDownloaded
         val skipOutsideReleasePeriod = prefs.skipOutsideReleasePeriod
         val filterDownloaded = if (downloadedOnly) TriState.ENABLED_IS else prefs.filterDownloaded

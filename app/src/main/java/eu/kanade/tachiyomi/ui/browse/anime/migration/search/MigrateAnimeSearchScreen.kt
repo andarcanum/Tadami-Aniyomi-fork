@@ -10,6 +10,7 @@ import eu.kanade.presentation.browse.anime.MigrateAnimeSearchScreen
 import eu.kanade.presentation.browse.openSecretHallIfNeeded
 import eu.kanade.presentation.util.Screen
 import eu.kanade.tachiyomi.ui.browse.anime.migration.anime.season.MigrateSeasonSelectScreen
+import eu.kanade.tachiyomi.ui.browse.anime.migration.list.AnimeMigrationListScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 
 class MigrateAnimeSearchScreen(private val animeId: Long) : Screen() {
@@ -47,9 +48,17 @@ class MigrateAnimeSearchScreen(private val animeId: Long) : Screen() {
                 )
             },
             onClickItem = {
-                dialogScreenModel.setDialog(
-                    (AnimeMigrateSearchScreenDialogScreenModel.Dialog.Migrate(it)),
-                )
+                val migrationListScreen = navigator.items
+                    .filterIsInstance<AnimeMigrationListScreen>()
+                    .lastOrNull()
+                if (migrationListScreen != null) {
+                    migrationListScreen.addMatchOverride(current = animeId, target = it.id)
+                    navigator.popUntil { screen -> screen is AnimeMigrationListScreen }
+                } else {
+                    dialogScreenModel.setDialog(
+                        (AnimeMigrateSearchScreenDialogScreenModel.Dialog.Migrate(it)),
+                    )
+                }
             },
             onLongClickItem = { navigator.push(AnimeScreen(it.id, true)) },
         )

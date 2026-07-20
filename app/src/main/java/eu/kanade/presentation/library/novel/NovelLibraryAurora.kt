@@ -85,14 +85,12 @@ import eu.kanade.presentation.library.resolveNovelLibraryCardProgressPercent
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
-import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.source.model.SManga
 import tachiyomi.domain.entries.novel.model.NovelCover
 import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.service.LibraryPreferences
-import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Badge
@@ -131,8 +129,6 @@ fun NovelLibraryAuroraContent(
     onContinueReadingClicked: ((NovelLibraryItem) -> Unit)? = null,
     showInlineHeader: Boolean = true,
     libraryPreferences: LibraryPreferences,
-    sourceManager: NovelSourceManager,
-    downloadCache: NovelDownloadCache,
 ) {
     val configuration = LocalConfiguration.current
     val useSeparateDisplayModePerMedia by libraryPreferences
@@ -154,15 +150,16 @@ fun NovelLibraryAuroraContent(
         }
     }
     val columns by columnPreference.collectAsStateWithLifecycle()
+    val safeColumns = columns.coerceAtLeast(0)
     val auroraCardStyle by libraryPreferences.auroraLibraryCardStyle().collectAsStateWithLifecycle()
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
     val enabledAuras by uiPreferences.enabledAuras().collectAsStateWithLifecycle()
     val useGlowContourCards = auroraCardStyle == AuroraLibraryCardStyle.GlowContour
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
-    val displaySpec = remember(displayMode, columns, auroraAdaptiveSpec) {
+    val displaySpec = remember(displayMode, safeColumns, auroraAdaptiveSpec) {
         resolveNovelLibraryAuroraDisplaySpec(
             displayMode = displayMode,
-            columns = columns,
+            columns = safeColumns,
             auroraAdaptiveSpec = auroraAdaptiveSpec,
         )
     }
@@ -332,7 +329,7 @@ fun NovelLibraryAuroraContent(
                 modifier = Modifier
                     .fillMaxSize()
                     .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
-                columns = columns,
+                columns = safeColumns,
                 adaptiveMinCellDp = displaySpec.adaptiveMinCellDp,
                 contentPadding = contentPadding,
             ) {
@@ -429,7 +426,7 @@ fun NovelLibraryAuroraContent(
 
                             cardStyle = auroraCardStyle,
                             glowDisplayMode = displayMode,
-                            gridColumns = columns.coerceAtLeast(0),
+                            gridColumns = safeColumns,
                             onTogglePinned = onTogglePinned,
                             enabledAuras = enabledAuras,
                             performanceMode = useLargeGridPerformanceMode,
@@ -551,13 +548,15 @@ private fun NovelLibraryAuroraCard(
         remainingCount = item.unreadCount,
         isFinished = item.coverNovel?.let { resolveNovelLibraryCornerIndicatorIsFinished(it.status) } ?: false,
     )
-    val coverData = item.coverNovel?.asNovelCover() ?: NovelCover(
-        novelId = item.id,
-        sourceId = 0,
-        isNovelFavorite = true,
-        url = null,
-        lastModified = 0,
-    )
+    val coverData = remember(item.coverNovel, item.id) {
+        item.coverNovel?.asNovelCover() ?: NovelCover(
+            novelId = item.id,
+            sourceId = 0,
+            isNovelFavorite = true,
+            url = null,
+            lastModified = 0,
+        )
+    }
     val topEndBadge: @Composable (() -> Unit)? = if (item.pinned) {
         { PinnedBadge() }
     } else {
@@ -899,11 +898,23 @@ private fun InlineNovelLibraryHeader(
     val tabState = LocalTabState.current
     var showMenu by remember { mutableStateOf(false) }
 
-    var internalQuery by remember(searchQuery) { mutableStateOf(searchQuery) }
+    var internalQuery by remember { mutableStateOf(searchQuery) }
+    var lastCommittedQuery by remember { mutableStateOf(searchQuery) }
+
+    // Accept external query changes without clobbering unsent user input:
+    // re-initializing the field on every parent echo of our own debounced
+    // commit could erase characters typed while the commit was in flight.
+    LaunchedEffect(searchQuery) {
+        if (searchQuery != lastCommittedQuery) {
+            lastCommittedQuery = searchQuery
+            internalQuery = searchQuery
+        }
+    }
 
     LaunchedEffect(internalQuery) {
-        if (internalQuery != searchQuery) {
+        if (internalQuery != lastCommittedQuery) {
             kotlinx.coroutines.delay(eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS)
+            lastCommittedQuery = internalQuery
             onSearchQueryChange(internalQuery)
         }
     }

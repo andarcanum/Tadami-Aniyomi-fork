@@ -16,6 +16,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
+import eu.kanade.presentation.components.CoverReloadSignal
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
@@ -62,14 +64,33 @@ enum class ItemCover(val ratio: Float) {
         val context = LocalContext.current
 
         if (isLoadableCoverData(model)) {
-            val coverRequest = remember(model) {
+            val coverReloadTick = CoverReloadSignal.tick.value
+            val coverRequest = remember(context, model, coverReloadTick) {
                 buildAuroraCoverImageRequest(context, model)
+            }
+            // Don't pass a `placeholder` painter directly: Coil's transformOf()
+            // would unconditionally override the painter restored via
+            // `placeholderMemoryCacheKey`, causing a gray flash even for covers
+            // that are already in the memory cache. This transform only falls
+            // back to the flat placeholder when no memory-cached cover is
+            // available, and maps error/fallback states to the error painter.
+            val transform = remember(resolvedErrorPainter) {
+                { state: AsyncImagePainter.State ->
+                    when (state) {
+                        is AsyncImagePainter.State.Loading ->
+                            if (state.painter == null) {
+                                state.copy(painter = CoverPlaceholderPainter)
+                            } else {
+                                state
+                            }
+                        is AsyncImagePainter.State.Error -> state.copy(painter = resolvedErrorPainter)
+                        else -> state
+                    }
+                }
             }
             AsyncImage(
                 model = coverRequest,
-                placeholder = ColorPainter(CoverPlaceholderColor),
-                error = resolvedErrorPainter,
-                fallback = resolvedErrorPainter,
+                transform = transform,
                 contentDescription = contentDescription,
                 modifier = imageModifier,
                 contentScale = ContentScale.Crop,
@@ -112,3 +133,4 @@ internal fun isLoadableCoverData(data: Any?): Boolean {
 }
 
 private val CoverPlaceholderColor = Color(0x1F888888)
+private val CoverPlaceholderPainter = ColorPainter(CoverPlaceholderColor)

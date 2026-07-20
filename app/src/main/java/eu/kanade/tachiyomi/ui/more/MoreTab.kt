@@ -104,6 +104,17 @@ data object MoreTab : Tab {
                 onHelpClick = { navigator.push(HelpScreen) },
                 onDebugAppUpdatePreviewClick = { navigator.push(DebugAppUpdatePreviewScreen()) },
                 onDebugUpdatedChangelogPreviewClick = { navigator.push(DebugUpdatedChangelogPreviewScreen()) },
+                onDebugResetAuroraHeartClick = {
+                    screenModel.screenModelScope.launchIO {
+                        val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
+                        manager.debugReset()
+
+                        runCatching {
+                            val repo = Injekt.get<tachiyomi.domain.achievement.repository.AchievementRepository>()
+                            repo.deleteAchievement("aurora_heart")
+                        }
+                    }
+                },
                 onStatsClick = { navigator.push(StatsTab) },
                 onLibraryUpdateErrorsClick = { navigator.push(LibraryUpdateErrorScreen()) },
                 onAchievementsClick = { navigator.push(AchievementScreenVoyager) },
@@ -132,6 +143,17 @@ data object MoreTab : Tab {
                 onClickHelp = { navigator.push(HelpScreen) },
                 onClickDebugAppUpdatePreview = { navigator.push(DebugAppUpdatePreviewScreen()) },
                 onClickDebugUpdatedChangelogPreview = { navigator.push(DebugUpdatedChangelogPreviewScreen()) },
+                onClickDebugResetAuroraHeart = {
+                    screenModel.screenModelScope.launchIO {
+                        val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
+                        manager.debugReset()
+
+                        runCatching {
+                            val repo = Injekt.get<tachiyomi.domain.achievement.repository.AchievementRepository>()
+                            repo.deleteAchievement("aurora_heart")
+                        }
+                    }
+                },
             )
         }
     }

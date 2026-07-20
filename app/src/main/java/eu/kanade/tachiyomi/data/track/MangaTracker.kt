@@ -52,6 +52,13 @@ interface MangaTracker {
 
     suspend fun searchManga(query: String): List<MangaTrackSearch>
 
+    /**
+     * Fetches remote metadata for an already-linked entry by its remote id.
+     * Returns null when the tracker cannot resolve entries by id; callers should
+     * fall back to search-based matching.
+     */
+    suspend fun getMangaMetadata(remoteId: Long): MangaTrackSearch? = null
+
     suspend fun refresh(track: MangaTrack): MangaTrack
 
     suspend fun register(item: MangaTrack, mangaId: Long) {

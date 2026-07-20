@@ -3,6 +3,7 @@
 package eu.kanade.tachiyomi.novelsource.model
 
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import kotlinx.serialization.json.JsonObject
 
 class SNovelImpl : SNovel {
 
@@ -23,4 +24,6 @@ class SNovelImpl : SNovel {
     override var update_strategy: UpdateStrategy = UpdateStrategy.ALWAYS_UPDATE
 
     override var initialized: Boolean = false
+
+    override var memo: JsonObject = JsonObject(emptyMap())
 }

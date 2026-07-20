@@ -87,6 +87,8 @@ object Notifications {
     const val ID_ANIXART_IMPORT_COMPLETE = -802
     const val ID_SHIKIMORI_IMPORT_PROGRESS = -803
     const val ID_SHIKIMORI_IMPORT_COMPLETE = -804
+    const val ID_ANILIST_IMPORT_PROGRESS = -805
+    const val ID_ANILIST_IMPORT_COMPLETE = -806
 
     /**
      * Notification channel used for Incognito Mode

@@ -1,4 +1,5 @@
 import eu.kanade.tachiyomi.animesource.model.AnimeUpdateStrategy;
+import kotlinx.serialization.json.JsonObject;
 import eu.kanade.tachiyomi.animesource.model.FetchType;
 import kotlin.Boolean;
 import kotlin.String;
@@ -43,7 +44,8 @@ CREATE TABLE animes(
     custom_author TEXT,
     custom_description TEXT,
     custom_genre TEXT AS List<String>,
-    custom_status INTEGER
+    custom_status INTEGER,
+    memo BLOB AS JsonObject NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX animelib_favorite_index ON animes(favorite) WHERE favorite = 1;

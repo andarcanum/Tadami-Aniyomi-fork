@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -42,6 +41,7 @@ import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.theme.resolveAuroraBorderColor
 import eu.kanade.presentation.theme.resolveAuroraControlContainerColor
 import eu.kanade.presentation.theme.resolveAuroraIconSurfaceColor
@@ -109,7 +109,7 @@ private fun SettingsAuroraHeader(onBackClick: () -> Unit) {
         IconButton(
             onClick = onBackClick,
             modifier = Modifier
-                .background(resolveAuroraControlContainerColor(colors), CircleShape)
+                .auroraHeaderIconSurface(colors)
                 .size(40.dp),
         ) {
             Icon(

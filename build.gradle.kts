@@ -15,6 +15,8 @@ plugins {
     alias(libs.plugins.aboutLibrariesAndroid) apply false
     alias(libs.plugins.moko) apply false
     alias(libs.plugins.sqldelight) apply false
+    // Required for Spotless 8.x multi-project shared task service (diffplug/spotless#2877).
+    alias(libs.plugins.spotless) apply false
 }
 
 val buildLogic = gradle.includedBuild("build-logic")

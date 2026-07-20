@@ -14,11 +14,9 @@
  * limitations under the License.
  */
 
-/**
- * Straight copy from Compose M3 for Button fork
- */
-
 package tachiyomi.presentation.core.util
+
+// Straight copy from Compose M3 for Button fork
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationSpec

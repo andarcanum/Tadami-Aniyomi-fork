@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.network.interceptor.CoverRequestPolicy
 import okhttp3.Call
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
+import okio.Buffer
 import okio.FileSystem
 import java.io.IOException
 
@@ -37,13 +38,79 @@ class AuroraPosterRequestFetcher(
     private val data: AuroraPosterRequest,
     private val options: Options,
     private val callFactoryLazy: Lazy<Call.Factory>,
+    private val imageLoader: ImageLoader,
 ) : Fetcher {
 
+    private val diskCacheKey: String
+        get() = buildString {
+            append("aurora-poster;")
+            append(data.primaryUrl.orEmpty())
+            append(';')
+            append(data.fallbackUrl.orEmpty())
+        }
+
     override suspend fun fetch(): FetchResult {
-        return loadAuroraPosterSource(
+        readFromDiskCache()?.let { return it }
+
+        val fetched = loadAuroraPosterSource(
             callFactory = callFactoryLazy.value,
             fileSystem = options.fileSystem,
             request = data,
+        )
+        if (fetched !is SourceFetchResult) return fetched
+        return writeToDiskCache(fetched) ?: fetched
+    }
+
+    private fun readFromDiskCache(): FetchResult? {
+        if (!options.diskCachePolicy.readEnabled) return null
+        val diskCache = imageLoader.diskCache ?: return null
+        val snapshot = runCatching { diskCache.openSnapshot(diskCacheKey) }.getOrNull() ?: return null
+        return SourceFetchResult(
+            source = ImageSource(
+                file = snapshot.data,
+                fileSystem = diskCache.fileSystem,
+                diskCacheKey = diskCacheKey,
+                closeable = snapshot,
+            ),
+            mimeType = "image/*",
+            dataSource = DataSource.DISK,
+        )
+    }
+
+    /**
+     * Persists the fetched poster bytes into Coil's disk cache so posters stay
+     * available on offline starts. Returns null only before the source has
+     * been consumed (caching disabled), so the caller can fall back to the
+     * original result safely.
+     */
+    private fun writeToDiskCache(fetched: SourceFetchResult): FetchResult? {
+        if (!options.diskCachePolicy.writeEnabled) return null
+        val diskCache = imageLoader.diskCache ?: return null
+        val bytes = fetched.source.use { it.source().readByteArray() }
+        val snapshot = runCatching {
+            val editor = diskCache.openEditor(diskCacheKey) ?: return@runCatching null
+            try {
+                diskCache.fileSystem.write(editor.data) { write(bytes) }
+                editor.commitAndOpenSnapshot()
+            } catch (e: Exception) {
+                runCatching { editor.abort() }
+                null
+            }
+        }.getOrNull()
+        val source = if (snapshot != null) {
+            ImageSource(
+                file = snapshot.data,
+                fileSystem = diskCache.fileSystem,
+                diskCacheKey = diskCacheKey,
+                closeable = snapshot,
+            )
+        } else {
+            ImageSource(source = Buffer().write(bytes), fileSystem = options.fileSystem)
+        }
+        return SourceFetchResult(
+            source = source,
+            mimeType = fetched.mimeType,
+            dataSource = fetched.dataSource,
         )
     }
 
@@ -59,6 +126,7 @@ class AuroraPosterRequestFetcher(
                 data = data,
                 options = options,
                 callFactoryLazy = callFactoryLazy,
+                imageLoader = imageLoader,
             )
         }
     }

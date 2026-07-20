@@ -29,6 +29,8 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.util.Base64
 
 class NovelJsRuntimeFactory(
@@ -68,7 +70,8 @@ class NovelJsRuntimeFactory(
 
         override fun fetch(url: String, optionsJson: String?): String {
             val resolvedUrl = resolveAlias(url)
-            val request = buildRequest(resolvedUrl, optionsJson)
+            val options = decodeFetchRequest(optionsJson)
+            val request = buildRequest(resolvedUrl, options)
             return runCatching {
                 networkHelper.client.newCall(request).execute().use { response ->
                     syncAndroidWebViewResponseCookies(
@@ -78,7 +81,10 @@ class NovelJsRuntimeFactory(
                     val headers = response.headers.toMultimap()
                         .mapValues { (_, values) -> values.joinToString(",") }
                     val responseBody = response.body
-                    val bodyCharset = responseBody.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
+                    val bodyCharset = options.textEncoding
+                        ?.let { name -> resolveCharsetOrNull(name) }
+                        ?: responseBody.contentType()?.charset(Charsets.UTF_8)
+                        ?: Charsets.UTF_8
                     val body = responseBody.bytes().toString(bodyCharset)
                     if (!response.isSuccessful) {
                         logcat(priority = LogPriority.WARN, tag = "NovelFetch") {
@@ -251,7 +257,7 @@ class NovelJsRuntimeFactory(
         override fun select(html: String, selector: String): String {
             val nodes = runCatching {
                 Jsoup.parseBodyFragment(html)
-                    .select(selector)
+                    .select(normalizeCssSelector(selector))
                     .map { element ->
                         JsDomNode(
                             html = element.outerHtml(),
@@ -289,42 +295,53 @@ class NovelJsRuntimeFactory(
         override fun domLoad(html: String): Int = domStore.loadDocument(html)
 
         override fun domSelect(handle: Int, selector: String): String {
-            // Jsoup does not support double quotes inside :contains("..."), strip them
-            val cleaned = selector.replace(Regex(""":contains\(["']([^"']+)["']\)""")) { match ->
-                ":contains(${match.groupValues[1]})"
-            }
-            return json.encodeToString(domStore.select(handle, cleaned).toList())
+            return json.encodeToString(domStore.select(handle, normalizeCssSelector(selector)).toList())
         }
 
         override fun domParent(handle: Int): Int = domStore.parent(handle)
 
         override fun domChildren(handle: Int, selector: String?): String =
-            json.encodeToString(domStore.children(handle, selector).toList())
+            json.encodeToString(domStore.children(handle, normalizeCssSelectorOrNull(selector)).toList())
 
-        override fun domNext(handle: Int, selector: String?): Int = domStore.next(handle, selector)
+        override fun domNext(handle: Int, selector: String?): Int = domStore.next(
+            handle,
+            normalizeCssSelectorOrNull(selector),
+        )
 
-        override fun domPrev(handle: Int, selector: String?): Int = domStore.prev(handle, selector)
+        override fun domPrev(handle: Int, selector: String?): Int = domStore.prev(
+            handle,
+            normalizeCssSelectorOrNull(selector),
+        )
 
         override fun domNextAll(handle: Int, selector: String?): String =
-            json.encodeToString(domStore.nextAll(handle, selector).toList())
+            json.encodeToString(domStore.nextAll(handle, normalizeCssSelectorOrNull(selector)).toList())
 
         override fun domPrevAll(handle: Int, selector: String?): String =
-            json.encodeToString(domStore.prevAll(handle, selector).toList())
+            json.encodeToString(domStore.prevAll(handle, normalizeCssSelectorOrNull(selector)).toList())
 
         override fun domSiblings(handle: Int, selector: String?): String =
-            json.encodeToString(domStore.siblings(handle, selector).toList())
+            json.encodeToString(domStore.siblings(handle, normalizeCssSelectorOrNull(selector)).toList())
 
-        override fun domClosest(handle: Int, selector: String): Int = domStore.closest(handle, selector)
+        override fun domClosest(handle: Int, selector: String): Int = domStore.closest(
+            handle,
+            normalizeCssSelector(selector),
+        )
 
         override fun domContents(handle: Int): String =
             json.encodeToString(domStore.contents(handle).toList())
 
-        override fun domIs(handle: Int, selector: String): Boolean = domStore.matches(handle, selector)
+        override fun domIs(handle: Int, selector: String): Boolean = domStore.matches(
+            handle,
+            normalizeCssSelector(selector),
+        )
 
-        override fun domHas(handle: Int, selector: String): Boolean = domStore.has(handle, selector)
+        override fun domHas(handle: Int, selector: String): Boolean = domStore.has(
+            handle,
+            normalizeCssSelector(selector),
+        )
 
         override fun domNot(handle: Int, selector: String): String =
-            json.encodeToString(domStore.not(handle, selector).toList())
+            json.encodeToString(domStore.not(handle, normalizeCssSelector(selector)).toList())
 
         override fun domHtml(handle: Int): String = domStore.getHtml(handle)
 
@@ -375,6 +392,29 @@ class NovelJsRuntimeFactory(
         override fun domRelease(handle: Int) = domStore.release(handle)
 
         override fun domReleaseAll() = domStore.releaseAll()
+
+        override fun urlEncode(value: String, charsetName: String?): String {
+            val charset = resolveCharsetOrNull(charsetName) ?: Charsets.UTF_8
+            return try {
+                URLEncoder.encode(value, charset.name()).replace("+", "%20")
+            } catch (e: Exception) {
+                value
+            }
+        }
+
+        override fun urlDecode(value: String, charsetName: String?): String {
+            val charset = resolveCharsetOrNull(charsetName) ?: Charsets.UTF_8
+            return try {
+                URLDecoder.decode(value, charset.name())
+            } catch (e: Exception) {
+                value
+            }
+        }
+
+        private fun resolveCharsetOrNull(name: String?): java.nio.charset.Charset? {
+            if (name.isNullOrBlank()) return null
+            return runCatching { charset(name) }.getOrNull()
+        }
 
         // Crypto
         override fun aesGcmDecrypt(keyB64: String, ivB64: String, cipherB64: String): String {
@@ -598,9 +638,16 @@ class NovelJsRuntimeFactory(
 
         private fun JsonObject.intValue(key: String): Int? = this[key]?.jsonPrimitive?.intOrNull
 
-        private fun buildRequest(url: String, optionsJson: String?): Request {
-            val options = optionsJson?.let { json.decodeFromString<JsFetchRequest>(it) }
+        private fun decodeFetchRequest(optionsJson: String?): JsFetchRequest {
+            return optionsJson?.let { json.decodeFromString<JsFetchRequest>(it) }
                 ?: JsFetchRequest()
+        }
+
+        private fun buildRequest(url: String, optionsJson: String?): Request {
+            return buildRequest(url, decodeFetchRequest(optionsJson))
+        }
+
+        private fun buildRequest(url: String, options: JsFetchRequest): Request {
             val builder = Request.Builder().url(url)
             val presentHeaders = mutableSetOf<String>()
             val requestHeaders = options.headers.toMutableMap()
@@ -727,6 +774,7 @@ class NovelJsRuntimeFactory(
         val formEntries: List<FormEntry>? = null,
         val referrer: String? = null,
         val origin: String? = null,
+        val textEncoding: String? = null,
     )
 
     @Serializable
@@ -908,4 +956,32 @@ class NovelJsRuntimeFactory(
         @ProtoNumber(1) val seconds: Long? = null,
         @ProtoNumber(2) val nanos: Int? = null,
     )
+}
+
+/**
+ * Rewrites cheerio-style `:contains("text")` selectors into Jsoup's
+ * case-sensitive `:containsWholeText(text)`.
+ *
+ * cheerio (css-select) treats `:contains` as case-SENSITIVE and supports
+ * quoted arguments. Jsoup's `:contains` is case-INSENSITIVE and treats quote
+ * characters literally. Both differences break LNReader plugins: quoted
+ * arguments match nothing, and unquoted arguments match unrelated text. For
+ * example WTR-Lab pages contain both "Chapters ..." and "630 chapters locked",
+ * so Jsoup's `:contains(Chapters)` also matches the locked-chapters line and
+ * the plugin derives its chapter count from the locked amount.
+ */
+private val CONTAINS_SELECTOR_REGEX =
+    Regex(""":contains\(\s*(?:"([^"]*)"|'([^']*)'|([^()]*?))\s*\)""")
+
+internal fun normalizeCssSelector(selector: String): String {
+    return selector.replace(CONTAINS_SELECTOR_REGEX) { match ->
+        val text = match.groupValues[1].ifEmpty {
+            match.groupValues[2].ifEmpty { match.groupValues[3] }
+        }
+        if (text.isBlank()) match.value else ":containsWholeText($text)"
+    }
+}
+
+internal fun normalizeCssSelectorOrNull(selector: String?): String? {
+    return selector?.let(::normalizeCssSelector)
 }

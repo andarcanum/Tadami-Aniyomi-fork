@@ -9,6 +9,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.browse.novel.GlobalNovelSearchScreen
 import eu.kanade.presentation.browse.openSecretHallIfNeeded
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.ui.browse.novel.migration.list.NovelMigrationListScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 
@@ -44,9 +45,17 @@ class MigrateNovelSearchScreen(private val novelId: Long) : Screen() {
                 navigator.push(BrowseNovelSourceScreen(it.id, state.searchQuery))
             },
             onClickItem = {
-                dialogScreenModel.setDialog(
-                    NovelMigrateSearchScreenDialogScreenModel.Dialog.Migrate(it),
-                )
+                val migrationListScreen = navigator.items
+                    .filterIsInstance<NovelMigrationListScreen>()
+                    .lastOrNull()
+                if (migrationListScreen != null) {
+                    migrationListScreen.addMatchOverride(current = novelId, target = it.id)
+                    navigator.popUntil { screen -> screen is NovelMigrationListScreen }
+                } else {
+                    dialogScreenModel.setDialog(
+                        NovelMigrateSearchScreenDialogScreenModel.Dialog.Migrate(it),
+                    )
+                }
             },
             onLongClickItem = { navigator.push(NovelScreen(it.id, true)) },
         )

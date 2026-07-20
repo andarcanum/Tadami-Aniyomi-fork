@@ -180,12 +180,24 @@ class AnimeExtensionManager(
      * Finds the available anime extensions in the [api] and updates [availableExtensionsMapFlow].
      */
     suspend fun findAvailableExtensions() {
-        val extensions: List<AnimeExtension.Available> = try {
+        val fetched = try {
             api.findExtensions()
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
             withUIContext { context.toast(MR.strings.extension_api_error) }
-            emptyList()
+            // Keep the last known state instead of wiping the available list.
+            return
+        }
+
+        // If some stores failed to respond, carry over their last known extensions so a
+        // transient failure doesn't drop their icons or mark installed extensions as obsolete.
+        val extensions = if (fetched.isComplete) {
+            fetched.extensions
+        } else {
+            val fetchedKeys = fetched.extensions.map { it.pkgName to it.repoUrl }.toHashSet()
+            fetched.extensions + availableExtensionsStateFlow.value.filter {
+                it.repoUrl in fetched.failedRepoUrls && (it.pkgName to it.repoUrl) !in fetchedKeys
+            }
         }
 
         enableAdditionalSubLanguages(extensions)
@@ -194,7 +206,7 @@ class AnimeExtensionManager(
         availableExtensionsMapFlow.value = extensions
             .groupBy { it.pkgName }
             .mapValues { (_, variants) -> variants.newestByVersion()!! }
-        updatedInstalledAnimeExtensionsStatuses(extensions)
+        updatedInstalledAnimeExtensionsStatuses(extensions, canMarkObsolete = fetched.isComplete)
         setupAvailableAnimeExtensionsSourcesDataMap(extensions)
     }
 
@@ -235,6 +247,7 @@ class AnimeExtensionManager(
      */
     private fun updatedInstalledAnimeExtensionsStatuses(
         availableExtensions: List<AnimeExtension.Available>,
+        canMarkObsolete: Boolean = true,
     ) {
         if (availableExtensions.isEmpty()) {
             preferences.animeExtensionUpdatesCount().set(0)
@@ -249,7 +262,7 @@ class AnimeExtensionManager(
             val variants = availableExtensionsByPkgName[pkgName].orEmpty()
             val availableExt = variants.newestByVersion()
 
-            if (availableExt == null && !extension.isObsolete) {
+            if (availableExt == null && canMarkObsolete && !extension.isObsolete) {
                 installedExtensionsMap[pkgName] = extension.copy(isObsolete = true)
                 changed = true
             } else if (availableExt != null) {
@@ -260,6 +273,8 @@ class AnimeExtensionManager(
                 val updatedExtension = extensionWithRepo.copy(
                     hasUpdate = regularUpdate != null || reinstallCandidates.isNotEmpty(),
                     needsReinstall = regularUpdate == null && reinstallCandidates.isNotEmpty(),
+                    // The extension is available again, so it is no longer obsolete.
+                    isObsolete = false,
                 )
                 if (updatedExtension != extension) {
                     installedExtensionsMap[pkgName] = updatedExtension

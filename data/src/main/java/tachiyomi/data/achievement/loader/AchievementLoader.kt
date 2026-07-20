@@ -68,10 +68,14 @@ class AchievementLoader(
                         "[ACHIEVEMENTS] Existing achievements in database: $existingCount, JSON has: ${definitions.achievements.size}"
                     }
 
-                    // Force reload if counts don't match (new achievements added)
-                    if (existingCount < definitions.achievements.size) {
+                    val existingIds = existingAchievements.map { it.id }.toSet()
+                    val jsonIds = definitions.achievements.map { it.id }.toSet()
+                    val hasMissingAchievements = !existingIds.containsAll(jsonIds)
+
+                    // Force reload if counts don't match (new achievements added) or some are missing
+                    if (hasMissingAchievements || existingCount < definitions.achievements.size) {
                         logcat(LogPriority.WARN) {
-                            "[ACHIEVEMENTS] WARNING: Database has fewer achievements than JSON! Forcing reload..."
+                            "[ACHIEVEMENTS] WARNING: Database has fewer or missing achievements compared to JSON! Forcing reload..."
                         }
                         saveVersion(0)
                     } else if (existingCount == 0) {

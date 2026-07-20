@@ -38,6 +38,7 @@ import eu.kanade.domain.tutorial.model.TutorialMode
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
 import eu.kanade.presentation.achievement.components.AchievementBannerManager
+import eu.kanade.presentation.components.CoverReloadSignal
 import eu.kanade.presentation.tutorial.CoachTipRegistry
 import eu.kanade.tachiyomi.crash.CrashActivity
 import eu.kanade.tachiyomi.crash.GlobalExceptionHandler
@@ -76,14 +77,18 @@ import eu.kanade.tachiyomi.ui.base.delegate.SecureActivityDelegate
 import eu.kanade.tachiyomi.util.system.DeviceUtil
 import eu.kanade.tachiyomi.util.system.GLUtil
 import eu.kanade.tachiyomi.util.system.WebViewUtil
+import eu.kanade.tachiyomi.util.system.activeNetworkState
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.cancelNotification
 import eu.kanade.tachiyomi.util.system.isPreviewBuildType
+import eu.kanade.tachiyomi.util.system.networkStateFlow
 import eu.kanade.tachiyomi.util.system.notify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import logcat.AndroidLogcatLogger
@@ -125,9 +130,6 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     @SuppressLint("LaunchActivityFromNotification")
     @OptIn(DelicateCoilApi::class)
     override fun onCreate() {
-        val launchStart = System.currentTimeMillis()
-        logcat(LogPriority.DEBUG) { "TADAMI_PERF_LAUNCH app-oncreate-start" }
-
         LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
         super<Application>.onCreate()
         patchInjekt()
@@ -174,8 +176,58 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         // SY <--
         if (isMainProcess) {
             Injekt.importModule(AppModule(this))
+
+            // Setup Aurora easter egg unlock hook
+            eu.kanade.domain.easteregg.aurora.AuroraEchoBus.onUnlocked = { payload ->
+                achievementScope.launch {
+                    val repo = Injekt
+                        .get<tachiyomi.domain.achievement.repository.AchievementRepository>()
+                    val pointsManager = Injekt
+                        .get<tachiyomi.data.achievement.handler.PointsManager>()
+                    val userProfileManager = Injekt
+                        .get<tachiyomi.data.achievement.UserProfileManager>()
+                    val activityDataRepository = Injekt
+                        .get<tachiyomi.domain.achievement.repository.ActivityDataRepository>()
+
+                    repo.insertOrUpdateProgress(
+                        tachiyomi.domain.achievement.model.AchievementProgress.createStandard(
+                            achievementId = "aurora_heart",
+                            progress = 1,
+                            maxProgress = 1,
+                            isUnlocked = true,
+                            unlockedAt = System.currentTimeMillis(),
+                        ),
+                    )
+                    pointsManager.addPoints(payload.bonusPoints ?: 0)
+                    pointsManager.incrementUnlocked()
+                    activityDataRepository.recordAchievementUnlock()
+
+                    userProfileManager.unlockTheme("AURORA_PRIME")
+
+                    val unlockableManager = Injekt.get<tachiyomi.data.achievement.UnlockableManager>()
+                    unlockableManager.setUnlockableUnlocked("theme_AURORA_PRIME")
+                    unlockableManager.setUnlockableUnlocked("special_navbar_aurora_celestial")
+                }
+            }
         }
         SingletonImageLoader.setUnsafe { context -> newImageLoader(context) }
+
+        if (isMainProcess) {
+            applicationScope.launch {
+                var wasOnline = runCatching { activeNetworkState().isOnline }.getOrDefault(true)
+                runCatching {
+                    networkStateFlow()
+                        .map { it.isOnline }
+                        .distinctUntilChanged()
+                        .collect { online ->
+                            if (online && !wasOnline) {
+                                CoverReloadSignal.bump()
+                            }
+                            wasOnline = online
+                        }
+                }
+            }
+        }
 
         if (isMainProcess) {
             Handler(Looper.getMainLooper()).post {
@@ -343,10 +395,6 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 
         if (isMainProcess) {
             initializeMigrator()
-        }
-
-        logcat(LogPriority.DEBUG) {
-            "TADAMI_PERF_LAUNCH app-oncreate-done took=${System.currentTimeMillis() - launchStart}ms"
         }
     }
 

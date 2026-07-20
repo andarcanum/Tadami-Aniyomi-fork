@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.data.DateColumnAdapter
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
+import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.handlers.manga.AndroidMangaDatabaseHandler
 import tachiyomi.data.Database as MangaDatabase
@@ -43,7 +44,9 @@ class MangaExtensionStoreRepositoryImplTest {
         val database = MangaDatabase(
             driver = driver,
             historyAdapter = History.Adapter(last_readAdapter = DateColumnAdapter),
+            chaptersAdapter = data.Chapters.Adapter(memoAdapter = MemoColumnAdapter),
             mangasAdapter = Mangas.Adapter(
+                memoAdapter = MemoColumnAdapter,
                 genreAdapter = StringListColumnAdapter,
                 update_strategyAdapter = MangaUpdateStrategyColumnAdapter,
                 custom_genreAdapter = StringListColumnAdapter,

@@ -129,6 +129,8 @@ class UiPreferences(
 
     fun showTabGlow() = preferenceStore.getBoolean("show_tab_glow", false)
 
+    fun showCelestialNavbar() = preferenceStore.getBoolean("show_celestial_navbar", false)
+
     fun animatedAuroraBackground() = preferenceStore.getBoolean("animated_aurora_background", true)
 
     fun auroraDarkRimLightEnabled() = preferenceStore.getBoolean("aurora_dark_rim_light_enabled", true)
@@ -153,6 +155,14 @@ class UiPreferences(
     fun enabledAuras() = preferenceStore.getStringSet("enabled_auras", emptySet())
 
     fun debugBypassTreasuryLocks() = preferenceStore.getBoolean("debug_bypass_treasury_locks", false)
+
+    fun showSeasonTabs() = preferenceStore.getBoolean("show_season_tabs", true)
+
+    fun alwaysShowFullEpisodeList() = preferenceStore.getBoolean("always_show_full_episode_list", false)
+
+    fun alwaysShowFullChapterListManga() = preferenceStore.getBoolean("always_show_full_chapter_list_manga", false)
+
+    fun alwaysShowFullChapterListNovel() = preferenceStore.getBoolean("always_show_full_chapter_list_novel", false)
 
     fun entrySuggestionsExpandInline() = preferenceStore.getBoolean("entry_suggestions_expand_inline", true)
 

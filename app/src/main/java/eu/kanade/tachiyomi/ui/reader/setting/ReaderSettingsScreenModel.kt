@@ -16,6 +16,8 @@ class ReaderSettingsScreenModel(
     val hasDisplayCutout: Boolean,
     val onChangeReadingMode: (ReadingMode) -> Unit,
     val onChangeOrientation: (ReaderOrientation) -> Unit,
+    val onSetSeriesViewerOverride: (Boolean) -> Unit = {},
+    val isSeriesViewerOverrideEnabled: () -> Boolean = { false },
     val preferences: ReaderPreferences = Injekt.get(),
 ) : ScreenModel {
 

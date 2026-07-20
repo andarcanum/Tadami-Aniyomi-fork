@@ -1,5 +1,9 @@
 package tachiyomi.data.achievement.handler.checkers
 
+import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
+import tachiyomi.data.handlers.manga.MangaDatabaseHandler
+import tachiyomi.data.handlers.novel.NovelDatabaseHandler
+
 /**
  * РџСЂРѕРІРµСЂС‰РёРє РґРѕСЃС‚РёР¶РµРЅРёР№ СЂР°Р·РЅРѕРѕР±СЂР°Р·РёСЏ.
  *
@@ -24,9 +28,6 @@ package tachiyomi.data.achievement.handler.checkers
  *
  * @see AchievementType.DIVERSITY
  */
-import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
-import tachiyomi.data.handlers.manga.MangaDatabaseHandler
-import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 
 class DiversityAchievementChecker(
     private val mangaHandler: MangaDatabaseHandler,

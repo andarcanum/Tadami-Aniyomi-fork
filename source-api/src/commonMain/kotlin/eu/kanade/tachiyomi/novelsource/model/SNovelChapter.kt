@@ -2,6 +2,7 @@
 
 package eu.kanade.tachiyomi.novelsource.model
 
+import kotlinx.serialization.json.JsonObject
 import java.io.Serializable
 
 interface SNovelChapter : Serializable {
@@ -18,6 +19,18 @@ interface SNovelChapter : Serializable {
 
     var scanlator: String?
 
+    /**
+     * Extra metadata associated with the chapter.
+     *
+     * The JSON object is not visible to users and is intended for internal or source-specific
+     * purposes. Apps may define their own namespaced keys (e.g., `"mihon.*"`) for sources to populate.
+     *
+     * @since tachiyomix 1.6
+     */
+    var memo: JsonObject
+        get() = JsonObject(emptyMap())
+        set(value) {}
+
     fun copyFrom(other: SNovelChapter) {
         name = other.name
         url = other.url
@@ -25,6 +38,7 @@ interface SNovelChapter : Serializable {
         date_upload_raw = other.date_upload_raw
         chapter_number = other.chapter_number
         scanlator = other.scanlator
+        memo = other.memo
     }
 
     companion object {

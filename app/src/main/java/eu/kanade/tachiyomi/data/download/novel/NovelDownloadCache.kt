@@ -4,6 +4,7 @@ import android.app.Application
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -15,7 +16,6 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.decodeFromByteArray
@@ -33,6 +33,7 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 sealed interface NovelDownloadCacheEvent {
@@ -59,7 +60,10 @@ class NovelDownloadCache(
     private val storageManager: StorageManager = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
     private val novelRepository: NovelRepository = Injekt.get(),
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
+    // SupervisorJob: a failure in one coroutine must not cancel the whole
+    // scope, otherwise the storageManager/sourceManager subscriptions die
+    // and the cache stays empty forever (see issue #141).
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val cacheFileProvider: () -> File = {
         File(Injekt.get<Application>().cacheDir, "dl_novel_cache_v1")
     },
@@ -86,7 +90,8 @@ class NovelDownloadCache(
 
     private var updateDiskCacheJob: Job? = null
     private val writeDiskCacheMutex = Mutex()
-    private val isInitializing = MutableStateFlow(false)
+    private val isRenewing = AtomicBoolean(false)
+    private val pendingCountRefreshIds = ConcurrentHashMap.newKeySet<Long>()
 
     init {
         _changes.tryEmit(NovelDownloadCacheEvent.InvalidateAll)
@@ -146,7 +151,10 @@ class NovelDownloadCache(
             .onEach { initialized ->
                 if (initialized) {
                     logcat(LogPriority.DEBUG) { "NovelDownloadCache: sources initialized, invalidating cache" }
-                    invalidateAll()
+                    // Do not wipe the cache wholesale: renewCache() overwrites
+                    // entries itself. During the transition the UI keeps seeing
+                    // the old data instead of an empty cache, and never falls
+                    // back to a synchronous filesystem scan on the main thread.
                     renewCache()
                 }
             }
@@ -158,8 +166,48 @@ class NovelDownloadCache(
     }
 
     fun getDownloadCount(novel: Novel): Int {
-        return cachedCounts.getOrPut(novel.id) {
-            downloadCountLookup(novel)
+        cachedCounts[novel.id]?.let { return it }
+        // Cache miss: do NOT scan the filesystem on the caller (usually main)
+        // thread -- that was the source of the freeze. Return 0 and refresh
+        // the value in the background.
+        scheduleDownloadCountRefresh(novel)
+        return 0
+    }
+
+    private fun scheduleDownloadCountRefresh(novel: Novel) {
+        if (!pendingCountRefreshIds.add(novel.id)) return
+        scope.launch {
+            try {
+                val lookupVersion = cacheStateVersion.get()
+                val count = downloadCountLookup(novel)
+                val applied = synchronized(cacheStateLock) {
+                    if (cacheStateVersion.get() != lookupVersion) {
+                        false
+                    } else {
+                        if (count > 0) {
+                            cachedCounts[novel.id] = count
+                        } else {
+                            cachedCounts.remove(novel.id)
+                        }
+                        true
+                    }
+                }
+                if (applied && count > 0) {
+                    _changes.tryEmit(
+                        NovelDownloadCacheEvent.ChaptersChanged(
+                            novelId = novel.id,
+                            chapterIds = emptySet(),
+                            downloaded = true,
+                        ),
+                    )
+                }
+            } catch (e: Throwable) {
+                logcat(LogPriority.ERROR, e) {
+                    "NovelDownloadCache: failed to refresh download count for novel ${novel.id}"
+                }
+            } finally {
+                pendingCountRefreshIds.remove(novel.id)
+            }
         }
     }
 
@@ -266,13 +314,10 @@ class NovelDownloadCache(
     }
 
     private fun persistDiskCache() {
-        updateDiskCacheJob?.cancel()
-        updateDiskCacheJob = null
-        runBlocking {
-            writeDiskCacheMutex.withLock {
-                writeDiskCacheSnapshot()
-            }
-        }
+        // runBlocking used to block the caller thread (including main) while
+        // a background write held the mutex. Write asynchronously, but
+        // without the debounce delay.
+        writeDiskCache(immediate = true)
     }
 
     private fun writeDiskCache(immediate: Boolean) {
@@ -314,9 +359,10 @@ class NovelDownloadCache(
     }
 
     fun renewCache() {
-        if (isInitializing.value) return
+        // compareAndSet closes the check-then-act race: the flag is set
+        // atomically BEFORE launching the coroutine, not inside it.
+        if (!isRenewing.compareAndSet(false, true)) return
         scope.launch {
-            isInitializing.value = true
             try {
                 val libraryNovels = novelRepository.getLibraryNovel().map { it.novel }
                 val readNovels = novelRepository.getReadNovelNotInLibrary()
@@ -341,7 +387,7 @@ class NovelDownloadCache(
             } catch (e: Throwable) {
                 logcat(LogPriority.ERROR, e) { "Failed to renew novel download cache" }
             } finally {
-                isInitializing.value = false
+                isRenewing.set(false)
             }
         }
     }

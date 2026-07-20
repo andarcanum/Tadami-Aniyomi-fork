@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -40,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.theme.AuroraTheme
-import eu.kanade.presentation.theme.resolveAuroraTopBarIconSurfaceColor
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.theme.resolveAuroraTopBarScrimColor
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -263,7 +262,7 @@ internal fun AuroraTopBarIconButton(
         },
         modifier = modifier
             .size(44.dp)
-            .background(resolveAuroraTopBarIconSurfaceColor(colors), CircleShape),
+            .auroraHeaderIconSurface(colors),
     ) {
         Icon(
             imageVector = icon,

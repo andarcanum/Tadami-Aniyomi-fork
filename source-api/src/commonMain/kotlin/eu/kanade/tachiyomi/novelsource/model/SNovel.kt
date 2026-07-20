@@ -4,6 +4,7 @@ package eu.kanade.tachiyomi.novelsource.model
 
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
 import eu.kanade.tachiyomi.source.model.parseSourceGenres
+import kotlinx.serialization.json.JsonObject
 import java.io.Serializable
 
 interface SNovel : Serializable {
@@ -26,6 +27,18 @@ interface SNovel : Serializable {
 
     var initialized: Boolean
 
+    /**
+     * Extra metadata associated with the novel.
+     *
+     * The JSON object is not visible to users and is intended for internal or source-specific
+     * purposes. Apps may define their own namespaced keys (e.g., `"mihon.*"`) for sources to populate.
+     *
+     * @since tachiyomix 1.6
+     */
+    var memo: JsonObject
+        get() = JsonObject(emptyMap())
+        set(value) {}
+
     fun getGenres(): List<String>? {
         return parseSourceGenres(genre)
     }
@@ -40,6 +53,7 @@ interface SNovel : Serializable {
         it.thumbnail_url = thumbnail_url
         it.update_strategy = update_strategy
         it.initialized = initialized
+        it.memo = memo
     }
 
     companion object {

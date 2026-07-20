@@ -92,10 +92,17 @@ data class AnixartRow(
      * Strips suffixes, brackets, parentheses, and common anime metadata.
      */
     fun searchQueries(): List<String> {
+        // Prefer cleaned titles, but fall back to the raw title when cleaning
+        // strips everything (e.g. a title consisting only of bracketed text),
+        // so the row still gets a search query instead of silently no-matching.
+        fun MutableList<String>.addCleanedOrRaw(title: String) {
+            val cleaned = cleanAnimeTitle(title)
+            add(if (cleaned.isNotBlank()) cleaned else title.trim())
+        }
         val raw = buildList {
-            add(cleanAnimeTitle(originalTitle))
-            add(cleanAnimeTitle(russianTitle))
-            alternativeTitles.split(',').forEach { add(cleanAnimeTitle(it)) }
+            addCleanedOrRaw(originalTitle)
+            addCleanedOrRaw(russianTitle)
+            alternativeTitles.split(',').forEach { addCleanedOrRaw(it) }
         }
         val seen = HashSet<String>()
         return raw

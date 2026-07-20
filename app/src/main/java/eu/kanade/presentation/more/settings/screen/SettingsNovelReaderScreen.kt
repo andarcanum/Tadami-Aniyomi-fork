@@ -20,10 +20,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -34,6 +38,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,6 +51,8 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.widget.BasePreferenceWidget
 import eu.kanade.presentation.more.settings.widget.PrefsHorizontalPadding
@@ -100,6 +107,9 @@ import eu.kanade.presentation.reader.novel.resolveRendererSettingsAvailability
 import eu.kanade.presentation.reader.novel.shouldShowPageTurnTuningControls
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCache
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCacheStore
+import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistory
+import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistoryScreen
+import eu.kanade.tachiyomi.ui.reader.novel.dictionary.StarDictManager
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelAutoScrollChapterEndBehavior
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
@@ -114,11 +124,16 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -188,6 +203,7 @@ object SettingsNovelReaderScreen : SearchableSettings {
             getNavigationGroup(prefs),
             getAccessibilityGroup(prefs),
             getTtsGroup(prefs),
+            getDictionaryGroup(prefs),
             getAdvancedGroup(prefs),
         )
     }
@@ -1531,6 +1547,199 @@ object SettingsNovelReaderScreen : SearchableSettings {
     }
 
     @Composable
+    private fun getDictionaryGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+
+        val dictionaryLanguages = kotlinx.collections.immutable.persistentMapOf(
+            "en" to "English",
+            "ru" to "Русский",
+            "ja" to "日本語 (Japanese)",
+            "zh" to "中文 (Chinese)",
+            "ko" to "한국어 (Korean)",
+            "es" to "Español (Spanish)",
+            "fr" to "Français (French)",
+            "de" to "Deutsch (German)",
+            "it" to "Italiano (Italian)",
+            "pt" to "Português (Portuguese)",
+        )
+
+        var installedRevision by rememberSaveable { mutableIntStateOf(0) }
+        val installedDictionaries = remember(installedRevision) {
+            StarDictManager.listInstalled(context)
+        }
+        val disabledIdsPref = remember { prefs.novelDictionaryDisabledOfflineIds() }
+        val disabledIdsRaw by disabledIdsPref.collectAsState()
+        val disabledIds = remember(disabledIdsRaw) {
+            disabledIdsRaw.split(",").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toSet()
+        }
+
+        val importDictionaryLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenMultipleDocuments(),
+        ) { uris ->
+            if (uris.isEmpty()) return@rememberLauncherForActivityResult
+            scope.launch(Dispatchers.IO) {
+                val result = StarDictManager.importFromUris(context, uris)
+                withContext(Dispatchers.Main) {
+                    result
+                        .onSuccess { installed ->
+                            installedRevision += 1
+                            context.toast(
+                                context.stringResource(
+                                    AYMR.strings.novel_reader_dictionary_import_success,
+                                    installed.bookname,
+                                    installed.wordCount.toString(),
+                                ),
+                            )
+                        }
+                        .onFailure {
+                            context.toast(context.stringResource(AYMR.strings.novel_reader_dictionary_import_failed))
+                        }
+                }
+            }
+        }
+
+        val exportHistoryLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.CreateDocument("application/json"),
+        ) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch(Dispatchers.IO) {
+                val result = NovelDictionaryHistory.exportTo(context, uri)
+                withContext(Dispatchers.Main) {
+                    result
+                        .onSuccess { count ->
+                            context.toast(
+                                context.stringResource(
+                                    AYMR.strings.novel_reader_dictionary_history_export_success,
+                                    count,
+                                ),
+                            )
+                        }
+                        .onFailure {
+                            context.toast(context.stringResource(AYMR.strings.novel_reader_dictionary_history_failed))
+                        }
+                }
+            }
+        }
+
+        val importHistoryLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocument(),
+        ) { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            scope.launch(Dispatchers.IO) {
+                val result = NovelDictionaryHistory.importFrom(context, uri)
+                withContext(Dispatchers.Main) {
+                    result
+                        .onSuccess { count ->
+                            context.toast(
+                                context.stringResource(
+                                    AYMR.strings.novel_reader_dictionary_history_import_success,
+                                    count,
+                                ),
+                            )
+                        }
+                        .onFailure {
+                            context.toast(context.stringResource(AYMR.strings.novel_reader_dictionary_history_failed))
+                        }
+                }
+            }
+        }
+
+        val items = mutableListOf<Preference.PreferenceItem<out Any>>()
+        items += Preference.PreferenceItem.SwitchPreference(
+            preference = prefs.novelDictionaryEnabled(),
+            title = stringResource(AYMR.strings.novel_reader_dictionary_enabled),
+            subtitle = stringResource(AYMR.strings.novel_reader_dictionary_enabled_summary),
+        )
+        items += Preference.PreferenceItem.ListPreference(
+            preference = prefs.novelDictionarySource(),
+            title = stringResource(AYMR.strings.novel_reader_dictionary_source_mode),
+            entries = kotlinx.collections.immutable.persistentMapOf(
+                "ONLINE" to stringResource(AYMR.strings.novel_reader_dictionary_source_online),
+                "OFFLINE" to stringResource(AYMR.strings.novel_reader_dictionary_source_offline),
+                "OFFLINE_FIRST" to stringResource(AYMR.strings.novel_reader_dictionary_source_offline_first),
+                "ONLINE_FIRST" to stringResource(AYMR.strings.novel_reader_dictionary_source_online_first),
+            ),
+        )
+        items += Preference.PreferenceItem.ListPreference(
+            preference = prefs.novelDictionaryTargetLanguage(),
+            title = stringResource(AYMR.strings.novel_reader_dictionary_target_language),
+            entries = dictionaryLanguages,
+        )
+        items += Preference.PreferenceItem.TextPreference(
+            title = stringResource(AYMR.strings.novel_reader_dictionary_import),
+            subtitle = stringResource(AYMR.strings.novel_reader_dictionary_import_summary),
+            onClick = { importDictionaryLauncher.launch(arrayOf("*/*")) },
+        )
+        if (installedDictionaries.isEmpty()) {
+            items += Preference.PreferenceItem.InfoPreference(
+                title = stringResource(AYMR.strings.novel_reader_dictionary_imported_empty),
+            )
+        } else {
+            installedDictionaries.forEach { dictionary ->
+                items += Preference.PreferenceItem.TextPreference(
+                    title = dictionary.bookname,
+                    subtitle = stringResource(
+                        AYMR.strings.novel_reader_dictionary_word_count,
+                        dictionary.wordCount,
+                    ) + " · " + Formatter.formatFileSize(context, dictionary.sizeBytes),
+                    widget = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Switch(
+                                checked = dictionary.id !in disabledIds,
+                                onCheckedChange = { enabled ->
+                                    val updated = if (enabled) {
+                                        disabledIds - dictionary.id
+                                    } else {
+                                        disabledIds + dictionary.id
+                                    }
+                                    disabledIdsPref.set(updated.joinToString(","))
+                                },
+                            )
+                            IconButton(
+                                onClick = {
+                                    StarDictManager.delete(context, dictionary.id)
+                                    disabledIdsPref.set((disabledIds - dictionary.id).joinToString(","))
+                                    installedRevision += 1
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = stringResource(AYMR.strings.novel_reader_dictionary_delete),
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+        }
+        val navigator = LocalNavigator.currentOrThrow
+        items += Preference.PreferenceItem.SwitchPreference(
+            preference = prefs.novelDictionaryQuickAccess(),
+            title = stringResource(AYMR.strings.novel_reader_dictionary_quick_access),
+            subtitle = stringResource(AYMR.strings.novel_reader_dictionary_quick_access_summary),
+        )
+        items += Preference.PreferenceItem.TextPreference(
+            title = stringResource(AYMR.strings.novel_reader_dictionary_history),
+            subtitle = stringResource(AYMR.strings.novel_reader_dictionary_history_summary),
+            onClick = { navigator.push(NovelDictionaryHistoryScreen()) },
+        )
+        items += Preference.PreferenceItem.TextPreference(
+            title = stringResource(AYMR.strings.novel_reader_dictionary_history_export),
+            onClick = { exportHistoryLauncher.launch("novel-dictionary-history.json") },
+        )
+        items += Preference.PreferenceItem.TextPreference(
+            title = stringResource(AYMR.strings.novel_reader_dictionary_history_import),
+            onClick = { importHistoryLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+        )
+
+        return Preference.PreferenceGroup(
+            title = stringResource(AYMR.strings.novel_reader_dictionary_section),
+            preferenceItems = items.toImmutableList(),
+        )
+    }
+
+    @Composable
     private fun getAdvancedGroup(prefs: NovelReaderPreferences): Preference.PreferenceGroup {
         val dictionaryLanguages = kotlinx.collections.immutable.persistentMapOf(
             "en" to "English",
@@ -1560,19 +1769,9 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 preference = prefs.selectedTextTranslationEnabled(),
                 title = stringResource(AYMR.strings.novel_reader_selected_text_translation_enabled),
             ),
-            Preference.PreferenceItem.SwitchPreference(
-                preference = prefs.novelDictionaryEnabled(),
-                title = stringResource(AYMR.strings.novel_reader_dictionary_enabled),
-                subtitle = stringResource(AYMR.strings.novel_reader_dictionary_enabled_summary),
-            ),
             Preference.PreferenceItem.ListPreference(
                 preference = prefs.selectedTextTranslationTargetLanguage(),
                 title = stringResource(AYMR.strings.novel_reader_selected_text_translation_target_language),
-                entries = dictionaryLanguages,
-            ),
-            Preference.PreferenceItem.ListPreference(
-                preference = prefs.novelDictionaryTargetLanguage(),
-                title = stringResource(AYMR.strings.novel_reader_dictionary_target_language),
                 entries = dictionaryLanguages,
             ),
         )

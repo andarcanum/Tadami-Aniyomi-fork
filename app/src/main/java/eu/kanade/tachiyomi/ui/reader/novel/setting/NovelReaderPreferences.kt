@@ -675,6 +675,15 @@ class NovelReaderPreferences(
     fun novelDictionaryTargetLanguage() =
         preferenceStore.getString("novel_reader_dictionary_target_language", "ru")
 
+    fun novelDictionaryQuickAccess() =
+        preferenceStore.getBoolean("novel_reader_dictionary_quick_access", false)
+
+    fun novelDictionaryHistoryEnabled() =
+        preferenceStore.getBoolean("novel_reader_dictionary_history_enabled", true)
+
+    fun novelDictionaryDisabledOfflineIds() =
+        preferenceStore.getString("novel_reader_dictionary_disabled_offline_ids", "")
+
     fun ttsEnabled() = preferenceStore.getBoolean("novel_reader_tts_enabled", false)
 
     fun ttsEnginePackage() = preferenceStore.getString("novel_reader_tts_engine_package", "")
