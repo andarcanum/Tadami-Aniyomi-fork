@@ -88,6 +88,7 @@ fun AnimeStatsCard(
                     value = anime.displayAuthor?.takeIf { it.isNotBlank() }
                         ?: stringResource(MR.strings.unknown_author),
                     leadingIcon = Icons.Filled.PersonOutline,
+                    valueMaxLines = Int.MAX_VALUE,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 val artist = anime.displayArtist?.takeIf { it.isNotBlank() }
@@ -96,6 +97,7 @@ fun AnimeStatsCard(
                         label = stringResource(MR.strings.artist),
                         value = artist,
                         leadingIcon = Icons.Filled.Brush,
+                        valueMaxLines = Int.MAX_VALUE,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

@@ -36,6 +36,7 @@ fun QuietMetricTile(
     leadingIconTint: Color? = null,
     badge: Boolean = false,
     progressFraction: Float? = null,
+    valueMaxLines: Int = 1,
 ) {
     val colors = AuroraTheme.colors
 
@@ -78,9 +79,9 @@ fun QuietMetricTile(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.textPrimary,
-                    maxLines = 1,
+                    maxLines = valueMaxLines,
                     overflow = TextOverflow.Ellipsis,
-                    softWrap = false,
+                    softWrap = valueMaxLines > 1,
                 )
             }
 

@@ -90,6 +90,7 @@ fun MangaStatsCard(
                     value = manga.displayAuthor?.takeIf { it.isNotBlank() }
                         ?: stringResource(MR.strings.unknown_author),
                     leadingIcon = Icons.Filled.PersonOutline,
+                    valueMaxLines = Int.MAX_VALUE,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 val artist = manga.displayArtist?.takeIf { it.isNotBlank() }
@@ -98,6 +99,7 @@ fun MangaStatsCard(
                         label = stringResource(MR.strings.artist),
                         value = artist,
                         leadingIcon = Icons.Filled.Brush,
+                        valueMaxLines = Int.MAX_VALUE,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

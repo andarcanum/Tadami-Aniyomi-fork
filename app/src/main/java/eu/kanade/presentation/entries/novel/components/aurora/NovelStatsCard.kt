@@ -109,6 +109,7 @@ fun NovelStatsCard(
                 value = novel.displayAuthor?.takeIf { it.isNotBlank() }
                     ?: stringResource(MR.strings.unknown_author),
                 leadingIcon = Icons.Filled.PersonOutline,
+                valueMaxLines = Int.MAX_VALUE,
                 modifier = Modifier.fillMaxWidth(),
             )
 
