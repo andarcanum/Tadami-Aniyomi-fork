@@ -125,11 +125,21 @@ private fun VerticalSliderInternal(
                     targetValue = overflowPercentage,
                     label = "vslideroverflowheight",
                 )
+                // In Monochrome (and any scheme where the error container equals the primary
+                // fill), the overflow/booster segment would be indistinguishable from the base
+                // volume fill. Fall back to tertiary to keep it visible.
+                val overflowColor = MaterialTheme.colorScheme.errorContainer.let {
+                    if (it == MaterialTheme.colorScheme.primary) {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        it
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .fillMaxHeight(overflowHeight)
-                        .background(MaterialTheme.colorScheme.errorContainer),
+                        .background(overflowColor),
                 )
             }
         }
