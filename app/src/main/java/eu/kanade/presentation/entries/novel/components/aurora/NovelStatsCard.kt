@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.runtime.Composable
@@ -100,6 +101,16 @@ fun NovelStatsCard(
                     )
                 }
             }
+
+            QuietSectionDivider()
+
+            QuietMetricTile(
+                label = stringResource(MR.strings.author),
+                value = novel.displayAuthor?.takeIf { it.isNotBlank() }
+                    ?: stringResource(MR.strings.unknown_author),
+                leadingIcon = Icons.Filled.PersonOutline,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
             QuietSectionDivider()
 

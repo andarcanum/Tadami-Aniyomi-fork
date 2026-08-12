@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.rounded.Translate
@@ -16,12 +18,14 @@ import eu.kanade.presentation.entries.components.aurora.GlassmorphismCard
 import eu.kanade.presentation.entries.components.aurora.QuietMetadataRow
 import eu.kanade.presentation.entries.components.aurora.QuietMetricTile
 import eu.kanade.presentation.entries.components.aurora.QuietSectionDivider
+import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun MangaStatsCard(
+    manga: Manga,
     detailsSnapshot: MangaDetailsSnapshot,
     modifier: Modifier = Modifier,
 ) {
@@ -70,6 +74,30 @@ fun MangaStatsCard(
                         label = stringResource(AYMR.strings.aurora_state),
                         value = detailsSnapshot.statusText,
                         badge = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+
+            QuietSectionDivider()
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                QuietMetricTile(
+                    label = stringResource(MR.strings.author),
+                    value = manga.displayAuthor?.takeIf { it.isNotBlank() }
+                        ?: stringResource(MR.strings.unknown_author),
+                    leadingIcon = Icons.Filled.PersonOutline,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                val artist = manga.displayArtist?.takeIf { it.isNotBlank() }
+                if (artist != null && artist != manga.displayAuthor) {
+                    QuietMetricTile(
+                        label = stringResource(MR.strings.artist),
+                        value = artist,
+                        leadingIcon = Icons.Filled.Brush,
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }

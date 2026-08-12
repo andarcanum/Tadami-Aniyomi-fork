@@ -525,6 +525,7 @@ fun MangaScreenAuroraImpl(
                                 )
                                 Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
                                 MangaStatsCard(
+                                    manga = manga,
                                     detailsSnapshot = detailsSnapshot,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -837,6 +838,7 @@ fun MangaScreenAuroraImpl(
                             ) {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 MangaStatsCard(
+                                    manga = manga,
                                     detailsSnapshot = detailsSnapshot,
                                     modifier = Modifier.fillMaxWidth(),
                                 )

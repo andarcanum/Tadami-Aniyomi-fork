@@ -722,6 +722,7 @@ fun AnimeScreenAuroraImpl(
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 AnimeStatsCard(
+                                    anime = anime,
                                     snapshot = animeDetailsSnapshot,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
@@ -1116,6 +1117,7 @@ fun AnimeScreenAuroraImpl(
                             ) {
                                 Spacer(modifier = Modifier.height(16.dp))
                                 AnimeStatsCard(
+                                    anime = anime,
                                     snapshot = animeDetailsSnapshot,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
