@@ -30,6 +30,7 @@ fun NavigationBar(
     windowInsets: WindowInsets = NavigationBarDefaults.windowInsets,
     shape: Shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    height: Dp = 80.dp,
     content: @Composable RowScope.() -> Unit,
 ) {
     androidx.compose.material3.Surface(
@@ -45,7 +46,7 @@ fun NavigationBar(
                 .fillMaxWidth()
                 .windowInsetsPadding(windowInsets)
                 .padding(contentPadding)
-                .height(80.dp)
+                .height(height)
                 .selectableGroup(),
             content = content,
         )
