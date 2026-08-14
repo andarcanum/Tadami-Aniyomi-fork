@@ -94,7 +94,7 @@ private fun JsonObject.toKotlinExtensionPlugin(repoUrl: String): NovelPlugin.Ava
         iconUrl = "icon/$pkgName.png".resolveAgainstRepo(repoUrl),
         customJs = null,
         customCss = null,
-        hasSettings = false,
+        hasSettings = this["hasSettings"]?.jsonPrimitive?.booleanOrNull ?: false,
         sha256 = this["sha256"]?.stringValue().orEmpty(),
         repoUrl = repoUrl,
         pkgName = pkgName,

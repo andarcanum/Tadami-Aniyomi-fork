@@ -189,6 +189,29 @@ class KotlinNovelFilterAdapterTest {
         cbB.state shouldBe true
     }
 
+    @Test
+    fun `toMangaFilterList copies state correctly for filters with duplicate names at different positions`() {
+        val catalogueSource = object : DummyCatalogueSource() {
+            override fun getFilterList(): FilterList {
+                return FilterList(
+                    CustomCheckbox("Include", false),
+                    CustomCheckbox("Include", false),
+                )
+            }
+        }
+
+        val novelFilters = NovelFilterList(
+            object : NovelFilter.CheckBox("Include", true) {},
+            object : NovelFilter.CheckBox("Include", false) {},
+        )
+
+        val mappedMangaFilters = adapter.toMangaFilterList(novelFilters, catalogueSource)
+
+        mappedMangaFilters.size shouldBe 2
+        (mappedMangaFilters[0] as CustomCheckbox).state shouldBe true
+        (mappedMangaFilters[1] as CustomCheckbox).state shouldBe false
+    }
+
     // Helper custom filter classes to test identity preservation
     private class CustomCheckbox(name: String, state: Boolean) : Filter.CheckBox(name, state)
     private class CustomTristate(name: String, state: Int) : Filter.TriState(name, state)

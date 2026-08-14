@@ -3,6 +3,10 @@ package eu.kanade.tachiyomi.novelsource
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
+import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
+import eu.kanade.tachiyomi.novelsource.model.SNovelUpdate
+import kotlinx.coroutines.async
+import kotlinx.coroutines.supervisorScope
 import rx.Observable
 import tachiyomi.core.common.util.lang.awaitSingle
 
@@ -75,6 +79,26 @@ interface NovelCatalogueSource : NovelSource {
      */
     suspend fun getLatestUpdates(page: Int, filters: NovelFilterList): NovelsPage {
         return getLatestUpdates(page)
+    }
+
+    /**
+     * Fetches updated information for a novel.
+     *
+     * @since extensions-lib 1.6
+     * @param novel the novel to fetch updates for.
+     * @param chapters existing chapters of the novel.
+     * @param fetchDetails whether to fetch updated novel details.
+     * @param fetchChapters whether to fetch available chapters.
+     */
+    suspend fun getNovelUpdate(
+        novel: SNovel,
+        chapters: List<SNovelChapter>,
+        fetchDetails: Boolean,
+        fetchChapters: Boolean,
+    ): SNovelUpdate = supervisorScope {
+        val asyncNovel = if (fetchDetails) async { getNovelDetails(novel) } else null
+        val asyncChapters = if (fetchChapters) async { getChapterList(novel) } else null
+        SNovelUpdate(asyncNovel?.await() ?: novel, asyncChapters?.await() ?: chapters)
     }
 
     /**

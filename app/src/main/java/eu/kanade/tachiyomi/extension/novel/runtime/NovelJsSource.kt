@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
+import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import eu.kanade.tachiyomi.source.novel.NovelImageRequestSource
 import eu.kanade.tachiyomi.source.novel.NovelPluginImagePayload
 import eu.kanade.tachiyomi.source.novel.NovelPluginImageSource
@@ -65,7 +66,8 @@ class NovelJsSource internal constructor(
     private val chapterRequestDelay: suspend (Long) -> Unit = { delayMs ->
         if (delayMs > 0L) delay(delayMs)
     },
-) : NovelCatalogueSource,
+) : NovelHttpSource,
+    NovelCatalogueSource,
     NovelSiteSource,
     NovelWebUrlSource,
     NovelPluginImageSource,
@@ -77,6 +79,7 @@ class NovelJsSource internal constructor(
     override val name: String = plugin.name
     override val lang: String = plugin.lang
     override val supportsLatest: Boolean = true
+    override val baseUrl: String get() = siteUrl.orEmpty()
     override val siteUrl: String?
         get() {
             if (isSiteUrlCached) {

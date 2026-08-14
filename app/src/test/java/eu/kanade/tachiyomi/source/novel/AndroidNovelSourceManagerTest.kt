@@ -119,6 +119,26 @@ class AndroidNovelSourceManagerTest {
     }
 
     @Test
+    fun `getOnlineSources returns active online sources`() {
+        runTest {
+            val dispatcher = StandardTestDispatcher(testScheduler)
+            val extensionManager = FakeNovelExtensionManager()
+            val repository = FakeNovelStubSourceRepository()
+            val manager = AndroidNovelSourceManager(context, extensionManager, repository, dispatcher)
+
+            val onlineSource = FakeNovelCatalogueSource(id = 100L, name = "OnlineNovel", lang = "en")
+            extensionManager.emitSources(listOf(onlineSource))
+            advanceUntilIdle()
+
+            val onlineSources = manager.getOnlineSources()
+
+            onlineSources.size shouldBe 1
+            onlineSources.first().id shouldBe 100L
+            onlineSources.first().name shouldBe "OnlineNovel"
+        }
+    }
+
+    @Test
     fun `source manager stays initialized when omni source initialization fails`() {
         runTest {
             val dispatcher = StandardTestDispatcher(testScheduler)
