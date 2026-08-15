@@ -2384,6 +2384,7 @@
     <!-- Feed -->
     <string name="feed">Лента</string>
     <string name="feed_add">Добавить источник в ленту</string>
+    <string name="feed_manage">Управление лентой</string>
     <string name="feed_empty">Источники ленты не настроены. Нажмите +, чтобы добавить источник с поддержкой Latest.</string>
     <string name="feed_delete_source_title">Удалить источник из ленты?</string>
     <string name="feed_delete_source_message">Источник будет удалён из ленты.</string>

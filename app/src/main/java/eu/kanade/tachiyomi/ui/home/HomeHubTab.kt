@@ -79,7 +79,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
+import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
@@ -731,6 +733,7 @@ object HomeHubTab : Tab {
 
     @Composable
     override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
         var hasReportedDrawn by remember { mutableStateOf(false) }
 
         val showAnimeSection by uiPreferences.showAnimeSection().collectAsStateWithLifecycle()
@@ -1106,6 +1109,10 @@ object HomeHubTab : Tab {
                             onStreakClick = {
                                 appHaptics.tap()
                                 showStreakStyleDialog = true
+                            },
+                            onSettingsClick = {
+                                appHaptics.tap()
+                                navigator.push(eu.kanade.tachiyomi.ui.setting.SettingsScreen())
                             },
                         )
                     },

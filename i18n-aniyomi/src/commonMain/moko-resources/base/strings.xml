@@ -2590,6 +2590,7 @@
     <!-- Feed -->
     <string name="feed">Feed</string>
     <string name="feed_add">Add source to feed</string>
+    <string name="feed_manage">Manage feed</string>
     <string name="feed_empty">Feed sources not configured. Tap + to add a source that supports Latest.</string>
     <string name="feed_delete_source_title">Remove source from feed?</string>
     <string name="feed_delete_source_message">This source will be removed from your feed.</string>
