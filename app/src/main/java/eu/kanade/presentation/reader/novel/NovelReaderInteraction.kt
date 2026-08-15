@@ -141,7 +141,6 @@ internal fun resolveHorizontalChapterSwipeAction(
 }
 
 internal fun resolveVerticalChapterSwipeAction(
-    swipeGesturesEnabled: Boolean,
     swipeToNextChapter: Boolean,
     swipeToPrevChapter: Boolean,
     deltaX: Float,
@@ -155,7 +154,6 @@ internal fun resolveVerticalChapterSwipeAction(
     isNearChapterEnd: Boolean,
     isNearChapterStart: Boolean,
 ): VerticalChapterSwipeAction {
-    if (!swipeGesturesEnabled) return VerticalChapterSwipeAction.NONE
     if (gestureDurationMillis < minHoldDurationMillis) return VerticalChapterSwipeAction.NONE
 
     val absX = abs(deltaX)
@@ -173,7 +171,6 @@ internal fun resolveVerticalChapterSwipeAction(
 }
 
 internal fun resolveWebViewVerticalChapterSwipeAction(
-    swipeGesturesEnabled: Boolean,
     swipeToNextChapter: Boolean,
     swipeToPrevChapter: Boolean,
     deltaX: Float,
@@ -187,7 +184,6 @@ internal fun resolveWebViewVerticalChapterSwipeAction(
     isNearChapterEnd: Boolean,
     isNearChapterStart: Boolean,
 ): VerticalChapterSwipeAction {
-    if (!swipeGesturesEnabled) return VerticalChapterSwipeAction.NONE
     if (gestureDurationMillis < minHoldDurationMillis) return VerticalChapterSwipeAction.NONE
 
     val absX = abs(deltaX)

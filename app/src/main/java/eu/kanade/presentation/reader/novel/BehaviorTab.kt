@@ -47,9 +47,8 @@ fun BehaviorTab(
         }
     }
 
-    val chapterSwipeControlsEnabled = remember(settings.swipeGestures, currentPageReaderActive) {
+    val chapterSwipeControlsEnabled = remember(currentPageReaderActive) {
         areChapterSwipeControlsEnabled(
-            swipeGesturesEnabled = settings.swipeGestures,
             pageReaderEnabled = currentPageReaderActive,
         )
     }

@@ -2638,7 +2638,6 @@ internal fun NovelReaderContentHost(
                                                     .coerceAtLeast(0L)
                                                 when (
                                                     resolveVerticalChapterSwipeAction(
-                                                        swipeGesturesEnabled = state.readerSettings.swipeGestures,
                                                         swipeToNextChapter = state.readerSettings.swipeToNextChapter,
                                                         swipeToPrevChapter = state.readerSettings.swipeToPrevChapter,
                                                         deltaX = deltaX,
@@ -3290,7 +3289,6 @@ internal fun NovelReaderContentHost(
 
                                             when (
                                                 resolveWebViewVerticalChapterSwipeAction(
-                                                    swipeGesturesEnabled = state.readerSettings.swipeGestures,
                                                     swipeToNextChapter = state.readerSettings.swipeToNextChapter,
                                                     swipeToPrevChapter = state.readerSettings.swipeToPrevChapter,
                                                     deltaX = deltaX,

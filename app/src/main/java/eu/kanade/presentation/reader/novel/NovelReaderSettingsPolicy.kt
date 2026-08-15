@@ -109,10 +109,9 @@ internal fun resolveRendererSettingsAvailability(
 }
 
 internal fun areChapterSwipeControlsEnabled(
-    swipeGesturesEnabled: Boolean,
     pageReaderEnabled: Boolean,
 ): Boolean {
-    return swipeGesturesEnabled && !pageReaderEnabled
+    return !pageReaderEnabled
 }
 
 internal fun shouldDismissReaderSettingsDialogAfterFamilyChange(
