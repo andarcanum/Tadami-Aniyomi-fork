@@ -3870,6 +3870,49 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn built-in edge tap fallback is disabled when custom tap zones are enabled`() {
+        assertFalse(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = true,
+                tapToScrollEnabled = true,
+                canMoveInDirection = true,
+            ),
+        )
+        assertFalse(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = true,
+                tapToScrollEnabled = false,
+                canMoveInDirection = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn built-in edge tap fallback follows tap to scroll and direction availability`() {
+        assertTrue(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = false,
+                tapToScrollEnabled = true,
+                canMoveInDirection = true,
+            ),
+        )
+        assertFalse(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = false,
+                tapToScrollEnabled = false,
+                canMoveInDirection = true,
+            ),
+        )
+        assertFalse(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = false,
+                tapToScrollEnabled = true,
+                canMoveInDirection = false,
+            ),
+        )
+    }
+
+    @Test
     fun `page turn configured tap action moves backward from zone action on inner page`() {
         assertEquals(
             PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE,

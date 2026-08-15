@@ -353,6 +353,19 @@ internal fun resolvePageTurnCustomTapAction(
     }
 }
 
+/**
+ * Whether the PageCurl library may run its built-in edge taps after [PageCurlConfig.onCustomTap]
+ * returns false. With custom tap zones enabled the reader's grid owns every short tap, so a
+ * NONE zone must not fall through to the library's built-in backward/forward navigation.
+ */
+internal fun resolvePageTurnBuiltInTapNavigationEnabled(
+    customTapZonesEnabled: Boolean,
+    tapToScrollEnabled: Boolean,
+    canMoveInDirection: Boolean,
+): Boolean {
+    return !customTapZonesEnabled && tapToScrollEnabled && canMoveInDirection
+}
+
 internal fun resolvePageTurnConfiguredTapAction(
     zoneAction: NovelReaderTapZoneAction,
     currentPage: Int,
@@ -726,8 +739,16 @@ internal fun PageTurnPageRenderer(
         pageCurlConfig.shadowOffset = DpOffset(rendererConfig.shadowOffsetXDp.dp, 0.dp)
         pageCurlConfig.dragBackwardEnabled = currentPage > 0
         pageCurlConfig.dragForwardEnabled = currentPage < virtualPageCount - 1
-        pageCurlConfig.tapBackwardEnabled = latestTapToScrollEnabled && currentActualPage > 0
-        pageCurlConfig.tapForwardEnabled = latestTapToScrollEnabled && currentActualPage < safeContentPages.lastIndex
+        pageCurlConfig.tapBackwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
+            customTapZonesEnabled = latestCustomTapZonesEnabled,
+            tapToScrollEnabled = latestTapToScrollEnabled,
+            canMoveInDirection = currentActualPage > 0,
+        )
+        pageCurlConfig.tapForwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
+            customTapZonesEnabled = latestCustomTapZonesEnabled,
+            tapToScrollEnabled = latestTapToScrollEnabled,
+            canMoveInDirection = currentActualPage < safeContentPages.lastIndex,
+        )
         pageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
         pageCurlConfig.dragInteraction = dragInteraction
         pageCurlConfig.tapInteraction = tapInteraction
