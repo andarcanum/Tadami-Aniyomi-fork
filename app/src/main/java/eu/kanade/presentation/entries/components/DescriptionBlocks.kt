@@ -27,10 +27,12 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -123,21 +125,18 @@ fun DescriptionBlocks(
                         bottom = if (last) 0.dp else style.blockSpacing,
                     ),
                 )
-                is DescriptionBlock.LabelRow -> Row(
+                is DescriptionBlock.LabelRow -> Text(
+                    text = buildAnnotatedString {
+                        withStyle(style.label.toSpanStyle().copy(color = style.labelColor)) {
+                            append("${block.label}: ")
+                        }
+                        withStyle(style.value.toSpanStyle().copy(color = style.valueColor)) {
+                            append(block.value)
+                        }
+                    },
+                    style = style.value,
                     modifier = Modifier.padding(bottom = if (last) 0.dp else style.blockSpacing),
-                ) {
-                    Text(
-                        text = "${block.label}:",
-                        style = style.label,
-                        color = style.labelColor,
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = block.value,
-                        style = style.value,
-                        color = style.valueColor,
-                    )
-                }
+                )
                 is DescriptionBlock.ListItem -> Row(
                     modifier = Modifier.padding(bottom = if (last) 0.dp else style.blockSpacing),
                 ) {

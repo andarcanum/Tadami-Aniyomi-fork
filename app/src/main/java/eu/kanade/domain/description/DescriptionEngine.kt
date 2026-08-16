@@ -32,16 +32,33 @@ object DescriptionEngine {
 
     private val sectionLabels = listOf(
         "альтернативные названия",
+        "альтернативное название",
+        "альт. названия",
+        "альт. название",
+        "альт.названия",
+        "альт.название",
         "alternative titles",
+        "alternative title",
+        "alt. titles",
+        "alt. title",
+        "alt titles",
+        "alt title",
         "другие названия",
+        "другое название",
         "original webcomic",
         "official translations",
         "оригинальный вебкомикс",
         "официальные переводы",
     )
     private val rowLabels = listOf(
-        "rank", "rating", "рейтинг", "author", "автор", "artist", "status", "статус",
-        "notes", "примечания", "source", "источник", "written by",
+        "rank", "rating", "рейтинг",
+        "author", "автор", "авторы", "artist", "художник", "художники",
+        "status", "статус", "notes", "примечания", "source", "источник", "written by",
+        "год выпуска", "год релиза", "год", "year", "release year", "published",
+        "перевод", "переводчик", "переводчики", "сценарист", "иллюстратор", "translator",
+        "тип", "формат", "type", "глав", "томов", "главы", "тома", "chapters", "volumes",
+        "возрастной рейтинг", "возрастное ограничение", "age rating",
+        "издатель", "publisher", "лицензировано", "licensed",
     )
 
     private val abbreviation = Regex(
@@ -141,6 +158,39 @@ object DescriptionEngine {
     )
 
     private fun paragraph(node: ASTNode, content: String): List<DescriptionBlock>? {
+        val rawSnippet = content.substring(node.startOffset, node.endOffset).trim()
+        if (rawSnippet.isEmpty()) return null
+
+        val rawLines = rawSnippet.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (rawLines.size > 1 && rawLines.any { isKnownLabel(it) }) {
+            val result = mutableListOf<DescriptionBlock>()
+            val proseBuffer = mutableListOf<String>()
+
+            fun flushProse() {
+                if (proseBuffer.isNotEmpty()) {
+                    val combined = proseBuffer.joinToString(" ")
+                    if (combined.length > SPLIT_THRESHOLD) {
+                        result += splitParagraph(combined)
+                    } else {
+                        result += DescriptionBlock.Paragraph(combined)
+                    }
+                    proseBuffer.clear()
+                }
+            }
+
+            for (line in rawLines) {
+                val parsed = parseLineLabel(line)
+                if (parsed != null) {
+                    flushProse()
+                    result += parsed
+                } else {
+                    proseBuffer += line
+                }
+            }
+            flushProse()
+            if (result.isNotEmpty()) return result
+        }
+
         val plain = collectText(node, content).trim()
         if (plain.isEmpty()) return null
 
@@ -184,6 +234,36 @@ object DescriptionEngine {
     // ------------------------------------------------------------------ flat path
 
     private fun flatWall(text: String): List<DescriptionBlock> {
+        val lines = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+        if (lines.size > 1 && lines.any { isKnownLabel(it) }) {
+            val result = mutableListOf<DescriptionBlock>()
+            val proseBuffer = mutableListOf<String>()
+
+            fun flushProse() {
+                if (proseBuffer.isNotEmpty()) {
+                    val combined = proseBuffer.joinToString(" ")
+                    if (combined.length > SPLIT_THRESHOLD) {
+                        result += splitParagraph(combined)
+                    } else {
+                        result += DescriptionBlock.Paragraph(combined)
+                    }
+                    proseBuffer.clear()
+                }
+            }
+
+            for (line in lines) {
+                val parsed = parseLineLabel(line)
+                if (parsed != null) {
+                    flushProse()
+                    result += parsed
+                } else {
+                    proseBuffer += line
+                }
+            }
+            flushProse()
+            if (result.isNotEmpty()) return result
+        }
+
         splitKnownLabel(text)?.let { return splitLongParagraphs(it) }
         return splitParagraph(text)
     }
@@ -234,23 +314,76 @@ object DescriptionEngine {
 
     // ------------------------------------------------------------------ label detection
 
+    private fun isKnownLabel(line: String): Boolean {
+        for (label in sectionLabels) {
+            if (Regex("(?iu)^(${Regex.escape(label)})\\s*[:：]").containsMatchIn(line)) return true
+        }
+        for (label in rowLabels) {
+            if (Regex("(?iu)^(${Regex.escape(label)})\\s*[:：]").containsMatchIn(line)) return true
+        }
+        return false
+    }
+
+    private fun parseLineLabel(line: String): List<DescriptionBlock>? {
+        for (label in sectionLabels) {
+            val regex = Regex("(?iu)^(${Regex.escape(label)})\\s*[:：]")
+            val m = regex.find(line) ?: continue
+            val rawValue = line.substring(m.range.last + 1).trim()
+            val labelText = m.groupValues[1].trim()
+
+            val cleanValue = rawValue.trim().trimStart('|').trimEnd('|').trim()
+            val items = cleanValue
+                .split(Regex("\\s*/\\s*|\\s*\\|\\s*|\n\\s*[-•]\\s*|\n"))
+                .map { it.trim().trimStart('|').trimEnd('|').trim() }
+                .filter { it.isNotEmpty() }
+
+            return when {
+                items.isEmpty() -> listOf(DescriptionBlock.SectionHeading(labelText))
+                items.size == 1 && !cleanValue.contains(
+                    '/',
+                ) && !cleanValue.contains('|') && !cleanValue.contains('\n') ->
+                    listOf(DescriptionBlock.LabelRow(labelText, cleanValue))
+                else -> {
+                    val out = mutableListOf<DescriptionBlock>()
+                    out += DescriptionBlock.SectionHeading(labelText)
+                    out += items.map { DescriptionBlock.ListItem(it) }
+                    out
+                }
+            }
+        }
+
+        for (label in rowLabels) {
+            val m = Regex("(?iu)^(${Regex.escape(label)})\\s*[:：]\\s*(.+)$").find(line) ?: continue
+            val value = m.groupValues[2].trim().trimStart('|').trimEnd('|').trim()
+            if (value.isNotEmpty() && value.length <= 120) {
+                return listOf(DescriptionBlock.LabelRow(m.groupValues[1].trim(), value))
+            }
+        }
+        return null
+    }
+
     private fun splitKnownLabel(text: String): List<DescriptionBlock>? {
         for (label in sectionLabels) {
             val regex = Regex("(?iu)(${Regex.escape(label)})\\s*[:：]")
             val m = regex.find(text) ?: continue
             val before = text.substring(0, m.range.first).trim()
-            val value = text.substring(m.range.last + 1).trim()
+            val rawValue = text.substring(m.range.last + 1).trim()
             val labelText = m.groupValues[1].trim()
-            val items = value.split(Regex("\\s*/\\s*|\n\\s*[-•]\\s*|\n"))
-                .map { it.trim() }
+
+            val cleanValue = rawValue.trim().trimStart('|').trimEnd('|').trim()
+            val items = cleanValue
+                .split(Regex("\\s*/\\s*|\\s*\\|\\s*|\n\\s*[-•]\\s*|\n"))
+                .map { it.trim().trimStart('|').trimEnd('|').trim() }
                 .filter { it.isNotEmpty() }
 
             val out = mutableListOf<DescriptionBlock>()
             if (before.isNotEmpty()) out += DescriptionBlock.Paragraph(before)
             when {
                 items.isEmpty() -> out += DescriptionBlock.SectionHeading(labelText)
-                items.size == 1 && !value.contains('/') && !value.contains('\n') ->
-                    out += DescriptionBlock.LabelRow(labelText, items.first())
+                items.size == 1 && !cleanValue.contains(
+                    '/',
+                ) && !cleanValue.contains('|') && !cleanValue.contains('\n') ->
+                    out += DescriptionBlock.LabelRow(labelText, cleanValue)
                 else -> {
                     out += DescriptionBlock.SectionHeading(labelText)
                     out += items.map { DescriptionBlock.ListItem(it) }
@@ -261,8 +394,8 @@ object DescriptionEngine {
 
         for (label in rowLabels) {
             val m = Regex("(?iu)^(${Regex.escape(label)})\\s*[:：]\\s*(.+)$").find(text) ?: continue
-            val value = m.groupValues[2].trim()
-            if (value.isNotEmpty() && value.length <= 80) {
+            val value = m.groupValues[2].trim().trimStart('|').trimEnd('|').trim()
+            if (value.isNotEmpty() && value.length <= 120) {
                 return listOf(DescriptionBlock.LabelRow(m.groupValues[1].trim(), value))
             }
         }
