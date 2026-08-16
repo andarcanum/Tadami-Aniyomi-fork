@@ -130,8 +130,8 @@ import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.formatEpisodeNumber
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
-import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeSeasonItem
 import eu.kanade.tachiyomi.ui.entries.anime.EpisodeList
@@ -413,13 +413,13 @@ fun AnimeScreenAuroraImpl(
         resolveCoverUrl(state, metadataSource != MetadataSource.NONE)
     }
     val refererUrl = remember(state.source) {
-        (state.source as? HttpSource)?.baseUrl
+        (state.source as? AnimeHttpSource)?.baseUrl
     }
     val sourceHeaders = remember(state.source) {
-        (state.source as? HttpSource)?.headers?.toMap()
+        (state.source as? AnimeHttpSource)?.headers?.toMap()
     }
     val sourceClient = remember(state.source) {
-        (state.source as? HttpSource)?.client
+        (state.source as? AnimeHttpSource)?.client
     }
     LaunchedEffect(
         anime.id,

@@ -153,7 +153,7 @@ fun NovelGlassHeroCard(
             coverLastModified = novel.coverLastModified,
         )
     }
-    val previewCoverModel = remember(novel.id, novel.thumbnailUrl, novel.coverLastModified) {
+    val previewCoverModel = remember(novel.id) {
         novel.asNovelCover()
     }
 

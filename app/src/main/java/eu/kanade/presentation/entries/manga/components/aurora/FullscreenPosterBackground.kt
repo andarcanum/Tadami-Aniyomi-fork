@@ -153,7 +153,7 @@ fun FullscreenPosterBackground(
     }
     // Stable preview from manga's thumbnail (the one visible in library/browse grid).
     // Full/resolves poster will fade in over it.
-    val previewCoverModel = remember(manga.id, manga.thumbnailUrl, manga.coverLastModified) {
+    val previewCoverModel = remember(manga.id) {
         MangaCover(
             mangaId = manga.id,
             sourceId = manga.source,
@@ -203,7 +203,7 @@ fun FullscreenPosterBackground(
         if (posterModel != null) {
             val backgroundRequest = remember(
                 posterRequest,
-                placeholderCover,
+                previewCoverModel,
                 previousSuccessfulBackgroundSpec?.memoryCacheKey,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
@@ -217,7 +217,7 @@ fun FullscreenPosterBackground(
                     containerHeightPx = containerHeightPx,
                     placeholderData = previousSuccessfulBackgroundSpec
                         ?.takeIf { it.memoryCacheKey != backgroundSpec.memoryCacheKey }
-                        ?: placeholderCover,
+                        ?: previewCoverModel,
                 )
             }
             val backgroundPainter = rememberAuroraPosterBackgroundPainter(

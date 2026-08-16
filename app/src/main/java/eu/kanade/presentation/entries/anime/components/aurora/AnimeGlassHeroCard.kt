@@ -152,7 +152,7 @@ fun AnimeGlassHeroCard(
             coverLastModified = anime.coverLastModified,
         )
     }
-    val previewCoverModel = remember(anime.id, anime.thumbnailUrl, anime.coverLastModified) {
+    val previewCoverModel = remember(anime.id) {
         AnimeCover(
             animeId = anime.id,
             sourceId = anime.source,

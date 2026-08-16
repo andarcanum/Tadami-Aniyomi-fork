@@ -114,7 +114,7 @@ fun FullscreenPosterBackground(
     // Stable preview from the thumbnail shown in list/grid before open.
     // We keep this layer always visible initially so enter never shows black,
     // then overlay the (possibly higher-quality or full-screen-sized) poster.
-    val previewCoverModel = remember(novel.id, novel.thumbnailUrl, novel.coverLastModified) {
+    val previewCoverModel = remember(novel.id) {
         sourceAwareNovelCoverModel(novel)
     }
     val isPosterLoadable = !posterRequest.primaryUrl.isNullOrBlank() ||
@@ -207,7 +207,7 @@ fun FullscreenPosterBackground(
         if (isPosterLoadable) {
             val backgroundRequest = remember(
                 posterRequest,
-                placeholderCover,
+                previewCoverModel,
                 previousSuccessfulBackgroundSpec?.memoryCacheKey,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
@@ -221,7 +221,7 @@ fun FullscreenPosterBackground(
                     containerHeightPx = containerHeightPx,
                     placeholderData = previousSuccessfulBackgroundSpec
                         ?.takeIf { it.memoryCacheKey != backgroundSpec.memoryCacheKey }
-                        ?: placeholderCover,
+                        ?: previewCoverModel,
                 )
             }
             val backgroundPainter = rememberAuroraPosterBackgroundPainter(

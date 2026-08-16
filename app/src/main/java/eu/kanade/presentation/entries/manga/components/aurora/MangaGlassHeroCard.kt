@@ -152,7 +152,7 @@ fun MangaGlassHeroCard(
             coverLastModified = manga.coverLastModified,
         )
     }
-    val previewCoverModel = remember(manga.id, manga.thumbnailUrl, manga.coverLastModified) {
+    val previewCoverModel = remember(manga.id) {
         MangaCover(
             mangaId = manga.id,
             sourceId = manga.source,

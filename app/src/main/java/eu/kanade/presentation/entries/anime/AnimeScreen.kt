@@ -96,9 +96,9 @@ import eu.kanade.presentation.util.formatEpisodeNumber
 import eu.kanade.tachiyomi.animesource.ConfigurableAnimeSource
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.source.anime.getNameForAnimeInfo
-import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.browse.anime.extension.details.AnimeSourcePreferencesScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreenModel
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeSeasonItem
@@ -505,7 +505,7 @@ private fun AnimeScreenSmallImpl(
         resolveCoverUrl(state, metadataSource)
     }
     val refererUrl = remember(state.source) {
-        (state.source as? HttpSource)?.baseUrl
+        (state.source as? AnimeHttpSource)?.baseUrl
     }
 
     val density = LocalDensity.current
@@ -975,7 +975,7 @@ fun AnimeScreenLargeImpl(
         resolveCoverUrl(state, metadataSource)
     }
     val refererUrl = remember(state.source) {
-        (state.source as? HttpSource)?.baseUrl
+        (state.source as? AnimeHttpSource)?.baseUrl
     }
 
     val layoutDirection = LocalLayoutDirection.current

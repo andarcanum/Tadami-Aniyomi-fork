@@ -115,6 +115,8 @@ import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.formatChapterNumber
+import eu.kanade.tachiyomi.novelsource.online.HttpNovelSource
+import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
@@ -352,7 +354,8 @@ fun NovelScreenAuroraImpl(
     val titleScreenAnimation by uiPreferences.titleScreenAnimation().collectAsState()
     val titleStaggerState = rememberTitleScreenStaggerState(titleScreenAnimation)
     val sourceClient = remember(state.source) {
-        (state.source as? HttpSource)?.client
+        (state.source as? HttpNovelSource)?.client
+            ?: (state.source as? HttpSource)?.client
     }
     val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val auroraEntryTranslationEnabled by uiPreferences
@@ -515,7 +518,8 @@ fun NovelScreenAuroraImpl(
                         novel = novel,
                         scrollOffset = 0,
                         firstVisibleItemIndex = 0,
-                        sourceHeaders = (state.source as? HttpSource)?.headers?.toMap(),
+                        sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
+                            ?: (state.source as? HttpSource)?.headers?.toMap(),
                         sourceClient = sourceClient,
                         modifier = Modifier.hazeSource(state = hazeState),
                     )
@@ -639,7 +643,8 @@ fun NovelScreenAuroraImpl(
                                         actionLabel = novelHeroActionLabel,
                                         showOriginalTitle = showOriginalTitle,
                                         chapterCount = totalChapterCount,
-                                        sourceHeaders = (state.source as? HttpSource)?.headers?.toMap(),
+                                        sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
+                                            ?: (state.source as? HttpSource)?.headers?.toMap(),
                                         sourceClient = sourceClient,
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -1440,7 +1445,8 @@ fun NovelScreenAuroraImpl(
                     novel = novel,
                     scrollOffset = scrollOffset,
                     firstVisibleItemIndex = firstVisibleItemIndex,
-                    sourceHeaders = (state.source as? HttpSource)?.headers?.toMap(),
+                    sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
+                        ?: (state.source as? HttpSource)?.headers?.toMap(),
                     sourceClient = sourceClient,
                     modifier = Modifier.hazeSource(state = hazeState),
                 )
@@ -1580,7 +1586,8 @@ fun NovelScreenAuroraImpl(
                                 actionLabel = novelHeroActionLabel,
                                 showOriginalTitle = showOriginalTitle,
                                 chapterCount = totalChapterCount,
-                                sourceHeaders = (state.source as? HttpSource)?.headers?.toMap(),
+                                sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
+                                    ?: (state.source as? HttpSource)?.headers?.toMap(),
                                 sourceClient = sourceClient,
                                 modifier = Modifier
                                     .fillMaxWidth()

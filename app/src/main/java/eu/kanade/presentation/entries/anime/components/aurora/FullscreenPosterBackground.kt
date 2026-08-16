@@ -150,7 +150,7 @@ fun FullscreenPosterBackground(
     }
     // Stable preview from the thumbnail shown in list/grid before open, so the
     // title never starts black while the full poster resolves.
-    val previewCoverModel = remember(anime.id, anime.thumbnailUrl, anime.coverLastModified) {
+    val previewCoverModel = remember(anime.id) {
         anime.asAnimeCover()
     }
 
@@ -188,7 +188,7 @@ fun FullscreenPosterBackground(
             }
             val backgroundRequest = remember(
                 posterRequest,
-                placeholderCover,
+                previewCoverModel,
                 previousSuccessfulBackgroundSpec?.memoryCacheKey,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
@@ -202,7 +202,7 @@ fun FullscreenPosterBackground(
                     containerHeightPx = containerHeightPx,
                     placeholderData = previousSuccessfulBackgroundSpec
                         ?.takeIf { it.memoryCacheKey != backgroundSpec.memoryCacheKey }
-                        ?: placeholderCover,
+                        ?: previewCoverModel,
                 )
             }
             val backgroundPainter = rememberAuroraPosterBackgroundPainter(
