@@ -648,6 +648,8 @@
     <string name="novel_reader_page_mode_summary">Display content in pages instead of continuous scroll</string>
     <string name="novel_reader_show_page_chapter_title">Show chapter title</string>
     <string name="novel_reader_show_page_chapter_title_summary">Display chapter titles in Page mode</string>
+    <string name="novel_reader_two_page_landscape">Two-page landscape</string>
+    <string name="novel_reader_two_page_landscape_summary">Show two pages side by side when the device is landscape and wide enough</string>
     <string name="novel_reader_page_transition_style">Page transition style</string>
     <string name="novel_reader_page_transition_style_instant">Instant</string>
     <string name="novel_reader_page_transition_style_slide">Slide</string>

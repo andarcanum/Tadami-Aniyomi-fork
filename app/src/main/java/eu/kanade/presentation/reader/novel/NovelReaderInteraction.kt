@@ -320,6 +320,30 @@ internal fun shouldPaginateForPageReader(
     return pageReaderEnabled && contentBlocksCount > 0
 }
 
+/**
+ * Minimum viewport width, in px, a two-page spread is allowed to activate at. Below this, a
+ * half-width column would squeeze text too narrow to read comfortably — manga art tolerates a
+ * narrow half, running text does not, so unlike the manga pager this needs a width floor and not
+ * just an orientation check. 600dp mirrors Android's own sw600dp tablet breakpoint.
+ */
+internal const val NOVEL_SPREAD_MIN_WIDTH_DP = 600
+
+/** Gap between the two columns of a spread. Deliberately independent of the page margin: the
+ * margin is breathing room around the whole spread, this is the seam between its two halves. */
+internal const val NOVEL_SPREAD_COLUMN_GAP_DP = 24
+
+/** How many text columns one pager slot should show side by side. */
+internal fun resolveNovelSpreadColumns(
+    twoPageLandscapeEnabled: Boolean,
+    viewportWidthPx: Int,
+    viewportHeightPx: Int,
+    minSpreadWidthPx: Int,
+): Int {
+    val isLandscape = viewportWidthPx > viewportHeightPx
+    val isWideEnough = viewportWidthPx >= minSpreadWidthPx
+    return if (twoPageLandscapeEnabled && isLandscape && isWideEnough) 2 else 1
+}
+
 internal fun shouldShowPageReaderDismissLayer(
     showReaderUi: Boolean,
     usePageReader: Boolean,
@@ -468,6 +492,28 @@ internal fun shouldUseComposePagerBoundaryPreview(
     }
 }
 
+/**
+ * Number of pager slots [contentPageCount] single-column pages collapse into when every slot
+ * shows [columnsPerSpread] of them side by side. A trailing odd page still gets its own slot
+ * (rendered with an empty second column), the same way a physical book's last page can be a
+ * lone right-hand page facing nothing.
+ */
+internal fun resolveSpreadSlotCount(contentPageCount: Int, columnsPerSpread: Int): Int {
+    val safeColumns = columnsPerSpread.coerceAtLeast(1)
+    return ceil(contentPageCount.coerceAtLeast(1).toDouble() / safeColumns).toInt().coerceAtLeast(1)
+}
+
+/** First single-column page index shown in spread slot [spreadSlot]. */
+internal fun resolveSpreadSlotFirstPageIndex(spreadSlot: Int, columnsPerSpread: Int): Int {
+    return spreadSlot.coerceAtLeast(0) * columnsPerSpread.coerceAtLeast(1)
+}
+
+/** Which spread slot [pageIndex] (a single-column page index) is shown in. */
+internal fun resolveSpreadSlotForPageIndex(pageIndex: Int, columnsPerSpread: Int): Int {
+    val safeColumns = columnsPerSpread.coerceAtLeast(1)
+    return pageIndex.coerceAtLeast(0) / safeColumns
+}
+
 internal fun resolveComposePagerVirtualPageCount(
     contentPageCount: Int,
     hasPreviousChapter: Boolean,
@@ -611,6 +657,7 @@ internal fun resolveReaderVerticalSeekbarValue(
     nativeFirstVisibleItemIndex: Int = 0,
     nativeCanScrollForward: Boolean = true,
     bookModeEnabled: Boolean = false,
+    spreadColumns: Int = 1,
 ): Float {
     return when {
         bookModeEnabled -> {

@@ -74,6 +74,7 @@ data class NovelReaderSettings(
     val swipeGestures: Boolean,
     val pageReader: Boolean,
     val showPageChapterTitle: Boolean = true,
+    val twoPageLandscape: Boolean = false,
     val preferWebViewRenderer: Boolean,
     val richNativeRendererExperimental: Boolean,
     val pageTransitionStyle: NovelPageTransitionStyle = NovelPageTransitionStyle.SLIDE,
@@ -348,6 +349,7 @@ data class NovelReaderOverride(
     val swipeGestures: Boolean? = null,
     val pageReader: Boolean? = null,
     val showPageChapterTitle: Boolean? = null,
+    val twoPageLandscape: Boolean? = null,
     val preferWebViewRenderer: Boolean? = null,
     val richNativeRendererExperimental: Boolean? = null,
     val pageTransitionStyle: NovelPageTransitionStyle? = null,
@@ -551,6 +553,8 @@ class NovelReaderPreferences(
 
     fun showPageChapterTitle() =
         preferenceStore.getBoolean("novel_reader_show_page_chapter_title", true)
+
+    fun twoPageLandscape() = preferenceStore.getBoolean("novel_reader_two_page_landscape", false)
 
     fun preferWebViewRenderer() = preferenceStore.getBoolean("novel_reader_prefer_webview_renderer", false)
 
@@ -1089,6 +1093,7 @@ class NovelReaderPreferences(
                 swipeGestures = swipeGestures().get(),
                 pageReader = pageReader().get(),
                 showPageChapterTitle = showPageChapterTitle().get(),
+                twoPageLandscape = twoPageLandscape().get(),
                 preferWebViewRenderer = preferWebViewRenderer().get(),
                 richNativeRendererExperimental = richNativeRendererExperimental().get(),
                 pageTransitionStyle = pageTransitionStyle().get(),
@@ -1247,6 +1252,7 @@ class NovelReaderPreferences(
             swipeGestures = override?.swipeGestures ?: swipeGestures().get(),
             pageReader = override?.pageReader ?: pageReader().get(),
             showPageChapterTitle = override?.showPageChapterTitle ?: showPageChapterTitle().get(),
+            twoPageLandscape = override?.twoPageLandscape ?: twoPageLandscape().get(),
             preferWebViewRenderer = override?.preferWebViewRenderer ?: preferWebViewRenderer().get(),
             richNativeRendererExperimental =
             override?.richNativeRendererExperimental ?: richNativeRendererExperimental().get(),
@@ -1492,6 +1498,7 @@ class NovelReaderPreferences(
             swipeGestures().changes(),
             pageReader().changes(),
             showPageChapterTitle().changes(),
+            twoPageLandscape().changes(),
             preferWebViewRenderer().changes(),
             richNativeRendererExperimental().changes(),
             pageTransitionStyle().changes(),
@@ -1523,27 +1530,28 @@ class NovelReaderPreferences(
                 values[3] as Boolean,
                 values[4] as Boolean,
                 values[5] as Boolean,
-                (values[6] as? NovelPageTransitionStyle) ?: NovelPageTransitionStyle.SLIDE,
-                (values[7] as? NovelBookFlipAnimationSpeed) ?: NovelBookFlipAnimationSpeed.SLOW,
-                (values[8] as? NovelPageTurnSpeed) ?: NovelPageTurnSpeed.NORMAL,
-                (values[9] as? NovelPageTurnIntensity) ?: NovelPageTurnIntensity.MEDIUM,
-                (values[10] as? NovelPageTurnShadowIntensity) ?: NovelPageTurnShadowIntensity.MEDIUM,
-                (values[11] as? NovelPageTurnActivationZone) ?: NovelPageTurnActivationZone.WIDE,
-                values[12] as Boolean,
+                values[6] as Boolean,
+                (values[7] as? NovelPageTransitionStyle) ?: NovelPageTransitionStyle.SLIDE,
+                (values[8] as? NovelBookFlipAnimationSpeed) ?: NovelBookFlipAnimationSpeed.SLOW,
+                (values[9] as? NovelPageTurnSpeed) ?: NovelPageTurnSpeed.NORMAL,
+                (values[10] as? NovelPageTurnIntensity) ?: NovelPageTurnIntensity.MEDIUM,
+                (values[11] as? NovelPageTurnShadowIntensity) ?: NovelPageTurnShadowIntensity.MEDIUM,
+                (values[12] as? NovelPageTurnActivationZone) ?: NovelPageTurnActivationZone.WIDE,
                 values[13] as Boolean,
                 values[14] as Boolean,
                 values[15] as Boolean,
                 values[16] as Boolean,
-                values[17] as Int,
+                values[17] as Boolean,
                 values[18] as Int,
-                (values[19] as? NovelAutoScrollChapterEndBehavior) ?: NovelAutoScrollChapterEndBehavior.StopAtEnd,
-                values[20] as Boolean,
-                values[21] as Long,
-                values[22] as Boolean,
+                values[19] as Int,
+                (values[20] as? NovelAutoScrollChapterEndBehavior) ?: NovelAutoScrollChapterEndBehavior.StopAtEnd,
+                values[21] as Boolean,
+                values[22] as Long,
                 values[23] as Boolean,
                 values[24] as Boolean,
-                values[25] as String,
-                values[26] as Boolean,
+                values[25] as Boolean,
+                values[26] as String,
+                values[27] as Boolean,
             )
         }.distinctUntilChanged()
 
@@ -1795,6 +1803,7 @@ class NovelReaderPreferences(
                 swipeGestures = override?.swipeGestures ?: navigation.swipeGestures,
                 pageReader = override?.pageReader ?: navigation.pageReader,
                 showPageChapterTitle = override?.showPageChapterTitle ?: navigation.showPageChapterTitle,
+                twoPageLandscape = override?.twoPageLandscape ?: navigation.twoPageLandscape,
                 preferWebViewRenderer = override?.preferWebViewRenderer ?: navigation.preferWebViewRenderer,
                 richNativeRendererExperimental =
                 override?.richNativeRendererExperimental ?: navigation.richNativeRendererExperimental,
@@ -1951,6 +1960,7 @@ class NovelReaderPreferences(
         val swipeGestures: Boolean,
         val pageReader: Boolean,
         val showPageChapterTitle: Boolean,
+        val twoPageLandscape: Boolean,
         val preferWebViewRenderer: Boolean,
         val richNativeRendererExperimental: Boolean,
         val pageTransitionStyle: NovelPageTransitionStyle,

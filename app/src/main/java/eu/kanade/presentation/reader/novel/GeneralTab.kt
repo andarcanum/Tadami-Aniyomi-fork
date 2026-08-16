@@ -202,6 +202,18 @@ fun GeneralTab(
                         )
                     },
                 )
+                AuroraToggleRow(
+                    label = stringResource(AYMR.strings.novel_reader_two_page_landscape),
+                    subtitle = stringResource(AYMR.strings.novel_reader_two_page_landscape_summary),
+                    checked = settings.twoPageLandscape,
+                    onClick = {
+                        update(
+                            !settings.twoPageLandscape,
+                            { o, v -> o.copy(twoPageLandscape = v) },
+                            { preferences.twoPageLandscape().set(it) },
+                        )
+                    },
+                )
                 ListPreferenceWidget(
                     value = settings.pageTransitionStyle,
                     title = stringResource(AYMR.strings.novel_reader_page_transition_style),

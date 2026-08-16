@@ -109,4 +109,56 @@ class NovelReaderInteractionTest {
             chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.START,
         ) shouldBe page0Progress
     }
+
+    @Test
+    fun `spread columns require landscape, enough width, and the preference on`() {
+        resolveNovelSpreadColumns(
+            twoPageLandscapeEnabled = true,
+            viewportWidthPx = 2000,
+            viewportHeightPx = 1000,
+            minSpreadWidthPx = 1800,
+        ) shouldBe 2
+
+        resolveNovelSpreadColumns(
+            twoPageLandscapeEnabled = false,
+            viewportWidthPx = 2000,
+            viewportHeightPx = 1000,
+            minSpreadWidthPx = 1800,
+        ) shouldBe 1
+
+        resolveNovelSpreadColumns(
+            twoPageLandscapeEnabled = true,
+            viewportWidthPx = 1000,
+            viewportHeightPx = 2000,
+            minSpreadWidthPx = 1800,
+        ) shouldBe 1
+
+        resolveNovelSpreadColumns(
+            twoPageLandscapeEnabled = true,
+            viewportWidthPx = 1200,
+            viewportHeightPx = 1000,
+            minSpreadWidthPx = 1800,
+        ) shouldBe 1
+    }
+
+    @Test
+    fun `spread slot count collapses pages into pairs and keeps a trailing odd page`() {
+        resolveSpreadSlotCount(contentPageCount = 10, columnsPerSpread = 2) shouldBe 5
+        resolveSpreadSlotCount(contentPageCount = 9, columnsPerSpread = 2) shouldBe 5
+        resolveSpreadSlotCount(contentPageCount = 9, columnsPerSpread = 1) shouldBe 9
+        resolveSpreadSlotCount(contentPageCount = 0, columnsPerSpread = 2) shouldBe 1
+    }
+
+    @Test
+    fun `spread slot first page index and page-to-slot mapping round trip`() {
+        resolveSpreadSlotFirstPageIndex(spreadSlot = 0, columnsPerSpread = 2) shouldBe 0
+        resolveSpreadSlotFirstPageIndex(spreadSlot = 3, columnsPerSpread = 2) shouldBe 6
+
+        resolveSpreadSlotForPageIndex(pageIndex = 0, columnsPerSpread = 2) shouldBe 0
+        resolveSpreadSlotForPageIndex(pageIndex = 1, columnsPerSpread = 2) shouldBe 0
+        resolveSpreadSlotForPageIndex(pageIndex = 2, columnsPerSpread = 2) shouldBe 1
+        resolveSpreadSlotForPageIndex(pageIndex = 7, columnsPerSpread = 2) shouldBe 3
+
+        resolveSpreadSlotForPageIndex(pageIndex = 5, columnsPerSpread = 1) shouldBe 5
+    }
 }
