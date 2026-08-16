@@ -73,4 +73,26 @@ class UiPreferencesTest {
         prefs.entrySuggestionsExpandInline().get() shouldBe true
         prefs.entrySuggestionsInOverflow().get() shouldBe false
     }
+
+    @Test
+    fun `title screen style defaults to poster immersive and persists glass stack`() {
+        val prefs = UiPreferences(InMemoryPreferenceStore())
+        val stylePref = prefs.titleScreenStyle()
+
+        stylePref.get() shouldBe eu.kanade.domain.ui.model.TitleScreenStyle.POSTER_IMMERSIVE
+
+        stylePref.set(eu.kanade.domain.ui.model.TitleScreenStyle.GLASS_STACK)
+        stylePref.get() shouldBe eu.kanade.domain.ui.model.TitleScreenStyle.GLASS_STACK
+    }
+
+    @Test
+    fun `title screen open animation is enabled by default and persists disabled`() {
+        val prefs = UiPreferences(InMemoryPreferenceStore())
+        val animationPref = prefs.titleScreenAnimation()
+
+        animationPref.get() shouldBe true
+
+        animationPref.set(false)
+        animationPref.get() shouldBe false
+    }
 }

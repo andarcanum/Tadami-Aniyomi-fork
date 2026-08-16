@@ -32,6 +32,13 @@ data class AuroraPosterRequest(
      */
     val headers: Map<String, String>? = null,
     /**
+     * Source's own OkHttp client, when available. It carries the source's
+     * interceptors (Cloudflare/WebView bypass, User-Agent) that the generic
+     * poster client does not, so viewer-hosted covers (e.g. animepahe behind
+     * Cloudflare) are fetched the same way the entry thumbnail is.
+     */
+    val client: Call.Factory? = null,
+    /**
      * User-set custom cover file for the entry, if any. When the file exists
      * it always wins over [primaryUrl]/[fallbackUrl] (issue #154).
      */
@@ -80,7 +87,7 @@ class AuroraPosterRequestFetcher(
         readFromDiskCache()?.let { return it }
 
         val fetched = loadAuroraPosterSource(
-            callFactory = callFactoryLazy.value,
+            callFactory = data.client ?: callFactoryLazy.value,
             fileSystem = options.fileSystem,
             request = data,
         )

@@ -92,54 +92,6 @@ fun NovelInfoCard(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(
-                verticalArrangement = Arrangement.Top,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = stringResource(AYMR.strings.aurora_description_header),
-                    color = colors.textSecondary.copy(alpha = 0.6f),
-                    fontSize = 9.sp,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
-                    letterSpacing = 0.8.sp,
-                )
-                val descriptionBlocks = remember(normalizedDescription) {
-                    normalizedDescription?.let { DescriptionEngine.beautify(it) } ?: emptyList()
-                }
-                val descriptionToggleEnabled = shouldShowNovelDescriptionToggle(
-                    hasDescriptionOverflow = hasDescriptionOverflow,
-                    descriptionExpanded = descriptionExpanded,
-                )
-                if (descriptionBlocks.isEmpty()) {
-                    Text(
-                        text = stringResource(AYMR.strings.aurora_no_description),
-                        color = colors.textPrimary.copy(alpha = 0.9f),
-                        fontSize = 14.sp,
-                        lineHeight = 22.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
-                    SelectionContainer(
-                        modifier = Modifier.then(
-                            if (descriptionToggleEnabled) {
-                                Modifier.auroraSpringClick(onClick = onToggleDescription)
-                            } else {
-                                Modifier
-                            },
-                        ),
-                    ) {
-                        ExpandableDescriptionBlocks(
-                            blocks = descriptionBlocks,
-                            expanded = descriptionExpanded,
-                            onToggle = { onToggleDescription() },
-                            style = auroraDescriptionBlockStyle(colors),
-                            collapsedLines = 5,
-                            onOverflowChanged = { hasDescriptionOverflow = it },
-                        )
-                    }
-                }
-            }
-
             if (normalizedGenres.isNotEmpty()) {
                 Column(
                     verticalArrangement = Arrangement.Top,
@@ -155,7 +107,7 @@ fun NovelInfoCard(
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier.weight(1f),
                         ) {
-                            val genresToShow = if (genresExpanded) normalizedGenres else normalizedGenres.take(3)
+                            val genresToShow = if (genresExpanded) normalizedGenres else normalizedGenres.take(8)
                             genresToShow.forEach { genre ->
                                 val isSelected = genre in selectedGenres
                                 Box(
@@ -225,7 +177,7 @@ fun NovelInfoCard(
                             }
                         }
 
-                        if (normalizedGenres.size > 3) {
+                        if (normalizedGenres.size > 8) {
                             Icon(
                                 imageVector = if (genresExpanded) {
                                     Icons.Filled.KeyboardArrowUp
@@ -239,6 +191,54 @@ fun NovelInfoCard(
                                     .auroraSpringClick(onClick = onToggleGenres),
                             )
                         }
+                    }
+                }
+            }
+
+            Column(
+                verticalArrangement = Arrangement.Top,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(AYMR.strings.aurora_description_header),
+                    color = colors.textSecondary.copy(alpha = 0.6f),
+                    fontSize = 9.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Medium,
+                    letterSpacing = 0.8.sp,
+                )
+                val descriptionBlocks = remember(normalizedDescription) {
+                    normalizedDescription?.let { DescriptionEngine.beautify(it) } ?: emptyList()
+                }
+                val descriptionToggleEnabled = shouldShowNovelDescriptionToggle(
+                    hasDescriptionOverflow = hasDescriptionOverflow,
+                    descriptionExpanded = descriptionExpanded,
+                )
+                if (descriptionBlocks.isEmpty()) {
+                    Text(
+                        text = stringResource(AYMR.strings.aurora_no_description),
+                        color = colors.textPrimary.copy(alpha = 0.9f),
+                        fontSize = 14.sp,
+                        lineHeight = 22.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    SelectionContainer(
+                        modifier = Modifier.then(
+                            if (descriptionToggleEnabled) {
+                                Modifier.auroraSpringClick(onClick = onToggleDescription)
+                            } else {
+                                Modifier
+                            },
+                        ),
+                    ) {
+                        ExpandableDescriptionBlocks(
+                            blocks = descriptionBlocks,
+                            expanded = descriptionExpanded,
+                            onToggle = { onToggleDescription() },
+                            style = auroraDescriptionBlockStyle(colors),
+                            collapsedLines = 5,
+                            onOverflowChanged = { hasDescriptionOverflow = it },
+                        )
                     }
                 }
             }

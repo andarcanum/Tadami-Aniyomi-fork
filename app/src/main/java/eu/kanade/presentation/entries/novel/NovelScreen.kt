@@ -188,6 +188,8 @@ fun NovelScreen(
     onDeleteBookSourceChaptersClicked: (() -> Unit)? = null,
     onDeleteBookClicked: (() -> Unit)? = null,
     onToggleReadAsBook: ((Boolean) -> Unit)? = null,
+    onToggleSort: (() -> Unit)? = null,
+    onToggleUnreadFilter: (() -> Unit)? = null,
 ) {
     val uiPreferences = Injekt.get<UiPreferences>()
     val sourcePreferences = remember { Injekt.get<SourcePreferences>() }
@@ -258,6 +260,8 @@ fun NovelScreen(
             chapterSwipeEndAction = chapterSwipeEndAction,
             onChapterSwipe = onChapterSwipe,
             onFilterButtonClicked = onFilterButtonClicked,
+            onToggleSort = onToggleSort,
+            onToggleUnreadFilter = onToggleUnreadFilter,
             scanlatorChapterCounts = scanlatorChapterCounts,
             selectedScanlator = selectedScanlator,
             onScanlatorSelected = onScanlatorSelected,

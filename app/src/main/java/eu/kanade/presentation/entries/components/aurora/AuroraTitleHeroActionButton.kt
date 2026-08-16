@@ -259,6 +259,7 @@ internal fun AuroraTitleHeroActionButton(
     hasProgress: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    actionLabel: String? = null,
     cornerRadius: Dp = 16.dp,
     iconSize: Dp = 28.dp,
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
@@ -298,7 +299,7 @@ internal fun AuroraTitleHeroActionButton(
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = stringResource(
+                text = actionLabel ?: stringResource(
                     if (hasProgress) MR.strings.action_resume else MR.strings.action_start,
                 ),
                 color = contentColor,

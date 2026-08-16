@@ -28,10 +28,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
-import coil3.request.ImageRequest
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
-import eu.kanade.presentation.components.resolveAuroraCoverPlaceholderMemoryCacheKey
 import eu.kanade.presentation.entries.components.aurora.AuroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBlur
@@ -46,6 +45,7 @@ import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.util.debugTitleCoverFlow
 import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import kotlinx.coroutines.flow.collectLatest
+import okhttp3.Call
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaCover
 import uy.kohesive.injekt.Injekt
@@ -70,6 +70,7 @@ fun FullscreenPosterBackground(
     resolvedCoverUrlFallback: String? = null,
     refererUrl: String? = null,
     sourceHeaders: Map<String, String>? = null,
+    sourceClient: Call.Factory? = null,
     onPosterLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -87,6 +88,7 @@ fun FullscreenPosterBackground(
         resolvedCoverUrlFallback,
         refererUrl,
         sourceHeaders,
+        sourceClient,
         manga.thumbnailUrl,
         customCoverFile,
         manga.coverLastModified,
@@ -96,6 +98,7 @@ fun FullscreenPosterBackground(
             fallbackUrl = resolvedCoverUrlFallback?.takeIf { it.isNotBlank() } ?: manga.thumbnailUrl,
             refererUrl = refererUrl?.takeIf { it.isNotBlank() },
             headers = sourceHeaders,
+            client = sourceClient,
             customCoverFile = customCoverFile,
             coverLastModified = manga.coverLastModified,
         )
@@ -224,14 +227,10 @@ fun FullscreenPosterBackground(
 
             // Preview layer from original thumbnail for instant non-black on enter.
             // Full poster (with resolved if any) overlays via fade animation.
+            // Preview layer: reuse the exact grid request so the thumbnail resolves
+            // from the memory cache instantly — never the "no poster" placeholder.
             val previewRequest = remember(manga.id, previewCoverModel) {
-                ImageRequest.Builder(context)
-                    .data(previewCoverModel)
-                    .size(containerWidthPx, containerHeightPx)
-                    .placeholderMemoryCacheKey(
-                        resolveAuroraCoverPlaceholderMemoryCacheKey(previewCoverModel),
-                    )
-                    .build()
+                buildAuroraCoverImageRequest(context, previewCoverModel)
             }
             val previewLayerPainter = rememberAsyncImagePainter(
                 model = previewRequest,
@@ -261,6 +260,11 @@ fun FullscreenPosterBackground(
                     if (state is AsyncImagePainter.State.Success) {
                         previousSuccessfulBackgroundSpec = backgroundSpec
                         isHighResPosterReady = true
+                    } else if (state is AsyncImagePainter.State.Error) {
+                        // Full poster failed (e.g. Cloudflare on the generic poster
+                        // client): hide the overlay so the preview thumbnail stays
+                        // visible instead of showing the "no poster" placeholder.
+                        isHighResPosterReady = false
                     }
                     debugTitleCoverFlow(
                         scope = "manga-bg",

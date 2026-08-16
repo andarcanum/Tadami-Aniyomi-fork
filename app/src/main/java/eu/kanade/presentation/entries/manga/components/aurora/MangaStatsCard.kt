@@ -28,6 +28,7 @@ fun MangaStatsCard(
     manga: Manga,
     detailsSnapshot: MangaDetailsSnapshot,
     modifier: Modifier = Modifier,
+    showAuthor: Boolean = true,
 ) {
     GlassmorphismCard(
         modifier = modifier,
@@ -79,29 +80,31 @@ fun MangaStatsCard(
                 }
             }
 
-            QuietSectionDivider()
+            if (showAuthor) {
+                QuietSectionDivider()
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                QuietMetricTile(
-                    label = stringResource(MR.strings.author),
-                    value = manga.displayAuthor?.takeIf { it.isNotBlank() }
-                        ?: stringResource(MR.strings.unknown_author),
-                    leadingIcon = Icons.Filled.PersonOutline,
-                    valueMaxLines = Int.MAX_VALUE,
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                )
-                val artist = manga.displayArtist?.takeIf { it.isNotBlank() }
-                if (artist != null && artist != manga.displayAuthor) {
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     QuietMetricTile(
-                        label = stringResource(MR.strings.artist),
-                        value = artist,
-                        leadingIcon = Icons.Filled.Brush,
+                        label = stringResource(MR.strings.author),
+                        value = manga.displayAuthor?.takeIf { it.isNotBlank() }
+                            ?: stringResource(MR.strings.unknown_author),
+                        leadingIcon = Icons.Filled.PersonOutline,
                         valueMaxLines = Int.MAX_VALUE,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    val artist = manga.displayArtist?.takeIf { it.isNotBlank() }
+                    if (artist != null && artist != manga.displayAuthor) {
+                        QuietMetricTile(
+                            label = stringResource(MR.strings.artist),
+                            value = artist,
+                            leadingIcon = Icons.Filled.Brush,
+                            valueMaxLines = Int.MAX_VALUE,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
 

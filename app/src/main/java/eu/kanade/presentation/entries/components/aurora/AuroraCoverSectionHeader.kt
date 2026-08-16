@@ -30,8 +30,8 @@ import eu.kanade.presentation.theme.AuroraTheme
 @Composable
 fun AuroraCoverSectionHeader(
     title: String,
-    icon: ImageVector,
     modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
     count: String? = null,
     showChevron: Boolean = false,
     onChevronClick: (() -> Unit)? = null,
@@ -51,25 +51,27 @@ fun AuroraCoverSectionHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .background(
-                        color = if (isDark) {
-                            Color.White.copy(alpha = 0.08f)
-                        } else {
-                            colors.accent
-                        },
-                        shape = CircleShape,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (isDark) colors.accent else Color.White,
-                    modifier = Modifier.size(16.dp),
-                )
+            if (icon != null) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(
+                            color = if (isDark) {
+                                Color.White.copy(alpha = 0.08f)
+                            } else {
+                                colors.accent
+                            },
+                            shape = CircleShape,
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = if (isDark) colors.accent else Color.White,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
             }
 
             val titleColor = if (!isDark) Color(0xFF241A16) else colors.textPrimary
@@ -148,6 +150,74 @@ fun AuroraCoverSectionHeader(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Filter / Sort action chip for Aurora headers (styled with outline / glass capsule).
+ */
+@Composable
+fun AuroraHeaderFilterChip(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    icon: ImageVector? = null,
+    isActive: Boolean = false,
+) {
+    val colors = AuroraTheme.colors
+    val isDark = colors.isDark
+
+    val backgroundColor = when {
+        isActive && isDark -> colors.accent.copy(alpha = 0.18f)
+        isActive && !isDark -> colors.accent.copy(alpha = 0.15f)
+        isDark -> Color.White.copy(alpha = 0.06f)
+        else -> Color.White.copy(alpha = 0.65f)
+    }
+
+    val borderColor = when {
+        isActive -> colors.accent.copy(alpha = 0.45f)
+        isDark -> Color.White.copy(alpha = 0.14f)
+        else -> Color.Black.copy(alpha = 0.12f)
+    }
+
+    val contentColor = when {
+        isActive -> colors.accent
+        isDark -> colors.textPrimary.copy(alpha = 0.9f)
+        else -> Color(0xFF241A16)
+    }
+
+    Box(
+        modifier = modifier
+            .background(backgroundColor, RoundedCornerShape(100.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(100.dp))
+            .auroraSpringCombinedClick(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(13.dp),
+                )
+            }
+            Text(
+                text = text,
+                color = contentColor,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
         }
     }
 }

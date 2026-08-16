@@ -2932,4 +2932,10 @@
     <string name="novel_reader_book_mode_section_retry">Повторить</string>
     <string name="novel_reader_seamless_chapter_transition">Бесшовный переход между главами (эксперимент)</string>
     <string name="novel_reader_seamless_chapter_transition_summary">Менять главу внутри читалки: без экрана перезагрузки для длинных страниц и без промежуточной страницы главы в постраничном режиме</string>
+
+    <string name="pref_title_screen_style">Стиль экрана тайтла</string>
+    <string name="pref_title_screen_style_poster_immersive">Полноэкранный постер (По умолчанию)</string>
+    <string name="pref_title_screen_style_glass_stack">Стек матового стекла (Aurora)</string>
+    <string name="pref_title_screen_animation">Анимация открытия тайтла</string>
+    <string name="pref_title_screen_animation_summary">Приближение при открытии экрана тайтла с каскадом контента. Отключите для стандартного перехода.</string>
 </resources>

@@ -75,9 +75,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import aniyomi.domain.anime.SeasonAnime
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import eu.kanade.domain.entries.anime.model.episodesFiltered
+import eu.kanade.domain.entries.anime.model.seasonsFiltered
 import eu.kanade.domain.metadata.model.MetadataLoadError
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.TitleScreenStyle
+import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.components.EntryDownloadDropdownMenu
 import eu.kanade.presentation.entries.DownloadAction
 import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
@@ -87,6 +93,7 @@ import eu.kanade.presentation.entries.anime.components.EpisodeDownloadAction
 import eu.kanade.presentation.entries.anime.components.NextEpisodeAiringListItem
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeActionCard
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeEpisodeCardCompact
+import eu.kanade.presentation.entries.anime.components.aurora.AnimeGlassHeroCard
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeHeroContent
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeInfoCard
 import eu.kanade.presentation.entries.anime.components.aurora.AnimeStatsCard
@@ -104,6 +111,8 @@ import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
 import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.aurora.auroraSpringClick
+import eu.kanade.presentation.entries.components.aurora.rememberTitleScreenStaggerState
+import eu.kanade.presentation.entries.components.aurora.titleScreenStagger
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
 import eu.kanade.presentation.entries.reduceTitleFastScrollOverlayAccumulator
@@ -117,6 +126,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.formatEpisodeNumber
 import eu.kanade.tachiyomi.animesource.model.FetchType
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -144,6 +154,7 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -198,6 +209,8 @@ fun AnimeScreenAuroraImpl(
     onDownloadLongClick: ((Episode) -> Unit)?,
     onRetryMetadata: () -> Unit,
     onSettingsClicked: (() -> Unit)?,
+    onToggleSort: (() -> Unit)? = null,
+    onToggleUnseenFilter: (() -> Unit)? = null,
     isAutoJumpToNextEnabled: Boolean,
     autoJumpToNextLabel: String,
     onToggleAutoJumpToNext: () -> Unit,
@@ -218,6 +231,10 @@ fun AnimeScreenAuroraImpl(
     val showSeasonTabs by uiPreferences.showSeasonTabs().collectAsState()
     val alwaysShowFullEpisodeList by uiPreferences.alwaysShowFullEpisodeList().collectAsState()
     val episodeListDensity by uiPreferences.episodeListDensity().collectAsState()
+    val titleScreenStyle by uiPreferences.titleScreenStyle().collectAsState()
+    val titleScreenAnimation by uiPreferences.titleScreenAnimation().collectAsState()
+    val titleStaggerState = rememberTitleScreenStaggerState(titleScreenAnimation)
+    val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val globalSearchQuery = remember(anime.displayTitle) { normalizeAuroraGlobalSearchQuery(anime.displayTitle) }
     val episodes = state.episodeListItems
     val selectedEpisodes = remember(episodes) {
@@ -230,6 +247,12 @@ fun AnimeScreenAuroraImpl(
             currentAnimeId = anime.id,
             seasons = seasons.map { it.seasonAnime },
         )
+    }
+    val hasFilters = remember(state) {
+        when (state.anime.fetchType) {
+            FetchType.Seasons -> state.anime.seasonsFiltered(state.downloadedOnly)
+            FetchType.Episodes -> state.anime.episodesFiltered(state.downloadedOnly)
+        }
     }
 
     val distinctVirtualSeasons = remember(episodes) {
@@ -364,6 +387,7 @@ fun AnimeScreenAuroraImpl(
     }
 
     val colors = AuroraTheme.colors
+    val hazeState = remember { HazeState() }
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
     val auroraAdaptiveSpec = remember(isTabletUi, configuration.screenWidthDp) {
@@ -393,6 +417,9 @@ fun AnimeScreenAuroraImpl(
     }
     val sourceHeaders = remember(state.source) {
         (state.source as? HttpSource)?.headers?.toMap()
+    }
+    val sourceClient = remember(state.source) {
+        (state.source as? HttpSource)?.client
     }
     LaunchedEffect(
         anime.id,
@@ -598,6 +625,25 @@ fun AnimeScreenAuroraImpl(
             episode.seen || episode.lastSecondSeen > 0L
         }
     }
+    val nextEpisodeNum = remember(animeDetailsSnapshot.progress) {
+        val watched = animeDetailsSnapshot.progress?.watchedCount ?: 0
+        val total = animeDetailsSnapshot.progress?.totalEpisodes ?: 0
+        if (watched in 1 until total) {
+            watched + 1
+        } else if (watched == total && total > 0) {
+            total
+        } else {
+            null
+        }
+    }
+    val animeActionResumeText = stringResource(MR.strings.action_resume)
+    val animeHeroActionLabel = remember(hasWatchingProgress, nextEpisodeNum, animeActionResumeText) {
+        if (hasWatchingProgress && nextEpisodeNum != null && nextEpisodeNum > 0) {
+            "$animeActionResumeText • $nextEpisodeNum"
+        } else {
+            null
+        }
+    }
     val auroraTranslationPreferences = remember { Injekt.get<UiPreferences>() }
     val auroraEntryTranslationEnabled by auroraTranslationPreferences
         .auroraEntryTranslationEnabled()
@@ -638,16 +684,29 @@ fun AnimeScreenAuroraImpl(
                 .fillMaxSize()
                 .auroraPosterLongPress(onPosterLongClicked ?: onCoverClicked),
         ) {
-            // Fixed background poster
-            FullscreenPosterBackground(
-                anime = anime,
-                scrollOffset = scrollOffset,
-                firstVisibleItemIndex = firstVisibleItemIndex,
-                resolvedCoverUrl = resolvedCover.coverUrl,
-                resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
-                refererUrl = refererUrl,
-                sourceHeaders = sourceHeaders,
-            )
+            // Fixed background poster or Aurora background.
+            // The haze source is scoped to the background layer only: the top
+            // bar lenses must blur the poster/aurora backdrop, never the
+            // scrolling list content passing underneath them.
+            if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
+                FullscreenPosterBackground(
+                    anime = anime,
+                    scrollOffset = scrollOffset,
+                    firstVisibleItemIndex = firstVisibleItemIndex,
+                    resolvedCoverUrl = resolvedCover.coverUrl,
+                    resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
+                    refererUrl = refererUrl,
+                    sourceHeaders = sourceHeaders,
+                    sourceClient = sourceClient,
+                    modifier = Modifier.hazeSource(state = hazeState),
+                )
+            } else {
+                AuroraBackground(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .hazeSource(state = hazeState),
+                ) {}
+            }
 
             if (useTwoPaneLayout) {
                 val topContentPadding = 96.dp
@@ -692,78 +751,161 @@ fun AnimeScreenAuroraImpl(
                                         alignment = Alignment.TopStart,
                                     ),
                             ) {
-                                AnimeHeroContent(
-                                    anime = anime,
-                                    translation = auroraEntryTranslation,
-                                    hasWatchingProgress = hasWatchingProgress,
-                                    ratingText = animeDetailsSnapshot.ratingText,
-                                    episodeCount = state.episodes.size,
-                                    statusText = animeDetailsSnapshot.statusText,
-                                    note = anime.notes,
-                                    onEditNotesClicked = onEditNotesClicked,
-                                    onContinueWatching = onContinueWatching,
-                                    onDubbingClicked = onDubbingClicked,
-                                    selectedDubbing = selectedDubbing,
-                                    onGenreClick = onGenreClick,
-                                    onGenreLongClick = { genre ->
-                                        selectedGenres = if (genre in selectedGenres) {
-                                            selectedGenres - genre
-                                        } else {
-                                            selectedGenres + genre
-                                        }
-                                    },
-                                    selectedGenres = selectedGenres,
-                                    onSearchSelected = {
-                                        onGenresSearch?.invoke(selectedGenres.toList())
-                                        selectedGenres = emptySet()
-                                    },
-                                    onClearSelected = { selectedGenres = emptySet() },
-                                    onCopyTitle = onTitleCopy,
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                AnimeStatsCard(
-                                    anime = anime,
-                                    snapshot = animeDetailsSnapshot,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                AnimeInfoCard(
-                                    anime = anime,
-                                    translation = auroraEntryTranslation,
-                                    onTagSearch = onTagSearch,
-                                    descriptionExpanded = descriptionExpanded,
-                                    genresExpanded = genresExpanded,
-                                    onToggleDescription = {
-                                        descriptionExpanded = !descriptionExpanded
-                                    },
-                                    onToggleGenres = { genresExpanded = !genresExpanded },
-                                    selectedGenres = selectedGenres,
-                                    onGenreClick = onGenreClick,
-                                    onGenreLongClick = { genre ->
-                                        selectedGenres = if (genre in selectedGenres) {
-                                            selectedGenres - genre
-                                        } else {
-                                            selectedGenres + genre
-                                        }
-                                    },
-                                    onSearchSelected = {
-                                        onGenresSearch?.invoke(selectedGenres.toList())
-                                        selectedGenres = emptySet()
-                                    },
-                                    onClearSelected = { selectedGenres = emptySet() },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
-                                AnimeActionCard(
-                                    anime = anime,
-                                    trackingCount = state.trackingCount,
-                                    onAddToLibraryClicked = onAddToLibraryClicked,
-                                    onAddToLibraryLongClicked = onEditCategoryClicked,
-                                    onWebViewClicked = onWebViewClicked,
-                                    onTrackingClicked = onTrackingClicked,
-                                    onShareClicked = onShareClicked,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+                                if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
+                                    AnimeHeroContent(
+                                        anime = anime,
+                                        translation = auroraEntryTranslation,
+                                        hasWatchingProgress = hasWatchingProgress,
+                                        ratingText = animeDetailsSnapshot.ratingText,
+                                        episodeCount = state.episodes.size,
+                                        statusText = animeDetailsSnapshot.statusText,
+                                        note = anime.notes,
+                                        onEditNotesClicked = onEditNotesClicked,
+                                        onContinueWatching = onContinueWatching,
+                                        onDubbingClicked = onDubbingClicked,
+                                        selectedDubbing = selectedDubbing,
+                                        onGenreClick = onGenreClick,
+                                        onGenreLongClick = { genre ->
+                                            selectedGenres = if (genre in selectedGenres) {
+                                                selectedGenres - genre
+                                            } else {
+                                                selectedGenres + genre
+                                            }
+                                        },
+                                        selectedGenres = selectedGenres,
+                                        onSearchSelected = {
+                                            onGenresSearch?.invoke(selectedGenres.toList())
+                                            selectedGenres = emptySet()
+                                        },
+                                        onClearSelected = { selectedGenres = emptySet() },
+                                        onCopyTitle = onTitleCopy,
+                                        modifier = Modifier.titleScreenStagger(titleStaggerState, 1),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AnimeStatsCard(
+                                        anime = anime,
+                                        snapshot = animeDetailsSnapshot,
+                                        showAuthor = false,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 2),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AnimeInfoCard(
+                                        anime = anime,
+                                        translation = auroraEntryTranslation,
+                                        onTagSearch = onTagSearch,
+                                        descriptionExpanded = descriptionExpanded,
+                                        genresExpanded = genresExpanded,
+                                        onToggleDescription = {
+                                            descriptionExpanded = !descriptionExpanded
+                                        },
+                                        onToggleGenres = { genresExpanded = !genresExpanded },
+                                        selectedGenres = selectedGenres,
+                                        onGenreClick = onGenreClick,
+                                        onGenreLongClick = { genre ->
+                                            selectedGenres = if (genre in selectedGenres) {
+                                                selectedGenres - genre
+                                            } else {
+                                                selectedGenres + genre
+                                            }
+                                        },
+                                        onSearchSelected = {
+                                            onGenresSearch?.invoke(selectedGenres.toList())
+                                            selectedGenres = emptySet()
+                                        },
+                                        onClearSelected = { selectedGenres = emptySet() },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 3),
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    AnimeActionCard(
+                                        anime = anime,
+                                        trackingCount = state.trackingCount,
+                                        onAddToLibraryClicked = onAddToLibraryClicked,
+                                        onAddToLibraryLongClicked = onEditCategoryClicked,
+                                        onWebViewClicked = onWebViewClicked,
+                                        onTrackingClicked = onTrackingClicked,
+                                        onShareClicked = onShareClicked,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 4),
+                                    )
+                                } else {
+                                    AnimeGlassHeroCard(
+                                        anime = anime,
+                                        translation = auroraEntryTranslation,
+                                        hasWatchingProgress = hasWatchingProgress,
+                                        note = anime.notes,
+                                        onEditNotesClicked = onEditNotesClicked,
+                                        onContinueWatching = onContinueWatching,
+                                        onCoverClicked = onCoverClicked,
+                                        onCopyTitle = onTitleCopy,
+                                        actionLabel = animeHeroActionLabel,
+                                        showOriginalTitle = showOriginalTitle,
+                                        episodeCount = state.episodes.size,
+                                        resolvedCoverUrl = resolvedCover.coverUrl,
+                                        resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
+                                        refererUrl = refererUrl,
+                                        sourceHeaders = sourceHeaders,
+                                        sourceClient = sourceClient,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 1),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AnimeActionCard(
+                                        anime = anime,
+                                        trackingCount = state.trackingCount,
+                                        onAddToLibraryClicked = onAddToLibraryClicked,
+                                        onAddToLibraryLongClicked = onEditCategoryClicked,
+                                        onWebViewClicked = onWebViewClicked,
+                                        onTrackingClicked = onTrackingClicked,
+                                        onShareClicked = onShareClicked,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 4),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AnimeInfoCard(
+                                        anime = anime,
+                                        translation = auroraEntryTranslation,
+                                        onTagSearch = onTagSearch,
+                                        descriptionExpanded = descriptionExpanded,
+                                        genresExpanded = genresExpanded,
+                                        onToggleDescription = {
+                                            descriptionExpanded = !descriptionExpanded
+                                        },
+                                        onToggleGenres = { genresExpanded = !genresExpanded },
+                                        selectedGenres = selectedGenres,
+                                        onGenreClick = onGenreClick,
+                                        onGenreLongClick = { genre ->
+                                            selectedGenres = if (genre in selectedGenres) {
+                                                selectedGenres - genre
+                                            } else {
+                                                selectedGenres + genre
+                                            }
+                                        },
+                                        onSearchSelected = {
+                                            onGenresSearch?.invoke(selectedGenres.toList())
+                                            selectedGenres = emptySet()
+                                        },
+                                        onClearSelected = { selectedGenres = emptySet() },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 3),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AnimeStatsCard(
+                                        anime = anime,
+                                        snapshot = animeDetailsSnapshot,
+                                        showAuthor = false,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 2),
+                                    )
+                                }
                                 if (entrySuggestionsEnabled) {
                                     if (entrySuggestionsExpandInline) {
                                         Spacer(modifier = Modifier.height(16.dp))
@@ -860,6 +1002,14 @@ fun AnimeScreenAuroraImpl(
                                             filteredEpisodes.size
                                         },
                                         fetchType = state.anime.fetchType,
+                                        isDescending = anime.sortDescending(),
+                                        unseenFilter = anime.unseenFilter,
+                                        filterActive = hasFilters,
+                                        onClickSort = onToggleSort ?: onFilterButtonClicked,
+                                        onLongClickSort = onFilterButtonClicked,
+                                        onClickFilter = onToggleUnseenFilter ?: onFilterButtonClicked,
+                                        onLongClickFilter = onFilterButtonClicked,
+                                        modifier = Modifier.titleScreenStagger(titleStaggerState, 5),
                                     )
                                 }
 
@@ -1096,72 +1246,180 @@ fun AnimeScreenAuroraImpl(
                         contentPadding = PaddingValues(bottom = 100.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        // Spacer for poster/hero area
-                        item {
-                            Spacer(modifier = Modifier.height(screenHeight))
-                        }
+                        if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
+                            // Spacer for poster/hero area
+                            item {
+                                Spacer(modifier = Modifier.height(screenHeight))
+                            }
 
-                        // Info and Action cards merged into one item for layout stability
-                        item {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
-                                    .animateContentSize(
-                                        animationSpec = spring(
-                                            dampingRatio = Spring.DampingRatioNoBouncy,
-                                            stiffness = Spring.StiffnessLow,
+                            // Info and Action cards merged into one item for layout stability
+                            item {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                        .animateContentSize(
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessLow,
+                                            ),
+                                            alignment = Alignment.TopStart,
                                         ),
-                                        alignment = Alignment.TopStart,
+                                ) {
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    AnimeStatsCard(
+                                        anime = anime,
+                                        snapshot = animeDetailsSnapshot,
+                                        showAuthor = false,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 2),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AnimeInfoCard(
+                                        anime = anime,
+                                        translation = auroraEntryTranslation,
+                                        onTagSearch = onTagSearch,
+                                        descriptionExpanded = descriptionExpanded,
+                                        genresExpanded = genresExpanded,
+                                        onToggleDescription = {
+                                            descriptionExpanded = !descriptionExpanded
+                                        },
+                                        onToggleGenres = {
+                                            genresExpanded = !genresExpanded
+                                        },
+                                        selectedGenres = selectedGenres,
+                                        onGenreClick = onGenreClick,
+                                        onGenreLongClick = { genre ->
+                                            selectedGenres = if (genre in selectedGenres) {
+                                                selectedGenres - genre
+                                            } else {
+                                                selectedGenres + genre
+                                            }
+                                        },
+                                        onSearchSelected = {
+                                            onGenresSearch?.invoke(selectedGenres.toList())
+                                            selectedGenres = emptySet()
+                                        },
+                                        onClearSelected = { selectedGenres = emptySet() },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 3),
+                                    )
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    AnimeActionCard(
+                                        anime = anime,
+                                        trackingCount = state.trackingCount,
+                                        onAddToLibraryClicked = onAddToLibraryClicked,
+                                        onAddToLibraryLongClicked = onEditCategoryClicked,
+                                        onWebViewClicked = onWebViewClicked,
+                                        onTrackingClicked = onTrackingClicked,
+                                        onShareClicked = onShareClicked,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 4),
+                                    )
+                                }
+                            }
+                        } else {
+                            item {
+                                Spacer(
+                                    modifier = Modifier.height(
+                                        WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 76.dp,
                                     ),
-                            ) {
-                                Spacer(modifier = Modifier.height(16.dp))
-                                AnimeStatsCard(
-                                    anime = anime,
-                                    snapshot = animeDetailsSnapshot,
-                                    modifier = Modifier.fillMaxWidth(),
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                AnimeInfoCard(
+                                AnimeGlassHeroCard(
                                     anime = anime,
                                     translation = auroraEntryTranslation,
-                                    onTagSearch = onTagSearch,
-                                    descriptionExpanded = descriptionExpanded,
-                                    genresExpanded = genresExpanded,
-                                    onToggleDescription = {
-                                        descriptionExpanded = !descriptionExpanded
-                                    },
-                                    onToggleGenres = {
-                                        genresExpanded = !genresExpanded
-                                    },
-                                    selectedGenres = selectedGenres,
-                                    onGenreClick = onGenreClick,
-                                    onGenreLongClick = { genre ->
-                                        selectedGenres = if (genre in selectedGenres) {
-                                            selectedGenres - genre
-                                        } else {
-                                            selectedGenres + genre
-                                        }
-                                    },
-                                    onSearchSelected = {
-                                        onGenresSearch?.invoke(selectedGenres.toList())
-                                        selectedGenres = emptySet()
-                                    },
-                                    onClearSelected = { selectedGenres = emptySet() },
-                                    modifier = Modifier.fillMaxWidth(),
+                                    hasWatchingProgress = hasWatchingProgress,
+                                    note = anime.notes,
+                                    onEditNotesClicked = onEditNotesClicked,
+                                    onContinueWatching = onContinueWatching,
+                                    onCoverClicked = onCoverClicked,
+                                    onCopyTitle = onTitleCopy,
+                                    actionLabel = animeHeroActionLabel,
+                                    showOriginalTitle = showOriginalTitle,
+                                    episodeCount = state.episodes.size,
+                                    resolvedCoverUrl = resolvedCover.coverUrl,
+                                    resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
+                                    refererUrl = refererUrl,
+                                    sourceHeaders = sourceHeaders,
+                                    sourceClient = sourceClient,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                        .titleScreenStagger(titleStaggerState, 1),
                                 )
+                            }
 
-                                Spacer(modifier = Modifier.height(12.dp))
-                                AnimeActionCard(
-                                    anime = anime,
-                                    trackingCount = state.trackingCount,
-                                    onAddToLibraryClicked = onAddToLibraryClicked,
-                                    onAddToLibraryLongClicked = onEditCategoryClicked,
-                                    onWebViewClicked = onWebViewClicked,
-                                    onTrackingClicked = onTrackingClicked,
-                                    onShareClicked = onShareClicked,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+                            item {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                        .animateContentSize(
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessLow,
+                                            ),
+                                            alignment = Alignment.TopStart,
+                                        ),
+                                ) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AnimeActionCard(
+                                        anime = anime,
+                                        trackingCount = state.trackingCount,
+                                        onAddToLibraryClicked = onAddToLibraryClicked,
+                                        onAddToLibraryLongClicked = onEditCategoryClicked,
+                                        onWebViewClicked = onWebViewClicked,
+                                        onTrackingClicked = onTrackingClicked,
+                                        onShareClicked = onShareClicked,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 4),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AnimeInfoCard(
+                                        anime = anime,
+                                        translation = auroraEntryTranslation,
+                                        onTagSearch = onTagSearch,
+                                        descriptionExpanded = descriptionExpanded,
+                                        genresExpanded = genresExpanded,
+                                        onToggleDescription = {
+                                            descriptionExpanded = !descriptionExpanded
+                                        },
+                                        onToggleGenres = {
+                                            genresExpanded = !genresExpanded
+                                        },
+                                        selectedGenres = selectedGenres,
+                                        onGenreClick = onGenreClick,
+                                        onGenreLongClick = { genre ->
+                                            selectedGenres = if (genre in selectedGenres) {
+                                                selectedGenres - genre
+                                            } else {
+                                                selectedGenres + genre
+                                            }
+                                        },
+                                        onSearchSelected = {
+                                            onGenresSearch?.invoke(selectedGenres.toList())
+                                            selectedGenres = emptySet()
+                                        },
+                                        onClearSelected = { selectedGenres = emptySet() },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 3),
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    AnimeStatsCard(
+                                        anime = anime,
+                                        snapshot = animeDetailsSnapshot,
+                                        showAuthor = false,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 2),
+                                    )
+                                }
                             }
                         }
 
@@ -1245,7 +1503,16 @@ fun AnimeScreenAuroraImpl(
                                     filteredEpisodes.size
                                 },
                                 fetchType = state.anime.fetchType,
-                                modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
+                                isDescending = anime.sortDescending(),
+                                unseenFilter = anime.unseenFilter,
+                                filterActive = hasFilters,
+                                onClickSort = onToggleSort ?: onFilterButtonClicked,
+                                onLongClickSort = onFilterButtonClicked,
+                                onClickFilter = onToggleUnseenFilter ?: onFilterButtonClicked,
+                                onLongClickFilter = onFilterButtonClicked,
+                                modifier = Modifier
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .titleScreenStagger(titleStaggerState, 5),
                             )
                         }
 
@@ -1431,6 +1698,7 @@ fun AnimeScreenAuroraImpl(
             // Hero content (fixed at bottom of first screen) - fades out on scroll
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
             if (
+                titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE &&
                 shouldShowAnimeAuroraHeroContent(
                     useTwoPaneLayout = useTwoPaneLayout,
                     firstVisibleItemIndex = firstVisibleItemIndex,
@@ -1480,6 +1748,7 @@ fun AnimeScreenAuroraImpl(
                             },
                             onClearSelected = { selectedGenres = emptySet() },
                             onCopyTitle = onTitleCopy,
+                            modifier = Modifier.titleScreenStagger(titleStaggerState, 1),
                         )
                     }
                 }
@@ -1511,6 +1780,15 @@ fun AnimeScreenAuroraImpl(
                 targetValue = if (!isAnyEpisodeSelected && showAnimeOverlayChrome) 0f else -1f,
                 label = "overlayChromeOffsetY",
             )
+            // The lens densifies as the hero scrolls away, so list rows passing
+            // under the top bar no longer blend into the buttons.
+            val topBarScrollProgress = if (firstVisibleItemIndex > 0) {
+                1f
+            } else {
+                (scrollOffset / heroThreshold.toFloat()).coerceIn(0f, 1f)
+            }
+            val isPosterMode = titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1519,6 +1797,7 @@ fun AnimeScreenAuroraImpl(
                         alpha = overlayChromeAlpha
                         translationY = overlayChromeOffsetY * size.height
                     }
+                    .titleScreenStagger(titleStaggerState, 0)
                     .padding(WindowInsets.statusBars.asPaddingValues())
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1529,6 +1808,9 @@ fun AnimeScreenAuroraImpl(
                     onClick = navigateUp,
                     icon = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = null,
+                    hazeState = hazeState,
+                    scrollProgress = topBarScrollProgress,
+                    isPosterMode = isPosterMode,
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -1538,6 +1820,9 @@ fun AnimeScreenAuroraImpl(
                     onClick = onFilterButtonClicked,
                     icon = Icons.Default.FilterList,
                     contentDescription = null,
+                    hazeState = hazeState,
+                    scrollProgress = topBarScrollProgress,
+                    isPosterMode = isPosterMode,
                 )
 
                 // Download menu - Aurora glassmorphism style
@@ -1548,6 +1833,9 @@ fun AnimeScreenAuroraImpl(
                             onClick = { downloadExpanded = !downloadExpanded },
                             icon = Icons.Filled.Download,
                             contentDescription = null,
+                            hazeState = hazeState,
+                            scrollProgress = topBarScrollProgress,
+                            isPosterMode = isPosterMode,
                         )
                         EntryDownloadDropdownMenu(
                             expanded = downloadExpanded,
@@ -1566,6 +1854,9 @@ fun AnimeScreenAuroraImpl(
                         onClick = { showMenu = !showMenu },
                         icon = Icons.Default.MoreVert,
                         contentDescription = null,
+                        hazeState = hazeState,
+                        scrollProgress = topBarScrollProgress,
+                        isPosterMode = isPosterMode,
                     )
                     AuroraEntryDropdownMenu(
                         expanded = showMenu,
@@ -1979,43 +2270,34 @@ private fun AuroraActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String?,
     modifier: Modifier = Modifier,
+    iconTint: Color? = null,
+    hazeState: HazeState? = null,
+    scrollProgress: Float = 0f,
+    isPosterMode: Boolean = false,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
+    val tint = iconTint ?: colors.accent.copy(alpha = 0.95f)
 
     Box(
         modifier = modifier
             .size(44.dp)
-            .clip(CircleShape)
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        colors.surface.copy(alpha = 0.9f),
-                        colors.surface.copy(alpha = 0.6f),
-                    ),
-                    center = Offset(0.3f, 0.3f),
-                    radius = 0.8f,
-                ),
+            .auroraHeaderIconSurface(
+                colors = colors,
+                hazeState = hazeState,
+                scrollProgress = scrollProgress,
+                isPosterMode = isPosterMode,
             )
-            .drawBehind {
-                // Subtle inner glow
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            colors.accent.copy(alpha = 0.15f),
-                            Color.Transparent,
-                        ),
-                        center = Offset(size.width * 0.3f, size.height * 0.3f),
-                        radius = size.width * 0.6f,
-                    ),
-                )
-            }
-            .clickable(onClick = onClick),
+            .clickable(onClick = {
+                appHaptics.tap()
+                onClick()
+            }),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = colors.accent.copy(alpha = 0.95f),
+            tint = tint,
             modifier = Modifier.size(22.dp),
         )
     }

@@ -140,6 +140,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import logcat.logcat
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.i18n.MR
@@ -536,6 +537,15 @@ class NovelScreen(
             chapterSwipeEndAction = screenModel.chapterSwipeEndAction,
             onChapterSwipe = screenModel::chapterSwipe,
             onFilterButtonClicked = screenModel::showSettingsDialog,
+            onToggleSort = { screenModel.setSorting(successState.novel.sorting) },
+            onToggleUnreadFilter = {
+                val next = when (successState.novel.unreadFilter) {
+                    TriState.DISABLED -> TriState.ENABLED_IS
+                    TriState.ENABLED_IS -> TriState.ENABLED_NOT
+                    TriState.ENABLED_NOT -> TriState.DISABLED
+                }
+                screenModel.setUnreadFilter(next)
+            },
             scanlatorChapterCounts = successState.scanlatorChapterCounts,
             selectedScanlator = successState.selectedScanlator,
             onScanlatorSelected = screenModel::selectScanlator,

@@ -2916,4 +2916,10 @@
     <string name="achievement_lattice_resonance_title">Lattice Resonance</string>
     <string name="achievement_lattice_resonance_desc">The shell peeled back. Signal reached the core. Architect identified.</string>
     <string name="achievement_lattice_resonance_hint_vague">Something drifts under the render shell…</string>
+
+    <string name="pref_title_screen_style">Title screen style</string>
+    <string name="pref_title_screen_style_poster_immersive">Fullscreen Poster (Default)</string>
+    <string name="pref_title_screen_style_glass_stack">Layered Glass Stack (Aurora)</string>
+    <string name="pref_title_screen_animation">Title screen open animation</string>
+    <string name="pref_title_screen_animation_summary">Zoom into title screens with a content cascade. Disable to use the standard transition.</string>
 </resources>

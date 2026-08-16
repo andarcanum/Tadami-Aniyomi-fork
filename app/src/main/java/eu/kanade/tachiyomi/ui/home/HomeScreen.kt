@@ -863,6 +863,10 @@ object HomeScreen : Screen() {
                     spotColor = Color.White.copy(alpha = 0.12f),
                 )
                 .clip(shape)
+                // Opaque base under the frost: on first frames after navigation
+                // (e.g. popping back to home) the haze layer has not captured
+                // content yet, so without this the bar flashes transparent.
+                .background(colors.background, shape)
                 .hazeEffect(state = hazeState, style = hazeStyle)
                 .border(
                     BorderStroke(width = 1.dp, brush = auroraMenuRimLightBrush(colors)),
@@ -872,6 +876,8 @@ object HomeScreen : Screen() {
             this
                 .shadow(elevation = 8.dp, shape = shape)
                 .clip(shape)
+                // Opaque base under the frost (see dark branch comment).
+                .background(colors.background, shape)
                 .hazeEffect(state = hazeState, style = hazeStyle)
                 .border(
                     BorderStroke(

@@ -12,6 +12,7 @@ import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeCover
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaCover
+import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelCover
 
 enum class AuroraCoverPlaceholderVariant {
@@ -31,16 +32,17 @@ fun auroraCoverPlaceholderResId(variant: AuroraCoverPlaceholderVariant): Int {
 fun rememberAuroraCoverPlaceholderPainter(
     variant: AuroraCoverPlaceholderVariant = AuroraCoverPlaceholderVariant.Portrait,
 ): Painter {
-    return rememberResourceBitmapPainter(id = auroraCoverPlaceholderResId(variant))
+    return rememberResourceBitmapPainter(auroraCoverPlaceholderResId(variant))
 }
 
 @Composable
 fun rememberThemeAwareCoverErrorPainter(
     variant: AuroraCoverPlaceholderVariant = AuroraCoverPlaceholderVariant.Portrait,
 ): Painter {
+    val isAuroraTheme = LocalIsAuroraTheme.current
     return rememberResourceBitmapPainter(
-        id = themeAwareCoverFallbackResId(
-            isAuroraTheme = LocalIsAuroraTheme.current,
+        themeAwareCoverFallbackResId(
+            isAuroraTheme = isAuroraTheme,
             variant = variant,
         ),
     )
@@ -54,6 +56,7 @@ fun resolveAuroraCoverPlaceholderMemoryCacheKey(data: Any?): String? {
         is AnimeCover -> "anime;${candidate.animeId};${candidate.url};${candidate.lastModified}"
         is Manga -> "manga;${candidate.id};${candidate.thumbnailUrl};${candidate.coverLastModified}"
         is MangaCover -> "manga;${candidate.mangaId};${candidate.url};${candidate.lastModified}"
+        is Novel -> "novel;${candidate.id};${candidate.thumbnailUrl};${candidate.coverLastModified}"
         is NovelCover -> "novel;${candidate.novelId};${candidate.url};${candidate.lastModified}"
         else -> candidate.toString()
     }
@@ -118,6 +121,7 @@ private fun resolveAuroraCoverModelCandidate(data: Any?): Any? {
         is AnimeCover -> data.takeIf { !it.url.isNullOrBlank() || it.isAnimeFavorite }
         is MangaCover -> data.takeIf { !it.url.isNullOrBlank() || it.isMangaFavorite }
         is NovelCover -> data.takeIf { !it.url.isNullOrBlank() || it.isNovelFavorite }
+        is Novel -> data.takeIf { !it.thumbnailUrl.isNullOrBlank() || it.favorite }
         else -> data
     }
 }

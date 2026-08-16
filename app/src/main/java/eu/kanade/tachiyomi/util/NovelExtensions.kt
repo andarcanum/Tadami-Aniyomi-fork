@@ -12,8 +12,9 @@ suspend fun Novel.editCover(
     updateNovel: UpdateNovel = Injekt.get(),
     coverCache: NovelCoverCache = Injekt.get(),
 ) {
-    if (favorite) {
-        coverCache.setCustomCoverToCache(this, stream)
-        updateNovel.awaitUpdateCoverLastModified(id)
-    }
+    // Custom covers work for any entry, matching manga/anime behavior. The
+    // favorite-only guard made the flow silently do nothing for non-library
+    // novels (picked an image, nothing changed, no snackbar).
+    coverCache.setCustomCoverToCache(this, stream)
+    updateNovel.awaitUpdateCoverLastModified(id)
 }

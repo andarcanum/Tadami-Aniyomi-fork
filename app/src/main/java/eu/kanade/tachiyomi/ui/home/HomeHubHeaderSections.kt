@@ -26,10 +26,8 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,7 +75,6 @@ import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.tachiyomi.ui.home.components.AvatarFrameDecorations
 import eu.kanade.tachiyomi.ui.home.components.avatarGlitch
-import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import kotlin.math.roundToInt
@@ -109,7 +106,6 @@ internal fun HomeHubPinnedHeader(
     onNameClick: () -> Unit,
     onGreetingClick: () -> Unit,
     onStreakClick: () -> Unit,
-    onSettingsClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
@@ -165,32 +161,13 @@ internal fun HomeHubPinnedHeader(
                 )
 
                 Spacer(Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (tabs.size > 1) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            AuroraTabRow(
-                                tabs = tabs,
-                                selectedIndex = selectedIndex,
-                                onTabSelected = onTabSelected,
-                                scrollable = false,
-                            )
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                    IconButton(
-                        onClick = onSettingsClick,
-                        modifier = Modifier.padding(end = 10.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Settings,
-                            contentDescription = stringResource(MR.strings.label_settings),
-                            tint = colors.textPrimary,
-                        )
-                    }
+                if (tabs.size > 1) {
+                    AuroraTabRow(
+                        tabs = tabs,
+                        selectedIndex = selectedIndex,
+                        onTabSelected = onTabSelected,
+                        scrollable = false,
+                    )
                 }
                 Spacer(Modifier.height(6.dp))
             }

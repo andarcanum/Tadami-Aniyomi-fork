@@ -35,6 +35,7 @@ fun NovelStatsCard(
     nextUpdate: Instant?,
     sourceName: String,
     modifier: Modifier = Modifier,
+    showAuthor: Boolean = true,
 ) {
     val nextUpdateDays = rememberNovelNextUpdateDays(nextUpdate)
     val nextUpdateDayLabel = nextUpdateDays
@@ -102,16 +103,18 @@ fun NovelStatsCard(
                 }
             }
 
-            QuietSectionDivider()
+            if (showAuthor) {
+                QuietSectionDivider()
 
-            QuietMetricTile(
-                label = stringResource(MR.strings.author),
-                value = novel.displayAuthor?.takeIf { it.isNotBlank() }
-                    ?: stringResource(MR.strings.unknown_author),
-                leadingIcon = Icons.Filled.PersonOutline,
-                valueMaxLines = Int.MAX_VALUE,
-                modifier = Modifier.fillMaxWidth(),
-            )
+                QuietMetricTile(
+                    label = stringResource(MR.strings.author),
+                    value = novel.displayAuthor?.takeIf { it.isNotBlank() }
+                        ?: stringResource(MR.strings.unknown_author),
+                    leadingIcon = Icons.Filled.PersonOutline,
+                    valueMaxLines = Int.MAX_VALUE,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             QuietSectionDivider()
 

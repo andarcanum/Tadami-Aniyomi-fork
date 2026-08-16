@@ -89,49 +89,6 @@ fun AnimeInfoCard(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            val filteredDescription = remember(anime.displayDescription, translation?.description) {
-                translation?.description?.takeUnless { it.isBlank() }
-                    ?: filterAnimeDescription(anime.displayDescription)
-            }
-
-            Text(
-                text = stringResource(AYMR.strings.aurora_description_header),
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.textSecondary.copy(alpha = 0.6f),
-                letterSpacing = 0.8.sp,
-            )
-
-            var hasDescriptionOverflow by remember { mutableStateOf(false) }
-            val descriptionBlocks = remember(filteredDescription) {
-                filteredDescription?.let { DescriptionEngine.beautify(it) } ?: emptyList()
-            }
-            if (descriptionBlocks.isEmpty()) {
-                Text(
-                    text = stringResource(AYMR.strings.aurora_no_description),
-                    color = colors.textPrimary.copy(alpha = 0.9f),
-                    fontSize = 14.sp,
-                    lineHeight = 22.sp,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            } else {
-                ExpandableDescriptionBlocks(
-                    blocks = descriptionBlocks,
-                    expanded = descriptionExpanded,
-                    onToggle = { onToggleDescription() },
-                    style = auroraDescriptionBlockStyle(colors),
-                    collapsedLines = 5,
-                    onOverflowChanged = { hasDescriptionOverflow = it },
-                    modifier = Modifier.then(
-                        if (hasDescriptionOverflow) {
-                            Modifier.clickable { onToggleDescription() }
-                        } else {
-                            Modifier
-                        },
-                    ),
-                )
-            }
-
             if (!anime.displayGenre.isNullOrEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -143,7 +100,7 @@ fun AnimeInfoCard(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.weight(1f),
                     ) {
-                        val genresToShow = if (genresExpanded) anime.displayGenre!! else anime.displayGenre!!.take(3)
+                        val genresToShow = if (genresExpanded) anime.displayGenre!! else anime.displayGenre!!.take(8)
                         genresToShow.forEach { genre ->
                             val isSelected = genre in selectedGenres
                             Box(
@@ -213,7 +170,7 @@ fun AnimeInfoCard(
                         }
                     }
 
-                    if (anime.displayGenre!!.size > 3) {
+                    if (anime.displayGenre!!.size > 8) {
                         Icon(
                             imageVector = if (genresExpanded) {
                                 Icons.Filled.KeyboardArrowUp
@@ -228,6 +185,49 @@ fun AnimeInfoCard(
                         )
                     }
                 }
+            }
+
+            val filteredDescription = remember(anime.displayDescription, translation?.description) {
+                translation?.description?.takeUnless { it.isBlank() }
+                    ?: filterAnimeDescription(anime.displayDescription)
+            }
+
+            Text(
+                text = stringResource(AYMR.strings.aurora_description_header),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.textSecondary.copy(alpha = 0.6f),
+                letterSpacing = 0.8.sp,
+            )
+
+            var hasDescriptionOverflow by remember { mutableStateOf(false) }
+            val descriptionBlocks = remember(filteredDescription) {
+                filteredDescription?.let { DescriptionEngine.beautify(it) } ?: emptyList()
+            }
+            if (descriptionBlocks.isEmpty()) {
+                Text(
+                    text = stringResource(AYMR.strings.aurora_no_description),
+                    color = colors.textPrimary.copy(alpha = 0.9f),
+                    fontSize = 14.sp,
+                    lineHeight = 22.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                ExpandableDescriptionBlocks(
+                    blocks = descriptionBlocks,
+                    expanded = descriptionExpanded,
+                    onToggle = { onToggleDescription() },
+                    style = auroraDescriptionBlockStyle(colors),
+                    collapsedLines = 5,
+                    onOverflowChanged = { hasDescriptionOverflow = it },
+                    modifier = Modifier.then(
+                        if (hasDescriptionOverflow) {
+                            Modifier.clickable { onToggleDescription() }
+                        } else {
+                            Modifier
+                        },
+                    ),
+                )
             }
         }
     }

@@ -30,11 +30,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImagePainter
 import coil3.compose.rememberAsyncImagePainter
-import coil3.request.ImageRequest
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
-import eu.kanade.presentation.components.resolveAuroraCoverPlaceholderMemoryCacheKey
 import eu.kanade.presentation.entries.components.aurora.AuroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBlur
@@ -50,6 +49,7 @@ import eu.kanade.tachiyomi.util.debugTitleCoverFlow
 import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import eu.kanade.tachiyomi.util.previewTitleCoverValue
 import kotlinx.coroutines.flow.collectLatest
+import okhttp3.Call
 import tachiyomi.domain.entries.novel.model.Novel
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -71,6 +71,7 @@ fun FullscreenPosterBackground(
     modifier: Modifier = Modifier,
     resolvedCoverUrl: String? = null,
     sourceHeaders: Map<String, String>? = null,
+    sourceClient: Call.Factory? = null,
     onPosterLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -84,11 +85,19 @@ fun FullscreenPosterBackground(
         coverCache.getCustomCoverFile(novel.id).takeIf { it.exists() }
     }
     val posterRequest =
-        remember(resolvedCoverUrl, novel.thumbnailUrl, sourceHeaders, customCoverFile, novel.coverLastModified) {
+        remember(
+            resolvedCoverUrl,
+            novel.thumbnailUrl,
+            sourceHeaders,
+            sourceClient,
+            customCoverFile,
+            novel.coverLastModified,
+        ) {
             AuroraPosterRequest(
                 primaryUrl = resolvedCoverUrl?.takeIf { it.isNotBlank() },
                 fallbackUrl = novel.thumbnailUrl,
                 headers = sourceHeaders,
+                client = sourceClient,
                 customCoverFile = customCoverFile,
                 coverLastModified = novel.coverLastModified,
             )
@@ -223,14 +232,10 @@ fun FullscreenPosterBackground(
             // Preview layer (thumbnail from before navigation) is always rendered first.
             // This matches old behavior: show preview poster immediately, full version
             // replaces via background overlay animation (not crude black swap).
+            // Preview layer: reuse the exact grid request so the thumbnail resolves
+            // from the memory cache instantly — never the "no poster" placeholder.
             val previewRequest = remember(novel.id, previewCoverModel) {
-                ImageRequest.Builder(context)
-                    .data(previewCoverModel)
-                    .size(containerWidthPx, containerHeightPx)
-                    .placeholderMemoryCacheKey(
-                        resolveAuroraCoverPlaceholderMemoryCacheKey(previewCoverModel),
-                    )
-                    .build()
+                buildAuroraCoverImageRequest(context, previewCoverModel)
             }
             val previewLayerPainter = rememberAsyncImagePainter(
                 model = previewRequest,
@@ -260,6 +265,11 @@ fun FullscreenPosterBackground(
                     if (state is AsyncImagePainter.State.Success) {
                         previousSuccessfulBackgroundSpec = backgroundSpec
                         isHighResPosterReady = true
+                    } else if (state is AsyncImagePainter.State.Error) {
+                        // Full poster failed (e.g. Cloudflare on the generic poster
+                        // client): hide the overlay so the preview thumbnail stays
+                        // visible instead of showing the "no poster" placeholder.
+                        isHighResPosterReady = false
                     }
                     debugTitleCoverFlow(
                         scope = "novel-bg",

@@ -206,6 +206,8 @@ fun AnimeScreen(
     onEpisodeSelected: (EpisodeList.Item, Boolean, Boolean, Boolean) -> Unit,
     onAllEpisodeSelected: (Boolean) -> Unit,
     onInvertSelection: () -> Unit,
+    onToggleSort: (() -> Unit)? = null,
+    onToggleUnseenFilter: (() -> Unit)? = null,
 
     // Season clicked
     onSeasonClicked: (SeasonAnime) -> Unit,
@@ -266,6 +268,8 @@ fun AnimeScreen(
             onGenreLongClick = onGenreLongClick,
             onGenresSearch = onGenresSearch,
             onFilterButtonClicked = onFilterButtonClicked,
+            onToggleSort = onToggleSort,
+            onToggleUnseenFilter = onToggleUnseenFilter,
             onRefresh = onRefresh,
             onContinueWatching = onContinueWatching,
             onSearch = onSearch,

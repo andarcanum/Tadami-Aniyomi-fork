@@ -27,6 +27,7 @@ fun AnimeStatsCard(
     anime: Anime,
     snapshot: AnimeDetailsSnapshot,
     modifier: Modifier = Modifier,
+    showAuthor: Boolean = true,
 ) {
     GlassmorphismCard(
         modifier = modifier,
@@ -77,29 +78,31 @@ fun AnimeStatsCard(
                 }
             }
 
-            QuietSectionDivider()
+            if (showAuthor) {
+                QuietSectionDivider()
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                QuietMetricTile(
-                    label = stringResource(MR.strings.author),
-                    value = anime.displayAuthor?.takeIf { it.isNotBlank() }
-                        ?: stringResource(MR.strings.unknown_author),
-                    leadingIcon = Icons.Filled.PersonOutline,
-                    valueMaxLines = Int.MAX_VALUE,
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                )
-                val artist = anime.displayArtist?.takeIf { it.isNotBlank() }
-                if (artist != null && artist != anime.displayAuthor) {
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     QuietMetricTile(
-                        label = stringResource(MR.strings.artist),
-                        value = artist,
-                        leadingIcon = Icons.Filled.Brush,
+                        label = stringResource(MR.strings.author),
+                        value = anime.displayAuthor?.takeIf { it.isNotBlank() }
+                            ?: stringResource(MR.strings.unknown_author),
+                        leadingIcon = Icons.Filled.PersonOutline,
                         valueMaxLines = Int.MAX_VALUE,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    val artist = anime.displayArtist?.takeIf { it.isNotBlank() }
+                    if (artist != null && artist != anime.displayAuthor) {
+                        QuietMetricTile(
+                            label = stringResource(MR.strings.artist),
+                            value = artist,
+                            leadingIcon = Icons.Filled.Brush,
+                            valueMaxLines = Int.MAX_VALUE,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                 }
             }
 

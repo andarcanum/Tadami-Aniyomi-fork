@@ -1,11 +1,16 @@
 package eu.kanade.presentation.entries.anime.components.aurora
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PersonOutline
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -177,6 +182,30 @@ fun AnimeHeroContent(
                     onCopyTitle = onCopyTitle,
                     tint = secondaryMetaColor,
                     contentDescription = stringResource(AYMR.strings.copy_title),
+                )
+            }
+        }
+
+        // Author (moved from the stats card onto the poster)
+        anime.displayAuthor?.takeIf { it.isNotBlank() }?.let { authorText ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PersonOutline,
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.size(15.dp),
+                )
+                Text(
+                    text = authorText,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.accent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
