@@ -904,6 +904,13 @@ internal fun NovelReaderContentHost(
             preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative,
         )
     }
+    val novelSpreadMinWidthPx = with(density) { NOVEL_SPREAD_MIN_WIDTH_DP.dp.roundToPx() }
+    val novelSpreadColumns = resolveNovelSpreadColumns(
+        twoPageLandscapeEnabled = state.readerSettings.twoPageLandscape,
+        viewportWidthPx = pageViewportSize.width,
+        viewportHeightPx = pageViewportSize.height,
+        minSpreadWidthPx = novelSpreadMinWidthPx,
+    )
     val pageReaderPages: List<List<PlainPageSlice>> = remember(
         state.chapter.id,
         pageReaderTextBlocks,
@@ -921,6 +928,7 @@ internal fun NovelReaderContentHost(
         pageViewportSize,
         contentPaddingPx,
         statusBarTopPadding,
+        novelSpreadColumns,
     ) {
         if (!shouldPaginatePageReader || pageReaderTextBlocks.isEmpty()) {
             emptyList()
@@ -951,10 +959,20 @@ internal fun NovelReaderContentHost(
                 bookBottomInsetPx +
                 pageFitSafetyPx +
                 navigationBarHeight
+            // The margin is the breathing room around the whole spread, not doubled per column: a
+            // spread column's width is the full content area (screen minus margins) split evenly,
+            // with a thin gap between the two columns rather than each getting its own margin.
+            val contentWidthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1)
+            val spreadColumnWidthPx = if (novelSpreadColumns > 1) {
+                val gapPx = with(density) { NOVEL_SPREAD_COLUMN_GAP_DP.dp.roundToPx() }
+                ((contentWidthPx - gapPx) / novelSpreadColumns).coerceAtLeast(1)
+            } else {
+                contentWidthPx
+            }
             paginatePlainPageBlocks(
                 textBlocks = pageReaderTextBlocks,
                 paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
-                widthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1),
+                widthPx = spreadColumnWidthPx,
                 heightPx = (screenHeightPx - verticalPaddingPx).coerceAtLeast(1),
                 textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() },
                 lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
@@ -990,6 +1008,7 @@ internal fun NovelReaderContentHost(
         pageViewportSize,
         contentPaddingPx,
         statusBarTopPadding,
+        novelSpreadColumns,
     ) {
         if (!shouldPaginateRichForPageReader) {
             MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList())
@@ -1020,10 +1039,17 @@ internal fun NovelReaderContentHost(
                 bookBottomInsetPx +
                 pageFitSafetyPx +
                 navigationBarHeight
+            val contentWidthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1)
+            val spreadColumnWidthPx = if (novelSpreadColumns > 1) {
+                val gapPx = with(density) { NOVEL_SPREAD_COLUMN_GAP_DP.dp.roundToPx() }
+                ((contentWidthPx - gapPx) / novelSpreadColumns).coerceAtLeast(1)
+            } else {
+                contentWidthPx
+            }
             paginateMixedRichPageBlocks(
                 richBlocks = pageReaderRichBlocks,
                 paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
-                widthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1),
+                widthPx = spreadColumnWidthPx,
                 heightPx = (screenHeightPx - verticalPaddingPx).coerceAtLeast(1),
                 textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() },
                 lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
@@ -1094,6 +1120,11 @@ internal fun NovelReaderContentHost(
         )
     }
     val pageReaderItemsCount = pageReaderContentPages.size
+    // Every index-based consumer below (TTS, auto-scroll, boundary pages, progress %) keeps
+    // addressing single-column pages via pageReaderItemsCount unmodified; only the pager/page-turn
+    // slot count and virtual-index math are adjusted, so a spread slot pairs pages
+    // [n*columns, n*columns + columns - 1] without touching any of those consumers' own indexing.
+    val pageReaderSpreadSlotCount = resolveSpreadSlotCount(pageReaderItemsCount, novelSpreadColumns)
     // The pager only needs an extra virtual page before/after the chapter while the intermediate
     // "next/previous chapter" placeholder is shown. Seamless chapter transitions hide that
     // placeholder, so the extra slots must not exist either: otherwise the edge page falls back to
@@ -1102,12 +1133,12 @@ internal fun NovelReaderContentHost(
     val composePagerHasPreviousChapter = state.previousChapterId != null && composePagerBoundaryPagesEnabled
     val composePagerHasNextChapter = state.nextChapterId != null && composePagerBoundaryPagesEnabled
     val composePagerVirtualPageCount = remember(
-        pageReaderItemsCount,
+        pageReaderSpreadSlotCount,
         composePagerHasPreviousChapter,
         composePagerHasNextChapter,
     ) {
         resolveComposePagerVirtualPageCount(
-            contentPageCount = pageReaderItemsCount,
+            contentPageCount = pageReaderSpreadSlotCount,
             hasPreviousChapter = composePagerHasPreviousChapter,
             hasNextChapter = composePagerHasNextChapter,
         )
@@ -1153,13 +1184,14 @@ internal fun NovelReaderContentHost(
         pageCount = pageReaderItemsCount.coerceAtLeast(1),
         chapterHandoffTarget = pageReaderChapterHandoffTarget,
     )
+    val initialContentSpreadSlot = resolveSpreadSlotForPageIndex(initialContentPage, novelSpreadColumns)
     val initialPagerPage = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
         resolveComposePagerVirtualPageIndex(
-            actualPageIndex = initialContentPage,
+            actualPageIndex = initialContentSpreadSlot,
             hasPreviousChapter = composePagerHasPreviousChapter,
         )
     } else {
-        initialContentPage
+        initialContentSpreadSlot
     }
     val pagerState = key(state.chapter.id) {
         rememberPagerState(
@@ -1168,7 +1200,7 @@ internal fun NovelReaderContentHost(
                 if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
                     composePagerVirtualPageCount.coerceAtLeast(1)
                 } else {
-                    pageReaderItemsCount.coerceAtLeast(1)
+                    pageReaderSpreadSlotCount.coerceAtLeast(1)
                 }
             },
         )
@@ -1177,17 +1209,19 @@ internal fun NovelReaderContentHost(
         pagerState,
         pageReaderRendererRoute,
         composePagerHasPreviousChapter,
+        novelSpreadColumns,
     ) {
         PageReaderTtsNavigationAdapter(
             navigator = object : PageReaderTtsNavigator {
                 override suspend fun scrollToPage(pageIndex: Int) {
+                    val spreadSlot = resolveSpreadSlotForPageIndex(pageIndex, novelSpreadColumns)
                     val targetPage = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
                         resolveComposePagerVirtualPageIndex(
-                            actualPageIndex = pageIndex,
+                            actualPageIndex = spreadSlot,
                             hasPreviousChapter = composePagerHasPreviousChapter,
                         )
                     } else {
-                        pageIndex
+                        spreadSlot
                     }.coerceIn(0, (pagerState.pageCount - 1).coerceAtLeast(0))
                     pagerState.scrollToPage(targetPage)
                 }
@@ -1332,18 +1366,28 @@ internal fun NovelReaderContentHost(
         pagerState.currentPage,
         pageTurnCurrentPage,
         composePagerHasPreviousChapter,
+        pageReaderSpreadSlotCount,
         pageReaderItemsCount,
+        novelSpreadColumns,
     ) {
         derivedStateOf {
-            resolvePageReaderCurrentPage(
+            // pageTurnCurrentPage is already a real page index (PageTurnPageRenderer resolves it
+            // itself before reporting), so only the compose-pager route's slot index needs
+            // expanding back to the first real page of that slot.
+            val slotOrRealIndex = resolvePageReaderCurrentPage(
                 pageReaderRendererRoute = pageReaderRendererRoute,
                 pagerCurrentPage = pagerState.currentPage,
                 pageTurnCurrentPage = pageTurnCurrentPage,
-                composePagerContentPageCount = pageReaderItemsCount,
+                composePagerContentPageCount = pageReaderSpreadSlotCount,
                 composePagerHasPreviousChapter = composePagerHasPreviousChapter,
                 pageTurnContentPageCount = pageReaderItemsCount,
                 pageTurnHasPreviousChapter = composePagerHasPreviousChapter,
             )
+            if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+                resolveSpreadSlotFirstPageIndex(slotOrRealIndex, novelSpreadColumns)
+            } else {
+                slotOrRealIndex
+            }
         }
     }
     var isInitialPositionRestored by remember(state.chapter.id) {
@@ -1796,18 +1840,22 @@ internal fun NovelReaderContentHost(
                     requestPageTurnChapterNavigation(PageTurnChapterNavigationDirection.PREVIOUS)
                 }
             } else {
-                val currentPage = pageReaderProgressPageIndex
+                val currentSpreadSlot = resolveSpreadSlotForPageIndex(
+                    pageReaderProgressPageIndex,
+                    novelSpreadColumns,
+                )
                 val currentVirtualPage = resolveComposePagerVirtualPageIndex(
-                    actualPageIndex = currentPage,
+                    actualPageIndex = currentSpreadSlot,
                     hasPreviousChapter = composePagerHasPreviousChapter,
                 )
                 if (currentVirtualPage > 0) {
                     val targetVirtualPage = currentVirtualPage - 1
-                    pageTurnCurrentPage = resolveComposePagerActualPageIndex(
+                    val targetSpreadSlot = resolveComposePagerActualPageIndex(
                         currentPage = targetVirtualPage,
-                        contentPageCount = pageReaderItemsCount,
+                        contentPageCount = pageReaderSpreadSlotCount,
                         hasPreviousChapter = composePagerHasPreviousChapter,
                     )
+                    pageTurnCurrentPage = resolveSpreadSlotFirstPageIndex(targetSpreadSlot, novelSpreadColumns)
                     if (pageAnimationDurationMillis != null) {
                         pagerState.animateScrollToPage(
                             targetVirtualPage,
@@ -1862,19 +1910,23 @@ internal fun NovelReaderContentHost(
                     requestPageTurnChapterNavigation(PageTurnChapterNavigationDirection.NEXT)
                 }
             } else {
-                val currentPage = pageReaderProgressPageIndex
+                val currentSpreadSlot = resolveSpreadSlotForPageIndex(
+                    pageReaderProgressPageIndex,
+                    novelSpreadColumns,
+                )
                 val currentVirtualPage = resolveComposePagerVirtualPageIndex(
-                    actualPageIndex = currentPage,
+                    actualPageIndex = currentSpreadSlot,
                     hasPreviousChapter = composePagerHasPreviousChapter,
                 )
                 val virtualLastPage = composePagerVirtualPageCount - 1
                 if (currentVirtualPage < virtualLastPage) {
                     val targetVirtualPage = currentVirtualPage + 1
-                    pageTurnCurrentPage = resolveComposePagerActualPageIndex(
+                    val targetSpreadSlot = resolveComposePagerActualPageIndex(
                         currentPage = targetVirtualPage,
-                        contentPageCount = pageReaderItemsCount,
+                        contentPageCount = pageReaderSpreadSlotCount,
                         hasPreviousChapter = composePagerHasPreviousChapter,
                     )
+                    pageTurnCurrentPage = resolveSpreadSlotFirstPageIndex(targetSpreadSlot, novelSpreadColumns)
                     if (pageAnimationDurationMillis != null) {
                         pagerState.animateScrollToPage(
                             targetVirtualPage,
@@ -2397,6 +2449,7 @@ internal fun NovelReaderContentHost(
                         ComposePagerPageRenderer(
                             pagerState = pagerState,
                             contentPages = pageReaderContentPages,
+                            spreadColumns = novelSpreadColumns,
                             transitionStyle = activePageTransitionStyle,
                             showBoundaryChapterPages = !seamlessChapterTransitionEnabled,
                             readerSettings = state.readerSettings,
@@ -2456,6 +2509,7 @@ internal fun NovelReaderContentHost(
                             pagerState = pagerState,
                             chapterId = state.chapter.id,
                             contentPages = pageReaderContentPages,
+                            spreadColumns = novelSpreadColumns,
                             transitionStyle = activePageTransitionStyle,
                             showBoundaryChapterPages = !seamlessChapterTransitionEnabled,
                             readerSettings = state.readerSettings,
@@ -3626,6 +3680,8 @@ internal fun NovelReaderContentHost(
                 isBookMode = isBookMode,
                 pageReaderRendererRoute = pageReaderRendererRoute,
                 pageReaderItemsCount = pageReaderItemsCount,
+                pageReaderSpreadSlotCount = pageReaderSpreadSlotCount,
+                spreadColumns = novelSpreadColumns,
                 composePagerHasPreviousChapter = composePagerHasPreviousChapter,
                 nativeScrollItemsCount = nativeScrollItemsCount,
                 pageReaderProgressPageIndex = pageReaderProgressPageIndex,
@@ -3687,8 +3743,9 @@ internal fun NovelReaderContentHost(
                     if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
                         pageTurnRequestedPage = target
                     } else {
+                        val targetSpreadSlot = resolveSpreadSlotForPageIndex(target, novelSpreadColumns)
                         val virtualTarget = resolveComposePagerVirtualPageIndex(
-                            actualPageIndex = target,
+                            actualPageIndex = targetSpreadSlot,
                             hasPreviousChapter = composePagerHasPreviousChapter,
                         )
                         coroutineScope.launch {

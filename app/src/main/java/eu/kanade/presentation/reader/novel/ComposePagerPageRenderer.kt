@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
@@ -182,6 +183,11 @@ private fun resolveComposePagerPageKey(
 internal fun ComposePagerPageRenderer(
     pagerState: PagerState,
     contentPages: List<NovelPageContentPage>,
+    // How many content pages one pager slot shows side by side. 1 is the ordinary single-page
+    // reader; 2 is a landscape two-page spread. contentPageCount below (and therefore the pager's
+    // own slot count) is expressed in slots, not raw content pages, so a slot always addresses
+    // pages [slot * spreadColumns, slot * spreadColumns + spreadColumns - 1].
+    spreadColumns: Int = 1,
     transitionStyle: NovelPageTransitionStyle,
     readerSettings: NovelReaderSettings,
     textColor: Color,
@@ -234,7 +240,9 @@ internal fun ComposePagerPageRenderer(
     @Suppress("NAME_SHADOWING")
     val hasNextChapter = hasNextChapter && showBoundaryChapterPages
     val useBoundaryPreview = shouldUseComposePagerBoundaryPreview(transitionStyle) && showBoundaryChapterPages
-    val contentPageCount = contentPages.size
+    // The pager's own index space is expressed in slots (see spreadColumns above), so every
+    // boundary/key computation below has to work against the slot count, not the raw page count.
+    val contentPageCount = resolveSpreadSlotCount(contentPages.size, spreadColumns)
     val latestToggleUi by rememberUpdatedState(onToggleUi)
     val latestMoveBackward by rememberUpdatedState(onMoveBackward)
     val latestMoveForward by rememberUpdatedState(onMoveForward)
@@ -369,15 +377,18 @@ internal fun ComposePagerPageRenderer(
                 HorizontalChapterSwipeAction.NONE -> null
             }
         }
-        val contentPage = if (boundaryPreview == null) {
-            val actualPage = resolveComposePagerActualPageIndex(
+        val spreadPages = if (boundaryPreview == null) {
+            val spreadSlot = resolveComposePagerActualPageIndex(
                 currentPage = page,
                 contentPageCount = contentPageCount,
                 hasPreviousChapter = hasPreviousChapter,
             )
-            contentPages.getOrElse(actualPage) { NovelPageContentPage(emptyList()) }
+            val firstPage = resolveSpreadSlotFirstPageIndex(spreadSlot, spreadColumns)
+            (firstPage until firstPage + spreadColumns).map { index ->
+                contentPages.getOrElse(index) { NovelPageContentPage(emptyList()) }
+            }
         } else {
-            NovelPageContentPage(emptyList())
+            listOf(NovelPageContentPage(emptyList()))
         }
         val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
         val transitionSpec = resolveComposePagerTransitionSpec(
@@ -429,9 +440,9 @@ internal fun ComposePagerPageRenderer(
                     textTypeface = textTypeface,
                     chapterTitleTypeface = chapterTitleTypeface,
                 )
-            } else {
+            } else if (spreadPages.size <= 1) {
                 NovelPageReaderPageContent(
-                    contentPage = contentPage,
+                    contentPage = spreadPages.first(),
                     readerSettings = readerSettings,
                     textColor = textColor,
                     textBackground = textBackground,
@@ -454,6 +465,39 @@ internal fun ComposePagerPageRenderer(
                     onPlainTap = onTextTap,
                     onImageLongClick = onImageLongClick,
                 )
+            } else {
+                // Two columns of one spread. Each gets a shared reader-content composable inside
+                // its own half-width slot; the pagination step (NovelReaderContentHost) already
+                // measured text against that half width, so no extra layout math is needed here.
+                Row(modifier = Modifier.fillMaxSize()) {
+                    spreadPages.forEach { spreadPage ->
+                        NovelPageReaderPageContent(
+                            contentPage = spreadPage,
+                            readerSettings = readerSettings,
+                            textColor = textColor,
+                            textBackground = textBackground,
+                            backgroundTexture = backgroundTexture,
+                            nativeTextureStrengthPercent = nativeTextureStrengthPercent,
+                            textTypeface = textTypeface,
+                            chapterTitleTypeface = chapterTitleTypeface,
+                            chapterTitleTextColor = chapterTitleTextColor,
+                            textShadowEnabled = readerSettings.textShadow,
+                            textShadowColor = readerSettings.textShadowColor,
+                            textShadowBlur = readerSettings.textShadowBlur,
+                            textShadowX = readerSettings.textShadowX,
+                            textShadowY = readerSettings.textShadowY,
+                            contentPadding = contentPadding,
+                            statusBarTopPadding = statusBarTopPadding,
+                            ttsHighlightState = ttsHighlightState,
+                            ttsHighlightColor = ttsHighlightColor,
+                            selectionSessionIdProvider = selectionSessionIdProvider,
+                            onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                            onPlainTap = onTextTap,
+                            onImageLongClick = onImageLongClick,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
             }
 
             if (abs(transitionSpec.rotationY) > 90f) {

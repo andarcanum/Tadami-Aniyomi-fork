@@ -666,7 +666,9 @@ internal fun resolveReaderVerticalSeekbarValue(
         showWebView -> webProgressPercent.coerceIn(0, 100) / 100f
         usePageReader -> {
             val max = (seekbarItemsCount - 1).coerceAtLeast(1)
-            val current = resolvePageReaderCurrentPage(
+            // Only the compose-pager route addresses spread slots; pageTurnCurrentPage is already
+            // a real page (PageTurnPageRenderer resolves it before reporting).
+            val slotOrRealIndex = resolvePageReaderCurrentPage(
                 pageReaderRendererRoute = pageReaderRendererRoute,
                 pagerCurrentPage = pagerCurrentPage,
                 pageTurnCurrentPage = pageTurnCurrentPage,
@@ -675,6 +677,11 @@ internal fun resolveReaderVerticalSeekbarValue(
                 pageTurnContentPageCount = pageTurnContentPageCount,
                 pageTurnHasPreviousChapter = pageTurnHasPreviousChapter,
             )
+            val current = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+                resolveSpreadSlotFirstPageIndex(slotOrRealIndex, spreadColumns)
+            } else {
+                slotOrRealIndex
+            }
             current.toFloat() / max.toFloat()
         }
         else -> {
