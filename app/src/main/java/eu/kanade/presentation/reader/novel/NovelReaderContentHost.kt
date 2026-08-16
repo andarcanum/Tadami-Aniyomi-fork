@@ -2504,6 +2504,65 @@ internal fun NovelReaderContentHost(
                             selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                         )
+                    } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER &&
+                        novelSpreadColumns > 1
+                    ) {
+                        // The curl library always folds across its own full measured width, so a
+                        // single wide PageCurl behind a two-column spread curls the whole spread as
+                        // one leaf, edge to edge, ignoring the spine. SpreadPageTurnPageRenderer runs
+                        // two half-width PageCurl surfaces instead, one per column, so the fold
+                        // anchors at the spine like a real book page.
+                        SpreadPageTurnPageRenderer(
+                            pagerState = pagerState,
+                            chapterId = state.chapter.id,
+                            contentPages = pageReaderContentPages,
+                            transitionStyle = activePageTransitionStyle,
+                            showBoundaryChapterPages = !seamlessChapterTransitionEnabled,
+                            readerSettings = state.readerSettings,
+                            textColor = textColor,
+                            textBackground = textBackground,
+                            chapterTitleTextColor = chapterTitleTextColor,
+                            backgroundTexture = activeBackgroundTexture,
+                            nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
+                            backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
+                            backgroundModeIdentity = if (isBackgroundMode) backgroundModeIdentity else "",
+                            isBackgroundMode = isBackgroundMode,
+                            activeBackgroundTexture = activeBackgroundTexture,
+                            activeOledEdgeGradient = activeOledEdgeGradient,
+                            isDarkTheme = isDarkTheme,
+                            pageEdgeShadow = state.readerSettings.pageEdgeShadow,
+                            pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
+                            textTypeface = composeTypeface,
+                            chapterTitleTypeface = chapterTitleTypeface,
+                            contentPadding = contentPaddingPx,
+                            statusBarTopPadding = statusBarTopPadding,
+                            ttsHighlightState = ttsHighlightState,
+                            ttsHighlightColor = ttsHighlightColor,
+                            hasPreviousChapter = state.previousChapterId != null,
+                            previousChapterName = state.previousChapterName,
+                            hasNextChapter = state.nextChapterId != null,
+                            nextChapterName = state.nextChapterName,
+                            previousChapterLabel = stringResource(MR.strings.action_previous_chapter),
+                            nextChapterLabel = stringResource(MR.strings.action_next_chapter),
+                            boundaryChapterHint = stringResource(MR.strings.reader_boundary_release_to_open),
+                            onToggleUi = { onSetShowReaderUi(!showReaderUi) },
+                            requestedPage = pageTurnRequestedPage,
+                            onRequestedPageConsumed = { pageTurnRequestedPage = -1 },
+                            onCurrentPageChange = { pageTurnCurrentPage = it },
+                            onOpenPreviousChapter = {
+                                openPreviousChapterFromReader()
+                            },
+                            onOpenNextChapter = { openNextChapterFromReader() },
+                            chapterNavigationRequest = pageTurnChapterNavigationRequest,
+                            onChapterNavigationRequestConsumed = {
+                                pageTurnChapterNavigationRequest = null
+                            },
+                            onTextTap = { tapX, tapY, width, height ->
+                                latestReaderShortTapHandler(tapX, tapY, width, height)
+                            },
+                            selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                            onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                        )
                     } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
                         PageTurnPageRenderer(
                             pagerState = pagerState,

@@ -441,7 +441,7 @@ private fun createPageTurnDragInteraction(
     }
 }
 
-private fun createPageTurnAnimation(
+internal fun createPageTurnAnimation(
     animationDurationMillis: Int,
     forward: Boolean,
     curlAmount: Float,
@@ -491,14 +491,14 @@ internal fun resolvePageTurnCurlMidEdge(
     }
 }
 
-private fun Size.startEdge(): Edge {
+internal fun Size.startEdge(): Edge {
     return Edge(
         top = Offset(0f, 0f),
         bottom = Offset(0f, height),
     )
 }
 
-private fun Size.endEdge(): Edge {
+internal fun Size.endEdge(): Edge {
     return Edge(
         top = Offset(width, height),
         bottom = Offset(width, height),
