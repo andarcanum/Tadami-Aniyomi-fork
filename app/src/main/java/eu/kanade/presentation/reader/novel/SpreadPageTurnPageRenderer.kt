@@ -219,9 +219,6 @@ internal fun SpreadPageTurnPageRenderer(
                 ),
             )
         }
-        tapCoroutineScope.launch {
-            leftCurlState.prev(instantPageTurnAnimation())
-        }
     }
     fun turnBackward() {
         tapCoroutineScope.launch {
@@ -232,9 +229,6 @@ internal fun SpreadPageTurnPageRenderer(
                     curlAmount = latestRendererConfig.preset.curlAmount,
                 ),
             )
-        }
-        tapCoroutineScope.launch {
-            rightCurlState.prev(instantPageTurnAnimation())
         }
     }
 
