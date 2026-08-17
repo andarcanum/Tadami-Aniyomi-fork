@@ -115,6 +115,7 @@ import eu.kanade.presentation.entries.components.aurora.auroraSpringClick
 import eu.kanade.presentation.entries.components.aurora.rememberTitleScreenStaggerState
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraFabBottomPadding
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroBottomPadding
+import eu.kanade.presentation.entries.components.aurora.titleScreenPosterEntrance
 import eu.kanade.presentation.entries.components.aurora.titleScreenStagger
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
@@ -702,12 +703,15 @@ fun AnimeScreenAuroraImpl(
                     refererUrl = refererUrl,
                     sourceHeaders = sourceHeaders,
                     sourceClient = sourceClient,
-                    modifier = Modifier.hazeSource(state = hazeState),
+                    modifier = Modifier
+                        .titleScreenPosterEntrance(titleStaggerState)
+                        .hazeSource(state = hazeState),
                 )
             } else {
                 AuroraBackground(
                     modifier = Modifier
                         .fillMaxSize()
+                        .titleScreenPosterEntrance(titleStaggerState)
                         .hazeSource(state = hazeState),
                 ) {}
             }
@@ -783,7 +787,8 @@ fun AnimeScreenAuroraImpl(
                                         },
                                         onClearSelected = { selectedGenres = emptySet() },
                                         onCopyTitle = onTitleCopy,
-                                        modifier = Modifier.titleScreenStagger(titleStaggerState, 1),
+                                        titleStaggerState = titleStaggerState,
+                                        modifier = Modifier,
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
                                     AnimeStatsCard(
@@ -1752,7 +1757,8 @@ fun AnimeScreenAuroraImpl(
                             },
                             onClearSelected = { selectedGenres = emptySet() },
                             onCopyTitle = onTitleCopy,
-                            modifier = Modifier.titleScreenStagger(titleStaggerState, 1),
+                            titleStaggerState = titleStaggerState,
+                            modifier = Modifier,
                         )
                     }
                 }

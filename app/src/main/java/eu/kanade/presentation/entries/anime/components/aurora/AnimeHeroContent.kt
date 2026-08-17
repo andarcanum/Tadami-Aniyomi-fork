@@ -35,10 +35,13 @@ import eu.kanade.presentation.entries.components.aurora.AuroraHeroScaffold
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroStatsRow
 import eu.kanade.presentation.entries.components.aurora.AuroraNotePreviewCard
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
+import eu.kanade.presentation.entries.components.aurora.AuroraTitleStaggerIndex
+import eu.kanade.presentation.entries.components.aurora.AuroraTitleStaggerState
 import eu.kanade.presentation.entries.components.aurora.CopyTitleIcon
 import eu.kanade.presentation.entries.components.aurora.copyTitleInlineContent
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSecondaryMetaColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
+import eu.kanade.presentation.entries.components.aurora.titleScreenStagger
 import eu.kanade.presentation.entries.translation.AuroraEntryTranslationState
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
@@ -92,6 +95,7 @@ fun AnimeHeroContent(
     onSearchSelected: (() -> Unit)? = null,
     onClearSelected: (() -> Unit)? = null,
     onCopyTitle: (() -> Unit)? = null,
+    titleStaggerState: AuroraTitleStaggerState? = null,
     modifier: Modifier = Modifier,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
@@ -113,7 +117,9 @@ fun AnimeHeroContent(
     ) {
         AuroraHeroGenreChips(
             genres = anime.displayGenre,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_GENRES),
             selectedGenres = selectedGenres,
             onGenreClick = onGenreClick,
             onGenreLongClick = onGenreLongClick,
@@ -146,7 +152,9 @@ fun AnimeHeroContent(
         )
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_TITLE),
             verticalAlignment = Alignment.Bottom,
         ) {
             Text(
@@ -189,7 +197,9 @@ fun AnimeHeroContent(
         // Author (moved from the stats card onto the poster)
         anime.displayAuthor?.takeIf { it.isNotBlank() }?.let { authorText ->
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_AUTHOR),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -211,17 +221,23 @@ fun AnimeHeroContent(
         }
 
         AuroraHeroStatsRow(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_STATS),
             ratingValue = ratingText,
             secondValue = stringResource(AYMR.strings.aurora_episode_count, episodeCount),
             thirdValue = statusText,
         )
 
-        AuroraNotePreviewCard(
-            note = note,
-            onClick = onEditNotesClicked,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (note.isNotBlank()) {
+            AuroraNotePreviewCard(
+                note = note,
+                onClick = onEditNotesClicked,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_NOTE),
+            )
+        }
 
         AuroraTitleHeroActionButton(
             hasProgress = hasWatchingProgress,
@@ -231,7 +247,8 @@ fun AnimeHeroContent(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp),
+                .height(54.dp)
+                .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_ACTION_BUTTON),
             cornerRadius = 16.dp,
             iconSize = 28.dp,
             contentPadding = PaddingValues(horizontal = 24.dp),

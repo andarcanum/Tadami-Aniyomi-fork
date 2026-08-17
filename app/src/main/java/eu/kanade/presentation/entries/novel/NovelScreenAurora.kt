@@ -95,6 +95,7 @@ import eu.kanade.presentation.entries.components.aurora.resolveAuroraDetailCardB
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraDetailCardBorderColors
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraFabBottomPadding
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroBottomPadding
+import eu.kanade.presentation.entries.components.aurora.titleScreenPosterEntrance
 import eu.kanade.presentation.entries.components.aurora.titleScreenStagger
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
@@ -525,12 +526,15 @@ fun NovelScreenAuroraImpl(
                         sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
                             ?: (state.source as? HttpSource)?.headers?.toMap(),
                         sourceClient = sourceClient,
-                        modifier = Modifier.hazeSource(state = hazeState),
+                        modifier = Modifier
+                            .titleScreenPosterEntrance(titleStaggerState)
+                            .hazeSource(state = hazeState),
                     )
                 } else {
                     AuroraBackground(
                         modifier = Modifier
                             .fillMaxSize()
+                            .titleScreenPosterEntrance(titleStaggerState)
                             .hazeSource(state = hazeState),
                     ) {}
                 }
@@ -576,9 +580,8 @@ fun NovelScreenAuroraImpl(
                                         },
                                         onClearSelected = { selectedGenres = emptySet() },
                                         onCopyTitle = onTitleCopy,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .titleScreenStagger(titleStaggerState, 1),
+                                        titleStaggerState = titleStaggerState,
+                                        modifier = Modifier.fillMaxWidth(),
                                     )
                                     Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
                                     NovelStatsCard(
@@ -1452,12 +1455,15 @@ fun NovelScreenAuroraImpl(
                     sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
                         ?: (state.source as? HttpSource)?.headers?.toMap(),
                     sourceClient = sourceClient,
-                    modifier = Modifier.hazeSource(state = hazeState),
+                    modifier = Modifier
+                        .titleScreenPosterEntrance(titleStaggerState)
+                        .hazeSource(state = hazeState),
                 )
             } else {
                 AuroraBackground(
                     modifier = Modifier
                         .fillMaxSize()
+                        .titleScreenPosterEntrance(titleStaggerState)
                         .hazeSource(state = hazeState),
                 ) {}
             }
@@ -2062,7 +2068,8 @@ fun NovelScreenAuroraImpl(
                         },
                         onClearSelected = { selectedGenres = emptySet() },
                         onCopyTitle = onTitleCopy,
-                        modifier = Modifier.titleScreenStagger(titleStaggerState, 1),
+                        titleStaggerState = titleStaggerState,
+                        modifier = Modifier,
                     )
                 }
             }

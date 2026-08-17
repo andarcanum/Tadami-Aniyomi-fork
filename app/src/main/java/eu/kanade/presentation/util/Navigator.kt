@@ -59,10 +59,10 @@ private val uiPreferences: UiPreferences = Injekt.get()
 private const val MODERN_ENTER_DURATION = 300
 private const val MODERN_EXIT_DURATION = 300
 private const val MODERN_ENTER_DELAY = 0
-private const val TITLE_ZOOM_MS = 720
-private const val TITLE_ZOOM_FADE_IN_MS = 560
-private const val TITLE_ZOOM_EXIT_MS = 360
-private val AURORA_EASING = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
+private const val TITLE_ZOOM_MS = 750
+private const val TITLE_ZOOM_FADE_IN_MS = 550
+private const val TITLE_ZOOM_EXIT_MS = 280
+private val AURORA_EASING = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 private val MODERN_SLIDE_DISTANCE = 30.dp
 
 interface Tab : cafe.adriel.voyager.navigator.tab.Tab {
@@ -188,7 +188,7 @@ private fun AnimatedContentTransitionScope<Screen>.titleScreenDeepZoom(): Conten
 private fun AnimatedContentTransitionScope<Screen>.titleScreenZoomOut(): ContentTransform {
     val enter = fadeIn(
         animationSpec = tween(
-            durationMillis = TITLE_ZOOM_FADE_IN_MS,
+            durationMillis = TITLE_ZOOM_EXIT_MS,
             easing = AURORA_EASING,
         ),
     )
@@ -198,9 +198,9 @@ private fun AnimatedContentTransitionScope<Screen>.titleScreenZoomOut(): Content
             easing = AURORA_EASING,
         ),
     ) + scaleOut(
-        targetScale = 0.92f,
+        targetScale = 0.94f,
         animationSpec = tween(
-            durationMillis = TITLE_ZOOM_MS,
+            durationMillis = TITLE_ZOOM_EXIT_MS,
             easing = AURORA_EASING,
         ),
     )
