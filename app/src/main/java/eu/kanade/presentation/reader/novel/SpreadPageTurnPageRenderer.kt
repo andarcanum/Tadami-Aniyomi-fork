@@ -22,6 +22,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -145,10 +146,10 @@ internal fun SpreadPageTurnPageRenderer(
 
     // Both surfaces are seeded at the same virtual slot and only ever move together (see the two
     // LaunchedEffects below), so they never observe each other's page content out of step.
-    val leftCurlState = rememberPageCurlState(initialCurrent = initialVirtualSlot)
+    val leftCurlState = rememberPageCurlState(initialCurrent = (virtualSlotCount - 1 - initialVirtualSlot).coerceAtLeast(0))
     val rightCurlState = rememberPageCurlState(initialCurrent = initialVirtualSlot)
 
-    val currentVirtualSlot = leftCurlState.current.coerceIn(0, virtualSlotCount - 1)
+    val currentVirtualSlot = (virtualSlotCount - 1 - leftCurlState.current).coerceIn(0, virtualSlotCount - 1)
     val currentSpreadSlot = resolvePageTurnRendererProgressPageIndex(
         currentPage = currentVirtualSlot,
         contentPageCount = spreadSlotCount,
@@ -219,7 +220,7 @@ internal fun SpreadPageTurnPageRenderer(
             )
         }
         tapCoroutineScope.launch {
-            leftCurlState.next(instantPageTurnAnimation())
+            leftCurlState.prev(instantPageTurnAnimation())
         }
     }
     fun turnBackward() {
@@ -345,7 +346,8 @@ internal fun SpreadPageTurnPageRenderer(
             actualPageIndex = pagerCurrentSlot,
             hasPreviousChapter = hasPreviousChapter,
         )
-        if (leftCurlState.current != targetVirtualSlot) leftCurlState.snapTo(targetVirtualSlot)
+        val invertedTarget = (virtualSlotCount - 1 - targetVirtualSlot).coerceAtLeast(0)
+        if (leftCurlState.current != invertedTarget) leftCurlState.snapTo(invertedTarget)
         if (rightCurlState.current != targetVirtualSlot) rightCurlState.snapTo(targetVirtualSlot)
     }
 
@@ -359,9 +361,10 @@ internal fun SpreadPageTurnPageRenderer(
         snapshotFlow { leftCurlState.current.coerceIn(0, virtualSlotCount - 1) to leftCurlState.progress }
             .distinctUntilChanged()
             .collectLatest { (targetVirtualSlot, progress) ->
+                val realTarget = (virtualSlotCount - 1 - targetVirtualSlot).coerceAtLeast(0)
                 when (
                     resolvePageTurnRendererSettledBoundaryChapterTarget(
-                        currentPage = targetVirtualSlot,
+                        currentPage = realTarget,
                         progress = progress,
                         contentPageCount = spreadSlotCount,
                         hasPreviousChapter = hasPreviousChapter,
@@ -393,8 +396,9 @@ internal fun SpreadPageTurnPageRenderer(
         snapshotFlow { rightCurlState.current.coerceIn(0, virtualSlotCount - 1) to rightCurlState.progress }
             .distinctUntilChanged()
             .collectLatest { (target, progress) ->
-                if (progress == 0f && leftCurlState.current != target) {
-                    leftCurlState.snapTo(target)
+                val invertedTarget = (virtualSlotCount - 1 - target).coerceAtLeast(0)
+                if (progress == 0f && leftCurlState.current != invertedTarget) {
+                    leftCurlState.snapTo(invertedTarget)
                 }
             }
     }
@@ -402,8 +406,9 @@ internal fun SpreadPageTurnPageRenderer(
         snapshotFlow { leftCurlState.current.coerceIn(0, virtualSlotCount - 1) to leftCurlState.progress }
             .distinctUntilChanged()
             .collectLatest { (target, progress) ->
-                if (progress == 0f && rightCurlState.current != target) {
-                    rightCurlState.snapTo(target)
+                val realTarget = (virtualSlotCount - 1 - target).coerceAtLeast(0)
+                if (progress == 0f && rightCurlState.current != realTarget) {
+                    rightCurlState.snapTo(realTarget)
                 }
             }
     }
@@ -412,15 +417,16 @@ internal fun SpreadPageTurnPageRenderer(
         snapshotFlow { leftCurlState.current.coerceIn(0, virtualSlotCount - 1) }
             .distinctUntilChanged()
             .collectLatest { targetVirtualSlot ->
+                val realTarget = (virtualSlotCount - 1 - targetVirtualSlot).coerceAtLeast(0)
                 val boundaryTarget = resolvePageTurnRendererBoundaryChapterTarget(
-                    currentPage = targetVirtualSlot,
+                    currentPage = realTarget,
                     contentPageCount = spreadSlotCount,
                     hasPreviousChapter = hasPreviousChapter,
                     hasNextChapter = hasNextChapter,
                 )
                 if (boundaryTarget == HorizontalChapterSwipeAction.NONE) {
                     val targetSpreadSlot = resolvePageTurnRendererProgressPageIndex(
-                        currentPage = targetVirtualSlot,
+                        currentPage = realTarget,
                         contentPageCount = spreadSlotCount,
                         hasPreviousChapter = hasPreviousChapter,
                     )
@@ -443,7 +449,8 @@ internal fun SpreadPageTurnPageRenderer(
             actualPageIndex = targetSpreadSlot,
             hasPreviousChapter = hasPreviousChapter,
         )
-        if (leftCurlState.current != clampedTarget) leftCurlState.snapTo(clampedTarget)
+        val invertedTarget = (virtualSlotCount - 1 - clampedTarget).coerceAtLeast(0)
+        if (leftCurlState.current != invertedTarget) leftCurlState.snapTo(invertedTarget)
         if (rightCurlState.current != clampedTarget) rightCurlState.snapTo(clampedTarget)
         latestRequestedPageConsumed()
     }
@@ -506,8 +513,11 @@ internal fun SpreadPageTurnPageRenderer(
 
         Row(modifier = Modifier.fillMaxSize()) {
             SpreadColumnCurl(
-                modifier = Modifier.fillMaxWidth(0.5f),
+                modifier = Modifier
+                    .fillMaxWidth(0.5f)
+                    .zIndex(if (leftCurlState.progress > 0f) 1f else 0f),
                 mirrored = true,
+                invertPage = true,
                 columnOffset = 0,
                 pageCurlState = leftCurlState,
                 pageCurlConfig = leftPageCurlConfig,
@@ -552,8 +562,11 @@ internal fun SpreadPageTurnPageRenderer(
                 onTextTap = onTextTap,
             )
             SpreadColumnCurl(
-                modifier = Modifier.fillMaxWidth(1f),
+                modifier = Modifier
+                    .fillMaxWidth(1f)
+                    .zIndex(if (rightCurlState.progress > 0f) 1f else 0f),
                 mirrored = false,
+                invertPage = false,
                 columnOffset = 1,
                 pageCurlState = rightCurlState,
                 pageCurlConfig = rightPageCurlConfig,
@@ -689,6 +702,7 @@ private fun SpreadColumnCurl(
     // the library's own right-referenced geometry land on the screen's actual left edge, so this
     // surface's fold anchors at the spine the same way the unmirrored right surface already does.
     mirrored: Boolean,
+    invertPage: Boolean,
     columnOffset: Int,
     pageCurlState: PageCurlState,
     pageCurlConfig: PageCurlConfig,
@@ -744,12 +758,13 @@ private fun SpreadColumnCurl(
         config = pageCurlConfig,
         modifier = curlModifier,
     ) { page ->
+        val actualPage = if (invertPage) (virtualSlotCount - 1 - page).coerceAtLeast(0) else page
         val boundaryPreview = if (!showBoundaryChapterPages) {
             null
         } else {
             when (
                 resolvePageTurnRendererBoundaryChapterTarget(
-                    currentPage = page,
+                    currentPage = actualPage,
                     contentPageCount = spreadSlotCount,
                     hasPreviousChapter = hasPreviousChapter,
                     hasNextChapter = hasNextChapter,
@@ -759,8 +774,8 @@ private fun SpreadColumnCurl(
                 HorizontalChapterSwipeAction.NEXT,
                 -> {
                     createNovelPageBoundaryPreviewData(
-                        chapterLabel = if (page <= 0) previousChapterLabel else nextChapterLabel,
-                        chapterName = if (page <= 0) previousChapterName else nextChapterName,
+                        chapterLabel = if (actualPage <= 0) previousChapterLabel else nextChapterLabel,
+                        chapterName = if (actualPage <= 0) previousChapterName else nextChapterName,
                         chapterHint = boundaryChapterHint,
                     )
                 }
@@ -769,7 +784,7 @@ private fun SpreadColumnCurl(
         }
         val contentPage = if (boundaryPreview == null) {
             val spreadSlot = resolvePageTurnRendererProgressPageIndex(
-                currentPage = page,
+                currentPage = actualPage,
                 contentPageCount = spreadSlotCount,
                 hasPreviousChapter = hasPreviousChapter,
             )
@@ -787,7 +802,7 @@ private fun SpreadColumnCurl(
             // The two surfaces address independent PageCurl instances with their own page-index
             // spaces, so columnOffset has to be part of the key or they would collide in the
             // shared cache despite showing different halves of the spread.
-            pageIndex = page * 2 + columnOffset,
+            pageIndex = actualPage * 2 + columnOffset,
             pageCount = virtualSlotCount * 2,
             pageContentHash = pageContentIdentity.hashCode(),
             pageSize = pageSize,
