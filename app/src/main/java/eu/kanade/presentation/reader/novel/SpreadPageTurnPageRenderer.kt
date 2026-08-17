@@ -243,6 +243,7 @@ internal fun SpreadPageTurnPageRenderer(
             handleSpreadCustomTap(
                 size = size,
                 offset = offset,
+                isRightSide = false,
                 currentSpreadSlot = currentSpreadSlot,
                 spreadSlotCount = spreadSlotCount,
                 latestCustomTapZonesEnabled = latestCustomTapZonesEnabled,
@@ -263,6 +264,7 @@ internal fun SpreadPageTurnPageRenderer(
             handleSpreadCustomTap(
                 size = size,
                 offset = offset,
+                isRightSide = true,
                 currentSpreadSlot = currentSpreadSlot,
                 spreadSlotCount = spreadSlotCount,
                 latestCustomTapZonesEnabled = latestCustomTapZonesEnabled,
@@ -624,6 +626,7 @@ private fun instantPageTurnAnimation(): suspend Animatable<Edge, AnimationVector
 private fun handleSpreadCustomTap(
     size: IntSize,
     offset: Offset,
+    isRightSide: Boolean,
     currentSpreadSlot: Int,
     spreadSlotCount: Int,
     latestCustomTapZonesEnabled: Boolean,
@@ -637,12 +640,19 @@ private fun handleSpreadCustomTap(
     latestOpenPreviousChapter: () -> Unit,
     latestOpenNextChapter: () -> Unit,
 ): Boolean {
+    val fullWidth = size.width * 2f
+    val absoluteTapX = if (isRightSide) {
+        size.width + offset.x
+    } else {
+        size.width - offset.x
+    }
+
     val customTapAction = if (latestCustomTapZonesEnabled) {
         resolvePageTurnConfiguredTapAction(
             zoneAction = resolveConfiguredNovelReaderTapAction(
-                tapX = offset.x,
+                tapX = absoluteTapX,
                 tapY = offset.y,
-                width = size.width.toFloat(),
+                width = fullWidth,
                 height = size.height.toFloat(),
                 customTapZonesEnabled = true,
                 tapZoneActions = latestTapZoneActions,
@@ -656,7 +666,7 @@ private fun handleSpreadCustomTap(
         )
     } else {
         resolvePageTurnCustomTapAction(
-            tapXFraction = if (size.width > 0) offset.x / size.width.toFloat() else 0.5f,
+            tapXFraction = if (fullWidth > 0) absoluteTapX / fullWidth else 0.5f,
             currentPage = currentSpreadSlot,
             pageCount = spreadSlotCount.coerceAtLeast(1),
             centerTapWidthFraction = latestRendererConfig.centerTapWidthFraction,
