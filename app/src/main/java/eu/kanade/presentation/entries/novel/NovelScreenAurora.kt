@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -92,6 +93,8 @@ import eu.kanade.presentation.entries.components.aurora.auroraSpringClick
 import eu.kanade.presentation.entries.components.aurora.rememberTitleScreenStaggerState
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraDetailCardBackgroundColors
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraDetailCardBorderColors
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraFabBottomPadding
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroBottomPadding
 import eu.kanade.presentation.entries.components.aurora.titleScreenStagger
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
@@ -341,6 +344,7 @@ fun NovelScreenAuroraImpl(
     val hazeState = remember { HazeState() }
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
+    val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.entryMaxWidthDp
     val useTwoPaneLayout = shouldUseNovelAuroraTwoPane(auroraAdaptiveSpec.deviceClass)
@@ -2030,6 +2034,7 @@ fun NovelScreenAuroraImpl(
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(AuroraZIndex.HERO)
+                        .padding(bottom = resolveAuroraHeroBottomPadding(navigationBarsBottom))
                         .graphicsLayer { alpha = heroAlpha },
                     contentAlignment = Alignment.BottomStart,
                 ) {
@@ -2069,7 +2074,10 @@ fun NovelScreenAuroraImpl(
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(AuroraZIndex.HERO)
-                        .padding(end = 20.dp, bottom = 20.dp),
+                        .padding(
+                            end = 20.dp,
+                            bottom = resolveAuroraFabBottomPadding(navigationBarsBottom),
+                        ),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                     AuroraTitleHeroActionFab(

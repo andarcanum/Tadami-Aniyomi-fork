@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -112,6 +113,8 @@ import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
 import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.aurora.auroraSpringClick
 import eu.kanade.presentation.entries.components.aurora.rememberTitleScreenStaggerState
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraFabBottomPadding
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroBottomPadding
 import eu.kanade.presentation.entries.components.aurora.titleScreenStagger
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.components.resolveExternalMetadataCover
@@ -390,6 +393,7 @@ fun AnimeScreenAuroraImpl(
     val hazeState = remember { HazeState() }
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
+    val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val auroraAdaptiveSpec = remember(isTabletUi, configuration.screenWidthDp) {
         resolveAuroraAdaptiveSpec(
             isTabletUi = isTabletUi,
@@ -1711,7 +1715,7 @@ fun AnimeScreenAuroraImpl(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .zIndex(AuroraZIndex.HERO)
-                        .padding(bottom = 0.dp),
+                        .padding(bottom = resolveAuroraHeroBottomPadding(navigationBarsBottom)),
                     contentAlignment = Alignment.BottomStart,
                 ) {
                     val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
@@ -1762,7 +1766,10 @@ fun AnimeScreenAuroraImpl(
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(AuroraZIndex.HERO)
-                        .padding(end = 20.dp, bottom = 20.dp),
+                        .padding(
+                            end = 20.dp,
+                            bottom = resolveAuroraFabBottomPadding(navigationBarsBottom),
+                        ),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                     AuroraTitleHeroActionFab(
