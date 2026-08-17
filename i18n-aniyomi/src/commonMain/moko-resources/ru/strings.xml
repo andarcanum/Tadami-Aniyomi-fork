@@ -2305,9 +2305,14 @@
     <string name="novel_reader_oled_edge_gradient">OLED-градиент по краям</string>
     <string name="novel_reader_oled_edge_gradient_summary">Использовать мягкое затемнение краев в темной теме для более комфортной прокрутки на OLED</string>
     <string name="novel_reader_bionic_reading">Бионическое чтение</string>
-    <string name="novel_reader_tab_general">Основные</string>
-    <string name="novel_reader_tab_reading">Чтение</string>
+    <string name="novel_reader_tab_general">Общие</string>
+    <string name="novel_reader_tab_reading">Стиль</string>
     <string name="novel_reader_tab_behavior">Поведение</string>
+    <string name="novel_reader_tab_tools">Инструменты</string>
+    <string name="novel_reader_section_express_switches">Быстрые переключатели</string>
+    <string name="novel_reader_auto_scroll_summary">Плавный скролл текста без касаний</string>
+    <string name="novel_reader_engine_settings">Движок рендера и скрипты</string>
+    <string name="novel_reader_section_text_rules">Правила автозамены текста</string>
     <string name="novel_reader_live_preview_badge">Превью</string>
     <string name="novel_reader_live_preview_sample">— Нет, это невозможно, — прошептала она, глядя в окно, где дождь стучал по стеклу. В комнате пахло старыми книгами и полынью.</string>
     <string name="novel_reader_text_align_source_short">Источник</string>

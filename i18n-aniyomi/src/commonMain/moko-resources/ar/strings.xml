@@ -525,8 +525,13 @@
     <string name="novel_reader_accessibility">إمكانية الوصول</string>
     <string name="novel_reader_advanced">متقدم</string>
     <string name="novel_reader_tab_general">عام</string>
-    <string name="novel_reader_tab_reading">القراءة</string>
+    <string name="novel_reader_tab_reading">النمط</string>
     <string name="novel_reader_tab_behavior">السلوك</string>
+    <string name="novel_reader_tab_tools">الأدوات</string>
+    <string name="novel_reader_section_express_switches">مفاتيح سريعة</string>
+    <string name="novel_reader_auto_scroll_summary">تمرير سلس دون الحاجة للمس الشاشة</string>
+    <string name="novel_reader_engine_settings">محرك العرض والرموز المخصصة</string>
+    <string name="novel_reader_section_text_rules">قواعد استبدال النص</string>
     <string name="novel_reader_section_reading_behavior">وضع القراءة</string>
     <string name="novel_reader_section_gestures">إعدادات الإيماءات</string>
     <string name="novel_reader_section_translation">الترجمة</string>

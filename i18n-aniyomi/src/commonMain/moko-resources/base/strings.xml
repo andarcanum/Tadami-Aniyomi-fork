@@ -575,8 +575,13 @@
     <string name="novel_reader_accessibility">Accessibility</string>
     <string name="novel_reader_advanced">Advanced</string>
     <string name="novel_reader_tab_general">General</string>
-    <string name="novel_reader_tab_reading">Reading</string>
+    <string name="novel_reader_tab_reading">Style</string>
     <string name="novel_reader_tab_behavior">Behavior</string>
+    <string name="novel_reader_tab_tools">Tools</string>
+    <string name="novel_reader_section_express_switches">Quick Switches</string>
+    <string name="novel_reader_auto_scroll_summary">Smooth hands-free reading scroll</string>
+    <string name="novel_reader_engine_settings">Rendering Engine &amp; Custom Code</string>
+    <string name="novel_reader_section_text_rules">Text Replace Rules</string>
     <string name="novel_reader_live_preview_badge">Preview</string>
     <string name="novel_reader_live_preview_sample">— No, that is impossible, — she whispered, watching the rain strike the glass. The room smelled of old books and wormwood.</string>
     <string name="novel_reader_text_align_source_short">Source</string>

@@ -94,6 +94,7 @@ fun NovelReaderSettingsDialog(
         stringResource(AYMR.strings.novel_reader_tab_general),
         stringResource(AYMR.strings.novel_reader_tab_reading),
         stringResource(AYMR.strings.novel_reader_tab_behavior),
+        stringResource(AYMR.strings.novel_reader_tab_tools),
     )
     val pagerState = rememberPagerState { tabTitles.size }
     val scope = rememberCoroutineScope()
@@ -223,27 +224,32 @@ fun NovelReaderSettingsDialog(
                             0 -> GeneralTab(
                                 settings = settings,
                                 sourceId = sourceId,
-                                currentWebViewActive = currentWebViewActive,
-                                currentPageReaderActive = currentPageReaderActive,
                                 overrideEnabled = overrideEnabled,
                                 preferences = preferences,
                                 onDismissRequest = onDismissRequest,
                                 bookModeActive = bookModeActive,
-                                onPrepareBook = onPrepareBook,
-                                prepareBookInProgress = prepareBookInProgress,
-                                preparedChapterCount = preparedChapterCount,
-                                totalChapterCount = totalChapterCount,
                             )
                             1 -> ReadingTab(
                                 settings = settings,
                                 sourceId = sourceId,
                                 overrideEnabled = overrideEnabled,
                                 preferences = preferences,
+                                onDismissRequest = onDismissRequest,
+                                currentWebViewActive = currentWebViewActive,
+                                currentPageReaderActive = currentPageReaderActive,
+                                bookModeActive = bookModeActive,
                             )
                             2 -> BehaviorTab(
                                 settings = settings,
                                 sourceId = sourceId,
                                 currentPageReaderActive = currentPageReaderActive,
+                                overrideEnabled = overrideEnabled,
+                                preferences = preferences,
+                                onDismissRequest = onDismissRequest,
+                            )
+                            3 -> ToolsTab(
+                                settings = settings,
+                                sourceId = sourceId,
                                 overrideEnabled = overrideEnabled,
                                 preferences = preferences,
                             )

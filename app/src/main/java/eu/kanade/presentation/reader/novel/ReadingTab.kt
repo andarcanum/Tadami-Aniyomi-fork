@@ -83,6 +83,10 @@ fun ReadingTab(
     sourceId: Long,
     overrideEnabled: Boolean,
     preferences: NovelReaderPreferences,
+    onDismissRequest: () -> Unit = {},
+    currentWebViewActive: Boolean = false,
+    currentPageReaderActive: Boolean = false,
+    bookModeActive: Boolean = false,
 ) {
     val context = LocalContext.current
 
@@ -90,11 +94,15 @@ fun ReadingTab(
         value: T,
         copyOverride: (NovelReaderOverride, T) -> NovelReaderOverride,
         setGlobal: (T) -> Unit,
+        dismissFamily: NovelReaderSettingsFamily? = null,
     ) {
         if (overrideEnabled) {
             preferences.updateSourceOverride(sourceId) { copyOverride(it, value) }
         } else {
             setGlobal(value)
+        }
+        if (dismissFamily != null && shouldDismissReaderSettingsDialogAfterFamilyChange(dismissFamily)) {
+            onDismissRequest()
         }
     }
 
@@ -991,35 +999,100 @@ fun ReadingTab(
             )
         }
 
-        AuroraGlassSection {
+        val rendererAvailability = remember(
+            currentPageReaderActive,
+            currentWebViewActive,
+            settings.bionicReading,
+            bookModeActive,
+        ) {
+            resolveRendererSettingsAvailability(
+                pageReaderEnabled = currentPageReaderActive,
+                showWebView = currentWebViewActive,
+                bionicReadingEnabled = settings.bionicReading,
+                bookModeEnabled = bookModeActive,
+            )
+        }
+
+        AuroraGlassSection(title = stringResource(AYMR.strings.novel_reader_engine_settings)) {
             AuroraToggleRow(
-                label = stringResource(AYMR.strings.novel_reader_page_edge_shadow),
-                subtitle = stringResource(AYMR.strings.novel_reader_page_edge_shadow_summary),
-                checked = settings.pageEdgeShadow,
+                label = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer),
+                subtitle = resolveRendererSettingSubtitle(
+                    baseSubtitle = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer_summary),
+                    reason = rendererAvailability.preferWebViewReason,
+                ),
+                checked = settings.preferWebViewRenderer,
+                enabled = rendererAvailability.preferWebViewEnabled,
                 onClick = {
                     update(
-                        !settings.pageEdgeShadow,
-                        { o, v -> o.copy(pageEdgeShadow = v) },
-                        { preferences.pageEdgeShadow().set(it) },
+                        !settings.preferWebViewRenderer,
+                        { o, v -> o.copy(preferWebViewRenderer = v) },
+                        { preferences.preferWebViewRenderer().set(it) },
+                        dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
                     )
                 },
             )
-            if (settings.pageEdgeShadow) {
-                LnReaderSliderRow(
-                    label = stringResource(AYMR.strings.novel_reader_page_edge_shadow_alpha),
-                    valueText = { "${(it * 100).roundToInt()}%" },
-                    committedValue = settings.pageEdgeShadowAlpha,
-                    range = 0.05f..1f,
-                    steps = 18,
-                    onCommit = {
-                        update(it, { o, v ->
-                            o.copy(pageEdgeShadowAlpha = v)
-                        }, { preferences.pageEdgeShadowAlpha().set(it) })
-                    },
-                )
-            }
+            AuroraToggleRow(
+                label = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental),
+                subtitle = resolveRendererSettingSubtitle(
+                    baseSubtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
+                    reason = rendererAvailability.richNativeReason,
+                ),
+                checked = settings.richNativeRendererExperimental,
+                enabled = rendererAvailability.richNativeEnabled,
+                onClick = {
+                    update(
+                        !settings.richNativeRendererExperimental,
+                        { o, v -> o.copy(richNativeRendererExperimental = v) },
+                        { preferences.richNativeRendererExperimental().set(it) },
+                        dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                    )
+                },
+            )
+            EditTextPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_custom_css),
+                subtitle = stringResource(AYMR.strings.novel_reader_custom_css_hint),
+                icon = null,
+                value = settings.customCSS,
+                onConfirm = {
+                    update(it, { o, v -> o.copy(customCSS = v) }, { preferences.customCSS().set(it) })
+                    true
+                },
+                singleLine = false,
+                canBeBlank = true,
+                formatSubtitle = false,
+            )
+            EditTextPreferenceWidget(
+                title = stringResource(AYMR.strings.novel_reader_custom_js),
+                subtitle = stringResource(AYMR.strings.novel_reader_custom_js_hint),
+                icon = null,
+                value = settings.customJS,
+                onConfirm = {
+                    update(it, { o, v -> o.copy(customJS = v) }, { preferences.customJS().set(it) })
+                    true
+                },
+                singleLine = false,
+                canBeBlank = true,
+                formatSubtitle = false,
+            )
         }
     }
+}
+
+@Composable
+private fun resolveRendererSettingSubtitle(
+    baseSubtitle: String,
+    reason: RendererSettingDisableReason?,
+): String {
+    val reasonText = when (reason) {
+        RendererSettingDisableReason.PAGE_MODE ->
+            stringResource(AYMR.strings.novel_reader_renderer_disabled_page_mode_summary)
+        RendererSettingDisableReason.WEBVIEW_ACTIVE ->
+            stringResource(AYMR.strings.novel_reader_renderer_disabled_webview_summary)
+        RendererSettingDisableReason.BIONIC_READING ->
+            stringResource(AYMR.strings.novel_reader_renderer_disabled_bionic_summary)
+        null -> null
+    }
+    return if (reasonText != null) "$baseSubtitle\n$reasonText" else baseSubtitle
 }
 
 @Composable
