@@ -120,15 +120,17 @@ fun GoogleTranslationDialog(
     val aurora = AuroraTheme.colors
     val baseScheme = MaterialTheme.colorScheme
     var sheetReveal by remember { mutableFloatStateOf(0f) }
+    val supportsBlurBehind = eu.kanade.presentation.util.rememberSupportsBlurBehind(aurora.isEInk)
 
-    val sheetContainer = remember(aurora.isDark, aurora.isEInk) {
+    val sheetContainer = remember(aurora.isDark, aurora.isEInk, supportsBlurBehind) {
         when {
             aurora.isEInk -> baseScheme.surfaceContainerHigh
+            !supportsBlurBehind -> aurora.surface
             aurora.isDark -> Color.Black.copy(alpha = 0.70f)
             else -> Color.White.copy(alpha = 0.88f)
         }
     }
-    val auroraScheme = remember(baseScheme, aurora) {
+    val auroraScheme = remember(baseScheme, aurora, sheetContainer) {
         baseScheme.copy(
             primary = aurora.accent,
             onPrimary = if (aurora.isDark) aurora.background else Color.White,
@@ -143,7 +145,6 @@ fun GoogleTranslationDialog(
         bottomEnd = ZeroCornerSize,
     )
     val pageMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.75f).dp
-    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !aurora.isEInk
 
     MaterialTheme(
         colorScheme = auroraScheme,
@@ -158,7 +159,7 @@ fun GoogleTranslationDialog(
                 shape = sheetShape,
             ),
             containerColor = sheetContainer,
-            scrimAlpha = 0f,
+            scrimAlpha = if (supportsBlurBehind) 0f else 0.5f,
             applyStatusBarsPadding = false,
             onRevealChange = { sheetReveal = it },
         ) {
@@ -167,13 +168,11 @@ fun GoogleTranslationDialog(
 
             DisposableEffect(window, supportsBlurBehind) {
                 val w = window
-                if (w != null) {
+                if (w != null && supportsBlurBehind) {
                     w.setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
                     w.setDimAmount(0f)
-                    if (supportsBlurBehind) {
-                        w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                        w.attributes = w.attributes.apply { blurBehindRadius = 0 }
-                    }
+                    w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    w.attributes = w.attributes.apply { blurBehindRadius = 0 }
                 }
                 onDispose {
                     if (w != null && supportsBlurBehind) {
@@ -186,6 +185,7 @@ fun GoogleTranslationDialog(
 
             LaunchedEffect(window, supportsBlurBehind) {
                 val w = window ?: return@LaunchedEffect
+                if (!supportsBlurBehind) return@LaunchedEffect
                 snapshotFlow { revealState.value.coerceIn(0f, 1f) }
                     .map { reveal -> (reveal * 20f).roundToInt().coerceIn(0, 20) }
                     .distinctUntilChanged()
@@ -193,7 +193,6 @@ fun GoogleTranslationDialog(
                         applyGoogleTranslationSheetWindowFx(
                             window = w,
                             reveal = step / 20f,
-                            supportsBlurBehind = supportsBlurBehind,
                         )
                     }
             }
@@ -455,23 +454,18 @@ fun GoogleTranslationDialog(
 private fun applyGoogleTranslationSheetWindowFx(
     window: Window,
     reveal: Float,
-    supportsBlurBehind: Boolean,
 ) {
     val glass = ((reveal - 0.18f) / 0.82f).coerceIn(0f, 1f)
-    if (supportsBlurBehind) {
-        val radius = if (glass <= 0.02f) {
-            0
-        } else {
-            (44f * glass).roundToInt().coerceIn(1, 48)
-        }
-        val attrs = window.attributes
-        if (attrs.blurBehindRadius != radius) {
-            window.attributes = attrs.apply { blurBehindRadius = radius }
-        }
-        window.setDimAmount(0.18f * glass)
+    val radius = if (glass <= 0.02f) {
+        0
     } else {
-        window.setDimAmount(0.26f * glass)
+        (44f * glass).roundToInt().coerceIn(1, 48)
     }
+    val attrs = window.attributes
+    if (attrs.blurBehindRadius != radius) {
+        window.attributes = attrs.apply { blurBehindRadius = radius }
+    }
+    window.setDimAmount(0.18f * glass)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

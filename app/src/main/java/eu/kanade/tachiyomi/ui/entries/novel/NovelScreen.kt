@@ -1253,7 +1253,7 @@ private fun NovelAuroraDownloadSheet(
     var scope by remember { mutableStateOf<NovelDownloadScope>(NovelDownloadScope.Next(20)) }
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
-    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !colors.isEInk
+    val supportsBlurBehind = eu.kanade.presentation.util.rememberSupportsBlurBehind(colors.isEInk)
     var sheetReveal by remember { mutableFloatStateOf(0f) }
     val accent = if (colors.isEInk) colors.textPrimary else colors.accent
     val selectedChipAmount = (scope as? NovelDownloadScope.Next)?.amount?.takeIf { it in setOf(1, 5, 10) }
@@ -1773,7 +1773,7 @@ private fun NovelEpubExportSheet(
 
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
-    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !colors.isEInk
+    val supportsBlurBehind = eu.kanade.presentation.util.rememberSupportsBlurBehind(colors.isEInk)
     var sheetReveal by remember { mutableFloatStateOf(0f) }
     val pressInteraction = remember { MutableInteractionSource() }
     val isPressed by pressInteraction.collectIsPressedAsState()

@@ -68,7 +68,7 @@ fun TabbedDialog(
     content: @Composable (Int) -> Unit,
 ) {
     val auroraColors = AuroraTheme.colors
-    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !auroraColors.isEInk
+    val supportsBlurBehind = eu.kanade.presentation.util.rememberSupportsBlurBehind(auroraColors.isEInk)
     var sheetReveal by remember { mutableFloatStateOf(0f) }
     AdaptiveSheet(
         modifier = modifier,

@@ -147,7 +147,7 @@ fun AuroraNoteEditorDialog(
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val accent = if (colors.isEInk) colors.textPrimary else colors.accent
-    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !colors.isEInk
+    val supportsBlurBehind = eu.kanade.presentation.util.rememberSupportsBlurBehind(colors.isEInk)
     var sheetReveal by remember { mutableFloatStateOf(0f) }
 
     AdaptiveSheet(

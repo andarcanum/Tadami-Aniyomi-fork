@@ -77,7 +77,7 @@ fun LanguageFilterChip(
 
     if (showSheet) {
         val colors = AuroraTheme.colors
-        val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !colors.isEInk
+        val supportsBlurBehind = eu.kanade.presentation.util.rememberSupportsBlurBehind(colors.isEInk)
         var sheetReveal by remember { mutableFloatStateOf(1f) }
 
         AdaptiveSheet(

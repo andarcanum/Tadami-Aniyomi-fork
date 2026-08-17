@@ -68,7 +68,7 @@ fun NovelBookBuildDialog(
     if (progress == null && missingChapterCount == null) return
     val colors = AuroraTheme.colors
     val building = progress != null
-    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !colors.isEInk
+    val supportsBlurBehind = eu.kanade.presentation.util.rememberSupportsBlurBehind(colors.isEInk)
     val containerColor = when {
         colors.isEInk -> MaterialTheme.colorScheme.surfaceContainerHigh
         !supportsBlurBehind -> colors.surface
