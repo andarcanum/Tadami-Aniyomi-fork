@@ -30,6 +30,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -80,6 +82,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -453,14 +456,21 @@ object HomeScreen : Screen() {
                             },
                             contentWindowInsets = WindowInsets(0),
                         ) { contentPadding ->
+                            val layoutDirection = LocalLayoutDirection.current
                             Box(
                                 modifier = Modifier
-                                    .padding(top = contentPadding.calculateTopPadding())
+                                    .padding(
+                                        top = contentPadding.calculateTopPadding(),
+                                        start = contentPadding.calculateStartPadding(layoutDirection),
+                                        end = contentPadding.calculateEndPadding(layoutDirection),
+                                    )
                                     .consumeWindowInsets(contentPadding)
                                     .hazeSource(hazeState),
                             ) {
                                 CompositionLocalProvider(
-                                    LocalHostScaffoldContentPadding provides contentPadding,
+                                    LocalHostScaffoldContentPadding provides PaddingValues(
+                                        bottom = contentPadding.calculateBottomPadding(),
+                                    ),
                                 ) {
                                     if (resolvedTransitionMode == ResolvedNavigationTransitionMode.NONE) {
                                         val currentTab = tabNavigator.current
