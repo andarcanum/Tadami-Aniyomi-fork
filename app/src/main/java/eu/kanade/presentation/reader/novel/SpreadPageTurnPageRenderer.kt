@@ -27,6 +27,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
@@ -198,6 +199,15 @@ internal fun SpreadPageTurnPageRenderer(
     // Advances both surfaces together: the one facing the turn direction plays the real fold, the
     // other jumps straight to its new page with no visible animation of its own (snap()), the same
     // way the spine-side page of a real book is simply "already there" once you see it.
+    //
+    // eu.wewox.pagecurl.page.PageCurl's own drag/animation geometry always references the widget's
+    // own size.width (NewEdgeCreator anchors on it, and PageCurlState.setup's forward Animatable
+    // always starts at the right edge): using prev()/backward on an unmirrored widget opens the
+    // current page from its own left edge outward, not a new page sliding in over it like a book
+    // leaf. The left surface is mirrored (see SpreadColumnCurl) so the library's right-referenced
+    // geometry lands on the screen's actual left edge — which means the left surface always calls
+    // next()/forward internally, for both book directions; only which surface plays the real
+    // animation and which one just snaps changes.
     fun turnForward() {
         tapCoroutineScope.launch {
             rightCurlState.next(
@@ -214,10 +224,10 @@ internal fun SpreadPageTurnPageRenderer(
     }
     fun turnBackward() {
         tapCoroutineScope.launch {
-            leftCurlState.prev(
+            leftCurlState.next(
                 createPageTurnAnimation(
                     animationDurationMillis = latestRendererConfig.preset.animationDurationMillis,
-                    forward = false,
+                    forward = true,
                     curlAmount = latestRendererConfig.preset.curlAmount,
                 ),
             )
@@ -275,21 +285,29 @@ internal fun SpreadPageTurnPageRenderer(
         leftPageCurlConfig.shadowAlpha = rendererConfig.preset.shadowAlpha
         leftPageCurlConfig.shadowRadius = rendererConfig.shadowRadiusDp.dp
         leftPageCurlConfig.shadowOffset = DpOffset(rendererConfig.shadowOffsetXDp.dp, 0.dp)
-        // The left surface only ever turns backward: its fold lives at the outer (left) edge.
-        leftPageCurlConfig.dragForwardEnabled = false
-        leftPageCurlConfig.dragBackwardEnabled = currentVirtualSlot > 0
-        leftPageCurlConfig.tapBackwardEnabled = latestTapToScrollEnabled && currentSpreadSlot > 0
-        leftPageCurlConfig.tapForwardEnabled = false
+        // The library's own drag-success target (dragTargetReachFraction) is tuned for a
+        // full-width single page (it can sit well past the halfway point). Each spread surface is
+        // only half that width, so the fold's release target has to be the spine itself — the
+        // reach a drag needs to travel to at most doubles compared to a full-width page.
+        val spineReach = 0.5f
+        // The left surface is mirrored (see SpreadColumnCurl), so the library's own forward
+        // mechanism — which always references size.width internally — is what turnBackward() drives
+        // here; the fold still lives at the outer (left) edge of the screen once un-mirrored. The
+        // library's backward mechanism is unused on this surface.
+        leftPageCurlConfig.dragForwardEnabled = currentVirtualSlot > 0
+        leftPageCurlConfig.dragBackwardEnabled = false
+        leftPageCurlConfig.tapBackwardEnabled = false
+        leftPageCurlConfig.tapForwardEnabled = latestTapToScrollEnabled && currentSpreadSlot > 0
         leftPageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
         leftPageCurlConfig.dragInteraction = PageCurlConfig.StartEndDragInteraction(
             pointerBehavior = rendererConfig.dragPointerBehavior,
             backward = PageCurlConfig.StartEndDragInteraction.Config(
-                start = Rect(0f, 0f, rendererConfig.dragActivationEdgeFraction, 1f),
-                end = Rect(1f - rendererConfig.dragTargetReachFraction, 0f, 1f, 1f),
+                start = Rect(0f, 0f, 0f, 1f),
+                end = Rect(0f, 0f, 0f, 1f),
             ),
             forward = PageCurlConfig.StartEndDragInteraction.Config(
-                start = Rect(1f, 0f, 1f, 1f),
-                end = Rect(1f, 0f, 1f, 1f),
+                start = Rect(1f - rendererConfig.dragActivationEdgeFraction, 0f, 1f, 1f),
+                end = Rect(0f, 0f, spineReach, 1f),
             ),
         )
         leftPageCurlConfig.tapInteraction = tapInteraction
@@ -314,7 +332,7 @@ internal fun SpreadPageTurnPageRenderer(
             ),
             forward = PageCurlConfig.StartEndDragInteraction.Config(
                 start = Rect(1f - rendererConfig.dragActivationEdgeFraction, 0f, 1f, 1f),
-                end = Rect(0f, 0f, rendererConfig.dragTargetReachFraction, 1f),
+                end = Rect(0f, 0f, spineReach, 1f),
             ),
         )
         rightPageCurlConfig.tapInteraction = tapInteraction
@@ -489,6 +507,7 @@ internal fun SpreadPageTurnPageRenderer(
         Row(modifier = Modifier.fillMaxSize()) {
             SpreadColumnCurl(
                 modifier = Modifier.fillMaxWidth(0.5f),
+                mirrored = true,
                 columnOffset = 0,
                 pageCurlState = leftCurlState,
                 pageCurlConfig = leftPageCurlConfig,
@@ -534,6 +553,7 @@ internal fun SpreadPageTurnPageRenderer(
             )
             SpreadColumnCurl(
                 modifier = Modifier.fillMaxWidth(1f),
+                mirrored = false,
                 columnOffset = 1,
                 pageCurlState = rightCurlState,
                 pageCurlConfig = rightPageCurlConfig,
@@ -661,6 +681,14 @@ private fun handleSpreadCustomTap(
 @Composable
 private fun SpreadColumnCurl(
     modifier: Modifier,
+    // eu.wewox.pagecurl.page.PageCurl's own drag/animation geometry always references the widget's
+    // right edge (NewEdgeCreator anchors on size.width, PageCurlState.setup's forward Animatable
+    // always runs right-to-left): using the library's backward mechanism unmirrored opens the
+    // current page from its own left edge outward instead of bringing a new page in from the left
+    // like a book leaf. Mirroring the whole widget horizontally (and un-mirroring its content) makes
+    // the library's own right-referenced geometry land on the screen's actual left edge, so this
+    // surface's fold anchors at the spine the same way the unmirrored right surface already does.
+    mirrored: Boolean,
     columnOffset: Int,
     pageCurlState: PageCurlState,
     pageCurlConfig: PageCurlConfig,
@@ -704,12 +732,17 @@ private fun SpreadColumnCurl(
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
     onTextTap: (Float, Float, Float, Float) -> Unit,
 ) {
+    val curlModifier = if (mirrored) {
+        modifier.fillMaxSize().graphicsLayer(scaleX = -1f)
+    } else {
+        modifier.fillMaxSize()
+    }
     PageCurl(
         count = virtualSlotCount,
         key = { it },
         state = pageCurlState,
         config = pageCurlConfig,
-        modifier = modifier.fillMaxSize(),
+        modifier = curlModifier,
     ) { page ->
         val boundaryPreview = if (!showBoundaryChapterPages) {
             null
@@ -793,11 +826,16 @@ private fun SpreadColumnCurl(
             textShadowY = readerSettings.textShadowY,
             bionicReading = readerSettings.bionicReading,
         )
+        val contentModifier = if (mirrored) {
+            Modifier.fillMaxSize().graphicsLayer(scaleX = -1f)
+        } else {
+            Modifier.fillMaxSize()
+        }
         NovelPageTurnSnapshotRenderer(
             snapshotKey = pageSnapshotKey,
             snapshotCache = snapshotCache,
             preferCachedBitmap = false,
-            modifier = Modifier.fillMaxSize(),
+            modifier = contentModifier,
         ) {
             NovelAtmosphereBackground(
                 backgroundColor = textBackground,
