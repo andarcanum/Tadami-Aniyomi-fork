@@ -32,8 +32,8 @@ import eu.kanade.domain.ui.model.EInkProfile
  * [scrollProgress] (0f..1f, default 0f) densifies the lens as content scrolls
  * under the top bar: at 1f the fill is nearly opaque, so list rows passing
  * underneath no longer blend into the button. [isPosterMode] forces a dense
- * dark lens (white icons expected) regardless of theme, so the buttons stay
- * readable over fullscreen cover artwork.
+ * lens matching the current theme (dark in dark theme, dense white in light
+ * theme) so the buttons stay readable over fullscreen cover artwork.
  */
 fun Modifier.auroraHeaderIconSurface(
     colors: AuroraColors,
@@ -46,19 +46,22 @@ fun Modifier.auroraHeaderIconSurface(
         return background(resolveAuroraIconSurfaceColor(colors), shape)
     }
 
-    // Fullscreen-poster title screens get a permanently dark, dense lens so the
-    // buttons stay readable over uncontrolled cover artwork, in both themes.
-    // Otherwise the lens starts at the classic translucent values and densifies
-    // as content scrolls underneath (scrollProgress 0f = top, 1f = hero gone).
+    // Fullscreen-poster title screens get a permanently dense lens so the
+    // buttons stay readable over uncontrolled cover artwork: dark in the dark
+    // theme, a near-opaque white in the light theme (mirrors the light theme's
+    // classic white lens, just denser + a soft shadow so it separates from
+    // light covers). Otherwise the lens starts at the classic translucent
+    // values and densifies as content scrolls underneath
+    // (scrollProgress 0f = top, 1f = hero gone).
     val density = scrollProgress.coerceIn(0f, 1f)
     val tintAlpha = if (isPosterMode) {
-        0.84f
+        if (colors.isDark) 0.84f else 0.90f
     } else {
         val baseAlpha = if (colors.isDark) 0.60f else 0.70f
         val denseAlpha = if (colors.isDark) 0.94f else 0.96f
         baseAlpha + (denseAlpha - baseAlpha) * density
     }
-    val useDarkLens = colors.isDark || isPosterMode
+    val useDarkLens = colors.isDark
     val tintColor = if (useDarkLens) {
         if (isPosterMode) Color(0xFF0E1118) else Color(0xFF161922)
     } else {
@@ -67,7 +70,11 @@ fun Modifier.auroraHeaderIconSurface(
     val shadowColor = if (useDarkLens) {
         Color.Black.copy(alpha = if (isPosterMode) 0.42f else 0.35f)
     } else {
-        colors.textPrimary.copy(alpha = 0.30f)
+        if (isPosterMode) {
+            Color.Black.copy(alpha = 0.30f)
+        } else {
+            colors.textPrimary.copy(alpha = 0.30f)
+        }
     }
 
     val shadowModifier = this.shadow(
@@ -83,7 +90,7 @@ fun Modifier.auroraHeaderIconSurface(
         // Poster mode keeps a constant density; otherwise the layer densifies
         // together with the tint as content scrolls underneath.
         val effectAlpha = if (isPosterMode) {
-            0.88f
+            if (colors.isDark) 0.88f else 0.94f
         } else {
             0.82f + 0.14f * density
         }
@@ -120,7 +127,7 @@ fun Modifier.auroraHeaderIconSurface(
         } else {
             hazeModifier.background(
                 brush = Brush.verticalGradient(
-                    0f to Color.White.copy(alpha = 0.35f),
+                    0f to Color.White.copy(alpha = if (isPosterMode) 0.55f else 0.35f),
                     1f to Color.Transparent,
                 ),
                 shape = shape,
@@ -138,8 +145,8 @@ fun Modifier.auroraHeaderIconSurface(
         } else {
             hazeModifier.background(
                 brush = Brush.verticalGradient(
-                    0f to Color.White.copy(alpha = 0.90f),
-                    1f to Color.White.copy(alpha = 0.60f),
+                    0f to Color.White.copy(alpha = if (isPosterMode) 0.95f else 0.90f),
+                    1f to Color.White.copy(alpha = if (isPosterMode) 0.85f else 0.60f),
                 ),
                 shape = shape,
             )
