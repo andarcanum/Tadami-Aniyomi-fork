@@ -1,9 +1,13 @@
 package eu.kanade.tachiyomi.ui.home
 
 import android.content.Context
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
+import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -87,6 +91,7 @@ internal class HomeHubScreenModel(
     private val getNextEpisodes: GetNextEpisodes by injectLazy()
     private val getLibraryAnime: GetLibraryAnime by injectLazy()
     private val getAnimeCategories: GetAnimeCategories by injectLazy()
+    private val getEnabledAnimeSources: GetEnabledAnimeSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: AnimeSourceManager by injectLazy()
     private val userProfileManager: tachiyomi.data.achievement.UserProfileManager by injectLazy()
@@ -176,6 +181,27 @@ internal class HomeHubScreenModel(
         cached.hero?.let { hero ->
             screenModelScope.launchIO {
                 loadHeroEpisode(hero.entryId, hero.subId)
+            }
+        }
+
+        // Enabled (installed) anime sources for the Home source picker — mirrors Browse's logic
+        screenModelScope.launchIO {
+            getEnabledAnimeSources.subscribe().collectLatest { sources ->
+                mutableState.update {
+                    it.copy(
+                        availableSources = sources.distinctBy { it.id }.map { s ->
+                            HomeSourceItem(
+                                id = s.id,
+                                name = s.name,
+                                lang = s.lang,
+                                isLocal = s.id == tachiyomi.source.local.entries.anime.LocalAnimeSource.ID,
+                                iconBitmap = animeExtensionManager.getAppIconForSource(
+                                    s.id,
+                                )?.toBitmap()?.asImageBitmap(),
+                            )
+                        },
+                    )
+                }
             }
         }
     }
@@ -372,7 +398,13 @@ internal class HomeHubScreenModel(
         )
     }
 
+    private val animeExtensionManager: AnimeExtensionManager by injectLazy()
+
     fun getLastUsedAnimeSourceId(): Long = sourcePreferences.lastUsedAnimeSource().get()
+
+    fun setLastUsedAnimeSourceId(sourceId: Long) {
+        sourcePreferences.lastUsedAnimeSource().set(sourceId)
+    }
 
     fun getLastUsedAnimeSourceName(): String? {
         val sourceId = sourcePreferences.lastUsedAnimeSource().get()
