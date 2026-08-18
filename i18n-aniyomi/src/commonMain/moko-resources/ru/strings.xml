@@ -2947,4 +2947,22 @@
     <string name="pref_title_screen_style_glass_stack">Стек матового стекла (Aurora)</string>
     <string name="pref_title_screen_animation">Анимация открытия тайтла</string>
     <string name="pref_title_screen_animation_summary">Приближение при открытии экрана тайтла с каскадом контента. Отключите для стандартного перехода.</string>
+
+    <!-- Home Search Bar & Source Picker -->
+    <string name="home_search_placeholder_global">Глобальный поиск…</string>
+    <string name="home_search_placeholder_default">Поиск %1$s…</string>
+    <string name="home_search_placeholder_search">Поиск…</string>
+    <string name="home_search_section_manga">манги</string>
+    <string name="home_search_section_anime">аниме</string>
+    <string name="home_search_section_novel">ранобэ</string>
+    <string name="home_select_source">Выбрать источник</string>
+    <string name="home_all_sources">Все источники</string>
+    <string name="home_all_sources_summary">Глобальный поиск</string>
+    <string name="home_source_picker_title">Выбор источника</string>
+    <string name="home_source_picker_subtitle">Тап по источнику — выбрать • Кнопка «Каталог» — открыть источник</string>
+    <string name="home_source_picker_search">Найти источник…</string>
+    <string name="home_source_picker_no_results">Ничего не найдено</string>
+    <string name="home_open_catalog">Открыть каталог</string>
+    <string name="home_catalog_button">Каталог</string>
+    <string name="home_search_cancel">Отмена</string>
 </resources>

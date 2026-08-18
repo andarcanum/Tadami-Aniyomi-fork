@@ -2931,4 +2931,22 @@
     <string name="pref_title_screen_style_glass_stack">Layered Glass Stack (Aurora)</string>
     <string name="pref_title_screen_animation">Title screen open animation</string>
     <string name="pref_title_screen_animation_summary">Zoom into title screens with a content cascade. Disable to use the standard transition.</string>
+
+    <!-- Home Search Bar & Source Picker -->
+    <string name="home_search_placeholder_global">Global search…</string>
+    <string name="home_search_placeholder_default">Search %1$s…</string>
+    <string name="home_search_placeholder_search">Search…</string>
+    <string name="home_search_section_manga">manga</string>
+    <string name="home_search_section_anime">anime</string>
+    <string name="home_search_section_novel">novels</string>
+    <string name="home_select_source">Select source</string>
+    <string name="home_all_sources">All sources</string>
+    <string name="home_all_sources_summary">Global search</string>
+    <string name="home_source_picker_title">Select source</string>
+    <string name="home_source_picker_subtitle">Tap a source to select it • Catalogue button opens the source</string>
+    <string name="home_source_picker_search">Find source…</string>
+    <string name="home_source_picker_no_results">No sources match</string>
+    <string name="home_open_catalog">Open catalogue</string>
+    <string name="home_catalog_button">Catalogue</string>
+    <string name="home_search_cancel">Cancel</string>
 </resources>
