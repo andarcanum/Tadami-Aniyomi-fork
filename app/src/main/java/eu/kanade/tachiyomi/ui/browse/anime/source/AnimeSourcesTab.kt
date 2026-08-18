@@ -1,8 +1,8 @@
 package eu.kanade.tachiyomi.ui.browse.anime.source
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.FilterList
-import androidx.compose.material.icons.outlined.TravelExplore
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,12 +36,12 @@ fun Screen.animeSourcesTab(): TabContent {
         actions = persistentListOf(
             AppBar.Action(
                 title = stringResource(MR.strings.action_global_search),
-                icon = Icons.Outlined.TravelExplore,
+                icon = Icons.Filled.TravelExplore,
                 onClick = { navigator.push(GlobalAnimeSearchScreen()) },
             ),
             AppBar.Action(
                 title = stringResource(MR.strings.action_filter),
-                icon = Icons.Outlined.FilterList,
+                icon = Icons.Filled.FilterList,
                 onClick = { navigator.push(AnimeSourcesFilterScreen()) },
             ),
         ),

@@ -40,11 +40,13 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
+import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.theme.resolveAuroraBorderColor
 import eu.kanade.presentation.theme.resolveAuroraControlContainerColor
 import eu.kanade.presentation.theme.resolveAuroraIconSurfaceColor
+import eu.kanade.tachiyomi.ui.home.LocalHomeHazeState
 import tachiyomi.data.achievement.UnlockableManager
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -106,18 +108,12 @@ private fun SettingsAuroraHeader(onBackClick: () -> Unit) {
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
+        AuroraTopBarIconButton(
             onClick = onBackClick,
-            modifier = Modifier
-                .auroraHeaderIconSurface(colors)
-                .size(40.dp),
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(AYMR.strings.aurora_back),
-                tint = colors.textPrimary,
-            )
-        }
+            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = stringResource(AYMR.strings.aurora_back),
+            hazeState = LocalHomeHazeState.current,
+        )
 
         Spacer(modifier = Modifier.width(16.dp))
 

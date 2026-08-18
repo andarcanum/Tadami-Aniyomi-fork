@@ -54,8 +54,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.browse.novel.components.BaseNovelSourceItem
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.tachiyomi.ui.browse.novel.source.NovelSourcesScreenModel
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreenModel.Listing
+import eu.kanade.tachiyomi.ui.home.LocalHomeHazeState
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import tachiyomi.domain.source.novel.model.Pin
 import tachiyomi.domain.source.novel.model.Source
@@ -117,11 +119,14 @@ fun NovelSourcesScreen(
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                         ) {
                             if (!active) {
+                                // Collapsed - Icon Button (shared Aurora header lens)
                                 Box(
                                     modifier = Modifier
                                         .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(searchBackground)
+                                        .auroraHeaderIconSurface(
+                                            colors = colors,
+                                            hazeState = LocalHomeHazeState.current,
+                                        )
                                         .clickable { isSearchActive = true },
                                     contentAlignment = Alignment.Center,
                                 ) {

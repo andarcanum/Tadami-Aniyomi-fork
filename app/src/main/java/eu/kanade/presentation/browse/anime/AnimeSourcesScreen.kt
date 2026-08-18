@@ -51,8 +51,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.browse.anime.components.BaseAnimeSourceItem
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.tachiyomi.ui.browse.anime.source.AnimeSourcesScreenModel
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreenModel.Listing
+import eu.kanade.tachiyomi.ui.home.LocalHomeHazeState
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import tachiyomi.domain.source.anime.model.AnimeSource
 import tachiyomi.domain.source.anime.model.Pin
@@ -115,12 +117,14 @@ fun AnimeSourcesScreen(
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                         ) {
                             if (!active) {
-                                // Collapsed - Icon Button
+                                // Collapsed - Icon Button (shared Aurora header lens)
                                 Box(
                                     modifier = Modifier
                                         .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(searchBackground)
+                                        .auroraHeaderIconSurface(
+                                            colors = colors,
+                                            hazeState = LocalHomeHazeState.current,
+                                        )
                                         .clickable { isSearchActive = true },
                                     contentAlignment = Alignment.Center,
                                 ) {

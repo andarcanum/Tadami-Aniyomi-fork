@@ -531,20 +531,15 @@ private fun AuroraUpdatesPinnedHeader(
                 }
             }
 
+            val homeHazeState = eu.kanade.tachiyomi.ui.home.LocalHomeHazeState.current
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
+                eu.kanade.presentation.more.settings.AuroraTopBarIconButton(
                     onClick = onRefreshCurrent,
-                    modifier = Modifier
-                        .auroraHeaderIconSurface(colors)
-                        .size(44.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Refresh,
-                        contentDescription = stringResource(AYMR.strings.aurora_refresh_current_tab),
-                        tint = colors.textPrimary,
-                        modifier = Modifier.rotate(if (isRefreshSpinning) rotation else 0f),
-                    )
-                }
+                    icon = Icons.Filled.Refresh,
+                    contentDescription = stringResource(AYMR.strings.aurora_refresh_current_tab),
+                    iconRotation = if (isRefreshSpinning) rotation else 0f,
+                    hazeState = homeHazeState,
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 IconButton(
                     onClick = onRefreshAll,
@@ -561,20 +556,14 @@ private fun AuroraUpdatesPinnedHeader(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Box {
-                    IconButton(
+                    eu.kanade.presentation.more.settings.AuroraTopBarIconButton(
                         onClick = {
                             pacingMenuExpanded = true
                         },
-                        modifier = Modifier
-                            .auroraHeaderIconSurface(colors)
-                            .size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MoreVert,
-                            contentDescription = stringResource(MR.strings.action_menu_overflow_description),
-                            tint = colors.textPrimary,
-                        )
-                    }
+                        icon = Icons.Filled.MoreVert,
+                        contentDescription = stringResource(MR.strings.action_menu_overflow_description),
+                        hazeState = homeHazeState,
+                    )
                     AuroraEntryDropdownMenu(
                         expanded = pacingMenuExpanded,
                         onDismissRequest = { pacingMenuExpanded = false },

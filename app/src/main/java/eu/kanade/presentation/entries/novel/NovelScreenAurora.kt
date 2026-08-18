@@ -2978,13 +2978,13 @@ private fun AuroraActionButton(
 
     Box(
         modifier = modifier
-            .size(44.dp)
             .auroraHeaderIconSurface(
                 colors = colors,
                 hazeState = hazeState,
                 scrollProgress = scrollProgress,
                 isPosterMode = isPosterMode,
             )
+            .size(44.dp)
             .clickable(onClick = {
                 appHaptics.tap()
                 onClick()

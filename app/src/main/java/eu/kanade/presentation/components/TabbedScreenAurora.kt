@@ -544,7 +544,7 @@ private fun AuroraTabHeader(
             // Do not insert Spacer children here: Arrangement.spacedBy already puts 12.dp
             // between siblings, so an extra Spacer would double-count (12 + width + 12).
             // Extra gaps are applied as start padding on the next icon instead.
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (currentTab?.searchEnabled == true) {
                     AuroraTopBarIconButton(
                         onClick = onSearchClick,
@@ -555,22 +555,12 @@ private fun AuroraTabHeader(
                 }
 
                 iconActions.forEachIndexed { index, appBarAction ->
-                    var startPadding = 0.dp
-                    if (
+                    val buttonModifier = if (
                         index == 0 &&
                         currentTab?.searchEnabled == true &&
                         extraSearchToActionsGap > 0.dp
                     ) {
-                        startPadding += extraSearchToActionsGap
-                    }
-                    if (index > 0) {
-                        startPadding += 4.dp
-                        if (iconActions[index - 1].title == extraActionGapAfterTitle) {
-                            startPadding += 4.dp
-                        }
-                    }
-                    val buttonModifier = if (startPadding > 0.dp) {
-                        Modifier.padding(start = startPadding)
+                        Modifier.padding(start = extraSearchToActionsGap)
                     } else {
                         Modifier
                     }
@@ -594,7 +584,6 @@ private fun AuroraTabHeader(
                             onClick = { showOverflowMenu = true },
                             icon = Icons.Outlined.MoreVert,
                             contentDescription = stringResource(MR.strings.action_menu_overflow_description),
-                            modifier = Modifier.padding(start = 4.dp),
                         )
 
                         AuroraEntryDropdownMenu(

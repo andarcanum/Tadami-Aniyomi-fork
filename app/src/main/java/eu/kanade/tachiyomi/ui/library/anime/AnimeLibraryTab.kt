@@ -1782,55 +1782,31 @@ private fun AuroraLibraryPinnedHeader(
                             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                         )
 
-                        Row {
-                            IconButton(
+                        val homeHazeState = eu.kanade.tachiyomi.ui.home.LocalHomeHazeState.current
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            eu.kanade.presentation.more.settings.AuroraTopBarIconButton(
                                 onClick = {
-                                    appHaptics.tap()
                                     isSearchExpanded = true
                                 },
-                                modifier = Modifier
-                                    .auroraHeaderIconSurface(colors)
-                                    .size(44.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Search,
-                                    contentDescription = stringResource(MR.strings.action_search),
-                                    tint = colors.textPrimary,
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
-                            IconButton(
-                                onClick = {
-                                    appHaptics.tap()
-                                    onFilterClick()
-                                },
-                                modifier = Modifier
-                                    .auroraHeaderIconSurface(colors)
-                                    .size(44.dp),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.FilterList,
-                                    contentDescription = null,
-                                    tint = colors.textPrimary,
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
+                                icon = Icons.Filled.Search,
+                                contentDescription = stringResource(MR.strings.action_search),
+                                hazeState = homeHazeState,
+                            )
+                            eu.kanade.presentation.more.settings.AuroraTopBarIconButton(
+                                onClick = onFilterClick,
+                                icon = Icons.Filled.FilterList,
+                                contentDescription = null,
+                                hazeState = homeHazeState,
+                            )
                             androidx.compose.foundation.layout.Box {
-                                IconButton(
+                                eu.kanade.presentation.more.settings.AuroraTopBarIconButton(
                                     onClick = {
-                                        appHaptics.tap()
                                         showMenu = true
                                     },
-                                    modifier = Modifier
-                                        .auroraHeaderIconSurface(colors)
-                                        .size(44.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.MoreVert,
-                                        contentDescription = null,
-                                        tint = colors.textPrimary,
-                                    )
-                                }
+                                    icon = Icons.Filled.MoreVert,
+                                    contentDescription = null,
+                                    hazeState = homeHazeState,
+                                )
                                 AuroraEntryDropdownMenu(
                                     expanded = showMenu,
                                     onDismissRequest = { showMenu = false },
