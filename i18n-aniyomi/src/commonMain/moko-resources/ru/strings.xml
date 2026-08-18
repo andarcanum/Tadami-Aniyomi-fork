@@ -408,6 +408,10 @@
     <string name="novel_reader_page_mode_summary">Отображать содержимое постранично вместо непрерывной прокрутки</string>
     <string name="novel_reader_show_page_chapter_title">Показывать название главы</string>
     <string name="novel_reader_show_page_chapter_title_summary">Показывать название главы в постраничном режиме</string>
+    <string name="novel_reader_two_page_landscape">Две страницы (альбомная)</string>
+    <string name="novel_reader_two_page_landscape_summary">Показывать две страницы рядом в постраничном режиме, когда устройство в альбомной ориентации и достаточно широкое</string>
+    <string name="novel_reader_spread_cutout_guard">Отступ под вырез камеры</string>
+    <string name="novel_reader_spread_cutout_guard_summary">Резервировать место под вырез камеры у краёв экрана в режиме двух страниц. Выключите, если выреза нет или хотите использовать всю ширину</string>
     <string name="novel_reader_page_transition_style">Стиль перелистывания</string>
     <string name="novel_reader_page_transition_style_instant">Мгновенно</string>
     <string name="novel_reader_page_transition_style_slide">Сдвиг</string>

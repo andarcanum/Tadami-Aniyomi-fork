@@ -173,6 +173,31 @@ fun GeneralTab(
                 )
             }
             NovelGlassHint(stringResource(AYMR.strings.novel_reader_page_mode_summary))
+
+            if (settings.pageReader) {
+                AuroraToggleRow(
+                    label = stringResource(AYMR.strings.novel_reader_two_page_landscape),
+                    subtitle = stringResource(AYMR.strings.novel_reader_two_page_landscape_summary),
+                    checked = settings.twoPageLandscape,
+                    onClick = {
+                        update(
+                            !settings.twoPageLandscape,
+                            { o, v -> o.copy(twoPageLandscape = v) },
+                            { preferences.twoPageLandscape().set(it) },
+                        )
+                    },
+                )
+                if (settings.twoPageLandscape) {
+                    AuroraToggleRow(
+                        label = stringResource(AYMR.strings.novel_reader_spread_cutout_guard),
+                        subtitle = stringResource(AYMR.strings.novel_reader_spread_cutout_guard_summary),
+                        checked = settings.spreadCutoutGuard,
+                        // Device-level setting: the cutout-guard is a property of the display, not
+                        // of a source, so it only ever toggles the global preference.
+                        onClick = { preferences.spreadCutoutGuard().set(!settings.spreadCutoutGuard) },
+                    )
+                }
+            }
         }
 
         // Внешний вид страницы (Размер текста + Тема / Фон)

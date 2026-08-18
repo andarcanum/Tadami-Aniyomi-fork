@@ -904,6 +904,36 @@ internal fun NovelReaderContentHost(
             preserveSourceTextAlignInNative = state.readerSettings.preserveSourceTextAlignInNative,
         )
     }
+    val novelSpreadMinWidthPx = with(density) { NOVEL_SPREAD_MIN_WIDTH_DP.dp.roundToPx() }
+    val novelSpreadColumns = resolveNovelSpreadColumns(
+        twoPageLandscapeEnabled = state.readerSettings.twoPageLandscape,
+        viewportWidthPx = pageViewportSize.width,
+        viewportHeightPx = pageViewportSize.height,
+        minSpreadWidthPx = novelSpreadMinWidthPx,
+    )
+    // Reserve room for a display cutout on the short edges of a spread. Spread columns run to the
+    // very edge of the screen (the "spine" is just two margins meeting at center), so without this
+    // the first/last characters slide under a camera punch-hole on devices that render into the
+    // cutout area. Gated on the cutout-guard setting and only when a spread is actually active.
+    val spreadCutoutLeftPx = if (novelSpreadColumns > 1 && state.readerSettings.spreadCutoutGuard) {
+        rootInsets?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout())?.left ?: 0
+    } else {
+        0
+    }
+    val spreadCutoutRightPx = if (novelSpreadColumns > 1 && state.readerSettings.spreadCutoutGuard) {
+        rootInsets?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout())?.right ?: 0
+    } else {
+        0
+    }
+    // A spread page's contentPadding is bumped by a small vertical safety so the first and last
+    // lines stay clear of a device's rounded screen corners. Pagination must use the same bumped
+    // value (via spreadContentPaddingPx below) so the rendered page and its text box agree.
+    val spreadContentPadding = if (novelSpreadColumns > 1) {
+        contentPaddingPx + with(density) { NOVEL_SPREAD_VERTICAL_SAFE_DP.dp }
+    } else {
+        contentPaddingPx
+    }
+    val spreadContentPaddingPx = with(density) { spreadContentPadding.roundToPx() }
     val pageReaderPages: List<List<PlainPageSlice>> = remember(
         state.chapter.id,
         pageReaderTextBlocks,
@@ -921,6 +951,7 @@ internal fun NovelReaderContentHost(
         pageViewportSize,
         contentPaddingPx,
         statusBarTopPadding,
+        novelSpreadColumns,
     ) {
         if (!shouldPaginatePageReader || pageReaderTextBlocks.isEmpty()) {
             emptyList()
@@ -946,15 +977,41 @@ internal fun NovelReaderContentHost(
                     lineHeight = state.readerSettings.lineHeight,
                 ).roundToPx()
             }
-            val verticalPaddingPx = topPaddingPx +
-                bottomPaddingPx +
-                bookBottomInsetPx +
-                pageFitSafetyPx +
-                navigationBarHeight
+            val verticalPaddingPx = if (novelSpreadColumns > 1) {
+                // Compact spread: breathing margin (with a small vertical safety folded in so the
+                // first/last line stays clear of rounded screen corners) + anti-clip inset + book
+                // bottom inset. The status bar and navigation bar are dropped (landscape usually
+                // has neither). Must match the rendered page's own top+bottom reservation or the
+                // bottom line clips.
+                resolveNovelSpreadPageVerticalPadding(
+                    contentPaddingPx = spreadContentPaddingPx,
+                    pageFitSafetyPx = pageFitSafetyPx,
+                    bookBottomInsetPx = bookBottomInsetPx,
+                )
+            } else {
+                topPaddingPx +
+                    bottomPaddingPx +
+                    bookBottomInsetPx +
+                    pageFitSafetyPx +
+                    navigationBarHeight
+            }
+            // Spread columns keep the same horizontal margin the single-page reader applies, so a
+            // column's text width is the half-slot width minus both margins. It must match exactly
+            // what the renderers lay out (full-width columns with an inner margin) or reflowed text
+            // would overflow the page; the visible "spine" is the two margins meeting at center.
+            // Reserved cutout room on the short edges is subtracted so columns never slide under a
+            // camera punch-hole.
+            val spreadColumnWidthPx = resolveNovelSpreadColumnTextWidth(
+                screenWidthPx = screenWidthPx,
+                horizontalPaddingPx = horizontalPaddingPx,
+                columns = novelSpreadColumns,
+                cutoutLeftPx = spreadCutoutLeftPx,
+                cutoutRightPx = spreadCutoutRightPx,
+            )
             paginatePlainPageBlocks(
                 textBlocks = pageReaderTextBlocks,
                 paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
-                widthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1),
+                widthPx = spreadColumnWidthPx,
                 heightPx = (screenHeightPx - verticalPaddingPx).coerceAtLeast(1),
                 textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() },
                 lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
@@ -990,6 +1047,7 @@ internal fun NovelReaderContentHost(
         pageViewportSize,
         contentPaddingPx,
         statusBarTopPadding,
+        novelSpreadColumns,
     ) {
         if (!shouldPaginateRichForPageReader) {
             MixedRichPagePagination(blockTexts = emptyList(), pages = emptyList())
@@ -1015,15 +1073,30 @@ internal fun NovelReaderContentHost(
                     lineHeight = state.readerSettings.lineHeight,
                 ).roundToPx()
             }
-            val verticalPaddingPx = topPaddingPx +
-                bottomPaddingPx +
-                bookBottomInsetPx +
-                pageFitSafetyPx +
-                navigationBarHeight
+            val verticalPaddingPx = if (novelSpreadColumns > 1) {
+                resolveNovelSpreadPageVerticalPadding(
+                    contentPaddingPx = spreadContentPaddingPx,
+                    pageFitSafetyPx = pageFitSafetyPx,
+                    bookBottomInsetPx = bookBottomInsetPx,
+                )
+            } else {
+                topPaddingPx +
+                    bottomPaddingPx +
+                    bookBottomInsetPx +
+                    pageFitSafetyPx +
+                    navigationBarHeight
+            }
+            val spreadColumnWidthPx = resolveNovelSpreadColumnTextWidth(
+                screenWidthPx = screenWidthPx,
+                horizontalPaddingPx = horizontalPaddingPx,
+                columns = novelSpreadColumns,
+                cutoutLeftPx = spreadCutoutLeftPx,
+                cutoutRightPx = spreadCutoutRightPx,
+            )
             paginateMixedRichPageBlocks(
                 richBlocks = pageReaderRichBlocks,
                 paragraphSpacingPx = with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() },
-                widthPx = (screenWidthPx - horizontalPaddingPx).coerceAtLeast(1),
+                widthPx = spreadColumnWidthPx,
                 heightPx = (screenHeightPx - verticalPaddingPx).coerceAtLeast(1),
                 textSizePx = with(density) { state.readerSettings.fontSize.sp.toPx() },
                 lineHeightMultiplier = state.readerSettings.lineHeight.coerceAtLeast(1f),
@@ -1094,6 +1167,11 @@ internal fun NovelReaderContentHost(
         )
     }
     val pageReaderItemsCount = pageReaderContentPages.size
+    // Every index-based consumer below (TTS, auto-scroll, boundary pages, progress %) keeps
+    // addressing single-column pages via pageReaderItemsCount unmodified; only the pager/page-turn
+    // slot count and virtual-index math are adjusted, so a spread slot pairs pages
+    // [n*columns, n*columns + columns - 1] without touching any of those consumers' own indexing.
+    val pageReaderSpreadSlotCount = resolveSpreadSlotCount(pageReaderItemsCount, novelSpreadColumns)
     // The pager only needs an extra virtual page before/after the chapter while the intermediate
     // "next/previous chapter" placeholder is shown. Seamless chapter transitions hide that
     // placeholder, so the extra slots must not exist either: otherwise the edge page falls back to
@@ -1102,12 +1180,12 @@ internal fun NovelReaderContentHost(
     val composePagerHasPreviousChapter = state.previousChapterId != null && composePagerBoundaryPagesEnabled
     val composePagerHasNextChapter = state.nextChapterId != null && composePagerBoundaryPagesEnabled
     val composePagerVirtualPageCount = remember(
-        pageReaderItemsCount,
+        pageReaderSpreadSlotCount,
         composePagerHasPreviousChapter,
         composePagerHasNextChapter,
     ) {
         resolveComposePagerVirtualPageCount(
-            contentPageCount = pageReaderItemsCount,
+            contentPageCount = pageReaderSpreadSlotCount,
             hasPreviousChapter = composePagerHasPreviousChapter,
             hasNextChapter = composePagerHasNextChapter,
         )
@@ -1153,13 +1231,14 @@ internal fun NovelReaderContentHost(
         pageCount = pageReaderItemsCount.coerceAtLeast(1),
         chapterHandoffTarget = pageReaderChapterHandoffTarget,
     )
+    val initialContentSpreadSlot = resolveSpreadSlotForPageIndex(initialContentPage, novelSpreadColumns)
     val initialPagerPage = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
         resolveComposePagerVirtualPageIndex(
-            actualPageIndex = initialContentPage,
+            actualPageIndex = initialContentSpreadSlot,
             hasPreviousChapter = composePagerHasPreviousChapter,
         )
     } else {
-        initialContentPage
+        initialContentSpreadSlot
     }
     val pagerState = key(state.chapter.id) {
         rememberPagerState(
@@ -1168,7 +1247,7 @@ internal fun NovelReaderContentHost(
                 if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
                     composePagerVirtualPageCount.coerceAtLeast(1)
                 } else {
-                    pageReaderItemsCount.coerceAtLeast(1)
+                    pageReaderSpreadSlotCount.coerceAtLeast(1)
                 }
             },
         )
@@ -1177,17 +1256,19 @@ internal fun NovelReaderContentHost(
         pagerState,
         pageReaderRendererRoute,
         composePagerHasPreviousChapter,
+        novelSpreadColumns,
     ) {
         PageReaderTtsNavigationAdapter(
             navigator = object : PageReaderTtsNavigator {
                 override suspend fun scrollToPage(pageIndex: Int) {
+                    val spreadSlot = resolveSpreadSlotForPageIndex(pageIndex, novelSpreadColumns)
                     val targetPage = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
                         resolveComposePagerVirtualPageIndex(
-                            actualPageIndex = pageIndex,
+                            actualPageIndex = spreadSlot,
                             hasPreviousChapter = composePagerHasPreviousChapter,
                         )
                     } else {
-                        pageIndex
+                        spreadSlot
                     }.coerceIn(0, (pagerState.pageCount - 1).coerceAtLeast(0))
                     pagerState.scrollToPage(targetPage)
                 }
@@ -1332,20 +1413,52 @@ internal fun NovelReaderContentHost(
         pagerState.currentPage,
         pageTurnCurrentPage,
         composePagerHasPreviousChapter,
+        pageReaderSpreadSlotCount,
         pageReaderItemsCount,
+        novelSpreadColumns,
     ) {
         derivedStateOf {
-            resolvePageReaderCurrentPage(
+            // pageTurnCurrentPage is already a real page index (PageTurnPageRenderer resolves it
+            // itself before reporting), so only the compose-pager route's slot index needs
+            // expanding back to the first real page of that slot.
+            val slotOrRealIndex = resolvePageReaderCurrentPage(
                 pageReaderRendererRoute = pageReaderRendererRoute,
                 pagerCurrentPage = pagerState.currentPage,
                 pageTurnCurrentPage = pageTurnCurrentPage,
-                composePagerContentPageCount = pageReaderItemsCount,
+                composePagerContentPageCount = pageReaderSpreadSlotCount,
                 composePagerHasPreviousChapter = composePagerHasPreviousChapter,
                 pageTurnContentPageCount = pageReaderItemsCount,
                 pageTurnHasPreviousChapter = composePagerHasPreviousChapter,
             )
+            if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+                resolveSpreadSlotFirstPageIndex(slotOrRealIndex, novelSpreadColumns)
+            } else {
+                slotOrRealIndex
+            }
         }
     }
+
+    // Spread mode changes the pager's slot space under the same pagerState: the setting can toggle
+    // live from the reader settings sheet, and rotation can flip the spread on/off. Park the pager
+    // on the slot that contains the currently displayed page instead of letting the raw index carry
+    // over — toggling the spread off from spread slot 2 must land on real page 4 (the first page of
+    // that spread), not on page 2.
+    LaunchedEffect(pagerState, pageReaderRendererRoute, novelSpreadColumns, pageReaderSpreadSlotCount) {
+        val currentRealPage = pageReaderProgressPageIndex.coerceIn(0, (pageReaderItemsCount - 1).coerceAtLeast(0))
+        val targetSlot = resolveSpreadSlotForPageIndex(currentRealPage, novelSpreadColumns)
+        val targetVirtualPage = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+            resolveComposePagerVirtualPageIndex(
+                actualPageIndex = targetSlot,
+                hasPreviousChapter = composePagerHasPreviousChapter,
+            )
+        } else {
+            targetSlot
+        }.coerceIn(0, (pagerState.pageCount - 1).coerceAtLeast(0))
+        if (pagerState.currentPage != targetVirtualPage) {
+            pagerState.scrollToPage(targetVirtualPage)
+        }
+    }
+
     var isInitialPositionRestored by remember(state.chapter.id) {
         mutableStateOf(false)
     }
@@ -1796,18 +1909,22 @@ internal fun NovelReaderContentHost(
                     requestPageTurnChapterNavigation(PageTurnChapterNavigationDirection.PREVIOUS)
                 }
             } else {
-                val currentPage = pageReaderProgressPageIndex
+                val currentSpreadSlot = resolveSpreadSlotForPageIndex(
+                    pageReaderProgressPageIndex,
+                    novelSpreadColumns,
+                )
                 val currentVirtualPage = resolveComposePagerVirtualPageIndex(
-                    actualPageIndex = currentPage,
+                    actualPageIndex = currentSpreadSlot,
                     hasPreviousChapter = composePagerHasPreviousChapter,
                 )
                 if (currentVirtualPage > 0) {
                     val targetVirtualPage = currentVirtualPage - 1
-                    pageTurnCurrentPage = resolveComposePagerActualPageIndex(
+                    val targetSpreadSlot = resolveComposePagerActualPageIndex(
                         currentPage = targetVirtualPage,
-                        contentPageCount = pageReaderItemsCount,
+                        contentPageCount = pageReaderSpreadSlotCount,
                         hasPreviousChapter = composePagerHasPreviousChapter,
                     )
+                    pageTurnCurrentPage = resolveSpreadSlotFirstPageIndex(targetSpreadSlot, novelSpreadColumns)
                     if (pageAnimationDurationMillis != null) {
                         pagerState.animateScrollToPage(
                             targetVirtualPage,
@@ -1862,19 +1979,23 @@ internal fun NovelReaderContentHost(
                     requestPageTurnChapterNavigation(PageTurnChapterNavigationDirection.NEXT)
                 }
             } else {
-                val currentPage = pageReaderProgressPageIndex
+                val currentSpreadSlot = resolveSpreadSlotForPageIndex(
+                    pageReaderProgressPageIndex,
+                    novelSpreadColumns,
+                )
                 val currentVirtualPage = resolveComposePagerVirtualPageIndex(
-                    actualPageIndex = currentPage,
+                    actualPageIndex = currentSpreadSlot,
                     hasPreviousChapter = composePagerHasPreviousChapter,
                 )
                 val virtualLastPage = composePagerVirtualPageCount - 1
                 if (currentVirtualPage < virtualLastPage) {
                     val targetVirtualPage = currentVirtualPage + 1
-                    pageTurnCurrentPage = resolveComposePagerActualPageIndex(
+                    val targetSpreadSlot = resolveComposePagerActualPageIndex(
                         currentPage = targetVirtualPage,
-                        contentPageCount = pageReaderItemsCount,
+                        contentPageCount = pageReaderSpreadSlotCount,
                         hasPreviousChapter = composePagerHasPreviousChapter,
                     )
+                    pageTurnCurrentPage = resolveSpreadSlotFirstPageIndex(targetSpreadSlot, novelSpreadColumns)
                     if (pageAnimationDurationMillis != null) {
                         pagerState.animateScrollToPage(
                             targetVirtualPage,
@@ -2397,6 +2518,7 @@ internal fun NovelReaderContentHost(
                         ComposePagerPageRenderer(
                             pagerState = pagerState,
                             contentPages = pageReaderContentPages,
+                            spreadColumns = novelSpreadColumns,
                             transitionStyle = activePageTransitionStyle,
                             showBoundaryChapterPages = !seamlessChapterTransitionEnabled,
                             readerSettings = state.readerSettings,
@@ -2412,8 +2534,10 @@ internal fun NovelReaderContentHost(
                             pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
                             textTypeface = composeTypeface,
                             chapterTitleTypeface = chapterTitleTypeface,
-                            contentPadding = contentPaddingPx,
+                            contentPadding = spreadContentPadding,
                             statusBarTopPadding = statusBarTopPadding,
+                            spreadCutoutLeftDp = with(density) { spreadCutoutLeftPx.toDp() },
+                            spreadCutoutRightDp = with(density) { spreadCutoutRightPx.toDp() },
                             ttsHighlightState = ttsHighlightState,
                             ttsHighlightColor = ttsHighlightColor,
                             hasPreviousChapter = state.previousChapterId != null,
@@ -2451,8 +2575,15 @@ internal fun NovelReaderContentHost(
                             selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                         )
-                    } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
-                        PageTurnPageRenderer(
+                    } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER &&
+                        novelSpreadColumns > 1
+                    ) {
+                        // The curl library always folds across its own full measured width, so a
+                        // single wide PageCurl behind a two-column spread curls the whole spread as
+                        // one leaf, edge to edge, ignoring the spine. SpreadPageTurnPageRenderer runs
+                        // two half-width PageCurl surfaces instead, one per column, so the fold
+                        // anchors at the spine like a real book page.
+                        SpreadPageTurnPageRenderer(
                             pagerState = pagerState,
                             chapterId = state.chapter.id,
                             contentPages = pageReaderContentPages,
@@ -2474,8 +2605,65 @@ internal fun NovelReaderContentHost(
                             pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
                             textTypeface = composeTypeface,
                             chapterTitleTypeface = chapterTitleTypeface,
-                            contentPadding = contentPaddingPx,
+                            contentPadding = spreadContentPadding,
                             statusBarTopPadding = statusBarTopPadding,
+                            spreadCutoutLeftDp = with(density) { spreadCutoutLeftPx.toDp() },
+                            spreadCutoutRightDp = with(density) { spreadCutoutRightPx.toDp() },
+                            ttsHighlightState = ttsHighlightState,
+                            ttsHighlightColor = ttsHighlightColor,
+                            hasPreviousChapter = state.previousChapterId != null,
+                            previousChapterName = state.previousChapterName,
+                            hasNextChapter = state.nextChapterId != null,
+                            nextChapterName = state.nextChapterName,
+                            previousChapterLabel = stringResource(MR.strings.action_previous_chapter),
+                            nextChapterLabel = stringResource(MR.strings.action_next_chapter),
+                            boundaryChapterHint = stringResource(MR.strings.reader_boundary_release_to_open),
+                            onToggleUi = { onSetShowReaderUi(!showReaderUi) },
+                            requestedPage = pageTurnRequestedPage,
+                            onRequestedPageConsumed = { pageTurnRequestedPage = -1 },
+                            onCurrentPageChange = { pageTurnCurrentPage = it },
+                            onOpenPreviousChapter = {
+                                openPreviousChapterFromReader()
+                            },
+                            onOpenNextChapter = { openNextChapterFromReader() },
+                            chapterNavigationRequest = pageTurnChapterNavigationRequest,
+                            onChapterNavigationRequestConsumed = {
+                                pageTurnChapterNavigationRequest = null
+                            },
+                            onTextTap = { tapX, tapY, width, height ->
+                                latestReaderShortTapHandler(tapX, tapY, width, height)
+                            },
+                            selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                            onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                        )
+                    } else if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
+                        PageTurnPageRenderer(
+                            pagerState = pagerState,
+                            chapterId = state.chapter.id,
+                            contentPages = pageReaderContentPages,
+                            spreadColumns = novelSpreadColumns,
+                            transitionStyle = activePageTransitionStyle,
+                            showBoundaryChapterPages = !seamlessChapterTransitionEnabled,
+                            readerSettings = state.readerSettings,
+                            textColor = textColor,
+                            textBackground = textBackground,
+                            chapterTitleTextColor = chapterTitleTextColor,
+                            backgroundTexture = activeBackgroundTexture,
+                            nativeTextureStrengthPercent = state.readerSettings.nativeTextureStrengthPercent,
+                            backgroundImageModel = if (isBackgroundMode) backgroundImageModel else null,
+                            backgroundModeIdentity = if (isBackgroundMode) backgroundModeIdentity else "",
+                            isBackgroundMode = isBackgroundMode,
+                            activeBackgroundTexture = activeBackgroundTexture,
+                            activeOledEdgeGradient = activeOledEdgeGradient,
+                            isDarkTheme = isDarkTheme,
+                            pageEdgeShadow = state.readerSettings.pageEdgeShadow,
+                            pageEdgeShadowAlpha = state.readerSettings.pageEdgeShadowAlpha,
+                            textTypeface = composeTypeface,
+                            chapterTitleTypeface = chapterTitleTypeface,
+                            contentPadding = spreadContentPadding,
+                            statusBarTopPadding = statusBarTopPadding,
+                            spreadCutoutLeftDp = with(density) { spreadCutoutLeftPx.toDp() },
+                            spreadCutoutRightDp = with(density) { spreadCutoutRightPx.toDp() },
                             ttsHighlightState = ttsHighlightState,
                             ttsHighlightColor = ttsHighlightColor,
                             hasPreviousChapter = state.previousChapterId != null,
@@ -3624,6 +3812,8 @@ internal fun NovelReaderContentHost(
                 isBookMode = isBookMode,
                 pageReaderRendererRoute = pageReaderRendererRoute,
                 pageReaderItemsCount = pageReaderItemsCount,
+                pageReaderSpreadSlotCount = pageReaderSpreadSlotCount,
+                spreadColumns = novelSpreadColumns,
                 composePagerHasPreviousChapter = composePagerHasPreviousChapter,
                 nativeScrollItemsCount = nativeScrollItemsCount,
                 pageReaderProgressPageIndex = pageReaderProgressPageIndex,
@@ -3685,8 +3875,9 @@ internal fun NovelReaderContentHost(
                     if (pageReaderRendererRoute == NovelPageReaderRendererRoute.PAGE_TURN_RENDERER) {
                         pageTurnRequestedPage = target
                     } else {
+                        val targetSpreadSlot = resolveSpreadSlotForPageIndex(target, novelSpreadColumns)
                         val virtualTarget = resolveComposePagerVirtualPageIndex(
-                            actualPageIndex = target,
+                            actualPageIndex = targetSpreadSlot,
                             hasPreviousChapter = composePagerHasPreviousChapter,
                         )
                         coroutineScope.launch {

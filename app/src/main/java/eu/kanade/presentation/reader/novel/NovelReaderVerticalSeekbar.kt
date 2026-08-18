@@ -63,6 +63,11 @@ internal fun NovelReaderVerticalSeekbar(
     isBookMode: Boolean,
     pageReaderRendererRoute: NovelPageReaderRendererRoute,
     pageReaderItemsCount: Int,
+    // pagerCurrentPage above is a spread-slot index when a two-page spread is active, so resolving
+    // it back to a real page (for the seekbar's own position math) needs the slot count, not the
+    // real page count pageReaderItemsCount holds.
+    pageReaderSpreadSlotCount: Int = pageReaderItemsCount,
+    spreadColumns: Int = 1,
     composePagerHasPreviousChapter: Boolean,
     nativeScrollItemsCount: Int,
     pageReaderProgressPageIndex: Int,
@@ -126,6 +131,7 @@ internal fun NovelReaderVerticalSeekbar(
             seekbarItemsCount,
             readingProgressPercent,
             isBookMode,
+            spreadColumns,
         ) {
             derivedStateOf {
                 resolveReaderVerticalSeekbarValue(
@@ -135,7 +141,7 @@ internal fun NovelReaderVerticalSeekbar(
                     pageReaderRendererRoute = pageReaderRendererRoute,
                     pagerCurrentPage = pagerCurrentPage,
                     pageTurnCurrentPage = pageTurnCurrentPage,
-                    composePagerContentPageCount = pageReaderItemsCount,
+                    composePagerContentPageCount = pageReaderSpreadSlotCount,
                     composePagerHasPreviousChapter = composePagerHasPreviousChapter,
                     pageTurnContentPageCount = pageReaderItemsCount,
                     pageTurnHasPreviousChapter = composePagerHasPreviousChapter,
@@ -144,6 +150,7 @@ internal fun NovelReaderVerticalSeekbar(
                     nativeFirstVisibleItemIndex = firstVisibleItemIndex,
                     nativeCanScrollForward = canScrollForward,
                     bookModeEnabled = isBookMode,
+                    spreadColumns = spreadColumns,
                 )
             }
         }

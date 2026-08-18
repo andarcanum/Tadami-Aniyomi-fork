@@ -316,6 +316,79 @@ internal fun shouldPaginateForPageReader(
     return pageReaderEnabled && contentBlocksCount > 0
 }
 
+/**
+ * Minimum viewport width, in px, a two-page spread is allowed to activate at. Below this, a
+ * half-width column would squeeze text too narrow to read comfortably — manga art tolerates a
+ * narrow half, running text does not, so unlike the manga pager this needs a width floor and not
+ * just an orientation check. 600dp mirrors Android's own sw600dp tablet breakpoint.
+ */
+internal const val NOVEL_SPREAD_MIN_WIDTH_DP = 600
+
+/**
+ * Extra vertical breathing room (dp) added above and below the text in a spread, so the first and
+ * last lines stay clear of a device's rounded screen corners. Single page mode keeps the existing
+ * (portrait-tuned) insets untouched.
+ */
+internal const val NOVEL_SPREAD_VERTICAL_SAFE_DP = 24
+
+/**
+ * Text width of one spread column, in px.
+ *
+ * Spread columns keep the same horizontal page margin the single-page reader applies, so a
+ * column's text width is the half-slot width minus both margins. The renderers lay full-width
+ * columns (screen/columns) with the margin applied inside each, so this must match exactly:
+ * paginating wider than the rendered text makes the text reflow narrower and overflow the page
+ * bottom. The visible "spine" is the two margins meeting at the screen center.
+ */
+internal fun resolveNovelSpreadColumnTextWidth(
+    screenWidthPx: Int,
+    horizontalPaddingPx: Int,
+    columns: Int,
+    cutoutLeftPx: Int = 0,
+    cutoutRightPx: Int = 0,
+): Int {
+    val safeColumns = columns.coerceAtLeast(1)
+    val reservedCutout = (cutoutLeftPx + cutoutRightPx).coerceAtLeast(0)
+    return if (safeColumns > 1) {
+        ((screenWidthPx - reservedCutout) / safeColumns - horizontalPaddingPx).coerceAtLeast(1)
+    } else {
+        (screenWidthPx - horizontalPaddingPx - reservedCutout).coerceAtLeast(1)
+    }
+}
+
+/**
+ * Vertical padding (px) subtracted from the page height when paginating a spread.
+ *
+ * Landscape spreads live on the short side of the screen: the status bar and the system
+ * navigation bar usually are not present, so what looked fine in portrait single-page mode
+ * (double-counted inset + navigation bar + a full extra page-turn bottom inset) simply wastes
+ * vertical room and shrinks the text to ~60% of the screen. Compact spread keeps a single
+ * [contentPaddingPx] breathing margin plus the anti-clip [pageFitSafetyPx], dropping the status
+ * bar, navigation bar and the book bottom inset so the text gets nearly the full height back.
+ */
+internal fun resolveNovelSpreadPageVerticalPadding(
+    contentPaddingPx: Int,
+    pageFitSafetyPx: Int,
+    bookBottomInsetPx: Int = 0,
+): Int {
+    // The rendered spread page reserves contentPadding on top and contentPadding + bookBottomInset
+    // on the bottom (the vertical-safe dp is folded into contentPaddingPx by the caller, so it
+    // counts on both edges evenly). Pagination must subtract the same total or the last line clips.
+    return (contentPaddingPx * 2 + pageFitSafetyPx + bookBottomInsetPx).coerceAtLeast(1)
+}
+
+/** How many text columns one pager slot should show side by side. */
+internal fun resolveNovelSpreadColumns(
+    twoPageLandscapeEnabled: Boolean,
+    viewportWidthPx: Int,
+    viewportHeightPx: Int,
+    minSpreadWidthPx: Int,
+): Int {
+    val isLandscape = viewportWidthPx > viewportHeightPx
+    val isWideEnough = viewportWidthPx >= minSpreadWidthPx
+    return if (twoPageLandscapeEnabled && isLandscape && isWideEnough) 2 else 1
+}
+
 internal fun shouldShowPageReaderDismissLayer(
     showReaderUi: Boolean,
     usePageReader: Boolean,
@@ -464,6 +537,28 @@ internal fun shouldUseComposePagerBoundaryPreview(
     }
 }
 
+/**
+ * Number of pager slots [contentPageCount] single-column pages collapse into when every slot
+ * shows [columnsPerSpread] of them side by side. A trailing odd page still gets its own slot
+ * (rendered with an empty second column), the same way a physical book's last page can be a
+ * lone right-hand page facing nothing.
+ */
+internal fun resolveSpreadSlotCount(contentPageCount: Int, columnsPerSpread: Int): Int {
+    val safeColumns = columnsPerSpread.coerceAtLeast(1)
+    return ceil(contentPageCount.coerceAtLeast(1).toDouble() / safeColumns).toInt().coerceAtLeast(1)
+}
+
+/** First single-column page index shown in spread slot [spreadSlot]. */
+internal fun resolveSpreadSlotFirstPageIndex(spreadSlot: Int, columnsPerSpread: Int): Int {
+    return spreadSlot.coerceAtLeast(0) * columnsPerSpread.coerceAtLeast(1)
+}
+
+/** Which spread slot [pageIndex] (a single-column page index) is shown in. */
+internal fun resolveSpreadSlotForPageIndex(pageIndex: Int, columnsPerSpread: Int): Int {
+    val safeColumns = columnsPerSpread.coerceAtLeast(1)
+    return pageIndex.coerceAtLeast(0) / safeColumns
+}
+
 internal fun resolveComposePagerVirtualPageCount(
     contentPageCount: Int,
     hasPreviousChapter: Boolean,
@@ -607,6 +702,7 @@ internal fun resolveReaderVerticalSeekbarValue(
     nativeFirstVisibleItemIndex: Int = 0,
     nativeCanScrollForward: Boolean = true,
     bookModeEnabled: Boolean = false,
+    spreadColumns: Int = 1,
 ): Float {
     return when {
         bookModeEnabled -> {
@@ -615,7 +711,9 @@ internal fun resolveReaderVerticalSeekbarValue(
         showWebView -> webProgressPercent.coerceIn(0, 100) / 100f
         usePageReader -> {
             val max = (seekbarItemsCount - 1).coerceAtLeast(1)
-            val current = resolvePageReaderCurrentPage(
+            // Only the compose-pager route addresses spread slots; pageTurnCurrentPage is already
+            // a real page (PageTurnPageRenderer resolves it before reporting).
+            val slotOrRealIndex = resolvePageReaderCurrentPage(
                 pageReaderRendererRoute = pageReaderRendererRoute,
                 pagerCurrentPage = pagerCurrentPage,
                 pageTurnCurrentPage = pageTurnCurrentPage,
@@ -624,6 +722,11 @@ internal fun resolveReaderVerticalSeekbarValue(
                 pageTurnContentPageCount = pageTurnContentPageCount,
                 pageTurnHasPreviousChapter = pageTurnHasPreviousChapter,
             )
+            val current = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+                resolveSpreadSlotFirstPageIndex(slotOrRealIndex, spreadColumns)
+            } else {
+                slotOrRealIndex
+            }
             current.toFloat() / max.toFloat()
         }
         else -> {
