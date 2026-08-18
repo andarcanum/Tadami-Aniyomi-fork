@@ -306,7 +306,9 @@ fun FullscreenPosterBackground(
                     },
             )
 
-            // PERF (backported from novel): only pay expensive blur layer on scroll or significant blur.
+            val activePosterPainter = if (isHighResPosterReady) backgroundPainter else previewLayerPainter
+
+            // PERF: only pay the expensive blur layer cost when user has scrolled or blur is significant.
             // Avoids double full-res + blur modifier on initial Aurora title launch.
             val shouldApplyBlurLayer by remember {
                 derivedStateOf {
@@ -316,14 +318,14 @@ fun FullscreenPosterBackground(
             }
             if (shouldApplyBlurLayer) {
                 Image(
-                    painter = backgroundPainter,
+                    painter = activePosterPainter,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     colorFilter = posterColorFilter,
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            alpha = blurOverlayAlpha * highResAlpha
+                            alpha = blurOverlayAlpha
                         }
                         .auroraPosterBlur(20.dp),
                 )

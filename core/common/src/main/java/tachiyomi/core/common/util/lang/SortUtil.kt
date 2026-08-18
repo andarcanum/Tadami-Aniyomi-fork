@@ -13,5 +13,5 @@ private val collators = ThreadLocal.withInitial {
 }
 
 fun String.compareToWithCollator(other: String): Int {
-    return collators.get().compare(this, other)
+    return collators.get()?.compare(this, other) ?: this.compareTo(other, ignoreCase = true)
 }

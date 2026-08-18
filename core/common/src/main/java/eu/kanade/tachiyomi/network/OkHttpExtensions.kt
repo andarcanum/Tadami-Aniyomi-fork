@@ -94,8 +94,8 @@ private suspend fun Call.await(callStack: Array<StackTraceElement>): Response {
         val callback =
             object : Callback {
                 override fun onResponse(call: Call, response: Response) {
-                    continuation.resume(response) {
-                        response.body.close()
+                    continuation.resume(response) { _, res, _ ->
+                        res.body.close()
                     }
                 }
 

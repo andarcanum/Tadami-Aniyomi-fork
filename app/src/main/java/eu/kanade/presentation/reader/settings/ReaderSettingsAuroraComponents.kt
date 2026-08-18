@@ -103,7 +103,7 @@ internal fun auroraRimColor(): Color {
 internal fun AuroraFieldLabel(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = AuroraTheme.colors.accent,
+    color: Color = AuroraTheme.colors.textSecondary,
 ) {
     Text(
         text = text,

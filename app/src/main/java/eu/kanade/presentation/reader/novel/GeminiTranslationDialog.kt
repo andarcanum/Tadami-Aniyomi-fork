@@ -2,6 +2,7 @@
 
 package eu.kanade.presentation.reader.novel
 
+import android.content.ClipData
 import android.graphics.drawable.ColorDrawable
 import android.view.Window
 import android.view.WindowManager
@@ -75,11 +76,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -1719,14 +1720,14 @@ internal fun GeminiTranslationDialog(
                                                             AYMR.strings.novel_reader_ai_translator_style_scenario_prefix,
                                                         ).format(stringResource(selectedStylePreset.scenarioRes)),
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = aurora.accent.copy(alpha = 0.90f),
+                                                        color = aurora.textSecondary,
                                                     )
                                                     Text(
                                                         text = stringResource(
                                                             AYMR.strings.novel_reader_ai_translator_style_advantage_prefix,
                                                         ).format(stringResource(selectedStylePreset.advantageRes)),
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = aurora.accent.copy(alpha = 0.90f),
+                                                        color = aurora.textSecondary,
                                                     )
                                                 }
                                             }
@@ -1852,14 +1853,14 @@ internal fun GeminiTranslationDialog(
                                                         AYMR.strings.novel_reader_ai_translator_generation_scenario_prefix,
                                                     ).format(selectedPreset.scenario),
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = aurora.accent.copy(alpha = 0.90f),
+                                                    color = aurora.textSecondary,
                                                 )
                                                 Text(
                                                     text = stringResource(
                                                         AYMR.strings.novel_reader_ai_translator_generation_advantage_prefix,
                                                     ).format(selectedPreset.advantage),
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = aurora.accent.copy(alpha = 0.90f),
+                                                    color = aurora.textSecondary,
                                                 )
                                             }
                                         }
@@ -2384,7 +2385,7 @@ internal fun GeminiTranslationDialog(
                                 }
 
                                 // 3. Debug Terminal Logs
-                                val clipboardManager = LocalClipboardManager.current
+                                val clipboard = LocalClipboard.current
                                 AuroraGlassSection(
                                     title = stringResource(AYMR.strings.novel_reader_ai_translator_logs_title),
                                 ) {
@@ -2405,7 +2406,11 @@ internal fun GeminiTranslationDialog(
                                             TextButton(
                                                 onClick = {
                                                     val text = logs.joinToString("\n")
-                                                    clipboardManager.setText(AnnotatedString(text))
+                                                    scope.launch {
+                                                        clipboard.setClipEntry(
+                                                            ClipEntry(ClipData.newPlainText(null, text)),
+                                                        )
+                                                    }
                                                 },
                                             ) {
                                                 Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(16.dp))
