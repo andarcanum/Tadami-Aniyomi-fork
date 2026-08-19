@@ -4,7 +4,10 @@ internal fun resolveNovelPluginRepoIndexUrls(baseUrl: String): List<String> {
     val normalized = baseUrl.trim().trimEnd('/')
     if (normalized.isEmpty()) return emptyList()
 
-    return if (normalized.endsWith(".json", ignoreCase = true)) {
+    return if (
+        normalized.endsWith(".json", ignoreCase = true) ||
+        normalized.endsWith(".pb", ignoreCase = true)
+    ) {
         listOf(normalized)
     } else {
         // LNReader-style repos publish plugins.min.json / plugins.json; Tachiyomi-style repos
@@ -13,8 +16,9 @@ internal fun resolveNovelPluginRepoIndexUrls(baseUrl: String): List<String> {
         listOf(
             "$normalized/plugins.min.json",
             "$normalized/plugins.json",
-            "$normalized/index.min.json",
             "$normalized/index.json",
+            "$normalized/index.pb",
+            "$normalized/index.min.json",
         )
     }
 }

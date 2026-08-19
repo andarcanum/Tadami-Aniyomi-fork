@@ -103,6 +103,48 @@ class NovelPluginApiTest {
         )
     }
 
+    @Test
+    fun `canonical indexUrl wins over base url probing`() = runTest {
+        val repo = ExtensionRepo(
+            baseUrl = "https://repo.one",
+            name = "Repo One",
+            shortName = null,
+            website = "https://repo.one",
+            signingKeyFingerprint = "fingerprint-1",
+            indexUrl = "https://repo.one/repo/index.pb",
+        )
+        val requested = mutableListOf<String>()
+        val api = NovelPluginApi(
+            repoProvider = FakeRepoProvider(listOf(repo)),
+            fetcher = FakeFetcher(
+                payloads = mapOf(
+                    "https://repo.one/repo/index.pb" to """
+                        [
+                          {
+                            "isNovel": true,
+                            "pkg": "one.extension",
+                            "name": "One Ext",
+                            "lang": "all",
+                            "apk": "https://cdn.example/one.apk",
+                            "version": 3,
+                            "sources": [ { "id": "1", "lang": "all", "name": "One", "baseUrl": "https://one.example" } ]
+                          }
+                        ]
+                    """.trimIndent(),
+                ),
+                requested = requested,
+            ),
+            parser = NovelPluginIndexParser(Json { ignoreUnknownKeys = true }),
+        )
+
+        val plugins = api.fetchAvailablePlugins()
+
+        requested shouldBe listOf("https://repo.one/repo/index.pb")
+        plugins.single().id shouldBe "one.extension"
+        plugins.single().isKotlinExtension shouldBe true
+        plugins.single().apkUrl shouldBe "https://cdn.example/one.apk"
+    }
+
     private class FakeRepoProvider(
         private val repos: List<ExtensionRepo>,
     ) : NovelPluginRepoProvider {
@@ -111,8 +153,10 @@ class NovelPluginApiTest {
 
     private class FakeFetcher(
         private val payloads: Map<String, String>,
+        private val requested: MutableList<String> = mutableListOf(),
     ) : NovelPluginIndexFetcher {
         override suspend fun fetch(repoUrl: String): String {
+            requested.add(repoUrl)
             return payloads[repoUrl] ?: error("Missing payload for $repoUrl")
         }
     }
