@@ -298,6 +298,65 @@ class ExtensionStoreServiceTest {
                 extension.pkgName shouldBe "matrix.listed.pkg"
                 extension.isNsfw shouldBe true
             }
+            "proto3_json_string_int64" -> {
+                val keiyoushiStyle = """
+                    {
+                      "name": "Kei",
+                      "badgeLabel": "KEI",
+                      "signingKey": "fp",
+                      "contact": { "website": "https://kei.example", "discord": null },
+                      "extensionList": {
+                        "extensions": [
+                          {
+                            "name": "Str Id Ext",
+                            "packageName": "str.id.pkg",
+                            "resources": {
+                              "apkUrl": "https://cdn.example/str.apk",
+                              "iconUrl": "https://cdn.example/str.png",
+                              "jarUrl": "https://cdn.example/str.jar"
+                            },
+                            "extensionLib": "1.6",
+                            "versionCode": "4",
+                            "versionName": "1.6.4",
+                            "contentWarning": "CONTENT_WARNING_NSFW",
+                            "sources": [
+                              {
+                                "id": "6289731484943315811",
+                                "name": "Str Id",
+                                "language": "all",
+                                "homeUrl": "https://str.example"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "extensionListUrl": null
+                    }
+                """.trimIndent()
+                val store = ExtensionStore(
+                    indexUrl = server.url("/store.json").toString(),
+                    name = "Kei",
+                    badgeLabel = "KEI",
+                    signingKey = "fp",
+                    contact = ExtensionStore.Contact(website = "https://kei.example", discord = null),
+                    isLegacy = false,
+                    extensionListUrl = null,
+                )
+                server.enqueue(bodyResponse(keiyoushiStyle, gzip))
+                // fetch() must also decode the embedded extension list
+                val fetched = service.fetch(server.url("/store.json").toString())
+                fetched.isSuccess.shouldBeTrue()
+                fetched.getOrThrow().name shouldBe "Kei"
+                server.enqueue(bodyResponse(keiyoushiStyle, gzip))
+                val result = service.getExtensions(store)
+                result.isSuccess.shouldBeTrue()
+                val extension = result.getOrThrow().single()
+                extension.pkgName shouldBe "str.id.pkg"
+                extension.versionCode shouldBe 4
+                extension.libVersion shouldBe 1.6
+                extension.isNsfw shouldBe true
+                extension.sources.single().id shouldBe 6289731484943315811
+            }
             else -> error("Unknown getExtensions format: $format")
         }
     }
@@ -359,6 +418,8 @@ class ExtensionStoreServiceTest {
             Arguments.of("getExtensions", "embedded_json", true),
             Arguments.of("getExtensions", "separate_list", false),
             Arguments.of("getExtensions", "separate_list", true),
+            Arguments.of("getExtensions", "proto3_json_string_int64", false),
+            Arguments.of("getExtensions", "proto3_json_string_int64", true),
         )
     }
 }

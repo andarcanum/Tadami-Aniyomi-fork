@@ -15,6 +15,7 @@ private val INDEX_FILE_NAMES = listOf(
     "repo.json",
     "index.min.json",
     "index.json",
+    "index.pb",
     "plugins.min.json",
     "plugins.json",
 )
@@ -55,4 +56,39 @@ fun String.collapseDuplicateExtensionStoreSuffix(): String {
     if (base == trimmed) return trimmed
     val fileName = trimmed.removePrefix(base).trim('/').substringBefore('/')
     return if (fileName.isBlank()) base else "$base/$fileName"
+}
+
+/**
+ * Best-effort human-readable label for a repo/store url or a plain store name.
+ *
+ * The repo picker dialogs and extension-screen badges used to fall back to the bare URL
+ * host ("github.com") which conveys nothing. This collapses github-style urls to
+ * "owner/repo" (or "owner" when the repo segment is missing), gitlab-style hosts to their
+ * first two path segments, and leaves plain names ("NovelSourcery") untouched.
+ */
+fun String.repoDisplayNameFallback(): String {
+    val trimmed = trim()
+    if (trimmed.isEmpty()) return ""
+    if (!trimmed.contains("://")) {
+        // A plain name such as "NovelSourcery", not a url.
+        return trimmed
+    }
+    val hostAndPath = trimmed.substringAfter("://").substringBefore('#').substringBefore('?')
+    val host = hostAndPath.substringBefore('/').removePrefix("www.")
+    val segments = hostAndPath.substringAfter('/', "").trim('/').split('/').filter { it.isNotBlank() }
+    return when {
+        host.equals("github.com", ignoreCase = true) ||
+            host.equals("raw.githubusercontent.com", ignoreCase = true) -> {
+            if (segments.isEmpty()) {
+                host
+            } else if (segments.size >= 2) {
+                "${segments[0]}/${segments[1]}"
+            } else {
+                segments[0]
+            }
+        }
+        segments.size >= 2 -> "${segments[0]}/${segments[1]}"
+        segments.size == 1 -> segments[0]
+        else -> host.ifBlank { trimmed }
+    }
 }
