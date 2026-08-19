@@ -41,8 +41,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
-import eu.kanade.presentation.components.CoverReloadSignal
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroCoverImage
 import eu.kanade.presentation.entries.components.aurora.AuroraNotePreviewCard
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
@@ -124,7 +124,7 @@ fun MangaGlassHeroCard(
     )
 
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Portrait)
-    val coverReloadTick = CoverReloadSignal.tick.value
+    val coverReloadTick = rememberCoverReloadTick()
     // Same poster resolution logic as the fullscreen background: a user-set
     // custom cover always wins, then the metadata-resolved full cover, then
     // the list thumbnail as fallback.

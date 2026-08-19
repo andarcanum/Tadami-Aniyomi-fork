@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroGenreChips
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroScaffold
@@ -96,6 +97,8 @@ fun AnimeHeroContent(
     onClearSelected: (() -> Unit)? = null,
     onCopyTitle: (() -> Unit)? = null,
     titleStaggerState: AuroraTitleStaggerState? = null,
+    hazeState: HazeState? = null,
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
@@ -114,6 +117,8 @@ fun AnimeHeroContent(
     AuroraHeroScaffold(
         modifier = modifier,
         shape = heroPanelShape,
+        hazeState = hazeState,
+        bottomPadding = bottomPadding,
     ) {
         AuroraHeroGenreChips(
             genres = anime.displayGenre,

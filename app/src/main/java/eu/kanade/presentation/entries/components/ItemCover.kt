@@ -17,8 +17,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
-import eu.kanade.presentation.components.CoverReloadSignal
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
 import tachiyomi.domain.entries.anime.model.Anime
@@ -67,7 +67,7 @@ enum class ItemCover(val ratio: Float) {
         val context = LocalContext.current
 
         if (isLoadableCoverData(model)) {
-            val coverReloadTick = CoverReloadSignal.tick.value
+            val coverReloadTick = rememberCoverReloadTick()
             val coverRequest = remember(context, model, coverReloadTick) {
                 buildAuroraCoverImageRequest(context, model)
             }

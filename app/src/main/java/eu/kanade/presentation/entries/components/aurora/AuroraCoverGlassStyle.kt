@@ -114,11 +114,13 @@ fun Modifier.auroraCoverHeroCardStyle(
         colors = colors,
         shape = shape,
         cornerRadius = cornerRadius,
-        topAlpha = 0.92f,
-        centerAlpha = 0.86f,
-        bottomAlpha = 0.80f,
-        neutralUnderlayAlpha = 0.060f,
-        accentUnderlayAlpha = 0.032f,
+        topAlpha = 0.46f,
+        centerAlpha = 0.38f,
+        bottomAlpha = 0.30f,
+        borderTopAlpha = 0.85f,
+        borderBottomAlpha = 0.16f,
+        neutralUnderlayAlpha = 0.025f,
+        accentUnderlayAlpha = 0.012f,
     )
 }
 
@@ -132,11 +134,13 @@ fun Modifier.auroraCoverInfoCardStyle(
         colors = colors,
         shape = shape,
         cornerRadius = cornerRadius,
-        topAlpha = 0.88f,
-        centerAlpha = 0.82f,
-        bottomAlpha = 0.76f,
-        neutralUnderlayAlpha = 0.050f,
-        accentUnderlayAlpha = 0.026f,
+        topAlpha = 0.68f,
+        centerAlpha = 0.60f,
+        bottomAlpha = 0.52f,
+        borderTopAlpha = 0.88f,
+        borderBottomAlpha = 0.18f,
+        neutralUnderlayAlpha = 0.035f,
+        accentUnderlayAlpha = 0.016f,
     )
 }
 
@@ -150,11 +154,13 @@ fun Modifier.auroraCoverChapterRowStyle(
         colors = colors,
         shape = shape,
         cornerRadius = cornerRadius,
-        topAlpha = 0.90f,
-        centerAlpha = 0.84f,
-        bottomAlpha = 0.80f,
-        neutralUnderlayAlpha = 0.045f,
-        accentUnderlayAlpha = 0.022f,
+        topAlpha = 0.70f,
+        centerAlpha = 0.62f,
+        bottomAlpha = 0.54f,
+        borderTopAlpha = 0.88f,
+        borderBottomAlpha = 0.18f,
+        neutralUnderlayAlpha = 0.030f,
+        accentUnderlayAlpha = 0.015f,
     )
 }
 

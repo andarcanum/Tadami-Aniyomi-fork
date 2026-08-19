@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroGenreChips
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroScaffold
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroStatsRow
@@ -63,12 +64,14 @@ fun MangaHeroContent(
     onClearSelected: (() -> Unit)? = null,
     onCopyTitle: (() -> Unit)? = null,
     titleStaggerState: AuroraTitleStaggerState? = null,
+    hazeState: HazeState? = null,
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
-    val heroPanelShape = RoundedCornerShape(24.dp)
+    val heroPanelShape = RoundedCornerShape(28.dp)
     val titleColor = resolveAuroraHeroTitleColor(colors)
     val secondaryMetaColor = resolveAuroraHeroSecondaryMetaColor(colors)
     val titleText = translation?.title ?: manga.displayTitle
@@ -83,6 +86,8 @@ fun MangaHeroContent(
     AuroraHeroScaffold(
         modifier = modifier,
         shape = heroPanelShape,
+        hazeState = hazeState,
+        bottomPadding = bottomPadding,
     ) {
         AuroraHeroGenreChips(
             genres = manga.displayGenre,

@@ -581,6 +581,7 @@ fun NovelScreenAuroraImpl(
                                         onClearSelected = { selectedGenres = emptySet() },
                                         onCopyTitle = onTitleCopy,
                                         titleStaggerState = titleStaggerState,
+                                        hazeState = hazeState,
                                         modifier = Modifier.fillMaxWidth(),
                                     )
                                     Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
@@ -2040,7 +2041,6 @@ fun NovelScreenAuroraImpl(
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(AuroraZIndex.HERO)
-                        .padding(bottom = resolveAuroraHeroBottomPadding(navigationBarsBottom))
                         .graphicsLayer { alpha = heroAlpha },
                     contentAlignment = Alignment.BottomStart,
                 ) {
@@ -2069,6 +2069,8 @@ fun NovelScreenAuroraImpl(
                         onClearSelected = { selectedGenres = emptySet() },
                         onCopyTitle = onTitleCopy,
                         titleStaggerState = titleStaggerState,
+                        hazeState = hazeState,
+                        bottomPadding = resolveAuroraHeroBottomPadding(navigationBarsBottom),
                         modifier = Modifier,
                     )
                 }

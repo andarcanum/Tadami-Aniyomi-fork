@@ -788,6 +788,7 @@ fun AnimeScreenAuroraImpl(
                                         onClearSelected = { selectedGenres = emptySet() },
                                         onCopyTitle = onTitleCopy,
                                         titleStaggerState = titleStaggerState,
+                                        hazeState = hazeState,
                                         modifier = Modifier,
                                     )
                                     Spacer(modifier = Modifier.height(8.dp))
@@ -1719,8 +1720,7 @@ fun AnimeScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .zIndex(AuroraZIndex.HERO)
-                        .padding(bottom = resolveAuroraHeroBottomPadding(navigationBarsBottom)),
+                        .zIndex(AuroraZIndex.HERO),
                     contentAlignment = Alignment.BottomStart,
                 ) {
                     val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
@@ -1758,6 +1758,8 @@ fun AnimeScreenAuroraImpl(
                             onClearSelected = { selectedGenres = emptySet() },
                             onCopyTitle = onTitleCopy,
                             titleStaggerState = titleStaggerState,
+                            hazeState = hazeState,
+                            bottomPadding = resolveAuroraHeroBottomPadding(navigationBarsBottom),
                             modifier = Modifier,
                         )
                     }

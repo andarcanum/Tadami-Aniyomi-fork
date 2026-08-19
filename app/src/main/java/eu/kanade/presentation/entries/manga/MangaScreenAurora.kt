@@ -575,6 +575,7 @@ fun MangaScreenAuroraImpl(
                                         onClearSelected = { selectedGenres = emptySet() },
                                         onCopyTitle = onTitleCopy,
                                         titleStaggerState = titleStaggerState,
+                                        hazeState = hazeState,
                                         modifier = Modifier,
                                     )
                                     Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
@@ -1352,8 +1353,7 @@ fun MangaScreenAuroraImpl(
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .zIndex(AuroraZIndex.HERO)
-                        .padding(bottom = resolveAuroraHeroBottomPadding(navigationBarsBottom)),
+                        .zIndex(AuroraZIndex.HERO),
                     contentAlignment = Alignment.BottomStart,
                 ) {
                     // Calculate fade out alpha based on scroll (0-70% range)
@@ -1388,6 +1388,8 @@ fun MangaScreenAuroraImpl(
                             onClearSelected = { selectedGenres = emptySet() },
                             onCopyTitle = onTitleCopy,
                             titleStaggerState = titleStaggerState,
+                            hazeState = hazeState,
+                            bottomPadding = resolveAuroraHeroBottomPadding(navigationBarsBottom),
                             modifier = Modifier,
                         )
                     }
