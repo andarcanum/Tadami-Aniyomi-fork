@@ -46,6 +46,7 @@ sealed class MangaExtension {
         val iconUrl: String,
         val repoUrl: String,
         val repoName: String = "",
+        val needsAppUpdate: Boolean = false,
     ) : MangaExtension() {
 
         data class MangaSource(

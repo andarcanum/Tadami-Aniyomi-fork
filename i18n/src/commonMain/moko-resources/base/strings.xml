@@ -426,6 +426,8 @@
     <string name="ext_reinstall_required_hint">A newer plugin was found in another repository. Reinstall is required.</string>
     <string name="ext_update_available_banner">A newer version of this extension is available from its store.</string>
     <string name="ext_obsolete">Orphaned</string>
+    <string name="ext_needs_app_update">Update required</string>
+    <string name="extension_needs_app_update_message">This extension requires a newer version of the app. Update the app to install it.</string>
     <string name="ext_repo_update_short">Different repository</string>
     <string name="ext_repo_update_required">Reinstall required</string>
     <string name="ext_repo_update_dialog_title">Reinstall from another repository</string>

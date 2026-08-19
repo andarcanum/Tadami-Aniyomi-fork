@@ -8,13 +8,13 @@ import mihon.domain.extensionstore.model.legacyBaseUrl
 import tachiyomi.core.common.util.system.logcat
 
 fun AvailableExtensionData.toMangaExtensionAvailable(): MangaExtension.Available? {
-    if (libVersion !in MangaExtensionLoader.SUPPORTED_LIB_VERSIONS) {
+    val needsAppUpdate = libVersion !in MangaExtensionLoader.SUPPORTED_LIB_VERSIONS
+    if (needsAppUpdate) {
         MangaExtensionStoreMapperLog.logcat(LogPriority.WARN) {
-            "Skipping extension $pkgName $versionName from store '${store.name}': " +
+            "Keeping extension $pkgName $versionName from store '${store.name}' visible: " +
                 "unsupported extensions-lib version $libVersion " +
                 "(supported: ${MangaExtensionLoader.SUPPORTED_LIB_VERSIONS})"
         }
-        return null
     }
     val repoBase = store.legacyBaseUrl()
     return MangaExtension.Available(
@@ -37,6 +37,7 @@ fun AvailableExtensionData.toMangaExtensionAvailable(): MangaExtension.Available
         iconUrl = iconUrl,
         repoUrl = repoBase,
         repoName = store.name.ifBlank { store.badgeLabel },
+        needsAppUpdate = needsAppUpdate,
     )
 }
 

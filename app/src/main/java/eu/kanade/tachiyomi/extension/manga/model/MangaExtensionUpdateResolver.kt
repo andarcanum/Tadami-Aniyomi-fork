@@ -111,5 +111,6 @@ private fun isNewer(
     extension: MangaExtension.Installed,
     candidate: MangaExtension.Available,
 ): Boolean {
-    return candidate.versionCode > extension.versionCode || candidate.libVersion > extension.libVersion
+    return !candidate.needsAppUpdate &&
+        (candidate.versionCode > extension.versionCode || candidate.libVersion > extension.libVersion)
 }

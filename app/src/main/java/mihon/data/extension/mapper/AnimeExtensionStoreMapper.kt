@@ -8,13 +8,13 @@ import mihon.domain.extensionstore.model.legacyBaseUrl
 import tachiyomi.core.common.util.system.logcat
 
 fun AvailableExtensionData.toAnimeExtensionAvailable(): AnimeExtension.Available? {
-    if (libVersion !in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) {
+    val needsAppUpdate = libVersion !in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS
+    if (needsAppUpdate) {
         AnimeExtensionStoreMapperLog.logcat(LogPriority.WARN) {
             "Skipping extension $pkgName $versionName from store '${store.name}': " +
                 "unsupported extensions-lib version $libVersion " +
                 "(supported: ${AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS})"
         }
-        return null
     }
     val repoBase = store.legacyBaseUrl()
     return AnimeExtension.Available(
@@ -37,6 +37,7 @@ fun AvailableExtensionData.toAnimeExtensionAvailable(): AnimeExtension.Available
         iconUrl = iconUrl,
         repoUrl = repoBase,
         repoName = store.name.ifBlank { store.badgeLabel },
+        needsAppUpdate = needsAppUpdate,
     )
 }
 
