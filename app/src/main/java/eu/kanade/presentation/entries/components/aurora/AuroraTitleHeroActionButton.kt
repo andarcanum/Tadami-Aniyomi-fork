@@ -298,17 +298,50 @@ internal fun AuroraTitleHeroActionButton(
                 modifier = Modifier.size(iconSize),
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = actionLabel ?: stringResource(
-                    if (hasProgress) MR.strings.action_resume else MR.strings.action_start,
-                ),
-                color = contentColor,
-                fontSize = textSize,
-                fontWeight = textWeight,
-                style = TextStyle(shadow = labelShadow),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            val fullLabel = actionLabel ?: stringResource(
+                if (hasProgress) MR.strings.action_resume else MR.strings.action_start,
             )
+            if (fullLabel.contains(" • ")) {
+                val parts = fullLabel.split(" • ", limit = 2)
+                Text(
+                    text = parts[0],
+                    color = contentColor,
+                    fontSize = textSize,
+                    fontWeight = textWeight,
+                    style = TextStyle(shadow = labelShadow),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "•",
+                    color = contentColor,
+                    fontSize = textSize,
+                    fontWeight = textWeight,
+                    style = TextStyle(shadow = labelShadow),
+                    modifier = Modifier
+                        .padding(horizontal = 4.dp)
+                        .offset(y = 1.5.dp),
+                )
+                Text(
+                    text = parts[1],
+                    color = contentColor,
+                    fontSize = textSize,
+                    fontWeight = textWeight,
+                    style = TextStyle(shadow = labelShadow),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            } else {
+                Text(
+                    text = fullLabel,
+                    color = contentColor,
+                    fontSize = textSize,
+                    fontWeight = textWeight,
+                    style = TextStyle(shadow = labelShadow),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

@@ -642,9 +642,12 @@ fun AnimeScreenAuroraImpl(
         }
     }
     val animeActionResumeText = stringResource(MR.strings.action_resume)
-    val animeHeroActionLabel = remember(hasWatchingProgress, nextEpisodeNum, animeActionResumeText) {
-        if (hasWatchingProgress && nextEpisodeNum != null && nextEpisodeNum > 0) {
-            "$animeActionResumeText • $nextEpisodeNum"
+    val animeHeroTargetEpText = nextEpisodeNum?.takeIf { it > 0 }?.let {
+        stringResource(AYMR.strings.aurora_hero_cta_episode, it)
+    }
+    val animeHeroActionLabel = remember(hasWatchingProgress, animeHeroTargetEpText, animeActionResumeText) {
+        if (hasWatchingProgress && animeHeroTargetEpText != null) {
+            "$animeActionResumeText • $animeHeroTargetEpText"
         } else {
             null
         }

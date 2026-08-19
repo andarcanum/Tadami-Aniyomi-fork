@@ -253,9 +253,12 @@ fun NovelScreenAuroraImpl(
         }
     }
     val novelActionResumeText = stringResource(MR.strings.action_resume)
-    val novelHeroActionLabel = remember(isReading, nextNovelChapterNum, novelActionResumeText) {
-        if (isReading && nextNovelChapterNum != null && nextNovelChapterNum > 0) {
-            "$novelActionResumeText • $nextNovelChapterNum"
+    val novelHeroTargetChText = nextNovelChapterNum?.takeIf { it > 0 }?.let {
+        stringResource(MR.strings.aurora_hero_cta_chapter, it)
+    }
+    val novelHeroActionLabel = remember(isReading, novelHeroTargetChText, novelActionResumeText) {
+        if (isReading && novelHeroTargetChText != null) {
+            "$novelActionResumeText • $novelHeroTargetChText"
         } else {
             null
         }

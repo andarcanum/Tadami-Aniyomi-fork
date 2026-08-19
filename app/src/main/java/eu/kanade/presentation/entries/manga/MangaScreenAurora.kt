@@ -310,13 +310,17 @@ fun MangaScreenAuroraImpl(
         detailsSnapshot.progress?.currentChapterIndex?.let { it + 1 }
     }
     val mangaActionResumeText = stringResource(MR.strings.action_resume)
-    val mangaHeroActionLabel = remember(detailsSnapshot.progress?.hasProgress, nextChapterNum, mangaActionResumeText) {
-        if (detailsSnapshot.progress?.hasProgress == true && nextChapterNum != null && nextChapterNum > 0) {
-            "$mangaActionResumeText • $nextChapterNum"
-        } else {
-            null
-        }
+    val mangaHeroTargetChText = nextChapterNum?.takeIf { it > 0 }?.let {
+        stringResource(MR.strings.aurora_hero_cta_chapter, it)
     }
+    val mangaHeroActionLabel =
+        remember(detailsSnapshot.progress?.hasProgress, mangaHeroTargetChText, mangaActionResumeText) {
+            if (detailsSnapshot.progress?.hasProgress == true && mangaHeroTargetChText != null) {
+                "$mangaActionResumeText • $mangaHeroTargetChText"
+            } else {
+                null
+            }
+        }
     val auroraTranslationPreferences = remember { Injekt.get<UiPreferences>() }
     val auroraEntryTranslationEnabled by auroraTranslationPreferences
         .auroraEntryTranslationEnabled()

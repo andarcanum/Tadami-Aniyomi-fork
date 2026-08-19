@@ -1714,11 +1714,13 @@
     <string name="aurora_continue">ЗАПУСК</string>
     <string name="aurora_episodes_header">Эпизоды</string>
     <string name="aurora_episode_count">%d эп.</string>
+    <string name="aurora_hero_cta_episode">%d эп.</string>
     <string name="aurora_episode_badge_filler">Филлер</string>
     <string name="aurora_episode_badge_seen">Просм.</string>
     <string name="aurora_chapters_header">Главы</string>
     <string name="aurora_chapters">ГЛАВЫ</string>
     <string name="aurora_chapter_count">%d гл.</string>
+    <string name="aurora_hero_cta_chapter">%d гл.</string>
     <string name="aurora_episode_progress_format">%1$d/%2$d Эпизодов</string>
     <string name="aurora_chapter_progress_format">%1$d/%2$d Глав</string>
     <string name="aurora_chapter_progress">Глава %d</string>

@@ -2034,12 +2034,14 @@
     <string name="aurora_continue">CONTINUE</string>
     <string name="aurora_episodes_header">Episodes</string>
     <string name="aurora_episode_count">%d eps</string>
+    <string name="aurora_hero_cta_episode">%d Ep.</string>
     <string name="copy_title">Copy title</string>
     <string name="aurora_episode_badge_filler">Filler</string>
     <string name="aurora_episode_badge_seen">Seen</string>
     <string name="aurora_chapters_header">Chapters</string>
     <string name="aurora_chapters">CHAPTERS</string>
     <string name="aurora_chapter_count">%d chs</string>
+    <string name="aurora_hero_cta_chapter">%d Ch.</string>
     <string name="aurora_episode_progress_format">%1$d/%2$d Episode</string>
     <string name="aurora_chapter_progress_format">%1$d/%2$d Chapter</string>
     <string name="aurora_chapter_progress">Chapter %d</string>
