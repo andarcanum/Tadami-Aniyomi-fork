@@ -2,6 +2,7 @@ package eu.kanade.presentation.browse.novel
 
 import androidx.compose.runtime.Composable
 import eu.kanade.presentation.browse.RepoPickerDialog
+import mihon.domain.extensionstore.model.repoDisplayNameFallback
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.i18n.aniyomi.AYMR
 
@@ -19,7 +20,7 @@ fun NovelRepoPickerDialog(
         options = options,
         onSelectOption = onSelectPlugin,
         onDismiss = onDismiss,
-        optionLabel = { plugin -> plugin.repoName.ifBlank { plugin.repoUrl } },
+        optionLabel = { plugin -> plugin.repoName.ifBlank { plugin.repoUrl.repoDisplayNameFallback() } },
         optionVersionText = { plugin -> "v${plugin.versionName}" },
         comparator = compareBy<NovelPlugin.Available> { it.versionCode },
     )

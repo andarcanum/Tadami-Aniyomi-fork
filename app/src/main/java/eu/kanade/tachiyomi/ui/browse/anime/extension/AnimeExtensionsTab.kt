@@ -36,6 +36,7 @@ import eu.kanade.tachiyomi.ui.webview.WebViewScreen
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import kotlinx.collections.immutable.persistentListOf
+import mihon.domain.extensionstore.model.repoDisplayNameFallback
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
@@ -224,7 +225,7 @@ private fun AnimeExtensionReinstallDialog(
                 } else {
                     candidates.forEach { candidate ->
                         val repoName = candidate.repoName.ifBlank {
-                            candidate.repoUrl.substringAfter("://", candidate.repoUrl).substringBefore('/')
+                            candidate.repoUrl.repoDisplayNameFallback()
                         }
                         Button(
                             modifier = Modifier.fillMaxWidth(),

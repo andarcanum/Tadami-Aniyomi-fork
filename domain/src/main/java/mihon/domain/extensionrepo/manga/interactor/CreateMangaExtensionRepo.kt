@@ -1,10 +1,10 @@
 package mihon.domain.extensionrepo.manga.interactor
-
 import eu.kanade.tachiyomi.util.lang.Hash
 import logcat.LogPriority
 import mihon.domain.extensionrepo.model.ExtensionRepo
 import mihon.domain.extensionstore.manga.repository.MangaExtensionStoreRepository
 import mihon.domain.extensionstore.model.legacyBaseUrl
+import mihon.domain.extensionstore.model.repoDisplayNameFallback
 import mihon.domain.extensionstore.model.toExtensionStoreBaseUrl
 import mihon.domain.extensionstore.model.toLegacyExtensionRepoUrl
 import mihon.domain.extensionstore.toExtensionRepo
@@ -58,17 +58,9 @@ class CreateMangaExtensionRepo(
     }
 
     private fun extractRepoName(url: String): String {
+        // GitHub -> owner/repo; other hosts -> first two path segments; host as last resort.
         return try {
-            val uri = java.net.URI(url)
-            val segments = uri.path?.trim('/')?.split("/").orEmpty()
-            when {
-                uri.host == "raw.githubusercontent.com" && segments.size >= 2 ->
-                    "${segments[0]}/${segments[1]}"
-                uri.host == "github.com" && segments.size >= 2 ->
-                    "${segments[0]}/${segments[1]}"
-                segments.size >= 2 -> segments.take(2).joinToString("/")
-                else -> url
-            }
+            url.repoDisplayNameFallback()
         } catch (_: Exception) {
             url
         }
