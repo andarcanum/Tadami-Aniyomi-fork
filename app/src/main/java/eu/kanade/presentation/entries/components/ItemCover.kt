@@ -17,12 +17,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import coil3.compose.AsyncImage
 import coil3.compose.AsyncImagePainter
-import eu.kanade.presentation.components.CoverReloadSignal
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.entries.components.aurora.rememberAuroraPosterColorFilter
+import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeCover
+import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.MangaCover
+import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelCover
 import tachiyomi.presentation.core.util.LocalAppHaptics
 
@@ -64,7 +67,7 @@ enum class ItemCover(val ratio: Float) {
         val context = LocalContext.current
 
         if (isLoadableCoverData(model)) {
-            val coverReloadTick = CoverReloadSignal.tick.value
+            val coverReloadTick = rememberCoverReloadTick()
             val coverRequest = remember(context, model, coverReloadTick) {
                 buildAuroraCoverImageRequest(context, model)
             }
@@ -110,10 +113,9 @@ enum class ItemCover(val ratio: Float) {
 internal fun resolveCoverModel(data: Any?): Any? {
     return when (data) {
         is String -> data.takeIf { it.isNotBlank() }
-        // Keep cover data classes even with blank URLs — let NovelCoverFetcher
-        // (or the equivalent fetcher) decide how to handle them. This avoids
-        // skipping the AsyncImage loading pipeline entirely and showing the
-        // error painter before the fetcher has a chance to run.
+        is Anime -> data
+        is Manga -> data
+        is Novel -> data
         is AnimeCover -> data
         is MangaCover -> data
         is NovelCover -> data
@@ -128,6 +130,9 @@ internal fun isLoadableCoverData(data: Any?): Boolean {
         is NovelCover -> !data.url.isNullOrBlank() || data.isNovelFavorite
         is AnimeCover -> !data.url.isNullOrBlank() || data.isAnimeFavorite
         is MangaCover -> !data.url.isNullOrBlank() || data.isMangaFavorite
+        is Novel -> !data.thumbnailUrl.isNullOrBlank() || data.favorite
+        is Anime -> !data.thumbnailUrl.isNullOrBlank() || data.favorite
+        is Manga -> !data.thumbnailUrl.isNullOrBlank() || data.favorite
         else -> true
     }
 }

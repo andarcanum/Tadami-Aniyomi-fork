@@ -34,6 +34,7 @@ import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelExtensionDetai
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelSourcePreferencesScreen
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import kotlinx.collections.immutable.persistentListOf
+import mihon.domain.extensionstore.model.repoDisplayNameFallback
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -208,7 +209,7 @@ private fun NovelRepoReinstallDialog(
                 } else {
                     candidates.forEach { candidate ->
                         val repoName = candidate.repoName
-                            .ifBlank { candidate.repoUrl.substringAfter("://", candidate.repoUrl).substringBefore('/') }
+                            .ifBlank { candidate.repoUrl.repoDisplayNameFallback() }
                         Button(
                             modifier = Modifier.fillMaxWidth(),
                             onClick = { onClickCandidate(candidate) },

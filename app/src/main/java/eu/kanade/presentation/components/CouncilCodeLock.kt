@@ -377,7 +377,7 @@ fun CouncilCodeLockDialog(
     // Раздельные независимые таймеры глитчей для элементов
     var leftTagGlitch by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        val rnd = java.util.Random(111L)
+        val rnd = kotlin.random.Random(111L)
         while (true) {
             delay(rnd.nextLong(3000, 7500))
             leftTagGlitch = true
@@ -388,7 +388,7 @@ fun CouncilCodeLockDialog(
 
     var headerTitleGlitch by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        val rnd = java.util.Random(222L)
+        val rnd = kotlin.random.Random(222L)
         while (true) {
             delay(rnd.nextLong(2000, 6000))
             headerTitleGlitch = true
@@ -399,7 +399,7 @@ fun CouncilCodeLockDialog(
 
     var rightTagGlitch by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        val rnd = java.util.Random(333L)
+        val rnd = kotlin.random.Random(333L)
         while (true) {
             delay(rnd.nextLong(4000, 9000))
             rightTagGlitch = true
@@ -410,7 +410,7 @@ fun CouncilCodeLockDialog(
 
     var statusTextGlitch by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        val rnd = java.util.Random(444L)
+        val rnd = kotlin.random.Random(444L)
         while (true) {
             delay(rnd.nextLong(2500, 6500))
             statusTextGlitch = true
@@ -421,7 +421,7 @@ fun CouncilCodeLockDialog(
 
     var borderGlitch by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        val rnd = java.util.Random(555L)
+        val rnd = kotlin.random.Random(555L)
         while (true) {
             delay(rnd.nextLong(3500, 8000))
             borderGlitch = true
@@ -435,7 +435,7 @@ fun CouncilCodeLockDialog(
     // Логика поочерёдного подёргивания карточек: ровно одна случайная карточка дергается раз в 2 - 7 сек
     var activeGlitchingCardIndex by remember { mutableStateOf(-1) }
     LaunchedEffect(Unit) {
-        val rnd = java.util.Random()
+        val rnd = kotlin.random.Random.Default
         var lastIdx = -1
         while (true) {
             delay(rnd.nextLong(2000, 7000))

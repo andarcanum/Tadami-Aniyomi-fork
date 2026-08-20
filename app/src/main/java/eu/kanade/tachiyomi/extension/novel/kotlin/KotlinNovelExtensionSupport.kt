@@ -42,6 +42,7 @@ import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.NovelsPage
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
+import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.ConfigurableSource
 import eu.kanade.tachiyomi.source.MangaSource
@@ -50,6 +51,7 @@ import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
+import eu.kanade.tachiyomi.source.novel.NovelImageRequestSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.lang.Hash
@@ -251,9 +253,9 @@ object KotlinNovelExtensionLoader {
     private const val METADATA_EXTENSION_LIB = "tachiyomix.extensionLib"
     private const val PRIVATE_EXTENSION_EXTENSION = "ext"
     private const val LIB_VERSION_MIN = 1.4
-    private const val LIB_VERSION_MAX = 1.5
+    private const val LIB_VERSION_MAX = 1.7
 
-    val SUPPORTED_LIB_VERSIONS = listOf(LIB_VERSION_MIN, LIB_VERSION_MAX)
+    val SUPPORTED_LIB_VERSIONS = listOf(1.4, 1.5, 1.6, 1.7)
 
     private val preferences: SourcePreferences by injectLazy()
     private val trustExtension: TrustNovelExtension by injectLazy()
@@ -691,12 +693,19 @@ private fun NovelSource.withKotlinPluginIdentity(pluginId: String): NovelSource 
 private open class KotlinIdentityBasicNovelSourceAdapter(
     protected val source: NovelSource,
     override val pluginId: String,
-) : NovelSource, NovelSiteSource, NovelPluginIdentitySource {
+) : NovelSource, NovelSiteSource, NovelPluginIdentitySource, NovelImageRequestSource {
     override val id: Long = source.id
     override val name: String = source.name
     override val lang: String = source.lang
     override val isKotlinExtension: Boolean = true
-    override val siteUrl: String? = (source as? NovelSiteSource)?.siteUrl
+    override val siteUrl: String? = (source as? NovelSiteSource)?.siteUrl ?: (source as? NovelHttpSource)?.baseUrl
+
+    override suspend fun getImageRequestHeaders(): Map<String, String> {
+        val headers = (source as? NovelHttpSource)?.headers
+            ?: (source as? HttpSource)?.headers
+            ?: return emptyMap()
+        return (0 until headers.size).associate { headers.name(it) to headers.value(it) }
+    }
 
     override suspend fun getNovelDetails(novel: SNovel): SNovel = source.getNovelDetails(novel)
 
@@ -720,7 +729,10 @@ private open class KotlinIdentityBasicNovelSourceAdapter(
 private open class KotlinIdentityCatalogueNovelSourceAdapter(
     protected val catalogueSource: NovelCatalogueSource,
     pluginId: String,
-) : KotlinIdentityBasicNovelSourceAdapter(catalogueSource, pluginId), NovelCatalogueSource {
+) : KotlinIdentityBasicNovelSourceAdapter(catalogueSource, pluginId), NovelHttpSource, NovelCatalogueSource {
+    override val baseUrl: String get() = (catalogueSource as? NovelHttpSource)?.baseUrl ?: siteUrl.orEmpty()
+    override val headers: okhttp3.Headers get() = (catalogueSource as? NovelHttpSource)?.headers
+        ?: okhttp3.Headers.Builder().build()
     override val supportsLatest: Boolean = catalogueSource.supportsLatest
 
     override suspend fun getPopularNovels(page: Int): NovelsPage = catalogueSource.getPopularNovels(page)
@@ -782,12 +794,17 @@ private class KotlinIdentityConfigurableCatalogueNovelSourceAdapter(
 private open class KotlinMangaNovelSourceAdapter(
     protected val source: TachiyomiSource,
     override val pluginId: String,
-) : NovelSource, NovelSiteSource, NovelPluginIdentitySource {
+) : NovelSource, NovelSiteSource, NovelPluginIdentitySource, NovelImageRequestSource {
     override val id: Long = source.id
     override val name: String = source.name
     override val lang: String = source.lang
     override val isKotlinExtension: Boolean = true
     override val siteUrl: String? = (source as? HttpSource)?.baseUrl
+
+    override suspend fun getImageRequestHeaders(): Map<String, String> {
+        val headers = (source as? HttpSource)?.headers ?: return emptyMap()
+        return (0 until headers.size).associate { headers.name(it) to headers.value(it) }
+    }
 
     override suspend fun getNovelDetails(novel: SNovel): SNovel {
         return source.getMangaDetails(novel.toManga()).toNovel(source)
@@ -798,10 +815,19 @@ private open class KotlinMangaNovelSourceAdapter(
     }
 
     override suspend fun getChapterText(chapter: SNovelChapter): String {
-        val page = runCatching { source.getPageList(chapter.toChapter()).firstOrNull() }
-            .getOrNull()
-            ?: Page(0, chapter.url)
-        return source.fetchPageText(page)
+        val pages = runCatching { source.getPageList(chapter.toChapter()) }.getOrNull()
+        if (pages.isNullOrEmpty()) {
+            val fallbackPage = Page(0, chapter.url)
+            return source.fetchPageText(fallbackPage)
+        }
+        val textBlocks = pages.map { page ->
+            runCatching { source.fetchPageText(page) }.getOrDefault("")
+        }.filter { it.isNotBlank() }
+        return if (textBlocks.isNotEmpty()) {
+            textBlocks.joinToString("\n\n")
+        } else {
+            source.fetchPageText(pages.first())
+        }
     }
 }
 
@@ -825,9 +851,11 @@ private val filterAdapter: KotlinNovelFilterAdapter = KotlinNovelFilterAdapterIm
 private open class KotlinCatalogueNovelSourceAdapter(
     source: CatalogueSource,
     pluginId: String,
-) : KotlinMangaNovelSourceAdapter(source, pluginId), NovelCatalogueSource {
+) : KotlinMangaNovelSourceAdapter(source, pluginId), NovelHttpSource, NovelCatalogueSource {
     private val catalogueSource: CatalogueSource = source
 
+    override val baseUrl: String get() = (source as? HttpSource)?.baseUrl.orEmpty()
+    override val headers: okhttp3.Headers get() = (source as? HttpSource)?.headers ?: okhttp3.Headers.Builder().build()
     override val supportsLatest: Boolean = catalogueSource.supportsLatest
 
     override suspend fun getPopularNovels(page: Int): NovelsPage {

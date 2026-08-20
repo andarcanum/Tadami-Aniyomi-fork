@@ -52,8 +52,8 @@ class AuroraPrimeOverlayTest {
 
         result.background shouldBe live.background
         result.surface shouldBe live.surface
-        result.onBackground shouldBe Color(0xFFDCEBFF)
-        result.onSurface shouldBe Color(0xFFDCEBFF)
+        result.onBackground shouldBe base.onBackground
+        result.onSurface shouldBe base.onSurface
         result.primary shouldBe live.primary
         result.secondary shouldBe live.secondary
         result.tertiary shouldBe live.accent

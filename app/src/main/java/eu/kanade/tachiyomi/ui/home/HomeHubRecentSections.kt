@@ -85,8 +85,8 @@ internal fun HistoryRow(
             androidx.compose.material3.Text(
                 stringResource(AYMR.strings.aurora_more),
                 color = colors.accent,
-                fontSize = 12.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                fontSize = 14.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                 modifier = Modifier.clickable {
                     appHaptics.tap()
                     onViewAllClick()
@@ -206,8 +206,8 @@ internal fun RecommendationsGrid(
             androidx.compose.material3.Text(
                 stringResource(AYMR.strings.aurora_more),
                 color = colors.accent,
-                fontSize = 12.sp,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                fontSize = 14.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                 modifier = Modifier.clickable {
                     appHaptics.tap()
                     onMoreClick()

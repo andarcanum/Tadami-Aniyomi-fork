@@ -40,6 +40,7 @@ import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
+import eu.kanade.domain.ui.model.TitleScreenStyle
 import eu.kanade.domain.ui.model.setAppCompatDelegateThemeMode
 import eu.kanade.presentation.entries.translation.googleTranslationSourceLanguageFamilyOptions
 import eu.kanade.presentation.more.settings.Preference
@@ -551,6 +552,22 @@ object SettingsAppearanceScreen : SearchableSettings {
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.pref_category_title_screens),
             preferenceItems = buildList<Preference.PreferenceItem<out Any>> {
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.titleScreenStyle(),
+                        entries = TitleScreenStyle.entries
+                            .associateWith { stringResource(it.titleRes) }
+                            .toImmutableMap(),
+                        title = stringResource(AYMR.strings.pref_title_screen_style),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.titleScreenAnimation(),
+                        title = stringResource(AYMR.strings.pref_title_screen_animation),
+                        subtitle = stringResource(AYMR.strings.pref_title_screen_animation_summary),
+                    ),
+                )
                 add(
                     Preference.PreferenceItem.SwitchPreference(
                         preference = uiPreferences.showOriginalTitle(),

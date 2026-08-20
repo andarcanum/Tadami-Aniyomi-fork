@@ -26,7 +26,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImagePainter
+import coil3.compose.rememberAsyncImagePainter
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
+import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.entries.components.aurora.AuroraPosterBackgroundSpec
 import eu.kanade.presentation.entries.components.aurora.auroraPosterBackgroundSpec
@@ -42,6 +44,7 @@ import eu.kanade.tachiyomi.data.coil.AuroraPosterRequest
 import eu.kanade.tachiyomi.util.debugTitleCoverFlow
 import eu.kanade.tachiyomi.util.previewTitleCoverUrl
 import kotlinx.coroutines.flow.collectLatest
+import okhttp3.Call
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.asAnimeCover
 import uy.kohesive.injekt.Injekt
@@ -65,6 +68,7 @@ fun FullscreenPosterBackground(
     resolvedCoverUrlFallback: String? = null,
     refererUrl: String? = null,
     sourceHeaders: Map<String, String>? = null,
+    sourceClient: Call.Factory? = null,
     onPosterLongPress: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -82,6 +86,7 @@ fun FullscreenPosterBackground(
         resolvedCoverUrlFallback,
         refererUrl,
         sourceHeaders,
+        sourceClient,
         anime.thumbnailUrl,
         customCoverFile,
         anime.coverLastModified,
@@ -91,6 +96,7 @@ fun FullscreenPosterBackground(
             fallbackUrl = resolvedCoverUrlFallback?.takeIf { it.isNotBlank() } ?: anime.thumbnailUrl,
             refererUrl = refererUrl?.takeIf { it.isNotBlank() },
             headers = sourceHeaders,
+            client = sourceClient,
             customCoverFile = customCoverFile,
             coverLastModified = anime.coverLastModified,
         )
@@ -139,6 +145,14 @@ fun FullscreenPosterBackground(
     var previousSuccessfulBackgroundSpec by remember(anime.id) {
         mutableStateOf<AuroraPosterBackgroundSpec?>(null)
     }
+    var isHighResPosterReady by remember(anime.id) {
+        mutableStateOf(false)
+    }
+    // Stable preview from the thumbnail shown in list/grid before open, so the
+    // title never starts black while the full poster resolves.
+    val previewCoverModel = remember(anime.id) {
+        anime.asAnimeCover()
+    }
 
     Box(
         modifier = modifier
@@ -174,7 +188,7 @@ fun FullscreenPosterBackground(
             }
             val backgroundRequest = remember(
                 posterRequest,
-                placeholderCover,
+                previewCoverModel,
                 previousSuccessfulBackgroundSpec?.memoryCacheKey,
                 backgroundSpec.memoryCacheKey,
                 containerWidthPx,
@@ -188,7 +202,7 @@ fun FullscreenPosterBackground(
                     containerHeightPx = containerHeightPx,
                     placeholderData = previousSuccessfulBackgroundSpec
                         ?.takeIf { it.memoryCacheKey != backgroundSpec.memoryCacheKey }
-                        ?: placeholderCover,
+                        ?: previewCoverModel,
                 )
             }
             val backgroundPainter = rememberAuroraPosterBackgroundPainter(
@@ -215,6 +229,12 @@ fun FullscreenPosterBackground(
                 backgroundPainter.state.collectLatest { state ->
                     if (state is AsyncImagePainter.State.Success) {
                         previousSuccessfulBackgroundSpec = backgroundSpec
+                        isHighResPosterReady = true
+                    } else if (state is AsyncImagePainter.State.Error) {
+                        // Full poster failed (e.g. Cloudflare on the generic poster
+                        // client): hide the overlay so the preview thumbnail stays
+                        // visible instead of showing the "no poster" placeholder.
+                        isHighResPosterReady = false
                     }
                     debugTitleCoverFlow(
                         scope = "anime-bg",
@@ -225,15 +245,49 @@ fun FullscreenPosterBackground(
                 }
             }
 
+            // Preview layer (list thumbnail) - instant, never blank on enter.
+            // Preview layer: reuse the exact grid request so the thumbnail resolves
+            // from the memory cache instantly — never the "no poster" placeholder.
+            val previewRequest = remember(anime.id, previewCoverModel) {
+                buildAuroraCoverImageRequest(context, previewCoverModel)
+            }
+            val previewLayerPainter = rememberAsyncImagePainter(
+                model = previewRequest,
+                error = placeholderPainter,
+                fallback = placeholderPainter,
+                contentScale = ContentScale.Crop,
+            )
+
+            val highResAlpha by animateFloatAsState(
+                targetValue = if (isHighResPosterReady) 1f else 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessLow,
+                ),
+                label = "highResPosterAlpha",
+            )
+
             Image(
-                painter = backgroundPainter,
+                painter = previewLayerPainter,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 colorFilter = posterColorFilter,
                 modifier = Modifier.fillMaxSize(),
             )
 
-            // PERF (backported from novel): guard the blur layer cost on initial Aurora title open.
+            Image(
+                painter = backgroundPainter,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                colorFilter = posterColorFilter,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = highResAlpha },
+            )
+
+            val activePosterPainter = if (isHighResPosterReady) backgroundPainter else previewLayerPainter
+
+            // PERF: guard the blur layer cost on initial Aurora title open.
             val shouldApplyBlurLayer by remember {
                 derivedStateOf {
                     blurOverlayAlpha > 0.08f &&
@@ -242,7 +296,7 @@ fun FullscreenPosterBackground(
             }
             if (shouldApplyBlurLayer) {
                 Image(
-                    painter = backgroundPainter,
+                    painter = activePosterPainter,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     colorFilter = posterColorFilter,

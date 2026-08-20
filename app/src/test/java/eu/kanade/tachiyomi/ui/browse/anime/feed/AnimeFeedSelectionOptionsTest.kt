@@ -1,5 +1,7 @@
 package eu.kanade.tachiyomi.ui.browse.anime.feed
 
+import eu.kanade.presentation.browse.buildFeedSelectionOptions
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.source.model.FeedListingType
@@ -17,7 +19,7 @@ class AnimeFeedSelectionOptionsTest {
             filtersJson = null,
         )
 
-        val options = buildAnimeFeedSelectionOptions(
+        val options = buildFeedSelectionOptions(
             sourceSupportsLatest = true,
             savedSearches = listOf(search),
             latestLabel = "Latest",
@@ -31,6 +33,18 @@ class AnimeFeedSelectionOptionsTest {
             FeedListingType.SAVED_SEARCH,
         )
         options.last().savedSearch shouldBe search
+    }
+
+    @Test
+    fun `selection options omit latest when source does not support it`() {
+        val options = buildFeedSelectionOptions(
+            sourceSupportsLatest = false,
+            savedSearches = emptyList(),
+            latestLabel = "Latest",
+            popularLabel = "Popular",
+        )
+
+        options.map { it.listingType } shouldContainExactly listOf(FeedListingType.POPULAR)
     }
 
     @Test

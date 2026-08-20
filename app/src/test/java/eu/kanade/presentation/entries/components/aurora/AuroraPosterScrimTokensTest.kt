@@ -8,11 +8,11 @@ class AuroraPosterScrimTokensTest {
     @Test
     fun `light aurora poster scrim uses neutral airy overlay`() {
         resolveAuroraPosterScrimAlphaStops(isDark = false) shouldBe listOf(
-            0.0f to 0.00f,
-            0.3f to 0.08f,
-            0.5f to 0.22f,
-            0.7f to 0.42f,
-            1.0f to 0.65f,
+            0.00f to 0.00f,
+            0.45f to 0.00f,
+            0.65f to 0.04f,
+            0.85f to 0.16f,
+            1.00f to 0.35f,
         )
     }
 }

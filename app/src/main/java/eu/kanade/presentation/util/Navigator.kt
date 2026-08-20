@@ -9,6 +9,8 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -31,6 +33,9 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.reader.novel.NovelReaderSystemUiSession
 import eu.kanade.presentation.theme.LocalIsEInkMode
+import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
+import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
+import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.powerManager
 import kotlinx.coroutines.CoroutineName
@@ -54,7 +59,10 @@ private val uiPreferences: UiPreferences = Injekt.get()
 private const val MODERN_ENTER_DURATION = 300
 private const val MODERN_EXIT_DURATION = 300
 private const val MODERN_ENTER_DELAY = 0
-private val AURORA_EASING = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
+private const val TITLE_ZOOM_MS = 750
+private const val TITLE_ZOOM_FADE_IN_MS = 550
+private const val TITLE_ZOOM_EXIT_MS = 280
+private val AURORA_EASING = CubicBezierEasing(0.16f, 1.0f, 0.3f, 1.0f)
 private val MODERN_SLIDE_DISTANCE = 30.dp
 
 interface Tab : cafe.adriel.voyager.navigator.tab.Tab {
@@ -95,6 +103,7 @@ fun DefaultNavigatorScreenTransition(
     val density = LocalDensity.current
     val modernSlideDistance = with(density) { MODERN_SLIDE_DISTANCE.roundToPx() }
     val selectedMode = uiPreferences.navigationTransitionMode().collectAsState().value
+    val titleScreenAnimationEnabled = uiPreferences.titleScreenAnimation().collectAsState().value
     val isEInkMode = LocalIsEInkMode.current
     val resolvedMode = resolveNavigationTransitionMode(
         selectedMode = selectedMode,
@@ -105,6 +114,7 @@ fun DefaultNavigatorScreenTransition(
     ScreenTransition(
         navigator = navigator,
         transition = {
+            val isForward = navigator.lastEvent != StackEvent.Pop
             if (
                 shouldSuppressTransitionForInternalChapterReplace(
                     initialScreen = initialState,
@@ -114,17 +124,30 @@ fun DefaultNavigatorScreenTransition(
             ) {
                 EnterTransition.None togetherWith ExitTransition.None
             } else {
-                when (resolvedMode) {
-                    ResolvedNavigationTransitionMode.NONE -> EnterTransition.None togetherWith ExitTransition.None
-                    ResolvedNavigationTransitionMode.LEGACY -> {
+                when {
+                    // System (or user) has disabled animations altogether.
+                    resolvedMode == ResolvedNavigationTransitionMode.NONE ->
+                        EnterTransition.None togetherWith ExitTransition.None
+                    // Dedicated title-screen entrance: Deep Zoom (scale + fade),
+                    // only when pushing an entry screen forward and the option
+                    // is enabled. Everything else keeps the configured mode.
+                    titleScreenAnimationEnabled &&
+                        isForward &&
+                        targetState.isTitleScreen() -> titleScreenDeepZoom()
+                    // Reverse of the entrance when leaving a title screen:
+                    // the title zooms back out while the origin fades in.
+                    titleScreenAnimationEnabled &&
+                        !isForward &&
+                        initialState.isTitleScreen() -> titleScreenZoomOut()
+                    resolvedMode == ResolvedNavigationTransitionMode.LEGACY -> {
                         materialSharedAxisX(
-                            forward = navigator.lastEvent != StackEvent.Pop,
+                            forward = isForward,
                             slideDistance = slideDistance,
                         )
                     }
-                    ResolvedNavigationTransitionMode.MODERN -> {
+                    else -> {
                         modernSharedAxisX(
-                            forward = navigator.lastEvent != StackEvent.Pop,
+                            forward = isForward,
                             slideDistance = modernSlideDistance,
                         )
                     }
@@ -133,6 +156,57 @@ fun DefaultNavigatorScreenTransition(
         },
         modifier = modifier,
     )
+}
+
+private fun Screen.isTitleScreen(): Boolean =
+    this is MangaScreen || this is AnimeScreen || this is NovelScreen
+
+private fun AnimatedContentTransitionScope<Screen>.titleScreenDeepZoom(): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = TITLE_ZOOM_FADE_IN_MS,
+            easing = AURORA_EASING,
+        ),
+    ) + scaleIn(
+        initialScale = 0.90f,
+        animationSpec = tween(
+            durationMillis = TITLE_ZOOM_MS,
+            easing = AURORA_EASING,
+        ),
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = TITLE_ZOOM_EXIT_MS,
+            easing = AURORA_EASING,
+        ),
+    )
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
+}
+
+private fun AnimatedContentTransitionScope<Screen>.titleScreenZoomOut(): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = TITLE_ZOOM_EXIT_MS,
+            easing = AURORA_EASING,
+        ),
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = TITLE_ZOOM_EXIT_MS,
+            easing = AURORA_EASING,
+        ),
+    ) + scaleOut(
+        targetScale = 0.94f,
+        animationSpec = tween(
+            durationMillis = TITLE_ZOOM_EXIT_MS,
+            easing = AURORA_EASING,
+        ),
+    )
+    return (enter togetherWith exit).apply {
+        targetContentZIndex = 1f
+    }
 }
 
 @Composable

@@ -2,36 +2,65 @@
 
 package eu.kanade.presentation.reader.novel
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.ViewDay
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import cafe.adriel.voyager.navigator.LocalNavigator
-import cafe.adriel.voyager.navigator.currentOrThrow
-import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
-import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
+import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.reader.settings.AuroraFieldLabel
 import eu.kanade.presentation.reader.settings.AuroraGlassSection
 import eu.kanade.presentation.reader.settings.AuroraMiniOption
-import eu.kanade.presentation.reader.settings.AuroraNavRow
 import eu.kanade.presentation.reader.settings.AuroraToggleRow
-import eu.kanade.tachiyomi.ui.reader.novel.replace.NovelTextReplaceRulesScreen
-import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
+import eu.kanade.presentation.reader.settings.auroraRimColor
+import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderColorTheme
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import tachiyomi.i18n.aniyomi.AYMR
@@ -43,16 +72,10 @@ import kotlin.math.roundToInt
 fun GeneralTab(
     settings: eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings,
     sourceId: Long,
-    currentWebViewActive: Boolean,
-    currentPageReaderActive: Boolean,
     overrideEnabled: Boolean,
     preferences: NovelReaderPreferences,
     onDismissRequest: () -> Unit,
     bookModeActive: Boolean = false,
-    onPrepareBook: (() -> Unit)? = null,
-    prepareBookInProgress: Boolean = false,
-    preparedChapterCount: Int = 0,
-    totalChapterCount: Int = 0,
 ) {
     fun <T> update(
         value: T,
@@ -70,54 +93,16 @@ fun GeneralTab(
         }
     }
 
-    val pageTransitionEntries = novelPageTransitionStyleEntries()
-    val pageTurnSpeedEntries = novelPageTurnSpeedEntries()
-    val pageTurnIntensityEntries = novelPageTurnIntensityEntries()
-    val pageTurnShadowEntries = novelPageTurnShadowIntensityEntries()
-    val pageTurnActivationZoneEntries = novelPageTurnActivationZoneEntries()
-    val showPageTurnTuning = shouldShowPageTurnTuningControls(
-        pageReaderEnabled = settings.pageReader,
-        style = settings.pageTransitionStyle,
-    )
-    var pageTurnTuningExpanded by rememberSaveable(settings.pageReader, settings.pageTransitionStyle) {
-        mutableStateOf(false)
-    }
-    val rendererAvailability = remember(
-        currentPageReaderActive,
-        currentWebViewActive,
-        settings.bionicReading,
-        bookModeActive,
-    ) {
-        resolveRendererSettingsAvailability(
-            pageReaderEnabled = currentPageReaderActive,
-            showWebView = currentWebViewActive,
-            bionicReadingEnabled = settings.bionicReading,
-            bookModeEnabled = bookModeActive,
-        )
-    }
     val bookModeHeadingsPref = preferences.bookModeShowChapterHeadings()
     val bookModeHeadings by bookModeHeadingsPref.collectAsState()
-
-    @Composable
-    fun rendererSubtitle(
-        baseSubtitle: String,
-        reason: RendererSettingDisableReason?,
-    ): String {
-        val reasonText = when (reason) {
-            RendererSettingDisableReason.PAGE_MODE ->
-                stringResource(AYMR.strings.novel_reader_renderer_disabled_page_mode_summary)
-            RendererSettingDisableReason.WEBVIEW_ACTIVE ->
-                stringResource(AYMR.strings.novel_reader_renderer_disabled_webview_summary)
-            RendererSettingDisableReason.BIONIC_READING ->
-                stringResource(AYMR.strings.novel_reader_renderer_disabled_bionic_summary)
-            null -> null
-        }
-        return if (reasonText != null) "$baseSubtitle\n$reasonText" else baseSubtitle
-    }
+    val aurora = AuroraTheme.colors
+    val selectedColorTheme = resolveNovelReaderColorTheme(
+        settings.backgroundColor.orEmpty(),
+        settings.textColor.orEmpty(),
+    )
 
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Scope control — same compact pattern as manga series override:
-        // section title names the scope; state lives in the toggle subtitle only.
+        // Scope control (Общие vs Для источника)
         AuroraGlassSection(title = stringResource(AYMR.strings.novel_reader_settings_title)) {
             AuroraToggleRow(
                 label = stringResource(AYMR.strings.novel_reader_override_source),
@@ -137,9 +122,8 @@ fun GeneralTab(
             )
         }
 
+        // Режим чтения
         AuroraGlassSection(title = stringResource(AYMR.strings.novel_reader_section_reading_behavior)) {
-            // The global "Book" reading mode is gone: a title is read as a book only when its book
-            // artifact was compiled from the title screen, so these rows follow that state instead.
             if (bookModeActive) {
                 AuroraToggleRow(
                     label = stringResource(AYMR.strings.novel_reader_book_mode_show_chapter_headings),
@@ -189,6 +173,325 @@ fun GeneralTab(
                 )
             }
             NovelGlassHint(stringResource(AYMR.strings.novel_reader_page_mode_summary))
+
+            if (settings.pageReader) {
+                AuroraToggleRow(
+                    label = stringResource(AYMR.strings.novel_reader_two_page_landscape),
+                    subtitle = stringResource(AYMR.strings.novel_reader_two_page_landscape_summary),
+                    checked = settings.twoPageLandscape,
+                    onClick = {
+                        update(
+                            !settings.twoPageLandscape,
+                            { o, v -> o.copy(twoPageLandscape = v) },
+                            { preferences.twoPageLandscape().set(it) },
+                        )
+                    },
+                )
+                if (settings.twoPageLandscape) {
+                    AuroraToggleRow(
+                        label = stringResource(AYMR.strings.novel_reader_spread_cutout_guard),
+                        subtitle = stringResource(AYMR.strings.novel_reader_spread_cutout_guard_summary),
+                        checked = settings.spreadCutoutGuard,
+                        // Device-level setting: the cutout-guard is a property of the display, not
+                        // of a source, so it only ever toggles the global preference.
+                        onClick = { preferences.spreadCutoutGuard().set(!settings.spreadCutoutGuard) },
+                    )
+                }
+            }
+        }
+
+        // Внешний вид страницы (Размер текста + Тема / Фон)
+        AuroraGlassSection(title = stringResource(AYMR.strings.novel_reader_section_appearance)) {
+            // Слайдер размера шрифта (стиль Apple Books / Kindle с буквами A по краям)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(AYMR.strings.novel_reader_font_size),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = aurora.textPrimary,
+                    )
+                    Text(
+                        text = "${settings.fontSize} sp",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = aurora.accent,
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    IconButton(
+                        onClick = {
+                            val newSize = (settings.fontSize - 1).coerceIn(12, 28)
+                            update(newSize, { o, v -> o.copy(fontSize = v) }, { preferences.fontSize().set(it) })
+                        },
+                        enabled = settings.fontSize > 12,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Text(
+                            text = "A",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (settings.fontSize >
+                                12
+                            ) {
+                                aurora.textPrimary
+                            } else {
+                                aurora.textSecondary.copy(alpha = 0.35f)
+                            },
+                        )
+                    }
+
+                    var draftFontSize by rememberSaveable { mutableFloatStateOf(settings.fontSize.toFloat()) }
+                    LaunchedEffect(settings.fontSize) {
+                        draftFontSize = settings.fontSize.toFloat()
+                    }
+
+                    Slider(
+                        value = draftFontSize,
+                        onValueChange = { draftFontSize = it },
+                        onValueChangeFinished = {
+                            val committed = draftFontSize.roundToInt().coerceIn(12, 28)
+                            if (committed != settings.fontSize) {
+                                update(committed, { o, v -> o.copy(fontSize = v) }, { preferences.fontSize().set(it) })
+                            }
+                        },
+                        valueRange = 12f..28f,
+                        steps = 15,
+                        modifier = Modifier.weight(1f),
+                        colors = SliderDefaults.colors(
+                            thumbColor = aurora.accent,
+                            activeTrackColor = aurora.accent,
+                            inactiveTrackColor = if (aurora.isDark) {
+                                Color.White.copy(
+                                    alpha = 0.12f,
+                                )
+                            } else {
+                                Color.Black.copy(alpha = 0.08f)
+                            },
+                            activeTickColor = Color.Transparent,
+                            inactiveTickColor = Color.Transparent,
+                        ),
+                    )
+
+                    IconButton(
+                        onClick = {
+                            val newSize = (settings.fontSize + 1).coerceIn(12, 28)
+                            update(newSize, { o, v -> o.copy(fontSize = v) }, { preferences.fontSize().set(it) })
+                        },
+                        enabled = settings.fontSize < 28,
+                        modifier = Modifier.size(36.dp),
+                    ) {
+                        Text(
+                            text = "A",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (settings.fontSize <
+                                28
+                            ) {
+                                aurora.textPrimary
+                            } else {
+                                aurora.textSecondary.copy(alpha = 0.35f)
+                            },
+                        )
+                    }
+                }
+            }
+
+            // Сегментированный переключатель: Тема vs Фон
+            AuroraFieldLabel(stringResource(AYMR.strings.novel_reader_appearance_mode))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AuroraMiniOption(
+                    selected = settings.appearanceMode == NovelReaderAppearanceMode.THEME,
+                    onClick = {
+                        update(
+                            NovelReaderAppearanceMode.THEME,
+                            { o, v -> o.copy(appearanceMode = v) },
+                            { preferences.appearanceMode().set(it) },
+                        )
+                    },
+                    label = stringResource(AYMR.strings.novel_reader_appearance_mode_theme),
+                    icon = Icons.Outlined.Palette,
+                    modifier = Modifier.weight(1f),
+                )
+                AuroraMiniOption(
+                    selected = settings.appearanceMode == NovelReaderAppearanceMode.BACKGROUND,
+                    onClick = {
+                        update(
+                            NovelReaderAppearanceMode.BACKGROUND,
+                            { o, v -> o.copy(appearanceMode = v) },
+                            { preferences.appearanceMode().set(it) },
+                        )
+                    },
+                    label = stringResource(AYMR.strings.novel_reader_appearance_mode_background),
+                    icon = Icons.Outlined.Image,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            // Быстрые пресеты темы или фона
+            if (settings.appearanceMode == NovelReaderAppearanceMode.THEME) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(novelReaderPresetThemes) { theme ->
+                        val isSelected = selectedColorTheme == theme
+                        val parsedBg = remember(theme.backgroundColor) { parseHexColor(theme.backgroundColor) }
+                        val parsedFg = remember(theme.textColor) { parseHexColor(theme.textColor) }
+
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    update(
+                                        NovelReaderAppearanceMode.THEME,
+                                        { o, v -> o.copy(appearanceMode = v) },
+                                        { preferences.appearanceMode().set(it) },
+                                    )
+                                    update(
+                                        theme.backgroundColor,
+                                        { o, v -> o.copy(backgroundColor = v) },
+                                        { preferences.backgroundColor().set(it) },
+                                    )
+                                    update(
+                                        theme.textColor,
+                                        { o, v -> o.copy(textColor = v) },
+                                        { preferences.textColor().set(it) },
+                                    )
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) aurora.accent.copy(alpha = 0.18f) else Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) {
+                                    aurora.accent
+                                } else {
+                                    MaterialTheme.colorScheme.outlineVariant.copy(
+                                        alpha = 0.25f,
+                                    )
+                                },
+                            ),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(parsedBg)
+                                        .border(1.dp, parsedFg.copy(alpha = 0.4f), CircleShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "A",
+                                        color = parsedFg,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(novelReaderBackgroundPresets) { preset ->
+                        val isSelected = settings.backgroundSource == NovelReaderBackgroundSource.PRESET &&
+                            settings.backgroundPresetId == preset.id
+                        val shape = RoundedCornerShape(12.dp)
+
+                        Surface(
+                            modifier = Modifier
+                                .width(76.dp)
+                                .height(54.dp)
+                                .clip(shape)
+                                .clickable {
+                                    update(
+                                        NovelReaderAppearanceMode.BACKGROUND,
+                                        { o, v -> o.copy(appearanceMode = v) },
+                                        { preferences.appearanceMode().set(it) },
+                                    )
+                                    update(
+                                        NovelReaderBackgroundSource.PRESET,
+                                        { o, v -> o.copy(backgroundSource = v) },
+                                        { preferences.backgroundSource().set(it) },
+                                    )
+                                    update(
+                                        preset.id,
+                                        { o, v -> o.copy(backgroundPresetId = v) },
+                                        { preferences.backgroundPresetId().set(it) },
+                                    )
+                                },
+                            shape = shape,
+                            color = Color.Transparent,
+                            border = androidx.compose.foundation.BorderStroke(
+                                width = if (isSelected) 1.5.dp else 1.dp,
+                                color = if (isSelected) aurora.accent else auroraRimColor(),
+                            ),
+                        ) {
+                            Box(modifier = Modifier.fillMaxWidth()) {
+                                Image(
+                                    painter = painterResource(id = preset.imageResId),
+                                    contentDescription = preset.id,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                if (isSelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.BottomEnd)
+                                            .padding(4.dp)
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(aurora.accent),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = if (aurora.isDark) aurora.background else Color.White,
+                                            modifier = Modifier.size(11.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Экспресс-переключатели
+        AuroraGlassSection(title = stringResource(AYMR.strings.novel_reader_section_express_switches)) {
             if (settings.pageReader) {
                 AuroraToggleRow(
                     label = stringResource(AYMR.strings.novel_reader_show_page_chapter_title),
@@ -202,230 +505,46 @@ fun GeneralTab(
                         )
                     },
                 )
-                ListPreferenceWidget(
-                    value = settings.pageTransitionStyle,
-                    title = stringResource(AYMR.strings.novel_reader_page_transition_style),
-                    subtitle = novelPageTransitionStyleSubtitle(
-                        style = settings.pageTransitionStyle,
-                        entries = pageTransitionEntries,
-                    ),
-                    icon = null,
-                    entries = pageTransitionEntries,
-                    onValueChange = {
-                        update(
-                            it,
-                            { o, v -> o.copy(pageTransitionStyle = v) },
-                            { preferences.pageTransitionStyle().set(it) },
-                            dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                        )
-                    },
-                )
-                if (settings.pageTransitionStyle == NovelPageTransitionStyle.BOOK_FLIP) {
-                    val bookFlipAnimationSpeedEntries = novelBookFlipAnimationSpeedEntries()
-                    LnReaderSliderRow(
-                        label = stringResource(AYMR.strings.novel_reader_book_flip_animation_speed),
-                        valueText = { value ->
-                            resolveNovelPageTurnSliderLabel(
-                                value = resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
-                                entries = bookFlipAnimationSpeedEntries,
-                            )
-                        },
-                        committedValue = novelBookFlipAnimationSpeedSliderIndex(
-                            settings.bookFlipAnimationSpeed,
-                        ).toFloat(),
-                        range = 0f..(bookFlipAnimationSpeedEntries.size - 1).toFloat(),
-                        steps = bookFlipAnimationSpeedEntries.size - 2,
-                        onCommit = { value ->
-                            update(
-                                resolveNovelBookFlipAnimationSpeedSliderValue(value.roundToInt()),
-                                { o, v -> o.copy(bookFlipAnimationSpeed = v) },
-                                { preferences.bookFlipAnimationSpeed().set(it) },
-                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                            )
-                        },
-                    )
-                    LnReaderSliderRow(
-                        label = stringResource(AYMR.strings.novel_reader_page_turn_activation_zone),
-                        valueText = { value ->
-                            resolveNovelPageTurnSliderLabel(
-                                value = resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
-                                entries = pageTurnActivationZoneEntries,
-                            )
-                        },
-                        committedValue = novelPageTurnActivationZoneSliderIndex(
-                            settings.pageTurnActivationZone,
-                        ).toFloat(),
-                        range = 0f..(pageTurnActivationZoneEntries.size - 1).toFloat(),
-                        steps = pageTurnActivationZoneEntries.size - 2,
-                        onCommit = { value ->
-                            update(
-                                resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
-                                { o, v -> o.copy(pageTurnActivationZone = v) },
-                                { preferences.pageTurnActivationZone().set(it) },
-                                dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                            )
-                        },
-                    )
-                }
-                if (showPageTurnTuning) {
-                    TextPreferenceWidget(
-                        title = stringResource(AYMR.strings.novel_reader_page_turn_tuning),
-                        subtitle = novelPageTurnTuningSummary(
-                            speed = settings.pageTurnSpeed,
-                            intensity = settings.pageTurnIntensity,
-                            shadowIntensity = settings.pageTurnShadowIntensity,
-                            activationZone = settings.pageTurnActivationZone,
-                            speedEntries = pageTurnSpeedEntries,
-                            intensityEntries = pageTurnIntensityEntries,
-                            shadowEntries = pageTurnShadowEntries,
-                            activationZoneEntries = pageTurnActivationZoneEntries,
-                        ),
-                        widget = {
-                            Icon(
-                                imageVector = if (pageTurnTuningExpanded) {
-                                    Icons.Filled.KeyboardArrowDown
-                                } else {
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight
-                                },
-                                contentDescription = null,
-                            )
-                        },
-                        onPreferenceClick = {
-                            pageTurnTuningExpanded = !pageTurnTuningExpanded
-                        },
-                    )
-                    if (pageTurnTuningExpanded) {
-                        LnReaderSliderRow(
-                            label = stringResource(AYMR.strings.novel_reader_page_turn_speed),
-                            valueText = { value ->
-                                resolveNovelPageTurnSliderLabel(
-                                    value = resolveNovelPageTurnSpeedSliderValue(value.roundToInt()),
-                                    entries = pageTurnSpeedEntries,
-                                )
-                            },
-                            committedValue = novelPageTurnSpeedSliderIndex(settings.pageTurnSpeed).toFloat(),
-                            range = 0f..(pageTurnSpeedEntries.size - 1).toFloat(),
-                            steps = pageTurnSpeedEntries.size - 2,
-                            onCommit = { value ->
-                                update(
-                                    resolveNovelPageTurnSpeedSliderValue(value.roundToInt()),
-                                    { o, v -> o.copy(pageTurnSpeed = v) },
-                                    { preferences.pageTurnSpeed().set(it) },
-                                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                                )
-                            },
-                        )
-                        LnReaderSliderRow(
-                            label = stringResource(AYMR.strings.novel_reader_page_turn_intensity),
-                            valueText = { value ->
-                                resolveNovelPageTurnSliderLabel(
-                                    value = resolveNovelPageTurnIntensitySliderValue(value.roundToInt()),
-                                    entries = pageTurnIntensityEntries,
-                                )
-                            },
-                            committedValue = novelPageTurnIntensitySliderIndex(
-                                settings.pageTurnIntensity,
-                            ).toFloat(),
-                            range = 0f..(pageTurnIntensityEntries.size - 1).toFloat(),
-                            steps = pageTurnIntensityEntries.size - 2,
-                            onCommit = { value ->
-                                update(
-                                    resolveNovelPageTurnIntensitySliderValue(value.roundToInt()),
-                                    { o, v -> o.copy(pageTurnIntensity = v) },
-                                    { preferences.pageTurnIntensity().set(it) },
-                                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                                )
-                            },
-                        )
-                        LnReaderSliderRow(
-                            label = stringResource(AYMR.strings.novel_reader_page_turn_shadow_intensity),
-                            valueText = { value ->
-                                resolveNovelPageTurnSliderLabel(
-                                    value = resolveNovelPageTurnShadowIntensitySliderValue(value.roundToInt()),
-                                    entries = pageTurnShadowEntries,
-                                )
-                            },
-                            committedValue = novelPageTurnShadowIntensitySliderIndex(
-                                settings.pageTurnShadowIntensity,
-                            ).toFloat(),
-                            range = 0f..(pageTurnShadowEntries.size - 1).toFloat(),
-                            steps = pageTurnShadowEntries.size - 2,
-                            onCommit = { value ->
-                                update(
-                                    resolveNovelPageTurnShadowIntensitySliderValue(value.roundToInt()),
-                                    { o, v -> o.copy(pageTurnShadowIntensity = v) },
-                                    { preferences.pageTurnShadowIntensity().set(it) },
-                                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                                )
-                            },
-                        )
-                        LnReaderSliderRow(
-                            label = stringResource(AYMR.strings.novel_reader_page_turn_activation_zone),
-                            valueText = { value ->
-                                resolveNovelPageTurnSliderLabel(
-                                    value = resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
-                                    entries = pageTurnActivationZoneEntries,
-                                )
-                            },
-                            committedValue = novelPageTurnActivationZoneSliderIndex(
-                                settings.pageTurnActivationZone,
-                            ).toFloat(),
-                            range = 0f..(pageTurnActivationZoneEntries.size - 1).toFloat(),
-                            steps = pageTurnActivationZoneEntries.size - 2,
-                            onCommit = { value ->
-                                update(
-                                    resolveNovelPageTurnActivationZoneSliderValue(value.roundToInt()),
-                                    { o, v -> o.copy(pageTurnActivationZone = v) },
-                                    { preferences.pageTurnActivationZone().set(it) },
-                                    dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
-                                )
-                            },
-                        )
-                    }
-                }
             }
             AuroraToggleRow(
-                label = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer),
-                subtitle = rendererSubtitle(
-                    baseSubtitle = stringResource(AYMR.strings.novel_reader_prefer_webview_renderer_summary),
-                    reason = rendererAvailability.preferWebViewReason,
-                ),
-                checked = settings.preferWebViewRenderer,
-                enabled = rendererAvailability.preferWebViewEnabled,
+                label = stringResource(AYMR.strings.novel_reader_fullscreen),
+                subtitle = stringResource(AYMR.strings.novel_reader_fullscreen_summary),
+                checked = settings.fullScreenMode,
                 onClick = {
                     update(
-                        !settings.preferWebViewRenderer,
-                        { o, v -> o.copy(preferWebViewRenderer = v) },
-                        { preferences.preferWebViewRenderer().set(it) },
-                        dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                        !settings.fullScreenMode,
+                        { o, v -> o.copy(fullScreenMode = v) },
+                        { preferences.fullScreenMode().set(it) },
                     )
                 },
             )
             AuroraToggleRow(
-                label = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental),
-                subtitle = rendererSubtitle(
-                    baseSubtitle = stringResource(AYMR.strings.novel_reader_rich_native_renderer_experimental_summary),
-                    reason = rendererAvailability.richNativeReason,
-                ),
-                checked = settings.richNativeRendererExperimental,
-                enabled = rendererAvailability.richNativeEnabled,
+                label = stringResource(AYMR.strings.novel_reader_auto_scroll),
+                subtitle = stringResource(AYMR.strings.novel_reader_auto_scroll_summary),
+                checked = settings.autoScrollInterval > 0,
                 onClick = {
+                    val nextInterval = if (settings.autoScrollInterval > 0) 0 else 50
                     update(
-                        !settings.richNativeRendererExperimental,
-                        { o, v -> o.copy(richNativeRendererExperimental = v) },
-                        { preferences.richNativeRendererExperimental().set(it) },
-                        dismissFamily = NovelReaderSettingsFamily.RENDERER_TUNING,
+                        nextInterval,
+                        { o, v -> o.copy(autoScrollInterval = v) },
+                        { preferences.autoScrollInterval().set(it) },
                     )
                 },
             )
         }
+    }
+}
 
-        AuroraGlassSection {
-            val navigator = LocalNavigator.currentOrThrow
-            AuroraNavRow(
-                label = stringResource(AYMR.strings.novel_reader_text_replace),
-                onClick = { navigator.push(NovelTextReplaceRulesScreen()) },
-            )
+private fun parseHexColor(hex: String): Color {
+    return try {
+        val cleanHex = hex.removePrefix("#")
+        val colorInt = when (cleanHex.length) {
+            6 -> (0xFF000000 or cleanHex.toLong(16)).toInt()
+            8 -> cleanHex.toLong(16).toInt()
+            else -> android.graphics.Color.DKGRAY
         }
+        Color(colorInt)
+    } catch (_: Exception) {
+        Color.DarkGray
     }
 }

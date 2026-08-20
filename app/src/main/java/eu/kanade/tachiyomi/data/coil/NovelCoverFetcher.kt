@@ -35,6 +35,7 @@ import okio.source
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.NovelCover
+import tachiyomi.domain.entries.novel.model.asNovelCover
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.injectLazy
 import java.io.File
@@ -372,6 +373,71 @@ class NovelCoverFetcher(
 
         /** A path starting with '/' that should be resolved against the source's site URL. */
         RELATIVE,
+    }
+
+    class NovelFactory(
+        private val callFactoryLazy: Lazy<Call.Factory>,
+    ) : Fetcher.Factory<tachiyomi.domain.entries.novel.model.Novel> {
+
+        private val coverCache: NovelCoverCache by injectLazy()
+        private val sourceManager: NovelSourceManager by injectLazy()
+        private val getNovel: GetNovel by injectLazy()
+
+        override fun create(
+            data: tachiyomi.domain.entries.novel.model.Novel,
+            options: Options,
+            imageLoader: ImageLoader,
+        ): Fetcher? {
+            val cover = data.asNovelCover()
+            return NovelCoverFetcher(
+                data = cover,
+                options = options,
+                sourceSiteUrlLazy = lazy { (sourceManager.get(data.source) as? NovelSiteSource)?.siteUrl },
+                coverFileLazy = lazy { coverCache.getCoverFile(data.thumbnailUrl) },
+                customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.id) },
+                diskCacheKeyProvider = { effectiveUrl, lastModified ->
+                    "novel;${data.id};$effectiveUrl;${lastModified ?: data.coverLastModified}"
+                },
+                dbCoverProvider = { getNovel.await(data.id)?.let { it.thumbnailUrl to it.coverLastModified } },
+                pluginHeadersProvider = {
+                    (sourceManager.get(data.source) as? NovelImageRequestSource)
+                        ?.getImageRequestHeaders()
+                        .orEmpty()
+                },
+                callFactoryLazy = callFactoryLazy,
+                imageLoader = imageLoader,
+            )
+        }
+    }
+
+    class NovelCoverFactory(
+        private val callFactoryLazy: Lazy<Call.Factory>,
+    ) : Fetcher.Factory<NovelCover> {
+
+        private val coverCache: NovelCoverCache by injectLazy()
+        private val sourceManager: NovelSourceManager by injectLazy()
+        private val getNovel: GetNovel by injectLazy()
+
+        override fun create(data: NovelCover, options: Options, imageLoader: ImageLoader): Fetcher? {
+            return NovelCoverFetcher(
+                data = data,
+                options = options,
+                sourceSiteUrlLazy = lazy { (sourceManager.get(data.sourceId) as? NovelSiteSource)?.siteUrl },
+                coverFileLazy = lazy { coverCache.getCoverFile(data.url) },
+                customCoverFileLazy = lazy { coverCache.getCustomCoverFile(data.novelId) },
+                diskCacheKeyProvider = { effectiveUrl, lastModified ->
+                    "novel;${data.novelId};$effectiveUrl;${lastModified ?: data.lastModified}"
+                },
+                dbCoverProvider = { getNovel.await(data.novelId)?.let { it.thumbnailUrl to it.coverLastModified } },
+                pluginHeadersProvider = {
+                    (sourceManager.get(data.sourceId) as? NovelImageRequestSource)
+                        ?.getImageRequestHeaders()
+                        .orEmpty()
+                },
+                callFactoryLazy = callFactoryLazy,
+                imageLoader = imageLoader,
+            )
+        }
     }
 
     class Factory(

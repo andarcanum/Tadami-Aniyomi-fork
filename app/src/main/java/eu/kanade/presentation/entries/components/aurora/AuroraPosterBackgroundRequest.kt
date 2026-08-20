@@ -3,8 +3,11 @@ package eu.kanade.presentation.entries.components.aurora
 import android.content.Context
 import android.os.Build
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
@@ -66,10 +69,15 @@ internal fun rememberAuroraPosterBackgroundPainter(
     request: ImageRequest,
     placeholderPainter: Painter,
 ): AsyncImagePainter {
+    // Error/fallback are transparent on purpose: the full poster sits over the
+    // always-visible preview thumbnail, so on failure the overlay must not draw
+    // the "no poster" placeholder — it would flash between the thumbnail and the
+    // final image (issue: заглушка during the title transition).
+    val transparent = remember { ColorPainter(Color.Transparent) }
     return rememberAsyncImagePainter(
         model = request,
-        error = placeholderPainter,
-        fallback = placeholderPainter,
+        error = transparent,
+        fallback = transparent,
         contentScale = ContentScale.Crop,
     )
 }

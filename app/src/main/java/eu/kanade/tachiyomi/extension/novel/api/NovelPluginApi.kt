@@ -35,8 +35,11 @@ class NovelPluginApi(
 
     private suspend fun fetchPluginsFromRepo(repo: ExtensionRepo): List<NovelPlugin.Available> {
         return try {
-            val payload = fetcher.fetch(repo.baseUrl)
-            parser.parse(payload, repo.baseUrl)
+            // Prefer the canonical index url (e.g. a pasted index.pb/repo.json); fall back to
+            // probing the base url candidates (plugins.*/index.*).
+            val targetUrl = repo.indexUrl?.takeIf { it.isNotBlank() } ?: repo.baseUrl
+            val payload = fetcher.fetch(targetUrl)
+            parser.parse(payload, targetUrl)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

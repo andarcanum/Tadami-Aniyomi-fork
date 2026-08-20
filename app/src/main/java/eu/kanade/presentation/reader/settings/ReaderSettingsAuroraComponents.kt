@@ -52,16 +52,17 @@ import kotlin.math.roundToInt
 /** Glass section card: translucent frost (lets window blur show through), 1dp rim. */
 @Composable
 internal fun AuroraGlassSection(
-    title: String? = null,
     modifier: Modifier = Modifier,
+    title: String? = null,
+    titleColor: Color = MaterialTheme.colorScheme.onSurface,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = AuroraTheme.colors
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(16.dp)
     // Section lift over the sheet — enough contrast, still translucent.
     val frostBase = when {
         colors.isEInk -> colors.surface
-        colors.isDark -> Color.White.copy(alpha = 0.06f)
+        colors.isDark -> Color.White.copy(alpha = 0.055f)
         else -> Color.Black.copy(alpha = 0.04f)
     }
     Column(
@@ -78,7 +79,7 @@ internal fun AuroraGlassSection(
                 text = title,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = colors.accent,
+                color = titleColor,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             HorizontalDivider(
@@ -99,12 +100,16 @@ internal fun auroraRimColor(): Color {
 
 /** Small secondary label for a field group inside a glass section. */
 @Composable
-internal fun AuroraFieldLabel(text: String) {
+internal fun AuroraFieldLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = AuroraTheme.colors.textSecondary,
+) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
-        color = AuroraTheme.colors.textSecondary,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp),
+        color = color,
+        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
     )
 }
 

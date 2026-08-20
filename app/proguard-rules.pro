@@ -46,6 +46,18 @@
 # implementations and the generated JS shim stay in sync (method names are the
 # JS contract), and nothing gets inlined away or merged incorrectly.
 -keep class eu.kanade.tachiyomi.extension.novel.runtime.** { *; }
+
+# WebView JS bridges: @JavascriptInterface methods are only invoked from JavaScript
+# via addJavascriptInterface, so R8 sees no Kotlin/Java callers and strips them in
+# release builds. The JS then finds the method missing and never calls back, which
+# is what made the book reader's page-by-page mode hang (onReady never fired).
+# Keep every annotated method so the JS contract survives minification:
+#   - NovelBookWebViewRenderer.NativeBridge (book reader ready/relocated/measured/boundary)
+#   - NovelReaderWebViewBridge (chapter selection)
+#   - OmniBuilderScreenModel (element picker)
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
 -keep,allowoptimization class uy.kohesive.injekt.** { public protected *; }
 -keep,allowoptimization class is.xyz.mpv.** { public protected *; }
 -keep,allowoptimization class com.arthenica.** { public protected *; }

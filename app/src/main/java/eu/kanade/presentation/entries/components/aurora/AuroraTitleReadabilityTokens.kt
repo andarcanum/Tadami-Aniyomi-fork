@@ -25,10 +25,10 @@ internal fun resolveAuroraHeroOverlayAlphaStops(isDark: Boolean): List<Pair<Floa
     }
     return listOf(
         0.00f to 0.00f,
-        0.28f to 0.00f,
-        0.60f to 0.04f,
-        0.82f to 0.28f,
-        1.00f to 0.58f,
+        0.45f to 0.00f,
+        0.65f to 0.04f,
+        0.82f to 0.18f,
+        1.00f to 0.38f,
     )
 }
 
@@ -211,8 +211,8 @@ internal fun resolveAuroraDetailCardBackgroundColors(colors: AuroraColors): List
         )
     } else {
         listOf(
-            Color.White.copy(alpha = 0.76f),
-            Color.White.copy(alpha = 0.93f),
+            Color.White.copy(alpha = 0.84f),
+            Color.White.copy(alpha = 0.74f),
         )
     }
 }
@@ -231,8 +231,8 @@ internal fun resolveAuroraDetailCardBorderColors(colors: AuroraColors): List<Col
         )
     } else {
         listOf(
-            resolveAuroraBorderColor(colors, emphasized = true),
-            resolveAuroraBorderColor(colors, emphasized = false),
+            Color.White.copy(alpha = 0.92f),
+            Color.White.copy(alpha = 0.30f),
         )
     }
 }

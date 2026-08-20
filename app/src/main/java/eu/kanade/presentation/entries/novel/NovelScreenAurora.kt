@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -72,9 +73,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.entries.novel.model.normalizeNovelDescription
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.model.TitleScreenStyle
+import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.entries.TitleFastScrollOverlayAccumulator
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
@@ -85,14 +90,20 @@ import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
 import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
 import eu.kanade.presentation.entries.components.aurora.auroraSpringClick
+import eu.kanade.presentation.entries.components.aurora.rememberTitleScreenStaggerState
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraDetailCardBackgroundColors
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraDetailCardBorderColors
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraFabBottomPadding
+import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroBottomPadding
+import eu.kanade.presentation.entries.components.aurora.titleScreenPosterEntrance
+import eu.kanade.presentation.entries.components.aurora.titleScreenStagger
 import eu.kanade.presentation.entries.components.normalizeAuroraGlobalSearchQuery
 import eu.kanade.presentation.entries.manga.components.ScanlatorBranchSelector
 import eu.kanade.presentation.entries.novel.components.aurora.ChaptersHeader
 import eu.kanade.presentation.entries.novel.components.aurora.FullscreenPosterBackground
 import eu.kanade.presentation.entries.novel.components.aurora.NovelActionCard
 import eu.kanade.presentation.entries.novel.components.aurora.NovelChapterCardCompactUi
+import eu.kanade.presentation.entries.novel.components.aurora.NovelGlassHeroCard
 import eu.kanade.presentation.entries.novel.components.aurora.NovelHeroContent
 import eu.kanade.presentation.entries.novel.components.aurora.NovelInfoCard
 import eu.kanade.presentation.entries.novel.components.aurora.NovelStatsCard
@@ -106,7 +117,10 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.formatChapterNumber
+import eu.kanade.tachiyomi.novelsource.online.HttpNovelSource
+import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
@@ -130,6 +144,7 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.TwoPanelBox
 import tachiyomi.presentation.core.components.VerticalFastScroller
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -174,6 +189,8 @@ fun NovelScreenAuroraImpl(
     chapterSwipeEndAction: LibraryPreferences.NovelSwipeAction,
     onChapterSwipe: (Long, LibraryPreferences.NovelSwipeAction) -> Unit,
     onFilterButtonClicked: () -> Unit,
+    onToggleSort: (() -> Unit)? = null,
+    onToggleUnreadFilter: (() -> Unit)? = null,
     scanlatorChapterCounts: Map<String, Int>,
     selectedScanlator: String?,
     onScanlatorSelected: (String?) -> Unit,
@@ -222,6 +239,30 @@ fun NovelScreenAuroraImpl(
     val posterLongPressModifier = onPosterLongClicked?.let { Modifier.auroraPosterLongPress(it) } ?: Modifier
     val chapters = state.processedChapters
     val readChapterCount = remember(state.chapters) { state.chapters.count { it.read } }
+    val nextNovelChapterNum = remember(readChapterCount, state.chapters.size) {
+        if (readChapterCount in
+            1 until state.chapters.size
+        ) {
+            readChapterCount + 1
+        } else if (readChapterCount == state.chapters.size &&
+            state.chapters.isNotEmpty()
+        ) {
+            state.chapters.size
+        } else {
+            null
+        }
+    }
+    val novelActionResumeText = stringResource(MR.strings.action_resume)
+    val novelHeroTargetChText = nextNovelChapterNum?.takeIf { it > 0 }?.let {
+        stringResource(MR.strings.aurora_hero_cta_chapter, it)
+    }
+    val novelHeroActionLabel = remember(isReading, novelHeroTargetChText, novelActionResumeText) {
+        if (isReading && novelHeroTargetChText != null) {
+            "$novelActionResumeText • $novelHeroTargetChText"
+        } else {
+            null
+        }
+    }
     val groupedByChapter = false
     // PERF: use cheaper keys for remember. Full list reference changes often; size + scanlator is usually sufficient
     // for grouping decision until actual chapter content (names/numbers) changes.
@@ -304,8 +345,10 @@ fun NovelScreenAuroraImpl(
         chapters.size
     }
     val colors = AuroraTheme.colors
+    val hazeState = remember { HazeState() }
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp.dp
+    val navigationBarsBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.entryMaxWidthDp
     val useTwoPaneLayout = shouldUseNovelAuroraTwoPane(auroraAdaptiveSpec.deviceClass)
@@ -315,6 +358,14 @@ fun NovelScreenAuroraImpl(
     val entrySuggestionsExpandInline by uiPreferences.entrySuggestionsExpandInline().collectAsState()
     val entrySuggestionsInOverflow by uiPreferences.entrySuggestionsInOverflow().collectAsState()
     val alwaysShowFullChapterList by uiPreferences.alwaysShowFullChapterListNovel().collectAsState()
+    val titleScreenStyle by uiPreferences.titleScreenStyle().collectAsState()
+    val titleScreenAnimation by uiPreferences.titleScreenAnimation().collectAsState()
+    val titleStaggerState = rememberTitleScreenStaggerState(titleScreenAnimation)
+    val sourceClient = remember(state.source) {
+        (state.source as? HttpNovelSource)?.client
+            ?: (state.source as? HttpSource)?.client
+    }
+    val showOriginalTitle by uiPreferences.showOriginalTitle().collectAsState()
     val auroraEntryTranslationEnabled by uiPreferences
         .auroraEntryTranslationEnabled()
         .collectAsState()
@@ -466,12 +517,30 @@ fun NovelScreenAuroraImpl(
                     .fillMaxSize()
                     .then(posterLongPressModifier),
             ) {
-                FullscreenPosterBackground(
-                    novel = novel,
-                    scrollOffset = 0,
-                    firstVisibleItemIndex = 0,
-                    sourceHeaders = (state.source as? HttpSource)?.headers?.toMap(),
-                )
+                // Fixed background poster or Aurora background.
+                // The haze source is scoped to the background layer only: the top
+                // bar lenses must blur the poster/aurora backdrop, never the
+                // scrolling list content passing underneath them.
+                if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
+                    FullscreenPosterBackground(
+                        novel = novel,
+                        scrollOffset = 0,
+                        firstVisibleItemIndex = 0,
+                        sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
+                            ?: (state.source as? HttpSource)?.headers?.toMap(),
+                        sourceClient = sourceClient,
+                        modifier = Modifier
+                            .titleScreenPosterEntrance(titleStaggerState)
+                            .hazeSource(state = hazeState),
+                    )
+                } else {
+                    AuroraBackground(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .titleScreenPosterEntrance(titleStaggerState)
+                            .hazeSource(state = hazeState),
+                    ) {}
+                }
 
                 TwoPanelBox(
                     modifier = Modifier
@@ -489,80 +558,164 @@ fun NovelScreenAuroraImpl(
                                     .fillMaxWidth()
                                     .auroraCenteredMaxWidth(420),
                             ) {
-                                NovelHeroContent(
-                                    novel = novel,
-                                    translation = auroraEntryTranslation,
-                                    chapterCount = totalChapterCount,
-                                    rating = state.rating,
-                                    note = novel.notes,
-                                    onEditNotesClicked = onEditNotesClicked,
-                                    onContinueReading = onStartReading,
-                                    isReading = isReading,
-                                    onGenreClick = onGenreClick,
-                                    onGenreLongClick = { genre ->
-                                        selectedGenres = if (genre in selectedGenres) {
-                                            selectedGenres - genre
-                                        } else {
-                                            selectedGenres + genre
-                                        }
-                                    },
-                                    selectedGenres = selectedGenres,
-                                    onSearchSelected = {
-                                        onGenresSearch?.invoke(selectedGenres.toList())
-                                        selectedGenres = emptySet()
-                                    },
-                                    onClearSelected = { selectedGenres = emptySet() },
-                                    onCopyTitle = onTitleCopy,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
-                                NovelStatsCard(
-                                    novel = novel,
-                                    rating = state.rating,
-                                    chapterCount = totalChapterCount,
-                                    readChapterCount = readChapterCount,
-                                    nextUpdate = nextUpdate,
-                                    sourceName = state.source.name,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                                Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
-                                NovelInfoCard(
-                                    novel = novel,
-                                    translation = auroraEntryTranslation,
-                                    onTagSearch = onGenreClick ?: { tag -> onSearch(tag, true) },
-                                    descriptionExpanded = descriptionExpanded,
-                                    genresExpanded = genresExpanded,
-                                    onToggleDescription = { descriptionExpanded = !descriptionExpanded },
-                                    onToggleGenres = { genresExpanded = !genresExpanded },
-                                    selectedGenres = selectedGenres,
-                                    onGenreClick = onGenreClick,
-                                    onGenreLongClick = { genre ->
-                                        selectedGenres = if (genre in selectedGenres) {
-                                            selectedGenres - genre
-                                        } else {
-                                            selectedGenres + genre
-                                        }
-                                    },
-                                    onSearchSelected = {
-                                        onGenresSearch?.invoke(selectedGenres.toList())
-                                        selectedGenres = emptySet()
-                                    },
-                                    onClearSelected = { selectedGenres = emptySet() },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-
-                                Spacer(modifier = Modifier.height(if (colors.isDark) 12.dp else 16.dp))
-                                NovelActionCard(
-                                    novel = novel,
-                                    trackingCount = trackingCount,
-                                    onAddToLibraryClicked = onToggleFavorite,
-                                    onAddToLibraryLongClicked = onEditCategoryClicked,
-                                    onTrackingClicked = onTrackingClicked,
-                                    onBatchDownloadClicked = onOpenBatchDownloadDialog,
-                                    onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
-                                    onExportEpubClicked = onOpenEpubExportDialog,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+                                if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
+                                    NovelHeroContent(
+                                        novel = novel,
+                                        translation = auroraEntryTranslation,
+                                        chapterCount = totalChapterCount,
+                                        rating = state.rating,
+                                        note = novel.notes,
+                                        onEditNotesClicked = onEditNotesClicked,
+                                        onContinueReading = onStartReading,
+                                        isReading = isReading,
+                                        onGenreClick = onGenreClick,
+                                        onGenreLongClick = { genre ->
+                                            selectedGenres = if (genre in selectedGenres) {
+                                                selectedGenres - genre
+                                            } else {
+                                                selectedGenres + genre
+                                            }
+                                        },
+                                        selectedGenres = selectedGenres,
+                                        onSearchSelected = {
+                                            onGenresSearch?.invoke(selectedGenres.toList())
+                                            selectedGenres = emptySet()
+                                        },
+                                        onClearSelected = { selectedGenres = emptySet() },
+                                        onCopyTitle = onTitleCopy,
+                                        titleStaggerState = titleStaggerState,
+                                        hazeState = hazeState,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
+                                    NovelStatsCard(
+                                        novel = novel,
+                                        rating = state.rating,
+                                        chapterCount = totalChapterCount,
+                                        readChapterCount = readChapterCount,
+                                        nextUpdate = nextUpdate,
+                                        sourceName = state.source.name,
+                                        showAuthor = false,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 2),
+                                    )
+                                    Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
+                                    NovelInfoCard(
+                                        novel = novel,
+                                        translation = auroraEntryTranslation,
+                                        onTagSearch = onGenreClick ?: { tag -> onSearch(tag, true) },
+                                        descriptionExpanded = descriptionExpanded,
+                                        genresExpanded = genresExpanded,
+                                        onToggleDescription = { descriptionExpanded = !descriptionExpanded },
+                                        onToggleGenres = { genresExpanded = !genresExpanded },
+                                        selectedGenres = selectedGenres,
+                                        onGenreClick = onGenreClick,
+                                        onGenreLongClick = { genre ->
+                                            selectedGenres = if (genre in selectedGenres) {
+                                                selectedGenres - genre
+                                            } else {
+                                                selectedGenres + genre
+                                            }
+                                        },
+                                        onSearchSelected = {
+                                            onGenresSearch?.invoke(selectedGenres.toList())
+                                            selectedGenres = emptySet()
+                                        },
+                                        onClearSelected = { selectedGenres = emptySet() },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 3),
+                                    )
+                                    Spacer(modifier = Modifier.height(if (colors.isDark) 12.dp else 16.dp))
+                                    NovelActionCard(
+                                        novel = novel,
+                                        trackingCount = trackingCount,
+                                        onAddToLibraryClicked = onToggleFavorite,
+                                        onAddToLibraryLongClicked = onEditCategoryClicked,
+                                        onTrackingClicked = onTrackingClicked,
+                                        onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                                        onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
+                                        onExportEpubClicked = onOpenEpubExportDialog,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 4),
+                                    )
+                                } else {
+                                    NovelGlassHeroCard(
+                                        novel = novel,
+                                        translation = auroraEntryTranslation,
+                                        note = novel.notes,
+                                        onEditNotesClicked = onEditNotesClicked,
+                                        isReading = isReading,
+                                        onContinueReading = onStartReading,
+                                        onCoverClicked = { onPosterLongClicked?.invoke() },
+                                        onCopyTitle = onTitleCopy,
+                                        actionLabel = novelHeroActionLabel,
+                                        showOriginalTitle = showOriginalTitle,
+                                        chapterCount = totalChapterCount,
+                                        sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
+                                            ?: (state.source as? HttpSource)?.headers?.toMap(),
+                                        sourceClient = sourceClient,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 1),
+                                    )
+                                    Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
+                                    NovelActionCard(
+                                        novel = novel,
+                                        trackingCount = trackingCount,
+                                        onAddToLibraryClicked = onToggleFavorite,
+                                        onAddToLibraryLongClicked = onEditCategoryClicked,
+                                        onTrackingClicked = onTrackingClicked,
+                                        onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                                        onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
+                                        onExportEpubClicked = onOpenEpubExportDialog,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 4),
+                                    )
+                                    Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
+                                    NovelInfoCard(
+                                        novel = novel,
+                                        translation = auroraEntryTranslation,
+                                        onTagSearch = onGenreClick ?: { tag -> onSearch(tag, true) },
+                                        descriptionExpanded = descriptionExpanded,
+                                        genresExpanded = genresExpanded,
+                                        onToggleDescription = { descriptionExpanded = !descriptionExpanded },
+                                        onToggleGenres = { genresExpanded = !genresExpanded },
+                                        selectedGenres = selectedGenres,
+                                        onGenreClick = onGenreClick,
+                                        onGenreLongClick = { genre ->
+                                            selectedGenres = if (genre in selectedGenres) {
+                                                selectedGenres - genre
+                                            } else {
+                                                selectedGenres + genre
+                                            }
+                                        },
+                                        onSearchSelected = {
+                                            onGenresSearch?.invoke(selectedGenres.toList())
+                                            selectedGenres = emptySet()
+                                        },
+                                        onClearSelected = { selectedGenres = emptySet() },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 3),
+                                    )
+                                    Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
+                                    NovelStatsCard(
+                                        novel = novel,
+                                        rating = state.rating,
+                                        chapterCount = totalChapterCount,
+                                        readChapterCount = readChapterCount,
+                                        nextUpdate = nextUpdate,
+                                        sourceName = state.source.name,
+                                        showAuthor = false,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .titleScreenStagger(titleStaggerState, 2),
+                                    )
+                                }
                                 if (entrySuggestionsEnabled) {
                                     if (entrySuggestionsExpandInline) {
                                         Spacer(modifier = Modifier.height(16.dp))
@@ -669,7 +822,15 @@ fun NovelScreenAuroraImpl(
                                 item {
                                     ChaptersHeader(
                                         chapterCount = listChapterCount,
+                                        isDescending = novel.sortDescending(),
+                                        unreadFilter = novel.unreadFilter,
+                                        filterActive = state.filterActive,
                                         isBookToc = state.bookState?.enabled == true,
+                                        onClickSort = onToggleSort ?: onFilterButtonClicked,
+                                        onLongClickSort = onFilterButtonClicked,
+                                        onClickFilter = onToggleUnreadFilter ?: onFilterButtonClicked,
+                                        onLongClickFilter = onFilterButtonClicked,
+                                        modifier = Modifier.titleScreenStagger(titleStaggerState, 5),
                                     )
                                 }
 
@@ -967,6 +1128,15 @@ fun NovelScreenAuroraImpl(
                     targetValue = if (!isSelectionMode && showNovelOverlayChrome) 0f else -1f,
                     label = "overlayChromeOffsetY",
                 )
+                // The lens densifies as the chapter list scrolls under the top bar,
+                // so list rows no longer blend into the buttons.
+                val topBarScrollProgress = if (firstVisibleItemIndex > 0) {
+                    1f
+                } else {
+                    (scrollOffset / (screenHeight.value * 0.7f)).coerceIn(0f, 1f)
+                }
+                val isPosterMode = titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -975,6 +1145,7 @@ fun NovelScreenAuroraImpl(
                             alpha = overlayChromeAlphaTwoPane
                             translationY = overlayChromeOffsetYTwoPane * size.height
                         }
+                        .titleScreenStagger(titleStaggerState, 0)
                         .padding(WindowInsets.statusBars.asPaddingValues())
                         .padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -984,6 +1155,9 @@ fun NovelScreenAuroraImpl(
                         onClick = onBack,
                         icon = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = null,
+                        hazeState = hazeState,
+                        scrollProgress = topBarScrollProgress,
+                        isPosterMode = isPosterMode,
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     AuroraActionButton(
@@ -991,12 +1165,18 @@ fun NovelScreenAuroraImpl(
                         icon = Icons.Default.FilterList,
                         contentDescription = null,
                         iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
+                        hazeState = hazeState,
+                        scrollProgress = topBarScrollProgress,
+                        isPosterMode = isPosterMode,
                     )
                     if (onWebView != null) {
                         AuroraActionButton(
                             onClick = onWebView,
                             icon = Icons.Filled.Public,
                             contentDescription = null,
+                            hazeState = hazeState,
+                            scrollProgress = topBarScrollProgress,
+                            isPosterMode = isPosterMode,
                         )
                     }
 
@@ -1008,6 +1188,9 @@ fun NovelScreenAuroraImpl(
                                 onClick = { showMenu = !showMenu },
                                 icon = Icons.Default.MoreVert,
                                 contentDescription = null,
+                                hazeState = hazeState,
+                                scrollProgress = topBarScrollProgress,
+                                isPosterMode = isPosterMode,
                             )
                             AuroraEntryDropdownMenu(
                                 expanded = showMenu,
@@ -1264,12 +1447,30 @@ fun NovelScreenAuroraImpl(
                 .fillMaxSize()
                 .then(posterLongPressModifier),
         ) {
-            FullscreenPosterBackground(
-                novel = novel,
-                scrollOffset = scrollOffset,
-                firstVisibleItemIndex = firstVisibleItemIndex,
-                sourceHeaders = (state.source as? HttpSource)?.headers?.toMap(),
-            )
+            // Fixed background poster or Aurora background.
+            // The haze source is scoped to the background layer only: the top
+            // bar lenses must blur the poster/aurora backdrop, never the
+            // scrolling list content passing underneath them.
+            if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
+                FullscreenPosterBackground(
+                    novel = novel,
+                    scrollOffset = scrollOffset,
+                    firstVisibleItemIndex = firstVisibleItemIndex,
+                    sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
+                        ?: (state.source as? HttpSource)?.headers?.toMap(),
+                    sourceClient = sourceClient,
+                    modifier = Modifier
+                        .titleScreenPosterEntrance(titleStaggerState)
+                        .hazeSource(state = hazeState),
+                )
+            } else {
+                AuroraBackground(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .titleScreenPosterEntrance(titleStaggerState)
+                        .hazeSource(state = hazeState),
+                ) {}
+            }
 
             val density = LocalDensity.current
             val fastScrollBaseTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 16.dp
@@ -1314,62 +1515,162 @@ fun NovelScreenAuroraImpl(
                     contentPadding = PaddingValues(bottom = 112.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    item { Spacer(modifier = Modifier.height(screenHeight)) }
+                    if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
+                        item { Spacer(modifier = Modifier.height(screenHeight)) }
 
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .auroraCenteredMaxWidth(contentMaxWidthDp),
-                        ) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            NovelStatsCard(
-                                novel = novel,
-                                rating = state.rating,
-                                chapterCount = totalChapterCount,
-                                readChapterCount = readChapterCount,
-                                nextUpdate = nextUpdate,
-                                sourceName = state.source.name,
-                                modifier = Modifier.fillMaxWidth(),
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp),
+                            ) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                NovelStatsCard(
+                                    novel = novel,
+                                    rating = state.rating,
+                                    chapterCount = totalChapterCount,
+                                    readChapterCount = readChapterCount,
+                                    nextUpdate = nextUpdate,
+                                    sourceName = state.source.name,
+                                    showAuthor = false,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .titleScreenStagger(titleStaggerState, 2),
+                                )
+                                Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
+                                NovelInfoCard(
+                                    novel = novel,
+                                    translation = auroraEntryTranslation,
+                                    onTagSearch = { tag -> onSearch(tag, true) },
+                                    descriptionExpanded = descriptionExpanded,
+                                    genresExpanded = genresExpanded,
+                                    onToggleDescription = { descriptionExpanded = !descriptionExpanded },
+                                    onToggleGenres = { genresExpanded = !genresExpanded },
+                                    selectedGenres = selectedGenres,
+                                    onGenreClick = onGenreClick,
+                                    onGenreLongClick = { genre ->
+                                        selectedGenres = if (genre in selectedGenres) {
+                                            selectedGenres - genre
+                                        } else {
+                                            selectedGenres + genre
+                                        }
+                                    },
+                                    onSearchSelected = {
+                                        onGenresSearch?.invoke(selectedGenres.toList())
+                                        selectedGenres = emptySet()
+                                    },
+                                    onClearSelected = { selectedGenres = emptySet() },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .titleScreenStagger(titleStaggerState, 3),
+                                )
+
+                                Spacer(modifier = Modifier.height(if (colors.isDark) 12.dp else 16.dp))
+                                NovelActionCard(
+                                    novel = novel,
+                                    trackingCount = trackingCount,
+                                    onAddToLibraryClicked = onToggleFavorite,
+                                    onAddToLibraryLongClicked = onEditCategoryClicked,
+                                    onTrackingClicked = onTrackingClicked,
+                                    onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                                    onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
+                                    onExportEpubClicked = onOpenEpubExportDialog,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .titleScreenStagger(titleStaggerState, 4),
+                                )
+                            }
+                        }
+                    } else {
+                        item {
+                            Spacer(
+                                modifier = Modifier.height(
+                                    WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 76.dp,
+                                ),
                             )
-                            Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
-                            NovelInfoCard(
+                            NovelGlassHeroCard(
                                 novel = novel,
                                 translation = auroraEntryTranslation,
-                                onTagSearch = { tag -> onSearch(tag, true) },
-                                descriptionExpanded = descriptionExpanded,
-                                genresExpanded = genresExpanded,
-                                onToggleDescription = { descriptionExpanded = !descriptionExpanded },
-                                onToggleGenres = { genresExpanded = !genresExpanded },
-                                selectedGenres = selectedGenres,
-                                onGenreClick = onGenreClick,
-                                onGenreLongClick = { genre ->
-                                    selectedGenres = if (genre in selectedGenres) {
-                                        selectedGenres - genre
-                                    } else {
-                                        selectedGenres + genre
-                                    }
-                                },
-                                onSearchSelected = {
-                                    onGenresSearch?.invoke(selectedGenres.toList())
-                                    selectedGenres = emptySet()
-                                },
-                                onClearSelected = { selectedGenres = emptySet() },
-                                modifier = Modifier.fillMaxWidth(),
+                                note = novel.notes,
+                                onEditNotesClicked = onEditNotesClicked,
+                                isReading = isReading,
+                                onContinueReading = onStartReading,
+                                onCoverClicked = { onPosterLongClicked?.invoke() },
+                                onCopyTitle = onTitleCopy,
+                                actionLabel = novelHeroActionLabel,
+                                showOriginalTitle = showOriginalTitle,
+                                chapterCount = totalChapterCount,
+                                sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
+                                    ?: (state.source as? HttpSource)?.headers?.toMap(),
+                                sourceClient = sourceClient,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                    .titleScreenStagger(titleStaggerState, 1),
                             )
+                        }
 
-                            Spacer(modifier = Modifier.height(if (colors.isDark) 12.dp else 16.dp))
-                            NovelActionCard(
-                                novel = novel,
-                                trackingCount = trackingCount,
-                                onAddToLibraryClicked = onToggleFavorite,
-                                onAddToLibraryLongClicked = onEditCategoryClicked,
-                                onTrackingClicked = onTrackingClicked,
-                                onBatchDownloadClicked = onOpenBatchDownloadDialog,
-                                onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
-                                onExportEpubClicked = onOpenEpubExportDialog,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .auroraCenteredMaxWidth(contentMaxWidthDp),
+                            ) {
+                                Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
+                                NovelActionCard(
+                                    novel = novel,
+                                    trackingCount = trackingCount,
+                                    onAddToLibraryClicked = onToggleFavorite,
+                                    onAddToLibraryLongClicked = onEditCategoryClicked,
+                                    onTrackingClicked = onTrackingClicked,
+                                    onBatchDownloadClicked = onOpenBatchDownloadDialog,
+                                    onTranslatedDownloadClicked = onOpenTranslatedDownloadDialog,
+                                    onExportEpubClicked = onOpenEpubExportDialog,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .titleScreenStagger(titleStaggerState, 4),
+                                )
+                                Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
+                                NovelInfoCard(
+                                    novel = novel,
+                                    translation = auroraEntryTranslation,
+                                    onTagSearch = { tag -> onSearch(tag, true) },
+                                    descriptionExpanded = descriptionExpanded,
+                                    genresExpanded = genresExpanded,
+                                    onToggleDescription = { descriptionExpanded = !descriptionExpanded },
+                                    onToggleGenres = { genresExpanded = !genresExpanded },
+                                    selectedGenres = selectedGenres,
+                                    onGenreClick = onGenreClick,
+                                    onGenreLongClick = { genre ->
+                                        selectedGenres = if (genre in selectedGenres) {
+                                            selectedGenres - genre
+                                        } else {
+                                            selectedGenres + genre
+                                        }
+                                    },
+                                    onSearchSelected = {
+                                        onGenresSearch?.invoke(selectedGenres.toList())
+                                        selectedGenres = emptySet()
+                                    },
+                                    onClearSelected = { selectedGenres = emptySet() },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .titleScreenStagger(titleStaggerState, 3),
+                                )
+                                Spacer(modifier = Modifier.height(if (colors.isDark) 8.dp else 16.dp))
+                                NovelStatsCard(
+                                    novel = novel,
+                                    rating = state.rating,
+                                    chapterCount = totalChapterCount,
+                                    readChapterCount = readChapterCount,
+                                    nextUpdate = nextUpdate,
+                                    sourceName = state.source.name,
+                                    showAuthor = false,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .titleScreenStagger(titleStaggerState, 2),
+                                )
+                            }
                         }
                     }
 
@@ -1431,8 +1732,17 @@ fun NovelScreenAuroraImpl(
                         Spacer(modifier = Modifier.height(16.dp))
                         ChaptersHeader(
                             chapterCount = totalChapterCount,
+                            isDescending = novel.sortDescending(),
+                            unreadFilter = novel.unreadFilter,
+                            filterActive = state.filterActive,
                             isBookToc = state.bookState?.enabled == true,
-                            modifier = Modifier.auroraCenteredMaxWidth(contentMaxWidthDp),
+                            onClickSort = onToggleSort ?: onFilterButtonClicked,
+                            onLongClickSort = onFilterButtonClicked,
+                            onClickFilter = onToggleUnreadFilter ?: onFilterButtonClicked,
+                            onLongClickFilter = onFilterButtonClicked,
+                            modifier = Modifier
+                                .auroraCenteredMaxWidth(contentMaxWidthDp)
+                                .titleScreenStagger(titleStaggerState, 5),
                         )
                     }
 
@@ -1720,6 +2030,7 @@ fun NovelScreenAuroraImpl(
 
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
             if (
+                titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE &&
                 shouldShowNovelAuroraHeroContent(
                     useTwoPaneLayout = useTwoPaneLayout,
                     firstVisibleItemIndex = firstVisibleItemIndex,
@@ -1760,6 +2071,10 @@ fun NovelScreenAuroraImpl(
                         },
                         onClearSelected = { selectedGenres = emptySet() },
                         onCopyTitle = onTitleCopy,
+                        titleStaggerState = titleStaggerState,
+                        hazeState = hazeState,
+                        bottomPadding = resolveAuroraHeroBottomPadding(navigationBarsBottom),
+                        modifier = Modifier,
                     )
                 }
             }
@@ -1771,7 +2086,10 @@ fun NovelScreenAuroraImpl(
                     modifier = Modifier
                         .fillMaxSize()
                         .zIndex(AuroraZIndex.HERO)
-                        .padding(end = 20.dp, bottom = 20.dp),
+                        .padding(
+                            end = 20.dp,
+                            bottom = resolveAuroraFabBottomPadding(navigationBarsBottom),
+                        ),
                     contentAlignment = Alignment.BottomEnd,
                 ) {
                     AuroraTitleHeroActionFab(
@@ -1789,6 +2107,15 @@ fun NovelScreenAuroraImpl(
                 targetValue = if (!isSelectionMode && showNovelOverlayChrome) 0f else -1f,
                 label = "overlayChromeOffsetY",
             )
+            // The lens densifies as the chapter list scrolls under the top bar,
+            // so list rows no longer blend into the buttons.
+            val topBarScrollProgress = if (firstVisibleItemIndex > 0) {
+                1f
+            } else {
+                (scrollOffset / heroThreshold.toFloat()).coerceIn(0f, 1f)
+            }
+            val isPosterMode = titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1797,6 +2124,7 @@ fun NovelScreenAuroraImpl(
                         alpha = overlayChromeAlpha
                         translationY = overlayChromeOffsetY * size.height
                     }
+                    .titleScreenStagger(titleStaggerState, 0)
                     .padding(WindowInsets.statusBars.asPaddingValues())
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1806,6 +2134,9 @@ fun NovelScreenAuroraImpl(
                     onClick = onBack,
                     icon = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = null,
+                    hazeState = hazeState,
+                    scrollProgress = topBarScrollProgress,
+                    isPosterMode = isPosterMode,
                 )
 
                 Spacer(modifier = Modifier.weight(1f))
@@ -1815,6 +2146,9 @@ fun NovelScreenAuroraImpl(
                     icon = Icons.Default.FilterList,
                     contentDescription = null,
                     iconTint = if (state.filterActive) colors.accent else colors.accent.copy(alpha = 0.7f),
+                    hazeState = hazeState,
+                    scrollProgress = topBarScrollProgress,
+                    isPosterMode = isPosterMode,
                 )
 
                 if (onWebView != null) {
@@ -1822,6 +2156,9 @@ fun NovelScreenAuroraImpl(
                         onClick = onWebView,
                         icon = Icons.Filled.Public,
                         contentDescription = null,
+                        hazeState = hazeState,
+                        scrollProgress = topBarScrollProgress,
+                        isPosterMode = isPosterMode,
                     )
                 }
 
@@ -1833,6 +2170,9 @@ fun NovelScreenAuroraImpl(
                             onClick = { showMenu = !showMenu },
                             icon = Icons.Default.MoreVert,
                             contentDescription = null,
+                            hazeState = hazeState,
+                            scrollProgress = topBarScrollProgress,
+                            isPosterMode = isPosterMode,
                         )
 
                         AuroraEntryDropdownMenu(
@@ -2633,37 +2973,27 @@ private fun AuroraActionButton(
     contentDescription: String?,
     modifier: Modifier = Modifier,
     iconTint: Color? = null,
+    hazeState: HazeState? = null,
+    scrollProgress: Float = 0f,
+    isPosterMode: Boolean = false,
 ) {
     val colors = AuroraTheme.colors
+    val appHaptics = LocalAppHaptics.current
     val tint = iconTint ?: colors.accent.copy(alpha = 0.95f)
 
     Box(
         modifier = modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        colors.surface.copy(alpha = 0.9f),
-                        colors.surface.copy(alpha = 0.6f),
-                    ),
-                    center = Offset(0.3f, 0.3f),
-                    radius = 0.8f,
-                ),
+            .auroraHeaderIconSurface(
+                colors = colors,
+                hazeState = hazeState,
+                scrollProgress = scrollProgress,
+                isPosterMode = isPosterMode,
             )
-            .drawBehind {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            colors.accent.copy(alpha = 0.15f),
-                            Color.Transparent,
-                        ),
-                        center = Offset(size.width * 0.3f, size.height * 0.3f),
-                        radius = size.width * 0.6f,
-                    ),
-                )
-            }
-            .clickable(onClick = onClick),
+            .size(44.dp)
+            .clickable(onClick = {
+                appHaptics.tap()
+                onClick()
+            }),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

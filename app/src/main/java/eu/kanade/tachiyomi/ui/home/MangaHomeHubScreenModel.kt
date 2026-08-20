@@ -1,10 +1,14 @@
 package eu.kanade.tachiyomi.ui.home
 
 import android.content.Context
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.source.manga.interactor.GetEnabledMangaSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
+import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -87,6 +91,7 @@ internal class MangaHomeHubScreenModel(
     private val getMangaWithChapters: GetMangaWithChapters by injectLazy()
     private val getLibraryManga: GetLibraryManga by injectLazy()
     private val getMangaCategories: GetMangaCategories by injectLazy()
+    private val getEnabledMangaSources: GetEnabledMangaSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: MangaSourceManager by injectLazy()
 
@@ -118,6 +123,27 @@ internal class MangaHomeHubScreenModel(
         fastCache.load().hero?.let { hero ->
             screenModelScope.launchIO {
                 loadHeroChapter(hero.entryId, hero.subId)
+            }
+        }
+
+        // Enabled (installed) manga sources for the Home source picker — mirrors Browse's logic
+        screenModelScope.launchIO {
+            getEnabledMangaSources.subscribe().collectLatest { sources ->
+                mutableState.update {
+                    it.copy(
+                        availableSources = sources.distinctBy { it.id }.map { s ->
+                            HomeSourceItem(
+                                id = s.id,
+                                name = s.name,
+                                lang = s.lang,
+                                isLocal = s.id == tachiyomi.source.local.entries.manga.LocalMangaSource.ID,
+                                iconBitmap = mangaExtensionManager.getAppIconForSource(
+                                    s.id,
+                                )?.toBitmap()?.asImageBitmap(),
+                            )
+                        },
+                    )
+                }
             }
         }
     }
@@ -318,7 +344,13 @@ internal class MangaHomeHubScreenModel(
         )
     }
 
+    private val mangaExtensionManager: MangaExtensionManager by injectLazy()
+
     fun getLastUsedMangaSourceId(): Long = sourcePreferences.lastUsedMangaSource().get()
+
+    fun setLastUsedMangaSourceId(sourceId: Long) {
+        sourcePreferences.lastUsedMangaSource().set(sourceId)
+    }
 
     fun getLastUsedMangaSourceName(): String? {
         val sourceId = sourcePreferences.lastUsedMangaSource().get()

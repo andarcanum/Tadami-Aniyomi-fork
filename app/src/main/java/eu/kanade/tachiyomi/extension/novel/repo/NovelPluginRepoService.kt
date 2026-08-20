@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.extension.novel.repo
 
+import eu.kanade.tachiyomi.extension.novel.NovelIndexFormatDecoder
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
 import kotlinx.coroutines.CancellationException
@@ -39,8 +40,8 @@ class NovelPluginRepoService(
                 client.newCall(GET(url))
                     .awaitSuccess()
                     .use { response ->
-                        val payload = response.body.string()
-                        if (payload.isBlank()) {
+                        val payload = NovelIndexFormatDecoder.decodeToPluginJson(response.body.bytes())
+                        if (payload.isNullOrBlank()) {
                             emptyList()
                         } else {
                             runCatching { parser.parse(payload) }

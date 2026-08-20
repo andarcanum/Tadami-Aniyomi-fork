@@ -55,8 +55,8 @@ fun AnimeActionCard(
 
     GlassmorphismCard(
         modifier = modifier,
-        verticalPadding = 6.dp,
-        innerPadding = 12.dp,
+        verticalPadding = 4.dp,
+        innerPadding = 8.dp,
         cornerRadius = 16.dp,
     ) {
         Row(
@@ -163,11 +163,11 @@ private fun ActionButton(
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
-            .padding(horizontal = 2.dp, vertical = 4.dp),
+            .padding(horizontal = 2.dp, vertical = 2.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(34.dp)
                 .then(
                     if (isActive) {
                         Modifier.background(colors.accent.copy(alpha = 0.2f), CircleShape)
@@ -179,15 +179,15 @@ private fun ActionButton(
         ) {
             icon()
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = label,
-            color = if (isActive) colors.accent else colors.textPrimary.copy(alpha = 0.8f),
-            fontSize = 10.sp,
-            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isActive) colors.accent else colors.textPrimary.copy(alpha = 0.85f),
+            fontSize = 11.sp,
+            fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
             textAlign = TextAlign.Center,
             maxLines = 2,
-            lineHeight = 12.sp,
+            lineHeight = 13.sp,
         )
     }
 }

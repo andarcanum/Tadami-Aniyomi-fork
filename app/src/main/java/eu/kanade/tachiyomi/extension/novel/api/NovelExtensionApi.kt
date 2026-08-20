@@ -40,7 +40,7 @@ internal class NovelExtensionApi(
 
         // Pass the repo base URLs; each repo is fetched once via its first available candidate.
         val repoUrls = getExtensionRepo.getAll()
-            .map { it.baseUrl }
+            .map { it.indexUrl?.takeIf { url -> url.isNotBlank() } ?: it.baseUrl }
             .distinct()
 
         val updates = repoUpdateInteractor.findUpdates(repoUrls)

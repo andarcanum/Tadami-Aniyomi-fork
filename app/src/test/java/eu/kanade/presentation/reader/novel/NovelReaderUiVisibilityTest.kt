@@ -1867,7 +1867,6 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `vertical swipe up near chapter end opens next chapter`() {
         val result = resolveVerticalChapterSwipeAction(
-            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 40f,
@@ -1888,7 +1887,6 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `vertical swipe down near chapter start opens previous chapter`() {
         val result = resolveVerticalChapterSwipeAction(
-            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 20f,
@@ -1909,7 +1907,6 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `horizontal dominant swipe does not trigger vertical chapter switch`() {
         val result = resolveVerticalChapterSwipeAction(
-            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 320f,
@@ -1930,7 +1927,6 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview vertical swipe up near chapter end opens next chapter`() {
         val result = resolveWebViewVerticalChapterSwipeAction(
-            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 8f,
@@ -1951,7 +1947,6 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview vertical swipe requires minimum distance`() {
         val result = resolveWebViewVerticalChapterSwipeAction(
-            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 2f,
@@ -1972,7 +1967,6 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview vertical swipe ignores horizontal dominant gesture`() {
         val result = resolveWebViewVerticalChapterSwipeAction(
-            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 220f,
@@ -1993,7 +1987,6 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `vertical swipe requires deliberate hold duration`() {
         val result = resolveVerticalChapterSwipeAction(
-            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = false,
             deltaX = 4f,
@@ -2014,7 +2007,6 @@ class NovelReaderUiVisibilityTest {
     @Test
     fun `webview vertical swipe requires starting near chapter boundary`() {
         val result = resolveWebViewVerticalChapterSwipeAction(
-            swipeGesturesEnabled = true,
             swipeToNextChapter = true,
             swipeToPrevChapter = false,
             deltaX = 2f,
@@ -2033,9 +2025,8 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `vertical chapter swipe ignores gestures when master switch is off`() {
+    fun `vertical chapter swipe works without the horizontal master switch`() {
         val result = resolveVerticalChapterSwipeAction(
-            swipeGesturesEnabled = false,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 8f,
@@ -2050,13 +2041,12 @@ class NovelReaderUiVisibilityTest {
             isNearChapterStart = false,
         )
 
-        assertTrue(result == VerticalChapterSwipeAction.NONE)
+        assertTrue(result == VerticalChapterSwipeAction.NEXT)
     }
 
     @Test
-    fun `webview vertical chapter swipe ignores gestures when master switch is off`() {
+    fun `webview vertical chapter swipe works without the horizontal master switch`() {
         val result = resolveWebViewVerticalChapterSwipeAction(
-            swipeGesturesEnabled = false,
             swipeToNextChapter = true,
             swipeToPrevChapter = true,
             deltaX = 8f,
@@ -2071,7 +2061,7 @@ class NovelReaderUiVisibilityTest {
             isNearChapterStart = false,
         )
 
-        assertTrue(result == VerticalChapterSwipeAction.NONE)
+        assertTrue(result == VerticalChapterSwipeAction.NEXT)
     }
 
     @Test
@@ -3870,6 +3860,49 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `page turn built-in edge tap fallback is disabled when custom tap zones are enabled`() {
+        assertFalse(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = true,
+                tapToScrollEnabled = true,
+                canMoveInDirection = true,
+            ),
+        )
+        assertFalse(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = true,
+                tapToScrollEnabled = false,
+                canMoveInDirection = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `page turn built-in edge tap fallback follows tap to scroll and direction availability`() {
+        assertTrue(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = false,
+                tapToScrollEnabled = true,
+                canMoveInDirection = true,
+            ),
+        )
+        assertFalse(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = false,
+                tapToScrollEnabled = false,
+                canMoveInDirection = true,
+            ),
+        )
+        assertFalse(
+            resolvePageTurnBuiltInTapNavigationEnabled(
+                customTapZonesEnabled = false,
+                tapToScrollEnabled = true,
+                canMoveInDirection = false,
+            ),
+        )
+    }
+
+    @Test
     fun `page turn configured tap action moves backward from zone action on inner page`() {
         assertEquals(
             PageTurnCustomTapAction.MOVE_PREVIOUS_PAGE,
@@ -4289,27 +4322,15 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
-    fun `chapter swipe controls are disabled while page mode is active`() {
-        assertFalse(
-            areChapterSwipeControlsEnabled(
-                swipeGesturesEnabled = true,
-                pageReaderEnabled = true,
-            ),
-        )
-    }
-
-    @Test
-    fun `chapter swipe controls require swipe gestures and scroll mode`() {
+    fun `chapter swipe controls are enabled only in scroll mode`() {
         assertTrue(
             areChapterSwipeControlsEnabled(
-                swipeGesturesEnabled = true,
                 pageReaderEnabled = false,
             ),
         )
         assertFalse(
             areChapterSwipeControlsEnabled(
-                swipeGesturesEnabled = false,
-                pageReaderEnabled = false,
+                pageReaderEnabled = true,
             ),
         )
     }

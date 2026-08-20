@@ -60,6 +60,7 @@ import eu.kanade.tachiyomi.ui.browse.manga.extension.MangaExtensionsScreenModel
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import eu.kanade.tachiyomi.util.system.launchRequestPackageInstallsPermission
 import kotlinx.collections.immutable.persistentListOf
+import mihon.domain.extensionstore.model.repoDisplayNameFallback
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
 import tachiyomi.presentation.core.components.material.PullRefresh
@@ -415,7 +416,7 @@ private fun ExtensionItemContent(
                     extension is MangaExtension.Available && repoSourceCount > 1 -> {
                         pluralStringResource(MR.plurals.num_repos, count = repoSourceCount, repoSourceCount)
                     }
-                    repoDisplayName != null -> repoDisplayName.oneWordRepoName()
+                    repoDisplayName != null -> repoDisplayName.truncateLabel()
                     else -> extension.repoDisplayName(repoSourceCount)
                 }
                 repoName?.let { name ->
@@ -428,6 +429,7 @@ private fun ExtensionItemContent(
 
                 val warning = when {
                     extension is MangaExtension.Untrusted -> MR.strings.ext_untrusted
+                    extension is MangaExtension.Available && extension.needsAppUpdate -> MR.strings.ext_needs_app_update
                     extension is MangaExtension.Installed && extension.isObsolete -> MR.strings.ext_obsolete
                     extension.isNsfw -> MR.strings.ext_nsfw_short
                     else -> null
@@ -463,51 +465,16 @@ private fun MangaExtension.repoDisplayName(repoSourceCount: Int): String? {
     }
 
     val rawName = when (this) {
-        is MangaExtension.Available -> repoName.ifBlank { repoUrl.shortRepoName() }
-        is MangaExtension.Installed -> repoName?.takeIf { it.isNotBlank() } ?: repoUrl?.shortRepoName()
+        is MangaExtension.Available -> repoName.ifBlank { repoUrl.repoDisplayNameFallback() }
+        is MangaExtension.Installed -> repoName?.takeIf { it.isNotBlank() } ?: repoUrl?.repoDisplayNameFallback()
         is MangaExtension.Untrusted -> null
     } ?: return null
 
-    return rawName.oneWordRepoName()
+    return rawName.truncateLabel()
 }
 
-private fun String.shortRepoName(): String {
-    val withoutScheme = substringAfter("://", this)
-    val host = withoutScheme.substringBefore('/').removePrefix("www.")
-    if (host.equals("github.com", ignoreCase = true) || host.equals("raw.githubusercontent.com", ignoreCase = true)) {
-        val owner = withoutScheme.substringAfter('/', "").substringBefore('/')
-        if (owner.isNotBlank()) return owner
-    }
-    return host.ifBlank { this }
-}
-
-private fun String.oneWordRepoName(maxLength: Int = 14): String {
-    val commonWords = setOf(
-        "anime",
-        "manga",
-        "extension",
-        "extensions",
-        "repo",
-        "repos",
-        "repository",
-        "repositories",
-        "source",
-        "sources",
-    )
-    val normalized = trim()
-        .removePrefix("http://")
-        .removePrefix("https://")
-        .substringBefore('/')
-        .removePrefix("www.")
-        .replace('-', ' ')
-        .replace('_', ' ')
-        .replace('.', ' ')
-    val word = normalized
-        .split(' ')
-        .firstOrNull { it.isNotBlank() && it.lowercase() !in commonWords }
-        ?: trim()
-
-    return if (word.length <= maxLength) word else word.take(maxLength - 1).trimEnd() + "…"
+private fun String.truncateLabel(maxLength: Int = 16): String {
+    return if (length <= maxLength) this else take(maxLength - 1).trimEnd() + "…"
 }
 
 @Composable

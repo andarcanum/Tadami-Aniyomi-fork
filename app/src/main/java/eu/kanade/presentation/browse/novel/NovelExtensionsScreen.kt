@@ -56,6 +56,7 @@ import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionItem
 import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionsScreenModel
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import mihon.domain.extensionstore.model.repoDisplayNameFallback
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.FastScrollLazyColumn
@@ -583,7 +584,7 @@ private fun NovelExtensionItemRow(
                     plugin is NovelPlugin.Available && item.repoSourceCount > 1 -> {
                         pluralStringResource(MR.plurals.num_repos, count = item.repoSourceCount, item.repoSourceCount)
                     }
-                    repoDisplayName != null -> repoDisplayName.oneWordRepoName()
+                    repoDisplayName != null -> repoDisplayName.truncateLabel()
                     else -> plugin.repoDisplayName(item.repoSourceCount)
                 }
                 repoName?.takeIf { it.isNotBlank() }?.let { name ->
@@ -644,54 +645,16 @@ private fun NovelPlugin.repoDisplayName(repoSourceCount: Int): String? {
     }
 
     val rawName = when (this) {
-        is NovelPlugin.Available -> repoName.ifBlank { repoUrl.shortRepoName() }
-        is NovelPlugin.Installed -> repoName?.takeIf { it.isNotBlank() } ?: repoUrl.shortRepoName()
+        is NovelPlugin.Available -> repoName.ifBlank { repoUrl.repoDisplayNameFallback() }
+        is NovelPlugin.Installed -> repoName?.takeIf { it.isNotBlank() } ?: repoUrl.repoDisplayNameFallback()
         is NovelPlugin.Untrusted -> null
     }
 
-    return rawName?.takeIf { it.isNotBlank() }?.oneWordRepoName()
+    return rawName?.takeIf { it.isNotBlank() }?.truncateLabel()
 }
 
-private fun String.shortRepoName(): String {
-    val withoutScheme = substringAfter("://", this)
-    val host = withoutScheme.substringBefore('/').removePrefix("www.")
-    if (host.equals("github.com", ignoreCase = true) || host.equals("raw.githubusercontent.com", ignoreCase = true)) {
-        val owner = withoutScheme.substringAfter('/', "").substringBefore('/')
-        if (owner.isNotBlank()) return owner
-    }
-    return host.ifBlank { this }
-}
-
-private fun String.oneWordRepoName(maxLength: Int = 14): String {
-    val commonWords = setOf(
-        "novel",
-        "anime",
-        "manga",
-        "extension",
-        "extensions",
-        "plugin",
-        "plugins",
-        "repo",
-        "repos",
-        "repository",
-        "repositories",
-        "source",
-        "sources",
-    )
-    val normalized = trim()
-        .removePrefix("http://")
-        .removePrefix("https://")
-        .substringBefore('/')
-        .removePrefix("www.")
-        .replace('-', ' ')
-        .replace('_', ' ')
-        .replace('.', ' ')
-    val word = normalized
-        .split(' ')
-        .firstOrNull { it.isNotBlank() && it.lowercase() !in commonWords }
-        ?: trim()
-
-    return if (word.length <= maxLength) word else word.take(maxLength - 1).trimEnd() + "…"
+private fun String.truncateLabel(maxLength: Int = 16): String {
+    return if (length <= maxLength) this else take(maxLength - 1).trimEnd() + "…"
 }
 
 @Composable

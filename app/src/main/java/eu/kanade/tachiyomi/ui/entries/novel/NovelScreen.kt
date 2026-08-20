@@ -140,6 +140,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import logcat.logcat
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.i18n.MR
@@ -536,6 +537,15 @@ class NovelScreen(
             chapterSwipeEndAction = screenModel.chapterSwipeEndAction,
             onChapterSwipe = screenModel::chapterSwipe,
             onFilterButtonClicked = screenModel::showSettingsDialog,
+            onToggleSort = { screenModel.setSorting(successState.novel.sorting) },
+            onToggleUnreadFilter = {
+                val next = when (successState.novel.unreadFilter) {
+                    TriState.DISABLED -> TriState.ENABLED_IS
+                    TriState.ENABLED_IS -> TriState.ENABLED_NOT
+                    TriState.ENABLED_NOT -> TriState.DISABLED
+                }
+                screenModel.setUnreadFilter(next)
+            },
             scanlatorChapterCounts = successState.scanlatorChapterCounts,
             selectedScanlator = successState.selectedScanlator,
             onScanlatorSelected = screenModel::selectScanlator,
@@ -1243,7 +1253,7 @@ private fun NovelAuroraDownloadSheet(
     var scope by remember { mutableStateOf<NovelDownloadScope>(NovelDownloadScope.Next(20)) }
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
-    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !colors.isEInk
+    val supportsBlurBehind = eu.kanade.presentation.util.rememberSupportsBlurBehind(colors.isEInk)
     var sheetReveal by remember { mutableFloatStateOf(0f) }
     val accent = if (colors.isEInk) colors.textPrimary else colors.accent
     val selectedChipAmount = (scope as? NovelDownloadScope.Next)?.amount?.takeIf { it in setOf(1, 5, 10) }
@@ -1763,7 +1773,7 @@ private fun NovelEpubExportSheet(
 
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
-    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !colors.isEInk
+    val supportsBlurBehind = eu.kanade.presentation.util.rememberSupportsBlurBehind(colors.isEInk)
     var sheetReveal by remember { mutableFloatStateOf(0f) }
     val pressInteraction = remember { MutableInteractionSource() }
     val isPressed by pressInteraction.collectIsPressedAsState()

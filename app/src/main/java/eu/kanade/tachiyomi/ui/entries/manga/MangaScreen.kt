@@ -69,6 +69,7 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
@@ -188,6 +189,15 @@ class MangaScreen(
                 scope.launch { performGenresSearch(navigator, genres, screenModel.source!!) }
             },
             onFilterButtonClicked = screenModel::showSettingsDialog,
+            onToggleSort = { screenModel.setSorting(successState.manga.sorting) },
+            onToggleUnreadFilter = {
+                val next = when (successState.manga.unreadFilter) {
+                    TriState.DISABLED -> TriState.ENABLED_IS
+                    TriState.ENABLED_IS -> TriState.ENABLED_NOT
+                    TriState.ENABLED_NOT -> TriState.DISABLED
+                }
+                screenModel.setUnreadFilter(next)
+            },
             showScanlatorSelector = showScanlatorSelector,
             scanlatorChapterCounts = successState.scanlatorChapterCounts,
             selectedScanlator = successState.selectedScanlator,

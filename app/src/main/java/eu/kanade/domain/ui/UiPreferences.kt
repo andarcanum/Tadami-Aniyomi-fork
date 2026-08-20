@@ -10,6 +10,7 @@ import eu.kanade.domain.ui.model.NavTransitionMode
 import eu.kanade.domain.ui.model.StartScreen
 import eu.kanade.domain.ui.model.TabletUiMode
 import eu.kanade.domain.ui.model.ThemeMode
+import eu.kanade.domain.ui.model.TitleScreenStyle
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.preference.getEnum
 import tachiyomi.domain.metadata.model.MetadataSource
@@ -172,6 +173,10 @@ class UiPreferences(
     fun entrySuggestionsExpandInline() = preferenceStore.getBoolean("entry_suggestions_expand_inline", true)
 
     fun entrySuggestionsInOverflow() = preferenceStore.getBoolean("entry_suggestions_in_overflow", false)
+
+    fun titleScreenStyle() = preferenceStore.getEnum("pref_title_screen_style", TitleScreenStyle.POSTER_IMMERSIVE)
+
+    fun titleScreenAnimation() = preferenceStore.getBoolean("pref_title_screen_animation", true)
 
     companion object {
         const val DEFAULT_APP_UI_FONT_ID = ""

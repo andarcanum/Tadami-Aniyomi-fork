@@ -167,6 +167,39 @@ class DescriptionEngineTest {
     }
 
     @Test
+    fun `multi-label metadata block parses each label row cleanly without swallowing subsequent labels`() {
+        val raw = """
+            Альт. название: Eleceed
+            Другие названия: |Illegsideu, 일렉сид, بذور الكهرباء, تجاوز
+            Год выпуска: 2018
+
+            Кайден, таинственная личность, словно ниспосланная с небес в виде кометы...
+        """.trimIndent()
+        val blocks = DescriptionEngine.beautify(raw)
+
+        val labels = blocks.filterIsInstance<DescriptionBlock.LabelRow>()
+        labels.map { it.label } shouldBe listOf("Альт. название", "Другие названия", "Год выпуска")
+        labels.map { it.value } shouldBe listOf(
+            "Eleceed",
+            "Illegsideu, 일렉сид, بذور الكهرباء, تجاوز",
+            "2018",
+        )
+        val paragraphs = blocks.filterIsInstance<DescriptionBlock.Paragraph>()
+        paragraphs.size shouldBe 1
+        paragraphs.first().text shouldContain "Кайден"
+    }
+
+    @Test
+    fun `pipe delimited alternative titles are parsed into clean items without leading pipes`() {
+        val raw = "Другие названия: | Illegsideu | 일렉сид | Eleceed"
+        val blocks = DescriptionEngine.beautify(raw)
+        val heading = blocks.filterIsInstance<DescriptionBlock.SectionHeading>().single()
+        heading.text shouldBe "Другие названия"
+        val items = blocks.filterIsInstance<DescriptionBlock.ListItem>()
+        items.map { it.text } shouldBe listOf("Illegsideu", "일렉сид", "Eleceed")
+    }
+
+    @Test
     fun `blocks survive json round trip`() {
         val blocks = DescriptionEngine.beautify(corpus("structured_tbate.txt"))
         val decoded = DescriptionBlockCodec.decode(DescriptionBlockCodec.encode(blocks))

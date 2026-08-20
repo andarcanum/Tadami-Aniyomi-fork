@@ -111,5 +111,6 @@ private fun isNewer(
     extension: AnimeExtension.Installed,
     candidate: AnimeExtension.Available,
 ): Boolean {
-    return candidate.versionCode > extension.versionCode || candidate.libVersion > extension.libVersion
+    return !candidate.needsAppUpdate &&
+        (candidate.versionCode > extension.versionCode || candidate.libVersion > extension.libVersion)
 }

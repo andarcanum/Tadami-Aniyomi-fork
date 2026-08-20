@@ -72,6 +72,7 @@ import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
+import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withIOContext
 import tachiyomi.core.common.util.system.logcat
@@ -194,6 +195,15 @@ class AnimeScreen(
                 scope.launch { performGenresSearch(navigator, genres, screenModel.source!!) }
             },
             onFilterButtonClicked = screenModel::showSettingsDialog,
+            onToggleSort = { screenModel.setSorting(successState.anime.sorting) },
+            onToggleUnseenFilter = {
+                val next = when (successState.anime.unseenFilter) {
+                    TriState.DISABLED -> TriState.ENABLED_IS
+                    TriState.ENABLED_IS -> TriState.ENABLED_NOT
+                    TriState.ENABLED_NOT -> TriState.DISABLED
+                }
+                screenModel.setUnseenFilter(next)
+            },
             onRefresh = screenModel::fetchAllFromSource,
             onContinueWatching = {
                 scope.launchIO {

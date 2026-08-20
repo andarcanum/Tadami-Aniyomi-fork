@@ -5,7 +5,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -18,13 +23,17 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -49,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,10 +70,19 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -93,6 +112,7 @@ import eu.kanade.presentation.components.latticeCircuitBar
 import eu.kanade.presentation.components.latticeCircuitRail
 import eu.kanade.presentation.components.rememberAuroraCelestialNavbarUnlocked
 import eu.kanade.presentation.components.rememberLatticeCircuitNavbarUnlocked
+import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.presentation.tutorial.coachAnchorForTab
@@ -297,93 +317,40 @@ object HomeScreen : Screen() {
                                         )
                                     }
                                     val navContainerColor = if (useAuroraBottomNav) {
-                                        if (auroraColors!!.isDark) {
-                                            Color.Transparent
-                                        } else {
-                                            Color.Transparent
-                                        }
+                                        Color.Transparent
                                     } else {
                                         MaterialTheme.colorScheme.surfaceContainer
                                     }
                                     val navShadowElevation = 0.dp
-                                    val navTonalElevation = if (useAuroraBottomNav) {
-                                        if (auroraColors!!.isDark) 0.dp else 0.dp
-                                    } else {
-                                        0.dp
-                                    }
+                                    val navTonalElevation = 0.dp
                                     val navModifier = if (useAuroraBottomNav) {
-                                        val baseModifier = Modifier
+                                        Modifier
                                             .windowInsetsPadding(NavigationBarDefaults.windowInsets)
-                                            .padding(horizontal = 12.dp, vertical = 10.dp)
-                                        if (auroraColors!!.isDark) {
-                                            baseModifier
-                                                .shadow(
-                                                    elevation = 10.dp,
-                                                    shape = navBarShape,
-                                                    ambientColor = Color.White.copy(alpha = 0.12f),
-                                                    spotColor = Color.White.copy(alpha = 0.08f),
-                                                )
-                                                .shadow(
-                                                    elevation = 3.dp,
-                                                    shape = navBarShape,
-                                                    ambientColor = Color.White.copy(alpha = 0.18f),
-                                                    spotColor = Color.White.copy(alpha = 0.12f),
-                                                )
-                                                .clip(navBarShape)
-                                                .hazeEffect(
-                                                    state = hazeState,
-                                                    style = HazeStyle(
-                                                        backgroundColor = auroraColors.background,
-                                                        tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
-                                                        blurRadius = 24.dp,
-                                                        noiseFactor = 0.12f,
-                                                    ),
-                                                )
-                                                .border(
-                                                    BorderStroke(
-                                                        width = 1.dp,
-                                                        brush = auroraMenuRimLightBrush(auroraColors),
-                                                    ),
-                                                    shape = navBarShape,
-                                                )
-                                        } else {
-                                            baseModifier
-                                                .shadow(
-                                                    elevation = 8.dp,
-                                                    shape = navBarShape,
-                                                )
-                                                .clip(navBarShape)
-                                                .hazeEffect(
-                                                    state = hazeState,
-                                                    style = HazeStyle(
-                                                        backgroundColor = auroraColors.background,
-                                                        tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
-                                                        blurRadius = 24.dp,
-                                                        noiseFactor = 0.12f,
-                                                    ),
-                                                )
-                                                .border(
-                                                    BorderStroke(
-                                                        width = 1.dp,
-                                                        brush = Brush.verticalGradient(
-                                                            listOf(
-                                                                Color.White.copy(alpha = 0.80f),
-                                                                Color.White.copy(alpha = 0.20f),
-                                                            ),
-                                                        ),
-                                                    ),
-                                                    shape = navBarShape,
-                                                )
-                                        }
+                                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                                            .auroraGlassNav(auroraColors!!, navBarShape, hazeState)
                                     } else {
                                         Modifier
                                     }
-                                    val celestialNavbar =
-                                        useAuroraBottomNav && !isEInkMode && rememberAuroraCelestialNavbarUnlocked()
+                                    val celestialUnlocked = rememberAuroraCelestialNavbarUnlocked()
+                                    val celestialNavbar = useAuroraBottomNav && !isEInkMode && celestialUnlocked
                                     val celestialTabNavigator = if (celestialNavbar) LocalTabNavigator.current else null
                                     val celestialSelectedIndex = celestialTabNavigator?.let { tn ->
                                         navStyle.tabs.indexOfFirst { it::class == tn.current::class }
                                     } ?: -1
+                                    val auroraSelectedIndex = navStyle.tabs.indexOfFirst {
+                                        it::class ==
+                                            tabNavigator.current::class
+                                    }
+                                    val slidingPillIndex = remember { Animatable(auroraSelectedIndex.toFloat()) }
+                                    LaunchedEffect(auroraSelectedIndex) {
+                                        slidingPillIndex.animateTo(
+                                            targetValue = auroraSelectedIndex.toFloat(),
+                                            animationSpec = spring(
+                                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                                stiffness = Spring.StiffnessMediumLow,
+                                            ),
+                                        )
+                                    }
                                     val circuitNavbar = !isEInkMode && rememberLatticeCircuitNavbarUnlocked()
                                     val decoratedNavModifierBase = if (celestialNavbar && auroraColors != null) {
                                         navModifier.auroraCelestialBar(
@@ -427,9 +394,17 @@ object HomeScreen : Screen() {
                                                 } else {
                                                     PaddingValues(0.dp)
                                                 },
+                                                height = if (useAuroraBottomNav) 64.dp else 80.dp,
                                             ) {
-                                                navStyle.tabs.fastForEach {
-                                                    NavigationBarItem(it, useAuroraBottomNav)
+                                                navStyle.tabs.forEachIndexed { index, tab ->
+                                                    NavigationBarItem(
+                                                        tab,
+                                                        useAuroraBottomNav,
+                                                        index,
+                                                        slidingPillIndex,
+                                                        celestialUnlocked,
+                                                        auroraColors,
+                                                    )
                                                 }
                                             }
                                         }
@@ -462,9 +437,17 @@ object HomeScreen : Screen() {
                                                 } else {
                                                     PaddingValues(0.dp)
                                                 },
+                                                height = if (useAuroraBottomNav) 64.dp else 80.dp,
                                             ) {
-                                                navStyle.tabs.fastForEach {
-                                                    NavigationBarItem(it, useAuroraBottomNav)
+                                                navStyle.tabs.forEachIndexed { index, tab ->
+                                                    NavigationBarItem(
+                                                        tab,
+                                                        useAuroraBottomNav,
+                                                        index,
+                                                        slidingPillIndex,
+                                                        celestialUnlocked,
+                                                        auroraColors,
+                                                    )
                                                 }
                                             }
                                         }
@@ -473,14 +456,21 @@ object HomeScreen : Screen() {
                             },
                             contentWindowInsets = WindowInsets(0),
                         ) { contentPadding ->
+                            val layoutDirection = LocalLayoutDirection.current
                             Box(
                                 modifier = Modifier
-                                    .padding(top = contentPadding.calculateTopPadding())
+                                    .padding(
+                                        top = contentPadding.calculateTopPadding(),
+                                        start = contentPadding.calculateStartPadding(layoutDirection),
+                                        end = contentPadding.calculateEndPadding(layoutDirection),
+                                    )
                                     .consumeWindowInsets(contentPadding)
                                     .hazeSource(hazeState),
                             ) {
                                 CompositionLocalProvider(
-                                    LocalHostScaffoldContentPadding provides contentPadding,
+                                    LocalHostScaffoldContentPadding provides PaddingValues(
+                                        bottom = contentPadding.calculateBottomPadding(),
+                                    ),
                                 ) {
                                     if (resolvedTransitionMode == ResolvedNavigationTransitionMode.NONE) {
                                         val currentTab = tabNavigator.current
@@ -638,9 +628,16 @@ object HomeScreen : Screen() {
     }
 
     @Composable
-    private fun RowScope.NavigationBarItem(tab: eu.kanade.presentation.util.Tab, useAuroraBottomNav: Boolean) {
+    private fun RowScope.NavigationBarItem(
+        tab: eu.kanade.presentation.util.Tab,
+        useAuroraBottomNav: Boolean,
+        index: Int,
+        slidingPillIndex: Animatable<Float, AnimationVector1D>,
+        celestialHalo: Boolean,
+        auroraColors: AuroraColors?,
+    ) {
         if (useAuroraBottomNav) {
-            AuroraNavigationBarItem(tab)
+            AuroraNavigationBarItem(tab, index, slidingPillIndex, celestialHalo, auroraColors!!)
             return
         }
 
@@ -679,13 +676,18 @@ object HomeScreen : Screen() {
     }
 
     @Composable
-    private fun RowScope.AuroraNavigationBarItem(tab: eu.kanade.presentation.util.Tab) {
+    private fun RowScope.AuroraNavigationBarItem(
+        tab: eu.kanade.presentation.util.Tab,
+        index: Int,
+        slidingPillIndex: Animatable<Float, AnimationVector1D>,
+        celestialHalo: Boolean,
+        auroraColors: AuroraColors,
+    ) {
         val tabNavigator = LocalTabNavigator.current
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val selected = tabNavigator.current::class == tab::class
         val appHaptics = LocalAppHaptics.current
-        val auroraColors = AuroraTheme.colorsForCurrentTheme()
         val interactionSource = remember { MutableInteractionSource() }
         val iconColor = if (selected) {
             auroraColors.accent
@@ -697,33 +699,27 @@ object HomeScreen : Screen() {
         } else {
             auroraColors.textSecondary.copy(alpha = if (auroraColors.isDark) 0.82f else 0.88f)
         }
-        val iconBackgroundBrush = if (selected) {
-            Brush.verticalGradient(
-                listOf(
-                    if (auroraColors.isDark) {
-                        auroraColors.accent.copy(alpha = 0.28f)
-                    } else {
-                        auroraColors.accent.copy(alpha = 0.18f)
-                    },
-                    if (auroraColors.isDark) {
-                        auroraColors.accentVariant.copy(alpha = 0.18f)
-                    } else {
-                        Color.White.copy(alpha = 0.78f)
-                    },
-                ),
-            )
-        } else {
-            null
-        }
         val iconShape = RoundedCornerShape(999.dp)
-        val celestialHalo = rememberAuroraCelestialNavbarUnlocked()
+        val tabTitle = tab.options.title
+        val isPressed by interactionSource.collectIsPressedAsState()
+        val pressScale by animateFloatAsState(
+            targetValue = if (isPressed) 0.96f else 1f,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioMediumBouncy,
+                stiffness = Spring.StiffnessMediumLow,
+            ),
+            label = "auroraNavItemPressScale",
+        )
+        val itemWidthPx = remember { mutableStateOf(0f) }
 
         Box(
             modifier = Modifier
                 .weight(1f)
                 .coachAnchorForTab(tab)
+                .fillMaxHeight()
+                .onSizeChanged { itemWidthPx.value = it.width.toFloat() }
+                .scale(pressScale)
                 .padding(horizontal = 1.dp)
-                .padding(top = 8.dp, bottom = 0.dp)
                 .selectable(
                     selected = selected,
                     role = Role.Tab,
@@ -737,43 +733,41 @@ object HomeScreen : Screen() {
                             scope.launch { tab.onReselect(navigator) }
                         }
                     },
-                ),
+                )
+                .semantics(mergeDescendants = true) {
+                    contentDescription = tabTitle
+                },
             contentAlignment = Alignment.Center,
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Box(
                     modifier = Modifier
                         .then(
                             if (selected) {
-                                Modifier
-                                    .auroraCelestialHalo(
-                                        accent = auroraColors.accent,
-                                        accentVariant = auroraColors.accentVariant,
-                                        isDark = auroraColors.isDark,
-                                        shape = iconShape,
-                                        enabled = celestialHalo,
-                                    )
-                                    .background(iconBackgroundBrush!!, iconShape)
-                                    .border(
-                                        BorderStroke(
-                                            1.dp,
-                                            if (auroraColors.isDark) {
-                                                Color.White.copy(alpha = 0.12f)
-                                            } else {
-                                                auroraColors.accent.copy(alpha = 0.16f)
-                                            },
-                                        ),
-                                        iconShape,
-                                    )
+                                Modifier.auroraCelestialHalo(
+                                    accent = auroraColors.accent,
+                                    accentVariant = auroraColors.accentVariant,
+                                    isDark = auroraColors.isDark,
+                                    shape = iconShape,
+                                    enabled = celestialHalo,
+                                )
                             } else {
                                 Modifier
                             },
                         )
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                        .auroraSlidingPill(
+                            slidingPillIndex = slidingPillIndex,
+                            itemIndex = index,
+                            itemWidthPx = itemWidthPx,
+                            accent = auroraColors.accent,
+                            accentVariant = auroraColors.accentVariant,
+                            isDark = auroraColors.isDark,
+                        )
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     CompositionLocalProvider(LocalContentColor provides iconColor) {
@@ -789,13 +783,124 @@ object HomeScreen : Screen() {
                     text = tab.options.title,
                     color = labelColor,
                     style = MaterialTheme.typography.labelLarge.copy(
-                        fontSize = MaterialTheme.typography.labelLarge.fontSize * 0.92f,
+                        fontSize = MaterialTheme.typography.labelLarge.fontSize * 0.82f,
                     ),
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+        }
+    }
+
+    /**
+     * Единая плашка активной вкладки: рисуется в координатах иконки каждого
+     * айтема и плавно «переезжает» между ними по горизонтали. Каждый айтем
+     * рисует плашку только пока её центр находится в его зоне
+     * [index - 0.5, index + 0.5), поэтому между соседями нет ни двойной
+     * отрисовки, ни разрыва.
+     */
+    @Composable
+    private fun Modifier.auroraSlidingPill(
+        slidingPillIndex: Animatable<Float, AnimationVector1D>,
+        itemIndex: Int,
+        itemWidthPx: State<Float>,
+        accent: Color,
+        accentVariant: Color,
+        isDark: Boolean,
+    ): Modifier {
+        val pillBrush = remember(accent, accentVariant, isDark) {
+            Brush.verticalGradient(
+                listOf(
+                    if (isDark) accent.copy(alpha = 0.28f) else accent.copy(alpha = 0.18f),
+                    if (isDark) accentVariant.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.78f),
+                ),
+            )
+        }
+        val borderColor = if (isDark) {
+            Color.White.copy(alpha = 0.12f)
+        } else {
+            accent.copy(alpha = 0.16f)
+        }
+        return this.drawBehind {
+            val delta = slidingPillIndex.value - itemIndex
+            if (delta < -0.5f || delta >= 0.5f) return@drawBehind
+            val corner = CornerRadius(size.height / 2f, size.height / 2f)
+            val topLeft = Offset(delta * itemWidthPx.value, 0f)
+            drawRoundRect(
+                brush = pillBrush,
+                topLeft = topLeft,
+                size = size,
+                cornerRadius = corner,
+            )
+            drawRoundRect(
+                color = borderColor,
+                topLeft = topLeft,
+                size = size,
+                cornerRadius = corner,
+                style = Stroke(width = 1.dp.toPx()),
+            )
+        }
+    }
+
+    /**
+     * Общее «стекло» Aurora-навигации: тень + clip + haze-blur + rim-light.
+     * Одинаково для нижнего бара и бокового рейла, отличается только формой.
+     */
+    private fun Modifier.auroraGlassNav(
+        colors: AuroraColors,
+        shape: Shape,
+        hazeState: HazeState,
+    ): Modifier {
+        val hazeStyle = HazeStyle(
+            backgroundColor = colors.background,
+            tint = HazeTint(colors.surface.copy(alpha = 0.65f)),
+            blurRadius = 24.dp,
+            noiseFactor = 0.12f,
+        )
+        return if (colors.isDark) {
+            this
+                .shadow(
+                    elevation = 10.dp,
+                    shape = shape,
+                    ambientColor = Color.White.copy(alpha = 0.12f),
+                    spotColor = Color.White.copy(alpha = 0.08f),
+                )
+                .shadow(
+                    elevation = 3.dp,
+                    shape = shape,
+                    ambientColor = Color.White.copy(alpha = 0.18f),
+                    spotColor = Color.White.copy(alpha = 0.12f),
+                )
+                .clip(shape)
+                // Opaque base under the frost: on first frames after navigation
+                // (e.g. popping back to home) the haze layer has not captured
+                // content yet, so without this the bar flashes transparent.
+                .background(colors.background, shape)
+                .hazeEffect(state = hazeState, style = hazeStyle)
+                .border(
+                    BorderStroke(width = 1.dp, brush = auroraMenuRimLightBrush(colors)),
+                    shape = shape,
+                )
+        } else {
+            this
+                .shadow(elevation = 8.dp, shape = shape)
+                .clip(shape)
+                // Opaque base under the frost (see dark branch comment).
+                .background(colors.background, shape)
+                .hazeEffect(state = hazeState, style = hazeStyle)
+                .border(
+                    BorderStroke(
+                        width = 1.dp,
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.80f),
+                                Color.White.copy(alpha = 0.20f),
+                            ),
+                        ),
+                    ),
+                    shape = shape,
+                )
         }
     }
 
@@ -813,60 +918,7 @@ object HomeScreen : Screen() {
         val baseModifier = Modifier
             .windowInsetsPadding(NavigationRailDefaults.windowInsets)
             .padding(start = 12.dp, end = 4.dp, top = 12.dp, bottom = 12.dp)
-        val glassModifier = if (auroraColors.isDark) {
-            baseModifier
-                .shadow(
-                    elevation = 10.dp,
-                    shape = railShape,
-                    ambientColor = Color.White.copy(alpha = 0.12f),
-                    spotColor = Color.White.copy(alpha = 0.08f),
-                )
-                .shadow(
-                    elevation = 3.dp,
-                    shape = railShape,
-                    ambientColor = Color.White.copy(alpha = 0.18f),
-                    spotColor = Color.White.copy(alpha = 0.12f),
-                )
-                .clip(railShape)
-                .hazeEffect(
-                    state = hazeState,
-                    style = HazeStyle(
-                        backgroundColor = auroraColors.background,
-                        tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
-                        blurRadius = 24.dp,
-                        noiseFactor = 0.12f,
-                    ),
-                )
-                .border(
-                    BorderStroke(width = 1.dp, brush = auroraMenuRimLightBrush(auroraColors)),
-                    shape = railShape,
-                )
-        } else {
-            baseModifier
-                .shadow(elevation = 8.dp, shape = railShape)
-                .clip(railShape)
-                .hazeEffect(
-                    state = hazeState,
-                    style = HazeStyle(
-                        backgroundColor = auroraColors.background,
-                        tint = HazeTint(auroraColors.surface.copy(alpha = 0.65f)),
-                        blurRadius = 24.dp,
-                        noiseFactor = 0.12f,
-                    ),
-                )
-                .border(
-                    BorderStroke(
-                        width = 1.dp,
-                        brush = Brush.verticalGradient(
-                            listOf(
-                                Color.White.copy(alpha = 0.80f),
-                                Color.White.copy(alpha = 0.20f),
-                            ),
-                        ),
-                    ),
-                    shape = railShape,
-                )
-        }
+        val glassModifier = baseModifier.auroraGlassNav(auroraColors, railShape, hazeState)
         val celestialModifier = if (celestialRail) {
             glassModifier.auroraCelestialRail(
                 accent = auroraColors.accent,
@@ -890,18 +942,21 @@ object HomeScreen : Screen() {
             contentColor = auroraColors.textPrimary,
             windowInsets = WindowInsets(0),
         ) {
-            tabs.fastForEach { AuroraNavigationRailItem(it) }
+            tabs.forEachIndexed { _, tab -> AuroraNavigationRailItem(tab, celestialRail, auroraColors) }
         }
     }
 
     @Composable
-    private fun AuroraNavigationRailItem(tab: eu.kanade.presentation.util.Tab) {
+    private fun AuroraNavigationRailItem(
+        tab: eu.kanade.presentation.util.Tab,
+        celestialHalo: Boolean,
+        auroraColors: AuroraColors,
+    ) {
         val tabNavigator = LocalTabNavigator.current
         val navigator = LocalNavigator.currentOrThrow
         val scope = rememberCoroutineScope()
         val selected = tabNavigator.current::class == tab::class
         val appHaptics = LocalAppHaptics.current
-        val auroraColors = AuroraTheme.colorsForCurrentTheme()
         val interactionSource = remember { MutableInteractionSource() }
         val iconColor = if (selected) {
             auroraColors.accent
@@ -932,7 +987,7 @@ object HomeScreen : Screen() {
             null
         }
         val iconShape = RoundedCornerShape(999.dp)
-        val celestialHalo = rememberAuroraCelestialNavbarUnlocked()
+        val tabTitle = tab.options.title
 
         Box(
             modifier = Modifier
@@ -951,12 +1006,15 @@ object HomeScreen : Screen() {
                             scope.launch { tab.onReselect(navigator) }
                         }
                     },
-                ),
+                )
+                .semantics(mergeDescendants = true) {
+                    contentDescription = tabTitle
+                },
             contentAlignment = Alignment.Center,
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Box(
                     modifier = Modifier
@@ -986,7 +1044,7 @@ object HomeScreen : Screen() {
                                 Modifier
                             },
                         )
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                        .padding(horizontal = 12.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     CompositionLocalProvider(LocalContentColor provides iconColor) {
@@ -1002,7 +1060,7 @@ object HomeScreen : Screen() {
                     text = tab.options.title,
                     color = labelColor,
                     style = MaterialTheme.typography.labelLarge.copy(
-                        fontSize = MaterialTheme.typography.labelLarge.fontSize * 0.92f,
+                        fontSize = MaterialTheme.typography.labelLarge.fontSize * 0.82f,
                     ),
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                     maxLines = 1,

@@ -42,7 +42,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import kotlinx.collections.immutable.persistentMapOf
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -51,7 +56,9 @@ import tachiyomi.presentation.core.util.LocalAppHaptics
 @Composable
 fun AuroraHeroScaffold(
     modifier: Modifier = Modifier,
-    shape: Shape = RoundedCornerShape(24.dp),
+    shape: Shape = RoundedCornerShape(28.dp),
+    hazeState: HazeState? = null,
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     onClick: (() -> Unit)? = null,
     onClickLabel: String? = null,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
@@ -75,29 +82,60 @@ fun AuroraHeroScaffold(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(resolveAuroraHeroOverlayBrush(colors)),
+            .then(
+                if (colors.isDark) {
+                    Modifier.background(resolveAuroraHeroOverlayBrush(colors))
+                } else {
+                    Modifier
+                },
+            ),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 24.dp)
                 .then(
                     if (colors.isDark) {
                         Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                            .padding(top = 24.dp, bottom = 24.dp + bottomPadding)
                     } else if (colors.isEInk) {
                         Modifier
+                            .fillMaxWidth()
+                            .auroraCenteredMaxWidth(420)
+                            .padding(horizontal = 12.dp)
+                            .padding(top = 12.dp, bottom = 12.dp + bottomPadding)
                             .clip(panelShape)
                             .background(resolveAuroraHeroPanelContainerColor(colors))
                             .border(1.dp, resolveAuroraHeroPanelBorderColor(colors), panelShape)
                             .padding(horizontal = 12.dp, vertical = 14.dp)
                     } else {
+                        val hazeModifier = if (hazeState != null) {
+                            Modifier
+                                .clip(panelShape)
+                                .hazeEffect(
+                                    state = hazeState,
+                                    style = HazeStyle(
+                                        backgroundColor = Color.Transparent,
+                                        tint = HazeTint(Color.White.copy(alpha = 0.18f)),
+                                        blurRadius = 20.dp,
+                                        noiseFactor = 0f,
+                                    ),
+                                )
+                        } else {
+                            Modifier
+                        }
                         Modifier
+                            .fillMaxWidth()
+                            .auroraCenteredMaxWidth(420)
+                            .padding(horizontal = 12.dp)
+                            .padding(top = 12.dp, bottom = 12.dp + bottomPadding)
+                            .then(hazeModifier)
                             .auroraCoverHeroCardStyle(
                                 colors = colors,
                                 shape = panelShape,
-                                cornerRadius = 24.dp,
+                                cornerRadius = 28.dp,
                             )
-                            .padding(horizontal = 12.dp, vertical = 14.dp)
+                            .padding(horizontal = 14.dp, vertical = 16.dp)
                     },
                 )
                 .then(cardModifier),
@@ -148,7 +186,7 @@ fun AuroraHeroStatsRow(
             Text(
                 text = secondValue,
                 modifier = Modifier.align(Alignment.CenterVertically),
-                color = colors.textSecondary.copy(alpha = 0.82f),
+                color = colors.textPrimary,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,

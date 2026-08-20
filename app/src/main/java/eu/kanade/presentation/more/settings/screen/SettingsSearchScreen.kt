@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.paddingFromBaseline
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -20,6 +21,7 @@ import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.HorizontalDivider
@@ -62,6 +64,7 @@ import eu.kanade.presentation.components.UpIcon
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_HORIZONTAL_INSET
 import eu.kanade.presentation.more.settings.AURORA_SETTINGS_CARD_SHAPE
 import eu.kanade.presentation.more.settings.AuroraSettingsTopBarChrome
+import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.LocalSettingsUiStyle
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.SettingsAuroraBackground
@@ -81,7 +84,9 @@ import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsL
 import eu.kanade.presentation.more.settings.settingsSubtitleColor
 import eu.kanade.presentation.more.settings.settingsTitleColor
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.Screen
+import eu.kanade.tachiyomi.ui.home.LocalHomeHazeState
 import eu.kanade.tachiyomi.ui.player.layout.PlayerLayoutOrientation
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -154,15 +159,14 @@ class SettingsSearchScreen(
                                     navigationIcon = {
                                         val canPop = remember { navigator.canPop }
                                         if (canPop) {
-                                            IconButton(onClick = navigator::pop) {
-                                                Icon(
-                                                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                                                    contentDescription = stringResource(
-                                                        MR.strings.action_bar_up_description,
-                                                    ),
-                                                    tint = auroraColors.accent,
-                                                )
-                                            }
+                                            AuroraTopBarIconButton(
+                                                onClick = navigator::pop,
+                                                icon = Icons.AutoMirrored.Filled.ArrowBack,
+                                                contentDescription = stringResource(
+                                                    MR.strings.action_bar_up_description,
+                                                ),
+                                                hazeState = LocalHomeHazeState.current,
+                                            )
                                         }
                                     },
                                     title = {

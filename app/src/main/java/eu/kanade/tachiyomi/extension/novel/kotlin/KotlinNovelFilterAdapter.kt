@@ -47,18 +47,35 @@ class KotlinNovelFilterAdapterImpl : KotlinNovelFilterAdapter {
         source: List<NovelFilter<*>>,
         destination: List<Filter<*>>,
     ) {
-        val matchedIndices = mutableSetOf<Int>()
-        source.forEach { sourceFilter ->
+        val matchedSourceIndices = mutableSetOf<Int>()
+        val matchedDestinationIndices = mutableSetOf<Int>()
+
+        // Pass 1: positional match (handles identically ordered filters and duplicate names correctly)
+        for (i in source.indices) {
+            val sourceFilter = source[i]
+            if (i < destination.size && i !in matchedDestinationIndices &&
+                sourceFilter.isStateCompatibleWith(destination[i])
+            ) {
+                sourceFilter.copyStateTo(destination[i])
+                matchedSourceIndices.add(i)
+                matchedDestinationIndices.add(i)
+            }
+        }
+
+        // Pass 2: fallback by compatible name and type for any shifted/reordered filters
+        source.forEachIndexed { i, sourceFilter ->
+            if (i in matchedSourceIndices) return@forEachIndexed
             val destinationIndex = destination
                 .asSequence()
                 .withIndex()
-                .firstOrNull { (index, destinationFilter) ->
-                    index !in matchedIndices && sourceFilter.isStateCompatibleWith(destinationFilter)
+                .firstOrNull { (destIdx, destinationFilter) ->
+                    destIdx !in matchedDestinationIndices && sourceFilter.isStateCompatibleWith(destinationFilter)
                 }
                 ?.index
-                ?: return@forEach
+                ?: return@forEachIndexed
             sourceFilter.copyStateTo(destination[destinationIndex])
-            matchedIndices.add(destinationIndex)
+            matchedSourceIndices.add(i)
+            matchedDestinationIndices.add(destinationIndex)
         }
     }
 

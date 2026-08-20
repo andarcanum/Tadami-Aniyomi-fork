@@ -55,6 +55,7 @@ import eu.kanade.tachiyomi.data.coil.MangaCoverKeyer
 import eu.kanade.tachiyomi.data.coil.MangaKeyer
 import eu.kanade.tachiyomi.data.coil.NovelCoverFetcher
 import eu.kanade.tachiyomi.data.coil.NovelCoverKeyer
+import eu.kanade.tachiyomi.data.coil.NovelKeyer
 import eu.kanade.tachiyomi.data.coil.NovelPluginImageFetcher
 import eu.kanade.tachiyomi.data.coil.NovelPluginImageKeyer
 import eu.kanade.tachiyomi.data.coil.NovelReaderRefererImageFetcher
@@ -517,13 +518,15 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 add(MangaCoverFetcher.MangaCoverFactory(callFactoryLazy))
                 add(AnimeImageFetcher.AnimeFactory(callFactoryLazy))
                 add(AnimeImageFetcher.AnimeCoverFactory(callFactoryLazy))
-                add(NovelCoverFetcher.Factory(callFactoryLazy))
+                add(NovelCoverFetcher.NovelFactory(callFactoryLazy))
+                add(NovelCoverFetcher.NovelCoverFactory(callFactoryLazy))
                 add(AuroraPosterRequestFetcher.Factory(callFactoryLazy))
                 add(NovelReaderRefererImageFetcher.Factory(callFactoryLazy))
                 add(NovelPluginImageFetcher.Factory())
                 // Keyer
                 add(AnimeKeyer())
                 add(MangaKeyer())
+                add(NovelKeyer())
                 add(AnimeCoverKeyer())
                 add(MangaCoverKeyer())
                 add(NovelCoverKeyer())

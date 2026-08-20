@@ -92,6 +92,39 @@ class NovelPluginIndexParserTest {
     }
 
     @Test
+    fun `parses tachiyomi kotlin novel extension index with hasSettings`() {
+        val payload = """
+            [
+              {
+                "name": "NovelApp: NovelUpdates",
+                "pkg": "eu.kanade.tachiyomi.novelextension.en.novelupdates",
+                "apk": "tsundoku-en.novelupdates-v1.4.1.apk",
+                "lang": "en",
+                "code": 1,
+                "version": "1.4.1",
+                "nsfw": 0,
+                "hasSettings": true,
+                "isNovel": true,
+                "sources": [
+                  {
+                    "name": "Novel Updates",
+                    "baseUrl": "https://www.novelupdates.com"
+                  }
+                ]
+              }
+            ]
+        """.trimIndent()
+        val parser = NovelPluginIndexParser(json)
+
+        val plugins = parser.parse(payload, "https://repo.example/")
+
+        plugins.size shouldBe 1
+        plugins[0].id shouldBe "eu.kanade.tachiyomi.novelextension.en.novelupdates"
+        plugins[0].hasSettings shouldBe true
+        plugins[0].site shouldBe "https://www.novelupdates.com"
+    }
+
+    @Test
     fun `parses nsfw flag from js plugin index`() {
         val payload = """
             [

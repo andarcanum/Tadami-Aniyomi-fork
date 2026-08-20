@@ -163,6 +163,8 @@ fun MangaScreen(
     onChapterSelected: (ChapterList.Item, Boolean, Boolean, Boolean) -> Unit,
     onAllChapterSelected: (Boolean) -> Unit,
     onInvertSelection: () -> Unit,
+    onToggleSort: (() -> Unit)? = null,
+    onToggleUnreadFilter: (() -> Unit)? = null,
     onRetrySuggestions: () -> Unit = {},
     onOpenSuggestions: () -> Unit = {},
 ) {
@@ -205,6 +207,8 @@ fun MangaScreen(
             onGenreLongClick = onGenreLongClick,
             onGenresSearch = onGenresSearch,
             onFilterButtonClicked = onFilterButtonClicked,
+            onToggleSort = onToggleSort,
+            onToggleUnreadFilter = onToggleUnreadFilter,
             showScanlatorSelector = showScanlatorSelector,
             scanlatorChapterCounts = scanlatorChapterCounts,
             selectedScanlator = selectedScanlator,

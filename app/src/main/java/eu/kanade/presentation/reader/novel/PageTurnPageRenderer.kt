@@ -7,8 +7,10 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector4D
 import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
@@ -353,6 +355,19 @@ internal fun resolvePageTurnCustomTapAction(
     }
 }
 
+/**
+ * Whether the PageCurl library may run its built-in edge taps after [PageCurlConfig.onCustomTap]
+ * returns false. With custom tap zones enabled the reader's grid owns every short tap, so a
+ * NONE zone must not fall through to the library's built-in backward/forward navigation.
+ */
+internal fun resolvePageTurnBuiltInTapNavigationEnabled(
+    customTapZonesEnabled: Boolean,
+    tapToScrollEnabled: Boolean,
+    canMoveInDirection: Boolean,
+): Boolean {
+    return !customTapZonesEnabled && tapToScrollEnabled && canMoveInDirection
+}
+
 internal fun resolvePageTurnConfiguredTapAction(
     zoneAction: NovelReaderTapZoneAction,
     currentPage: Int,
@@ -440,7 +455,7 @@ private fun createPageTurnDragInteraction(
     }
 }
 
-private fun createPageTurnAnimation(
+internal fun createPageTurnAnimation(
     animationDurationMillis: Int,
     forward: Boolean,
     curlAmount: Float,
@@ -490,14 +505,14 @@ internal fun resolvePageTurnCurlMidEdge(
     }
 }
 
-private fun Size.startEdge(): Edge {
+internal fun Size.startEdge(): Edge {
     return Edge(
         top = Offset(0f, 0f),
         bottom = Offset(0f, height),
     )
 }
 
-private fun Size.endEdge(): Edge {
+internal fun Size.endEdge(): Edge {
     return Edge(
         top = Offset(width, height),
         bottom = Offset(width, height),
@@ -509,6 +524,9 @@ internal fun PageTurnPageRenderer(
     pagerState: PagerState,
     chapterId: Long,
     contentPages: List<NovelPageContentPage>,
+    // Same meaning as ComposePagerPageRenderer's spreadColumns: how many content pages one curl
+    // "page" shows side by side.
+    spreadColumns: Int = 1,
     transitionStyle: NovelPageTransitionStyle,
     readerSettings: NovelReaderSettings,
     textColor: Color,
@@ -528,6 +546,10 @@ internal fun PageTurnPageRenderer(
     chapterTitleTypeface: Typeface?,
     contentPadding: Dp,
     statusBarTopPadding: Dp,
+    // Horizontal (Dp) reserved on the short edges of a spread so text stays clear of a display
+    // cutout. Non-zero only when two-page landscape expands to the screen edges.
+    spreadCutoutLeftDp: Dp = 0.dp,
+    spreadCutoutRightDp: Dp = 0.dp,
     ttsHighlightState: NovelReaderTtsHighlightState? = null,
     ttsHighlightColor: Color = Color.Transparent,
     hasPreviousChapter: Boolean,
@@ -569,7 +591,10 @@ internal fun PageTurnPageRenderer(
     val safeContentPages = remember(contentPages) {
         contentPages.ifEmpty { listOf(NovelPageContentPage(emptyList())) }
     }
-    val actualPageCount = safeContentPages.size
+    // The curl renderer's own index space is expressed in spread slots (see spreadColumns on the
+    // signature), the same way the pager's page count is: a slot addresses
+    // [slot * spreadColumns, slot * spreadColumns + spreadColumns - 1] of safeContentPages.
+    val actualPageCount = resolveSpreadSlotCount(safeContentPages.size, spreadColumns)
     val virtualPageCount = remember(actualPageCount, hasPreviousChapter, hasNextChapter) {
         resolvePageTurnRendererVirtualPageCount(
             contentPageCount = actualPageCount,
@@ -577,7 +602,7 @@ internal fun PageTurnPageRenderer(
             hasNextChapter = hasNextChapter,
         )
     }
-    val pagerCurrentPage = pagerState.currentPage.coerceIn(0, safeContentPages.lastIndex)
+    val pagerCurrentPage = pagerState.currentPage.coerceIn(0, actualPageCount - 1)
     val initialVirtualPage = remember(pagerCurrentPage, hasPreviousChapter) {
         resolvePageTurnRendererVirtualPageIndex(
             actualPageIndex = pagerCurrentPage,
@@ -626,7 +651,7 @@ internal fun PageTurnPageRenderer(
     val latestChapterNavigationRequest by rememberUpdatedState(chapterNavigationRequest)
     val latestChapterNavigationRequestConsumed by rememberUpdatedState(onChapterNavigationRequestConsumed)
     val latestRendererConfig by rememberUpdatedState(rendererConfig)
-    val latestPageCount by rememberUpdatedState(safeContentPages.size)
+    val latestPageCount by rememberUpdatedState(actualPageCount)
     val latestHasPreviousBoundaryPage by rememberUpdatedState(hasPreviousChapter)
     val latestHasPreviousChapter by rememberUpdatedState(hasPreviousChapterNavigation)
     val latestHasNextChapter by rememberUpdatedState(hasNextChapterNavigation)
@@ -726,8 +751,16 @@ internal fun PageTurnPageRenderer(
         pageCurlConfig.shadowOffset = DpOffset(rendererConfig.shadowOffsetXDp.dp, 0.dp)
         pageCurlConfig.dragBackwardEnabled = currentPage > 0
         pageCurlConfig.dragForwardEnabled = currentPage < virtualPageCount - 1
-        pageCurlConfig.tapBackwardEnabled = latestTapToScrollEnabled && currentActualPage > 0
-        pageCurlConfig.tapForwardEnabled = latestTapToScrollEnabled && currentActualPage < safeContentPages.lastIndex
+        pageCurlConfig.tapBackwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
+            customTapZonesEnabled = latestCustomTapZonesEnabled,
+            tapToScrollEnabled = latestTapToScrollEnabled,
+            canMoveInDirection = currentActualPage > 0,
+        )
+        pageCurlConfig.tapForwardEnabled = resolvePageTurnBuiltInTapNavigationEnabled(
+            customTapZonesEnabled = latestCustomTapZonesEnabled,
+            tapToScrollEnabled = latestTapToScrollEnabled,
+            canMoveInDirection = currentActualPage < actualPageCount - 1,
+        )
         pageCurlConfig.tapCustomEnabled = rendererConfig.tapCustomEnabled
         pageCurlConfig.dragInteraction = dragInteraction
         pageCurlConfig.tapInteraction = tapInteraction
@@ -793,14 +826,16 @@ internal fun PageTurnPageRenderer(
                     hasNextChapter = hasNextChapter,
                 )
                 if (boundaryTarget == HorizontalChapterSwipeAction.NONE) {
-                    val targetPage = resolvePageTurnRendererProgressPageIndex(
+                    val targetSpreadSlot = resolvePageTurnRendererProgressPageIndex(
                         currentPage = targetVirtualPage,
                         contentPageCount = actualPageCount,
                         hasPreviousChapter = hasPreviousChapter,
                     )
-                    latestCurrentPageChange(targetPage)
-                    if (targetPage != pagerState.currentPage) {
-                        pagerState.scrollToPage(targetPage)
+                    // onCurrentPageChange reports a real page index (its callers persist/compare it
+                    // against pageReaderItemsCount), pagerState stays in the pager's own slot space.
+                    latestCurrentPageChange(resolveSpreadSlotFirstPageIndex(targetSpreadSlot, spreadColumns))
+                    if (targetSpreadSlot != pagerState.currentPage) {
+                        pagerState.scrollToPage(targetSpreadSlot)
                     }
                 }
             }
@@ -809,8 +844,12 @@ internal fun PageTurnPageRenderer(
     LaunchedEffect(latestRequestedPage, actualPageCount, hasPreviousChapter) {
         val targetPage = latestRequestedPage
         if (targetPage < 0 || safeContentPages.isEmpty()) return@LaunchedEffect
+        val targetSpreadSlot = resolveSpreadSlotForPageIndex(
+            targetPage.coerceIn(0, safeContentPages.lastIndex),
+            spreadColumns,
+        )
         val clampedTarget = resolvePageTurnRendererVirtualPageIndex(
-            actualPageIndex = targetPage.coerceIn(0, safeContentPages.lastIndex),
+            actualPageIndex = targetSpreadSlot,
             hasPreviousChapter = hasPreviousChapter,
         )
         if (pageCurlState.current != clampedTarget) {
@@ -902,20 +941,24 @@ internal fun PageTurnPageRenderer(
                     HorizontalChapterSwipeAction.NONE -> null
                 }
             }
-            val contentPage = if (boundaryPreview == null) {
-                val actualPage = resolvePageTurnRendererProgressPageIndex(
+            val spreadPages = if (boundaryPreview == null) {
+                val spreadSlot = resolvePageTurnRendererProgressPageIndex(
                     currentPage = page,
                     contentPageCount = actualPageCount,
                     hasPreviousChapter = hasPreviousChapter,
                 )
-                safeContentPages.getOrElse(actualPage) { NovelPageContentPage(emptyList()) }
+                val firstPage = resolveSpreadSlotFirstPageIndex(spreadSlot, spreadColumns)
+                (firstPage until firstPage + spreadColumns).map { index ->
+                    safeContentPages.getOrElse(index) { NovelPageContentPage(emptyList()) }
+                }
             } else {
-                NovelPageContentPage(emptyList())
+                listOf(NovelPageContentPage(emptyList()))
             }
+            val contentPage = spreadPages.first()
             val pageTexture = if (isBackgroundMode) activeBackgroundTexture else backgroundTexture
             val pageTextureStrengthPercent = if (isBackgroundMode) 0 else nativeTextureStrengthPercent
             val pageSurfaceColor = if (isBackgroundMode) null else rendererConfig.backPageColor
-            val pageContentIdentity = boundaryPreview ?: contentPage
+            val pageContentIdentity = boundaryPreview ?: spreadPages
             val pageSnapshotKey = resolveNovelPageTurnSnapshotKey(
                 style = rendererConfig.style,
                 pageIndex = page,
@@ -984,7 +1027,7 @@ internal fun PageTurnPageRenderer(
                         textTypeface = textTypeface,
                         chapterTitleTypeface = chapterTitleTypeface,
                     )
-                } else {
+                } else if (spreadPages.size <= 1) {
                     NovelPageReaderPageContent(
                         contentPage = contentPage,
                         readerSettings = readerSettings,
@@ -1010,6 +1053,41 @@ internal fun PageTurnPageRenderer(
                         onPlainTap = onTextTap,
                         touchHandlingEnabled = false,
                     )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(start = spreadCutoutLeftDp, end = spreadCutoutRightDp),
+                    ) {
+                        spreadPages.forEach { spreadPage ->
+                            NovelPageReaderPageContent(
+                                contentPage = spreadPage,
+                                readerSettings = readerSettings,
+                                textColor = textColor,
+                                textBackground = textBackground,
+                                pageSurfaceColor = pageSurfaceColor,
+                                backgroundTexture = pageTexture,
+                                nativeTextureStrengthPercent = pageTextureStrengthPercent,
+                                chapterTitleTextColor = chapterTitleTextColor,
+                                textTypeface = textTypeface,
+                                chapterTitleTypeface = chapterTitleTypeface,
+                                textShadowEnabled = readerSettings.textShadow,
+                                textShadowColor = readerSettings.textShadowColor,
+                                textShadowBlur = readerSettings.textShadowBlur,
+                                textShadowX = readerSettings.textShadowX,
+                                textShadowY = readerSettings.textShadowY,
+                                contentPadding = contentPadding,
+                                statusBarTopPadding = if (spreadPages.size > 1) 0.dp else statusBarTopPadding,
+                                ttsHighlightState = ttsHighlightState,
+                                ttsHighlightColor = ttsHighlightColor,
+                                selectionSessionIdProvider = selectionSessionIdProvider,
+                                onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                                onPlainTap = onTextTap,
+                                touchHandlingEnabled = false,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
             }
         }

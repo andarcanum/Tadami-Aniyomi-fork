@@ -575,8 +575,13 @@
     <string name="novel_reader_accessibility">Accessibility</string>
     <string name="novel_reader_advanced">Advanced</string>
     <string name="novel_reader_tab_general">General</string>
-    <string name="novel_reader_tab_reading">Reading</string>
+    <string name="novel_reader_tab_reading">Style</string>
     <string name="novel_reader_tab_behavior">Behavior</string>
+    <string name="novel_reader_tab_tools">Tools</string>
+    <string name="novel_reader_section_express_switches">Quick Switches</string>
+    <string name="novel_reader_auto_scroll_summary">Smooth hands-free reading scroll</string>
+    <string name="novel_reader_engine_settings">Rendering Engine &amp; Custom Code</string>
+    <string name="novel_reader_section_text_rules">Text Replace Rules</string>
     <string name="novel_reader_live_preview_badge">Preview</string>
     <string name="novel_reader_live_preview_sample">— No, that is impossible, — she whispered, watching the rain strike the glass. The room smelled of old books and wormwood.</string>
     <string name="novel_reader_text_align_source_short">Source</string>
@@ -648,6 +653,10 @@
     <string name="novel_reader_page_mode_summary">Display content in pages instead of continuous scroll</string>
     <string name="novel_reader_show_page_chapter_title">Show chapter title</string>
     <string name="novel_reader_show_page_chapter_title_summary">Display chapter titles in Page mode</string>
+    <string name="novel_reader_two_page_landscape">Two-page landscape</string>
+    <string name="novel_reader_two_page_landscape_summary">Show two pages side by side in Page mode when the device is landscape and wide enough</string>
+    <string name="novel_reader_spread_cutout_guard">Reserve space for the camera cutout</string>
+    <string name="novel_reader_spread_cutout_guard_summary">Keep spread columns clear of the display cutout at the screen edges. Turn off if there is no cutout or you want to use the full width</string>
     <string name="novel_reader_page_transition_style">Page transition style</string>
     <string name="novel_reader_page_transition_style_instant">Instant</string>
     <string name="novel_reader_page_transition_style_slide">Slide</string>
@@ -2025,12 +2034,14 @@
     <string name="aurora_continue">CONTINUE</string>
     <string name="aurora_episodes_header">Episodes</string>
     <string name="aurora_episode_count">%d eps</string>
+    <string name="aurora_hero_cta_episode">%d Ep.</string>
     <string name="copy_title">Copy title</string>
     <string name="aurora_episode_badge_filler">Filler</string>
     <string name="aurora_episode_badge_seen">Seen</string>
     <string name="aurora_chapters_header">Chapters</string>
     <string name="aurora_chapters">CHAPTERS</string>
     <string name="aurora_chapter_count">%d chs</string>
+    <string name="aurora_hero_cta_chapter">%d Ch.</string>
     <string name="aurora_episode_progress_format">%1$d/%2$d Episode</string>
     <string name="aurora_chapter_progress_format">%1$d/%2$d Chapter</string>
     <string name="aurora_chapter_progress">Chapter %d</string>
@@ -2590,6 +2601,7 @@
     <!-- Feed -->
     <string name="feed">Feed</string>
     <string name="feed_add">Add source to feed</string>
+    <string name="feed_manage">Manage feed</string>
     <string name="feed_empty">Feed sources not configured. Tap + to add a source that supports Latest.</string>
     <string name="feed_delete_source_title">Remove source from feed?</string>
     <string name="feed_delete_source_message">This source will be removed from your feed.</string>
@@ -2915,4 +2927,28 @@
     <string name="achievement_lattice_resonance_title">Lattice Resonance</string>
     <string name="achievement_lattice_resonance_desc">The shell peeled back. Signal reached the core. Architect identified.</string>
     <string name="achievement_lattice_resonance_hint_vague">Something drifts under the render shell…</string>
+
+    <string name="pref_title_screen_style">Title screen style</string>
+    <string name="pref_title_screen_style_poster_immersive">Fullscreen Poster (Default)</string>
+    <string name="pref_title_screen_style_glass_stack">Layered Glass Stack (Aurora)</string>
+    <string name="pref_title_screen_animation">Title screen open animation</string>
+    <string name="pref_title_screen_animation_summary">Zoom into title screens with a content cascade. Disable to use the standard transition.</string>
+
+    <!-- Home Search Bar & Source Picker -->
+    <string name="home_search_placeholder_global">Global search…</string>
+    <string name="home_search_placeholder_default">Search %1$s…</string>
+    <string name="home_search_placeholder_search">Search…</string>
+    <string name="home_search_section_manga">manga</string>
+    <string name="home_search_section_anime">anime</string>
+    <string name="home_search_section_novel">novels</string>
+    <string name="home_select_source">Select source</string>
+    <string name="home_all_sources">All sources</string>
+    <string name="home_all_sources_summary">Global search</string>
+    <string name="home_source_picker_title">Select source</string>
+    <string name="home_source_picker_subtitle">Tap a source to select it • Catalogue button opens the source</string>
+    <string name="home_source_picker_search">Find source…</string>
+    <string name="home_source_picker_no_results">No sources match</string>
+    <string name="home_open_catalog">Open catalogue</string>
+    <string name="home_catalog_button">Catalogue</string>
+    <string name="home_search_cancel">Cancel</string>
 </resources>

@@ -25,6 +25,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -58,8 +60,11 @@ import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 import eu.kanade.tachiyomi.ui.browse.BrowseTab
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
+import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreen
+import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreen
+import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
@@ -96,9 +101,23 @@ internal fun AnimeHomeHub(
         }
     }
 
-    val lastSourceName = remember(activeSection) {
-        if (activeSection == HomeHubSection.Anime) screenModel.getLastUsedAnimeSourceName() else null
+    var lastSourceId by remember(activeSection) {
+        mutableLongStateOf(
+            if (activeSection == HomeHubSection.Anime) screenModel.getLastUsedAnimeSourceId() else -1L,
+        )
     }
+    var lastSourceName by remember(activeSection) {
+        mutableStateOf<String?>(
+            if (activeSection ==
+                HomeHubSection.Anime
+            ) {
+                screenModel.getLastUsedAnimeSourceName()
+            } else {
+                null
+            },
+        )
+    }
+    val availableSources = state.availableSources
 
     HomeHubScreen(
         section = HomeHubSection.Anime,
@@ -107,19 +126,33 @@ internal fun AnimeHomeHub(
         onScrollSignal = onScrollSignal,
         state = state,
         searchQuery = searchQuery,
-        lastSourceName = lastSourceName,
+        sourceId = lastSourceId,
+        sourceName = lastSourceName,
+        availableSources = availableSources,
         heroCtaMode = heroCtaMode,
         recentCardMode = recentCardMode,
         contentPadding = contentPadding,
         onEntryClick = { navigator.push(AnimeScreen(it)) },
         onPlayHero = { screenModel.playHeroEpisode(context) },
-        onSourceClick = {
+        onSearchClick = { query ->
             val sourceId = screenModel.getLastUsedAnimeSourceId()
+            if (sourceId != -1L) {
+                navigator.push(BrowseAnimeSourceScreen(sourceId, query))
+            } else {
+                navigator.push(GlobalAnimeSearchScreen(query))
+            }
+        },
+        onOpenCatalog = { sourceId ->
             if (sourceId != -1L) {
                 navigator.push(BrowseAnimeSourceScreen(sourceId, null))
             } else {
-                tabNavigator.current = BrowseTab
+                navigator.push(GlobalAnimeSearchScreen())
             }
+        },
+        onSelectSource = { selectedId, selectedName ->
+            lastSourceId = selectedId
+            lastSourceName = selectedName
+            screenModel.setLastUsedAnimeSourceId(selectedId)
         },
         onBrowseClick = { navigator.push(AnimeExtensionStoreScreen()) },
         onExtensionClick = {
@@ -156,9 +189,23 @@ internal fun MangaHomeHub(
         }
     }
 
-    val lastSourceName = remember(activeSection) {
-        if (activeSection == HomeHubSection.Manga) screenModel.getLastUsedMangaSourceName() else null
+    var lastSourceId by remember(activeSection) {
+        mutableLongStateOf(
+            if (activeSection == HomeHubSection.Manga) screenModel.getLastUsedMangaSourceId() else -1L,
+        )
     }
+    var lastSourceName by remember(activeSection) {
+        mutableStateOf<String?>(
+            if (activeSection ==
+                HomeHubSection.Manga
+            ) {
+                screenModel.getLastUsedMangaSourceName()
+            } else {
+                null
+            },
+        )
+    }
+    val availableSources = state.availableSources
 
     HomeHubScreen(
         section = HomeHubSection.Manga,
@@ -167,19 +214,33 @@ internal fun MangaHomeHub(
         onScrollSignal = onScrollSignal,
         state = state,
         searchQuery = searchQuery,
-        lastSourceName = lastSourceName,
+        sourceId = lastSourceId,
+        sourceName = lastSourceName,
+        availableSources = availableSources,
         heroCtaMode = heroCtaMode,
         recentCardMode = recentCardMode,
         contentPadding = contentPadding,
         onEntryClick = { navigator.push(MangaScreen(it)) },
         onPlayHero = { screenModel.readHeroChapter(context) },
-        onSourceClick = {
+        onSearchClick = { query ->
             val sourceId = screenModel.getLastUsedMangaSourceId()
+            if (sourceId != -1L) {
+                navigator.push(BrowseMangaSourceScreen(sourceId, query))
+            } else {
+                navigator.push(GlobalMangaSearchScreen(query))
+            }
+        },
+        onOpenCatalog = { sourceId ->
             if (sourceId != -1L) {
                 navigator.push(BrowseMangaSourceScreen(sourceId, null))
             } else {
-                tabNavigator.current = BrowseTab
+                navigator.push(GlobalMangaSearchScreen())
             }
+        },
+        onSelectSource = { selectedId, selectedName ->
+            lastSourceId = selectedId
+            lastSourceName = selectedName
+            screenModel.setLastUsedMangaSourceId(selectedId)
         },
         onBrowseClick = { navigator.push(MangaExtensionStoreScreen()) },
         onExtensionClick = {
@@ -218,9 +279,23 @@ internal fun NovelHomeHub(
         }
     }
 
-    val lastSourceName = remember(activeSection) {
-        if (activeSection == HomeHubSection.Novel) screenModel.getLastUsedNovelSourceName() else null
+    var lastSourceId by remember(activeSection) {
+        mutableLongStateOf(
+            if (activeSection == HomeHubSection.Novel) screenModel.getLastUsedNovelSourceId() else -1L,
+        )
     }
+    var lastSourceName by remember(activeSection) {
+        mutableStateOf<String?>(
+            if (activeSection ==
+                HomeHubSection.Novel
+            ) {
+                screenModel.getLastUsedNovelSourceName()
+            } else {
+                null
+            },
+        )
+    }
+    val availableSources = state.availableSources
 
     HomeHubScreen(
         section = HomeHubSection.Novel,
@@ -229,7 +304,9 @@ internal fun NovelHomeHub(
         onScrollSignal = onScrollSignal,
         state = state,
         searchQuery = searchQuery,
-        lastSourceName = lastSourceName,
+        sourceId = lastSourceId,
+        sourceName = lastSourceName,
+        availableSources = availableSources,
         heroCtaMode = heroCtaMode,
         recentCardMode = recentCardMode,
         contentPadding = contentPadding,
@@ -239,13 +316,25 @@ internal fun NovelHomeHub(
                 navigator.push(NovelReaderScreen(chapterId))
             }
         },
-        onSourceClick = {
+        onSearchClick = { query ->
             val sourceId = screenModel.getLastUsedNovelSourceId()
+            if (sourceId != -1L) {
+                navigator.push(BrowseNovelSourceScreen(sourceId, query))
+            } else {
+                navigator.push(GlobalNovelSearchScreen(query))
+            }
+        },
+        onOpenCatalog = { sourceId ->
             if (sourceId != -1L) {
                 navigator.push(BrowseNovelSourceScreen(sourceId, null))
             } else {
-                tabNavigator.current = BrowseTab
+                navigator.push(GlobalNovelSearchScreen())
             }
+        },
+        onSelectSource = { selectedId, selectedName ->
+            lastSourceId = selectedId
+            lastSourceName = selectedName
+            screenModel.setLastUsedNovelSourceId(selectedId)
         },
         onBrowseClick = { navigator.push(NovelExtensionStoreScreen()) },
         onExtensionClick = {
@@ -268,13 +357,17 @@ private fun HomeHubScreen(
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
     state: HomeHubUiState,
     searchQuery: String?,
-    lastSourceName: String?,
+    sourceId: Long,
+    sourceName: String?,
+    availableSources: List<HomeSourceItem>,
     heroCtaMode: HomeHeroCtaMode,
     recentCardMode: HomeHubRecentCardMode,
     contentPadding: PaddingValues,
     onEntryClick: (Long) -> Unit,
     onPlayHero: () -> Unit,
-    onSourceClick: () -> Unit,
+    onSearchClick: (String) -> Unit,
+    onOpenCatalog: (Long) -> Unit,
+    onSelectSource: (Long, String?) -> Unit,
     onBrowseClick: () -> Unit,
     onExtensionClick: () -> Unit,
     onHistoryClick: () -> Unit,
@@ -369,8 +462,16 @@ private fun HomeHubScreen(
                 }
             }
 
-            item(key = "quick_source", contentType = "home_hub_quick_source") {
-                QuickSourceButton(sourceName = lastSourceName, onClick = onSourceClick)
+            item(key = "home_search_bar", contentType = "home_hub_search_bar") {
+                HomeSearchBarWithSourceChip(
+                    section = section,
+                    sourceId = sourceId,
+                    sourceName = sourceName,
+                    availableSources = availableSources,
+                    onSearchClick = onSearchClick,
+                    onOpenCatalog = onOpenCatalog,
+                    onSelectSource = onSelectSource,
+                )
             }
 
             if (history.isNotEmpty()) {

@@ -11,10 +11,10 @@ class AuroraTitleReadabilityTokensTest {
     fun `light hero overlay fades into surface instead of dark scrim`() {
         resolveAuroraHeroOverlayAlphaStops(isDark = false) shouldBe listOf(
             0.00f to 0.00f,
-            0.28f to 0.00f,
-            0.60f to 0.04f,
-            0.82f to 0.28f,
-            1.00f to 0.58f,
+            0.45f to 0.00f,
+            0.65f to 0.04f,
+            0.82f to 0.18f,
+            1.00f to 0.38f,
         )
     }
 
@@ -40,12 +40,12 @@ class AuroraTitleReadabilityTokensTest {
     @Test
     fun `light detail card colors use bright layered surfaces`() {
         resolveAuroraDetailCardBackgroundColors(AuroraColors.Light) shouldBe listOf(
-            Color.White.copy(alpha = 0.76f),
-            Color.White.copy(alpha = 0.93f),
+            Color.White.copy(alpha = 0.84f),
+            Color.White.copy(alpha = 0.74f),
         )
         resolveAuroraDetailCardBorderColors(AuroraColors.Light) shouldBe listOf(
-            Color.Transparent,
-            Color.Transparent,
+            Color.White.copy(alpha = 0.92f),
+            Color.White.copy(alpha = 0.30f),
         )
     }
 

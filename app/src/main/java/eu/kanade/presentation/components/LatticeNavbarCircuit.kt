@@ -7,7 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -22,8 +21,6 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.easteregg.lattice.rememberLatticeReducedMotion
-import tachiyomi.data.achievement.UnlockableManager
-import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import kotlin.math.PI
@@ -42,15 +39,10 @@ private val LatticeAmber = Color(0xFFFFA726)
 @Composable
 fun rememberLatticeCircuitNavbarUnlocked(): Boolean {
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
-    val enabled by uiPreferences.showCircuitNavbar().collectAsState()
-    val unlockableManager = remember { Injekt.get<UnlockableManager>() }
-    val unlockedUnlockables by remember(unlockableManager) {
-        unlockableManager.observeUnlockedUnlockables()
-    }.collectAsState(initial = unlockableManager.getUnlockedUnlockables())
-    val isUnlocked = remember(unlockedUnlockables) {
-        unlockableManager.isUnlockableAvailable(LATTICE_CIRCUIT_NAVBAR_UNLOCKABLE)
-    }
-    return enabled && isUnlocked
+    return rememberUnlockableNavbarEnabled(
+        enabled = uiPreferences.showCircuitNavbar(),
+        unlockableId = LATTICE_CIRCUIT_NAVBAR_UNLOCKABLE,
+    )
 }
 
 /**

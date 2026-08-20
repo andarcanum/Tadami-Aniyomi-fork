@@ -1,24 +1,48 @@
+@file:Suppress("ktlint:standard:max-line-length")
+
 package eu.kanade.presentation.reader.novel
 
+import android.content.ClipData
+import android.graphics.drawable.ColorDrawable
+import android.view.Window
+import android.view.WindowManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.ZeroCornerSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.AlertDialog
@@ -26,27 +50,54 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import eu.kanade.presentation.components.TabbedDialog
+import androidx.compose.ui.window.DialogWindowProvider
+import eu.kanade.presentation.components.AdaptiveSheet
+import eu.kanade.presentation.more.settings.widget.ListPreferenceWidget
+import eu.kanade.presentation.reader.settings.AuroraChipFlow
+import eu.kanade.presentation.reader.settings.AuroraFieldLabel
+import eu.kanade.presentation.reader.settings.AuroraGlassSection
+import eu.kanade.presentation.reader.settings.AuroraTabRow
+import eu.kanade.presentation.reader.settings.AuroraToggleRow
+import eu.kanade.presentation.reader.settings.auroraRimColor
+import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.rememberSupportsBlurBehind
 import eu.kanade.tachiyomi.ui.reader.novel.ProviderApiTestStatus
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
@@ -58,10 +109,15 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePres
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OLLAMA_CLOUD_FREE_MODELS
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveTranslationReasoningOptions
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 import kotlin.math.abs
+import kotlin.math.roundToInt
+import android.graphics.Color as AndroidColor
 
 internal enum class TranslationKind {
     Gemini,
@@ -307,7 +363,6 @@ internal fun GeminiTranslationDialog(
     val autoEnglishLabel = stringResource(AYMR.strings.novel_reader_translation_auto_english_title)
     val prefetchNextLabel = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title)
     val privatePythonLikeLabel = stringResource(AYMR.strings.novel_reader_gemini_private_python_like_mode)
-    val geminiProviderLabel = stringResource(AYMR.strings.novel_reader_translation_provider_gemini)
     val generationLabel = stringResource(AYMR.strings.novel_reader_ai_translator_generation_title)
     val temperatureLabel = stringResource(AYMR.strings.novel_reader_gemini_temperature)
     val topPLabel = stringResource(AYMR.strings.novel_reader_gemini_top_p)
@@ -548,7 +603,6 @@ internal fun GeminiTranslationDialog(
     val hasTranslationResult = hasCache || translationProgress >= 100
     val isGeminiSelected = tempProvider == NovelTranslationProvider.GEMINI
     val isGeminiPrivateSelected = tempProvider == NovelTranslationProvider.GEMINI_PRIVATE
-    val isGeminiFamilySelected = isGeminiSelected || isGeminiPrivateSelected
     val isPrivateSingleRequestMode =
         isGeminiPrivateSelected &&
             isPrivateProviderInstalled &&
@@ -620,1539 +674,1794 @@ internal fun GeminiTranslationDialog(
         }
     }
 
-    TabbedDialog(
-        onDismissRequest = onDismiss,
-        tabTitles = tabTitles,
-        enableSwipeDismiss = false,
-    ) { page ->
-        Column(
-            modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+    val pagerState = rememberPagerState { tabTitles.size }
+    val scope = rememberCoroutineScope()
+    val aurora = AuroraTheme.colors
+    val baseScheme = MaterialTheme.colorScheme
+    var sheetReveal by remember { mutableFloatStateOf(0f) }
+    val supportsBlurBehind = rememberSupportsBlurBehind(aurora.isEInk)
+
+    val sheetContainer = remember(aurora.isDark, aurora.isEInk, supportsBlurBehind) {
+        when {
+            aurora.isEInk -> baseScheme.surfaceContainerHigh
+            !supportsBlurBehind -> aurora.surface
+            aurora.isDark -> Color.Black.copy(alpha = 0.70f)
+            else -> Color.White.copy(alpha = 0.88f)
+        }
+    }
+    val auroraScheme = remember(baseScheme, aurora, sheetContainer) {
+        baseScheme.copy(
+            primary = aurora.accent,
+            onPrimary = if (aurora.isDark) aurora.background else Color.White,
+            surfaceContainerHigh = sheetContainer,
+            surfaceContainerHighest = sheetContainer,
+            secondaryContainer = aurora.accent.copy(alpha = 0.22f),
+            onSecondaryContainer = aurora.accent,
+        )
+    }
+    val sheetShape = MaterialTheme.shapes.extraLarge.copy(
+        bottomStart = ZeroCornerSize,
+        bottomEnd = ZeroCornerSize,
+    )
+    val pageMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.72f).dp
+
+    MaterialTheme(
+        colorScheme = auroraScheme,
+        shapes = MaterialTheme.shapes,
+        typography = MaterialTheme.typography,
+    ) {
+        AdaptiveSheet(
+            onDismissRequest = onDismiss,
+            modifier = Modifier.border(
+                width = 1.dp,
+                color = auroraRimColor(),
+                shape = sheetShape,
+            ),
+            containerColor = sheetContainer,
+            scrimAlpha = if (supportsBlurBehind) 0f else 0.5f,
+            applyStatusBarsPadding = false,
+            onRevealChange = { sheetReveal = it },
         ) {
-            Text(
-                text = stringResource(AYMR.strings.novel_reader_ai_translator_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            if (page == 0) {
-                GeminiSettingsBlock(
-                    title = stringResource(AYMR.strings.novel_reader_ai_translator_status_title),
-                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_status_summary),
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    text = stringResource(status.titleRes),
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                                Text(
-                                    text = "$translationProgress%",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                            Text(
-                                text = stringResource(status.subtitleRes),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = buildString {
-                                    append(stringResource(AYMR.strings.novel_reader_translation_provider))
-                                    append(": ")
-                                    append(getAiTranslatorProviderLabel(tempProvider))
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = "${tempSourceLang.ifBlank { "?" }} → ${tempTargetLang.ifBlank { "?" }}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            LinearProgressIndicator(
-                                progress = { progressValue },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                    }
+            val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+            val revealState = rememberUpdatedState(sheetReveal)
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Button(
-                            onClick = {
-                                if (isTranslating) {
-                                    onStop()
-                                } else {
-                                    if (privateBridgeUnlocked) {
-                                        onStart()
-                                    } else {
-                                        logTemplate(
-                                            bridgeLockedLabel,
-                                            privateProviderLabel,
-                                        )
-                                    }
-                                }
-                            },
-                            enabled = isTranslating || privateBridgeUnlocked,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(
-                                if (isTranslating) {
-                                    stringResource(AYMR.strings.novel_reader_ai_translator_action_stop)
-                                } else {
-                                    stringResource(AYMR.strings.novel_reader_gemini_action_start)
-                                },
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = onToggleVisibility,
-                            enabled = hasTranslationResult,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text(
-                                if (isVisible) {
-                                    stringResource(AYMR.strings.novel_reader_gemini_show_original)
-                                } else {
-                                    stringResource(AYMR.strings.novel_reader_gemini_show_translation)
-                                },
-                            )
-                        }
-                    }
-
-                    if (hasTranslationResult) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            TextButton(onClick = onClear) {
-                                Text(
-                                    stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_clear_chapter_cache,
-                                    ),
-                                )
-                            }
-                        }
+            DisposableEffect(window, supportsBlurBehind) {
+                val w = window
+                if (w != null && supportsBlurBehind) {
+                    w.setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
+                    w.setDimAmount(0f)
+                    w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    w.attributes = w.attributes.apply { blurBehindRadius = 0 }
+                }
+                onDispose {
+                    if (w != null && supportsBlurBehind) {
+                        w.attributes = w.attributes.apply { blurBehindRadius = 0 }
+                        w.setDimAmount(0f)
+                        w.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
                     }
                 }
             }
 
-            if (page == 0 || page == 1) {
-                GeminiSettingsBlock(
-                    title = stringResource(AYMR.strings.novel_reader_ai_translator_core_title),
-                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_core_summary),
+            LaunchedEffect(window, supportsBlurBehind) {
+                val w = window ?: return@LaunchedEffect
+                if (!supportsBlurBehind) return@LaunchedEffect
+                snapshotFlow { revealState.value.coerceIn(0f, 1f) }
+                    .map { reveal -> (reveal * 20f).roundToInt().coerceIn(0, 20) }
+                    .distinctUntilChanged()
+                    .collect { step ->
+                        applyNovelSheetWindowFx(
+                            window = w,
+                            reveal = step / 20f,
+                        )
+                    }
+            }
+
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = 4.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    if (page == 0) {
-                        Text(
-                            text = stringResource(AYMR.strings.novel_reader_translation_languages),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Text(
-                            text = stringResource(AYMR.strings.novel_reader_translation_languages_summary),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = tempSourceLang,
-                                onValueChange = {
-                                    tempSourceLang = it
-                                    onSetGeminiSourceLang(it)
+                    Box(
+                        modifier = Modifier
+                            .width(36.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(
+                                if (aurora.isDark) {
+                                    Color.White.copy(alpha = 0.22f)
+                                } else {
+                                    Color.Black.copy(alpha = 0.18f)
                                 },
-                                label = {
-                                    Text(stringResource(AYMR.strings.novel_reader_gemini_source_lang))
-                                },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                            )
-                            OutlinedTextField(
-                                value = tempTargetLang,
-                                onValueChange = {
-                                    tempTargetLang = it
-                                    onSetGeminiTargetLang(it)
-                                },
-                                label = {
-                                    Text(stringResource(AYMR.strings.novel_reader_gemini_target_lang))
-                                },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                            )
-                        }
-                        Text(
-                            stringResource(AYMR.strings.novel_reader_translation_provider),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        AiTranslatorSupportText(
-                            stringResource(AYMR.strings.novel_reader_ai_translator_provider_summary),
-                        )
-                        val providerCards = listOf(
-                            NovelTranslationProvider.GEMINI to stringResource(
-                                AYMR.strings.novel_reader_translation_provider_gemini,
                             ),
-                            NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
-                            NovelTranslationProvider.OPENROUTER to stringResource(
-                                AYMR.strings.novel_reader_translation_provider_openrouter,
-                            ),
-                            NovelTranslationProvider.DEEPSEEK to stringResource(
-                                AYMR.strings.novel_reader_translation_provider_deepseek,
-                            ),
-                            NovelTranslationProvider.MISTRAL to stringResource(
-                                AYMR.strings.novel_reader_translation_provider_mistral,
-                            ),
-                            NovelTranslationProvider.NVIDIA to stringResource(
-                                AYMR.strings.novel_reader_translation_provider_nvidia,
-                            ),
-                            NovelTranslationProvider.OLLAMA_CLOUD to stringResource(
-                                AYMR.strings.novel_reader_translation_provider_ollama_cloud,
-                            ),
-                        )
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            providerCards.chunked(2).forEach { rowProviders ->
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                ) {
-                                    rowProviders.forEach { option ->
-                                        val selected = tempProvider == option.first
-                                        val apiConfigured = when (option.first) {
-                                            NovelTranslationProvider.GEMINI -> tempKey.isNotBlank()
-                                            NovelTranslationProvider.GEMINI_PRIVATE ->
-                                                tempKey.isNotBlank() && isPrivateProviderUnlocked
-                                            NovelTranslationProvider.OPENROUTER ->
-                                                tempOpenRouterBaseUrl.isNotBlank() &&
-                                                    readerSettings.openRouterApiKey.isNotBlank() &&
-                                                    tempOpenRouterModel.isNotBlank()
-                                            NovelTranslationProvider.DEEPSEEK ->
-                                                tempDeepSeekBaseUrl.isNotBlank() &&
-                                                    readerSettings.deepSeekApiKey.isNotBlank() &&
-                                                    tempDeepSeekModel.isNotBlank()
-                                            NovelTranslationProvider.MISTRAL ->
-                                                tempMistralBaseUrl.isNotBlank() &&
-                                                    readerSettings.mistralApiKey.isNotBlank() &&
-                                                    tempMistralModel.isNotBlank()
-                                            NovelTranslationProvider.NVIDIA ->
-                                                tempNvidiaBaseUrl.isNotBlank() &&
-                                                    readerSettings.nvidiaApiKey.isNotBlank() &&
-                                                    tempNvidiaModel.isNotBlank()
-                                            NovelTranslationProvider.OLLAMA_CLOUD ->
-                                                tempOllamaCloudBaseUrl.isNotBlank() &&
-                                                    readerSettings.ollamaCloudApiKey.isNotBlank() &&
-                                                    tempOllamaCloudModel.isNotBlank()
-                                        }
-                                        AiTranslatorProviderCard(
-                                            title = option.second,
-                                            apiConfigured = apiConfigured,
-                                            selected = selected,
-                                            modifier = Modifier.weight(1f),
-                                            onClick = {
-                                                tempProvider = option.first
-                                                onSetTranslationProvider(option.first)
-                                                logPair(providerLabel, option.second)
-                                                when (option.first) {
-                                                    NovelTranslationProvider.GEMINI -> Unit
-                                                    NovelTranslationProvider.GEMINI_PRIVATE -> Unit
-                                                    NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
-                                                    NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
-                                                    NovelTranslationProvider.MISTRAL -> onRefreshMistralModels()
-                                                    NovelTranslationProvider.NVIDIA -> onRefreshNvidiaModels()
-                                                    NovelTranslationProvider.OLLAMA_CLOUD ->
-                                                        onRefreshOllamaCloudModels()
-                                                }
-                                            },
-                                        )
-                                    }
-                                    if (rowProviders.size == 1) {
-                                        Spacer(modifier = Modifier.weight(1f))
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    )
+                }
 
-                    if (page == 0) {
-                        if (privateBridgeInstalled) {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
-                                shape = RoundedCornerShape(12.dp),
-                            ) {
-                                Text(
-                                    text = if (isPrivateProviderUnlocked) {
-                                        stringResource(
-                                            AYMR.strings.novel_reader_gemini_private_bridge_connected_unlocked,
-                                        ).format(privateProviderLabel)
-                                    } else {
-                                        stringResource(
-                                            AYMR.strings.novel_reader_gemini_private_bridge_connected_unlock_required,
-                                        ).format(privateProviderLabel)
-                                    },
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
+                AuroraTabRow(
+                    titles = tabTitles,
+                    selectedIndex = pagerState.currentPage,
+                    onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
+                )
 
-                        if (privateBridgeRequiresUnlock && !isPrivateProviderUnlocked) {
-                            OutlinedTextField(
-                                value = tempPrivatePassword,
-                                onValueChange = { tempPrivatePassword = it },
-                                label = {
-                                    Text(
-                                        stringResource(
-                                            AYMR.strings.novel_reader_gemini_private_bridge_password_label,
-                                        ).format(privateProviderLabel),
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = {
-                                        val password = tempPrivatePassword.trim()
-                                        if (password.isBlank()) {
-                                            logTemplate(
-                                                bridgeEnterPasswordLabel,
-                                                privateProviderLabel,
-                                            )
-                                        } else {
-                                            val unlocked = GeminiPrivateBridge.unlock(password)
-                                            if (unlocked) {
-                                                isPrivateProviderUnlocked = true
-                                                onSetGeminiPrivateUnlocked(true)
-                                                tempPrivatePassword = ""
-                                                logTemplate(
-                                                    bridgeUnlockedLabel,
-                                                    privateProviderLabel,
-                                                )
-                                            } else {
-                                                logTemplate(
-                                                    bridgeDebugLabel,
-                                                    privateProviderLabel,
-                                                    GeminiPrivateBridge.debugInfo(),
-                                                )
-                                                onAddLog(invalidBridgePasswordLabel)
-                                            }
-                                        }
-                                    },
-                                ) {
-                                    Text(stringResource(AYMR.strings.novel_reader_gemini_action_unlock))
-                                }
-                                OutlinedButton(
-                                    onClick = {
-                                        tempPrivatePassword = ""
-                                    },
-                                ) {
-                                    Text(stringResource(AYMR.strings.novel_reader_gemini_action_clear))
-                                }
-                            }
-                        }
-
-                        when (tempProvider) {
-                            NovelTranslationProvider.GEMINI,
-                            NovelTranslationProvider.GEMINI_PRIVATE,
-                            -> {
-                                AiTranslatorMiniSection(
-                                    title = stringResource(AYMR.strings.novel_reader_gemini_model),
-                                    subtitle = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_model_summary,
-                                    ),
-                                )
-                                eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
-                                    value = tempModel,
-                                    title = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_current_model,
-                                    ),
-                                    subtitle = modelMap[tempModel] ?: tempModel,
-                                    icon = null,
-                                    entries = modelMap,
-                                    onValueChange = { selected ->
-                                        tempModel = selected
-                                        onSetGeminiModel(selected)
-                                        logPair(geminiModelLabel, modelMap[selected] ?: selected)
-                                    },
-                                )
-                            }
-                            NovelTranslationProvider.OPENROUTER -> {
-                                AiTranslatorMiniSection(
-                                    title = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_openrouter_models_title,
-                                    ),
-                                    subtitle = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_model_summary,
-                                    ),
-                                )
-                                if (openRouterAllModelEntries.isNotEmpty()) {
-                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
-                                        value = tempOpenRouterModel,
-                                        title = stringResource(
-                                            AYMR.strings.novel_reader_ai_translator_openrouter_models_count,
-                                        ).format(openRouterAllModelEntries.size),
-                                        subtitle = tempOpenRouterModel.ifBlank {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_choose_free_model,
-                                            )
-                                        },
-                                        icon = null,
-                                        entries = openRouterAllModelEntries,
-                                        onValueChange = { selected ->
-                                            tempOpenRouterModel = selected
-                                            onSetOpenRouterModel(selected)
-                                            logPair(openRouterModelLabel, selected)
-                                        },
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(onClick = onRefreshOpenRouterModels) {
-                                        Text(
-                                            if (isOpenRouterModelsLoading) {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
-                                                )
-                                            } else {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
-                                                )
-                                            },
-                                        )
-                                    }
-                                }
-                                OutlinedTextField(
-                                    value = tempOpenRouterModel,
-                                    onValueChange = {
-                                        tempOpenRouterModel = it
-                                        onSetOpenRouterModel(it)
-                                    },
-                                    label = {
-                                        Text(
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_model_id_free_only,
-                                            ),
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                            NovelTranslationProvider.DEEPSEEK -> {
-                                AiTranslatorMiniSection(
-                                    title = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_deepseek_models_title,
-                                    ),
-                                    subtitle = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_model_summary,
-                                    ),
-                                )
-                                if (deepSeekAllModelEntries.isNotEmpty()) {
-                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
-                                        value = tempDeepSeekModel,
-                                        title = stringResource(
-                                            AYMR.strings.novel_reader_ai_translator_models_count,
-                                        ).format(deepSeekAllModelEntries.size),
-                                        subtitle = tempDeepSeekModel.ifBlank {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_choose_model,
-                                            )
-                                        },
-                                        icon = null,
-                                        entries = deepSeekAllModelEntries,
-                                        onValueChange = { selected ->
-                                            tempDeepSeekModel = selected
-                                            onSetDeepSeekModel(selected)
-                                            logPair(deepSeekModelLabel, selected)
-                                        },
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(onClick = onRefreshDeepSeekModels) {
-                                        Text(
-                                            if (isDeepSeekModelsLoading) {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
-                                                )
-                                            } else {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
-                                                )
-                                            },
-                                        )
-                                    }
-                                }
-                                OutlinedTextField(
-                                    value = tempDeepSeekModel,
-                                    onValueChange = {
-                                        tempDeepSeekModel = it
-                                        onSetDeepSeekModel(it)
-                                    },
-                                    label = {
-                                        Text(
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_model_id,
-                                            ),
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                            NovelTranslationProvider.MISTRAL -> {
-                                AiTranslatorMiniSection(
-                                    title = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_mistral_models_title,
-                                    ),
-                                    subtitle = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_model_summary,
-                                    ),
-                                )
-                                if (mistralAllModelEntries.isNotEmpty()) {
-                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
-                                        value = tempMistralModel,
-                                        title = stringResource(
-                                            AYMR.strings.novel_reader_ai_translator_models_count,
-                                        ).format(mistralAllModelEntries.size),
-                                        subtitle = tempMistralModel.ifBlank {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_choose_model,
-                                            )
-                                        },
-                                        icon = null,
-                                        entries = mistralAllModelEntries,
-                                        onValueChange = { selected ->
-                                            tempMistralModel = selected
-                                            onSetMistralModel(selected)
-                                            logPair(mistralModelLabel, selected)
-                                        },
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(onClick = onRefreshMistralModels) {
-                                        Text(
-                                            if (isMistralModelsLoading) {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
-                                                )
-                                            } else {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
-                                                )
-                                            },
-                                        )
-                                    }
-                                }
-                                OutlinedTextField(
-                                    value = tempMistralModel,
-                                    onValueChange = {
-                                        tempMistralModel = it
-                                        onSetMistralModel(it)
-                                    },
-                                    label = {
-                                        Text(
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_model_id,
-                                            ),
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                            NovelTranslationProvider.NVIDIA -> {
-                                AiTranslatorMiniSection(
-                                    title = stringResource(
-                                        AYMR.strings.novel_reader_nvidia_section_title,
-                                    ),
-                                    subtitle = stringResource(
-                                        AYMR.strings.novel_reader_nvidia_section_summary,
-                                    ),
-                                )
-                                AiTranslatorSupportText(
-                                    stringResource(AYMR.strings.novel_reader_ai_translator_model_summary),
-                                )
-                                if (nvidiaAllModelEntries.isNotEmpty()) {
-                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
-                                        value = tempNvidiaModel,
-                                        title = stringResource(
-                                            AYMR.strings.novel_reader_ai_translator_models_count,
-                                        ).format(nvidiaAllModelEntries.size),
-                                        subtitle = tempNvidiaModel.ifBlank {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_choose_model,
-                                            )
-                                        },
-                                        icon = null,
-                                        entries = nvidiaAllModelEntries,
-                                        onValueChange = { selected ->
-                                            tempNvidiaModel = selected
-                                            onSetNvidiaModel(selected)
-                                            logPair(nvidiaModelLabel, selected)
-                                        },
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(onClick = onRefreshNvidiaModels) {
-                                        Text(
-                                            if (isNvidiaModelsLoading) {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
-                                                )
-                                            } else {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
-                                                )
-                                            },
-                                        )
-                                    }
-                                }
-                                OutlinedTextField(
-                                    value = tempNvidiaModel,
-                                    onValueChange = {
-                                        tempNvidiaModel = it
-                                        onSetNvidiaModel(it)
-                                    },
-                                    label = {
-                                        Text(
-                                            stringResource(
-                                                AYMR.strings.novel_reader_nvidia_model,
-                                            ),
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                            NovelTranslationProvider.OLLAMA_CLOUD -> {
-                                AiTranslatorMiniSection(
-                                    title = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_ollama_cloud_models_title,
-                                    ),
-                                    subtitle = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_model_summary,
-                                    ),
-                                )
-                                if (ollamaCloudAllModelEntries.isNotEmpty()) {
-                                    eu.kanade.presentation.more.settings.widget.ListPreferenceWidget(
-                                        value = tempOllamaCloudModel,
-                                        title = stringResource(
-                                            AYMR.strings.novel_reader_ai_translator_models_count,
-                                        ).format(ollamaCloudAllModelEntries.size),
-                                        subtitle = when {
-                                            tempOllamaCloudModel in OLLAMA_CLOUD_FREE_MODELS ->
-                                                "$tempOllamaCloudModel (Free)"
-                                            tempOllamaCloudModel.isNotBlank() -> tempOllamaCloudModel
-                                            else -> stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_choose_model,
-                                            )
-                                        },
-                                        icon = null,
-                                        entries = ollamaCloudAllModelEntries,
-                                        onValueChange = { selected ->
-                                            tempOllamaCloudModel = selected
-                                            onSetOllamaCloudModel(selected)
-                                            logPair(ollamaCloudModelLabel, selected)
-                                        },
-                                    )
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedButton(onClick = onRefreshOllamaCloudModels) {
-                                        Text(
-                                            if (isOllamaCloudModelsLoading) {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
-                                                )
-                                            } else {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
-                                                )
-                                            },
-                                        )
-                                    }
-                                }
-                                OutlinedTextField(
-                                    value = tempOllamaCloudModel,
-                                    onValueChange = {
-                                        tempOllamaCloudModel = it
-                                        onSetOllamaCloudModel(it)
-                                    },
-                                    label = {
-                                        Text(
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ollama_cloud_model,
-                                            ),
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
-                    }
-
-                    if (page == 1) {
-                        if (!isPrivateSingleRequestMode) {
-                            Text(
-                                stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            AiTranslatorSupportText(
-                                stringResource(AYMR.strings.novel_reader_ai_translator_prompt_mode_summary),
-                            )
-                            val promptModeClassicLabel = stringResource(
-                                AYMR.strings.novel_reader_gemini_prompt_mode_classic,
-                            )
-                            val promptModeAdultLabel = stringResource(
-                                AYMR.strings.novel_reader_gemini_prompt_mode_adult_short,
-                            )
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(
-                                    listOf(
-                                        GeminiPromptMode.CLASSIC to promptModeClassicLabel,
-                                        GeminiPromptMode.ADULT_18 to promptModeAdultLabel,
-                                    ),
-                                ) { option ->
-                                    val selected = tempPromptMode == option.first
-                                    AiTranslatorChoiceChip(
-                                        text = option.second,
-                                        selected = selected,
-                                        onClick = {
-                                            tempPromptMode = option.first
-                                            onSetGeminiPromptMode(option.first)
-                                            logPair(promptModeLabel, option.second)
-                                        },
-                                    )
-                                }
-                            }
-
-                            Text(
-                                stringResource(AYMR.strings.novel_reader_ai_translator_style_title),
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            AiTranslatorSupportText(
-                                stringResource(AYMR.strings.novel_reader_ai_translator_style_summary),
-                            )
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(stylePresets) { preset ->
-                                    val selected = tempStylePreset == preset.id
-                                    val presetTitle = stringResource(preset.titleRes)
-                                    AiTranslatorChoiceChip(
-                                        text = presetTitle,
-                                        selected = selected,
-                                        onClick = {
-                                            tempStylePreset = preset.id
-                                            onSetGeminiStylePreset(preset.id)
-                                            logPair(styleLabel, presetTitle)
-                                        },
-                                    )
-                                }
-                            }
-                            val selectedStylePreset = stylePresets.firstOrNull { it.id == tempStylePreset }
-                            val selectedStylePresetTitle = stringResource(
-                                selectedStylePreset?.titleRes ?: stylePresets.first().titleRes,
-                            )
-                            if (selectedStylePreset != null) {
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                                    shape = RoundedCornerShape(12.dp),
+                HorizontalPager(
+                    modifier = Modifier.heightIn(max = pageMaxHeight),
+                    state = pagerState,
+                    verticalAlignment = Alignment.Top,
+                    beyondViewportPageCount = 0,
+                ) { page ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = pageMaxHeight)
+                            .padding(vertical = 6.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        when (page) {
+                            0 -> {
+                                // -------------------------------------------------------------
+                                // TAB 0: ОСНОВНЫЕ
+                                // -------------------------------------------------------------
+                                // 1. Hero Status & Actions Card
+                                AuroraGlassSection(
+                                    title = stringResource(AYMR.strings.novel_reader_ai_translator_status_title),
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(10.dp),
                                     ) {
-                                        Text(
-                                            text = selectedStylePresetTitle,
-                                            style = MaterialTheme.typography.labelLarge,
-                                        )
-                                        Text(
-                                            text = stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_style_scenario_prefix,
-                                            ).format(stringResource(selectedStylePreset.scenarioRes)),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                        Text(
-                                            text = stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_style_advantage_prefix,
-                                            ).format(stringResource(selectedStylePreset.advantageRes)),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                }
-                            }
-
-                            Text(
-                                stringResource(AYMR.strings.novel_reader_gemini_prompt_modifiers),
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            AiTranslatorSupportText(
-                                stringResource(AYMR.strings.novel_reader_gemini_prompt_modifiers_hint),
-                            )
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                items(GeminiPromptModifiers.all) { modifier ->
-                                    val selected = tempEnabledModifiers.contains(modifier.id)
-                                    val modifierLabel = stringResource(modifier.labelRes)
-                                    Surface(
-                                        color = if (selected) {
-                                            MaterialTheme.colorScheme.primaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.surfaceVariant
-                                        },
-                                        shape = RoundedCornerShape(16.dp),
-                                        modifier = Modifier.clickable {
-                                            tempEnabledModifiers = if (selected) {
-                                                tempEnabledModifiers - modifier.id
-                                            } else {
-                                                tempEnabledModifiers + modifier.id
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(8.dp)
+                                                        .clip(CircleShape)
+                                                        .background(
+                                                            if (isTranslating) aurora.accent else MaterialTheme.colorScheme.outline,
+                                                        ),
+                                                )
+                                                Text(
+                                                    text = stringResource(status.titleRes),
+                                                    style = MaterialTheme.typography.titleSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
                                             }
-                                            onSetGeminiEnabledPromptModifiers(
-                                                tempEnabledModifiers.toList(),
+                                            Text(
+                                                text = "$translationProgress%",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = aurora.accent,
                                             )
-                                        },
-                                    ) {
+                                        }
+
                                         Text(
-                                            text = modifierLabel,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                            style = MaterialTheme.typography.labelMedium,
+                                            text = stringResource(status.subtitleRes),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
+                                            Text(
+                                                text = getAiTranslatorProviderLabel(tempProvider),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Medium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            Text(
+                                                text = "${tempSourceLang.ifBlank {
+                                                    "?"
+                                                }} → ${tempTargetLang.ifBlank { "?" }}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
+                                        }
+
+                                        LinearProgressIndicator(
+                                            progress = { progressValue },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(6.dp)
+                                                .clip(RoundedCornerShape(3.dp)),
+                                            color = aurora.accent,
+                                        )
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Button(
+                                                onClick = {
+                                                    if (isTranslating) {
+                                                        onStop()
+                                                    } else {
+                                                        if (privateBridgeUnlocked) {
+                                                            onStart()
+                                                        } else {
+                                                            logTemplate(bridgeLockedLabel, privateProviderLabel)
+                                                        }
+                                                    }
+                                                },
+                                                enabled = isTranslating || privateBridgeUnlocked,
+                                                modifier = Modifier.weight(1f),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = aurora.accent,
+                                                    contentColor = if (aurora.isDark) Color.Black else Color.White,
+                                                ),
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isTranslating) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                                Spacer(Modifier.size(6.dp))
+                                                Text(
+                                                    text = if (isTranslating) {
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_action_stop,
+                                                        )
+                                                    } else {
+                                                        stringResource(AYMR.strings.novel_reader_gemini_action_start)
+                                                    },
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = onToggleVisibility,
+                                                enabled = hasTranslationResult,
+                                                modifier = Modifier.weight(1f),
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                                Spacer(Modifier.size(6.dp))
+                                                Text(
+                                                    if (isVisible) {
+                                                        stringResource(AYMR.strings.novel_reader_gemini_show_original)
+                                                    } else {
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_gemini_show_translation,
+                                                        )
+                                                    },
+                                                )
+                                            }
+                                        }
+
+                                        if (hasTranslationResult) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End,
+                                            ) {
+                                                TextButton(onClick = onClear) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Delete,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(16.dp),
+                                                        tint = MaterialTheme.colorScheme.error,
+                                                    )
+                                                    Spacer(Modifier.size(4.dp))
+                                                    Text(
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_clear_chapter_cache,
+                                                        ),
+                                                        color = MaterialTheme.colorScheme.error,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
-                                item {
-                                    Surface(
-                                        color = if (tempCustomModifier.isNotBlank()) {
-                                            MaterialTheme.colorScheme.tertiaryContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.surfaceVariant
-                                        },
-                                        shape = RoundedCornerShape(16.dp),
-                                        modifier = Modifier.clickable { showCustomPromptDialog = true },
+
+                                // 2. Language Pair Bridge
+                                AuroraGlassSection(
+                                    title = stringResource(AYMR.strings.novel_reader_translation_languages),
+                                ) {
+                                    AuroraFieldLabel(
+                                        stringResource(AYMR.strings.novel_reader_translation_languages_summary),
+                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Text(
-                                            text = if (tempCustomModifier.isBlank()) {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_custom_modifier_add,
+                                        AuroraOutlinedTextField(
+                                            value = tempSourceLang,
+                                            onValueChange = {
+                                                tempSourceLang = it
+                                                onSetGeminiSourceLang(it)
+                                            },
+                                            label = {
+                                                Text(stringResource(AYMR.strings.novel_reader_gemini_source_lang))
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true,
+                                        )
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = if (aurora.isDark) {
+                                                Color.White.copy(
+                                                    alpha = 0.06f,
                                                 )
                                             } else {
-                                                stringResource(
-                                                    AYMR.strings.novel_reader_ai_translator_custom_modifier_active,
-                                                )
+                                                Color.Black.copy(alpha = 0.04f)
                                             },
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                            style = MaterialTheme.typography.labelMedium,
+                                            border = BorderStroke(1.dp, auroraRimColor()),
+                                            modifier = Modifier
+                                                .offset(y = 4.dp)
+                                                .size(40.dp),
+                                        ) {
+                                            IconButton(
+                                                onClick = {
+                                                    val oldSource = tempSourceLang
+                                                    tempSourceLang = tempTargetLang
+                                                    tempTargetLang = oldSource
+                                                    onSetGeminiSourceLang(tempSourceLang)
+                                                    onSetGeminiTargetLang(tempTargetLang)
+                                                },
+                                                modifier = Modifier.size(40.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.SwapHoriz,
+                                                    contentDescription = "Swap languages",
+                                                    tint = aurora.accent,
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                        }
+                                        AuroraOutlinedTextField(
+                                            value = tempTargetLang,
+                                            onValueChange = {
+                                                tempTargetLang = it
+                                                onSetGeminiTargetLang(it)
+                                            },
+                                            label = {
+                                                Text(stringResource(AYMR.strings.novel_reader_gemini_target_lang))
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true,
+                                        )
+                                    }
+                                }
+
+                                // 3. Provider Selection 2x2 Grid
+                                AuroraGlassSection(
+                                    title = stringResource(AYMR.strings.novel_reader_translation_provider),
+                                ) {
+                                    AuroraFieldLabel(
+                                        stringResource(AYMR.strings.novel_reader_ai_translator_provider_summary),
+                                    )
+                                    val providerCards = listOf(
+                                        NovelTranslationProvider.GEMINI to
+                                            stringResource(AYMR.strings.novel_reader_translation_provider_gemini),
+                                        NovelTranslationProvider.GEMINI_PRIVATE to privateProviderLabel,
+                                        NovelTranslationProvider.OPENROUTER to
+                                            stringResource(AYMR.strings.novel_reader_translation_provider_openrouter),
+                                        NovelTranslationProvider.DEEPSEEK to
+                                            stringResource(AYMR.strings.novel_reader_translation_provider_deepseek),
+                                        NovelTranslationProvider.MISTRAL to
+                                            stringResource(AYMR.strings.novel_reader_translation_provider_mistral),
+                                        NovelTranslationProvider.NVIDIA to
+                                            stringResource(AYMR.strings.novel_reader_translation_provider_nvidia),
+                                        NovelTranslationProvider.OLLAMA_CLOUD to
+                                            stringResource(AYMR.strings.novel_reader_translation_provider_ollama_cloud),
+                                    )
+
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        providerCards.chunked(2).forEach { rowProviders ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                rowProviders.forEach { option ->
+                                                    val selected = tempProvider == option.first
+                                                    val apiConfigured = when (option.first) {
+                                                        NovelTranslationProvider.GEMINI -> tempKey.isNotBlank()
+                                                        NovelTranslationProvider.GEMINI_PRIVATE -> tempKey.isNotBlank() &&
+                                                            isPrivateProviderUnlocked
+                                                        NovelTranslationProvider.OPENROUTER -> tempOpenRouterBaseUrl.isNotBlank() &&
+                                                            readerSettings.openRouterApiKey.isNotBlank() &&
+                                                            tempOpenRouterModel.isNotBlank()
+                                                        NovelTranslationProvider.DEEPSEEK -> tempDeepSeekBaseUrl.isNotBlank() &&
+                                                            readerSettings.deepSeekApiKey.isNotBlank() &&
+                                                            tempDeepSeekModel.isNotBlank()
+                                                        NovelTranslationProvider.MISTRAL -> tempMistralBaseUrl.isNotBlank() &&
+                                                            readerSettings.mistralApiKey.isNotBlank() &&
+                                                            tempMistralModel.isNotBlank()
+                                                        NovelTranslationProvider.NVIDIA -> tempNvidiaBaseUrl.isNotBlank() &&
+                                                            readerSettings.nvidiaApiKey.isNotBlank() &&
+                                                            tempNvidiaModel.isNotBlank()
+                                                        NovelTranslationProvider.OLLAMA_CLOUD -> tempOllamaCloudBaseUrl.isNotBlank() &&
+                                                            readerSettings.ollamaCloudApiKey.isNotBlank() &&
+                                                            tempOllamaCloudModel.isNotBlank()
+                                                    }
+                                                    AiTranslatorProviderCard(
+                                                        title = option.second,
+                                                        apiConfigured = apiConfigured,
+                                                        selected = selected,
+                                                        modifier = Modifier.weight(1f),
+                                                        onClick = {
+                                                            tempProvider = option.first
+                                                            onSetTranslationProvider(option.first)
+                                                            logPair(providerLabel, option.second)
+                                                            when (option.first) {
+                                                                NovelTranslationProvider.GEMINI, NovelTranslationProvider.GEMINI_PRIVATE -> Unit
+                                                                NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
+                                                                NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
+                                                                NovelTranslationProvider.MISTRAL -> onRefreshMistralModels()
+                                                                NovelTranslationProvider.NVIDIA -> onRefreshNvidiaModels()
+                                                                NovelTranslationProvider.OLLAMA_CLOUD -> onRefreshOllamaCloudModels()
+                                                            }
+                                                        },
+                                                    )
+                                                }
+                                                if (rowProviders.size == 1) {
+                                                    Spacer(modifier = Modifier.weight(1f))
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Private Bridge Unlock Box
+                                    if (privateBridgeInstalled) {
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f),
+                                            shape = RoundedCornerShape(12.dp),
+                                        ) {
+                                            Text(
+                                                text = if (isPrivateProviderUnlocked) {
+                                                    stringResource(
+                                                        AYMR.strings.novel_reader_gemini_private_bridge_connected_unlocked,
+                                                    ).format(privateProviderLabel)
+                                                } else {
+                                                    stringResource(
+                                                        AYMR.strings.novel_reader_gemini_private_bridge_connected_unlock_required,
+                                                    ).format(privateProviderLabel)
+                                                },
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                style = MaterialTheme.typography.bodySmall,
+                                            )
+                                        }
+                                    }
+
+                                    if (privateBridgeRequiresUnlock && !isPrivateProviderUnlocked) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            AuroraOutlinedTextField(
+                                                value = tempPrivatePassword,
+                                                onValueChange = { tempPrivatePassword = it },
+                                                label = {
+                                                    Text(
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_gemini_private_bridge_password_label,
+                                                        ).format(privateProviderLabel),
+                                                    )
+                                                },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                singleLine = true,
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Button(
+                                                    onClick = {
+                                                        val password = tempPrivatePassword.trim()
+                                                        if (password.isBlank()) {
+                                                            logTemplate(bridgeEnterPasswordLabel, privateProviderLabel)
+                                                        } else {
+                                                            val unlocked = GeminiPrivateBridge.unlock(password)
+                                                            if (unlocked) {
+                                                                isPrivateProviderUnlocked = true
+                                                                onSetGeminiPrivateUnlocked(true)
+                                                                tempPrivatePassword = ""
+                                                                logTemplate(bridgeUnlockedLabel, privateProviderLabel)
+                                                            } else {
+                                                                logTemplate(
+                                                                    bridgeDebugLabel,
+                                                                    privateProviderLabel,
+                                                                    GeminiPrivateBridge.debugInfo(),
+                                                                )
+                                                                onAddLog(invalidBridgePasswordLabel)
+                                                            }
+                                                        }
+                                                    },
+                                                ) {
+                                                    Text(stringResource(AYMR.strings.novel_reader_gemini_action_unlock))
+                                                }
+                                                OutlinedButton(onClick = { tempPrivatePassword = "" }) {
+                                                    Text(stringResource(AYMR.strings.novel_reader_gemini_action_clear))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 4. Models Selection Block
+                                AuroraGlassSection(
+                                    title = when (tempProvider) {
+                                        NovelTranslationProvider.GEMINI, NovelTranslationProvider.GEMINI_PRIVATE -> stringResource(
+                                            AYMR.strings.novel_reader_gemini_model,
+                                        )
+                                        NovelTranslationProvider.OPENROUTER -> stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_openrouter_models_title,
+                                        )
+                                        NovelTranslationProvider.DEEPSEEK -> stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_deepseek_models_title,
+                                        )
+                                        NovelTranslationProvider.MISTRAL -> stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_mistral_models_title,
+                                        )
+                                        NovelTranslationProvider.NVIDIA -> stringResource(
+                                            AYMR.strings.novel_reader_nvidia_section_title,
+                                        )
+                                        NovelTranslationProvider.OLLAMA_CLOUD -> stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_ollama_cloud_models_title,
+                                        )
+                                    },
+                                ) {
+                                    AuroraFieldLabel(
+                                        stringResource(AYMR.strings.novel_reader_ai_translator_model_summary),
+                                    )
+                                    when (tempProvider) {
+                                        NovelTranslationProvider.GEMINI, NovelTranslationProvider.GEMINI_PRIVATE -> {
+                                            ListPreferenceWidget(
+                                                value = tempModel,
+                                                title = stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_current_model,
+                                                ),
+                                                subtitle = modelMap[tempModel] ?: tempModel,
+                                                icon = null,
+                                                entries = modelMap,
+                                                onValueChange = { selected ->
+                                                    tempModel = selected
+                                                    onSetGeminiModel(selected)
+                                                    logPair(geminiModelLabel, modelMap[selected] ?: selected)
+                                                },
+                                            )
+                                        }
+                                        NovelTranslationProvider.OPENROUTER -> {
+                                            if (openRouterAllModelEntries.isNotEmpty()) {
+                                                ListPreferenceWidget(
+                                                    value = tempOpenRouterModel,
+                                                    title = stringResource(
+                                                        AYMR.strings.novel_reader_ai_translator_openrouter_models_count,
+                                                    ).format(openRouterAllModelEntries.size),
+                                                    subtitle = tempOpenRouterModel.ifBlank {
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_choose_free_model,
+                                                        )
+                                                    },
+                                                    icon = null,
+                                                    entries = openRouterAllModelEntries,
+                                                    onValueChange = { selected ->
+                                                        tempOpenRouterModel = selected
+                                                        onSetOpenRouterModel(selected)
+                                                        logPair(openRouterModelLabel, selected)
+                                                    },
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                OutlinedButton(onClick = onRefreshOpenRouterModels) {
+                                                    Icon(Icons.Filled.Refresh, null, modifier = Modifier.size(16.dp))
+                                                    Spacer(Modifier.size(4.dp))
+                                                    Text(
+                                                        if (isOpenRouterModelsLoading) {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                            )
+                                                        } else {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                            )
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                            AuroraOutlinedTextField(
+                                                value = tempOpenRouterModel,
+                                                onValueChange = {
+                                                    tempOpenRouterModel = it
+                                                    onSetOpenRouterModel(it)
+                                                },
+                                                label = {
+                                                    Text(
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_model_id_free_only,
+                                                        ),
+                                                    )
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            )
+                                        }
+                                        NovelTranslationProvider.DEEPSEEK -> {
+                                            if (deepSeekAllModelEntries.isNotEmpty()) {
+                                                ListPreferenceWidget(
+                                                    value = tempDeepSeekModel,
+                                                    title = stringResource(
+                                                        AYMR.strings.novel_reader_ai_translator_models_count,
+                                                    ).format(deepSeekAllModelEntries.size),
+                                                    subtitle = tempDeepSeekModel.ifBlank {
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_choose_model,
+                                                        )
+                                                    },
+                                                    icon = null,
+                                                    entries = deepSeekAllModelEntries,
+                                                    onValueChange = { selected ->
+                                                        tempDeepSeekModel = selected
+                                                        onSetDeepSeekModel(selected)
+                                                        logPair(deepSeekModelLabel, selected)
+                                                    },
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                OutlinedButton(onClick = onRefreshDeepSeekModels) {
+                                                    Icon(Icons.Filled.Refresh, null, modifier = Modifier.size(16.dp))
+                                                    Spacer(Modifier.size(4.dp))
+                                                    Text(
+                                                        if (isDeepSeekModelsLoading) {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                            )
+                                                        } else {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                            )
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                            AuroraOutlinedTextField(
+                                                value = tempDeepSeekModel,
+                                                onValueChange = {
+                                                    tempDeepSeekModel = it
+                                                    onSetDeepSeekModel(it)
+                                                },
+                                                label = {
+                                                    Text(
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_model_id,
+                                                        ),
+                                                    )
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            )
+                                        }
+                                        NovelTranslationProvider.MISTRAL -> {
+                                            if (mistralAllModelEntries.isNotEmpty()) {
+                                                ListPreferenceWidget(
+                                                    value = tempMistralModel,
+                                                    title = stringResource(
+                                                        AYMR.strings.novel_reader_ai_translator_models_count,
+                                                    ).format(mistralAllModelEntries.size),
+                                                    subtitle = tempMistralModel.ifBlank {
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_choose_model,
+                                                        )
+                                                    },
+                                                    icon = null,
+                                                    entries = mistralAllModelEntries,
+                                                    onValueChange = { selected ->
+                                                        tempMistralModel = selected
+                                                        onSetMistralModel(selected)
+                                                        logPair(mistralModelLabel, selected)
+                                                    },
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                OutlinedButton(onClick = onRefreshMistralModels) {
+                                                    Icon(Icons.Filled.Refresh, null, modifier = Modifier.size(16.dp))
+                                                    Spacer(Modifier.size(4.dp))
+                                                    Text(
+                                                        if (isMistralModelsLoading) {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                            )
+                                                        } else {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                            )
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                            AuroraOutlinedTextField(
+                                                value = tempMistralModel,
+                                                onValueChange = {
+                                                    tempMistralModel = it
+                                                    onSetMistralModel(it)
+                                                },
+                                                label = {
+                                                    Text(
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_model_id,
+                                                        ),
+                                                    )
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            )
+                                        }
+                                        NovelTranslationProvider.NVIDIA -> {
+                                            if (nvidiaAllModelEntries.isNotEmpty()) {
+                                                ListPreferenceWidget(
+                                                    value = tempNvidiaModel,
+                                                    title = stringResource(
+                                                        AYMR.strings.novel_reader_ai_translator_models_count,
+                                                    ).format(nvidiaAllModelEntries.size),
+                                                    subtitle = tempNvidiaModel.ifBlank {
+                                                        stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_choose_model,
+                                                        )
+                                                    },
+                                                    icon = null,
+                                                    entries = nvidiaAllModelEntries,
+                                                    onValueChange = { selected ->
+                                                        tempNvidiaModel = selected
+                                                        onSetNvidiaModel(selected)
+                                                        logPair(nvidiaModelLabel, selected)
+                                                    },
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                OutlinedButton(onClick = onRefreshNvidiaModels) {
+                                                    Icon(Icons.Filled.Refresh, null, modifier = Modifier.size(16.dp))
+                                                    Spacer(Modifier.size(4.dp))
+                                                    Text(
+                                                        if (isNvidiaModelsLoading) {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                            )
+                                                        } else {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                            )
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                            AuroraOutlinedTextField(
+                                                value = tempNvidiaModel,
+                                                onValueChange = {
+                                                    tempNvidiaModel = it
+                                                    onSetNvidiaModel(it)
+                                                },
+                                                label = {
+                                                    Text(stringResource(AYMR.strings.novel_reader_nvidia_model))
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            )
+                                        }
+                                        NovelTranslationProvider.OLLAMA_CLOUD -> {
+                                            if (ollamaCloudAllModelEntries.isNotEmpty()) {
+                                                ListPreferenceWidget(
+                                                    value = tempOllamaCloudModel,
+                                                    title = stringResource(
+                                                        AYMR.strings.novel_reader_ai_translator_models_count,
+                                                    ).format(ollamaCloudAllModelEntries.size),
+                                                    subtitle = when {
+                                                        tempOllamaCloudModel in OLLAMA_CLOUD_FREE_MODELS -> "$tempOllamaCloudModel (Free)"
+                                                        tempOllamaCloudModel.isNotBlank() -> tempOllamaCloudModel
+                                                        else -> stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_choose_model,
+                                                        )
+                                                    },
+                                                    icon = null,
+                                                    entries = ollamaCloudAllModelEntries,
+                                                    onValueChange = { selected ->
+                                                        tempOllamaCloudModel = selected
+                                                        onSetOllamaCloudModel(selected)
+                                                        logPair(ollamaCloudModelLabel, selected)
+                                                    },
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            ) {
+                                                OutlinedButton(onClick = onRefreshOllamaCloudModels) {
+                                                    Icon(Icons.Filled.Refresh, null, modifier = Modifier.size(16.dp))
+                                                    Spacer(Modifier.size(4.dp))
+                                                    Text(
+                                                        if (isOllamaCloudModelsLoading) {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                            )
+                                                        } else {
+                                                            stringResource(
+                                                                AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                            )
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                            AuroraOutlinedTextField(
+                                                value = tempOllamaCloudModel,
+                                                onValueChange = {
+                                                    tempOllamaCloudModel = it
+                                                    onSetOllamaCloudModel(it)
+                                                },
+                                                label = {
+                                                    Text(stringResource(AYMR.strings.novel_reader_ollama_cloud_model))
+                                                },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // 5. Speed & Parallelism
+                                if (!isPrivateSingleRequestMode) {
+                                    AuroraGlassSection(
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism,
+                                        ),
+                                    ) {
+                                        AuroraChipFlow {
+                                            speedPresets.forEach { preset ->
+                                                val label = preset.first
+                                                val batch = preset.second.first
+                                                val concurrency = preset.second.second
+                                                val selected =
+                                                    tempBatch == batch.toString() &&
+                                                        tempConcurrency == concurrency.toString()
+                                                AiTranslatorChoiceChip(
+                                                    text = label,
+                                                    selected = selected,
+                                                    onClick = {
+                                                        tempBatch = batch.toString()
+                                                        tempConcurrency = concurrency.toString()
+                                                        onSetGeminiBatchSize(batch)
+                                                        onSetGeminiConcurrency(concurrency)
+                                                        logPair(speedLabel, label)
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    AuroraGlassSection(
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism,
+                                        ),
+                                    ) {
+                                        Text(
+                                            text = "$privateProviderLabel: отправка идёт одним запросом на главу. При ошибке включается fallback (batch=40, concurrency=1).",
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+
+                                // 6. Reasoning Effort
+                                if (reasoningOptions.isNotEmpty()) {
+                                    AuroraGlassSection(
+                                        title = reasoningLabel,
+                                    ) {
+                                        if (isDeepSeekSelected && tempReasoning != "none") {
+                                            AuroraFieldLabel(
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_deepseek_reasoning_hint,
+                                                ),
+                                            )
+                                        }
+                                        AuroraChipFlow {
+                                            reasoningOptions.forEach { option ->
+                                                AiTranslatorChoiceChip(
+                                                    text = reasoningDisplayLabel(option),
+                                                    selected = tempReasoning == option,
+                                                    onClick = {
+                                                        tempReasoning = option
+                                                        onSetGeminiReasoningEffort(option)
+                                                        logPair(reasoningLabel, reasoningDisplayLabel(option))
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            1 -> {
+                                // -------------------------------------------------------------
+                                // TAB 1: ПРОМПТ
+                                // -------------------------------------------------------------
+                                if (!isPrivateSingleRequestMode) {
+                                    // 1. Prompt Filtering Mode
+                                    AuroraGlassSection(
+                                        title = stringResource(AYMR.strings.novel_reader_gemini_prompt_mode),
+                                    ) {
+                                        AuroraFieldLabel(
+                                            stringResource(AYMR.strings.novel_reader_ai_translator_prompt_mode_summary),
+                                        )
+                                        val promptModeClassicLabel =
+                                            stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_classic)
+                                        val promptModeAdultLabel =
+                                            stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_adult_short)
+                                        AuroraChipFlow {
+                                            listOf(
+                                                GeminiPromptMode.CLASSIC to promptModeClassicLabel,
+                                                GeminiPromptMode.ADULT_18 to promptModeAdultLabel,
+                                            ).forEach { option ->
+                                                AiTranslatorChoiceChip(
+                                                    text = option.second,
+                                                    selected = tempPromptMode == option.first,
+                                                    onClick = {
+                                                        tempPromptMode = option.first
+                                                        onSetGeminiPromptMode(option.first)
+                                                        logPair(promptModeLabel, option.second)
+                                                    },
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // 2. Style Persona Presets
+                                    AuroraGlassSection(
+                                        title = stringResource(AYMR.strings.novel_reader_ai_translator_style_title),
+                                    ) {
+                                        AuroraFieldLabel(
+                                            stringResource(AYMR.strings.novel_reader_ai_translator_style_summary),
+                                        )
+                                        AuroraChipFlow {
+                                            stylePresets.forEach { preset ->
+                                                val selected = tempStylePreset == preset.id
+                                                val presetTitle = stringResource(preset.titleRes)
+                                                AiTranslatorChoiceChip(
+                                                    text = presetTitle,
+                                                    selected = selected,
+                                                    onClick = {
+                                                        tempStylePreset = preset.id
+                                                        onSetGeminiStylePreset(preset.id)
+                                                        logPair(styleLabel, presetTitle)
+                                                    },
+                                                )
+                                            }
+                                        }
+                                        val selectedStylePreset = stylePresets.firstOrNull { it.id == tempStylePreset }
+                                        if (selectedStylePreset != null) {
+                                            Surface(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                                color = if (aurora.isDark) {
+                                                    Color.White.copy(
+                                                        alpha = 0.04f,
+                                                    )
+                                                } else {
+                                                    Color.Black.copy(alpha = 0.03f)
+                                                },
+                                                shape = RoundedCornerShape(14.dp),
+                                                border = BorderStroke(1.dp, auroraRimColor()),
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(6.dp)
+                                                                .clip(CircleShape)
+                                                                .background(aurora.accent),
+                                                        )
+                                                        Text(
+                                                            text = stringResource(selectedStylePreset.titleRes),
+                                                            style = MaterialTheme.typography.labelLarge,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurface,
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_style_scenario_prefix,
+                                                        ).format(stringResource(selectedStylePreset.scenarioRes)),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = aurora.textSecondary,
+                                                    )
+                                                    Text(
+                                                        text = stringResource(
+                                                            AYMR.strings.novel_reader_ai_translator_style_advantage_prefix,
+                                                        ).format(stringResource(selectedStylePreset.advantageRes)),
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = aurora.textSecondary,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // 3. Prompt Modifiers
+                                    AuroraGlassSection(
+                                        title = stringResource(AYMR.strings.novel_reader_gemini_prompt_modifiers),
+                                    ) {
+                                        AuroraFieldLabel(
+                                            stringResource(AYMR.strings.novel_reader_gemini_prompt_modifiers_hint),
+                                        )
+                                        AuroraChipFlow {
+                                            GeminiPromptModifiers.all.forEach { modifier ->
+                                                val selected = tempEnabledModifiers.contains(modifier.id)
+                                                val modifierLabel = stringResource(modifier.labelRes)
+                                                AiTranslatorFilterChip(
+                                                    label = modifierLabel,
+                                                    selected = selected,
+                                                    onClick = {
+                                                        tempEnabledModifiers = if (selected) {
+                                                            tempEnabledModifiers - modifier.id
+                                                        } else {
+                                                            tempEnabledModifiers + modifier.id
+                                                        }
+                                                        onSetGeminiEnabledPromptModifiers(tempEnabledModifiers.toList())
+                                                    },
+                                                )
+                                            }
+                                            AiTranslatorFilterChip(
+                                                label = if (tempCustomModifier.isBlank()) {
+                                                    stringResource(
+                                                        AYMR.strings.novel_reader_ai_translator_custom_modifier_add,
+                                                    )
+                                                } else {
+                                                    stringResource(
+                                                        AYMR.strings.novel_reader_ai_translator_custom_modifier_active,
+                                                    )
+                                                },
+                                                selected = tempCustomModifier.isNotBlank(),
+                                                onClick = { showCustomPromptDialog = true },
+                                            )
+                                        }
+                                    }
+
+                                    // 4. Generation Sampling Presets & Sliders
+                                    AuroraGlassSection(
+                                        title = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_generation_title,
+                                        ),
+                                    ) {
+                                        AuroraFieldLabel(
+                                            stringResource(AYMR.strings.novel_reader_ai_translator_generation_summary),
+                                        )
+                                        AuroraChipFlow {
+                                            activeGenerationPresets.forEach { preset ->
+                                                AiTranslatorChoiceChip(
+                                                    text = preset.title,
+                                                    selected = preset.id == selectedGenerationPresetId,
+                                                    onClick = {
+                                                        selectedGenerationPresetId = preset.id
+                                                        val name = preset.title
+                                                        val t = preset.temperature
+                                                        val p = preset.topP
+                                                        tempTemperature = t.toString()
+                                                        tempTopP = p.toString()
+                                                        onSetGeminiTemperature(t)
+                                                        onSetGeminiTopP(p)
+                                                        val k = preset.topK
+                                                        if (k != null) {
+                                                            tempTopK = k.toString()
+                                                            onSetGeminiTopK(k)
+                                                            onAddLog("$generationLabel: $name (T:$t P:$p K:$k)")
+                                                        } else {
+                                                            onAddLog("$generationLabel: $name (T:$t P:$p)")
+                                                        }
+                                                    },
+                                                )
+                                            }
+                                        }
+
+                                        val selectedPreset =
+                                            activeGenerationPresets.firstOrNull { it.id == selectedGenerationPresetId }
+                                                ?: activeGenerationPresets.first()
+                                        Surface(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                                            color = if (aurora.isDark) {
+                                                Color.White.copy(
+                                                    alpha = 0.04f,
+                                                )
+                                            } else {
+                                                Color.Black.copy(alpha = 0.03f)
+                                            },
+                                            shape = RoundedCornerShape(14.dp),
+                                            border = BorderStroke(1.dp, auroraRimColor()),
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(6.dp)
+                                                            .clip(CircleShape)
+                                                            .background(aurora.accent),
+                                                    )
+                                                    Text(
+                                                        text = selectedPreset.title,
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                    )
+                                                }
+                                                Text(
+                                                    text = stringResource(
+                                                        AYMR.strings.novel_reader_ai_translator_generation_scenario_prefix,
+                                                    ).format(selectedPreset.scenario),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = aurora.textSecondary,
+                                                )
+                                                Text(
+                                                    text = stringResource(
+                                                        AYMR.strings.novel_reader_ai_translator_generation_advantage_prefix,
+                                                    ).format(selectedPreset.advantage),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = aurora.textSecondary,
+                                                )
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                text = stringResource(AYMR.strings.novel_reader_gemini_temperature),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = if (aurora.isDark) Color(0xFFD1D5DB) else Color(0xFF374151),
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(999.dp),
+                                                color = if (aurora.isDark) {
+                                                    Color.White.copy(
+                                                        alpha = 0.08f,
+                                                    )
+                                                } else {
+                                                    Color.Black.copy(alpha = 0.06f)
+                                                },
+                                                border = BorderStroke(1.dp, auroraRimColor()),
+                                            ) {
+                                                Text(
+                                                    text = tempTemperature,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = aurora.accent,
+                                                )
+                                            }
+                                        }
+                                        Slider(
+                                            value = tempTemperature.toFloatOrNull() ?: 0.7f,
+                                            onValueChange = {
+                                                val rounded = (it * 100).roundToInt() / 100f
+                                                tempTemperature = rounded.toString()
+                                                onSetGeminiTemperature(rounded)
+                                            },
+                                            valueRange = if (isDeepSeekSelected) 1.3f..1.5f else 0.0f..2.0f,
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = aurora.accent,
+                                                activeTrackColor = aurora.accent,
+                                                inactiveTrackColor = if (aurora.isDark) {
+                                                    Color.White.copy(
+                                                        alpha = 0.12f,
+                                                    )
+                                                } else {
+                                                    Color.Black.copy(alpha = 0.10f)
+                                                },
+                                            ),
+                                        )
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                text = stringResource(AYMR.strings.novel_reader_gemini_top_p),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = if (aurora.isDark) Color(0xFFD1D5DB) else Color(0xFF374151),
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(999.dp),
+                                                color = if (aurora.isDark) {
+                                                    Color.White.copy(
+                                                        alpha = 0.08f,
+                                                    )
+                                                } else {
+                                                    Color.Black.copy(alpha = 0.06f)
+                                                },
+                                                border = BorderStroke(1.dp, auroraRimColor()),
+                                            ) {
+                                                Text(
+                                                    text = tempTopP,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = aurora.accent,
+                                                )
+                                            }
+                                        }
+                                        Slider(
+                                            value = tempTopP.toFloatOrNull() ?: 0.9f,
+                                            onValueChange = {
+                                                val rounded = (it * 100).roundToInt() / 100f
+                                                tempTopP = rounded.toString()
+                                                onSetGeminiTopP(rounded)
+                                            },
+                                            valueRange = if (isDeepSeekSelected) 0.9f..0.95f else 0.0f..1.0f,
+                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                            colors = SliderDefaults.colors(
+                                                thumbColor = aurora.accent,
+                                                activeTrackColor = aurora.accent,
+                                                inactiveTrackColor = if (aurora.isDark) {
+                                                    Color.White.copy(
+                                                        alpha = 0.12f,
+                                                    )
+                                                } else {
+                                                    Color.Black.copy(alpha = 0.10f)
+                                                },
+                                            ),
+                                        )
+
+                                        if (!isDeepSeekSelected) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                Text(
+                                                    text = stringResource(AYMR.strings.novel_reader_gemini_top_k),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = if (aurora.isDark) Color(0xFFD1D5DB) else Color(0xFF374151),
+                                                )
+                                                Surface(
+                                                    shape = RoundedCornerShape(999.dp),
+                                                    color = if (aurora.isDark) {
+                                                        Color.White.copy(
+                                                            alpha = 0.08f,
+                                                        )
+                                                    } else {
+                                                        Color.Black.copy(alpha = 0.06f)
+                                                    },
+                                                    border = BorderStroke(1.dp, auroraRimColor()),
+                                                ) {
+                                                    Text(
+                                                        text = tempTopK,
+                                                        modifier = Modifier.padding(
+                                                            horizontal = 10.dp,
+                                                            vertical = 2.dp,
+                                                        ),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = aurora.accent,
+                                                    )
+                                                }
+                                            }
+                                            Slider(
+                                                value = tempTopK.toFloatOrNull() ?: 40f,
+                                                onValueChange = {
+                                                    val intVal = it.roundToInt()
+                                                    tempTopK = intVal.toString()
+                                                    onSetGeminiTopK(intVal)
+                                                },
+                                                valueRange = 1f..100f,
+                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                                colors = SliderDefaults.colors(
+                                                    thumbColor = aurora.accent,
+                                                    activeTrackColor = aurora.accent,
+                                                    inactiveTrackColor = if (aurora.isDark) {
+                                                        Color.White.copy(
+                                                            alpha = 0.12f,
+                                                        )
+                                                    } else {
+                                                        Color.Black.copy(alpha = 0.10f)
+                                                    },
+                                                ),
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    AuroraGlassSection(
+                                        title = stringResource(MR.strings.ai_translator_tab_prompt),
+                                    ) {
+                                        Text(
+                                            text = stringResource(
+                                                AYMR.strings.novel_reader_gemini_private_bridge_auto_rules,
+                                            ).format(privateProviderLabel),
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                                            style = MaterialTheme.typography.bodySmall,
                                         )
                                     }
                                 }
                             }
-                        } else {
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(12.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(
-                                        AYMR.strings.novel_reader_gemini_private_bridge_auto_rules,
-                                    ).format(privateProviderLabel),
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
-                    }
 
-                    if (page == 0 && !isPrivateSingleRequestMode) {
-                        Text(
-                            stringResource(AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(speedPresets) { preset ->
-                                val label = preset.first
-                                val batch = preset.second.first
-                                val concurrency = preset.second.second
-                                val selected = tempBatch == batch.toString() &&
-                                    tempConcurrency == concurrency.toString()
-                                AiTranslatorChoiceChip(
-                                    text = label,
-                                    selected = selected,
-                                    onClick = {
-                                        tempBatch = batch.toString()
-                                        tempConcurrency = concurrency.toString()
-                                        onSetGeminiBatchSize(batch)
-                                        onSetGeminiConcurrency(concurrency)
-                                        logPair(speedLabel, label)
-                                    },
-                                )
-                            }
-                        }
-                    }
+                            2 -> {
+                                // -------------------------------------------------------------
+                                // TAB 2: ЕЩЕ (Automation, API Connections & Logs)
+                                // -------------------------------------------------------------
+                                var apiKeyVisible by remember { mutableStateOf(false) }
+                                val apiTestStatus = when (tempProvider) {
+                                    NovelTranslationProvider.OPENROUTER -> openRouterApiTestStatus
+                                    NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestStatus
+                                    NovelTranslationProvider.MISTRAL -> mistralApiTestStatus
+                                    NovelTranslationProvider.NVIDIA -> nvidiaApiTestStatus
+                                    NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudApiTestStatus
+                                    NovelTranslationProvider.GEMINI, NovelTranslationProvider.GEMINI_PRIVATE -> ProviderApiTestStatus.Idle
+                                }
+                                val apiTestMessage = when (tempProvider) {
+                                    NovelTranslationProvider.OPENROUTER -> openRouterApiTestMessage
+                                    NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestMessage
+                                    NovelTranslationProvider.MISTRAL -> mistralApiTestMessage
+                                    NovelTranslationProvider.NVIDIA -> nvidiaApiTestMessage
+                                    NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudApiTestMessage
+                                    NovelTranslationProvider.GEMINI, NovelTranslationProvider.GEMINI_PRIVATE -> null
+                                }
 
-                    if (page == 0 && isPrivateSingleRequestMode) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f),
-                            shape = RoundedCornerShape(12.dp),
-                        ) {
-                            Text(
-                                text =
-                                "$privateProviderLabel: отправка идёт " +
-                                    "одним запросом на главу. При ошибке " +
-                                    "включается fallback (batch=40, " +
-                                    "concurrency=1).",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-
-                    if (page == 0 && reasoningOptions.isNotEmpty()) {
-                        Text(
-                            text = reasoningLabel,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        if (isDeepSeekSelected && tempReasoning != "none") {
-                            AiTranslatorSupportText(
-                                stringResource(
-                                    AYMR.strings.novel_reader_ai_translator_deepseek_reasoning_hint,
-                                ),
-                            )
-                        }
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items(reasoningOptions) { option ->
-                                OutlinedButton(
-                                    onClick = {
-                                        tempReasoning = option
-                                        onSetGeminiReasoningEffort(option)
-                                        logPair(reasoningLabel, reasoningDisplayLabel(option))
-                                    },
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = if (tempReasoning == option) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
+                                // 1. Automation Section
+                                AuroraGlassSection(
+                                    title = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_more_automation_title,
                                     ),
                                 ) {
-                                    Text(
-                                        reasoningDisplayLabel(option),
-                                        fontWeight = if (tempReasoning == option) {
-                                            FontWeight.SemiBold
-                                        } else {
-                                            FontWeight.Normal
+                                    AuroraToggleRow(
+                                        label = stringResource(
+                                            AYMR.strings.novel_reader_translation_auto_english_title,
+                                        ),
+                                        subtitle = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_more_auto_english_summary,
+                                        ),
+                                        checked = tempAutoTranslateEnglish,
+                                        onClick = {
+                                            tempAutoTranslateEnglish = !tempAutoTranslateEnglish
+                                            onSetGeminiAutoTranslateEnglishSource(tempAutoTranslateEnglish)
+                                            logState(autoEnglishLabel, tempAutoTranslateEnglish)
                                         },
                                     )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (page == 2) {
-                val apiTestStatus = when (tempProvider) {
-                    NovelTranslationProvider.OPENROUTER -> openRouterApiTestStatus
-                    NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestStatus
-                    NovelTranslationProvider.MISTRAL -> mistralApiTestStatus
-                    NovelTranslationProvider.NVIDIA -> nvidiaApiTestStatus
-                    NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudApiTestStatus
-                    NovelTranslationProvider.GEMINI,
-                    NovelTranslationProvider.GEMINI_PRIVATE,
-                    -> ProviderApiTestStatus.Idle
-                }
-                val apiTestMessage = when (tempProvider) {
-                    NovelTranslationProvider.OPENROUTER -> openRouterApiTestMessage
-                    NovelTranslationProvider.DEEPSEEK -> deepSeekApiTestMessage
-                    NovelTranslationProvider.MISTRAL -> mistralApiTestMessage
-                    NovelTranslationProvider.NVIDIA -> nvidiaApiTestMessage
-                    NovelTranslationProvider.OLLAMA_CLOUD -> ollamaCloudApiTestMessage
-                    NovelTranslationProvider.GEMINI,
-                    NovelTranslationProvider.GEMINI_PRIVATE,
-                    -> null
-                }
-                GeminiSettingsBlock(
-                    title = stringResource(AYMR.strings.novel_reader_ai_translator_system_title),
-                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_system_summary),
-                ) {
-                    AiTranslatorPanelCard(
-                        title = stringResource(AYMR.strings.novel_reader_ai_translator_more_automation_title),
-                        subtitle = stringResource(
-                            AYMR.strings.novel_reader_ai_translator_system_automation_summary,
-                        ),
-                    ) {
-                        AiTranslatorToggleRow(
-                            title = stringResource(AYMR.strings.novel_reader_translation_auto_english_title),
-                            subtitle = stringResource(
-                                AYMR.strings.novel_reader_ai_translator_more_auto_english_summary,
-                            ),
-                            checked = tempAutoTranslateEnglish,
-                            onCheckedChange = { enabled ->
-                                tempAutoTranslateEnglish = enabled
-                                onSetGeminiAutoTranslateEnglishSource(enabled)
-                                logState(autoEnglishLabel, enabled)
-                            },
-                        )
-                        AiTranslatorToggleRow(
-                            title = stringResource(AYMR.strings.novel_reader_translation_prefetch_next_title),
-                            subtitle = stringResource(
-                                AYMR.strings.novel_reader_ai_translator_more_prefetch_summary,
-                            ),
-                            checked = tempPrefetchNextChapterTranslation,
-                            onCheckedChange = { enabled ->
-                                tempPrefetchNextChapterTranslation = enabled
-                                onSetGeminiPrefetchNextChapterTranslation(enabled)
-                                logState(prefetchNextLabel, enabled)
-                            },
-                        )
-                        AiTranslatorToggleRow(
-                            title = stringResource(AYMR.strings.novel_reader_ai_translator_more_cache_title),
-                            subtitle = stringResource(
-                                AYMR.strings.novel_reader_ai_translator_more_cache_summary,
-                            ),
-                            checked = !tempDisableCache,
-                            onCheckedChange = { enabled ->
-                                tempDisableCache = !enabled
-                                onSetGeminiDisableCache(tempDisableCache)
-                                onAddLog(cacheStateLabel.format(visibilityStateLabel(!tempDisableCache)))
-                            },
-                        )
-                        if (isGeminiPrivateSelected) {
-                            AiTranslatorToggleRow(
-                                title = stringResource(AYMR.strings.novel_reader_gemini_private_python_like_mode),
-                                subtitle = stringResource(
-                                    AYMR.strings.novel_reader_ai_translator_more_private_python_summary,
-                                ),
-                                checked = tempPrivatePythonLikeMode,
-                                onCheckedChange = { enabled ->
-                                    tempPrivatePythonLikeMode = enabled
-                                    onSetGeminiPrivatePythonLikeMode(enabled)
-                                    logState(privatePythonLikeLabel, enabled)
-                                },
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                onClearAllCache()
-                                onAddLog(cacheClearedLabel)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text(stringResource(AYMR.strings.novel_reader_ai_translator_clear_all_cache))
-                        }
-                    }
-
-                    AiTranslatorPanelCard(
-                        title = stringResource(AYMR.strings.novel_reader_ai_translator_more_connection_title),
-                        subtitle = stringResource(
-                            AYMR.strings.novel_reader_ai_translator_system_connection_summary,
-                        ),
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    AYMR.strings.novel_reader_ai_translator_more_active_provider,
-                                ).format(getAiTranslatorProviderLabel(tempProvider)),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                        if (isOpenRouterSelected ||
-                            isDeepSeekSelected ||
-                            isMistralSelected ||
-                            isNvidiaSelected ||
-                            isOllamaCloudSelected
-                        ) {
-                            AiTranslatorSupportText(
-                                stringResource(AYMR.strings.novel_reader_ai_translator_more_base_url_summary),
-                            )
-                            OutlinedTextField(
-                                value = when {
-                                    isOpenRouterSelected -> tempOpenRouterBaseUrl
-                                    isDeepSeekSelected -> tempDeepSeekBaseUrl
-                                    isMistralSelected -> tempMistralBaseUrl
-                                    isNvidiaSelected -> tempNvidiaBaseUrl
-                                    else -> tempOllamaCloudBaseUrl
-                                },
-                                onValueChange = {
-                                    if (isOpenRouterSelected) {
-                                        tempOpenRouterBaseUrl = it
-                                        onSetOpenRouterBaseUrl(it)
-                                    } else if (isDeepSeekSelected) {
-                                        tempDeepSeekBaseUrl = it
-                                        onSetDeepSeekBaseUrl(it)
-                                    } else if (isMistralSelected) {
-                                        tempMistralBaseUrl = it
-                                        onSetMistralBaseUrl(it)
-                                    } else if (isNvidiaSelected) {
-                                        tempNvidiaBaseUrl = it
-                                        onSetNvidiaBaseUrl(it)
-                                    } else {
-                                        tempOllamaCloudBaseUrl = it
-                                        onSetOllamaCloudBaseUrl(it)
-                                    }
-                                },
-                                label = {
-                                    Text(
-                                        when {
-                                            isOpenRouterSelected -> stringResource(
-                                                AYMR.strings.novel_reader_openrouter_base_url,
+                                    AuroraToggleRow(
+                                        label = stringResource(
+                                            AYMR.strings.novel_reader_translation_prefetch_next_title,
+                                        ),
+                                        subtitle = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_more_prefetch_summary,
+                                        ),
+                                        checked = tempPrefetchNextChapterTranslation,
+                                        onClick = {
+                                            tempPrefetchNextChapterTranslation = !tempPrefetchNextChapterTranslation
+                                            onSetGeminiPrefetchNextChapterTranslation(
+                                                tempPrefetchNextChapterTranslation,
                                             )
-                                            isDeepSeekSelected -> stringResource(
-                                                AYMR.strings.novel_reader_deepseek_base_url,
-                                            )
-                                            isMistralSelected -> stringResource(
-                                                AYMR.strings.novel_reader_mistral_base_url,
-                                            )
-                                            isNvidiaSelected -> stringResource(
-                                                AYMR.strings.novel_reader_nvidia_base_url,
-                                            )
-                                            else -> stringResource(
-                                                AYMR.strings.novel_reader_ollama_cloud_base_url,
-                                            )
+                                            logState(prefetchNextLabel, tempPrefetchNextChapterTranslation)
                                         },
                                     )
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                            )
-                        }
-                        AiTranslatorSupportText(
-                            stringResource(AYMR.strings.novel_reader_ai_translator_more_api_key_summary),
-                        )
-                        val apiKeyUrl = getApiKeyUrl(tempProvider)
-                        if (apiKeyUrl != null) {
-                            val uriHandler = LocalUriHandler.current
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End,
-                            ) {
-                                TextButton(onClick = { uriHandler.openUri(apiKeyUrl) }) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp),
+                                    AuroraToggleRow(
+                                        label = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_more_cache_title,
+                                        ),
+                                        subtitle = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_more_cache_summary,
+                                        ),
+                                        checked = !tempDisableCache,
+                                        onClick = {
+                                            tempDisableCache = !tempDisableCache
+                                            onSetGeminiDisableCache(tempDisableCache)
+                                            onAddLog(cacheStateLabel.format(visibilityStateLabel(!tempDisableCache)))
+                                        },
                                     )
-                                    Spacer(Modifier.size(4.dp))
-                                    Text(stringResource(AYMR.strings.novel_reader_ai_translator_get_api_key))
-                                }
-                            }
-                        }
-                        OutlinedTextField(
-                            value = when {
-                                isOpenRouterSelected -> readerSettings.openRouterApiKey
-                                isDeepSeekSelected -> readerSettings.deepSeekApiKey
-                                isMistralSelected -> readerSettings.mistralApiKey
-                                isNvidiaSelected -> readerSettings.nvidiaApiKey
-                                isOllamaCloudSelected -> readerSettings.ollamaCloudApiKey
-                                else -> tempKey
-                            },
-                            onValueChange = {
-                                if (isOpenRouterSelected) {
-                                    onSetOpenRouterApiKey(it)
-                                } else if (isDeepSeekSelected) {
-                                    onSetDeepSeekApiKey(it)
-                                } else if (isMistralSelected) {
-                                    onSetMistralApiKey(it)
-                                } else if (isNvidiaSelected) {
-                                    onSetNvidiaApiKey(it)
-                                } else if (isOllamaCloudSelected) {
-                                    onSetOllamaCloudApiKey(it)
-                                } else {
-                                    tempKey = it
-                                    onSetGeminiApiKey(it)
-                                }
-                            },
-                            label = {
-                                Text(
-                                    when {
-                                        isOpenRouterSelected -> stringResource(
-                                            AYMR.strings.novel_reader_openrouter_api_key,
+                                    if (isGeminiPrivateSelected) {
+                                        AuroraToggleRow(
+                                            label = stringResource(
+                                                AYMR.strings.novel_reader_gemini_private_python_like_mode,
+                                            ),
+                                            subtitle = stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_more_private_python_summary,
+                                            ),
+                                            checked = tempPrivatePythonLikeMode,
+                                            onClick = {
+                                                tempPrivatePythonLikeMode = !tempPrivatePythonLikeMode
+                                                onSetGeminiPrivatePythonLikeMode(tempPrivatePythonLikeMode)
+                                                logState(privatePythonLikeLabel, tempPrivatePythonLikeMode)
+                                            },
                                         )
-                                        isDeepSeekSelected -> stringResource(AYMR.strings.novel_reader_deepseek_api_key)
-                                        isMistralSelected -> stringResource(AYMR.strings.novel_reader_mistral_api_key)
-                                        isNvidiaSelected -> stringResource(AYMR.strings.novel_reader_nvidia_api_key)
-                                        isOllamaCloudSelected -> stringResource(
-                                            AYMR.strings.novel_reader_ollama_cloud_api_key,
+                                    }
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                onClearAllCache()
+                                                onAddLog(cacheClearedLabel)
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Delete,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.error,
+                                            )
+                                            Spacer(Modifier.size(6.dp))
+                                            Text(
+                                                stringResource(AYMR.strings.novel_reader_ai_translator_clear_all_cache),
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // 2. API Connection Section
+                                AuroraGlassSection(
+                                    title = stringResource(
+                                        AYMR.strings.novel_reader_ai_translator_more_connection_title,
+                                    ),
+                                ) {
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = aurora.accent.copy(alpha = 0.10f),
+                                        border = BorderStroke(1.dp, aurora.accent.copy(alpha = 0.35f)),
+                                    ) {
+                                        Text(
+                                            text = stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_more_active_provider,
+                                            ).format(getAiTranslatorProviderLabel(tempProvider)),
+                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = aurora.accent,
                                         )
-                                        else -> stringResource(AYMR.strings.novel_reader_gemini_api_key)
-                                    },
-                                )
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                        )
-                        AiTranslatorToggleRow(
-                            title = stringResource(AYMR.strings.novel_reader_ai_translator_more_relaxed_title),
-                            subtitle = stringResource(
-                                AYMR.strings.novel_reader_ai_translator_more_relaxed_summary,
-                            ),
-                            checked = tempRelaxed,
-                            onCheckedChange = { enabled ->
-                                tempRelaxed = enabled
-                                onSetGeminiRelaxedMode(enabled)
-                                onAddLog(relaxedStateLabel.format(visibilityStateLabel(enabled)))
-                            },
-                        )
-                        if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                AiTranslatorApiTestButton(
-                                    status = apiTestStatus,
-                                    onClick = when {
-                                        isOpenRouterSelected -> onTestOpenRouterConnection
-                                        isDeepSeekSelected -> onTestDeepSeekConnection
-                                        else -> onTestMistralConnection
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                )
-                                OutlinedButton(
-                                    onClick = when {
-                                        isOpenRouterSelected -> onRefreshOpenRouterModels
-                                        isDeepSeekSelected -> onRefreshDeepSeekModels
-                                        else -> onRefreshMistralModels
-                                    },
-                                    enabled = when {
-                                        isOpenRouterSelected -> !isOpenRouterModelsLoading
-                                        isDeepSeekSelected -> !isDeepSeekModelsLoading
-                                        else -> !isMistralModelsLoading
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    val isLoading = when {
-                                        isOpenRouterSelected -> isOpenRouterModelsLoading
-                                        isDeepSeekSelected -> isDeepSeekModelsLoading
-                                        else -> isMistralModelsLoading
                                     }
-                                    Text(
-                                        if (isLoading) {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_loading_models,
-                                            )
-                                        } else {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_refresh_models,
-                                            )
-                                        },
-                                    )
-                                }
-                            }
-                            if (!apiTestMessage.isNullOrBlank() &&
-                                apiTestStatus == ProviderApiTestStatus.Error
-                            ) {
-                                AiTranslatorSupportText(apiTestMessage)
-                            }
-                        }
-                        if (isNvidiaSelected) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                AiTranslatorApiTestButton(
-                                    status = apiTestStatus,
-                                    onClick = onTestNvidiaConnection,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                OutlinedButton(
-                                    onClick = onRefreshNvidiaModels,
-                                    enabled = !isNvidiaModelsLoading,
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    Text(
-                                        if (isNvidiaModelsLoading) {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_loading_models,
-                                            )
-                                        } else {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_refresh_models,
-                                            )
-                                        },
-                                    )
-                                }
-                            }
-                            if (!apiTestMessage.isNullOrBlank() &&
-                                apiTestStatus == ProviderApiTestStatus.Error
-                            ) {
-                                AiTranslatorSupportText(apiTestMessage)
-                            }
-                        }
-                        if (isOllamaCloudSelected) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                AiTranslatorApiTestButton(
-                                    status = apiTestStatus,
-                                    onClick = onTestOllamaCloudConnection,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                OutlinedButton(
-                                    onClick = onRefreshOllamaCloudModels,
-                                    enabled = !isOllamaCloudModelsLoading,
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    Text(
-                                        if (isOllamaCloudModelsLoading) {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_loading_models,
-                                            )
-                                        } else {
-                                            stringResource(
-                                                AYMR.strings.novel_reader_ai_translator_refresh_models,
-                                            )
-                                        },
-                                    )
-                                }
-                            }
-                            if (!apiTestMessage.isNullOrBlank() &&
-                                apiTestStatus == ProviderApiTestStatus.Error
-                            ) {
-                                AiTranslatorSupportText(apiTestMessage)
-                            }
-                        }
-                    }
-                }
-            }
 
-            if (page == 1) {
-                GeminiSettingsBlock(
-                    title = stringResource(AYMR.strings.novel_reader_ai_translator_generation_title),
-                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_generation_summary),
-                ) {
-                    TextButton(onClick = { showGenerationConfig = !showGenerationConfig }) {
-                        Text(
-                            if (showGenerationConfig) {
-                                stringResource(AYMR.strings.novel_reader_ai_translator_generation_hide)
-                            } else {
-                                stringResource(AYMR.strings.novel_reader_ai_translator_generation_show)
-                            },
-                        )
-                    }
-                    if (showGenerationConfig) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(activeGenerationPresets) { preset ->
-                                val isSelected = preset.id == selectedGenerationPresetId
-                                AiTranslatorChoiceChip(
-                                    text = preset.title,
-                                    selected = isSelected,
-                                    onClick = {
-                                        selectedGenerationPresetId = preset.id
-                                        val name = preset.title
-                                        val t = preset.temperature
-                                        val p = preset.topP
-                                        tempTemperature = t.toString()
-                                        tempTopP = p.toString()
-                                        onSetGeminiTemperature(t)
-                                        onSetGeminiTopP(p)
-                                        val k = preset.topK
-                                        if (k != null) {
-                                            tempTopK = k.toString()
-                                            onSetGeminiTopK(k)
-                                            onAddLog(
-                                                "$generationLabel: $name (T:$t P:$p K:$k)",
-                                            )
-                                        } else {
-                                            onAddLog(
-                                                "$generationLabel: $name (T:$t P:$p)",
-                                            )
-                                        }
-                                    },
-                                )
-                            }
-                        }
-                        val selectedPreset = activeGenerationPresets.firstOrNull { it.id == selectedGenerationPresetId }
-                            ?: activeGenerationPresets.first()
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                            shape = RoundedCornerShape(12.dp),
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                Text(
-                                    text = selectedPreset.title,
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
-                                Text(
-                                    text = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_generation_scenario_prefix,
-                                    ).format(selectedPreset.scenario),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = stringResource(
-                                        AYMR.strings.novel_reader_ai_translator_generation_advantage_prefix,
-                                    ).format(selectedPreset.advantage),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        AiTranslatorMiniSection(
-                            title = stringResource(
-                                AYMR.strings.novel_reader_ai_translator_speed_batch_parallelism,
-                            ),
-                            subtitle = stringResource(
-                                AYMR.strings.novel_reader_ai_translator_generation_speed_summary,
-                            ),
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = tempTemperature,
-                                onValueChange = {
-                                    tempTemperature = it
-                                    it.toFloatOrNull()?.let { value ->
-                                        val normalized = if (isDeepSeekSelected) {
-                                            value.coerceIn(1.3f, 1.5f)
-                                        } else {
-                                            value
-                                        }
-                                        onSetGeminiTemperature(normalized)
-                                        logPair(temperatureLabel, normalized.toString())
+                                    if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected ||
+                                        isNvidiaSelected ||
+                                        isOllamaCloudSelected
+                                    ) {
+                                        AuroraOutlinedTextField(
+                                            value = when {
+                                                isOpenRouterSelected -> tempOpenRouterBaseUrl
+                                                isDeepSeekSelected -> tempDeepSeekBaseUrl
+                                                isMistralSelected -> tempMistralBaseUrl
+                                                isNvidiaSelected -> tempNvidiaBaseUrl
+                                                else -> tempOllamaCloudBaseUrl
+                                            },
+                                            onValueChange = {
+                                                if (isOpenRouterSelected) {
+                                                    tempOpenRouterBaseUrl = it
+                                                    onSetOpenRouterBaseUrl(it)
+                                                } else if (isDeepSeekSelected) {
+                                                    tempDeepSeekBaseUrl = it
+                                                    onSetDeepSeekBaseUrl(it)
+                                                } else if (isMistralSelected) {
+                                                    tempMistralBaseUrl = it
+                                                    onSetMistralBaseUrl(it)
+                                                } else if (isNvidiaSelected) {
+                                                    tempNvidiaBaseUrl = it
+                                                    onSetNvidiaBaseUrl(it)
+                                                } else {
+                                                    tempOllamaCloudBaseUrl = it
+                                                    onSetOllamaCloudBaseUrl(it)
+                                                }
+                                            },
+                                            label = {
+                                                Text(
+                                                    when {
+                                                        isOpenRouterSelected -> stringResource(
+                                                            AYMR.strings.novel_reader_openrouter_base_url,
+                                                        )
+                                                        isDeepSeekSelected -> stringResource(
+                                                            AYMR.strings.novel_reader_deepseek_base_url,
+                                                        )
+                                                        isMistralSelected -> stringResource(
+                                                            AYMR.strings.novel_reader_mistral_base_url,
+                                                        )
+                                                        isNvidiaSelected -> stringResource(
+                                                            AYMR.strings.novel_reader_nvidia_base_url,
+                                                        )
+                                                        else -> stringResource(
+                                                            AYMR.strings.novel_reader_ollama_cloud_base_url,
+                                                        )
+                                                    },
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                                            singleLine = true,
+                                        )
                                     }
-                                },
-                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_temperature)) },
-                                modifier = Modifier.weight(1f),
-                            )
-                            OutlinedTextField(
-                                value = tempTopP,
-                                onValueChange = {
-                                    tempTopP = it
-                                    it.toFloatOrNull()?.let { value ->
-                                        val normalized = if (isDeepSeekSelected) {
-                                            value.coerceIn(0.9f, 0.95f)
-                                        } else {
-                                            value
-                                        }
-                                        onSetGeminiTopP(normalized)
-                                        logPair(topPLabel, normalized.toString())
-                                    }
-                                },
-                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_top_p)) },
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (!isDeepSeekSelected) {
-                                OutlinedTextField(
-                                    value = tempTopK,
-                                    onValueChange = {
-                                        tempTopK = it
-                                        it.toIntOrNull()?.let { value ->
-                                            onSetGeminiTopK(value)
-                                            logPair(topKLabel, value.toString())
-                                        }
-                                    },
-                                    label = { Text(stringResource(AYMR.strings.novel_reader_gemini_top_k)) },
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = tempBatch,
-                                onValueChange = {
-                                    tempBatch = it
-                                    applyBatchAndConcurrency()
-                                },
-                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_batch_size)) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                            )
-                            OutlinedTextField(
-                                value = tempConcurrency,
-                                onValueChange = {
-                                    tempConcurrency = it
-                                    applyBatchAndConcurrency()
-                                },
-                                label = { Text(stringResource(AYMR.strings.novel_reader_gemini_concurrency)) },
-                                modifier = Modifier.weight(1f),
-                                singleLine = true,
-                            )
-                        }
-                        if (isDeepSeekSelected) {
-                            Text(
-                                text = stringResource(AYMR.strings.novel_reader_ai_translator_deepseek_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Text(
-                            text = stringResource(
-                                AYMR.strings.novel_reader_ai_translator_max_batch_size_hint,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
 
-            if (page == 2) {
-                GeminiSettingsBlock(
-                    title = stringResource(AYMR.strings.novel_reader_ai_translator_logs_title),
-                    subtitle = stringResource(AYMR.strings.novel_reader_ai_translator_logs_summary),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(AYMR.strings.novel_reader_ai_translator_logs_count).format(logs.size),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { showLogs = !showLogs }) {
-                                Text(
-                                    if (showLogs) {
-                                        stringResource(AYMR.strings.novel_reader_ai_translator_toggle_hide)
-                                    } else {
-                                        stringResource(AYMR.strings.novel_reader_ai_translator_toggle_show)
-                                    },
-                                )
-                            }
-                            TextButton(onClick = onClearLogs) {
-                                Text(stringResource(AYMR.strings.novel_reader_gemini_action_clear))
-                            }
-                        }
-                    }
-                    if (showLogs) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
-                                .padding(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            if (logs.isEmpty()) {
-                                Text(
-                                    stringResource(AYMR.strings.novel_reader_ai_translator_logs_empty),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            } else {
-                                logs.forEach { log ->
-                                    Text(log, style = MaterialTheme.typography.bodySmall)
+                                    val apiKeyUrl = getApiKeyUrl(tempProvider)
+                                    if (apiKeyUrl != null) {
+                                        val uriHandler = LocalUriHandler.current
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp),
+                                            horizontalArrangement = Arrangement.End,
+                                        ) {
+                                            TextButton(onClick = { uriHandler.openUri(apiKeyUrl) }) {
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = aurora.accent,
+                                                )
+                                                Spacer(Modifier.size(4.dp))
+                                                Text(
+                                                    stringResource(AYMR.strings.novel_reader_ai_translator_get_api_key),
+                                                    color = aurora.accent,
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    AuroraOutlinedTextField(
+                                        value = when {
+                                            isOpenRouterSelected -> readerSettings.openRouterApiKey
+                                            isDeepSeekSelected -> readerSettings.deepSeekApiKey
+                                            isMistralSelected -> readerSettings.mistralApiKey
+                                            isNvidiaSelected -> readerSettings.nvidiaApiKey
+                                            isOllamaCloudSelected -> readerSettings.ollamaCloudApiKey
+                                            else -> tempKey
+                                        },
+                                        onValueChange = {
+                                            if (isOpenRouterSelected) {
+                                                onSetOpenRouterApiKey(it)
+                                            } else if (isDeepSeekSelected) {
+                                                onSetDeepSeekApiKey(it)
+                                            } else if (isMistralSelected) {
+                                                onSetMistralApiKey(it)
+                                            } else if (isNvidiaSelected) {
+                                                onSetNvidiaApiKey(it)
+                                            } else if (isOllamaCloudSelected) {
+                                                onSetOllamaCloudApiKey(it)
+                                            } else {
+                                                tempKey = it
+                                                onSetGeminiApiKey(it)
+                                            }
+                                        },
+                                        label = {
+                                            Text(
+                                                when {
+                                                    isOpenRouterSelected -> stringResource(
+                                                        AYMR.strings.novel_reader_openrouter_api_key,
+                                                    )
+                                                    isDeepSeekSelected -> stringResource(
+                                                        AYMR.strings.novel_reader_deepseek_api_key,
+                                                    )
+                                                    isMistralSelected -> stringResource(
+                                                        AYMR.strings.novel_reader_mistral_api_key,
+                                                    )
+                                                    isNvidiaSelected -> stringResource(
+                                                        AYMR.strings.novel_reader_nvidia_api_key,
+                                                    )
+                                                    isOllamaCloudSelected -> stringResource(
+                                                        AYMR.strings.novel_reader_ollama_cloud_api_key,
+                                                    )
+                                                    else -> stringResource(AYMR.strings.novel_reader_gemini_api_key)
+                                                },
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                        singleLine = true,
+                                        visualTransformation = if (apiKeyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                        trailingIcon = {
+                                            IconButton(onClick = { apiKeyVisible = !apiKeyVisible }) {
+                                                Icon(
+                                                    imageVector = if (apiKeyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                                    contentDescription = if (apiKeyVisible) "Hide API key" else "Show API key",
+                                                    tint = if (apiKeyVisible) aurora.accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(20.dp),
+                                                )
+                                            }
+                                        },
+                                    )
+
+                                    AuroraToggleRow(
+                                        label = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_more_relaxed_title,
+                                        ),
+                                        subtitle = stringResource(
+                                            AYMR.strings.novel_reader_ai_translator_more_relaxed_summary,
+                                        ),
+                                        checked = tempRelaxed,
+                                        onClick = {
+                                            tempRelaxed = !tempRelaxed
+                                            onSetGeminiRelaxedMode(tempRelaxed)
+                                            onAddLog(relaxedStateLabel.format(visibilityStateLabel(tempRelaxed)))
+                                        },
+                                    )
+
+                                    if (isOpenRouterSelected || isDeepSeekSelected || isMistralSelected ||
+                                        isNvidiaSelected ||
+                                        isOllamaCloudSelected
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            AiTranslatorApiTestButton(
+                                                status = apiTestStatus,
+                                                onClick = when {
+                                                    isOpenRouterSelected -> onTestOpenRouterConnection
+                                                    isDeepSeekSelected -> onTestDeepSeekConnection
+                                                    isMistralSelected -> onTestMistralConnection
+                                                    isNvidiaSelected -> onTestNvidiaConnection
+                                                    else -> onTestOllamaCloudConnection
+                                                },
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                        }
+                                        if (!apiTestMessage.isNullOrBlank() &&
+                                            apiTestStatus == ProviderApiTestStatus.Error
+                                        ) {
+                                            Text(
+                                                text = apiTestMessage,
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // 3. Debug Terminal Logs
+                                val clipboard = LocalClipboard.current
+                                AuroraGlassSection(
+                                    title = stringResource(AYMR.strings.novel_reader_ai_translator_logs_title),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = stringResource(
+                                                AYMR.strings.novel_reader_ai_translator_logs_count,
+                                            ).format(logs.size),
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            TextButton(
+                                                onClick = {
+                                                    val text = logs.joinToString("\n")
+                                                    scope.launch {
+                                                        clipboard.setClipEntry(
+                                                            ClipEntry(ClipData.newPlainText(null, text)),
+                                                        )
+                                                    }
+                                                },
+                                            ) {
+                                                Icon(Icons.Filled.ContentCopy, null, modifier = Modifier.size(16.dp))
+                                                Spacer(Modifier.size(4.dp))
+                                                Text("Копировать")
+                                            }
+                                            TextButton(onClick = onClearLogs) {
+                                                Icon(Icons.Filled.Delete, null, modifier = Modifier.size(16.dp))
+                                                Spacer(Modifier.size(4.dp))
+                                                Text(stringResource(AYMR.strings.novel_reader_gemini_action_clear))
+                                            }
+                                        }
+                                    }
+
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (aurora.isDark) Color(0xFF07090F) else Color(0xFF1E232E))
+                                            .padding(10.dp)
+                                            .heightIn(max = 140.dp)
+                                            .verticalScroll(rememberScrollState()),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        if (logs.isEmpty()) {
+                                            Text(
+                                                text = stringResource(
+                                                    AYMR.strings.novel_reader_ai_translator_logs_empty,
+                                                ),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color(0xFF9CA3AF),
+                                                fontFamily = FontFamily.Monospace,
+                                            )
+                                        } else {
+                                            logs.forEach { log ->
+                                                Text(
+                                                    text = log,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color(0xFFA7F3D0),
+                                                    fontFamily = FontFamily.Monospace,
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                Spacer(Modifier.height(4.dp))
             }
         }
     }
@@ -2163,13 +2472,14 @@ internal fun GeminiTranslationDialog(
             title = { Text(stringResource(AYMR.strings.novel_reader_ai_translator_custom_modifier_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
+                    AuroraOutlinedTextField(
                         value = tempCustomModifier,
                         onValueChange = { tempCustomModifier = it },
                         label = {
                             Text(stringResource(AYMR.strings.novel_reader_ai_translator_custom_instructions))
                         },
                         minLines = 4,
+                        singleLine = false,
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
@@ -2205,91 +2515,139 @@ internal fun GeminiTranslationDialog(
 }
 
 @Composable
-private fun AiTranslatorChoiceChip(
-    text: String,
-    selected: Boolean,
-    onClick: () -> Unit,
+private fun AuroraOutlinedTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: @Composable (() -> Unit)? = null,
+    singleLine: Boolean = true,
+    minLines: Int = 1,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    trailingIcon: @Composable (() -> Unit)? = null,
 ) {
-    Surface(
-        modifier = Modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(
-            width = if (selected) 1.5.dp else 1.dp,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
+    val aurora = AuroraTheme.colors
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = label,
+        modifier = modifier,
+        singleLine = singleLine,
+        minLines = minLines,
+        visualTransformation = visualTransformation,
+        trailingIcon = trailingIcon,
+        shape = RoundedCornerShape(16.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = aurora.accent,
+            unfocusedBorderColor = auroraRimColor(),
+            focusedLabelColor = aurora.accent,
+            unfocusedLabelColor = if (aurora.isDark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
+            cursorColor = aurora.accent,
+            focusedContainerColor = if (aurora.isDark) {
+                Color.White.copy(
+                    alpha = 0.04f,
+                )
             } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
+                Color.Black.copy(alpha = 0.02f)
+            },
+            unfocusedContainerColor = if (aurora.isDark) {
+                Color.White.copy(
+                    alpha = 0.02f,
+                )
+            } else {
+                Color.Black.copy(alpha = 0.01f)
             },
         ),
-        color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.58f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-        },
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelLarge,
-            textAlign = TextAlign.Center,
-            color = if (selected) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        )
-    }
-}
-
-@Composable
-private fun AiTranslatorSupportText(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
 
 @Composable
-private fun AiTranslatorMiniSection(
-    title: String,
-    subtitle: String,
+private fun AiTranslatorChoiceChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    val aurora = AuroraTheme.colors
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) {
+                aurora.accent.copy(alpha = 0.55f)
+            } else {
+                auroraRimColor()
+            },
+        ),
+        color = if (selected) {
+            aurora.accent.copy(alpha = 0.16f)
+        } else {
+            if (aurora.isDark) Color.White.copy(alpha = 0.04f) else Color.Black.copy(alpha = 0.03f)
+        },
+    ) {
         Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
+            text = text,
+            modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+            color = if (selected) {
+                aurora.accent
+            } else {
+                if (aurora.isDark) Color(0xFFD1D5DB) else Color(0xFF374151)
+            },
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
         )
-        AiTranslatorSupportText(subtitle)
     }
 }
 
 @Composable
-private fun AiTranslatorPanelCard(
-    title: String,
-    subtitle: String,
+private fun AiTranslatorFilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
 ) {
+    val aurora = AuroraTheme.colors
     Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(999.dp),
         border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+            width = 1.dp,
+            color = if (selected) {
+                aurora.accent.copy(alpha = 0.50f)
+            } else {
+                auroraRimColor()
+            },
         ),
+        color = if (selected) {
+            if (aurora.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
+        } else {
+            if (aurora.isDark) Color.White.copy(alpha = 0.03f) else Color.Black.copy(alpha = 0.02f)
+        },
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            AiTranslatorMiniSection(
-                title = title,
-                subtitle = subtitle,
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = aurora.accent,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (selected) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    if (aurora.isDark) Color(0xFFD1D5DB) else Color(0xFF374151)
+                },
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             )
-            content()
         }
     }
 }
@@ -2302,60 +2660,62 @@ private fun AiTranslatorProviderCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val aurora = AuroraTheme.colors
     Surface(
         modifier = modifier.clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         color = if (selected) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+            aurora.accent.copy(alpha = 0.10f)
         } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
+            if (aurora.isDark) Color.White.copy(alpha = 0.035f) else Color.Black.copy(alpha = 0.025f)
         },
         border = BorderStroke(
-            width = if (selected) 1.5.dp else 1.dp,
+            width = 1.dp,
             color = if (selected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                aurora.accent.copy(alpha = 0.45f)
             } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                auroraRimColor()
             },
         ),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleSmall,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
-                    imageVector = if (apiConfigured) {
+                    imageVector = if (selected) {
+                        Icons.Filled.CheckCircle
+                    } else if (apiConfigured) {
                         Icons.Filled.CheckCircle
                     } else {
                         Icons.Outlined.RadioButtonUnchecked
                     },
                     contentDescription = null,
-                    tint = if (apiConfigured) {
-                        MaterialTheme.colorScheme.primary
+                    tint = if (selected) {
+                        aurora.accent
+                    } else if (apiConfigured) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
                     },
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                 )
             }
-            AiTranslatorSupportText(
+            Text(
                 text = stringResource(
                     if (apiConfigured) {
                         AYMR.strings.novel_reader_ai_translator_provider_api_ready
@@ -2363,37 +2723,10 @@ private fun AiTranslatorProviderCard(
                         AYMR.strings.novel_reader_ai_translator_provider_api_missing
                     },
                 ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-}
-
-@Composable
-private fun AiTranslatorToggleRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            AiTranslatorSupportText(subtitle)
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-        )
     }
 }
 
@@ -2409,27 +2742,20 @@ private fun AiTranslatorApiTestButton(
         ProviderApiTestStatus.Success -> AYMR.strings.novel_reader_ai_translator_api_test_success
         ProviderApiTestStatus.Error -> AYMR.strings.novel_reader_ai_translator_api_test_error
     }
-    val (containerColor, contentColor) = when (status) {
-        ProviderApiTestStatus.Idle ->
-            MaterialTheme.colorScheme.primaryContainer to
-                MaterialTheme.colorScheme.onPrimaryContainer
-        ProviderApiTestStatus.Loading ->
-            MaterialTheme.colorScheme.secondaryContainer to
-                MaterialTheme.colorScheme.onSecondaryContainer
-        ProviderApiTestStatus.Success ->
-            MaterialTheme.colorScheme.primaryContainer to
-                MaterialTheme.colorScheme.onPrimaryContainer
-        ProviderApiTestStatus.Error ->
-            MaterialTheme.colorScheme.errorContainer to
-                MaterialTheme.colorScheme.onErrorContainer
-    }
+    val aurora = AuroraTheme.colors
     Button(
         onClick = onClick,
         enabled = status != ProviderApiTestStatus.Loading,
         modifier = modifier,
         colors = ButtonDefaults.buttonColors(
-            containerColor = containerColor,
-            contentColor = contentColor,
+            containerColor = when (status) {
+                ProviderApiTestStatus.Error -> MaterialTheme.colorScheme.errorContainer
+                else -> aurora.accent
+            },
+            contentColor = when (status) {
+                ProviderApiTestStatus.Error -> MaterialTheme.colorScheme.onErrorContainer
+                else -> if (aurora.isDark) Color.Black else Color.White
+            },
         ),
     ) {
         when (status) {
@@ -2437,7 +2763,7 @@ private fun AiTranslatorApiTestButton(
                 CircularProgressIndicator(
                     modifier = Modifier.size(16.dp),
                     strokeWidth = 2.dp,
-                    color = contentColor,
+                    color = MaterialTheme.colorScheme.onPrimary,
                 )
                 Spacer(modifier = Modifier.size(8.dp))
             }
@@ -2466,7 +2792,7 @@ private fun AiTranslatorApiTestButton(
                 Spacer(modifier = Modifier.size(8.dp))
             }
         }
-        Text(stringResource(labelRes))
+        Text(stringResource(labelRes), fontWeight = FontWeight.Bold)
     }
 }
 
@@ -2511,4 +2837,21 @@ private fun getAiTranslatorProviderLabel(provider: NovelTranslationProvider): St
         NovelTranslationProvider.OLLAMA_CLOUD ->
             stringResource(AYMR.strings.novel_reader_translation_provider_ollama_cloud)
     }
+}
+
+private fun applyNovelSheetWindowFx(
+    window: Window,
+    reveal: Float,
+) {
+    val glass = ((reveal - 0.18f) / 0.82f).coerceIn(0f, 1f)
+    val radius = if (glass <= 0.02f) {
+        0
+    } else {
+        (44f * glass).roundToInt().coerceIn(1, 48)
+    }
+    val attrs = window.attributes
+    if (attrs.blurBehindRadius != radius) {
+        window.attributes = attrs.apply { blurBehindRadius = radius }
+    }
+    window.setDimAmount(0.18f * glass)
 }

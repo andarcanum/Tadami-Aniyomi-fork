@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.extension.novel.api
 
+import eu.kanade.tachiyomi.extension.novel.NovelIndexFormatDecoder
 import eu.kanade.tachiyomi.network.GET
 import eu.kanade.tachiyomi.network.awaitSuccess
 import kotlinx.coroutines.CancellationException
@@ -13,14 +14,18 @@ class NetworkNovelPluginIndexFetcher(
     override suspend fun fetch(repoUrl: String): String {
         return withContext(Dispatchers.IO) {
             val baseUrl = repoUrl.trimEnd('/')
-            val candidates = if (baseUrl.endsWith(".json", ignoreCase = true)) {
+            val candidates = if (
+                baseUrl.endsWith(".json", ignoreCase = true) ||
+                baseUrl.endsWith(".pb", ignoreCase = true)
+            ) {
                 listOf(baseUrl)
             } else {
                 listOf(
                     "$baseUrl/plugins.min.json",
                     "$baseUrl/plugins.json",
-                    "$baseUrl/index.min.json",
                     "$baseUrl/index.json",
+                    "$baseUrl/index.pb",
+                    "$baseUrl/index.min.json",
                 )
             }
 
@@ -29,7 +34,10 @@ class NetworkNovelPluginIndexFetcher(
             for (candidate in candidates) {
                 try {
                     client.newCall(GET(candidate)).awaitSuccess().use { response ->
-                        return@withContext response.body.string()
+                        val pluginJson = NovelIndexFormatDecoder.decodeToPluginJson(response.body.bytes())
+                        if (pluginJson != null) {
+                            return@withContext pluginJson
+                        }
                     }
                 } catch (error: CancellationException) {
                     throw error

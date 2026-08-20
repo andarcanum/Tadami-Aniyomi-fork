@@ -408,6 +408,10 @@
     <string name="novel_reader_page_mode_summary">Отображать содержимое постранично вместо непрерывной прокрутки</string>
     <string name="novel_reader_show_page_chapter_title">Показывать название главы</string>
     <string name="novel_reader_show_page_chapter_title_summary">Показывать название главы в постраничном режиме</string>
+    <string name="novel_reader_two_page_landscape">Две страницы (альбомная)</string>
+    <string name="novel_reader_two_page_landscape_summary">Показывать две страницы рядом в постраничном режиме, когда устройство в альбомной ориентации и достаточно широкое</string>
+    <string name="novel_reader_spread_cutout_guard">Отступ под вырез камеры</string>
+    <string name="novel_reader_spread_cutout_guard_summary">Резервировать место под вырез камеры у краёв экрана в режиме двух страниц. Выключите, если выреза нет или хотите использовать всю ширину</string>
     <string name="novel_reader_page_transition_style">Стиль перелистывания</string>
     <string name="novel_reader_page_transition_style_instant">Мгновенно</string>
     <string name="novel_reader_page_transition_style_slide">Сдвиг</string>
@@ -1710,11 +1714,13 @@
     <string name="aurora_continue">ЗАПУСК</string>
     <string name="aurora_episodes_header">Эпизоды</string>
     <string name="aurora_episode_count">%d эп.</string>
+    <string name="aurora_hero_cta_episode">%d эп.</string>
     <string name="aurora_episode_badge_filler">Филлер</string>
     <string name="aurora_episode_badge_seen">Просм.</string>
     <string name="aurora_chapters_header">Главы</string>
     <string name="aurora_chapters">ГЛАВЫ</string>
     <string name="aurora_chapter_count">%d гл.</string>
+    <string name="aurora_hero_cta_chapter">%d гл.</string>
     <string name="aurora_episode_progress_format">%1$d/%2$d Эпизодов</string>
     <string name="aurora_chapter_progress_format">%1$d/%2$d Глав</string>
     <string name="aurora_chapter_progress">Глава %d</string>
@@ -2305,9 +2311,14 @@
     <string name="novel_reader_oled_edge_gradient">OLED-градиент по краям</string>
     <string name="novel_reader_oled_edge_gradient_summary">Использовать мягкое затемнение краев в темной теме для более комфортной прокрутки на OLED</string>
     <string name="novel_reader_bionic_reading">Бионическое чтение</string>
-    <string name="novel_reader_tab_general">Основные</string>
-    <string name="novel_reader_tab_reading">Чтение</string>
+    <string name="novel_reader_tab_general">Общие</string>
+    <string name="novel_reader_tab_reading">Стиль</string>
     <string name="novel_reader_tab_behavior">Поведение</string>
+    <string name="novel_reader_tab_tools">Инструменты</string>
+    <string name="novel_reader_section_express_switches">Быстрые переключатели</string>
+    <string name="novel_reader_auto_scroll_summary">Плавный скролл текста без касаний</string>
+    <string name="novel_reader_engine_settings">Движок рендера и скрипты</string>
+    <string name="novel_reader_section_text_rules">Правила автозамены текста</string>
     <string name="novel_reader_live_preview_badge">Превью</string>
     <string name="novel_reader_live_preview_sample">— Нет, это невозможно, — прошептала она, глядя в окно, где дождь стучал по стеклу. В комнате пахло старыми книгами и полынью.</string>
     <string name="novel_reader_text_align_source_short">Источник</string>
@@ -2384,6 +2395,7 @@
     <!-- Feed -->
     <string name="feed">Лента</string>
     <string name="feed_add">Добавить источник в ленту</string>
+    <string name="feed_manage">Управление лентой</string>
     <string name="feed_empty">Источники ленты не настроены. Нажмите +, чтобы добавить источник с поддержкой Latest.</string>
     <string name="feed_delete_source_title">Удалить источник из ленты?</string>
     <string name="feed_delete_source_message">Источник будет удалён из ленты.</string>
@@ -2931,4 +2943,28 @@
     <string name="novel_reader_book_mode_section_retry">Повторить</string>
     <string name="novel_reader_seamless_chapter_transition">Бесшовный переход между главами (эксперимент)</string>
     <string name="novel_reader_seamless_chapter_transition_summary">Менять главу внутри читалки: без экрана перезагрузки для длинных страниц и без промежуточной страницы главы в постраничном режиме</string>
+
+    <string name="pref_title_screen_style">Стиль экрана тайтла</string>
+    <string name="pref_title_screen_style_poster_immersive">Полноэкранный постер (По умолчанию)</string>
+    <string name="pref_title_screen_style_glass_stack">Стек матового стекла (Aurora)</string>
+    <string name="pref_title_screen_animation">Анимация открытия тайтла</string>
+    <string name="pref_title_screen_animation_summary">Приближение при открытии экрана тайтла с каскадом контента. Отключите для стандартного перехода.</string>
+
+    <!-- Home Search Bar & Source Picker -->
+    <string name="home_search_placeholder_global">Глобальный поиск…</string>
+    <string name="home_search_placeholder_default">Поиск %1$s…</string>
+    <string name="home_search_placeholder_search">Поиск…</string>
+    <string name="home_search_section_manga">манги</string>
+    <string name="home_search_section_anime">аниме</string>
+    <string name="home_search_section_novel">ранобэ</string>
+    <string name="home_select_source">Выбрать источник</string>
+    <string name="home_all_sources">Все источники</string>
+    <string name="home_all_sources_summary">Глобальный поиск</string>
+    <string name="home_source_picker_title">Выбор источника</string>
+    <string name="home_source_picker_subtitle">Тап по источнику — выбрать • Кнопка «Каталог» — открыть источник</string>
+    <string name="home_source_picker_search">Найти источник…</string>
+    <string name="home_source_picker_no_results">Ничего не найдено</string>
+    <string name="home_open_catalog">Открыть каталог</string>
+    <string name="home_catalog_button">Каталог</string>
+    <string name="home_search_cancel">Отмена</string>
 </resources>

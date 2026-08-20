@@ -1,12 +1,17 @@
 package eu.kanade.presentation.entries.novel.components.aurora
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PersonOutline
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,15 +28,19 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeState
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroGenreChips
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroScaffold
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroStatsRow
 import eu.kanade.presentation.entries.components.aurora.AuroraNotePreviewCard
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
+import eu.kanade.presentation.entries.components.aurora.AuroraTitleStaggerIndex
+import eu.kanade.presentation.entries.components.aurora.AuroraTitleStaggerState
 import eu.kanade.presentation.entries.components.aurora.CopyTitleIcon
 import eu.kanade.presentation.entries.components.aurora.copyTitleInlineContent
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroSecondaryMetaColor
 import eu.kanade.presentation.entries.components.aurora.resolveAuroraHeroTitleColor
+import eu.kanade.presentation.entries.components.aurora.titleScreenStagger
 import eu.kanade.presentation.entries.translation.AuroraEntryTranslationState
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.LocalCoverTitleFontFamily
@@ -59,12 +68,15 @@ fun NovelHeroContent(
     onSearchSelected: (() -> Unit)? = null,
     onClearSelected: (() -> Unit)? = null,
     onCopyTitle: (() -> Unit)? = null,
+    titleStaggerState: AuroraTitleStaggerState? = null,
+    hazeState: HazeState? = null,
+    bottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
-    val heroPanelShape = RoundedCornerShape(24.dp)
+    val heroPanelShape = RoundedCornerShape(28.dp)
     val titleColor = resolveAuroraHeroTitleColor(colors)
     val secondaryMetaColor = resolveAuroraHeroSecondaryMetaColor(colors)
     val titleText = translation?.title ?: novel.displayTitle
@@ -79,10 +91,14 @@ fun NovelHeroContent(
     AuroraHeroScaffold(
         modifier = modifier,
         shape = heroPanelShape,
+        hazeState = hazeState,
+        bottomPadding = bottomPadding,
     ) {
         AuroraHeroGenreChips(
             genres = novel.displayGenre,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_GENRES),
             selectedGenres = selectedGenres,
             onGenreClick = onGenreClick,
             onGenreLongClick = onGenreLongClick,
@@ -91,7 +107,9 @@ fun NovelHeroContent(
         )
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_TITLE),
             verticalAlignment = Alignment.Bottom,
         ) {
             Text(
@@ -131,8 +149,36 @@ fun NovelHeroContent(
             }
         }
 
+        // Author (moved from the stats card onto the poster)
+        novel.displayAuthor?.takeIf { it.isNotBlank() }?.let { authorText ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_AUTHOR),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.PersonOutline,
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.size(15.dp),
+                )
+                Text(
+                    text = authorText,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.accent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
         AuroraHeroStatsRow(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_STATS),
             ratingValue = rating?.let { String.format(Locale.ROOT, "%.1f", it) }
                 ?: stringResource(MR.strings.not_applicable),
             secondValue = novelStatusText(novel.displayStatus),
@@ -143,11 +189,15 @@ fun NovelHeroContent(
             ),
         )
 
-        AuroraNotePreviewCard(
-            note = note,
-            onClick = onEditNotesClicked,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (note.isNotBlank()) {
+            AuroraNotePreviewCard(
+                note = note,
+                onClick = onEditNotesClicked,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_NOTE),
+            )
+        }
 
         if (onContinueReading != null) {
             Spacer(modifier = Modifier.height(4.dp))
@@ -159,7 +209,8 @@ fun NovelHeroContent(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp),
+                    .height(54.dp)
+                    .titleScreenStagger(titleStaggerState, AuroraTitleStaggerIndex.HERO_ACTION_BUTTON),
                 cornerRadius = 16.dp,
                 iconSize = 28.dp,
                 contentPadding = PaddingValues(horizontal = 24.dp),

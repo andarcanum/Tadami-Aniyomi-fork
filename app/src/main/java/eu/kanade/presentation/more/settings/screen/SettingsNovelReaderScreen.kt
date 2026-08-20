@@ -1046,9 +1046,8 @@ object SettingsNovelReaderScreen : SearchableSettings {
                 bionicReadingEnabled = bionicReading,
             )
         }
-        val chapterSwipeControlsEnabled = remember(swipeGestures, pageReader) {
+        val chapterSwipeControlsEnabled = remember(pageReader) {
             areChapterSwipeControlsEnabled(
-                swipeGesturesEnabled = swipeGestures,
                 pageReaderEnabled = pageReader,
             )
         }

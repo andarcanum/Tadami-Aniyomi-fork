@@ -23,7 +23,7 @@ class NovelExtensionListingInteractor(
         val installed = repository.getAll().map { it.toRepoEntry() }
         val available = getExtensionRepo.getAll()
             .flatMap { repo ->
-                repoService.fetchFirstAvailable(repo.baseUrl)
+                repoService.fetchFirstAvailable(repo.indexUrl?.takeIf { it.isNotBlank() } ?: repo.baseUrl)
             }
             .groupBy { it.id }
             .mapNotNull { (_, entries) -> entries.maxByOrNull { it.version } }

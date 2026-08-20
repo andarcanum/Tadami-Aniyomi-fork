@@ -679,6 +679,7 @@ internal data class HomeHubUiState(
     val isLoading: Boolean,
     val showWelcome: Boolean,
     val showFilteredEmpty: Boolean = false,
+    val availableSources: List<HomeSourceItem> = emptyList(),
 )
 
 internal data class HomeHubHero(

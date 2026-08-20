@@ -70,51 +70,6 @@ fun MangaInfoCard(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = stringResource(AYMR.strings.aurora_description_header),
-                    color = colors.textSecondary.copy(alpha = 0.6f),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-
-                var hasDescriptionOverflow by remember { mutableStateOf(false) }
-                val displayDescription = translation?.description ?: manga.displayDescription
-                val descriptionBlocks = remember(displayDescription) {
-                    displayDescription?.let { DescriptionEngine.beautify(it) } ?: emptyList()
-                }
-                if (descriptionBlocks.isEmpty()) {
-                    Text(
-                        text = stringResource(AYMR.strings.aurora_no_description),
-                        color = colors.textPrimary.copy(alpha = 0.9f),
-                        fontSize = 14.sp,
-                        lineHeight = 22.sp,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
-                    ExpandableDescriptionBlocks(
-                        blocks = descriptionBlocks,
-                        expanded = descriptionExpanded,
-                        onToggle = { onToggleDescription() },
-                        style = auroraDescriptionBlockStyle(colors),
-                        collapsedLines = 5,
-                        onOverflowChanged = { hasDescriptionOverflow = it },
-                        modifier = Modifier.then(
-                            if (hasDescriptionOverflow) {
-                                Modifier.auroraSpringClick { onToggleDescription() }
-                            } else {
-                                Modifier
-                            },
-                        ),
-                    )
-                }
-            }
-
             if (!manga.displayGenre.isNullOrEmpty()) {
                 Column(
                     verticalArrangement = Arrangement.Top,
@@ -134,7 +89,7 @@ fun MangaInfoCard(
                                 manga.displayGenre!!
                             } else {
                                 manga.displayGenre!!.take(
-                                    3,
+                                    8,
                                 )
                             }
                             genresToShow.forEach { genre ->
@@ -206,7 +161,7 @@ fun MangaInfoCard(
                             }
                         }
 
-                        if (manga.displayGenre!!.size > 3) {
+                        if (manga.displayGenre!!.size > 8) {
                             Icon(
                                 imageVector = if (genresExpanded) {
                                     Icons.Filled.KeyboardArrowUp
@@ -221,6 +176,51 @@ fun MangaInfoCard(
                             )
                         }
                     }
+                }
+            }
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = stringResource(AYMR.strings.aurora_description_header),
+                    color = colors.textSecondary.copy(alpha = 0.6f),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                var hasDescriptionOverflow by remember { mutableStateOf(false) }
+                val displayDescription = translation?.description ?: manga.displayDescription
+                val descriptionBlocks = remember(displayDescription) {
+                    displayDescription?.let { DescriptionEngine.beautify(it) } ?: emptyList()
+                }
+                if (descriptionBlocks.isEmpty()) {
+                    Text(
+                        text = stringResource(AYMR.strings.aurora_no_description),
+                        color = colors.textPrimary.copy(alpha = 0.9f),
+                        fontSize = 14.sp,
+                        lineHeight = 22.sp,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    ExpandableDescriptionBlocks(
+                        blocks = descriptionBlocks,
+                        expanded = descriptionExpanded,
+                        onToggle = { onToggleDescription() },
+                        style = auroraDescriptionBlockStyle(colors),
+                        collapsedLines = 5,
+                        onOverflowChanged = { hasDescriptionOverflow = it },
+                        modifier = Modifier.then(
+                            if (hasDescriptionOverflow) {
+                                Modifier.auroraSpringClick { onToggleDescription() }
+                            } else {
+                                Modifier
+                            },
+                        ),
+                    )
                 }
             }
         }

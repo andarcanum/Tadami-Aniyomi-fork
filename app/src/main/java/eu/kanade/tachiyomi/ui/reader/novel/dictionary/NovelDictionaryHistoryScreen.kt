@@ -791,9 +791,8 @@ private fun AuroraIconCircleButton(
     // Shared Aurora header icon surface (Lens) — see AuroraHeaderIconStyle.kt.
     Box(
         modifier = modifier
-            .size(HistoryIconCircleSize)
-            .clip(CircleShape)
             .auroraHeaderIconSurface(colors)
+            .size(HistoryIconCircleSize)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

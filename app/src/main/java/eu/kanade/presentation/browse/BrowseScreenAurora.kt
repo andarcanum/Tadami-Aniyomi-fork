@@ -201,6 +201,7 @@ private fun BrowseAuroraHeader(
     onSearchClick: () -> Unit,
 ) {
     val colors = AuroraTheme.colors
+    val homeHazeState = eu.kanade.tachiyomi.ui.home.LocalHomeHazeState.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -222,18 +223,12 @@ private fun BrowseAuroraHeader(
             )
         }
 
-        IconButton(
+        eu.kanade.presentation.more.settings.AuroraTopBarIconButton(
             onClick = onSearchClick,
-            modifier = Modifier
-                .auroraHeaderIconSurface(colors)
-                .size(48.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = stringResource(AYMR.strings.aurora_global_search),
-                tint = colors.textPrimary,
-            )
-        }
+            icon = Icons.Filled.Search,
+            contentDescription = stringResource(AYMR.strings.aurora_global_search),
+            hazeState = homeHazeState,
+        )
     }
 }
 

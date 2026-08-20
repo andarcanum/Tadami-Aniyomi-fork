@@ -36,6 +36,7 @@ import androidx.compose.ui.window.DialogWindowProvider
 import eu.kanade.presentation.components.AdaptiveSheet
 import eu.kanade.presentation.reader.settings.auroraRimColor
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.util.rememberSupportsBlurBehind
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
@@ -58,15 +59,17 @@ internal fun AuroraReaderSheet(
     val baseScheme = MaterialTheme.colorScheme
     // Start closed — initial 1f + closed offset used to flash full blur before open anim.
     var sheetReveal by remember { mutableFloatStateOf(0f) }
+    val supportsBlurBehind = rememberSupportsBlurBehind(aurora.isEInk)
 
-    val sheetContainer = remember(aurora.isDark, aurora.isEInk) {
+    val sheetContainer = remember(aurora.isDark, aurora.isEInk, supportsBlurBehind) {
         when {
             aurora.isEInk -> baseScheme.surfaceContainerHigh
+            !supportsBlurBehind -> aurora.surface
             aurora.isDark -> Color.Black.copy(alpha = 0.70f)
             else -> Color.White.copy(alpha = 0.88f)
         }
     }
-    val auroraScheme = remember(baseScheme, aurora) {
+    val auroraScheme = remember(baseScheme, aurora, sheetContainer) {
         baseScheme.copy(
             primary = aurora.accent,
             onPrimary = if (aurora.isDark) aurora.background else Color.White,
@@ -81,7 +84,6 @@ internal fun AuroraReaderSheet(
         bottomStart = ZeroCornerSize,
         bottomEnd = ZeroCornerSize,
     )
-    val supportsBlurBehind = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !aurora.isEInk
 
     MaterialTheme(
         colorScheme = auroraScheme,
@@ -97,7 +99,7 @@ internal fun AuroraReaderSheet(
                 shape = sheetShape,
             ),
             containerColor = sheetContainer,
-            scrimAlpha = 0f,
+            scrimAlpha = if (supportsBlurBehind) 0f else 0.5f,
             applyStatusBarsPadding = false,
             onRevealChange = { sheetReveal = it },
         ) {
@@ -107,13 +109,11 @@ internal fun AuroraReaderSheet(
             // One-shot window chrome setup — never add/clear BLUR flags per frame (flicker source).
             DisposableEffect(window, supportsBlurBehind) {
                 val w = window
-                if (w != null) {
+                if (w != null && supportsBlurBehind) {
                     w.setBackgroundDrawable(ColorDrawable(AndroidColor.TRANSPARENT))
                     w.setDimAmount(0f)
-                    if (supportsBlurBehind) {
-                        w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
-                        w.attributes = w.attributes.apply { blurBehindRadius = 0 }
-                    }
+                    w.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+                    w.attributes = w.attributes.apply { blurBehindRadius = 0 }
                 }
                 onDispose {
                     if (w != null && supportsBlurBehind) {
@@ -128,6 +128,7 @@ internal fun AuroraReaderSheet(
             // Progressive radius/dim only — quantized to cut attribute spam / edge ghosts.
             LaunchedEffect(window, supportsBlurBehind) {
                 val w = window ?: return@LaunchedEffect
+                if (!supportsBlurBehind) return@LaunchedEffect
                 snapshotFlow { revealState.value.coerceIn(0f, 1f) }
                     .map { reveal ->
                         // 20 steps is smooth enough; avoids every-pixel attribute rewrites.
@@ -138,7 +139,6 @@ internal fun AuroraReaderSheet(
                         applyReaderSheetWindowFx(
                             window = w,
                             reveal = step / 20f,
-                            supportsBlurBehind = supportsBlurBehind,
                         )
                     }
             }
@@ -185,22 +185,17 @@ private fun AuroraSheetDragHandle() {
 private fun applyReaderSheetWindowFx(
     window: Window,
     reveal: Float,
-    supportsBlurBehind: Boolean,
 ) {
     // 0..~0.2 of travel = sheet still mostly off-screen → keep FX off.
     val glass = ((reveal - 0.18f) / 0.82f).coerceIn(0f, 1f)
-    if (supportsBlurBehind) {
-        val radius = if (glass <= 0.02f) {
-            0
-        } else {
-            (44f * glass).roundToInt().coerceIn(1, 48)
-        }
-        val attrs = window.attributes
-        if (attrs.blurBehindRadius != radius) {
-            window.attributes = attrs.apply { blurBehindRadius = radius }
-        }
-        window.setDimAmount(0.18f * glass)
+    val radius = if (glass <= 0.02f) {
+        0
     } else {
-        window.setDimAmount(0.26f * glass)
+        (44f * glass).roundToInt().coerceIn(1, 48)
     }
+    val attrs = window.attributes
+    if (attrs.blurBehindRadius != radius) {
+        window.attributes = attrs.apply { blurBehindRadius = radius }
+    }
+    window.setDimAmount(0.18f * glass)
 }

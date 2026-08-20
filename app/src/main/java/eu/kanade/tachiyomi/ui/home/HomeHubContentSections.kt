@@ -64,9 +64,9 @@ import com.tadami.aurora.R
 import eu.kanade.domain.ui.model.HomeHeroCtaMode
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
-import eu.kanade.presentation.components.CoverReloadSignal
 import eu.kanade.presentation.components.auroraMenuRimLightBrush
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
+import eu.kanade.presentation.components.rememberCoverReloadTick
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
 import eu.kanade.presentation.components.resolveAuroraCtaLabelShadowSpec
 import eu.kanade.presentation.components.resolveAuroraHomeIconShadowSpec
@@ -241,7 +241,7 @@ internal fun HeroSection(
     ) {
         val fallbackPainter = rememberThemeAwareCoverErrorPainter(variant = AuroraCoverPlaceholderVariant.Wide)
         val heroContext = LocalContext.current
-        val heroCoverReloadTick = CoverReloadSignal.tick.value
+        val heroCoverReloadTick = rememberCoverReloadTick()
         val heroCoverRequest = remember(heroContext, hero.coverData, heroCoverReloadTick) {
             buildAuroraCoverImageRequest(heroContext, hero.coverData)
         }
@@ -479,136 +479,6 @@ private fun OutlinedHeroText(
 }
 
 @Composable
-internal fun QuickSourceButton(sourceName: String?, onClick: () -> Unit) {
-    val colors = AuroraTheme.colors
-    val appHaptics = LocalAppHaptics.current
-    val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
-    val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
-    val sourceButtonShape = CircleShape
-    val isLightTheme = !colors.isDark && !colors.isEInk
-    val tabContainerColor = resolveAuroraTabContainerColor(colors)
-    val quickSourceBorderBrush = remember(colors) {
-        if (colors.isDark && !colors.isEInk) {
-            Brush.verticalGradient(
-                listOf(
-                    Color.White.copy(alpha = 0.08f),
-                    Color.Transparent,
-                ),
-            )
-        } else {
-            auroraMenuRimLightBrush(colors)
-        }
-    }
-    val sourceBorderBrush = remember(colors) { auroraMenuRimLightBrush(colors) }
-    val sourceShowBorder = colors.isDark || colors.isEInk
-
-    Card(
-        modifier = Modifier
-            .auroraCenteredMaxWidth(contentMaxWidthDp)
-            .padding(horizontal = 16.dp, vertical = if (isLightTheme) 12.dp else 10.dp)
-            .then(
-                if (isLightTheme) {
-                    Modifier
-                        .drawBehind {
-                            val radius = size.height / 2f
-                            val cornerRadius = CornerRadius(radius, radius)
-
-                            val neutralOffsetY = 3.dp.toPx()
-                            val warmOffsetY = 5.dp.toPx()
-
-                            val neutralInset = 1.dp.toPx()
-                            val warmInset = 3.dp.toPx()
-
-                            // 1. Neutral shadow
-                            drawRoundRect(
-                                color = Color.Black.copy(alpha = 0.035f),
-                                topLeft = Offset(x = neutralInset, y = neutralOffsetY),
-                                size = Size(width = size.width - neutralInset * 2, height = size.height),
-                                cornerRadius = cornerRadius,
-                            )
-
-                            // 2. Accent glow
-                            drawRoundRect(
-                                color = colors.accent.copy(alpha = 0.025f),
-                                topLeft = Offset(x = warmInset, y = warmOffsetY),
-                                size = Size(width = size.width - warmInset * 2, height = size.height),
-                                cornerRadius = cornerRadius,
-                            )
-                        }
-                        .background(
-                            brush = Brush.verticalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.78f),
-                                    Color.White.copy(alpha = 0.68f),
-                                    Color.White.copy(alpha = 0.60f),
-                                ),
-                            ),
-                            shape = sourceButtonShape,
-                        )
-                        .border(
-                            width = 1.dp,
-                            brush = Brush.verticalGradient(
-                                listOf(
-                                    Color.White.copy(alpha = 0.75f),
-                                    Color.White.copy(alpha = 0.28f),
-                                    Color.White.copy(alpha = 0.12f),
-                                ),
-                            ),
-                            shape = sourceButtonShape,
-                        )
-                } else if (colors.isDark && !colors.isEInk) {
-                    Modifier
-                        .auroraCardStyle(
-                            colors = colors,
-                            shape = sourceButtonShape,
-                            applyDarkRimLight = false,
-                            applyDarkShadow = false,
-                        )
-                        .border(
-                            BorderStroke(1.dp, quickSourceBorderBrush),
-                            shape = sourceButtonShape,
-                        )
-                } else {
-                    Modifier
-                },
-            )
-            .clickable {
-                appHaptics.tap()
-                onClick()
-            },
-        shape = sourceButtonShape,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isLightTheme) Color.Transparent else tabContainerColor,
-        ),
-        border = if (sourceShowBorder && !colors.isDark) {
-            BorderStroke(0.75.dp, sourceBorderBrush)
-        } else {
-            null
-        },
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Filled.Search, null, tint = colors.accent, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = sourceName ?: stringResource(AYMR.strings.aurora_open_source),
-                color = colors.textPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
 internal fun HomeHubRecentCard(
     mode: HomeHubRecentCardRenderMode,
     title: String,
@@ -703,7 +573,7 @@ internal fun HomeHubRecentPosterCard(
                     ),
             ) {
                 val posterContext = LocalContext.current
-                val posterCoverReloadTick = CoverReloadSignal.tick.value
+                val posterCoverReloadTick = rememberCoverReloadTick()
                 val posterCoverRequest = remember(posterContext, coverData, posterCoverReloadTick) {
                     buildAuroraCoverImageRequest(posterContext, coverData)
                 }

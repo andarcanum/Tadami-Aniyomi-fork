@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PersonOutline
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.runtime.Composable
@@ -34,6 +35,7 @@ fun NovelStatsCard(
     nextUpdate: Instant?,
     sourceName: String,
     modifier: Modifier = Modifier,
+    showAuthor: Boolean = true,
 ) {
     val nextUpdateDays = rememberNovelNextUpdateDays(nextUpdate)
     val nextUpdateDayLabel = nextUpdateDays
@@ -99,6 +101,19 @@ fun NovelStatsCard(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+            }
+
+            if (showAuthor) {
+                QuietSectionDivider()
+
+                QuietMetricTile(
+                    label = stringResource(MR.strings.author),
+                    value = novel.displayAuthor?.takeIf { it.isNotBlank() }
+                        ?: stringResource(MR.strings.unknown_author),
+                    leadingIcon = Icons.Filled.PersonOutline,
+                    valueMaxLines = Int.MAX_VALUE,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             QuietSectionDivider()

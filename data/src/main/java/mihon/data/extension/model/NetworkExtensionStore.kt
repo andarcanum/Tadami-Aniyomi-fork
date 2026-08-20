@@ -31,7 +31,7 @@ data class NetworkExtensionStore(
         @ProtoNumber(2) val packageName: String,
         @ProtoNumber(3) val resources: Resources,
         @ProtoNumber(4) val extensionLib: String,
-        @ProtoNumber(5) val versionCode: Long,
+        @ProtoNumber(5) @Serializable(with = Proto3JsonInt64Serializer::class) val versionCode: Long,
         @ProtoNumber(6) val versionName: String,
         @ProtoNumber(7) val contentWarning: ContentWarning,
         @ProtoNumber(8) val sources: List<Source>,
@@ -41,11 +41,12 @@ data class NetworkExtensionStore(
     data class Resources(
         @ProtoNumber(1) val apkUrl: String,
         @ProtoNumber(2) val iconUrl: String,
+        @ProtoNumber(501) val jarUrl: String? = null,
     )
 
     @Serializable
     data class Source(
-        @ProtoNumber(1) val id: Long,
+        @ProtoNumber(1) @Serializable(with = Proto3JsonInt64Serializer::class) val id: Long,
         @ProtoNumber(2) val name: String,
         @ProtoNumber(3) val language: String,
         @ProtoNumber(4) val homeUrl: String = "",

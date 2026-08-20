@@ -49,6 +49,7 @@ sealed class AnimeExtension {
         val iconUrl: String,
         val repoUrl: String,
         val repoName: String = "",
+        val needsAppUpdate: Boolean = false,
     ) : AnimeExtension() {
 
         data class AnimeSource(

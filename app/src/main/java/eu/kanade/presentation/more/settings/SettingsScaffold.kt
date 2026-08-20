@@ -2,6 +2,8 @@ package eu.kanade.presentation.more.settings
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -14,19 +16,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
@@ -36,11 +41,13 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.theme.resolveAuroraTopBarScrimColor
+import eu.kanade.tachiyomi.ui.home.LocalHomeHazeState
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
@@ -144,7 +151,6 @@ internal fun AuroraSettingsTopBarChrome(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clipToBounds()
             .onSizeChanged { size ->
                 scrollBehavior.state.heightOffsetLimit = resolveAuroraSettingsTopBarHeightOffsetLimit(
                     size.height,
@@ -248,27 +254,36 @@ internal fun AuroraTopBarLayout(
 internal fun AuroraTopBarIconButton(
     onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
+    contentDescription: String?,
     modifier: Modifier = Modifier,
     tint: Color = AuroraTheme.colors.textPrimary,
     iconRotation: Float = 0f,
+    hazeState: HazeState? = LocalHomeHazeState.current,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
-    IconButton(
-        onClick = {
-            appHaptics.tap()
-            onClick()
-        },
+    Box(
         modifier = modifier
+            .auroraHeaderIconSurface(colors = colors, hazeState = hazeState)
             .size(44.dp)
-            .auroraHeaderIconSurface(colors),
+            .clip(CircleShape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(bounded = false, radius = 22.dp),
+                onClick = {
+                    appHaptics.tap()
+                    onClick()
+                },
+            ),
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = tint,
-            modifier = Modifier.rotate(iconRotation),
+            modifier = Modifier
+                .size(22.dp)
+                .rotate(iconRotation),
         )
     }
 }

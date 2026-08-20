@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.home
 
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.entries.novel.LocalNovelVisibility
+import eu.kanade.domain.source.novel.interactor.GetEnabledNovelSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
@@ -102,6 +103,7 @@ internal class NovelHomeHubScreenModel(
     private val getNovel: GetNovel by injectLazy()
     private val getNovelWithChapters: GetNovelWithChapters by injectLazy()
     private val getNovelCategories: GetNovelCategories by injectLazy()
+    private val getEnabledNovelSources: GetEnabledNovelSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
     private val sourceManager: NovelSourceManager by injectLazy()
     private val localNovelSourceFileSystem: LocalNovelSourceFileSystem by injectLazy()
@@ -204,6 +206,25 @@ internal class NovelHomeHubScreenModel(
         cached.hero?.let { hero ->
             screenModelScope.launchIO {
                 loadHeroChapterId(hero.entryId, hero.subId)
+            }
+        }
+
+        // Enabled (installed) novel sources for the Home source picker — mirrors Browse's logic
+        screenModelScope.launchIO {
+            getEnabledNovelSources.subscribe().collectLatest { sources ->
+                mutableState.update {
+                    it.copy(
+                        availableSources = sources.distinctBy { it.id }.map { s ->
+                            HomeSourceItem(
+                                id = s.id,
+                                name = s.name,
+                                lang = s.lang,
+                                isLocal = s.id == tachiyomi.source.local.entries.novel.LocalNovelSource.ID,
+                                iconUrl = novelExtensionManager.getPluginIconUrlForSource(s.id),
+                            )
+                        },
+                    )
+                }
             }
         }
     }
@@ -411,7 +432,13 @@ internal class NovelHomeHubScreenModel(
         )
     }
 
+    private val novelExtensionManager: eu.kanade.tachiyomi.extension.novel.NovelExtensionManager by injectLazy()
+
     fun getLastUsedNovelSourceId(): Long = sourcePreferences.lastUsedNovelSource().get()
+
+    fun setLastUsedNovelSourceId(sourceId: Long) {
+        sourcePreferences.lastUsedNovelSource().set(sourceId)
+    }
 
     fun getLastUsedNovelSourceName(): String? {
         val sourceId = sourcePreferences.lastUsedNovelSource().get()
