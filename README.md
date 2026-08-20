@@ -127,7 +127,7 @@ property of their respective owners.
 
 Tadami is intended for **lawful use only**. Do not use Tadami to infringe the
 rights of others. See [DISCLAIMER.md](DISCLAIMER.md) for the full statement and
-[DMCA.md](DMCA.md) for our copyright/takedown policy.
+[DMCA.md](DMCA.md) for our copyright/takedown policy (DMCA inquiries: [jannople7@gmail.com](mailto:jannople7@gmail.com)).
 
 ## Support Development
 
