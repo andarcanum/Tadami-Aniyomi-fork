@@ -34,6 +34,12 @@
 # app awaits through this bridge, and the bridge is only reachable from extension code.
 -keep class tachiyomi.core.common.util.lang.RxCoroutineBridgeKt { *; }
 -keep,allowoptimization class kotlinx.serialization.** { public protected *; }
+# Extension ABI, kotlinx.serialization desugared companion. Extensions built with D8 interface
+# desugaring (minSdk < 24) against kotlinx-serialization 1.8.x as compileOnly link to the synthetic
+# GeneratedSerializer$-CC companion (KT-84952). The app (minSdk 26) never generates it, so it is
+# provided as an explicit shim in core/common and must survive R8; resolved via the app parent
+# classloader at runtime. (Also covered by the kotlinx.serialization.** keep above.)
+-keep class kotlinx.serialization.internal.GeneratedSerializer$-CC { *; }
 -keep,allowoptimization class okhttp3.** { public protected *; }
 -keep,allowoptimization class okio.** { public protected *; }
 -keep,allowoptimization class org.jsoup.** { public protected *; }
