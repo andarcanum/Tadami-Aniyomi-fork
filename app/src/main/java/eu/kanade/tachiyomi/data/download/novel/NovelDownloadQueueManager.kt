@@ -423,6 +423,11 @@ object NovelDownloadQueueManager {
                     removeTask(nextTask.taskId)
                     continue
                 }
+                // A pause that arrived while we were sleeping out the throttle window
+                // must not dispatch a new download. The task stays QUEUED; the
+                // top-of-loop break handles the paused state, and startDownloads()
+                // re-arms the worker on resume.
+                if (!state.value.isRunning) continue
                 markTaskStatus(nextTask.taskId, NovelQueuedDownloadStatus.DOWNLOADING)
                 logcat(LogPriority.DEBUG) {
                     "Novel queue task starting: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, type=${nextTask.type}, throttle=$throttleConfig"
