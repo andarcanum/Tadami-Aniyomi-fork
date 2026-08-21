@@ -496,7 +496,6 @@ internal fun NovelReaderContentHost(
     val highlightItemList by highlightItems.androidxCollectAsState(emptyList())
     var editingHighlightId by remember { mutableStateOf<Long?>(null) }
     var showHighlightsPanel by remember { mutableStateOf(false) }
-    var showQuotesScreen by remember { mutableStateOf(false) }
     LaunchedEffect(webViewInstance, chapterHighlightList) {
         webViewInstance?.applyNovelHighlightsToPage(chapterHighlightList)
     }
@@ -525,34 +524,6 @@ internal fun NovelReaderContentHost(
             ).show()
         },
     )
-
-    if (showQuotesScreen) {
-        val quotesContext = LocalContext.current
-        NovelQuotesScreen(
-            novelTitle = state.novel.title,
-            quotes = highlightItemList,
-            onDismiss = { showQuotesScreen = false },
-            onCopy = { text ->
-                val clipboard = quotesContext.getSystemService(Context.CLIPBOARD_SERVICE)
-                    as android.content.ClipboardManager
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("quote", text))
-            },
-            onShare = { text ->
-                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(android.content.Intent.EXTRA_TEXT, text)
-                }
-                quotesContext.startActivity(android.content.Intent.createChooser(intent, null))
-            },
-            onShareAll = { text ->
-                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(android.content.Intent.EXTRA_TEXT, text)
-                }
-                quotesContext.startActivity(android.content.Intent.createChooser(intent, null))
-            },
-        )
-    }
 
     val editingHighlight = editingHighlightId?.let { id ->
         highlightItemList.firstOrNull { it.highlight.id == id }?.highlight
@@ -4069,7 +4040,6 @@ internal fun NovelReaderContentHost(
                 onBack = onBack,
                 onToggleBookmark = onToggleBookmark,
                 onOpenHighlights = { showHighlightsPanel = true },
-                onOpenQuotes = { showQuotesScreen = true },
                 onHapticTap = { appHaptics.tap() },
                 onIntervalChange = { persistAutoScrollIntervalPreference(it) },
                 onAdaptiveDelayChange = { persistAutoScrollAdaptiveDelayPreference(it) },

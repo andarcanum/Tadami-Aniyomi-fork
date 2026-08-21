@@ -19,12 +19,10 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,9 +34,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
+import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelAutoScrollChapterEndBehavior
 import tachiyomi.i18n.aniyomi.AYMR
-import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
 
 /**
@@ -66,7 +65,6 @@ internal fun NovelReaderTopBarPanel(
     onBack: () -> Unit,
     onToggleBookmark: () -> Unit,
     onOpenHighlights: () -> Unit,
-    onOpenQuotes: () -> Unit,
     onHapticTap: () -> Unit,
     onIntervalChange: (Int) -> Unit,
     onAdaptiveDelayChange: (Boolean) -> Unit,
@@ -88,7 +86,7 @@ internal fun NovelReaderTopBarPanel(
     )
     val panelBackgroundColor = MaterialTheme.colorScheme
         .surfaceColorAtElevation(3.dp)
-        .copy(alpha = if (androidx.compose.foundation.isSystemInDarkTheme()) 0.9f else 0.95f)
+        .copy(alpha = if (isSystemInDarkTheme()) 0.9f else 0.95f)
     AnimatedVisibility(
         visible = visible,
         enter = slideInVertically(
@@ -136,22 +134,16 @@ internal fun NovelReaderTopBarPanel(
                                 contentDescription = null,
                             )
                         }
-                        DropdownMenu(
+                        AuroraEntryDropdownMenu(
                             expanded = overflowExpanded,
                             onDismissRequest = { overflowExpanded = false },
                         ) {
-                            DropdownMenuItem(
-                                text = { Text(text = stringResource(AYMR.strings.novel_highlight_menu_title)) },
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(AYMR.strings.novel_highlight_menu_title),
+                                leadingIcon = Icons.Outlined.CollectionsBookmark,
                                 onClick = {
                                     overflowExpanded = false
                                     onOpenHighlights()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(text = stringResource(AYMR.strings.novel_quotes_screen_title)) },
-                                onClick = {
-                                    overflowExpanded = false
-                                    onOpenQuotes()
                                 },
                             )
                         }

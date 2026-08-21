@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,7 +23,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -62,7 +62,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tadami.aurora.R
 import eu.kanade.presentation.reader.components.AuroraReaderSheet
-import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.book.novel.model.NovelHighlightWithChapter
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -70,10 +69,16 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
- * Reader highlights sheet styled after the approved "antique paper" prototype:
- * haze-glass container (window blurBehind via [AuroraReaderSheet], solid fallback on e-ink),
- * soft aged-paper overlay, hanging bookmark ribbon and a centered serif header with the
- * source-novel fleuron. Tap opens the editor; the trash icon deletes.
+ * Dedicated antique parchment & amber gold palette:
+ * Warm, noble tones tuned specifically for the vellum/parchment texture in both dark & light themes.
+ */
+private val ParchmentGold = Color(0xFFE5A855) // Warm luminous antique gold (Cloudflare amber tone)
+private val ParchmentGoldMuted = Color(0xFFB88A4A) // Gentle antique bronze
+
+/**
+ * Reader highlights & quotes sheet: Compact Reader Flow (Variant 8).
+ * Airy, high-density reader layout with delicate dividers, authentic parchment texture,
+ * hanging silk ribbon, and clean centered typography.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,6 +95,7 @@ fun NovelHighlightsPanel(
 ) {
     if (!visible) return
     var showDefaultPicker by remember { mutableStateOf(false) }
+    val isDark = isSystemInDarkTheme()
 
     AuroraReaderSheet(
         onDismissRequest = onDismiss,
@@ -98,36 +104,19 @@ fun NovelHighlightsPanel(
             BookmarkRibbon(Modifier.align(Alignment.TopEnd))
         },
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
-            SheetHead(novelTitle = novelTitle)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            SheetHead(novelTitle = novelTitle, isDark = isDark)
 
-            Text(
-                text = stringResource(AYMR.strings.novel_highlights_default_color),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = 1.4.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            PaletteSection(
+                defaultColorArgb = defaultColorArgb,
+                onDefaultColorChange = onDefaultColorChange,
+                onOpenCustomPicker = { showDefaultPicker = true },
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 9.dp),
-                horizontalArrangement = Arrangement.spacedBy(11.dp, Alignment.CenterHorizontally),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                NOVEL_HIGHLIGHT_PRESET_COLORS.forEach { preset ->
-                    ColorSwatchDot(
-                        colorArgb = preset,
-                        selected = defaultColorArgb == preset,
-                        onClick = { onDefaultColorChange(preset) },
-                    )
-                }
-                CustomSwatchDot(
-                    colorArgb = defaultColorArgb,
-                    selected = NOVEL_HIGHLIGHT_PRESET_COLORS.none { it == defaultColorArgb },
-                    onClick = { showDefaultPicker = true },
-                )
-            }
 
             OrnamentDivider()
 
@@ -135,28 +124,37 @@ fun NovelHighlightsPanel(
                 Text(
                     text = stringResource(AYMR.strings.novel_highlight_list_empty),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isDark) Color(0xFFA39682) else Color(0xFF7A6953),
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 26.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 28.dp),
                 )
             } else {
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 470.dp)) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 500.dp),
+                ) {
                     items(items, key = { it.highlight.id }) { item ->
-                        HighlightRow(
+                        CompactQuoteRow(
                             item = item,
+                            isDark = isDark,
                             onEdit = onEdit,
                             onDelete = onDelete,
                             onCopy = onCopy,
                         )
                     }
                 }
-                // Финальный флерон после списка — маленькое украшение-подпись.
+                // Завершающий флерон после списка
                 Text(
                     text = "❦",
-                    color = AuroraTheme.colors.accent.copy(alpha = 0.55f),
+                    color = ParchmentGold.copy(alpha = 0.65f),
                     fontSize = 12.sp,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
                 )
             }
         }
@@ -174,76 +172,136 @@ fun NovelHighlightsPanel(
     }
 }
 
-/** Центрированная шапка: серифный титул + строка-источник «❦ из <новелла> ❦». */
+/** Центрированная шапка: современный заголовок + подпись источника «❦ из <новелла> ❦». */
 @Composable
-private fun SheetHead(novelTitle: String) {
-    val accent = AuroraTheme.colors.accent
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 2.dp)) {
+private fun SheetHead(novelTitle: String, isDark: Boolean) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Text(
-            text = "Highlights",
-            fontFamily = FontFamily.Serif,
-            fontWeight = FontWeight.SemiBold,
+            text = stringResource(AYMR.strings.novel_highlight_menu_title),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
             fontSize = 18.sp,
-            letterSpacing = 0.8.sp,
+            letterSpacing = (-0.2).sp,
+            color = if (isDark) Color(0xFFFAF5ED) else Color(0xFF2B1E0E),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
             text = buildAnnotatedString {
-                withStyle(SpanStyle(color = accent.copy(alpha = 0.85f))) { append("❦ из ") }
-                withStyle(SpanStyle(color = accent, fontWeight = FontWeight.SemiBold)) { append(novelTitle) }
-                withStyle(SpanStyle(color = accent.copy(alpha = 0.85f))) { append(" ❦") }
+                withStyle(SpanStyle(color = ParchmentGold.copy(alpha = 0.85f))) { append("❦ из ") }
+                withStyle(SpanStyle(color = ParchmentGold, fontWeight = FontWeight.Bold)) { append(novelTitle) }
+                withStyle(SpanStyle(color = ParchmentGold.copy(alpha = 0.85f))) { append(" ❦") }
             },
             fontSize = 11.sp,
             letterSpacing = 1.5.sp,
+            textAlign = TextAlign.Center,
             maxLines = 1,
-            modifier = Modifier.fillMaxWidth().padding(top = 3.dp, start = 20.dp, end = 20.dp),
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 3.dp, start = 20.dp, end = 20.dp),
         )
     }
 }
 
-/** Разделитель «линия — ❦ — линия» между секцией цвета и списком. */
+/** Гармоничная палитра маркеров. */
+@Composable
+private fun PaletteSection(
+    defaultColorArgb: Long,
+    onDefaultColorChange: (Long) -> Unit,
+    onOpenCustomPicker: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, start = 20.dp, end = 20.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            NOVEL_HIGHLIGHT_PRESET_COLORS.forEach { preset ->
+                ColorSwatchDot(
+                    colorArgb = preset,
+                    selected = defaultColorArgb == preset,
+                    onClick = { onDefaultColorChange(preset) },
+                )
+            }
+            CustomSwatchDot(
+                colorArgb = defaultColorArgb,
+                selected = NOVEL_HIGHLIGHT_PRESET_COLORS.none { it == defaultColorArgb },
+                onClick = onOpenCustomPicker,
+            )
+        }
+    }
+}
+
+/** Тонкий градиентный разделитель «линия — ❦ — линия». */
 @Composable
 private fun OrnamentDivider() {
-    val hairline = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Box(modifier = Modifier.weight(1f).height(1.dp).background(hairline))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color.Transparent, ParchmentGold.copy(alpha = 0.28f)),
+                    ),
+                ),
+        )
         Text(
             text = "❦",
-            color = AuroraTheme.colors.accent.copy(alpha = 0.75f),
+            color = ParchmentGold.copy(alpha = 0.85f),
             fontSize = 11.sp,
         )
-        Box(modifier = Modifier.weight(1f).height(1.dp).background(hairline))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(ParchmentGold.copy(alpha = 0.28f), Color.Transparent),
+                    ),
+                ),
+        )
     }
 }
 
-/** Кружок пресетного цвета для дефолта новых выделений. */
+/** Кружок цвета маркера. */
 @Composable
 private fun ColorSwatchDot(colorArgb: Long, selected: Boolean, onClick: () -> Unit) {
-    val accent = AuroraTheme.colors.accent
-    val ring = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+    val ring = if (selected) ParchmentGold else ParchmentGoldMuted.copy(alpha = 0.35f)
     Box(
         modifier = Modifier
-            .size(28.dp)
+            .size(26.dp)
             .background(Color(colorArgb), CircleShape)
             .border(width = if (selected) 2.dp else 1.dp, color = ring, shape = CircleShape)
             .clickable(onClick = onClick),
     )
 }
 
-/** Кружок произвольного цвета: показывает текущий дефолт, открывает пикер. */
+/** Кружок произвольного цвета маркера. */
 @Composable
 private fun CustomSwatchDot(colorArgb: Long, selected: Boolean, onClick: () -> Unit) {
-    val accent = AuroraTheme.colors.accent
     Box(
         modifier = Modifier
-            .size(28.dp)
+            .size(26.dp)
             .background(Color(colorArgb), CircleShape)
-            .border(width = if (selected) 2.dp else 1.dp, color = accent, shape = CircleShape)
+            .border(width = if (selected) 2.dp else 1.dp, color = ParchmentGold, shape = CircleShape)
             .drawBehind {
                 drawCircle(
                     brush = Brush.radialGradient(
@@ -256,126 +314,173 @@ private fun CustomSwatchDot(colorArgb: Long, selected: Boolean, onClick: () -> U
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = "+", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text(text = "+", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 /**
- * Строка одного хайлайта: цветная точка и серифная цитата занимают всю ширину, а источник
- * и компактные действия (копировать / редактировать / удалить) вынесены в нижнюю строку.
+ * Вариант 8: Компактная эстетичная строка цитаты без тяжелых рамок.
+ * Текст цитаты дышит, заметка вынесена изящным отступом, а снизу идет тонкая золотая нить.
  */
 @Composable
-private fun HighlightRow(
+private fun CompactQuoteRow(
     item: NovelHighlightWithChapter,
+    isDark: Boolean,
     onEdit: (Long) -> Unit,
     onDelete: (Long) -> Unit,
     onCopy: (String) -> Unit,
 ) {
     val highlight = item.highlight
-    val accent = AuroraTheme.colors.accent
-    Row(
+    val textColor = if (isDark) Color(0xFFEFE9E0) else Color(0xFF342616)
+    val metaColor = if (isDark) Color(0xFFA39682) else Color(0xFF7A6953)
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onEdit(highlight.id) }
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.Top,
+            .padding(horizontal = 20.dp, vertical = 7.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .padding(top = 4.dp)
-                .size(12.dp)
-                .background(Color(highlight.colorArgb), CircleShape),
-        )
-        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(
-                text = highlight.normalizedText,
-                fontFamily = FontFamily.Serif,
-                fontStyle = FontStyle.Italic,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 3,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            // Маркер цвета слева
+            Box(
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .size(8.dp)
+                    .background(Color(highlight.colorArgb), CircleShape),
             )
-            if (highlight.note.isNotBlank()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 10.dp),
+            ) {
+                // Текст цитаты
                 Text(
-                    text = highlight.note,
+                    text = "«${highlight.normalizedText}»",
                     fontFamily = FontFamily.Serif,
                     fontStyle = FontStyle.Italic,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .drawBehind {
-                            drawRect(
-                                brush = SolidColor(accent.copy(alpha = 0.75f)),
-                                topLeft = Offset.Zero,
-                                size = Size(2.dp.toPx(), size.height),
-                            )
-                        }
-                        .padding(start = 8.dp),
-                )
-            }
-            // Нижняя строка: источник слева, компактные действия справа.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = buildAnnotatedString {
-                        withStyle(
-                            SpanStyle(fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface),
-                        ) {
-                            append(item.novelTitle)
-                        }
-                        append(" · ")
-                        append(item.chapterName.orEmpty())
-                        if (highlight.pageCount > 0) {
-                            append(" · ")
-                            append(
-                                stringResource(
-                                    AYMR.strings.novel_highlight_page_label,
-                                    highlight.pageIndex,
-                                    highlight.pageCount,
-                                ),
-                            )
-                        }
-                    },
-                    fontSize = 11.sp,
-                    letterSpacing = 0.3.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
+                    fontSize = 14.5.sp,
+                    lineHeight = 21.sp,
+                    color = textColor,
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
                 )
-                MiniAction(
-                    icon = Icons.Outlined.ContentCopy,
-                    description = stringResource(AYMR.strings.novel_highlight_action_copy),
-                    onClick = { onCopy(highlight.normalizedText) },
-                )
-                MiniAction(
-                    icon = Icons.Outlined.Edit,
-                    description = stringResource(AYMR.strings.novel_highlight_editor_note_hint),
-                    onClick = { onEdit(highlight.id) },
-                )
-                MiniAction(
-                    icon = Icons.Outlined.Delete,
-                    description = stringResource(AYMR.strings.novel_highlight_action_delete),
-                    onClick = { onDelete(highlight.id) },
-                )
+                // Заметка
+                if (highlight.note.isNotBlank()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            text = "↳",
+                            color = ParchmentGold,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = highlight.note,
+                            fontFamily = FontFamily.Serif,
+                            fontStyle = FontStyle.Italic,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = ParchmentGold.copy(alpha = 0.92f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                // Нижняя строка: источник слева, компактные действия справа
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(
+                                SpanStyle(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isDark) Color(0xFFFAF5ED) else Color(0xFF2B1E0E),
+                                ),
+                            ) {
+                                append(item.novelTitle)
+                            }
+                            append(" · ")
+                            append(item.chapterName.orEmpty())
+                            if (highlight.pageCount > 0) {
+                                append(" · ")
+                                append(
+                                    stringResource(
+                                        AYMR.strings.novel_highlight_page_label,
+                                        highlight.pageIndex,
+                                        highlight.pageCount,
+                                    ),
+                                )
+                            }
+                        },
+                        fontSize = 11.sp,
+                        letterSpacing = 0.2.sp,
+                        color = metaColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MiniAction(
+                        icon = Icons.Outlined.ContentCopy,
+                        description = stringResource(AYMR.strings.novel_highlight_action_copy),
+                        tint = metaColor,
+                        onClick = { onCopy(highlight.normalizedText) },
+                    )
+                    MiniAction(
+                        icon = Icons.Outlined.Edit,
+                        description = stringResource(AYMR.strings.novel_highlight_editor_note_hint),
+                        tint = metaColor,
+                        onClick = { onEdit(highlight.id) },
+                    )
+                    MiniAction(
+                        icon = Icons.Outlined.Delete,
+                        description = stringResource(AYMR.strings.novel_highlight_action_delete),
+                        tint = metaColor,
+                        onClick = { onDelete(highlight.id) },
+                    )
+                }
             }
         }
+        // Тончайшая золотистая градиентная нить-разделитель между цитатами
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 7.dp)
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            ParchmentGold.copy(alpha = 0.22f),
+                            Color.Transparent,
+                        ),
+                    ),
+                ),
+        )
     }
 }
 
-/** Компактная круглая кнопка-действие без 48dp-минимума стандартного IconButton. */
+/** Компактная круглая кнопка-действие. */
 @Composable
 private fun MiniAction(
     icon: ImageVector,
     description: String,
+    tint: Color,
     onClick: () -> Unit,
 ) {
     Box(
         modifier = Modifier
-            .size(26.dp)
+            .size(28.dp)
             .clip(CircleShape)
             .clickable(onClick = onClick, role = Role.Button),
         contentAlignment = Alignment.Center,
@@ -384,7 +489,7 @@ private fun MiniAction(
             imageVector = icon,
             contentDescription = description,
             modifier = Modifier.size(15.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = tint,
         )
     }
 }
@@ -407,7 +512,6 @@ private fun PaperVeil(modifier: Modifier = Modifier) {
 /** Закладка-лента, висящая справа сверху шторки. */
 @Composable
 private fun BookmarkRibbon(modifier: Modifier = Modifier) {
-    val accent = AuroraTheme.colors.accent
     Canvas(modifier = modifier.padding(end = 26.dp).size(width = 22.dp, height = 56.dp)) {
         val w = size.width
         val h = size.height
@@ -421,7 +525,7 @@ private fun BookmarkRibbon(modifier: Modifier = Modifier) {
             close()
         }
         drawPath(path = path, brush = Brush.verticalGradient(listOf(Color(0xFFA82020), Color(0xFF6E1010))))
-        drawRect(brush = SolidColor(accent), topLeft = Offset.Zero, size = Size(w, 2.dp.toPx()))
+        drawRect(brush = SolidColor(ParchmentGold), topLeft = Offset.Zero, size = Size(w, 2.dp.toPx()))
     }
 }
 

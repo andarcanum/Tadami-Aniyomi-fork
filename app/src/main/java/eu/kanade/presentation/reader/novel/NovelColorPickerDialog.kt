@@ -27,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 /** Preset highlight colors shown as one-tap swatches. */
 val NOVEL_HIGHLIGHT_PRESET_COLORS = listOf(
@@ -86,12 +88,12 @@ fun NovelColorPickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = { onPick(currentArgb()) }) {
-                Text(text = "OK")
+                Text(text = stringResource(MR.strings.action_ok))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(text = "Cancel")
+                Text(text = stringResource(MR.strings.action_cancel))
             }
         },
         text = {
