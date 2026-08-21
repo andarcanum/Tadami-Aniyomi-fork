@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupNovelBookState
+import eu.kanade.tachiyomi.data.backup.models.BackupNovelHighlight
 import eu.kanade.tachiyomi.data.backup.models.backupNovelChapterMapper
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.book.novel.interactor.GetNovelBookState
@@ -44,6 +45,33 @@ class NovelBackupCreator(
             }
                 .takeUnless(List<BackupChapter>::isEmpty)
                 ?.let { novelObject.chapters = it }
+
+            val chapterUrlsById = handler.awaitList { db ->
+                db.novel_chaptersQueries.getChaptersByNovelId(
+                    novelId = novel.id,
+                    applyScanlatorFilter = 0,
+                )
+            }.associateBy({ it._id }, { it.url })
+            val highlights = handler.awaitList { db ->
+                db.novel_highlightsQueries.getForNovel(novel.id)
+            }
+            highlights.takeUnless { it.isEmpty() }?.let { rows ->
+                novelObject.highlights = rows.map { row ->
+                    BackupNovelHighlight(
+                        chapterUrl = chapterUrlsById[row.chapter_id].orEmpty(),
+                        blockIndex = row.block_index.toInt(),
+                        charStart = row.char_start.toInt(),
+                        charEndExclusive = row.char_end_exclusive.toInt(),
+                        normalizedText = row.normalized_text,
+                        colorArgb = row.color_argb,
+                        note = row.note,
+                        createdAt = row.created_at,
+                        updatedAt = row.updated_at,
+                        pageIndex = row.page_index.toInt(),
+                        pageCount = row.page_count.toInt(),
+                    )
+                }
+            }
         }
 
         if (options.categories) {

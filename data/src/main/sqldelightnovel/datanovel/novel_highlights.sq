@@ -1,0 +1,61 @@
+CREATE TABLE novel_highlights (
+    _id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    novel_id INTEGER NOT NULL,
+    chapter_id INTEGER NOT NULL,
+    block_index INTEGER NOT NULL DEFAULT 0,
+    char_start INTEGER NOT NULL DEFAULT 0,
+    char_end_exclusive INTEGER NOT NULL DEFAULT 0,
+    normalized_text TEXT NOT NULL DEFAULT '',
+    color_argb INTEGER NOT NULL DEFAULT 4294688813,
+    note TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    page_index INTEGER NOT NULL DEFAULT 0,
+    page_count INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY(novel_id) REFERENCES novels(_id) ON DELETE CASCADE
+);
+
+CREATE INDEX novel_highlights_novel_id_index ON novel_highlights(novel_id);
+CREATE INDEX novel_highlights_chapter_id_index ON novel_highlights(chapter_id);
+
+getForNovel:
+SELECT *
+FROM novel_highlights
+WHERE novel_id = :novelId
+ORDER BY chapter_id, block_index, char_start;
+
+getForChapter:
+SELECT *
+FROM novel_highlights
+WHERE chapter_id = :chapterId
+ORDER BY block_index, char_start;
+
+insert:
+INSERT INTO novel_highlights(novel_id, chapter_id, block_index, char_start, char_end_exclusive, normalized_text, color_argb, note, created_at, updated_at, page_index, page_count)
+VALUES (:novelId, :chapterId, :blockIndex, :charStart, :charEndExclusive, :normalizedText, :colorArgb, :note, :createdAt, :updatedAt, :pageIndex, :pageCount);
+
+selectLastInsertedRowId:
+SELECT last_insert_rowid();
+
+updateNoteAndColor:
+UPDATE novel_highlights
+SET note = :note,
+    color_argb = :colorArgb,
+    updated_at = :updatedAt
+WHERE _id = :highlightId;
+
+reanchor:
+UPDATE novel_highlights
+SET block_index = :blockIndex,
+    char_start = :charStart,
+    char_end_exclusive = :charEndExclusive,
+    updated_at = :updatedAt
+WHERE _id = :highlightId;
+
+delete:
+DELETE FROM novel_highlights
+WHERE _id = :highlightId;
+
+deleteForNovel:
+DELETE FROM novel_highlights
+WHERE novel_id = :novelId;

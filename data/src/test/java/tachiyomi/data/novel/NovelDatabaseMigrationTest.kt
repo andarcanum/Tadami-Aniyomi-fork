@@ -65,6 +65,34 @@ class NovelDatabaseMigrationTest {
         columnNames(driver, "translation_batch_state") shouldContain "last_successful_chapter_id"
     }
 
+    @Test
+    fun `migration creates novel highlights table`() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        createLegacyNovelVersionTables(driver)
+
+        NovelDatabase.Schema.migrate(
+            driver,
+            oldVersion = 1L,
+            newVersion = NovelDatabase.Schema.version,
+        )
+
+        columnNames(driver, "novel_highlights") shouldContain "_id"
+        columnNames(driver, "novel_highlights") shouldContain "novel_id"
+        columnNames(driver, "novel_highlights") shouldContain "chapter_id"
+        columnNames(driver, "novel_highlights") shouldContain "block_index"
+        columnNames(driver, "novel_highlights") shouldContain "char_start"
+        columnNames(driver, "novel_highlights") shouldContain "char_end_exclusive"
+        columnNames(driver, "novel_highlights") shouldContain "normalized_text"
+        columnNames(driver, "novel_highlights") shouldContain "color_argb"
+        columnNames(driver, "novel_highlights") shouldContain "note"
+        columnNames(driver, "novel_highlights") shouldContain "created_at"
+        columnNames(driver, "novel_highlights") shouldContain "updated_at"
+        columnNames(driver, "novel_highlights") shouldContain "page_index"
+        columnNames(driver, "novel_highlights") shouldContain "page_count"
+        indexNames(driver) shouldContain "novel_highlights_novel_id_index"
+        indexNames(driver) shouldContain "novel_highlights_chapter_id_index"
+    }
+
     private fun createLegacyNovelVersionTables(driver: JdbcSqliteDriver) {
         driver.execute(
             identifier = null,
@@ -187,6 +215,21 @@ class NovelDatabaseMigrationTest {
         driver.execute(
             identifier = null,
             sql = """
+                CREATE TABLE novels_categories(
+                    _id INTEGER NOT NULL PRIMARY KEY,
+                    novel_id INTEGER NOT NULL,
+                    category_id INTEGER NOT NULL,
+                    FOREIGN KEY(category_id) REFERENCES novel_categories (_id)
+                    ON DELETE CASCADE,
+                    FOREIGN KEY(novel_id) REFERENCES novels (_id)
+                    ON DELETE CASCADE
+                )
+            """.trimIndent(),
+            parameters = 0,
+        )
+        driver.execute(
+            identifier = null,
+            sql = """
                 CREATE TRIGGER update_last_modified_at_novel_chapters
                 AFTER UPDATE ON novel_chapters
                 FOR EACH ROW
@@ -263,6 +306,23 @@ class NovelDatabaseMigrationTest {
                     buildList {
                         while (cursor.next().value) {
                             add(cursor.getString(1).orEmpty())
+                        }
+                    },
+                )
+            },
+            parameters = 0,
+        ).value
+    }
+
+    private fun indexNames(driver: JdbcSqliteDriver): List<String> {
+        return driver.executeQuery(
+            identifier = null,
+            sql = "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'novel_highlights%'",
+            mapper = { cursor ->
+                QueryResult.Value(
+                    buildList {
+                        while (cursor.next().value) {
+                            add(cursor.getString(0).orEmpty())
                         }
                     },
                 )

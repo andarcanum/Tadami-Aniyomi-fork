@@ -847,6 +847,17 @@
     <string name="novel_reader_selected_text_translation_action_translate">Translate</string>
     <string name="novel_reader_text_selection_action_dictionary">Dictionary</string>
     <string name="novel_reader_text_selection_action_translate">Translate</string>
+    <string name="novel_highlight_action_save">Save highlight</string>
+    <string name="novel_highlight_saved">Highlight saved</string>
+    <string name="novel_highlight_editor_note_hint">Note</string>
+    <string name="novel_highlight_menu_title">Highlights</string>
+    <string name="novel_highlight_list_empty">No highlights yet</string>
+    <string name="novel_quotes_screen_title">Quotes</string>
+    <string name="novel_quotes_share_all">Share all quotes</string>
+    <string name="novel_highlight_action_copy">Copied</string>
+    <string name="novel_highlight_action_delete">Delete highlight</string>
+    <string name="novel_highlights_default_color">Default color</string>
+    <string name="novel_highlight_page_label">Page %1$d/%2$d</string>
     <string name="novel_reader_selected_text_translation_action_retry">Retry</string>
     <string name="novel_reader_selected_text_translation_action_close">Close</string>
     <string name="novel_reader_selected_text_translation_loading">Translating selected text…</string>

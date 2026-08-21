@@ -70,6 +70,7 @@ import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextAnchor
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
+import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectionAnchor
 import eu.kanade.tachiyomi.ui.reader.novel.SelectedTextAction
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
@@ -85,6 +86,7 @@ internal const val MENU_ID_TRANSLATION = 0x9002
 internal const val MENU_ID_COPY = 0x9003
 internal const val MENU_ID_SELECT_ALL = 0x9004
 internal const val MENU_ID_SHARE = 0x9005
+internal const val MENU_ID_HIGHLIGHT = 0x9006
 
 internal data class NovelPageReaderContentLayout(
     val textPadding: PaddingValues,
@@ -436,6 +438,15 @@ private class NovelPageReaderTextView constructor(
     private var isExecutingAction = false
     var isDictionaryEnabled = false
     var isTranslationEnabled = false
+
+    /**
+     * Persistent address of the text rendered by this view: the chapter id, the source block
+     * index and the offset of this view's text inside that block (slices of one block carry a
+     * non-zero start). When the chapter id is null the renderer cannot anchor selections.
+     */
+    var selectionAnchorChapterId: Long? = null
+    var selectionAnchorBlockIndex: Int = 0
+    var selectionAnchorTextStartInBlock: Int = 0
     private var isDetaching = false
 
     override fun onDetachedFromWindow() {
@@ -496,6 +507,17 @@ private class NovelPageReaderTextView constructor(
                         context.getString(AYMR.strings.novel_reader_text_selection_action_translate.resourceId),
                     )
                 }
+                // The view either can anchor selections at all or not; the anchor itself is
+                // computed from the live selection at click time (the system may open this menu
+                // before our selection listener has published localSelection).
+                if (selectionAnchorChapterId != null) {
+                    menu.add(
+                        Menu.NONE,
+                        MENU_ID_HIGHLIGHT,
+                        menuOrder + 2,
+                        context.getString(AYMR.strings.novel_highlight_action_save.resourceId),
+                    )
+                }
                 return true
             }
 
@@ -536,6 +558,19 @@ private class NovelPageReaderTextView constructor(
                         isExecutingAction = true
                         val selectionWithAction = selection.copy(triggerAction = SelectedTextAction.TRANSLATION)
                         onSelectedTextSelectionChanged(selectionWithAction)
+                        mode?.finish()
+                        return true
+                    }
+                    MENU_ID_HIGHLIGHT -> {
+                        if (selection == null) return false
+                        isExecutingAction = true
+                        val selectionWithAction = selection.copy(triggerAction = SelectedTextAction.HIGHLIGHT)
+                        onSelectedTextSelectionChanged(selectionWithAction)
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(AYMR.strings.novel_highlight_saved.resourceId),
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
                         mode?.finish()
                         return true
                     }
@@ -791,6 +826,14 @@ private class NovelPageReaderTextView constructor(
 
         val locationOnScreen = IntArray(2)
         getLocationOnScreen(locationOnScreen)
+        val selectionAnchor = selectionAnchorChapterId?.let { chapterId ->
+            NovelSelectionAnchor(
+                chapterId = chapterId,
+                blockIndex = selectionAnchorBlockIndex,
+                charStart = selectionAnchorTextStartInBlock + start,
+                charEndExclusive = selectionAnchorTextStartInBlock + end,
+            )
+        }
         localSelection = NovelSelectedTextSelection(
             sessionId = selectionSessionIdProvider(),
             renderer = selectionRenderer,
@@ -801,6 +844,7 @@ private class NovelPageReaderTextView constructor(
                 rightPx = (locationOnScreen[0] + bounds.right).roundToInt(),
                 bottomPx = (locationOnScreen[1] + bounds.bottom).roundToInt(),
             ),
+            selectionAnchor = selectionAnchor,
         )
         isExecutingAction = false
     }
@@ -918,6 +962,7 @@ internal fun NovelPageReaderPageContent(
     ttsHighlightColor: Color = Color.Transparent,
     selectionRenderer: NovelSelectedTextRenderer = NovelSelectedTextRenderer.PAGE_READER,
     selectionSessionIdProvider: () -> Long = { 0L },
+    selectionAnchorChapterId: Long? = null,
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
     onPlainTap: ((Float, Float, Float, Float) -> Unit)? = null,
     onImageLongClick: ((String) -> Unit)? = null,
@@ -1042,6 +1087,9 @@ internal fun NovelPageReaderPageContent(
                                     },
                                     selectionRenderer = selectionRenderer,
                                     selectionSessionIdProvider = selectionSessionIdProvider,
+                                    selectionAnchorChapterId = selectionAnchorChapterId,
+                                    selectionAnchorBlockIndex = block.sourceBlockIndex,
+                                    selectionAnchorTextStartInBlock = block.sourceTextStart ?: 0,
                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                                     onPlainTap = onPlainTap,
                                     touchHandlingEnabled = touchHandlingEnabled,
@@ -1089,6 +1137,9 @@ internal fun NovelPageReaderPageContent(
                                     },
                                     selectionRenderer = selectionRenderer,
                                     selectionSessionIdProvider = selectionSessionIdProvider,
+                                    selectionAnchorChapterId = selectionAnchorChapterId,
+                                    selectionAnchorBlockIndex = block.sourceBlockIndex,
+                                    selectionAnchorTextStartInBlock = block.sourceTextStart ?: 0,
                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                                     onPlainTap = onPlainTap,
                                     touchHandlingEnabled = touchHandlingEnabled,
@@ -1211,6 +1262,9 @@ internal fun NovelPageReaderTextBlock(
     baseTypefaceStyle: Int = Typeface.NORMAL,
     selectionRenderer: NovelSelectedTextRenderer? = null,
     selectionSessionIdProvider: () -> Long = { 0L },
+    selectionAnchorChapterId: Long? = null,
+    selectionAnchorBlockIndex: Int = 0,
+    selectionAnchorTextStartInBlock: Int = 0,
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit = {},
     onPlainTap: ((Float, Float, Float, Float) -> Unit)? = null,
     touchHandlingEnabled: Boolean = true,
@@ -1234,6 +1288,15 @@ internal fun NovelPageReaderTextBlock(
         textTypeface
     }
     val blockTextColor = textColorOverride ?: if (isChapterTitle) chapterTitleTextColor else textColor
+
+    // Paint saved highlights over the rendered slice before anything consumes the text.
+    val text = paintNovelSliceHighlights(
+        text = text,
+        chapterId = selectionAnchorChapterId,
+        blockIndex = selectionAnchorBlockIndex,
+        sliceStart = selectionAnchorTextStartInBlock,
+        sliceEndExclusive = selectionAnchorTextStartInBlock + text.length,
+    )
     val blockTextShadow = resolveReaderTextShadow(
         textShadowEnabled = textShadowEnabled,
         textShadowColor = textShadowColor,
@@ -1283,6 +1346,9 @@ internal fun NovelPageReaderTextBlock(
         update = { textView ->
             textView.isDictionaryEnabled = readerSettings.novelDictionaryEnabled
             textView.isTranslationEnabled = readerSettings.selectedTextTranslationEnabled
+            textView.selectionAnchorChapterId = selectionAnchorChapterId
+            textView.selectionAnchorBlockIndex = selectionAnchorBlockIndex
+            textView.selectionAnchorTextStartInBlock = selectionAnchorTextStartInBlock
             textView.updatePlainTapHandler(onPlainTap)
             textView.updateSelectionInteractionEnabled(selectionInteractionEnabled)
             val glyphPadBottom = resolvePageReaderGlyphOverflowPaddingPx(blockTextSizePx)

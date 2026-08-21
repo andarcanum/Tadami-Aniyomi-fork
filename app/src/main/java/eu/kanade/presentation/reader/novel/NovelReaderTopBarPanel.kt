@@ -9,26 +9,37 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelAutoScrollChapterEndBehavior
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
+import tachiyomi.presentation.core.i18n.stringResource
 
 /**
  * Top reader panel: the app bar and the auto-scroll settings panel.
@@ -54,6 +65,8 @@ internal fun NovelReaderTopBarPanel(
     adaptiveDelayCharacterCount: () -> Int,
     onBack: () -> Unit,
     onToggleBookmark: () -> Unit,
+    onOpenHighlights: () -> Unit,
+    onOpenQuotes: () -> Unit,
     onHapticTap: () -> Unit,
     onIntervalChange: (Int) -> Unit,
     onAdaptiveDelayChange: (Boolean) -> Unit,
@@ -114,6 +127,34 @@ internal fun NovelReaderTopBarPanel(
                             },
                             contentDescription = null,
                         )
+                    }
+                    var overflowExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { overflowExpanded = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = null,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = overflowExpanded,
+                            onDismissRequest = { overflowExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(text = stringResource(AYMR.strings.novel_highlight_menu_title)) },
+                                onClick = {
+                                    overflowExpanded = false
+                                    onOpenHighlights()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(text = stringResource(AYMR.strings.novel_quotes_screen_title)) },
+                                onClick = {
+                                    overflowExpanded = false
+                                    onOpenQuotes()
+                                },
+                            )
+                        }
                     }
                 },
             )

@@ -31,6 +31,7 @@ internal interface NovelSelectionTranslationHost {
     fun selectionChapter(): NovelChapter?
     fun selectionSourceLanguage(): String?
     fun selectionUpdateContent(settings: NovelReaderSettings)
+    fun saveHighlight(selection: NovelSelectedTextSelection)
 }
 
 /**
@@ -80,7 +81,9 @@ internal class NovelSelectionTranslationController(
         val currentSettings = host.selectionReaderSettings()
         val translationEnabled = currentSettings?.selectedTextTranslationEnabled == true
         val dictionaryEnabled = novelReaderPreferences.novelDictionaryEnabled().get()
-        if (!translationEnabled && !dictionaryEnabled) {
+        // Highlighting works independently of the translation/dictionary toggles.
+        val highlightOnly = selection?.triggerAction == SelectedTextAction.HIGHLIGHT
+        if (!translationEnabled && !dictionaryEnabled && !highlightOnly) {
             clearSelection(refreshUi = false)
             return
         }
@@ -99,6 +102,12 @@ internal class NovelSelectionTranslationController(
             when (selection.triggerAction) {
                 SelectedTextAction.DICTIONARY -> lookupSelectedTextDefinition()
                 SelectedTextAction.TRANSLATION -> translateSelectedText()
+                SelectedTextAction.HIGHLIGHT -> {
+                    host.saveHighlight(selection)
+                    // A saved highlight owns no card: drop the selection so the translation/
+                    // dictionary overlay never appears for it.
+                    clearSelection(refreshUi = true)
+                }
                 null -> {}
             }
         }

@@ -15,6 +15,7 @@ import androidx.core.content.res.ResourcesCompat
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextAnchor
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextRenderer
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
+import eu.kanade.tachiyomi.ui.reader.novel.parseNovelSelectionAnchor
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
@@ -63,6 +64,11 @@ internal fun buildInitialWebReaderHtml(
         append("\">")
         append(buildWebReaderSelectionJavascript())
         append("</script>")
+        // Highlight tap reporting: the listener resolves the bridge lazily on every click,
+        // so binding here before the interface is registered is safe.
+        append("<script>")
+        append(buildNovelHighlightClickJs(WEB_READER_SELECTION_BRIDGE_NAME))
+        append("</script>")
     }
     return injectHtmlFragmentIntoHead(rawHtml, injection)
 }
@@ -110,12 +116,38 @@ internal fun buildWebReaderSelectionJavascript(
                     return;
                 }
 
+                let domId = null;
+                let charStart = -1;
+                let charEnd = -1;
+                try {
+                    let el = range.startContainer;
+                    if (el.nodeType !== Node.ELEMENT_NODE) el = el.parentElement;
+                    while (el && !el.hasAttribute('data-an-b')) el = el.parentElement;
+                    if (el) {
+                        let endEl = range.endContainer;
+                        if (endEl.nodeType !== Node.ELEMENT_NODE) endEl = endEl.parentElement;
+                        while (endEl && endEl !== el && !endEl.hasAttribute('data-an-b')) endEl = endEl.parentElement;
+                        // Only single-block selections get a persistent anchor.
+                        if (endEl === el) {
+                            const pre = range.cloneRange();
+                            pre.selectNodeContents(el);
+                            pre.setEnd(range.startContainer, range.startOffset);
+                            charStart = pre.toString().length;
+                            charEnd = charStart + range.toString().length;
+                            domId = el.getAttribute('data-an-b');
+                        }
+                    }
+                } catch (e) {}
+
                 const payload = JSON.stringify({
                     text: text,
                     left: rect.left,
                     top: rect.top,
                     right: rect.right,
                     bottom: rect.bottom,
+                    domId: domId,
+                    charStart: charStart,
+                    charEnd: charEnd,
                 });
                 if (payload === lastPayload) return;
                 lastPayload = payload;
@@ -157,6 +189,7 @@ internal class NovelReaderSelectionBridge(
     private val view: WebView,
     private val selectionSessionIdProvider: () -> Long,
     private val onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
+    private val onHighlightClicked: (Long) -> Unit = {},
 ) {
     @JavascriptInterface
     fun onSelectionChanged(payloadJson: String) {
@@ -179,6 +212,11 @@ internal class NovelReaderSelectionBridge(
                     topPx = locationOnScreen[1] + payload.optDouble("top").toInt(),
                     rightPx = locationOnScreen[0] + payload.optDouble("right").toInt(),
                     bottomPx = locationOnScreen[1] + payload.optDouble("bottom").toInt(),
+                ),
+                selectionAnchor = parseNovelSelectionAnchor(
+                    domId = payload.optString("domId").takeIf { it.isNotBlank() },
+                    charStart = payload.optInt("charStart", -1),
+                    charEndExclusive = payload.optInt("charEnd", -1),
                 ),
             )
         }
@@ -213,11 +251,18 @@ internal class NovelReaderSelectionBridge(
             }
         }
     }
+
+    @JavascriptInterface
+    fun onHighlightClicked(idJson: String) {
+        val id = idJson.toLongOrNull() ?: return
+        view.post { onHighlightClicked(id) }
+    }
 }
 
 internal fun WebView.registerWebReaderSelectionBridge(
     selectionSessionIdProvider: () -> Long,
     onSelectedTextSelectionChanged: (NovelSelectedTextSelection?) -> Unit,
+    onHighlightClicked: (Long) -> Unit = {},
 ) {
     if (this is NovelReaderWebView) {
         this.onSelectedTextSelectionChanged = onSelectedTextSelectionChanged
@@ -230,6 +275,7 @@ internal fun WebView.registerWebReaderSelectionBridge(
             view = this,
             selectionSessionIdProvider = selectionSessionIdProvider,
             onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+            onHighlightClicked = onHighlightClicked,
         ),
         WEB_READER_SELECTION_BRIDGE_NAME,
     )

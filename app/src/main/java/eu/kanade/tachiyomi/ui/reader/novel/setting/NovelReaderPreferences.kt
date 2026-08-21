@@ -722,6 +722,10 @@ class NovelReaderPreferences(
     fun novelDictionaryTargetLanguage() =
         preferenceStore.getString("novel_reader_dictionary_target_language", "ru")
 
+    // Highlights
+    fun novelHighlightLastColor() =
+        preferenceStore.getLong("novel_highlight_last_color", DEFAULT_HIGHLIGHT_COLOR_ARGB)
+
     fun novelDictionaryQuickAccess() =
         preferenceStore.getBoolean("novel_reader_dictionary_quick_access", false)
 
@@ -2087,6 +2091,9 @@ class NovelReaderPreferences(
         const val DEFAULT_AUTO_SCROLL_OFFSET = 0
         const val DEFAULT_BACKGROUND_PRESET_ID = "linen_paper"
         const val DEFAULT_BOOK_MODE_PREPARE_AHEAD = 3
+
+        /** 0xFFFBC02D — amber, the default highlight color. */
+        const val DEFAULT_HIGHLIGHT_COLOR_ARGB = 4294688813L
 
         /** Hidden debug flag guarding the reworked book-mode pipeline. */
         const val NOVEL_BOOK_MODE_V2_KEY = "novel_reader_book_mode_v2"

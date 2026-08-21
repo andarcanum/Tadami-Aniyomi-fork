@@ -43,6 +43,14 @@ class NovelReaderWebView(context: Context) : WebView(context) {
                             context.getString(AYMR.strings.novel_reader_text_selection_action_translate.resourceId),
                         )
                     }
+                    if (localSelection?.selectionAnchor != null) {
+                        menu.add(
+                            Menu.NONE,
+                            MENU_ID_HIGHLIGHT,
+                            menuOrder + 2,
+                            context.getString(AYMR.strings.novel_highlight_action_save.resourceId),
+                        )
+                    }
                 }
                 return result
             }
@@ -67,6 +75,18 @@ class NovelReaderWebView(context: Context) : WebView(context) {
                                 isExecutingAction = true
                                 val selectionWithAction = selection.copy(triggerAction = SelectedTextAction.TRANSLATION)
                                 onSelectedTextSelectionChanged?.invoke(selectionWithAction)
+                                mode?.finish()
+                                return true
+                            }
+                            MENU_ID_HIGHLIGHT -> {
+                                isExecutingAction = true
+                                val selectionWithAction = selection.copy(triggerAction = SelectedTextAction.HIGHLIGHT)
+                                onSelectedTextSelectionChanged?.invoke(selectionWithAction)
+                                android.widget.Toast.makeText(
+                                    context,
+                                    context.getString(AYMR.strings.novel_highlight_saved.resourceId),
+                                    android.widget.Toast.LENGTH_SHORT,
+                                ).show()
                                 mode?.finish()
                                 return true
                             }

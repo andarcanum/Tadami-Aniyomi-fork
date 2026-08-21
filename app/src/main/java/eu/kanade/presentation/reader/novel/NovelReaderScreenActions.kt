@@ -126,6 +126,9 @@ data class NovelReaderScreenActions(
     val onRetryNovelDictionary: () -> Unit = onLookupSelectedTextDefinition,
     val onDismissNovelDictionary: () -> Unit = {},
     val onPlaySelectedTextPronunciation: (String) -> Unit = {},
+    val onUpdateHighlight: (highlightId: Long, note: String, colorArgb: Long) -> Unit = { _, _, _ -> },
+    val onDeleteHighlight: (highlightId: Long) -> Unit = {},
+    val onDefaultHighlightColorChanged: (colorArgb: Long) -> Unit = {},
     val loadBookEngineDocument: (suspend (NovelBookSection) -> NovelBookDocument)? = null,
     val onBookEngineLocationChanged: (NovelBookLocation) -> Unit = {},
     /** Acknowledges a [BookSeekRequest] the renderer applied, identified by its id. */
