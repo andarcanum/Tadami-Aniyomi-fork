@@ -155,6 +155,10 @@ data class MergeNovelQueuedTasksResult(
     val addedCount: Int,
 )
 
+internal fun novelQueueTaskIdsToCancelOnClear(tasks: List<NovelQueuedDownload>): Set<Long> {
+    return tasks.mapTo(mutableSetOf()) { it.taskId }
+}
+
 fun mergeNovelQueuedTasks(
     currentTasks: List<NovelQueuedDownload>,
     novel: Novel,
@@ -267,11 +271,11 @@ object NovelDownloadQueueManager {
     }
 
     fun clearQueue() {
-        val runningTaskIds = state.value.tasks
+        val snapshot = state.value.tasks
+        runtimeState.markCanceled(novelQueueTaskIdsToCancelOnClear(snapshot))
+        snapshot
             .filter { it.status == NovelQueuedDownloadStatus.DOWNLOADING }
-            .mapTo(mutableSetOf()) { it.taskId }
-        runtimeState.markCanceled(runningTaskIds)
-        runningTaskIds.forEach(runtimeState::cancelActiveDownload)
+            .forEach { runtimeState.cancelActiveDownload(it.taskId) }
         updateState {
             it.copy(
                 tasks = it.tasks.filter { task -> task.status == NovelQueuedDownloadStatus.DOWNLOADING },

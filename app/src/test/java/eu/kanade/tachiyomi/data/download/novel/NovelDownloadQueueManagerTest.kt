@@ -164,6 +164,22 @@ class NovelDownloadQueueManagerTest {
     }
 
     @Test
+    fun `clear queue cancel set includes every task regardless of status`() {
+        val runtime = NovelDownloadQueueRuntimeState()
+        val tasks = listOf(
+            queuedTask(status = NovelQueuedDownloadStatus.DOWNLOADING).copy(taskId = 1L),
+            queuedTask(status = NovelQueuedDownloadStatus.QUEUED).copy(taskId = 2L),
+            queuedTask(status = NovelQueuedDownloadStatus.FAILED).copy(taskId = 3L),
+        )
+
+        runtime.markCanceled(novelQueueTaskIdsToCancelOnClear(tasks))
+
+        runtime.consumeCanceled(1L) shouldBe true
+        runtime.consumeCanceled(2L) shouldBe true
+        runtime.consumeCanceled(3L) shouldBe true
+    }
+
+    @Test
     fun `recover stale downloading tasks requeues orphaned active tasks without reordering`() {
         val tasks = listOf(
             queuedTask(status = NovelQueuedDownloadStatus.QUEUED).copy(taskId = 1L),
