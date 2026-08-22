@@ -56,6 +56,7 @@ class GoogleSubtitleTranslationProvider(
                 message = "Subtitle translation failed",
                 retryable = true,
             )
+            if (error is kotlin.coroutines.cancellation.CancellationException) throw error
             lastError = error
             if (!error.isRetryableNetworkError()) {
                 return SubtitleTranslationProviderResult.Failure(

@@ -571,7 +571,7 @@ internal class NovelTranslationController(
                     .filterValues { translated -> translated.isNotBlank() }
                 addGoogleLog(
                     "Finished: translatedSegments=${results.values.count { it.isNotBlank() }}/" +
-                        "$baseTextBlocks.size, rateLimited=false",
+                        "${baseTextBlocks.size}, rateLimited=false",
                 )
                 host.translationHolderPut("google", results)
                 googleSessionCache.put(
