@@ -109,6 +109,14 @@ class NovelTranslatedDownloadManager(
             novelDirName = getReadableNovelDirName(novel),
             fileName = fileName,
         )?.delete()
+        getLegacyReadableSourceDirName(novel)?.let { legacySourceDirName ->
+            translatedFileInDirectory(
+                baseDir = rootDir,
+                sourceDirName = legacySourceDirName,
+                novelDirName = getReadableNovelDirName(novel),
+                fileName = fileName,
+            )?.delete()
+        }
         translatedFileInDirectory(
             baseDir = rootDir,
             sourceDirName = getStableSourceDirName(novel),
@@ -200,6 +208,16 @@ class NovelTranslatedDownloadManager(
         )
         if (readable != null) return readable
 
+        val legacyReadable = getLegacyReadableSourceDirName(novel)?.let { legacySourceDirName ->
+            translatedFileInDirectory(
+                baseDir = rootDir,
+                sourceDirName = legacySourceDirName,
+                novelDirName = getReadableNovelDirName(novel),
+                fileName = fileName,
+            )
+        }
+        if (legacyReadable != null) return legacyReadable
+
         val stableFile = translatedFileInDirectory(
             baseDir = rootDir,
             sourceDirName = getStableSourceDirName(novel),
@@ -235,6 +253,11 @@ class NovelTranslatedDownloadManager(
         return listOfNotNull(
             baseDir.findFile(getReadableSourceDirName(novel))
                 ?.findFile(getReadableNovelDirName(novel)),
+            getLegacyReadableSourceDirName(novel)
+                ?.let { legacySourceDirName ->
+                    baseDir.findFile(legacySourceDirName)
+                        ?.findFile(getReadableNovelDirName(novel))
+                },
             baseDir.findFile(getStableSourceDirName(novel))
                 ?.findFile(getStableNovelDirName(novel)),
         ).distinctBy { it.filePath ?: it.name }
@@ -373,9 +396,17 @@ class NovelTranslatedDownloadManager(
     }
 
     private fun getReadableSourceDirName(novel: Novel): String {
-        val sourceName = sourceManager?.getOrStub(novel.source)?.toString()?.ifBlank { null }
+        val sourceName = sourceManager?.getOrStub(novel.source)?.name?.ifBlank { null }
             ?: novel.source.toString()
         return DiskUtil.buildValidFilename(sourceName)
+    }
+
+    private fun getLegacyReadableSourceDirName(novel: Novel): String? {
+        val legacyName = sourceManager?.getOrStub(novel.source)?.toString()?.ifBlank { null }
+            ?: return null
+        val legacyDirName = DiskUtil.buildValidFilename(legacyName)
+        if (legacyDirName == getReadableSourceDirName(novel)) return null
+        return legacyDirName
     }
 
     private fun getReadableNovelDirName(novel: Novel): String {
