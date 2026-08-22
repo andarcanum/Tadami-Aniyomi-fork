@@ -82,8 +82,13 @@ data class NovelDownloadQueueState(
 }
 
 class NovelDownloadQueueRuntimeState {
+    companion object {
+        const val WORKER_GENERATION_NONE = 0L
+    }
+
     private var nextTaskId = 0L
     private var workerRunning = false
+    private var workerGeneration = WORKER_GENERATION_NONE
     private val canceledTaskIds = mutableSetOf<Long>()
     private var activeDownloadTaskId: Long? = null
     private var activeDownloadJob: Job? = null
@@ -94,16 +99,25 @@ class NovelDownloadQueueRuntimeState {
         return nextTaskId
     }
 
+    /**
+     * Acquires the single-worker latch and returns the generation token of the newly started
+     * worker, or [WORKER_GENERATION_NONE] when a worker is already running. The returned token
+     * must be passed back to [releaseWorker]; releases from any other (stale) generation are
+     * ignored so a late worker exit can never clear a latch owned by a newer worker.
+     */
     @Synchronized
-    fun tryStartWorker(): Boolean {
-        if (workerRunning) return false
+    fun tryStartWorker(): Long {
+        if (workerRunning) return WORKER_GENERATION_NONE
         workerRunning = true
-        return true
+        workerGeneration += 1
+        return workerGeneration
     }
 
     @Synchronized
-    fun markWorkerStopped() {
-        workerRunning = false
+    fun releaseWorker(generation: Long) {
+        if (generation != WORKER_GENERATION_NONE && workerGeneration == generation) {
+            workerRunning = false
+        }
     }
 
     @Synchronized
@@ -387,150 +401,161 @@ object NovelDownloadQueueManager {
     }
 
     private fun startWorkerIfNeeded() {
-        if (!runtimeState.tryStartWorker()) return
+        val generation = runtimeState.tryStartWorker()
+        if (generation == NovelDownloadQueueRuntimeState.WORKER_GENERATION_NONE) return
         updateState { queueState ->
             queueState.copy(tasks = recoverStaleDownloadingTasks(queueState.tasks))
         }
         logcat(LogPriority.DEBUG) { "Novel queue worker starting" }
         queueScope.launch {
-            try {
-                processLoop()
-            } finally {
-                runtimeState.markWorkerStopped()
-                logcat(LogPriority.DEBUG) { "Novel queue worker stopped" }
-            }
+            processLoop(generation)
         }
     }
 
-    private suspend fun processLoop() {
-        while (true) {
-            val snapshot = state.value
-            if (!snapshot.isRunning) {
-                if (!shouldWaitForNovelQueueWhilePaused(snapshot)) {
-                    break
-                }
-                delay(150)
-                continue
-            }
-
-            val networkStatus = currentNetworkStatus()
-            if (networkStatus != DownloadNetworkStatus.Available) {
-                pauseForNetwork(networkUnavailableReason(networkStatus))
-                delay(150)
-                continue
-            }
-
-            val nextTask = snapshot.tasks.firstOrNull { it.status == NovelQueuedDownloadStatus.QUEUED } ?: break
-            try {
-                val throttleConfig = NovelDownloadThrottleConfig.from(downloadPreferences)
-                if (!waitForNovelThrottleWindow(throttleConfig, nextTask.taskId)) {
-                    removeTask(nextTask.taskId)
+    private suspend fun processLoop(startGeneration: Long) {
+        var generation = startGeneration
+        try {
+            while (true) {
+                val snapshot = state.value
+                if (!snapshot.isRunning) {
+                    if (!shouldWaitForNovelQueueWhilePaused(snapshot)) {
+                        break
+                    }
+                    delay(150)
                     continue
                 }
-                // A pause that arrived while we were sleeping out the throttle window
-                // must not dispatch a new download. The task stays QUEUED; the
-                // top-of-loop break handles the paused state, and startDownloads()
-                // re-arms the worker on resume.
-                if (!state.value.isRunning) continue
-                markTaskStatus(nextTask.taskId, NovelQueuedDownloadStatus.DOWNLOADING)
-                logcat(LogPriority.DEBUG) {
-                    "Novel queue task starting: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, type=${nextTask.type}, throttle=$throttleConfig"
+
+                val networkStatus = currentNetworkStatus()
+                if (networkStatus != DownloadNetworkStatus.Available) {
+                    pauseForNetwork(networkUnavailableReason(networkStatus))
+                    delay(150)
+                    continue
                 }
 
-                val result = supervisorScope {
-                    val downloadJob = async {
-                        withTimeout(throttleConfig.timeoutMs) {
-                            when (nextTask.type) {
-                                NovelQueuedDownloadType.ORIGINAL -> {
-                                    downloadManager.downloadChapter(nextTask.novel, nextTask.chapter)
-                                }
-                                NovelQueuedDownloadType.TRANSLATED -> {
-                                    val format = when (nextTask.format) {
-                                        NovelQueuedDownloadFormat.TXT -> NovelTranslatedDownloadFormat.TXT
-                                        NovelQueuedDownloadFormat.DOCX -> NovelTranslatedDownloadFormat.DOCX
-                                        NovelQueuedDownloadFormat.HTML -> NovelTranslatedDownloadFormat.TXT
+                val nextTask = snapshot.tasks.firstOrNull { it.status == NovelQueuedDownloadStatus.QUEUED }
+                if (nextTask == null) {
+                    runtimeState.releaseWorker(generation)
+                    val hasFreshQueuedTasks = state.value.tasks.any { it.status == NovelQueuedDownloadStatus.QUEUED }
+                    if (!hasFreshQueuedTasks) break
+                    val retaken = runtimeState.tryStartWorker()
+                    if (retaken == NovelDownloadQueueRuntimeState.WORKER_GENERATION_NONE) break
+                    generation = retaken
+                    continue
+                }
+                try {
+                    val throttleConfig = NovelDownloadThrottleConfig.from(downloadPreferences)
+                    if (!waitForNovelThrottleWindow(throttleConfig, nextTask.taskId)) {
+                        removeTask(nextTask.taskId)
+                        continue
+                    }
+                    // A pause that arrived while we were sleeping out the throttle window
+                    // must not dispatch a new download. The task stays QUEUED; the
+                    // top-of-loop break handles the paused state, and startDownloads()
+                    // re-arms the worker on resume.
+                    if (!state.value.isRunning) continue
+                    markTaskStatus(nextTask.taskId, NovelQueuedDownloadStatus.DOWNLOADING)
+                    logcat(LogPriority.DEBUG) {
+                        "Novel queue task starting: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, type=${nextTask.type}, throttle=$throttleConfig"
+                    }
+
+                    val result = supervisorScope {
+                        val downloadJob = async {
+                            withTimeout(throttleConfig.timeoutMs) {
+                                when (nextTask.type) {
+                                    NovelQueuedDownloadType.ORIGINAL -> {
+                                        downloadManager.downloadChapter(nextTask.novel, nextTask.chapter)
                                     }
-                                    translatedDownloadManager
-                                        .exportTranslatedChapter(nextTask.novel, nextTask.chapter, format)
-                                        .isSuccess
+                                    NovelQueuedDownloadType.TRANSLATED -> {
+                                        val format = when (nextTask.format) {
+                                            NovelQueuedDownloadFormat.TXT -> NovelTranslatedDownloadFormat.TXT
+                                            NovelQueuedDownloadFormat.DOCX -> NovelTranslatedDownloadFormat.DOCX
+                                            NovelQueuedDownloadFormat.HTML -> NovelTranslatedDownloadFormat.TXT
+                                        }
+                                        translatedDownloadManager
+                                            .exportTranslatedChapter(nextTask.novel, nextTask.chapter, format)
+                                            .isSuccess
+                                    }
                                 }
                             }
                         }
-                    }
-                    runtimeState.registerActiveDownload(nextTask.taskId, downloadJob)
-                    try {
-                        runCatching { downloadJob.await() }
-                    } finally {
-                        runtimeState.clearActiveDownload(nextTask.taskId, downloadJob)
-                    }
-                }
-
-                val canceled = runtimeState.consumeCanceled(nextTask.taskId)
-                if (canceled) {
-                    if (nextTask.type == NovelQueuedDownloadType.ORIGINAL) {
-                        downloadManager.deleteChapter(nextTask.novel, nextTask.chapter.id)
-                    } else {
-                        val format = when (nextTask.format) {
-                            NovelQueuedDownloadFormat.TXT -> NovelTranslatedDownloadFormat.TXT
-                            NovelQueuedDownloadFormat.DOCX -> NovelTranslatedDownloadFormat.DOCX
-                            NovelQueuedDownloadFormat.HTML -> NovelTranslatedDownloadFormat.TXT
+                        runtimeState.registerActiveDownload(nextTask.taskId, downloadJob)
+                        try {
+                            runCatching { downloadJob.await() }
+                        } finally {
+                            runtimeState.clearActiveDownload(nextTask.taskId, downloadJob)
                         }
-                        translatedDownloadManager.deleteTranslatedChapter(
-                            novel = nextTask.novel,
-                            chapter = nextTask.chapter,
-                            format = format,
-                        )
                     }
-                    removeTask(nextTask.taskId)
-                    continue
-                }
 
-                val success = result.getOrElse { false }
-                if (success) {
-                    removeTask(nextTask.taskId)
-                    completionTracker.recordCompletion(DownloadSection.NOVEL)
-                    achievementHandler.trackFeatureUsed(AchievementEvent.Feature.DOWNLOAD)
-                    logcat(LogPriority.DEBUG) {
-                        "Novel queue task completed: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}"
+                    val canceled = runtimeState.consumeCanceled(nextTask.taskId)
+                    if (canceled) {
+                        if (nextTask.type == NovelQueuedDownloadType.ORIGINAL) {
+                            downloadManager.deleteChapter(nextTask.novel, nextTask.chapter.id)
+                        } else {
+                            val format = when (nextTask.format) {
+                                NovelQueuedDownloadFormat.TXT -> NovelTranslatedDownloadFormat.TXT
+                                NovelQueuedDownloadFormat.DOCX -> NovelTranslatedDownloadFormat.DOCX
+                                NovelQueuedDownloadFormat.HTML -> NovelTranslatedDownloadFormat.TXT
+                            }
+                            translatedDownloadManager.deleteTranslatedChapter(
+                                novel = nextTask.novel,
+                                chapter = nextTask.chapter,
+                                format = format,
+                            )
+                        }
+                        removeTask(nextTask.taskId)
+                        continue
                     }
-                } else {
-                    val exception = result.exceptionOrNull()
-                    val queueSnapshot = state.value
-                    val networkAvailable = currentNetworkStatus() == DownloadNetworkStatus.Available
-                    if (
-                        shouldRequeueNovelTaskAfterFailure(
-                            waitingForNetwork = queueSnapshot.waitingForNetwork,
-                            networkAvailable = networkAvailable,
-                            exception = exception,
-                        )
-                    ) {
-                        markTaskStatus(nextTask.taskId, NovelQueuedDownloadStatus.QUEUED)
-                        pauseForNetwork(networkUnavailableReason(currentNetworkStatus()))
+
+                    val success = result.getOrElse { false }
+                    if (success) {
+                        removeTask(nextTask.taskId)
+                        completionTracker.recordCompletion(DownloadSection.NOVEL)
+                        achievementHandler.trackFeatureUsed(AchievementEvent.Feature.DOWNLOAD)
                         logcat(LogPriority.DEBUG) {
-                            "Novel queue task requeued after network issue: taskId=${nextTask.taskId}"
+                            "Novel queue task completed: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}"
                         }
-                        continue
+                    } else {
+                        val exception = result.exceptionOrNull()
+                        val queueSnapshot = state.value
+                        val networkAvailable = currentNetworkStatus() == DownloadNetworkStatus.Available
+                        if (
+                            shouldRequeueNovelTaskAfterFailure(
+                                waitingForNetwork = queueSnapshot.waitingForNetwork,
+                                networkAvailable = networkAvailable,
+                                exception = exception,
+                            )
+                        ) {
+                            markTaskStatus(nextTask.taskId, NovelQueuedDownloadStatus.QUEUED)
+                            pauseForNetwork(networkUnavailableReason(currentNetworkStatus()))
+                            logcat(LogPriority.DEBUG) {
+                                "Novel queue task requeued after network issue: taskId=${nextTask.taskId}"
+                            }
+                            continue
+                        }
+                        val message = exception?.message
+                        markTaskFailed(nextTask.taskId, message ?: "Download failed")
+                        logcat(LogPriority.WARN) {
+                            "Novel queue task failed: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, error=${message ?: "Download failed"}"
+                        }
+                        applyFailureCooldown(throttleConfig, nextTask.taskId)
                     }
-                    val message = exception?.message
-                    markTaskFailed(nextTask.taskId, message ?: "Download failed")
-                    logcat(LogPriority.WARN) {
-                        "Novel queue task failed: taskId=${nextTask.taskId}, novel=${nextTask.novel.id}, chapter=${nextTask.chapter.id}, error=${message ?: "Download failed"}"
+                } catch (e: Exception) {
+                    if (e is CancellationException) {
+                        if (state.value.waitingForNetwork) {
+                            markTaskStatus(nextTask.taskId, NovelQueuedDownloadStatus.QUEUED)
+                            continue
+                        }
+                        throw e
                     }
-                    applyFailureCooldown(throttleConfig, nextTask.taskId)
-                }
-            } catch (e: Exception) {
-                if (e is CancellationException) {
-                    if (state.value.waitingForNetwork) {
-                        markTaskStatus(nextTask.taskId, NovelQueuedDownloadStatus.QUEUED)
-                        continue
+                    logcat(LogPriority.ERROR, e) {
+                        "Critical failure inside novel queue processLoop iteration for taskId=${nextTask.taskId}: ${e.message}"
                     }
-                    throw e
+                    markTaskFailed(nextTask.taskId, e.message ?: "Critical download failure")
                 }
-                logcat(LogPriority.ERROR, e) {
-                    "Critical failure inside novel queue processLoop iteration for taskId=${nextTask.taskId}: ${e.message}"
-                }
-                markTaskFailed(nextTask.taskId, e.message ?: "Critical download failure")
             }
+        } finally {
+            runtimeState.releaseWorker(generation)
+            logcat(LogPriority.DEBUG) { "Novel queue worker stopped" }
         }
     }
 

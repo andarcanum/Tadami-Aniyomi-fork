@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.download.novel
 
 import android.app.Application
 import com.hippo.unifile.UniFile
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -94,6 +95,46 @@ class NovelDownloadManagerTest {
             readableChapterFile(tempDir.resolve("downloads").toFile(), source.name, novel.title, chapter.id)
                 .exists() shouldBe true
             manager.getDownloadedChapterText(novel, chapter.id) shouldBe expectedText
+        }
+    }
+
+    @Test
+    fun `downloaded chapter is published atomically without leftover temp files`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val manager = createManager(source = source, chapterText = "updated text")
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
+            val chapter = NovelChapter.create().copy(id = 2L, novelId = 1L, url = "/chapter-2")
+            val chapterDir = tempDir.resolve("downloads").toFile()
+                .resolve("novels/${source.name}/${novel.title}")
+            chapterDir.mkdirs()
+            // A truncated file from a previous interrupted download must be fully replaced.
+            File(chapterDir, "${chapter.id}.html").writeText("stale partial")
+
+            manager.downloadChapter(novel = novel, chapter = chapter) shouldBe true
+
+            File(chapterDir, "${chapter.id}.html").readText() shouldBe "updated text"
+            chapterDir.listFiles()?.filter { it.name.endsWith(".tmp") }.orEmpty().shouldBeEmpty()
+            manager.getDownloadedChapterText(novel, chapter.id) shouldBe "updated text"
+        }
+    }
+
+    @Test
+    fun `failed fetch leaves previously downloaded content untouched`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val manager = createManager(source = source, chapterText = null)
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
+            val chapter = NovelChapter.create().copy(id = 2L, novelId = 1L, url = "/chapter-2")
+            val chapterDir = tempDir.resolve("downloads").toFile()
+                .resolve("novels/${source.name}/${novel.title}")
+            chapterDir.mkdirs()
+            File(chapterDir, "${chapter.id}.html").writeText("good content")
+
+            manager.downloadChapter(novel = novel, chapter = chapter) shouldBe false
+
+            File(chapterDir, "${chapter.id}.html").readText() shouldBe "good content"
+            chapterDir.listFiles()?.filter { it.name.endsWith(".tmp") }.orEmpty().shouldBeEmpty()
         }
     }
 
@@ -228,6 +269,12 @@ class NovelDownloadManagerTest {
         return mockk(relaxed = true) {
             every { getName() } returns normalized.name
             every { getFilePath() } returns normalized.absolutePath
+            every { getParentFile() } answers {
+                normalized.parentFile?.let { fakeUniFile(it) }
+            }
+            every { renameTo(any()) } answers {
+                normalized.renameTo(File(normalized.parentFile, firstArg<String>()))
+            }
             every { isDirectory() } answers { normalized.isDirectory }
             every { isFile() } answers { normalized.isFile }
             every { exists() } answers { normalized.exists() }

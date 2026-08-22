@@ -8,6 +8,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withTimeout
 import logcat.LogPriority
+import tachiyomi.core.common.storage.renameToOrCopy
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -16,6 +17,7 @@ import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
@@ -134,13 +136,25 @@ class NovelDownloadManager(
             return false
         } ?: return false
         coroutineContext.ensureActive()
-        val file = chapterFile(novel, chapter.id, create = true) ?: return false
-        file.parentFile?.let { resolvedNovelDirCache[novel.id] = it }
+        val novelDir = novelDirectory(novel, create = true) ?: return false
+        resolvedNovelDirCache[novel.id] = novelDir
         var writeElapsed = 0L
         writeElapsed = measureTimeMillis {
-            val outputStream = file.openOutputStream()
-            outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                writer.write(text)
+            val finalName = "${chapter.id}.html"
+            val tempFile = novelDir.findFile("${chapter.id}.html.tmp")
+                ?: novelDir.createFile("${chapter.id}.html.tmp")
+                ?: throw IOException("Failed to create temp file for chapter=${chapter.id}")
+            try {
+                tempFile.openOutputStream().use { output ->
+                    output.bufferedWriter(Charsets.UTF_8).use { writer ->
+                        writer.write(text)
+                    }
+                }
+                novelDir.findFile(finalName)?.delete()
+                tempFile.renameToOrCopy(finalName)
+            } catch (e: Throwable) {
+                tempFile.delete()
+                throw e
             }
         }
         logcat(LogPriority.DEBUG) {

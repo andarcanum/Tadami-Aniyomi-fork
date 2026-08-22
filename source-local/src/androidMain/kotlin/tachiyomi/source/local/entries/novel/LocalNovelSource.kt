@@ -286,7 +286,7 @@ actual class LocalNovelSource(
         val hasMultipleEpubFiles = chapterFiles
             .count { it.file.extension?.equals("epub", ignoreCase = true) == true } > 1
 
-        chapterFiles.forEachIndexed { index, chapterEntry ->
+        chapterFiles.forEach { chapterEntry ->
             val chapterFile = chapterEntry.file
             if (chapterFile.extension?.equals("epub", ignoreCase = true) == true) {
                 try {
@@ -310,12 +310,12 @@ actual class LocalNovelSource(
                                 ),
                             )
                         } else {
-                            allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
+                            allChapters.add(createSimpleChapter(novel, chapterEntry, allChapters.size + 1))
                         }
                     }
                 } catch (e: Throwable) {
                     logcat(LogPriority.ERROR, e) { "Error reading epub ${chapterFile.name}" }
-                    allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
+                    allChapters.add(createSimpleChapter(novel, chapterEntry, allChapters.size + 1))
                 }
             } else if (chapterFile.extension?.equals("fb2", ignoreCase = true) == true) {
                 try {
@@ -339,11 +339,11 @@ actual class LocalNovelSource(
                             )
                         }
                     } else {
-                        allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
+                        allChapters.add(createSimpleChapter(novel, chapterEntry, allChapters.size + 1))
                     }
                 } catch (e: Throwable) {
                     logcat(LogPriority.ERROR, e) { "Error reading fb2 ${chapterFile.name}" }
-                    allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
+                    allChapters.add(createSimpleChapter(novel, chapterEntry, allChapters.size + 1))
                 }
             } else if (isArchiveSupported(chapterFile)) {
                 try {
@@ -367,10 +367,10 @@ actual class LocalNovelSource(
                     }
                 } catch (e: Throwable) {
                     logcat(LogPriority.ERROR, e) { "Error reading archive ${chapterFile.name}" }
-                    allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
+                    allChapters.add(createSimpleChapter(novel, chapterEntry, allChapters.size + 1))
                 }
             } else {
-                allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
+                allChapters.add(createSimpleChapter(novel, chapterEntry, allChapters.size + 1))
             }
         }
 
