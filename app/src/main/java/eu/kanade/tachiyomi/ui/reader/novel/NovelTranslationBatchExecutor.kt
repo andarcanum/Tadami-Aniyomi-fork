@@ -40,6 +40,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Dispatches translation batches and next-chapter prefetch to the service of the configured
@@ -151,8 +152,8 @@ internal class NovelTranslationBatchExecutor(
                 val chunkSize = settings.effectiveTranslationBatchSize()
                 val chunks = nextTextBlocks.chunked(chunkSize)
                 val semaphore = Semaphore(settings.translationConcurrencyLimit())
-                val translated = mutableMapOf<Int, String>()
-                host.batchAddAiTranslationLog("?? ${settings.translationRequestConfigLog()} (prefetch)")
+                val translated = ConcurrentHashMap<Int, String>()
+                host.batchAddAiTranslationLog("🌐 ${settings.translationRequestConfigLog()} (prefetch)")
                 coroutineScope {
                     chunks.mapIndexed { chunkIndex, chunk ->
                         async {

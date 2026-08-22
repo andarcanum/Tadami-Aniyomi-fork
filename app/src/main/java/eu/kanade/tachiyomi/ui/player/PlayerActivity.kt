@@ -497,29 +497,42 @@ class PlayerActivity : BaseActivity() {
         if (advancedPlayerPreferences.mpvUserFiles().get()) {
             storageManager.getScriptsDirectory()?.listFiles()?.forEach { file ->
                 val outFile = scriptsDir()?.createFile(file.name)
-                outFile?.let {
-                    file.openInputStream().copyTo(it.openOutputStream())
+                outFile?.let { target ->
+                    file.openInputStream().use { input ->
+                        target.openOutputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
                 }
             }
             storageManager.getScriptOptsDirectory()?.listFiles()?.forEach { file ->
                 val outFile = scriptOptsDir()?.createFile(file.name)
-                outFile?.let {
-                    file.openInputStream().copyTo(it.openOutputStream())
+                outFile?.let { target ->
+                    file.openInputStream().use { input ->
+                        target.openOutputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
                 }
             }
             storageManager.getShadersDirectory()?.listFiles()?.forEach { file ->
                 val outFile = shadersDir()?.createFile(file.name)
-                outFile?.let {
-                    file.openInputStream().copyTo(it.openOutputStream())
+                outFile?.let { target ->
+                    file.openInputStream().use { input ->
+                        target.openOutputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
                 }
             }
         }
 
         // Copy over the bridge file
         val luaFile = scriptsDir()?.createFile("aniyomi.lua")
-        val luaBridge = assets.open("aniyomi.lua")
         luaFile?.openOutputStream()?.bufferedWriter()?.use { scriptLua ->
-            luaBridge.bufferedReader().use { scriptLua.write(it.readText()) }
+            assets.open("aniyomi.lua").bufferedReader().use { bridgeReader ->
+                scriptLua.write(bridgeReader.readText())
+            }
         }
     }
 
