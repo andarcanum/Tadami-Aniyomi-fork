@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Book
+import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.NewReleases
@@ -84,6 +85,7 @@ fun MoreScreenAurora(
     onPlayerSettingsClick: () -> Unit,
     onMangaReaderSettingsClick: () -> Unit,
     onNovelReaderSettingsClick: () -> Unit,
+    onNovelQuotesClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onDebugAppUpdatePreviewClick: () -> Unit,
@@ -163,6 +165,13 @@ fun MoreScreenAurora(
                     title = stringResource(AYMR.strings.pref_category_novel_reader),
                     icon = Icons.Outlined.Book,
                     onClick = onNovelReaderSettingsClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
+                )
+
+                AuroraSettingItem(
+                    title = stringResource(AYMR.strings.novel_quotes_library_title),
+                    icon = Icons.Outlined.FormatQuote,
+                    onClick = onNovelQuotesClick,
                     darkRimLightEnabled = darkRimLightEnabled,
                 )
 

@@ -7,6 +7,7 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Info
@@ -54,6 +55,7 @@ fun MoreScreen(
     onClickPlayerSettings: () -> Unit,
     onClickMangaReaderSettings: () -> Unit,
     onClickNovelReaderSettings: () -> Unit,
+    onClickNovelQuotes: () -> Unit,
     onClickSettings: () -> Unit,
     onClickAbout: () -> Unit,
     onClickHelp: () -> Unit,
@@ -195,6 +197,13 @@ fun MoreScreen(
                     subtitle = stringResource(AYMR.strings.pref_novel_reader_summary),
                     icon = Icons.Outlined.Book,
                     onPreferenceClick = onClickNovelReaderSettings,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_quotes_library_title),
+                    icon = Icons.Outlined.FormatQuote,
+                    onPreferenceClick = onClickNovelQuotes,
                 )
             }
             item {

@@ -32,6 +32,7 @@ import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.download.DownloadsTab
+import eu.kanade.tachiyomi.ui.library.novel.quotes.NovelQuotesLibraryScreen
 import eu.kanade.tachiyomi.ui.libraryUpdateError.LibraryUpdateErrorScreen
 import eu.kanade.tachiyomi.ui.more.DebugAppUpdatePreviewScreen
 import eu.kanade.tachiyomi.ui.more.DebugUpdatedChangelogPreviewScreen
@@ -110,6 +111,7 @@ data object MoreTab : Tab {
                 onPlayerSettingsClick = { navigator.push(PlayerSettingsScreen(mainSettings = false)) },
                 onMangaReaderSettingsClick = { navigator.push(SettingsReaderScreen) },
                 onNovelReaderSettingsClick = { navigator.push(SettingsNovelReaderScreen) },
+                onNovelQuotesClick = { navigator.push(NovelQuotesLibraryScreen()) },
                 onSettingsClick = { navigator.push(SettingsScreen()) },
                 onAboutClick = { navigator.push(AboutScreen) },
                 onHelpClick = { navigator.push(HelpScreen) },
@@ -169,6 +171,7 @@ data object MoreTab : Tab {
                 onClickPlayerSettings = { navigator.push(PlayerSettingsScreen(mainSettings = false)) },
                 onClickMangaReaderSettings = { navigator.push(SettingsReaderScreen) },
                 onClickNovelReaderSettings = { navigator.push(SettingsNovelReaderScreen) },
+                onClickNovelQuotes = { navigator.push(NovelQuotesLibraryScreen()) },
                 onClickSettings = { navigator.push(SettingsScreen()) },
                 onClickAbout = { navigator.push(AboutScreen) },
                 onClickHelp = { navigator.push(HelpScreen) },

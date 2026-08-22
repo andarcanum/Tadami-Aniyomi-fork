@@ -164,6 +164,7 @@ import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.book.novel.interactor.AddNovelHighlight
 import tachiyomi.domain.book.novel.interactor.DeleteNovelBookState
 import tachiyomi.domain.book.novel.interactor.DeleteNovelHighlight
+import tachiyomi.domain.book.novel.interactor.GetAllNovelHighlights
 import tachiyomi.domain.book.novel.interactor.GetNovelBookState
 import tachiyomi.domain.book.novel.interactor.GetNovelHighlights
 import tachiyomi.domain.book.novel.interactor.SetNovelBookEnabled
@@ -422,6 +423,7 @@ class DomainModule : InjektModule {
         addFactory { UpdateNovelHighlight(get()) }
         addFactory { DeleteNovelHighlight(get()) }
         addFactory { GetNovelHighlights(get()) }
+        addFactory { GetAllNovelHighlights(get()) }
 
         addSingletonFactory<AnimeRepository> { AnimeRepositoryImpl(get(), get()) }
         addFactory { GetDuplicateLibraryAnime(get()) }

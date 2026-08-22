@@ -860,6 +860,17 @@
     <string name="novel_highlight_action_delete">Delete highlight</string>
     <string name="novel_highlights_default_color">Default color</string>
     <string name="novel_highlight_page_label">Page %1$d/%2$d</string>
+    <string name="novel_quotes_library_title">Quotes</string>
+    <string name="novel_quotes_collection_title">Collection of Quotes</string>
+    <string name="novel_quotes_collection_all">FROM YOUR ENTIRE LIBRARY</string>
+    <string name="novel_quotes_collection_book">from the book „%1$s“</string>
+    <string name="novel_quotes_filter_all">All books</string>
+    <string name="novel_quotes_search_hint">Search quotes and notes…</string>
+    <string name="novel_quotes_empty">Your highlights and notes from all books will appear here.</string>
+    <string name="novel_quotes_empty_search">Nothing found for this query.</string>
+    <string name="novel_quotes_delete_title">Delete quote?</string>
+    <string name="novel_quotes_delete_message">The highlight will disappear from the book and this collection. This cannot be undone.</string>
+    <string name="novel_quotes_sort_toggle_cd">Toggle sorting (date / by book)</string>
     <string name="novel_reader_selected_text_translation_action_retry">Retry</string>
     <string name="novel_reader_selected_text_translation_action_close">Close</string>
     <string name="novel_reader_selected_text_translation_loading">Translating selected text…</string>

@@ -2843,6 +2843,9 @@ class NovelReaderScreenModelTest {
             chapterId: Long,
         ): Flow<List<tachiyomi.domain.book.novel.model.NovelHighlight>> = flow
 
+        override fun subscribeAll(): Flow<List<tachiyomi.domain.book.novel.model.NovelHighlightWithChapter>> =
+            kotlinx.coroutines.flow.flowOf(emptyList())
+
         override suspend fun getForNovel(novelId: Long): List<tachiyomi.domain.book.novel.model.NovelHighlight> =
             items.filter { it.novelId == novelId }
 

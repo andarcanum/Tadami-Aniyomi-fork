@@ -1,10 +1,14 @@
 package tachiyomi.domain.book.novel.interactor
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.book.novel.model.NovelHighlight
+import tachiyomi.domain.book.novel.model.NovelHighlightWithChapter
 import tachiyomi.domain.book.novel.repository.NovelHighlightRepository
 
 private fun highlight(id: Long = 0L, note: String = "", color: Long = 4294688813L) = NovelHighlight(
@@ -19,6 +23,7 @@ private class FakeNovelHighlightRepository : NovelHighlightRepository {
 
     override fun subscribeForNovel(novelId: Long) = flow
     override fun subscribeForChapter(chapterId: Long) = flow
+    override fun subscribeAll(): Flow<List<NovelHighlightWithChapter>> = flowOf(emptyList())
     override suspend fun getForNovel(novelId: Long) = items.filter { it.novelId == novelId }
     override suspend fun add(highlight: NovelHighlight): Long {
         val stored = highlight.copy(id = nextId++)
@@ -109,5 +114,12 @@ class NovelHighlightInteractorTest {
         add.await(highlight())
         GetNovelHighlights(repo).await(1L).size shouldBe 2
         GetNovelHighlights(repo).await(99L).size shouldBe 0
+    }
+
+    @Test
+    fun `subscribeAll delegates to repository`() = runTest {
+        val interactor = GetAllNovelHighlights(FakeNovelHighlightRepository())
+
+        interactor.subscribeAll().first() shouldBe emptyList()
     }
 }

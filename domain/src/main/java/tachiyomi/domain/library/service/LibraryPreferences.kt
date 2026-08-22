@@ -145,6 +145,8 @@ class LibraryPreferences(
     fun showContinueViewingButton() =
         preferenceStore.getBoolean("display_continue_reading_button", true)
 
+    fun novelQuotesSortMode() = preferenceStore.getString("novel_quotes_sort_mode", "DATE")
+
     fun auroraLibraryCardStyle() = preferenceStore.getEnum(
         "pref_aurora_library_card_style",
         AuroraLibraryCardStyle.GlowContour,

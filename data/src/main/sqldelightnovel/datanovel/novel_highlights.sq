@@ -59,3 +59,13 @@ WHERE _id = :highlightId;
 deleteForNovel:
 DELETE FROM novel_highlights
 WHERE novel_id = :novelId;
+
+getAllWithChapter:
+SELECT h.*,
+    COALESCE(n.custom_title, n.title) AS novelTitle,
+    c.name AS chapterName,
+    c.source_order AS chapterSourceOrder
+FROM novel_highlights h
+JOIN novels n ON n._id = h.novel_id
+LEFT JOIN novel_chapters c ON c._id = h.chapter_id
+ORDER BY h.updated_at DESC;

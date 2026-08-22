@@ -2992,6 +2992,17 @@
     <string name="novel_highlight_action_delete">Удалить цитату</string>
     <string name="novel_highlights_default_color">Цвет маркера</string>
     <string name="novel_highlight_page_label">Стр. %1$d/%2$d</string>
+    <string name="novel_quotes_library_title">Цитаты</string>
+    <string name="novel_quotes_collection_title">Сборник цитат</string>
+    <string name="novel_quotes_collection_all">ИЗ ВСЕЙ БИБЛИОТЕКИ</string>
+    <string name="novel_quotes_collection_book">из книги „%1$s“</string>
+    <string name="novel_quotes_filter_all">Все книги</string>
+    <string name="novel_quotes_search_hint">Поиск по цитатам и заметкам…</string>
+    <string name="novel_quotes_empty">Здесь появятся все ваши выделения и заметки из книг.</string>
+    <string name="novel_quotes_empty_search">Ничего не найдено по запросу.</string>
+    <string name="novel_quotes_delete_title">Удалить цитату?</string>
+    <string name="novel_quotes_delete_message">Выделение исчезнет из книги и из сборника. Это действие нельзя отменить.</string>
+    <string name="novel_quotes_sort_toggle_cd">Переключить сортировку (дата / по тайтлу)</string>
     <string name="novel_reader_selected_text_translation_action_retry">Повторить</string>
     <string name="novel_reader_selected_text_translation_action_close">Закрыть</string>
     <string name="novel_reader_selected_text_translation_loading">Перевод выделенного текста…</string>

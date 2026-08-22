@@ -3,6 +3,7 @@ package tachiyomi.data.book.novel
 import kotlinx.coroutines.flow.Flow
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.book.novel.model.NovelHighlight
+import tachiyomi.domain.book.novel.model.NovelHighlightWithChapter
 import tachiyomi.domain.book.novel.repository.NovelHighlightRepository
 
 class NovelHighlightRepositoryImpl(
@@ -16,6 +17,12 @@ class NovelHighlightRepositoryImpl(
     override fun subscribeForChapter(chapterId: Long): Flow<List<NovelHighlight>> {
         return handler.subscribeToList { db ->
             db.novel_highlightsQueries.getForChapter(chapterId, ::novelHighlightMapper)
+        }
+    }
+
+    override fun subscribeAll(): Flow<List<NovelHighlightWithChapter>> {
+        return handler.subscribeToList { db ->
+            db.novel_highlightsQueries.getAllWithChapter(::novelHighlightWithChapterMapper)
         }
     }
 
@@ -105,4 +112,42 @@ private fun novelHighlightMapper(
     updatedAt = updatedAt,
     pageIndex = pageIndex.toInt(),
     pageCount = pageCount.toInt(),
+)
+
+private fun novelHighlightWithChapterMapper(
+    id: Long,
+    novelId: Long,
+    chapterId: Long,
+    blockIndex: Long,
+    charStart: Long,
+    charEndExclusive: Long,
+    normalizedText: String,
+    colorArgb: Long,
+    note: String,
+    createdAt: Long,
+    updatedAt: Long,
+    pageIndex: Long,
+    pageCount: Long,
+    novelTitle: String,
+    chapterName: String?,
+    chapterSourceOrder: Long?,
+): NovelHighlightWithChapter = NovelHighlightWithChapter(
+    highlight = NovelHighlight(
+        id = id,
+        novelId = novelId,
+        chapterId = chapterId,
+        blockIndex = blockIndex.toInt(),
+        charStart = charStart.toInt(),
+        charEndExclusive = charEndExclusive.toInt(),
+        normalizedText = normalizedText,
+        colorArgb = colorArgb,
+        note = note,
+        createdAt = createdAt,
+        updatedAt = updatedAt,
+        pageIndex = pageIndex.toInt(),
+        pageCount = pageCount.toInt(),
+    ),
+    novelTitle = novelTitle,
+    chapterName = chapterName,
+    chapterSourceOrder = chapterSourceOrder ?: 0L,
 )
