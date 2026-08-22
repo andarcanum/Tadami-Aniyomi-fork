@@ -1604,7 +1604,11 @@ class NovelReaderScreenModel(
             chapter = chapter,
             becameRead = becameRead,
         )
-        val shouldEmitNovelCompleted = becameRead && chapterOrderList.all { it.read }
+        val shouldEmitNovelCompleted = becameRead &&
+            novelReaderNovelCompleted(
+                fullChapterList = fullChapterOrderList,
+                visibleWindow = chapterOrderList,
+            )
         progressPersistenceController.enqueueProgressPersistence(
             PendingProgressPersistence(
                 chapterId = chapter.id,
@@ -1725,6 +1729,15 @@ class NovelReaderScreenModel(
                     read = read,
                     lastPageRead = progress,
                 )
+            }
+        }
+        // The novel-completed check runs against the full chapter list, so the in-memory read mark
+        // has to reach it too (same as bookMarkChapterReadInMemory); the DB write arrives
+        // asynchronously through the progress pipeline.
+        val fullChapterIndex = fullChapterOrderList.indexOfFirst { it.id == chapter.id }
+        if (fullChapterIndex >= 0 && fullChapterOrderList[fullChapterIndex].read != read) {
+            fullChapterOrderList = fullChapterOrderList.toMutableList().also { list ->
+                list[fullChapterIndex] = list[fullChapterIndex].copy(read = read)
             }
         }
         val currentState = mutableState.value

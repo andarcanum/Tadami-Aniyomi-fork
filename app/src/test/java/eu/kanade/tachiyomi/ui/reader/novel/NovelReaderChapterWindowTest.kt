@@ -73,6 +73,46 @@ class NovelReaderChapterWindowTest {
         result.newWindow.last().id shouldBe 2000L
     }
 
+    @Test
+    fun `novel completed requires chapters outside the window to be read`() {
+        val allChapters = (1L..300L).map { fakeChapter(it).copy(read = it != 1L) }
+        val window = NovelReaderChapterWindow.resolveWindow(
+            chapters = allChapters,
+            currentChapterId = 300L,
+            windowRadius = 50,
+        )
+
+        novelReaderNovelCompleted(
+            fullChapterList = allChapters,
+            visibleWindow = window,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `novel completed when every chapter including outside the window is read`() {
+        val allChapters = (1L..300L).map { fakeChapter(it).copy(read = true) }
+        val window = NovelReaderChapterWindow.resolveWindow(
+            chapters = allChapters,
+            currentChapterId = 300L,
+            windowRadius = 50,
+        )
+
+        novelReaderNovelCompleted(
+            fullChapterList = allChapters,
+            visibleWindow = window,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `novel completed falls back to visible window without full list`() {
+        val window = (1L..101L).map { fakeChapter(it).copy(read = true) }
+
+        novelReaderNovelCompleted(
+            fullChapterList = emptyList(),
+            visibleWindow = window,
+        ) shouldBe true
+    }
+
     companion object {
         private fun fakeChapter(id: Long) = NovelChapter(
             id = id,
