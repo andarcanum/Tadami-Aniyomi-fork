@@ -8,6 +8,7 @@ okhttp_version = "5.4.0"
 paging = "3.3.0"
 richtext = "0.20.0"
 markdown = "0.43.0"
+jetbrains-markdown = "0.7.3"
 shizuku_version = "13.1.0"
 dhizuku_version = "2.6.0"
 sqldelight = "2.3.2"
@@ -67,6 +68,7 @@ natural-comparator = "com.github.gpanther:java-nat-sort:natural-comparator-1.1"
 richtext-commonmark = { module = "com.halilibo.compose-richtext:richtext-commonmark", version.ref = "richtext" }
 richtext-m3 = { module = "com.halilibo.compose-richtext:richtext-ui-material3", version.ref = "richtext" }
 markdown-core = { module = "com.mikepenz:multiplatform-markdown-renderer", version.ref = "markdown" }
+jetbrains-markdown = { module = "org.jetbrains:markdown", version.ref = "jetbrains-markdown" }
 
 material = "com.google.android.material:material:1.12.0"
 flexible-adapter-core = "com.github.arkon.FlexibleAdapter:flexible-adapter:c8013533"

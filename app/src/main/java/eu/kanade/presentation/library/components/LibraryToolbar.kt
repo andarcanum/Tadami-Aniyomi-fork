@@ -39,6 +39,7 @@ fun LibraryToolbar(
     onClickGlobalUpdate: () -> Unit,
     onClickOpenRandomEntry: () -> Unit,
     onClickImportEpub: (() -> Unit)? = null,
+    onClickImportFolder: (() -> Unit)? = null,
     searchQuery: String?,
     onSearchQueryChange: (String?) -> Unit,
     scrollBehavior: TopAppBarScrollBehavior?,
@@ -60,6 +61,7 @@ fun LibraryToolbar(
         onClickGlobalUpdate = onClickGlobalUpdate,
         onClickOpenRandomEntry = onClickOpenRandomEntry,
         onClickImportEpub = onClickImportEpub,
+        onClickImportFolder = onClickImportFolder,
         scrollBehavior = scrollBehavior,
         navigateUp = navigateUp,
     )
@@ -76,6 +78,7 @@ private fun LibraryRegularToolbar(
     onClickGlobalUpdate: () -> Unit,
     onClickOpenRandomEntry: () -> Unit,
     onClickImportEpub: (() -> Unit)?,
+    onClickImportFolder: (() -> Unit)?,
     scrollBehavior: TopAppBarScrollBehavior?,
     navigateUp: (() -> Unit)?,
 ) {
@@ -124,6 +127,14 @@ private fun LibraryRegularToolbar(
                         AppBar.OverflowAction(
                             title = stringResource(AYMR.strings.novel_library_import_epub),
                             onClick = importAction,
+                        ),
+                    )
+                }
+                onClickImportFolder?.let { importFolderAction ->
+                    add(
+                        AppBar.OverflowAction(
+                            title = stringResource(AYMR.strings.novel_library_import_folder),
+                            onClick = importFolderAction,
                         ),
                     )
                 }

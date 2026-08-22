@@ -16,7 +16,6 @@ import kotlinx.coroutines.runBlocking
 import logcat.LogPriority
 import mihon.core.archive.archiveReader
 import mihon.core.archive.epubReader
-import org.jsoup.nodes.Entities
 import rx.Observable
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.storage.extension
@@ -346,6 +345,30 @@ actual class LocalNovelSource(
                     logcat(LogPriority.ERROR, e) { "Error reading fb2 ${chapterFile.name}" }
                     allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
                 }
+            } else if (isArchiveSupported(chapterFile)) {
+                try {
+                    chapterFile.archiveReader(context).use { reader ->
+                        reader.useEntries { entries ->
+                            // An archive without a single readable entry yields zero
+                            // chapters on purpose: a ghost empty chapter would linger
+                            // in history/hub forever (same rule as unsupported PDFs).
+                            allChapters.addAll(
+                                buildArchiveChapters(
+                                    novelUrl = novel.url,
+                                    archiveRelativePath = chapterEntry.relativePath,
+                                    entryNames = entries
+                                        .filter { it.isFile }
+                                        .mapNotNull { it.name }
+                                        .toList(),
+                                    numberOffset = allChapters.size.toFloat(),
+                                ),
+                            )
+                        }
+                    }
+                } catch (e: Throwable) {
+                    logcat(LogPriority.ERROR, e) { "Error reading archive ${chapterFile.name}" }
+                    allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
+                }
             } else {
                 allChapters.add(createSimpleChapter(novel, chapterEntry, index + 1))
             }
@@ -432,20 +455,35 @@ actual class LocalNovelSource(
                 }
                 isArchiveSupported(chapterFile) -> {
                     chapterFile.archiveReader(context).use { reader ->
-                        reader.useEntries { entries ->
-                            entries.filter { it.isFile && (isTextFileName(it.name) || isFb2FileName(it.name)) }
-                                .toList()
-                                .sortedWith { e1, e2 ->
-                                    e1.name.compareToCaseInsensitiveNaturalOrder(e2.name)
-                                }
-                        }.joinToString("\n\n") { entry ->
-                            reader.getInputStream(entry.name)?.use { stream ->
-                                when {
-                                    isFb2FileName(entry.name) -> Fb2Book.parse(stream).bookHtml()
-                                    isHtmlFileName(entry.name) -> stream.bufferedReader().readText()
-                                    else -> plainTextToHtml(stream.bufferedReader().readText())
-                                }
-                            } ?: ""
+                        val requestedEntry = chapterFragment
+                            ?.takeIf { selectArchiveChapterEntries(listOf(it)).size == 1 }
+                        if (requestedEntry != null) {
+                            // Fragment points at a concrete entry: return only that chapter.
+                            reader.getInputStream(requestedEntry)?.use { stream ->
+                                renderArchiveEntryText(
+                                    entryName = requestedEntry,
+                                    rawText = stream.bufferedReader().readText(),
+                                )
+                            } ?: EMPTY_CHAPTER_HTML
+                        } else {
+                            // Legacy fallback: no usable fragment — concatenate all supported entries.
+                            reader.useEntries { entries ->
+                                entries.filter { it.isFile && (isTextFileName(it.name) || isFb2FileName(it.name)) }
+                                    .toList()
+                                    .sortedWith { e1, e2 ->
+                                        e1.name.compareToCaseInsensitiveNaturalOrder(e2.name)
+                                    }
+                            }.joinToString("\n\n") { entry ->
+                                reader.getInputStream(entry.name)?.use { stream ->
+                                    when {
+                                        isFb2FileName(entry.name) -> Fb2Book.parse(stream).bookHtml()
+                                        else -> renderTextFileBody(
+                                            fileName = entry.name.orEmpty(),
+                                            rawText = stream.bufferedReader().readText(),
+                                        )
+                                    }
+                                } ?: ""
+                            }.ifBlank { EMPTY_CHAPTER_HTML }
                         }
                     }
                 }
@@ -574,22 +612,7 @@ actual class LocalNovelSource(
 
     private fun readTextFileContent(file: UniFile): String {
         val rawText = file.openInputStream().bufferedReader().readText()
-        return if (isHtmlFileName(file.name.orEmpty())) {
-            rawText
-        } else {
-            plainTextToHtml(rawText)
-        }
-    }
-
-    private fun plainTextToHtml(text: String): String {
-        return "<html><body><pre style=\"white-space: pre-wrap; font-family: inherit;\">" +
-            Entities.escape(text) +
-            "</pre></body></html>"
-    }
-
-    private fun isHtmlFileName(name: String): Boolean {
-        val ext = name.substringAfterLast('.', "").lowercase()
-        return ext in HTML_EXTENSIONS
+        return renderTextFileBody(file.name.orEmpty(), rawText)
     }
 
     private fun isTextFile(file: UniFile): Boolean {
@@ -624,12 +647,6 @@ actual class LocalNovelSource(
             "text",
             "md",
             "markdown",
-            "html",
-            "htm",
-            "xhtml",
-        )
-
-        private val HTML_EXTENSIONS = setOf(
             "html",
             "htm",
             "xhtml",

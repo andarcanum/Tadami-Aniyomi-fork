@@ -6,6 +6,7 @@ import androidx.compose.animation.graphics.ExperimentalAnimationGraphicsApi
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -18,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -136,12 +138,35 @@ data object NovelLibraryTab : Tab {
             }
         }
         val epubImportLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.OpenDocument(),
+            contract = ActivityResultContracts.OpenMultipleDocuments(),
+            onResult = { uris ->
+                if (!uris.isNullOrEmpty()) {
+                    scope.launchIO {
+                        val (succeeded, total) = screenModel.importLocalBooks(uris)
+                        snackbarHostState.showSnackbar(
+                            context.stringResource(
+                                if (succeeded > 0) {
+                                    AYMR.strings.novel_library_import_result
+                                } else {
+                                    AYMR.strings.novel_library_import_failed
+                                },
+                                succeeded,
+                                total,
+                            ),
+                            duration = SnackbarDuration.Short,
+                        )
+                    }
+                }
+            },
+        )
+
+        val folderImportLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocumentTree(),
             onResult = { uri ->
                 if (uri != null) {
                     scope.launchIO {
                         try {
-                            screenModel.importEpub(uri)
+                            screenModel.importLocalBookFolder(uri)
                             snackbarHostState.showSnackbar(
                                 context.stringResource(AYMR.strings.novel_library_import_success),
                                 duration = SnackbarDuration.Short,
@@ -193,12 +218,24 @@ data object NovelLibraryTab : Tab {
                     onClickImportEpub = {
                         epubImportLauncher.launch(eu.kanade.domain.entries.novel.LocalNovelBookImport.PICKER_MIME_TYPES)
                     },
+                    onClickImportFolder = {
+                        folderImportLauncher.launch(null)
+                    },
                     searchQuery = state.searchQuery,
                     onSearchQueryChange = screenModel::search,
                     scrollBehavior = scrollBehavior,
                 )
             },
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            snackbarHost = {
+                // The Aurora bottom nav is a floating glass pill drawn over tab
+                // content; lift snackbars above it or they render underneath.
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(bottom = 80.dp),
+                )
+            },
         ) { contentPadding ->
             when {
                 state.isLoading -> LoadingScreen(Modifier.padding(contentPadding))

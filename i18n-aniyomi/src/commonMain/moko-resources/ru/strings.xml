@@ -341,8 +341,10 @@
     <string name="label_novel">Ранобэ</string>
     <string name="label_novel_library">Библиотека</string>
     <string name="novel_library_import_epub">Импортировать книгу</string>
-    <string name="novel_library_import_success">EPUB успешно импортирован</string>
-    <string name="novel_library_import_failed">Не удалось импортировать EPUB</string>
+    <string name="novel_library_import_result">Импортировано книг: %1$d из %2$d</string>
+    <string name="novel_library_import_folder">Импортировать папку с книгой</string>
+    <string name="novel_library_import_success">Книга успешно импортирована</string>
+    <string name="novel_library_import_failed">Не удалось импортировать книгу</string>
     <string name="novel_reader_settings_title">Для этого источника</string>
     <string name="novel_reader_override_source">Переопределить для источника</string>
     <string name="novel_reader_override_summary">Использовать свои настройки только для этого источника</string>

@@ -23,6 +23,7 @@ kotlin {
                 api(projects.i18nAniyomi)
 
                 implementation(libs.unifile)
+                implementation(libs.jetbrains.markdown)
             }
         }
         getByName("androidMain") {

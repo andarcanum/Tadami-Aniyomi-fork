@@ -125,6 +125,7 @@ fun NovelLibraryAuroraContent(
     onOpenRandomEntry: () -> Unit,
     onGlobalSearchClicked: () -> Unit,
     onImportEpub: () -> Unit = {},
+    onImportFolder: () -> Unit = {},
     onLongClickNovel: ((NovelLibraryItem) -> Unit)? = null,
     onContinueReadingClicked: ((NovelLibraryItem) -> Unit)? = null,
     showInlineHeader: Boolean = true,
@@ -209,6 +210,7 @@ fun NovelLibraryAuroraContent(
                     onGlobalUpdate = onGlobalUpdate,
                     onOpenRandomEntry = onOpenRandomEntry,
                     onImportEpub = onImportEpub,
+                    onImportFolder = onImportFolder,
                     modifier = Modifier
                         .fillMaxWidth()
                         .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
@@ -261,6 +263,7 @@ fun NovelLibraryAuroraContent(
                             onGlobalUpdate = onGlobalUpdate,
                             onOpenRandomEntry = onOpenRandomEntry,
                             onImportEpub = onImportEpub,
+                            onImportFolder = onImportFolder,
                             modifier = Modifier.auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
                         )
                     }
@@ -349,6 +352,7 @@ fun NovelLibraryAuroraContent(
                             onGlobalUpdate = onGlobalUpdate,
                             onOpenRandomEntry = onOpenRandomEntry,
                             onImportEpub = onImportEpub,
+                            onImportFolder = onImportFolder,
                             modifier = Modifier.auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),
                         )
                     }
@@ -892,6 +896,7 @@ private fun InlineNovelLibraryHeader(
     onGlobalUpdate: () -> Unit,
     onOpenRandomEntry: () -> Unit,
     onImportEpub: () -> Unit,
+    onImportFolder: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -1016,6 +1021,14 @@ private fun InlineNovelLibraryHeader(
                                 leadingIcon = Icons.Filled.Add,
                                 onClick = {
                                     onImportEpub()
+                                    showMenu = false
+                                },
+                            )
+                            AuroraEntryDropdownMenuItem(
+                                text = stringResource(AYMR.strings.novel_library_import_folder),
+                                leadingIcon = Icons.Filled.Add,
+                                onClick = {
+                                    onImportFolder()
                                     showMenu = false
                                 },
                             )
