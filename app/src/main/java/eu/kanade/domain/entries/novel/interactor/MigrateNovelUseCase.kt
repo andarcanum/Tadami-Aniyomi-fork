@@ -10,6 +10,8 @@ import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.entries.novel.model.NovelUpdate
+import tachiyomi.domain.history.novel.model.NovelHistoryUpdate
+import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.model.toNovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
@@ -30,6 +32,7 @@ class MigrateNovelUseCase(
     private val novelChapterRepository: NovelChapterRepository = Injekt.get(),
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get(),
     private val categoryRepository: NovelCategoryRepository = Injekt.get(),
+    private val novelHistoryRepository: NovelHistoryRepository = Injekt.get(),
 ) {
 
     suspend fun migrateNovel(
@@ -82,6 +85,10 @@ class MigrateNovelUseCase(
             val maxChapterRead = prevNovelChapters
                 .filter { it.read }
                 .maxOfOrNull { it.chapterNumber }
+            val prevHistoryByChapterId = novelHistoryRepository.getHistoryByNovelId(oldNovel.id).associateBy {
+                it.chapterId
+            }
+            val historyUpdates = mutableListOf<NovelHistoryUpdate>()
 
             val updatedNovelChapters = novelChapters.map { novelChapter ->
                 var updatedChapter = novelChapter
@@ -91,14 +98,20 @@ class MigrateNovelUseCase(
 
                     if (prevChapter != null) {
                         updatedChapter = updatedChapter.copy(
+                            read = prevChapter.read,
                             dateFetch = prevChapter.dateFetch,
                             bookmark = prevChapter.bookmark,
                             lastPageRead = prevChapter.lastPageRead,
                         )
-                    }
-
-                    if (maxChapterRead != null && updatedChapter.chapterNumber <= maxChapterRead) {
-                        updatedChapter = updatedChapter.copy(read = true, lastPageRead = 0L)
+                        prevHistoryByChapterId[prevChapter.id]?.let { prevHistory ->
+                            historyUpdates += NovelHistoryUpdate(
+                                chapterId = novelChapter.id,
+                                readAt = prevHistory.readAt ?: return@let,
+                                sessionReadDuration = prevHistory.readDuration,
+                            )
+                        }
+                    } else if (maxChapterRead != null && updatedChapter.chapterNumber <= maxChapterRead) {
+                        updatedChapter = updatedChapter.copy(read = true)
                     }
                 }
 
@@ -107,6 +120,7 @@ class MigrateNovelUseCase(
 
             val chapterUpdates = updatedNovelChapters.map { it.toNovelChapterUpdate() }
             novelChapterRepository.updateAllChapters(chapterUpdates)
+            historyUpdates.forEach { novelHistoryRepository.upsertNovelHistory(it) }
         }
 
         if (migrateCategories) {
@@ -118,16 +132,7 @@ class MigrateNovelUseCase(
             downloadManager.deleteNovel(oldNovel)
         }
 
-        if (replace) {
-            updateNovel.await(
-                NovelUpdate(
-                    id = oldNovel.id,
-                    favorite = false,
-                    dateAdded = 0L,
-                ),
-            )
-        }
-
+        // Add/favorite new entry first to guarantee no data loss if subsequent operations fail
         updateNovel.await(
             NovelUpdate(
                 id = newNovel.id,
@@ -137,5 +142,15 @@ class MigrateNovelUseCase(
                 dateAdded = if (replace) oldNovel.dateAdded else Instant.now().toEpochMilli(),
             ),
         )
+
+        if (replace) {
+            updateNovel.await(
+                NovelUpdate(
+                    id = oldNovel.id,
+                    favorite = false,
+                    dateAdded = 0L,
+                ),
+            )
+        }
     }
 }
