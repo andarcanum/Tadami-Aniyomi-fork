@@ -69,6 +69,7 @@ import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.updater.AppUpdateFileManager
 import eu.kanade.tachiyomi.di.AppModule
 import eu.kanade.tachiyomi.di.PreferenceModule
+import eu.kanade.tachiyomi.di.bootstrapInjektModules
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.installer.PendingApkInstallStore
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
@@ -130,12 +131,20 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var isMainProcess = false
 
+    override fun attachBaseContext(base: android.content.Context) {
+        super.attachBaseContext(base)
+        // Register the Injekt graph before any ContentProvider runs: WorkManager initializes
+        // in a provider and may dispatch a pending library-update worker right after process
+        // death, before onCreate() would have imported the modules. Without this the workers
+        // died with InjektionException in a fresh background process (crash log #bug 0.60).
+        isMainProcess = bootstrapInjektModules()
+    }
+
     @SuppressLint("LaunchActivityFromNotification")
     @OptIn(DelicateCoilApi::class)
     override fun onCreate() {
         LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
         super<Application>.onCreate()
-        patchInjekt()
 
         GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
 
@@ -149,12 +158,8 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
 
         // Avoid potential crashes
-        isMainProcess = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val process = getProcessName()
-            if (packageName != process) WebView.setDataDirectorySuffix(process)
-            packageName == process
-        } else {
-            true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && packageName != getProcessName()) {
+            WebView.setDataDirectorySuffix(getProcessName())
         }
 
         // Warm up the WebView default user agent on the main thread before any source loads.
@@ -169,17 +174,11 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             }
         }
 
-        Injekt.importModule(PreferenceModule(this))
-        // Register domain interactors before app managers. Some app managers can be touched by
-        // async platform callbacks during AppModule registration, so their domain dependencies
-        // must already exist in Injekt.
-        Injekt.importModule(DomainModule())
-        // SY -->
-        Injekt.importModule(SYDomainModule())
-        // SY <--
-        if (isMainProcess) {
-            Injekt.importModule(AppModule(this))
+        // Modules were imported in attachBaseContext (see bootstrapInjektModules) so the DI
+        // graph already exists here, including for workers dispatched by WorkManager's
+        // ContentProvider before onCreate ran.
 
+        if (isMainProcess) {
             // Setup Aurora easter egg unlock hook
             eu.kanade.domain.easteregg.aurora.AuroraEchoBus.onUnlocked = { payload ->
                 achievementScope.launch {
