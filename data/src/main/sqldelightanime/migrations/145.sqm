@@ -1,0 +1,7 @@
+-- The Updates tab re-runs its "recent episodes" query as a Flow on every write to
+-- animes/episodes. The plan drives from animes(favorite) and then looks up each anime's
+-- episodes by anime_id, so a date_upload-only index is never picked; the date filter was
+-- applied as a residual after scanning ALL episodes of every favorite anime. A composite
+-- (anime_id, date_upload) index turns that into an index range seek per anime, same
+-- treatment as the junction index in 144.sqm.
+CREATE INDEX IF NOT EXISTS episodes_anime_id_date_upload_index ON episodes(anime_id, date_upload);

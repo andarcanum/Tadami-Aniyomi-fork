@@ -1,0 +1,7 @@
+-- The Updates tab re-runs its "recent chapters" query as a Flow on every write to
+-- mangas/chapters/history. The plan drives from mangas(favorite) and then looks up each
+-- manga's chapters by manga_id, so a date_upload-only index is never picked; the date
+-- filter was applied as a residual after scanning ALL chapters of every favorite manga.
+-- A composite (manga_id, date_upload) index turns that into an index range seek per manga
+-- (manga_id=? AND date_upload>?), same treatment as the junction indexes in 50.sqm.
+CREATE INDEX IF NOT EXISTS chapters_manga_id_date_upload_index ON chapters(manga_id, date_upload);

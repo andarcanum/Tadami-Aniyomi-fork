@@ -1,0 +1,7 @@
+-- The Updates tab re-runs its "recent chapters" query as a Flow on every write to
+-- novels/novel_chapters. The plan drives from novels(favorite) and then looks up each
+-- novel's chapters by novel_id, so the view's datefetch (= date_fetch) filter was applied
+-- as a residual after scanning ALL chapters of every favorite novel. A composite
+-- (novel_id, date_fetch) index turns that into an index range seek per novel, same
+-- treatment as the junction index in 25.sqm.
+CREATE INDEX IF NOT EXISTS novel_chapters_novel_id_date_fetch_index ON novel_chapters(novel_id, date_fetch);
