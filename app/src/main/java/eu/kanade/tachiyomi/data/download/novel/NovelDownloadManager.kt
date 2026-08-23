@@ -19,6 +19,7 @@ import uy.kohesive.injekt.api.get
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.coroutineContext
 import kotlin.system.measureTimeMillis
 
@@ -28,6 +29,7 @@ class NovelDownloadManager(
     private val storageManager: StorageManager? = runCatching { Injekt.get<StorageManager>() }.getOrNull(),
     private val downloadCache: NovelDownloadCache? = runCatching { Injekt.get<NovelDownloadCache>() }.getOrNull(),
     private val chapterFetchTimeoutMillis: Long = DEFAULT_CHAPTER_FETCH_TIMEOUT_MILLIS,
+    internal val clock: () -> Long = System::currentTimeMillis,
     private val fetchChapterText: suspend (Novel, NovelChapter) -> String? = { novel, chapter ->
         sourceManager?.get(novel.source)?.getChapterText(chapter.toSNovelChapter())
     },
@@ -44,9 +46,22 @@ class NovelDownloadManager(
     // is not registered at read time, renamed novel title, etc.). See issue #143.
     private val resolvedNovelDirCache = ConcurrentHashMap<Long, UniFile>()
 
+    // Negative scan cache: a failed full-tree scan (chapter not found anywhere) is remembered
+    // per novel for a short TTL so repeated downloaded-state checks (library refresh, Updates
+    // tab, entry screen) do not re-walk the whole downloads tree every time. The tree is
+    // walked over SAF/DocumentFile, so each scan allocates heavily -- repeated misses on a
+    // large library were an OOM driver on low-heap devices (crash log #bug 0.60).
+    private val failedScanAt = ConcurrentHashMap<Long, Long>()
+
+    private val scanCount = AtomicInteger(0)
+
+    /** Number of full downloads-tree scans performed (test observability). */
+    internal fun debugScanCount(): Int = scanCount.get()
+
     fun invalidateCache() {
         cachedTotalCount = null
         cachedTotalSize = null
+        failedScanAt.clear()
     }
 
     private val legacyRootDir: File?
@@ -302,7 +317,13 @@ class NovelDownloadManager(
             }
         }
 
+        // A recent full-tree scan already ended without this file; walking the whole SAF
+        // tree again within the TTL would just repeat the same heavy IO + allocations.
+        val lastFailedScan = failedScanAt[novel.id]
+        if (lastFailedScan != null && clock() - lastFailedScan < FAILED_SCAN_TTL_MS) return null
+
         val baseDir = rootDir ?: return null
+        scanCount.incrementAndGet()
         baseDir.listFiles()?.forEach { sourceDir ->
             if (!sourceDir.isDirectory) return@forEach
             sourceDir.listFiles()?.forEach { novelDir ->
@@ -310,10 +331,12 @@ class NovelDownloadManager(
                 val file = novelDir.findFile(chapterName)
                 if (file != null && file.isFile) {
                     resolvedNovelDirCache[novel.id] = novelDir
+                    failedScanAt.remove(novel.id)
                     return file
                 }
             }
         }
+        failedScanAt[novel.id] = clock()
         return null
     }
 
@@ -438,6 +461,9 @@ class NovelDownloadManager(
     private companion object {
         const val ROOT_DIR_NAME = "novels"
         const val DEFAULT_CHAPTER_FETCH_TIMEOUT_MILLIS = 30_000L
+
+        // How long a failed full-tree scan result stays trusted before rescanning.
+        const val FAILED_SCAN_TTL_MS = 60_000L
     }
 
     private enum class NovelDownloadPath {

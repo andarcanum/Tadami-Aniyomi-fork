@@ -219,10 +219,60 @@ class NovelDownloadManagerTest {
         }
     }
 
+    @Test
+    fun `failed scan is not repeated within ttl and is retried after it expires`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapterId = 2L
+
+            var now = 1_000_000L
+            val manager = createManager(source = source, chapterText = null) { now }
+
+            // First miss walks the whole downloads tree and records a negative result.
+            manager.isChapterDownloaded(novel, chapterId) shouldBe false
+            val scansAfterFirst = manager.debugScanCount()
+
+            // Second miss within the TTL must be served from the negative cache: no rescan.
+            manager.isChapterDownloaded(novel, chapterId) shouldBe false
+            manager.debugScanCount() shouldBe scansAfterFirst
+
+            // After the TTL expires the scan runs again.
+            now += 61_000L
+            manager.isChapterDownloaded(novel, chapterId) shouldBe false
+            manager.debugScanCount() shouldBe scansAfterFirst + 1
+        }
+    }
+
+    @Test
+    fun `download clears the negative scan cache so the file is found immediately`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(id = 2L, novelId = 1L, url = "/chapter-2")
+
+            var now = 2_000_000L
+            val manager = createManager(source = source, chapterText = "downloaded text") { now }
+
+            // Miss first: the scan finds nothing and the negative cache is populated.
+            manager.isChapterDownloaded(novel, chapter.id) shouldBe false
+            val scansAfterMiss = manager.debugScanCount()
+            (scansAfterMiss > 0) shouldBe true
+
+            // Downloading the chapter must invalidate the negative cache...
+            manager.downloadChapter(novel, chapter) shouldBe true
+
+            // ...so the next lookup finds the file via the positive dir cache without a rescan.
+            manager.isChapterDownloaded(novel, chapter.id) shouldBe true
+            manager.debugScanCount() shouldBe scansAfterMiss
+        }
+    }
+
     private fun createManager(
         source: MutableNovelSource,
         chapterText: String?,
         applicationFilesDir: File? = null,
+        clock: () -> Long = System::currentTimeMillis,
     ): NovelDownloadManager {
         val storageManager = mockk<StorageManager>()
         every { storageManager.getDownloadsDirectory() } returns fakeUniFile(
@@ -244,6 +294,7 @@ class NovelDownloadManagerTest {
             storageManager = storageManager,
             downloadCache = null,
             fetchChapterText = { _, _ -> chapterText },
+            clock = clock,
         )
     }
 
