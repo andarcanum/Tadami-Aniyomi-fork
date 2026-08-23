@@ -511,7 +511,10 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         // Update anime metadata if needed
         if (libraryPreferences.autoUpdateMetadata().get()) {
             val networkAnime = source.getAnimeDetails(anime.toSAnime())
-            animeRatingFetcher.await(source, anime, forceRefresh = true)
+            // The details page above is the heaviest request of this pass; do not force a
+            // second download through the rating cache. Honoring its 7-day TTL halves the
+            // network traffic per anime (manual metadata refresh still forces).
+            animeRatingFetcher.await(source, anime)
             updateAnime.awaitUpdateFromSource(anime, networkAnime, manualFetch = false, coverCache, backgroundCache)
         }
 
