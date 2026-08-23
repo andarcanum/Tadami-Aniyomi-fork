@@ -35,7 +35,9 @@ class NetworkHelper(
             .dispatcher(
                 okhttp3.Dispatcher().apply {
                     maxRequests = 64
-                    maxRequestsPerHost = 8
+                    // Cover grids hammer a single CDN host; 8 serialized
+                    // http/1.1 connections per host was the throughput ceiling.
+                    maxRequestsPerHost = 16
                 },
             )
             .connectionPool(

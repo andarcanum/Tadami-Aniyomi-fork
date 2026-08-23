@@ -152,6 +152,36 @@ fun OkHttpClient.newCachelessCallWithProgress(request: Request, listener: Progre
     return progressClient.newCall(request)
 }
 
+/**
+ * Cover-sized timeouts for image fetchers. Covers are small and latency-bound;
+ * the shared client's 2-minute call timeout would let one stalled cover pin a
+ * Coil fetcher slot (and a UI placeholder) far too long.
+ *
+ * Derives from [this] via [OkHttpClient.newBuilder], so connection pool,
+ * interceptors (Cloudflare bypass, cover recovery), DoH routing and cookies
+ * of the source-specific client are preserved. Each timeout becomes
+ * min(current, budget): unset/infinite values (0) adopt the budget, and a
+ * source client with deliberately tighter limits keeps them.
+ */
+fun OkHttpClient.withCoverTimeouts(
+    callTimeoutMs: Long = COVER_CALL_TIMEOUT_MS,
+    connectTimeoutMs: Long = COVER_CONNECT_TIMEOUT_MS,
+    readTimeoutMs: Long = COVER_READ_TIMEOUT_MS,
+): OkHttpClient {
+    fun pickBudget(currentMs: Int, budgetMs: Long): Long =
+        if (currentMs in 1..budgetMs) currentMs.toLong() else budgetMs
+
+    return newBuilder()
+        .callTimeout(pickBudget(callTimeoutMillis, callTimeoutMs), java.util.concurrent.TimeUnit.MILLISECONDS)
+        .connectTimeout(pickBudget(connectTimeoutMillis, connectTimeoutMs), java.util.concurrent.TimeUnit.MILLISECONDS)
+        .readTimeout(pickBudget(readTimeoutMillis, readTimeoutMs), java.util.concurrent.TimeUnit.MILLISECONDS)
+        .build()
+}
+
+private const val COVER_CALL_TIMEOUT_MS = 25_000L
+private const val COVER_CONNECT_TIMEOUT_MS = 10_000L
+private const val COVER_READ_TIMEOUT_MS = 20_000L
+
 inline fun <reified T> Response.parseAs(json: Json = defaultJsonParser): T {
     return decodeFromJsonResponse(
         deserializer = serializer(),

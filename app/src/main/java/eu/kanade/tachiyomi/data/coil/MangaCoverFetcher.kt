@@ -15,6 +15,8 @@ import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.coil.MangaCoverFetcher.Companion.USE_CUSTOM_COVER_KEY
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.network.interceptor.CoverRequestPolicy
+import eu.kanade.tachiyomi.network.withCoverTimeouts
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.debugTitleCoverFlow
 import eu.kanade.tachiyomi.util.previewTitleCoverUrl
@@ -22,6 +24,8 @@ import kotlinx.coroutines.delay
 import logcat.LogPriority
 import okhttp3.CacheControl
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okio.FileSystem
@@ -220,7 +224,15 @@ class MangaCoverFetcher(
     }
 
     private suspend fun executeNetworkRequest(url: String): Response {
-        val client = sourceLazy.value?.client ?: callFactoryLazy.value
+        val client = (sourceLazy.value?.client ?: callFactoryLazy.value)
+            .let { factory ->
+                if (factory is OkHttpClient) factory.withCoverTimeouts() else factory
+            }
+        // A blacklisted host is refused by CoverRecoveryInterceptor before any
+        // network I/O; retrying would only add a fixed delay to every cover.
+        if (CoverRequestPolicy.isBlacklisted(url.toHttpUrlOrNull()?.host.orEmpty())) {
+            throw IOException("Skipped blacklisted cover host: ${url.toHttpUrlOrNull()?.host}")
+        }
         var lastException: IOException? = null
         repeat(COVER_NETWORK_ATTEMPTS) { attempt ->
             val response = try {
@@ -265,14 +277,18 @@ class MangaCoverFetcher(
 
         when {
             options.networkCachePolicy.readEnabled -> {
-                // don't take up okhttp cache
-                request.cacheControl(CACHE_CONTROL_NO_STORE)
+                // Keep OkHttp's cache in play so repeat loads can be served by
+                // conditional GETs (304) instead of full downloads.
             }
             else -> {
                 // This causes the request to fail with a 504 Unsatisfiable Request.
                 request.cacheControl(CACHE_CONTROL_NO_NETWORK_NO_CACHE)
             }
         }
+
+        // Opt into the cover-host blacklist: repeated recoverable failures on
+        // this host are remembered so later covers skip it immediately.
+        CoverRequestPolicy.markCoverRequest(request)
 
         return request.build()
     }
@@ -433,7 +449,6 @@ class MangaCoverFetcher(
     companion object {
         val USE_CUSTOM_COVER_KEY = Extras.Key(true)
 
-        private val CACHE_CONTROL_NO_STORE = CacheControl.Builder().noStore().build()
         private val CACHE_CONTROL_NO_NETWORK_NO_CACHE = CacheControl.Builder().noCache().onlyIfCached().build()
 
         private const val HTTP_NOT_MODIFIED = 304

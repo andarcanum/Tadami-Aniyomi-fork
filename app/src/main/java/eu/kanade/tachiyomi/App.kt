@@ -534,7 +534,9 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 add(NovelPluginImageKeyer())
             }
 
-            crossfade((300 * this@App.animatorDurationScale).toInt())
+            val crossfadeMs = (300 * this@App.animatorDurationScale).toInt()
+            // Long animations delay first paint of each cover; cap the scaled value.
+            crossfade(crossfadeMs.coerceAtMost(MAX_CROSSFADE_MS))
             allowRgb565(DeviceUtil.isLowRamDevice(this@App))
             memoryCache {
                 MemoryCache.Builder()
@@ -544,14 +546,18 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             diskCache {
                 DiskCache.Builder()
                     .directory(this@App.cacheDir.resolve("coil_cache").toOkioPath())
-                    .maxSizeBytes(128 * 1024 * 1024)
+                    .maxSizeBytes(diskCacheSizeBytes(this@App))
                     .build()
             }
             if (networkPreferences.verboseLogging().get()) logger(DebugLogger())
 
             // Coil spawns a new thread for every image load by default
             val isLowRam = DeviceUtil.isLowRamDevice(this@App)
-            fetcherCoroutineContext(Dispatchers.IO.limitedParallelism(if (isLowRam) 8 else 16))
+            fetcherCoroutineContext(
+                Dispatchers.IO.limitedParallelism(
+                    if (isLowRam) 8 else COVER_FETCH_PARALLELISM,
+                ),
+            )
             decoderCoroutineContext(Dispatchers.IO.limitedParallelism(if (isLowRam) 3 else 4))
         }
             .build()
@@ -641,6 +647,18 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 }
 
 private const val ACTION_DISABLE_INCOGNITO_MODE = "tachi.action.DISABLE_INCOGNITO_MODE"
+
+/** Parallel cover fetches on non-low-RAM devices (was 16; grids of 30+ cells). */
+private const val COVER_FETCH_PARALLELISM = 24
+
+/** Coil disk cache for covers/posters on devices that can afford it. */
+private fun diskCacheSizeBytes(context: android.content.Context): Long {
+    val isLowRam = eu.kanade.tachiyomi.util.system.DeviceUtil.isLowRamDevice(context)
+    return if (isLowRam) 128L * 1024 * 1024 else 256L * 1024 * 1024
+}
+
+/** Crossfade above this value delays first paint more than it helps. */
+private const val MAX_CROSSFADE_MS = 300
 
 private class MainThreadWatchdog(
     private val intervalMs: Long = 500,
