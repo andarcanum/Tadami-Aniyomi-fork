@@ -16,6 +16,21 @@ internal fun shouldDispatchWebProgressUpdate(
     return shouldTrackWebViewProgress(shouldRestoreWebScroll) && newPercent != currentPercent
 }
 
+/**
+ * Gate value to store when a scroll restore attempt completes.
+ *
+ * Both outcomes mean the restore is no longer in flight, so the gate must open
+ * either way: after a failure the user genuinely starts at the top and live
+ * scroll events drive truthful progress reports. Returning `!restored` here
+ * used to latch the gate shut for the whole chapter session on failure,
+ * disabling progress tracking and auto-scroll end detection.
+ */
+internal fun resolveWebViewRestoreGate(
+    restoreSucceeded: Boolean,
+): Boolean {
+    return false
+}
+
 internal fun resolveWebViewTotalScrollablePx(
     contentHeightPx: Int,
     viewHeightPx: Int,

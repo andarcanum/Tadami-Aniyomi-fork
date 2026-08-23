@@ -3351,7 +3351,7 @@ internal fun NovelReaderContentHost(
                                         view?.restoreWebViewScroll(
                                             progressPercent = state.lastSavedWebProgressPercent.coerceIn(0, 100),
                                             onComplete = { restored ->
-                                                shouldRestoreWebScroll = !restored
+                                                shouldRestoreWebScroll = resolveWebViewRestoreGate(restored)
                                                 if (restored) {
                                                     val settledProgress = view.resolveCurrentWebViewProgressPercent()
                                                     if (shouldDispatchWebProgressUpdate(
@@ -3752,7 +3752,7 @@ internal fun NovelReaderContentHost(
                                         view?.restoreWebViewScroll(
                                             progressPercent = currentRestoreProgress,
                                             onComplete = { restored ->
-                                                shouldRestoreWebScroll = !restored
+                                                shouldRestoreWebScroll = resolveWebViewRestoreGate(restored)
                                                 if (restored) {
                                                     val settledProgress = view.resolveCurrentWebViewProgressPercent()
                                                     if (shouldDispatchWebProgressUpdate(
