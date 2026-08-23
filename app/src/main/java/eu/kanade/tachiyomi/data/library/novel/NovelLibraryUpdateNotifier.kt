@@ -9,6 +9,7 @@ import com.tadami.aurora.R
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailureNotificationFormatter
+import eu.kanade.tachiyomi.data.library.ProgressPostThrottle
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.ui.main.MainActivity
@@ -37,6 +38,11 @@ class NovelLibraryUpdateNotifier(
         maximumFractionDigits = 0
     }
 
+    // Rate-limits the two-per-entry progress posts of long runs.
+    private val progressThrottle = ProgressPostThrottle(
+        ProgressPostThrottle.DEFAULT_PROGRESS_INTERVAL_MILLIS,
+    )
+
     private val cancelIntent by lazy {
         NotificationReceiver.cancelLibraryUpdatePendingBroadcast(context)
     }
@@ -62,6 +68,8 @@ class NovelLibraryUpdateNotifier(
         updated: Int,
         failed: Int,
     ) {
+        if (!progressThrottle.shouldPostNow()) return
+
         val safeTotal = total.coerceAtLeast(1)
 
         progressNotificationBuilder

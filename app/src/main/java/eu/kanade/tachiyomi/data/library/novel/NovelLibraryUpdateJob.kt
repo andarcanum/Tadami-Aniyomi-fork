@@ -276,18 +276,15 @@ class NovelLibraryUpdateJob(
 
         novelToUpdate = listToUpdate
             .distinctBy { it.novel.id }
-            .filter { libraryNovel ->
-                val isEligible = isNovelEligibleForAutoUpdate(
+            .mapNotNull { libraryNovel ->
+                val reason = getNovelAutoUpdateSkipReason(
                     item = libraryNovel,
                     restrictions = restrictions,
                     fetchWindowUpperBound = fetchWindowUpperBound,
                 )
-                if (!isEligible) {
-                    val reason = getNovelAutoUpdateSkipReason(
-                        item = libraryNovel,
-                        restrictions = restrictions,
-                        fetchWindowUpperBound = fetchWindowUpperBound,
-                    )
+                if (reason == null) {
+                    libraryNovel
+                } else {
                     skippedUpdates.add(
                         libraryNovel.novel to when (reason) {
                             NovelAutoUpdateSkipReason.NOT_ALWAYS_UPDATE ->
@@ -300,11 +297,10 @@ class NovelLibraryUpdateJob(
                                 context.stringResource(MR.strings.skipped_reason_not_started)
                             NovelAutoUpdateSkipReason.OUTSIDE_RELEASE_PERIOD ->
                                 context.stringResource(MR.strings.skipped_reason_not_in_release_period)
-                            null -> null
                         },
                     )
+                    null
                 }
-                isEligible
             }
             .sortedBy { it.novel.title }
 

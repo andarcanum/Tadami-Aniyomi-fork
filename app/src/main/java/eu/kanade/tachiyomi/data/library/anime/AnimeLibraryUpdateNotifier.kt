@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloader
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailureNotificationFormatter
+import eu.kanade.tachiyomi.data.library.ProgressPostThrottle
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -62,6 +63,11 @@ class AnimeLibraryUpdateNotifier(
         maximumFractionDigits = 0
     }
 
+    // Rate-limits the two-per-entry progress posts of long runs.
+    private val progressThrottle = ProgressPostThrottle(
+        ProgressPostThrottle.DEFAULT_PROGRESS_INTERVAL_MILLIS,
+    )
+
     /**
      * Pending intent of action that cancels the library update
      */
@@ -102,6 +108,8 @@ class AnimeLibraryUpdateNotifier(
      * @param total the total progress.
      */
     fun showProgressNotification(anime: List<Anime>, current: Int, total: Int) {
+        if (!progressThrottle.shouldPostNow()) return
+
         progressNotificationBuilder
             .setContentTitle(
                 context.stringResource(
