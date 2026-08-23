@@ -75,7 +75,14 @@ class CloudflareInterceptor(
                     cookieManager.remove(request.url, COOKIE_NAMES, 0)
                 }
 
-                webViewChallengeResolver.resolve(request, oldCookie)
+                // Serialize challenge solves globally (across hosts *and* interceptor
+                // instances): each solve spins up a heavyweight WebView (~tens of MB,
+                // up to 30 s). Per-host locks alone still allowed parallel WebViews for
+                // different hosts during a library refresh -- observed as OutOfMemoryError
+                // crashes on 512 MB-heap devices (see crash log #bug 0.60 / POCO X6 Pro).
+                synchronized(globalChallengeGate) {
+                    webViewChallengeResolver.resolve(request, oldCookie)
+                }
 
                 val firstAttempt = chain.proceed(request)
                 if (!shouldIntercept(firstAttempt)) {
@@ -104,6 +111,10 @@ class CloudflareInterceptor(
 
 internal val ERROR_CODES = listOf(403, 503)
 private val COOKIE_NAMES = listOf("cf_clearance")
+
+// Global (process-wide) gate for Cloudflare challenge solves: one WebView solve at a time,
+// regardless of host or which interceptor instance received the request.
+private val globalChallengeGate = Any()
 
 // Just enough to capture the challenge headers/markers; the page body is larger
 // but the challenge identifiers always appear near the top.

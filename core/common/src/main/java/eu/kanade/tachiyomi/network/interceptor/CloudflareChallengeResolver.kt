@@ -143,29 +143,33 @@ internal class WebViewCloudflareChallengeResolver(
         // Stage 1 -- optimistic wait. Most managed challenges self-solve within a couple of
         // seconds, so we first wait only up to the *soft* limit; the poller keeps running in
         // the background and releases the latch as soon as the cookie appears.
-        latch.await(waiter.softLimitMs, TimeUnit.MILLISECONDS)
+        try {
+            latch.await(waiter.softLimitMs, TimeUnit.MILLISECONDS)
 
-        // Stage 2 -- fast-fail interactive challenges. If no cookie arrived within the
-        // optimistic window and the page shows a human-verification widget (Turnstile), that
-        // challenge will never self-solve, so fail it here instead of sitting out the full
-        // timeout. Widget-free challenges (or a cookie that appears during the probe) keep
-        // their remaining time below, so slow auto-solves are not aborted.
-        if (!waiter.bypassed && !hasInteractiveWidget && detectInteractiveWidgetSync(webview)) {
-            hasInteractiveWidget = true
-            release()
-        } else if (!waiter.bypassed) {
-            // Stage 3 -- give a widget-free auto-solve the rest of the window up to the hard cap.
-            latch.await(CHALLENGE_RESOLVE_TIMEOUT_MS - waiter.softLimitMs, TimeUnit.MILLISECONDS)
-        }
-
-        mainExecutor.execute {
-            if (!waiter.bypassed) {
-                isWebViewOutdatedNow = webview?.let(isWebViewOutdated) == true
+            // Stage 2 -- fast-fail interactive challenges. If no cookie arrived within the
+            // optimistic window and the page shows a human-verification widget (Turnstile), that
+            // challenge will never self-solve, so fail it here instead of sitting out the full
+            // timeout. Widget-free challenges (or a cookie that appears during the probe) keep
+            // their remaining time below, so slow auto-solves are not aborted.
+            if (!waiter.bypassed && !hasInteractiveWidget && detectInteractiveWidgetSync(webview)) {
+                hasInteractiveWidget = true
+                release()
+            } else if (!waiter.bypassed) {
+                // Stage 3 -- give a widget-free auto-solve the rest of the window up to the hard cap.
+                latch.await(CHALLENGE_RESOLVE_TIMEOUT_MS - waiter.softLimitMs, TimeUnit.MILLISECONDS)
             }
+        } finally {
+            // Guaranteed teardown: an interrupted worker thread used to unwind before this
+            // block ran, leaking the created WebView (an OOM driver on low-heap devices).
+            mainExecutor.execute {
+                if (!waiter.bypassed) {
+                    isWebViewOutdatedNow = webview?.let(isWebViewOutdated) == true
+                }
 
-            webview?.run {
-                stopLoading()
-                destroy()
+                webview?.run {
+                    stopLoading()
+                    destroy()
+                }
             }
         }
 
