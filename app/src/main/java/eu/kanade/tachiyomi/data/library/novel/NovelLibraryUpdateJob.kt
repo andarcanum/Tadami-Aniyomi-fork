@@ -458,18 +458,20 @@ class NovelLibraryUpdateJob(
         if (!downloadPreferences.downloadNewNovelChapters().get()) return emptyList()
 
         val included = downloadPreferences.downloadNewNovelChapterCategories().get().map { it.toLong() }.toSet()
-        if (included.isNotEmpty() && categoryIds.intersect(included).isEmpty()) return emptyList()
-
         val excluded = downloadPreferences.downloadNewNovelChapterCategoriesExclude().get().map { it.toLong() }.toSet()
-        if (categoryIds.any { it in excluded }) return emptyList()
-
         val unreadOnly = downloadPreferences.downloadNewUnreadNovelChaptersOnly().get()
 
-        return newChapters
-            .asSequence()
-            .filter { !unreadOnly || !it.read }
-            .filterNot { novelDownloadManager.isChapterDownloaded(novel, it.id) }
-            .toList()
+        // One directory walk for all new chapters instead of two file stats per chapter.
+        val downloadedChapterIds = novelDownloadManager.getDownloadedChapterIds(novel)
+
+        return filterNovelChaptersForDownload(
+            newChapters = newChapters,
+            unreadOnly = unreadOnly,
+            includedCategories = included,
+            excludedCategories = excluded,
+            categoryIds = categoryIds,
+            downloadedChapterIds = downloadedChapterIds,
+        )
     }
 
     private fun writeErrorFile(errors: List<LibraryUpdateFailure>): File {
@@ -648,4 +650,29 @@ internal fun isNovelEligibleForAutoUpdate(
         restrictions = restrictions,
         fetchWindowUpperBound = fetchWindowUpperBound,
     ) == null
+}
+
+/**
+ * Decides which freshly synced chapters should be queued for download.
+ * Downloaded state is provided as a precomputed [downloadedChapterIds] set so the caller
+ * pays one directory walk instead of per-chapter file checks.
+ */
+internal fun filterNovelChaptersForDownload(
+    newChapters: List<NovelChapter>,
+    unreadOnly: Boolean,
+    includedCategories: Set<Long>,
+    excludedCategories: Set<Long>,
+    categoryIds: Set<Long>,
+    downloadedChapterIds: Set<Long>,
+): List<NovelChapter> {
+    if (includedCategories.isNotEmpty() && categoryIds.intersect(includedCategories).isEmpty()) {
+        return emptyList()
+    }
+    if (categoryIds.any { it in excludedCategories }) return emptyList()
+
+    return newChapters
+        .asSequence()
+        .filter { !unreadOnly || !it.read }
+        .filterNot { it.id in downloadedChapterIds }
+        .toList()
 }
