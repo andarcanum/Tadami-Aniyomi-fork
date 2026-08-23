@@ -147,7 +147,7 @@ class NovelLibraryUpdateJob(
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
         return ForegroundInfo(
-            Notifications.ID_LIBRARY_PROGRESS,
+            Notifications.ID_NOVEL_LIBRARY_UPDATE_PROGRESS,
             notifier.progressNotificationBuilder.build(),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC

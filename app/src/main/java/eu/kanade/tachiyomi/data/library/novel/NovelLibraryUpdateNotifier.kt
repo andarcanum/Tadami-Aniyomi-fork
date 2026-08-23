@@ -26,6 +26,10 @@ import tachiyomi.i18n.R as I18nR
 
 class NovelLibraryUpdateNotifier(
     private val context: Context,
+    /**
+     * Library update jobs run in parallel, so each media posts its progress under its own id.
+     */
+    val progressNotificationId: Int = Notifications.ID_NOVEL_LIBRARY_UPDATE_PROGRESS,
 ) {
 
     private val percentFormatter = NumberFormat.getPercentInstance().apply {
@@ -75,7 +79,7 @@ class NovelLibraryUpdateNotifier(
             )
 
         context.notify(
-            Notifications.ID_LIBRARY_PROGRESS,
+            progressNotificationId,
             progressNotificationBuilder
                 .setProgress(total, current, false)
                 .build(),
@@ -149,7 +153,7 @@ class NovelLibraryUpdateNotifier(
     }
 
     fun cancelProgressNotification() {
-        context.cancelNotification(Notifications.ID_LIBRARY_PROGRESS)
+        context.cancelNotification(progressNotificationId)
     }
 
     /**

@@ -52,7 +52,10 @@ class AnimeMetadataUpdateJob(private val context: Context, workerParams: WorkerP
     private val updateAnime: UpdateAnime = Injekt.get()
     private val animeRatingFetcher: AnimeRatingFetcher = Injekt.get()
 
-    private val notifier = AnimeLibraryUpdateNotifier(context)
+    private val notifier = AnimeLibraryUpdateNotifier(
+        context,
+        progressNotificationId = Notifications.ID_ANIME_LIBRARY_PROGRESS,
+    )
 
     private var animeToUpdate: List<LibraryAnime> = mutableListOf()
 
@@ -81,7 +84,10 @@ class AnimeMetadataUpdateJob(private val context: Context, workerParams: WorkerP
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
-        val notifier = AnimeLibraryUpdateNotifier(context)
+        val notifier = AnimeLibraryUpdateNotifier(
+            context,
+            progressNotificationId = Notifications.ID_ANIME_LIBRARY_PROGRESS,
+        )
         return ForegroundInfo(
             Notifications.ID_ANIME_LIBRARY_PROGRESS,
             notifier.progressNotificationBuilder.build(),

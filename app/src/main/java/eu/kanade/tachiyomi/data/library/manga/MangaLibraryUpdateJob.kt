@@ -156,7 +156,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     override suspend fun getForegroundInfo(): ForegroundInfo {
         val notifier = MangaLibraryUpdateNotifier(context)
         return ForegroundInfo(
-            Notifications.ID_LIBRARY_PROGRESS,
+            Notifications.ID_MANGA_LIBRARY_UPDATE_PROGRESS,
             notifier.progressNotificationBuilder.build(),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC

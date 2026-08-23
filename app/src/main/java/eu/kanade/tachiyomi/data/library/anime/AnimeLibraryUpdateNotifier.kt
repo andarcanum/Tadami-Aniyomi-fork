@@ -50,6 +50,11 @@ class AnimeLibraryUpdateNotifier(
 
     private val securityPreferences: SecurityPreferences = Injekt.get(),
     private val sourceManager: AnimeSourceManager = Injekt.get(),
+    /**
+     * Library update jobs run in parallel, so each media posts its progress under its own id.
+     * The anime metadata job overrides this with its own dedicated id.
+     */
+    val progressNotificationId: Int = Notifications.ID_ANIME_LIBRARY_UPDATE_PROGRESS,
 ) {
 
     private val percentFormatter = NumberFormat.getPercentInstance().apply {
@@ -111,7 +116,7 @@ class AnimeLibraryUpdateNotifier(
         }
 
         context.notify(
-            Notifications.ID_LIBRARY_PROGRESS,
+            progressNotificationId,
             progressNotificationBuilder
                 .setProgress(total, current, false)
                 .build(),
@@ -336,7 +341,7 @@ class AnimeLibraryUpdateNotifier(
      * Cancels the progress notification.
      */
     fun cancelProgressNotification() {
-        context.cancelNotification(Notifications.ID_LIBRARY_PROGRESS)
+        context.cancelNotification(progressNotificationId)
     }
 
     private suspend fun getAnimeIcon(anime: Anime): Bitmap? {
