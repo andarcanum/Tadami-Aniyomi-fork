@@ -27,6 +27,7 @@ import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
+import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
 import eu.kanade.tachiyomi.data.library.shouldRetryLegacyAutoUpdateRun
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorMedia
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorRunType
@@ -46,7 +47,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
 import mihon.domain.items.episode.interactor.FilterEpisodesForDownload
 import tachiyomi.core.common.i18n.stringResource
@@ -385,14 +385,16 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             animeToUpdate.groupBy { it.anime.source }.values
                 .map { animeInSource ->
                     async {
-                        semaphore.withPermit {
-                            animeInSource.forEachIndexed { index, libraryAnime ->
+                        processEntriesWithPacing(
+                            entries = animeInSource,
+                            semaphore = semaphore,
+                            process = { libraryAnime ->
                                 val anime = libraryAnime.anime
                                 ensureActive()
 
                                 // Don't continue to update if anime is not in library
                                 if (anime.parentId == null && getAnime.await(anime.id)?.favorite != true) {
-                                    return@forEachIndexed
+                                    return@processEntriesWithPacing false
                                 }
 
                                 withUpdateNotification(
@@ -460,13 +462,16 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                                     }
                                 }
 
+                                true
+                            },
+                            paceAfter = {
                                 pacingPolicy.delayAfterUpdate(
                                     mediaTag = LibraryUpdatePacingPolicy.MEDIA_ANIME,
-                                    sourceId = anime.source,
-                                    shouldDelay = index != animeInSource.lastIndex,
+                                    sourceId = animeInSource.first().anime.source,
+                                    shouldDelay = true,
                                 )
-                            }
-                        }
+                            },
+                        )
                     }
                 }
                 .awaitAll()

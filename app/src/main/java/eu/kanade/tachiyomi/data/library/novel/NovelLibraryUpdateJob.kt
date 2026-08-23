@@ -21,6 +21,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
+import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
 import eu.kanade.tachiyomi.data.library.shouldRetryLegacyAutoUpdateRun
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorMedia
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorRunType
@@ -41,7 +42,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.getAndSet
@@ -330,13 +330,15 @@ class NovelLibraryUpdateJob(
             novelToUpdate.groupBy { it.novel.source }.values
                 .map { novelsInSource ->
                     async {
-                        semaphore.withPermit {
-                            novelsInSource.forEachIndexed { index, libraryNovel ->
+                        processEntriesWithPacing(
+                            entries = novelsInSource,
+                            semaphore = semaphore,
+                            process = { libraryNovel ->
                                 val novel = libraryNovel.novel
                                 ensureActive()
 
                                 if (getNovel.await(novel.id)?.favorite != true) {
-                                    return@forEachIndexed
+                                    return@processEntriesWithPacing false
                                 }
 
                                 withUpdateNotification(
@@ -402,13 +404,16 @@ class NovelLibraryUpdateJob(
                                     }
                                 }
 
+                                true
+                            },
+                            paceAfter = {
                                 pacingPolicy.delayAfterUpdate(
                                     mediaTag = LibraryUpdatePacingPolicy.MEDIA_NOVEL,
-                                    sourceId = novel.source,
-                                    shouldDelay = index != novelsInSource.lastIndex,
+                                    sourceId = novelsInSource.first().novel.source,
+                                    shouldDelay = true,
                                 )
-                            }
-                        }
+                            },
+                        )
                     }
                 }
                 .awaitAll()

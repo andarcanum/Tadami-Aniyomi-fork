@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
+import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
 import eu.kanade.tachiyomi.data.library.shouldRetryLegacyAutoUpdateRun
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorMedia
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorRunType
@@ -44,7 +45,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
 import mihon.domain.items.chapter.interactor.FilterChaptersForDownload
 import tachiyomi.core.common.i18n.stringResource
@@ -361,14 +361,16 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             mangaToUpdate.groupBy { it.manga.source }.values
                 .map { mangaInSource ->
                     async {
-                        semaphore.withPermit {
-                            mangaInSource.forEachIndexed { index, libraryManga ->
+                        processEntriesWithPacing(
+                            entries = mangaInSource,
+                            semaphore = semaphore,
+                            process = { libraryManga ->
                                 val manga = libraryManga.manga
                                 ensureActive()
 
                                 // Don't continue to update if manga is not in library
                                 if (getManga.await(manga.id)?.favorite != true) {
-                                    return@forEachIndexed
+                                    return@processEntriesWithPacing false
                                 }
 
                                 withUpdateNotification(
@@ -434,13 +436,16 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                                     }
                                 }
 
+                                true
+                            },
+                            paceAfter = {
                                 pacingPolicy.delayAfterUpdate(
                                     mediaTag = LibraryUpdatePacingPolicy.MEDIA_MANGA,
-                                    sourceId = manga.source,
-                                    shouldDelay = index != mangaInSource.lastIndex,
+                                    sourceId = mangaInSource.first().manga.source,
+                                    shouldDelay = true,
                                 )
-                            }
-                        }
+                            },
+                        )
                     }
                 }
                 .awaitAll()
