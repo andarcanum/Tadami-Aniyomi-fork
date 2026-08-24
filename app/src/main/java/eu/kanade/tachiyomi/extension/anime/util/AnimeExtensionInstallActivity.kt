@@ -61,6 +61,18 @@ class AnimeExtensionInstallActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        maybeCheckIgnoredMiuiResult()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The ignored MIUI result may arrive while the activity is merely paused (not stopped),
+        // in which case onStart does not fire again — re-check on every resume instead.
+        // (Ported from MangaExtensionInstallActivity.)
+        maybeCheckIgnoredMiuiResult()
+    }
+
+    private fun maybeCheckIgnoredMiuiResult() {
         if (hasIgnoredResult) {
             hasIgnoredResult = false
             Handler(Looper.getMainLooper()).postDelayed({

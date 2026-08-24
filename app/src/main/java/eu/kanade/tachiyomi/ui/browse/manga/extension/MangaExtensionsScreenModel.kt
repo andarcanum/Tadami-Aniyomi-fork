@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.extension.manga.model.newestByVersion
 import eu.kanade.tachiyomi.extension.manga.model.selectMangaInstalledRepoDisplayName
 import eu.kanade.tachiyomi.extension.manga.model.selectMangaRegularUpdate
 import eu.kanade.tachiyomi.extension.manga.model.selectMangaReinstallCandidates
+import eu.kanade.tachiyomi.extension.manga.toInstalledMangaExtensionPkgName
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.coroutines.delay
@@ -120,7 +121,11 @@ class MangaExtensionsScreenModel(
 
                 val itemsGroups: ItemGroups = mutableMapOf()
                 availableExtensionVariants.value = _available.groupBy { it.pkgName }
-                updateExtensionVariants.value = rawAvailable.groupBy { it.pkgName }
+                // Installed names are normalized (suffix stripped at install time): the update
+                // variants map must use the same key or lookups by extension.pkgName miss.
+                updateExtensionVariants.value = rawAvailable.groupBy {
+                    it.pkgName.toInstalledMangaExtensionPkgName()
+                }
                 val availableRepoCounts = _available
                     .groupBy { it.pkgName }
                     .mapValues { (_, variants) -> variants.map { it.repoUrl }.distinct().size }

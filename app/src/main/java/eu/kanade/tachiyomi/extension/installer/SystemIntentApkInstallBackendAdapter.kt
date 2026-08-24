@@ -74,7 +74,9 @@ class SystemIntentApkInstallBackendAdapter(
         try {
             installApk(request, apkFile)
             withTimeout(INSTALL_TIMEOUT_MS) { installResult.await() }
-            pendingInstallStore.clear()
+            // Remove only this install's entry: clear() would wipe pending entries of the
+            // other media types waiting for their own user permission.
+            pendingInstallStore.remove(request.packageName)
         } finally {
             runCatching { context.unregisterReceiver(receiver) }
         }

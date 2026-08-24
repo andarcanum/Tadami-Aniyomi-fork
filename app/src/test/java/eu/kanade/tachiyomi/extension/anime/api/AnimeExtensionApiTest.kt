@@ -1,14 +1,21 @@
 package eu.kanade.tachiyomi.extension.anime.api
 
 import android.content.Context
+import eu.kanade.tachiyomi.core.security.SecurityPreferences
+import eu.kanade.tachiyomi.extension.ExtensionUpdateNotifier
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
+import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.extension.anime.util.AnimeExtensionLoader
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.coJustRun
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.mockkConstructor
+import io.mockk.runs
+import io.mockk.unmockkAll
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -19,10 +26,14 @@ import mihon.domain.extensionrepo.anime.interactor.UpdateAnimeExtensionRepo
 import mihon.domain.extensionstore.anime.repository.AnimeExtensionStoreRepository
 import mihon.domain.extensionstore.model.ExtensionStore
 import mihon.domain.extensionstore.model.legacyBaseUrl
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import tachiyomi.core.common.preference.InMemoryPreferenceStore
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.addSingleton
 
 class AnimeExtensionApiTest {
 
@@ -189,5 +200,62 @@ class AnimeExtensionApiTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun `update check matches suffixed store pkgName to normalized installed name`() = runTest {
+        nowMs = 200_000_000L
+        every { lastCheckPreference.get() } returns 0L
+
+        val installed = AnimeExtension.Installed(
+            name = "Source",
+            pkgName = "pkg.example", // normalized: the suffix was stripped at install time
+            versionName = "1.4.0",
+            versionCode = 10,
+            libVersion = 1.4,
+            lang = "en",
+            isNsfw = false,
+            pkgFactory = null,
+            sources = emptyList(),
+            icon = null,
+            isShared = true,
+        )
+        every { animeExtensionManager.installedExtensionsFlow } returns
+            MutableStateFlow(listOf(installed))
+
+        // The store publishes the same package with a numeric suffix and a newer build.
+        val storeRepository = mockk<AnimeExtensionStoreRepository>()
+        val storeFetcher = mockk<ExtensionStoreFetcher>()
+        val store = legacyStore(baseUrl = "https://alpha.example", badgeLabel = "Alpha Store")
+        coEvery { storeRepository.getAll() } returns listOf(store)
+        coEvery { storeFetcher.fetchExtensions(any()) } returns ExtensionStoreFetchResult(
+            extensions = listOf(
+                availableExtension(store, versionCode = 20).copy(pkgName = "pkg.example-123456789"),
+            ),
+            failedStores = emptyList(),
+        )
+
+        mockkConstructor(ExtensionUpdateNotifier::class)
+        every { anyConstructed<ExtensionUpdateNotifier>().promptUpdates(any(), any()) } just runs
+        // The notifier constructor resolves this from Injekt.
+        Injekt.addSingleton(SecurityPreferences(InMemoryPreferenceStore()))
+
+        val api = AnimeExtensionApi(
+            preferenceStore = preferenceStore,
+            storeRepository = storeRepository,
+            storeFetcher = storeFetcher,
+            updateExtensionRepo = updateExtensionRepo,
+            animeExtensionManager = animeExtensionManager,
+            timeProvider = { nowMs },
+        )
+
+        val result = api.checkForUpdatesIfDue(context)
+
+        result!!.map { it.pkgName } shouldBe listOf("pkg.example")
+    }
+
+    @AfterEach
+    fun tearDownMocks() {
+        unmockkAll()
     }
 }

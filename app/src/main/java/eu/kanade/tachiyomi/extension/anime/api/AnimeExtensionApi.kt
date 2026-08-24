@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeRegularUpdate
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeReinstallCandidates
+import eu.kanade.tachiyomi.extension.anime.toInstalledAnimeExtensionPkgName
 import mihon.data.extension.mapper.toAnimeExtensionAvailable
 import mihon.data.extension.repository.ExtensionStoreFetcher
 import mihon.domain.extensionrepo.anime.interactor.UpdateAnimeExtensionRepo
@@ -81,7 +82,9 @@ internal class AnimeExtensionApi(
             findExtensions().extensions.also { lastExtCheck.set(nowMs) }
         }
 
-        val extensionVariantsByPkgName = extensions.groupBy { it.pkgName }
+        // Installed names are normalized (numeric suffix stripped at install time), so the
+        // grouping key must be normalized too or suffixed store entries never match.
+        val extensionVariantsByPkgName = extensions.groupBy { it.pkgName.toInstalledAnimeExtensionPkgName() }
 
         val installedExtensions = animeExtensionManager.installedExtensionsFlow.value
 

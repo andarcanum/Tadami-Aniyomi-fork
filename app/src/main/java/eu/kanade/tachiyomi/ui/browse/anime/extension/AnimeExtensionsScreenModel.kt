@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.extension.anime.model.newestByVersion
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeInstalledRepoDisplayName
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeRegularUpdate
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeReinstallCandidates
+import eu.kanade.tachiyomi.extension.anime.toInstalledAnimeExtensionPkgName
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -119,7 +120,11 @@ class AnimeExtensionsScreenModel(
 
                 val itemsGroups: ItemGroups = mutableMapOf()
                 availableExtensionVariants.value = _available.groupBy { it.pkgName }
-                updateExtensionVariants.value = rawAvailable.groupBy { it.pkgName }
+                // Installed names are normalized (suffix stripped at install time): the update
+                // variants map must use the same key or lookups by extension.pkgName miss.
+                updateExtensionVariants.value = rawAvailable.groupBy {
+                    it.pkgName.toInstalledAnimeExtensionPkgName()
+                }
                 val availableRepoCounts = _available
                     .groupBy { it.pkgName }
                     .mapValues { (_, variants) -> variants.map { it.repoUrl }.distinct().size }

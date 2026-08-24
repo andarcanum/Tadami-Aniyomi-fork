@@ -121,7 +121,9 @@ class PendingApkInstallStore(
         return resumedAny
     }
 
-    private fun remove(packageName: String) {
+    /** Removes only the entry for [packageName]: a successful install of one extension must
+     *  never wipe pending entries of other extensions (cross-media queue loss). */
+    fun remove(packageName: String) {
         basePreferences.pendingApkInstallQueue().getAndSet { queue ->
             queue.filterNot { it.decode()?.packageName == packageName }.toSet()
         }

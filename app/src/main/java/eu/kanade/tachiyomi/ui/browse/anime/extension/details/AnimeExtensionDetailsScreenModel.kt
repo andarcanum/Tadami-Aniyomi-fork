@@ -13,6 +13,7 @@ import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeReinstallCandidates
+import eu.kanade.tachiyomi.extension.anime.toInstalledAnimeExtensionPkgName
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
@@ -160,7 +161,8 @@ class AnimeExtensionDetailsScreenModel(
     fun getReinstallCandidates(): List<AnimeExtension.Available> {
         val extension = state.value.extension ?: return emptyList()
         val variants = extensionManager.availableExtensionsFlow.value
-            .filter { it.pkgName == extension.pkgName }
+            // Installed names are normalized; store entries may carry a numeric suffix.
+            .filter { it.pkgName.toInstalledAnimeExtensionPkgName() == extension.pkgName }
         return selectAnimeReinstallCandidates(extension, variants)
     }
 
