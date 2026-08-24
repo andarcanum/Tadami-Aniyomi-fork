@@ -142,4 +142,62 @@ class GetApplicationReleaseTest {
         coVerify(exactly = 0) { releaseService.latest(any()) }
         result shouldBe GetApplicationRelease.Result.NoNewUpdate
     }
+
+    @Test
+    fun `When remote tag has fewer segments than local version expect no crash and no update`() = runTest {
+        // Regression: local "0.60.4" vs remote "v0.59" threw
+        // IndexOutOfBoundsException (Index 2 out of bounds for length 2).
+        every { preference.get() } returns 0
+        every { preference.set(any()) }.answers { }
+
+        val release = Release(
+            "v0.59",
+            "info",
+            "http://example.com/release_link",
+            "http://example.com/release_link.apk",
+            "2026-03-29",
+        )
+
+        coEvery { releaseService.latest(any()) } returns release
+
+        val result = getApplicationRelease.await(
+            GetApplicationRelease.Arguments(
+                isPreview = false,
+                commitCount = 0,
+                versionName = "0.60.4",
+                repository = "test",
+            ),
+        )
+
+        result shouldBe GetApplicationRelease.Result.NoNewUpdate
+    }
+
+    @Test
+    fun `When remote tag has more segments than local version expect new update`() = runTest {
+        every { preference.get() } returns 0
+        every { preference.set(any()) }.answers { }
+
+        val release = Release(
+            "v1.0.1",
+            "info",
+            "http://example.com/release_link",
+            "http://example.com/release_link.apk",
+            "2026-03-29",
+        )
+
+        coEvery { releaseService.latest(any()) } returns release
+
+        val result = getApplicationRelease.await(
+            GetApplicationRelease.Arguments(
+                isPreview = false,
+                commitCount = 0,
+                versionName = "1.0",
+                repository = "test",
+            ),
+        )
+
+        result shouldBe GetApplicationRelease.Result.NewUpdate(
+            release,
+        )
+    }
 }
