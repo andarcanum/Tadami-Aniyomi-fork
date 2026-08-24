@@ -161,9 +161,30 @@ internal object AnimeExtensionLoader {
             privateExtensionDir,
             "${extension.packageName}.$PRIVATE_EXTENSION_EXTENSION",
         )
+        // Write to a .part file and rename only after a complete copy: dying between the old
+        // delete->copy steps would leave the extension without any loadable file.
+        val part = File(privateExtensionDir, "${extension.packageName}.$PRIVATE_EXTENSION_EXTENSION.part")
+        // Set once the previous good file has been removed for the swap: staging failures
+        // before that point must never destroy a working extension.
+        var previousFileRemoved = false
         return try {
-            target.delete()
-            file.copyAndSetReadOnlyTo(target, overwrite = true)
+            part.delete()
+            file.copyAndSetReadOnlyTo(part, overwrite = true)
+            if (target.exists()) {
+                if (!target.delete()) {
+                    logcat(LogPriority.ERROR) {
+                        "Failed to replace existing private extension file: ${target.absolutePath}"
+                    }
+                    part.delete()
+                    return PrivateExtensionInstallResult.Error
+                }
+                previousFileRemoved = true
+            }
+            if (!part.renameTo(target)) {
+                part.copyTo(target, overwrite = true)
+                target.setReadOnly()
+                part.delete()
+            }
             if (currentExtension != null) {
                 AnimeExtensionInstallReceiver.notifyReplaced(context, extension.packageName)
                 // Keep the user's trust across the update when the signing key is unchanged.
@@ -180,7 +201,11 @@ internal object AnimeExtensionLoader {
             PrivateExtensionInstallResult.Success
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to copy extension file." }
-            target.delete()
+            // Best-effort restore when the swap had already removed the previous good file.
+            if (previousFileRemoved && !target.exists() && part.exists()) {
+                runCatching { part.renameTo(target) }
+            }
+            part.delete()
             PrivateExtensionInstallResult.Error
         }
     }
