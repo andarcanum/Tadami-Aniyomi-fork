@@ -90,7 +90,14 @@ class NovelCoverFetcher(
                 rawUrl,
             )} diskCacheKey=$diskCacheKey isLibrary=${data.isNovelFavorite}",
         )
-        if (rawUrl.isNullOrBlank()) throw IOException("No cover URL specified for novel ${data.novelId}")
+        if (rawUrl.isNullOrBlank()) {
+            // A favorite can legitimately have no cover URL: the source never
+            // provided one and no custom cover is set. Return a stable blank
+            // image instead of failing - a thrown error re-ran the whole request
+            // on every recomposition and spammed the log, while a successful
+            // result is held by Coil's memory cache and costs nothing afterwards.
+            return blankCoverResult()
+        }
         return when (getResourceType(rawUrl)) {
             Type.URL -> httpLoader(rawUrl)
             Type.PLUGIN_IMAGE -> pluginImageLoader(rawUrl)
@@ -366,6 +373,17 @@ class NovelCoverFetcher(
         )
     }
 
+    private fun blankCoverResult(): FetchResult {
+        return SourceFetchResult(
+            source = ImageSource(
+                source = Buffer().write(BLANK_COVER_PNG),
+                fileSystem = FileSystem.SYSTEM,
+            ),
+            mimeType = "image/png",
+            dataSource = DataSource.DISK,
+        )
+    }
+
     private fun getResourceType(cover: String?): Type? {
         return when {
             cover.isNullOrEmpty() -> null
@@ -491,6 +509,11 @@ class NovelCoverFetcher(
 
         /** Delay between the first failed attempt and the retry. */
         private const val COVER_NETWORK_RETRY_DELAY_MS = 500L
+
+        /** 1x1 transparent PNG returned for novels without any cover URL. */
+        private val BLANK_COVER_PNG = java.util.Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+        )
     }
 }
 
