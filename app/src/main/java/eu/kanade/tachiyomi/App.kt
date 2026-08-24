@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.core.content.ContextCompat
@@ -169,6 +170,10 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         if (isMainProcess) {
             try {
                 WebSettings.getDefaultUserAgent(this)
+                // Initialize the WebView cookie provider here too: CookieManager.getInstance()
+                // crashes with NPE inside WebViewFactory when first called from a background
+                // thread before the app is fully attached (Android 16, crash log 0.60.4).
+                CookieManager.getInstance()
             } catch (e: Throwable) {
                 logcat(LogPriority.ERROR) { "Failed to warm up WebView user agent: ${e.message}" }
             }
