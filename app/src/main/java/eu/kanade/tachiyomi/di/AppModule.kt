@@ -733,6 +733,7 @@ class AppModule(val app: Application) : InjektModule {
                     ShizukuApkInstallBackendAdapter(app),
                     DhizukuApkInstallBackendAdapter(app),
                 ),
+                pendingInstallStore = PendingApkInstallStore(get()),
             )
         }
         addSingletonFactory { KotlinNovelExtensionInstaller(app, get<NetworkHelper>().client, get(), get()) }
