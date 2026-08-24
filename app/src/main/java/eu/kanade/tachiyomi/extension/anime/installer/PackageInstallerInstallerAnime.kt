@@ -186,8 +186,8 @@ class PackageInstallerInstallerAnime(private val service: Service) : InstallerAn
     private fun notifyFallbackSuggestion(entry: Entry, reason: String) {
         fallbackNotifier.show(
             ApkInstallFallbackSuggestion(
-                packageName = "download-${entry.downloadId}",
-                displayName = "Extension ${entry.downloadId}",
+                packageName = entry.pkgName ?: "download-${entry.downloadId}",
+                displayName = entry.pkgName ?: "Extension ${entry.downloadId}",
                 kind = ApkExtensionKind.ANIME,
                 failedBackend = ApkInstallBackend.PACKAGE_INSTALLER,
                 reason = reason,

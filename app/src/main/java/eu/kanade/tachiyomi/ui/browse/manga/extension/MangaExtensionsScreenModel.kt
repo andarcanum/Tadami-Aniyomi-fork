@@ -14,7 +14,6 @@ import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
 import eu.kanade.tachiyomi.extension.manga.model.newestByVersion
 import eu.kanade.tachiyomi.extension.manga.model.selectMangaInstalledRepoDisplayName
-import eu.kanade.tachiyomi.extension.manga.model.selectMangaRegularUpdate
 import eu.kanade.tachiyomi.extension.manga.model.selectMangaReinstallCandidates
 import eu.kanade.tachiyomi.extension.manga.toInstalledMangaExtensionPkgName
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -240,9 +239,9 @@ class MangaExtensionsScreenModel(
 
     fun updateAllExtensions() {
         screenModelScope.launchIO {
-            state.value.items.values.flatten()
-                .map { it.extension }
-                .filterIsInstance<MangaExtension.Installed>()
+            // Source candidates from the manager flow, not the rendered list: search filters
+            // and collapsed language sections hide items whose updates still must be applied.
+            extensionManager.installedExtensionsFlow.value
                 .filter { it.hasUpdate && !it.needsReinstall }
                 .forEach { updateExtensionNow(it) }
         }
@@ -261,9 +260,13 @@ class MangaExtensionsScreenModel(
 
     fun updateExtension(extension: MangaExtension.Installed) {
         screenModelScope.launchIO {
-            if (extension.needsReinstall || getRegularUpdate(extension) == null) {
+            if (extension.needsReinstall) {
+                // Reinstall-from-repo owns this case; the row already offers its dialog.
                 return@launchIO
             }
+            // No silent miss here: the manager refreshes the repo list once and emits
+            // InstallStep.Error when no installable variant remains, surfacing in the UI
+            // through collectToInstallUpdate.
             updateExtensionNow(extension)
         }
     }
@@ -275,13 +278,6 @@ class MangaExtensionsScreenModel(
 
     fun getReinstallCandidates(extension: MangaExtension.Installed): List<MangaExtension.Available> {
         return selectMangaReinstallCandidates(
-            extension = extension,
-            variants = updateExtensionVariants.value[extension.pkgName].orEmpty(),
-        )
-    }
-
-    private fun getRegularUpdate(extension: MangaExtension.Installed): MangaExtension.Available? {
-        return selectMangaRegularUpdate(
             extension = extension,
             variants = updateExtensionVariants.value[extension.pkgName].orEmpty(),
         )

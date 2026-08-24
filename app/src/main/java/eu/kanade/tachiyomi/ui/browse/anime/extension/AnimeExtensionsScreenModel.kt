@@ -15,7 +15,6 @@ import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.extension.anime.model.newestByVersion
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeInstalledRepoDisplayName
-import eu.kanade.tachiyomi.extension.anime.model.selectAnimeRegularUpdate
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeReinstallCandidates
 import eu.kanade.tachiyomi.extension.anime.toInstalledAnimeExtensionPkgName
 import eu.kanade.tachiyomi.util.system.LocaleHelper
@@ -240,9 +239,9 @@ class AnimeExtensionsScreenModel(
 
     fun updateAllExtensions() {
         screenModelScope.launchIO {
-            state.value.items.values.flatten()
-                .map { it.extension }
-                .filterIsInstance<AnimeExtension.Installed>()
+            // Source candidates from the manager flow, not the rendered list: search filters
+            // and collapsed language sections hide items whose updates still must be applied.
+            extensionManager.installedExtensionsFlow.value
                 .filter { it.hasUpdate && !it.needsReinstall }
                 .forEach { updateExtensionNow(it) }
         }
@@ -261,9 +260,13 @@ class AnimeExtensionsScreenModel(
 
     fun updateExtension(extension: AnimeExtension.Installed) {
         screenModelScope.launchIO {
-            if (extension.needsReinstall || getRegularUpdate(extension) == null) {
+            if (extension.needsReinstall) {
+                // Reinstall-from-repo owns this case; the row already offers its dialog.
                 return@launchIO
             }
+            // No silent miss here: the manager refreshes the repo list once and emits
+            // InstallStep.Error when no installable variant remains, surfacing in the UI
+            // through collectToInstallUpdate.
             updateExtensionNow(extension)
         }
     }
@@ -275,13 +278,6 @@ class AnimeExtensionsScreenModel(
 
     fun getReinstallCandidates(extension: AnimeExtension.Installed): List<AnimeExtension.Available> {
         return selectAnimeReinstallCandidates(
-            extension = extension,
-            variants = updateExtensionVariants.value[extension.pkgName].orEmpty(),
-        )
-    }
-
-    private fun getRegularUpdate(extension: AnimeExtension.Installed): AnimeExtension.Available? {
-        return selectAnimeRegularUpdate(
             extension = extension,
             variants = updateExtensionVariants.value[extension.pkgName].orEmpty(),
         )
