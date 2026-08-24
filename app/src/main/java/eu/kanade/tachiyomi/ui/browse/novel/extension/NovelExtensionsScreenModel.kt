@@ -11,12 +11,14 @@ import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.installer.ExtensionApkFileStore
 import eu.kanade.tachiyomi.extension.installer.ExtensionInstallDiagnostic
+import eu.kanade.tachiyomi.extension.installer.UnifiedApkExtensionInstaller
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import eu.kanade.tachiyomi.extension.novel.NovelPluginId
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -46,6 +48,9 @@ class NovelExtensionsScreenModel(
     private val lastDiagnostics = MutableStateFlow<Map<String, ExtensionInstallDiagnostic>>(emptyMap())
     private val installedPluginsSnapshot = MutableStateFlow<List<NovelPlugin.Installed>>(emptyList())
     private val apkFileStore = ExtensionApkFileStore(basePreferences)
+    private val activeInstallJobs = mutableMapOf<String, Job>()
+    private val installCoordinator: UnifiedApkExtensionInstaller = Injekt.get()
+    private val installStateObservers = mutableMapOf<String, Job>()
 
     init {
         screenModelScope.launchIO {
@@ -231,6 +236,8 @@ class NovelExtensionsScreenModel(
                 }
             }
             .launchIn(screenModelScope)
+
+        observeInstallStates()
     }
 
     fun refresh() {
@@ -274,13 +281,17 @@ class NovelExtensionsScreenModel(
                     )
                 }
             } else {
-                installExtensionNow(plugin)
+                launchInstall(plugin)
             }
         }
     }
 
     fun cancelInstall(plugin: NovelPlugin.Available) {
-        currentDownloads.update { it - plugin.id }
+        // Real cancellation: stop the install coroutine and tell the manager/coordinator to
+        // abandon the attempt (including its pending-permission queue entry).
+        activeInstallJobs.remove(plugin.id)?.cancel()
+        extensionManager.cancelPluginInstall(plugin)
+        removeDownloadState(plugin)
     }
 
     fun diagnosticFor(plugin: NovelPlugin): String {
@@ -303,14 +314,14 @@ class NovelExtensionsScreenModel(
                 .filter { it.status == NovelExtensionItem.Status.UpdateAvailable && it.hasUpdate }
                 .mapNotNull { it.plugin as? NovelPlugin.Installed }
                 .mapNotNull { plugin -> getSameRepoUpdate(plugin) }
-                .forEach { installExtensionNow(it) }
+                .forEach { launchInstall(it) }
         }
     }
 
     fun updateExtension(plugin: NovelPlugin.Installed) {
         screenModelScope.launchIO {
             val available = getSameRepoUpdate(plugin) ?: return@launchIO
-            installExtensionNow(available)
+            launchInstall(available)
         }
     }
 
@@ -440,6 +451,52 @@ class NovelExtensionsScreenModel(
 
     private fun removeDownloadState(plugin: NovelPlugin) {
         currentDownloads.update { it - plugin.id }
+    }
+
+    /**
+     * Mirrors installer-side steps from the coordinator's state store into [currentDownloads]
+     * so an install started outside this ScreenModel (auto-resume after process death, or a
+     * ScreenModel recreation mid-install) still shows progress. Only non-terminal steps are
+     * mirrored; terminal transitions stay owned by the install flows themselves.
+     */
+    private fun observeInstallStates() {
+        screenModelScope.launchIO {
+            extensionManager.installedPluginsFlow.collectLatest { installed ->
+                val wanted = installed.mapNotNull { it.pkgName }.toSet()
+                synchronized(installStateObservers) {
+                    installStateObservers.keys.filter { it !in wanted }.forEach { pkgName ->
+                        installStateObservers.remove(pkgName)?.cancel()
+                    }
+                }
+                wanted.forEach { pkgName ->
+                    val alreadyObserved = synchronized(installStateObservers) {
+                        installStateObservers.containsKey(pkgName)
+                    }
+                    if (alreadyObserved) return@forEach
+                    val job = screenModelScope.launchIO {
+                        installCoordinator.observe(pkgName).collect { step ->
+                            if (step == InstallStep.Pending || step == InstallStep.Installing) {
+                                val pluginId = installed.firstOrNull { it.pkgName == pkgName }?.id ?: pkgName
+                                currentDownloads.update { it + (pluginId to step) }
+                            }
+                        }
+                    }
+                    synchronized(installStateObservers) { installStateObservers[pkgName] = job }
+                }
+            }
+        }
+    }
+
+    /** Launches a tracked install so [cancelInstall] can stop the real work, not just the UI. */
+    private fun launchInstall(plugin: NovelPlugin.Available) {
+        val job = screenModelScope.launchIO {
+            try {
+                installExtensionNow(plugin)
+            } finally {
+                activeInstallJobs.remove(plugin.id)
+            }
+        }
+        activeInstallJobs[plugin.id] = job
     }
 
     private suspend fun installExtensionNow(plugin: NovelPlugin.Available) {

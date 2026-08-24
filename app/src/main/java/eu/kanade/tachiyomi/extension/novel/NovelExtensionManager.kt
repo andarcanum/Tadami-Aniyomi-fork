@@ -37,6 +37,9 @@ interface NovelExtensionManager {
 
     suspend fun installPlugin(plugin: NovelPlugin.Available): NovelPlugin.Installed
 
+    /** Best-effort cancel of an in-flight install of [plugin]. */
+    fun cancelPluginInstall(plugin: NovelPlugin.Available) {}
+
     suspend fun uninstallPlugin(plugin: NovelPlugin.Installed)
 
     suspend fun uninstallPlugin(plugin: NovelPlugin.Untrusted)

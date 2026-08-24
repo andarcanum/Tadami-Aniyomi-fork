@@ -75,6 +75,7 @@ import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.installer.PendingApkInstallStore
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.novel.NovelPluginSourceFactory
+import eu.kanade.tachiyomi.extension.novel.kotlin.sweepOrphanedNovelPluginDownloads
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelRuntimeCacheTrimCallbacks
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
@@ -577,9 +578,19 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 // Creating the extension managers synchronously loads every installed extension on
                 // the main thread (MangaExtensionManager.initExtensions), so only touch them when
                 // there are orphaned downloads to actually recover.
-                if (basePreferences.extensionActiveDownloads().get().isNotEmpty()) {
+                if (
+                    basePreferences.mangaExtensionActiveDownloads().get().isNotEmpty() ||
+                    basePreferences.animeExtensionActiveDownloads().get().isNotEmpty()
+                ) {
                     runCatching { Injekt.get<MangaExtensionManager>().resumeOrphanedDownloads() }
                     runCatching { Injekt.get<AnimeExtensionManager>().resumeOrphanedDownloads() }
+                }
+                // Truncated or abandoned novel-plugin downloads are re-downloadable; sweep them.
+                runCatching {
+                    val swept = sweepOrphanedNovelPluginDownloads(this@App)
+                    if (swept.isNotEmpty()) {
+                        logcat(LogPriority.INFO) { "Deleted orphaned novel plugin downloads: ${swept.size}" }
+                    }
                 }
             }
             val libraryPreferences = Injekt.get<tachiyomi.domain.library.service.LibraryPreferences>()

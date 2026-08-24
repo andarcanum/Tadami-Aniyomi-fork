@@ -210,6 +210,13 @@ class DefaultNovelExtensionManager(
         return installed
     }
 
+    override fun cancelPluginInstall(plugin: NovelPlugin.Available) {
+        if (!plugin.isKotlinExtension) return
+        val pkgName = plugin.pkgName ?: plugin.id
+        pendingInstallRepos.remove(pkgName)
+        kotlinInstaller?.cancelInstall(pkgName)
+    }
+
     override suspend fun uninstallPlugin(plugin: NovelPlugin.Installed) {
         if (plugin.isKotlinExtension) {
             requireNotNull(kotlinInstaller) { "Kotlin novel extension installer is not available" }.uninstall(plugin)
