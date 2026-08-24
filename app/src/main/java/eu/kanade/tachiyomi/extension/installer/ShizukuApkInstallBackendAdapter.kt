@@ -4,11 +4,14 @@ import android.content.Context
 import android.content.pm.PackageManager
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.util.system.getUriSize
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import logcat.LogPriority
 import rikka.shizuku.Shizuku
 import tachiyomi.core.common.util.system.logcat
@@ -27,8 +30,7 @@ class ShizukuApkInstallBackendAdapter(
             emit(InstallStep.Error)
             return@flow
         }
-        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-            Shizuku.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE)
+        if (!awaitShizukuPermission()) {
             logcat(LogPriority.ERROR) { "Shizuku permission is required for APK install" }
             emit(InstallStep.Error)
             return@flow
@@ -84,8 +86,7 @@ class ShizukuApkInstallBackendAdapter(
 
     override suspend fun uninstall(request: ApkUninstallRequest): ApkInstallResult = withContext(Dispatchers.IO) {
         if (!Shizuku.pingBinder()) return@withContext ApkInstallResult.Error("Shizuku is not ready")
-        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-            Shizuku.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE)
+        if (!awaitShizukuPermission()) {
             return@withContext ApkInstallResult.Error("Shizuku permission is required")
         }
         val packageName = request.packageName
@@ -100,7 +101,34 @@ class ShizukuApkInstallBackendAdapter(
 
     override fun cancel(packageName: String) = Unit
 
+    /**
+     * Requests the Shizuku permission and suspends until the user answers, so a first-time
+     * install continues instead of failing instantly. The result listener fires on a binder
+     * thread; the deferred bridges it into this coroutine.
+     */
+    private suspend fun awaitShizukuPermission(): Boolean {
+        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) return true
+        val result = CompletableDeferred<Int>()
+        val listener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode == SHIZUKU_PERMISSION_REQUEST_CODE) {
+                result.complete(grantResult)
+            }
+        }
+        Shizuku.addRequestPermissionResultListener(listener)
+        try {
+            Shizuku.requestPermission(SHIZUKU_PERMISSION_REQUEST_CODE)
+            withTimeout(PERMISSION_TIMEOUT_MS) { result.await() }
+        } catch (e: TimeoutCancellationException) {
+            logcat(LogPriority.WARN) { "Timed out waiting for the Shizuku permission" }
+            return false
+        } finally {
+            Shizuku.removeRequestPermissionResultListener(listener)
+        }
+        return Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+    }
+
     private companion object {
         const val SHIZUKU_PERMISSION_REQUEST_CODE = 14045
+        const val PERMISSION_TIMEOUT_MS = 60_000L
     }
 }
