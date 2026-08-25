@@ -480,11 +480,17 @@ private class NovelPageReaderTextView constructor(
         updateSelectionInteractionEnabled(selectionInteractionEnabled)
         isClickable = false
         setupCustomSelectionActionModeCallback()
+        // Hand our menu to the editor: it builds its OWN floating action mode from this
+        // callback, which keeps its two-sided drag handles alive. Starting a competing mode
+        // manually (the previous approach) finished the editor's mode right after it appeared
+        // and collapsed the selection to a single end-of-word handle without highlight.
+        setCustomSelectionActionModeCallback(
+            requireNotNull(customSelectionActionModeCallback),
+        )
     }
 
     private fun setupCustomSelectionActionModeCallback() {
-        customSelectionActionModeCallback = object : ActionMode.Callback2() {
-            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+        customSelectionActionModeCallback = object : ActionMode.Callback2() {            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
                 if (menu == null) return true
                 // Standard system-style actions first, then the reader-specific ones.
                 menu.add(Menu.NONE, MENU_ID_COPY, 10, context.getString(MR.strings.copy.resourceId))
@@ -614,8 +620,12 @@ private class NovelPageReaderTextView constructor(
         // the hierarchy for a new focus target. That search re-enters Compose layout and crashes
         // with "Cannot start a writer when another writer is pending". Selection here is driven by
         // Selection.setSelection(), so Android focus is not needed.
-        isFocusable = false
-        isFocusableInTouchMode = false
+        // Focus matters for selection: the editor raises its drag handles only on a focused
+        // view, and in touch mode a view must be focusable-IN-touch-mode to take focus at all
+        // (programmatic requestFocus included). Detach-time focus searches stay neutralized by
+        // the clearFocus/focusSearch guards above (the original "writer pending" crash).
+        isFocusable = selectionInteractionEnabled
+        isFocusableInTouchMode = selectionInteractionEnabled
         isLongClickable = selectionInteractionEnabled
         if (!selectionInteractionEnabled) {
             clearSelectionPromotion()
@@ -715,6 +725,9 @@ private class NovelPageReaderTextView constructor(
         Selection.setSelection(spannable, selectionStart, selectionEnd)
         publishSelection(selectionStart, selectionEnd)
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        if (!isFocused) {
+            requestFocus()
+        }
         return true
     }
 
@@ -896,7 +909,11 @@ private class NovelPageReaderTextView constructor(
         Selection.setSelection(spannable, selectionStart, selectionEnd)
         publishSelection(selectionStart, selectionEnd)
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-        startSelectionActionMode()
+        // The editor attaches its drag handles only once the view holds focus. Its own action
+        // mode surfaces from the registered custom callback - starting ours here would kill it.
+        if (!isFocused) {
+            requestFocus()
+        }
         return true
     }
 
