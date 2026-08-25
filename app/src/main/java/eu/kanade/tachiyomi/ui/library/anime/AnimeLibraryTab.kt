@@ -110,6 +110,7 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.category.visualName
@@ -220,6 +221,11 @@ data object AnimeLibraryTab : Tab {
 
     private var lastAuroraSection: Section = Section.Anime
 
+    /** One-shot restore of the persisted section on the first composition after process death. */
+    private var lastAuroraSectionRestored = false
+
+    private val userProfilePreferences: UserProfilePreferences by injectLazy()
+
     private const val AURORA_LIBRARY_IDLE_PRELOAD_DELAY_MS = 300L
 
     @OptIn(ExperimentalAnimationGraphicsApi::class)
@@ -302,6 +308,17 @@ data object AnimeLibraryTab : Tab {
             Section.Novel.takeIf { showNovelSection },
         )
         val auroraPageCount = availableSections.size.coerceAtLeast(1)
+        // Restore the section the user actually worked in (survives process death); fall back
+        // to the first enabled one when the stored value is missing or now hidden.
+        if (!lastAuroraSectionRestored) {
+            val stored = userProfilePreferences.libraryLastSection().get()
+            Section.entries.firstOrNull { it.name.equals(stored, ignoreCase = true) }
+                ?.let { lastAuroraSection = it }
+            if (lastAuroraSection !in availableSections) {
+                lastAuroraSection = availableSections.firstOrNull() ?: lastAuroraSection
+            }
+            lastAuroraSectionRestored = true
+        }
         val initialAuroraPage = availableSections.indexOf(lastAuroraSection)
             .takeIf { it >= 0 }
             ?.coerceIn(0, auroraPageCount - 1)
@@ -800,6 +817,7 @@ data object AnimeLibraryTab : Tab {
             if (isAurora) {
                 sectionAtPage(auroraPagerState.currentPage.coerceAtMost(auroraPageCount - 1))?.let {
                     lastAuroraSection = it
+                    userProfilePreferences.libraryLastSection().set(it.name.lowercase(Locale.ROOT))
                 }
             }
         }
@@ -1667,6 +1685,7 @@ data object AnimeLibraryTab : Tab {
 
         LaunchedEffect(Unit) {
             launch { queryEvent.receiveAsFlow().collect(screenModel::search) }
+            launch { mangaQueryEvent.receiveAsFlow().collect { mangaScreenModel.search(it) } }
             launch {
                 novelQueryEvent.receiveAsFlow().collect { query ->
                     pendingNovelSearchQuery = query
@@ -1699,6 +1718,27 @@ data object AnimeLibraryTab : Tab {
     // For invoking search from other screen
     private val queryEvent = Channel<String>()
     suspend fun search(query: String) = queryEvent.send(query)
+
+    private val mangaQueryEvent = Channel<String>()
+
+    /**
+     * Searches the section the user is actually in (per the persisted Aurora section) instead
+     * of always landing on anime — mirrors [searchNovel]'s section routing.
+     */
+    suspend fun searchActive(query: String) {
+        when (lastAuroraSection) {
+            Section.Anime -> {
+                requestSection(Section.Anime)
+                queryEvent.send(query)
+            }
+            Section.Manga -> {
+                requestSection(Section.Manga)
+                mangaQueryEvent.send(query)
+            }
+            Section.Novel -> searchNovel(query)
+        }
+    }
+
     private val novelQueryEvent = Channel<String>(capacity = Channel.BUFFERED)
     suspend fun searchNovel(query: String) {
         requestSection(Section.Novel)

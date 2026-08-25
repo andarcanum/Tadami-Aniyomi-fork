@@ -70,6 +70,7 @@ import eu.kanade.domain.source.interactor.NovelReaderIncognitoState
 import eu.kanade.domain.source.manga.interactor.GetMangaIncognitoState
 import eu.kanade.domain.source.novel.interactor.GetNovelIncognitoState
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.presentation.achievement.components.AchievementGroupNotification
 import eu.kanade.presentation.achievement.components.AchievementListDialog
 import eu.kanade.presentation.achievement.components.AchievementPopupSizeTokens
@@ -173,6 +174,7 @@ class MainActivity : BaseActivity() {
     private val getMangaIncognitoState: GetMangaIncognitoState by injectLazy()
     private val getNovelIncognitoState: GetNovelIncognitoState by injectLazy()
     private val activityDataRepository: ActivityDataRepository by injectLazy()
+    private val userProfilePreferences: UserProfilePreferences by injectLazy()
 
     // To be checked by splash screen. If true then splash screen will be removed.
     var ready = false
@@ -827,11 +829,19 @@ class MainActivity : BaseActivity() {
                 if (!query.isNullOrEmpty()) {
                     navigator.popUntilRoot()
 
+                    // Explicit type wins; otherwise follow the media the user actually works
+                    // in (persisted library section) instead of always defaulting to anime.
                     val screenType = runCatching {
-                        intent.getStringExtra(INTENT_SEARCH_TYPE).orEmpty()
-                            .ifBlank { "ANIME" }
-                            .let(DeepLinkScreenType::valueOf)
-                    }.getOrDefault(DeepLinkScreenType.ANIME)
+                        intent.getStringExtra(INTENT_SEARCH_TYPE)
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let(DeepLinkScreenType::valueOf)
+                    }.getOrNull() ?: when (userProfilePreferences.libraryLastSection().get()) {
+                        "anime" -> DeepLinkScreenType.ANIME
+                        "novel" -> DeepLinkScreenType.NOVEL
+                        // Tadami's manga-first roots: fresh installs without a stored section
+                        // get manga results for an untyped search.
+                        else -> DeepLinkScreenType.MANGA
+                    }
 
                     when (screenType) {
                         DeepLinkScreenType.MANGA -> {

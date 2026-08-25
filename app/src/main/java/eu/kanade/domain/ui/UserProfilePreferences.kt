@@ -58,6 +58,14 @@ class UserProfilePreferences(
         false,
     )
     fun homeHubLastSection() = preferenceStore.getString("user_profile_home_hub_last_section", "anime")
+
+    /** Last active Aurora library section ("anime"/"manga"/"novel") — restores the tab and
+     *  routes external/global search intents to the media the user actually works with. */
+    fun libraryLastSection() = preferenceStore.getString("user_profile_library_last_section", "")
+
+    /** Last active Browse section ("anime"/"manga"/"novel") — initial section + onReselect search target. */
+    fun browseLastSection() = preferenceStore.getString("user_profile_browse_last_section", "")
+
     fun greetingFont() = preferenceStore.getString("user_profile_greeting_font", "default")
     fun greetingFontSize() = preferenceStore.getInt("user_profile_greeting_font_size", 12)
     fun greetingColor() = preferenceStore.getString("user_profile_greeting_color", "theme")

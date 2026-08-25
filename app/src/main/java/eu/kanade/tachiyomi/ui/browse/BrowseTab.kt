@@ -27,6 +27,7 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.presentation.components.AuroraTabRow
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.presentation.components.TabbedScreenAurora
@@ -44,11 +45,13 @@ import eu.kanade.tachiyomi.ui.browse.manga.extension.MangaExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.manga.extension.mangaExtensionsTab
 import eu.kanade.tachiyomi.ui.browse.manga.feed.mangaFeedTab
 import eu.kanade.tachiyomi.ui.browse.manga.migration.sources.migrateMangaSourceTab
+import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.GlobalMangaSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.mangaSourcesTab
 import eu.kanade.tachiyomi.ui.browse.novel.extension.NovelExtensionsScreenModel
 import eu.kanade.tachiyomi.ui.browse.novel.extension.novelExtensionsTab
 import eu.kanade.tachiyomi.ui.browse.novel.feed.novelFeedTab
 import eu.kanade.tachiyomi.ui.browse.novel.migration.sources.migrateNovelSourceTab
+import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.novelSourcesTab
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import kotlinx.collections.immutable.toPersistentList
@@ -77,10 +80,31 @@ data object BrowseTab : Tab {
         }
 
     override suspend fun onReselect(navigator: Navigator) {
-        navigator.push(GlobalAnimeSearchScreen())
+        // Respect the section the user is actually working in: re-tapping Browse from the
+        // manga section must open the manga global search, not the anime one.
+        val screen = when (resolveInitialSection()) {
+            BrowseSection.Manga -> GlobalMangaSearchScreen()
+            BrowseSection.Novel -> GlobalNovelSearchScreen()
+            BrowseSection.Anime -> GlobalAnimeSearchScreen()
+        }
+        navigator.push(screen)
     }
 
     private val uiPreferences: UiPreferences by injectLazy()
+    private val userProfilePreferences: UserProfilePreferences by injectLazy()
+
+    /** Initial/last browse section from preferences, validated against the enabled sections. */
+    private fun resolveInitialSection(): BrowseSection {
+        val enabled = buildBrowseSections(
+            showAnimeSection = uiPreferences.showAnimeSection().get(),
+            showMangaSection = uiPreferences.showMangaSection().get(),
+            showNovelSection = uiPreferences.showNovelSection().get(),
+        )
+        val stored = userProfilePreferences.browseLastSection().get()
+        return enabled.firstOrNull { it.name.equals(stored, ignoreCase = true) }
+            ?: enabled.firstOrNull()
+            ?: BrowseSection.Anime
+    }
 
     private val switchToTabNumberChannel = Channel<Int>(1, BufferOverflow.DROP_OLDEST)
 
@@ -206,11 +230,14 @@ data object BrowseTab : Tab {
                 showNovelSection = showNovelSection,
             )
         }
-        var currentSection by rememberSaveable { mutableStateOf(sections.firstOrNull() ?: BrowseSection.Anime) }
+        var currentSection by rememberSaveable { mutableStateOf(resolveInitialSection()) }
         LaunchedEffect(sections) {
             if (currentSection !in sections) {
                 currentSection = sections.firstOrNull() ?: BrowseSection.Anime
             }
+        }
+        LaunchedEffect(currentSection) {
+            userProfilePreferences.browseLastSection().set(currentSection.name)
         }
         val effectiveSection = currentSection
         val currentTabs = when (effectiveSection) {
