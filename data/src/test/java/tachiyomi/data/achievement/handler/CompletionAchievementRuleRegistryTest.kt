@@ -21,6 +21,9 @@ class CompletionAchievementRuleRegistryTest {
         mangaRepository = mockk<MangaRepository>(relaxed = true),
         animeRepository = mockk<AnimeRepository>(relaxed = true),
         novelRepository = mockk<NovelRepository>(relaxed = true),
+        novelHighlightRepository = mockk<tachiyomi.domain.book.novel.repository.NovelHighlightRepository>(
+            relaxed = true,
+        ),
     )
 
     @Test

@@ -303,6 +303,7 @@ class UnlockableManager(
             "special_background_neon_orbit" -> MR.strings.unlockable_special_background_neon_orbit
             "special_background_event_horizon_library" -> MR.strings.unlockable_special_background_event_horizon_library
             "special_background_void_weeping_red" -> MR.strings.unlockable_special_background_void_weeping_red
+            "special_background_ink_water" -> MR.strings.unlockable_special_background_ink_water
             "special_tab_glow" -> MR.strings.unlockable_special_tab_glow
             "special_navbar_aurora_celestial" -> MR.strings.unlockable_special_navbar_aurora_celestial
             "special_navbar_lattice_circuit" -> MR.strings.unlockable_special_navbar_lattice_circuit

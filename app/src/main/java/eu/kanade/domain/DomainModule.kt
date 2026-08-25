@@ -776,7 +776,7 @@ class DomainModule : InjektModule {
         addSingletonFactory { FeatureUsageCollector(get()) }
         addSingletonFactory { TimeBasedAchievementChecker(get(), get()) }
         addSingletonFactory { FeatureBasedAchievementChecker(get(), get()) }
-        addSingletonFactory { AchievementRuleRegistry(get(), get(), get()) }
+        addSingletonFactory { AchievementRuleRegistry(get(), get(), get(), get()) }
         addSingletonFactory {
             AchievementCalculator(
                 get(), get(), get(), get(), get(),

@@ -696,6 +696,13 @@ private fun AuroraSpecialBackgroundCanvas(
             null
         }
     }
+    val inkWater = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            InkWaterShader.getInstance()
+        } else {
+            null
+        }
+    }
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         when (styleKey) {
@@ -717,6 +724,31 @@ private fun AuroraSpecialBackgroundCanvas(
                         ),
                     )
                 }
+            }
+            "ink_water" -> {
+                val palette = inkWaterPalette(
+                    accent = colors.accent,
+                    accentVariant = colors.accentVariant,
+                    background = colors.background,
+                    dark = colors.isDark,
+                )
+                val time = if (animate) elapsedSeconds else 20f
+                val activeInkShader = inkWater
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && activeInkShader != null) {
+                    with(activeInkShader) {
+                        drawInkWater(
+                            timeSec = time,
+                            deepColor = palette.deep,
+                            midColor = palette.mid,
+                            accentColor = palette.accent,
+                            density = if (colors.isDark) 0.30f else 0.18f,
+                        )
+                    }
+                } else {
+                    // Fallback < Android 13 / отключённые анимации / power save
+                    drawInkWaterFallback(colors.accent, colors.accentVariant, dark = colors.isDark)
+                }
+                drawInkWaterVignette(palette.deep, palette.background, dark = colors.isDark)
             }
             "petal_storm" -> {
                 val petalColor = if (colors.isDark) {

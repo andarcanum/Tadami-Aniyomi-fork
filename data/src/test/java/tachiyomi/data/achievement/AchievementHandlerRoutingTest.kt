@@ -71,6 +71,7 @@ class AchievementHandlerRoutingTest : AchievementTestBase() {
             mangaRepository = mRepo,
             animeRepository = aRepo,
             novelRepository = nRepo,
+            novelHighlightRepository = mockk(relaxed = true),
         )
 
         coEvery { mangaHandler.awaitOneOrNull<Long>(any(), any()) } returns 0L

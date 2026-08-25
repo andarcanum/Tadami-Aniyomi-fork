@@ -204,4 +204,14 @@ class NovelHighlightRepositoryImplTest {
 
         repository.subscribeForChapter(chapterId).first() shouldBe emptyList()
     }
+
+    @Test
+    fun `countAll counts inserted highlights`() = runTest {
+        repository.countAll() shouldBe 0
+
+        repository.add(highlight())
+        repository.add(highlight(novelId = secondNovelId))
+
+        repository.countAll() shouldBe 2
+    }
 }

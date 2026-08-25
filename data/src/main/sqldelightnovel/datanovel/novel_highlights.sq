@@ -69,3 +69,6 @@ FROM novel_highlights h
 JOIN novels n ON n._id = h.novel_id
 LEFT JOIN novel_chapters c ON c._id = h.chapter_id
 ORDER BY h.updated_at DESC;
+
+countAll:
+SELECT COUNT(*) FROM novel_highlights;

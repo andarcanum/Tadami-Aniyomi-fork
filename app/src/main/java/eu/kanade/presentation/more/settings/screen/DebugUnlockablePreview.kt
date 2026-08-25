@@ -48,6 +48,7 @@ private val previewPresetUnlockables = setOf(
     "special_background_shadow_realm",
     "special_background_event_horizon_library",
     "special_background_void_weeping_red",
+    "special_background_ink_water",
     "special_tab_glow",
 )
 

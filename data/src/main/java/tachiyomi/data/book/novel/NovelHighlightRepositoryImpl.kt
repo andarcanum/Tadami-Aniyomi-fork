@@ -26,6 +26,10 @@ class NovelHighlightRepositoryImpl(
         }
     }
 
+    override suspend fun countAll(): Int {
+        return handler.await { db -> db.novel_highlightsQueries.countAll().executeAsOne().toInt() }
+    }
+
     override suspend fun getForNovel(novelId: Long): List<NovelHighlight> {
         return handler.awaitList { db -> db.novel_highlightsQueries.getForNovel(novelId, ::novelHighlightMapper) }
     }

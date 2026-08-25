@@ -2599,6 +2599,13 @@
     <string name="treasury_bg_deep_space_archive_desc">Древние фолианты, безмолвно дрейфующие в космической пустоте.</string>
     <string name="treasury_bg_shadow_realm_title">Царство Теней</string>
     <string name="treasury_bg_shadow_realm_desc">Вращающаяся бездна, где свет и время теряют смысл.</string>
+    <string name="achievement_save_5_quotes_title">Чернильница</string>
+    <string name="achievement_save_5_quotes_desc">Сохраните 5 цитат из своих ранобэ</string>
+    <string name="achievement_save_5_quotes_hint_vague">Иные строки отказываются исчезать.</string>
+    <string name="achievement_save_5_quotes_hint_direct">Отмечайте отрывки при чтении — сборник их запоминает.</string>
+    <string name="achievement_save_5_quotes_hint_obvious">Соберите 5 сохранённых цитат в разделе «Цитаты» (Ещё → Цитаты).</string>
+    <string name="treasury_bg_ink_water_title">Чернила в воде</string>
+    <string name="treasury_bg_ink_water_desc">Живые чернила, расцветающие в воде, — атмосфера экрана цитат для всего приложения.</string>
     <!-- Treasury misc -->
     <string name="treasury_nickname_preview">Предпросмотр ника</string>
     <string name="treasury_default_user_name">Имя пользователя</string>

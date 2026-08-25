@@ -1732,6 +1732,7 @@
     <string name="unlockable_special_background_neon_orbit">Neon Orbit</string>
     <string name="unlockable_special_background_event_horizon_library">Event Horizon Library</string>
     <string name="unlockable_special_background_void_weeping_red">Weeping Void</string>
+    <string name="unlockable_special_background_ink_water">Ink in Water</string>
     <string name="unlockable_aura_trinity_orbit">Trinity Orbit Aura</string>
     <string name="unlockable_aura_trinity_orbit_desc">Three orbital rings wrapping cards</string>
     <string name="unlockable_aura_deep_focus">Deep Focus Aura</string>

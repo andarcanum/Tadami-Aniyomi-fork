@@ -134,6 +134,7 @@ import org.jsoup.nodes.TextNode
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.domain.achievement.model.AchievementEvent
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.book.novel.model.NovelHighlight
 import tachiyomi.domain.book.novel.model.NovelHighlightWithChapter
@@ -824,6 +825,10 @@ class NovelReaderScreenModel(
                     pageIndex = pageProgress?.let { it.index + 1 } ?: 0,
                     pageCount = pageProgress?.totalItems ?: 0,
                 ),
+            )
+            // «Чернильница»: пересчёт прогресса по факту БД (QuoteRule слушает это событие).
+            eventBus?.tryEmit(
+                AchievementEvent.FeatureUsed(AchievementEvent.Feature.QUOTE_SAVED),
             )
         }
     }

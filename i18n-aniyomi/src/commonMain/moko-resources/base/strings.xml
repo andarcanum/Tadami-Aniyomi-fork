@@ -2249,6 +2249,13 @@
     <string name="treasury_bg_deep_space_archive_desc">Ancient folios drifting silently through the cosmic void.</string>
     <string name="treasury_bg_shadow_realm_title">Shadow Realm</string>
     <string name="treasury_bg_shadow_realm_desc">A swirling abyss where light and time lose their meaning.</string>
+    <string name="achievement_save_5_quotes_title">Inkwell</string>
+    <string name="achievement_save_5_quotes_desc">Save 5 quotes from your novels</string>
+    <string name="achievement_save_5_quotes_hint_vague">Some lines refuse to be forgotten.</string>
+    <string name="achievement_save_5_quotes_hint_direct">Mark passages while reading — the collection remembers them.</string>
+    <string name="achievement_save_5_quotes_hint_obvious">Keep 5 saved quotes in your Quotes collection (More → Quotes).</string>
+    <string name="treasury_bg_ink_water_title">Ink in Water</string>
+    <string name="treasury_bg_ink_water_desc">Living ink blooming through water — the Quotes screen ambience for the whole app.</string>
     <string name="treasury_bg_event_horizon_title">Event Horizon Library</string>
     <string name="treasury_bg_event_horizon_desc">A cinematic singularity scene with lensing rings, drifting archive shards, parallax gates, and restrained motion.</string>
     <!-- Treasury misc -->

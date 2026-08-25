@@ -12,6 +12,8 @@ interface NovelHighlightRepository {
 
     fun subscribeAll(): Flow<List<NovelHighlightWithChapter>>
 
+    suspend fun countAll(): Int
+
     suspend fun getForNovel(novelId: Long): List<NovelHighlight>
 
     suspend fun add(highlight: NovelHighlight): Long
