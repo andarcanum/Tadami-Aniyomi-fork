@@ -2,7 +2,11 @@
 
 package eu.kanade.presentation.library.novel.quotes
 
+import android.provider.Settings
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,8 +56,10 @@ import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -66,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.presentation.theme.LocalIsEInkMode
 import eu.kanade.tachiyomi.ui.library.novel.quotes.NovelQuotesLibraryState
 import eu.kanade.tachiyomi.ui.library.novel.quotes.NovelQuotesListOps
 import eu.kanade.tachiyomi.ui.library.novel.quotes.NovelQuotesSortMode
@@ -106,109 +114,129 @@ fun NovelQuotesLibraryContent(
     }
     val booksCount = remember(filteredItems) { filteredItems.map { it.novelTitle }.distinct().size }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background)
-            .statusBarsPadding(),
+            .background(colors.background),
     ) {
-        // Top bar: назад · заголовок · поиск · сортировка — с выверенными аврора-отступами
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AuroraTopBarIconButton(
-                onClick = onBack,
-                icon = Icons.AutoMirrored.Outlined.ArrowBack,
-                contentDescription = stringResource(MR.strings.action_bar_up_description),
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(AYMR.strings.novel_quotes_library_title),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 12.dp, end = 8.dp),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                AuroraTopBarIconButton(
-                    onClick = { searchVisible = !searchVisible },
-                    icon = if (searchVisible) Icons.Outlined.Close else Icons.Outlined.Search,
-                    contentDescription = stringResource(MR.strings.action_search),
-                )
-                AuroraTopBarIconButton(
-                    onClick = onToggleSort,
-                    icon = Icons.AutoMirrored.Outlined.Sort,
-                    contentDescription = stringResource(AYMR.strings.novel_quotes_sort_toggle_cd),
-                )
-            }
+        // V6 «Чернила в воде»: живой фон только на тёмной теме (внутри — свои фолбэки).
+        if (isDark) {
+            InkWaterBackground(modifier = Modifier.matchParentSize())
         }
-
-        // Поиск по цитатам и заметкам
-        AnimatedVisibility(visible = searchVisible) {
-            OutlinedTextField(
-                value = state.query,
-                onValueChange = onSearchQueryChange,
-                singleLine = true,
-                placeholder = { Text(text = stringResource(AYMR.strings.novel_quotes_search_hint)) },
-                trailingIcon = {
-                    IconButton(
-                        onClick = {
-                            onSearchQueryChange("")
-                            searchVisible = false
-                        },
-                    ) {
-                        Icon(imageVector = Icons.Outlined.Close, contentDescription = null)
-                    }
-                },
-                shape = RoundedCornerShape(24.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+        ) {
+            // Top bar: назад · заголовок · поиск · сортировка — с выверенными аврора-отступами
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 2.dp),
-            )
-        }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AuroraTopBarIconButton(
+                    onClick = onBack,
+                    icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = stringResource(MR.strings.action_bar_up_description),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(AYMR.strings.novel_quotes_library_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp, end = 8.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    AuroraTopBarIconButton(
+                        onClick = { searchVisible = !searchVisible },
+                        icon = if (searchVisible) Icons.Outlined.Close else Icons.Outlined.Search,
+                        contentDescription = stringResource(MR.strings.action_search),
+                    )
+                    AuroraTopBarIconButton(
+                        onClick = onToggleSort,
+                        icon = Icons.AutoMirrored.Outlined.Sort,
+                        contentDescription = stringResource(AYMR.strings.novel_quotes_sort_toggle_cd),
+                    )
+                }
+            }
 
-        ExlibrisHeader(
-            quotesCount = filteredItems.size,
-            booksCount = booksCount,
-            bookFilter = state.bookFilter,
-        )
-
-        OrnamentDivider()
-
-        BookFilterRow(
-            selected = state.bookFilter,
-            countsByNovel = countsByNovel,
-            totalCount = visibleItems.size,
-            onSelect = onSelectBook,
-        )
-
-        when {
-            visibleItems.isEmpty() -> EmptyContent(isSearch = false, isDark = isDark)
-            filteredItems.isEmpty() -> EmptyContent(isSearch = true, isDark = isDark)
-            else -> LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                if (state.sortMode == NovelQuotesSortMode.TITLE) {
-                    sections.forEach { section ->
-                        stickyHeader(key = "sec_${section.title}") {
-                            SectionHeader(
-                                title = section.title,
-                                count = section.items.size,
-                                isDark = isDark,
-                                backgroundColor = colors.background,
-                            )
+            // Поиск по цитатам и заметкам
+            AnimatedVisibility(visible = searchVisible) {
+                OutlinedTextField(
+                    value = state.query,
+                    onValueChange = onSearchQueryChange,
+                    singleLine = true,
+                    placeholder = { Text(text = stringResource(AYMR.strings.novel_quotes_search_hint)) },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = {
+                                onSearchQueryChange("")
+                                searchVisible = false
+                            },
+                        ) {
+                            Icon(imageVector = Icons.Outlined.Close, contentDescription = null)
                         }
-                        items(section.items, key = { it.highlight.id }) { item ->
+                    },
+                    shape = RoundedCornerShape(24.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 2.dp),
+                )
+            }
+
+            ExlibrisHeader(
+                quotesCount = filteredItems.size,
+                booksCount = booksCount,
+                bookFilter = state.bookFilter,
+            )
+
+            OrnamentDivider()
+
+            BookFilterRow(
+                selected = state.bookFilter,
+                countsByNovel = countsByNovel,
+                totalCount = visibleItems.size,
+                onSelect = onSelectBook,
+            )
+
+            when {
+                visibleItems.isEmpty() -> EmptyContent(isSearch = false, isDark = isDark)
+                filteredItems.isEmpty() -> EmptyContent(isSearch = true, isDark = isDark)
+                else -> LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (state.sortMode == NovelQuotesSortMode.TITLE) {
+                        sections.forEach { section ->
+                            stickyHeader(key = "sec_${section.title}") {
+                                SectionHeader(
+                                    title = section.title,
+                                    count = section.items.size,
+                                    isDark = isDark,
+                                    backgroundColor = colors.background,
+                                )
+                            }
+                            items(section.items, key = { it.highlight.id }) { item ->
+                                QuoteRow(
+                                    item = item,
+                                    showTitle = false,
+                                    isDark = isDark,
+                                    onEdit = onEditQuote,
+                                    onDelete = onDeleteQuote,
+                                    onCopy = onCopyQuote,
+                                )
+                            }
+                        }
+                    } else {
+                        items(sortedItems, key = { it.highlight.id }) { item ->
                             QuoteRow(
                                 item = item,
-                                showTitle = false,
+                                showTitle = true,
                                 isDark = isDark,
                                 onEdit = onEditQuote,
                                 onDelete = onDeleteQuote,
@@ -216,35 +244,24 @@ fun NovelQuotesLibraryContent(
                             )
                         }
                     }
-                } else {
-                    items(sortedItems, key = { it.highlight.id }) { item ->
-                        QuoteRow(
-                            item = item,
-                            showTitle = true,
-                            isDark = isDark,
-                            onEdit = onEditQuote,
-                            onDelete = onDeleteQuote,
-                            onCopy = onCopyQuote,
+                    item(key = "fleuron") {
+                        Text(
+                            text = "❦",
+                            color = colors.accent.copy(alpha = 0.65f),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp, bottom = 18.dp),
                         )
                     }
-                }
-                item(key = "fleuron") {
-                    Text(
-                        text = "❦",
-                        color = colors.accent.copy(alpha = 0.65f),
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp, bottom = 18.dp),
-                    )
                 }
             }
         }
     }
 }
 
-/** Сакральная экслибрис-плашка «CODEX SACRA» — динамическое стекло Aurora с темозависимым сакральным сиянием. */
+/** Экслибрис «CODEX SACRA» — V4 «Тихое стекло»: типографика + живая aurora-рамка. */
 @Composable
 private fun ExlibrisHeader(
     quotesCount: Int,
@@ -254,6 +271,16 @@ private fun ExlibrisHeader(
     val colors = AuroraTheme.colors
     val isDark = colors.isDark
     val accent = colors.accent
+    val isEInk = LocalIsEInkMode.current
+
+    // Вход заголовка: tracking-in + проявление, один раз при композиции.
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
+    val entrance by animateFloatAsState(
+        targetValue = if (entered) 1f else 0f,
+        animationSpec = tween(1400, delayMillis = 150, easing = FastOutSlowInEasing),
+        label = "exlibrisEntrance",
+    )
 
     Column(
         modifier = Modifier
@@ -265,34 +292,20 @@ private fun ExlibrisHeader(
             modifier = Modifier
                 .padding(horizontal = 24.dp)
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
+                .clip(RoundedCornerShape(20.dp))
                 .background(
                     Brush.verticalGradient(
                         listOf(
-                            accent.copy(alpha = if (isDark) 0.14f else 0.08f),
-                            (if (isDark) Color(0xFF161922) else Color.White).copy(alpha = if (isDark) 0.75f else 0.85f),
+                            colors.accentVariant.copy(alpha = if (isDark) 0.35f else 0.06f),
+                            (if (isDark) Color.White else colors.accentVariant).copy(
+                                alpha = if (isDark) 0.04f else 0.05f,
+                            ),
                         ),
                     ),
-                    RoundedCornerShape(22.dp),
                 )
-                .border(
-                    width = 1.dp,
-                    brush = Brush.verticalGradient(
-                        listOf(
-                            Color.White.copy(alpha = if (isDark) 0.65f else 0.85f),
-                            accent.copy(alpha = 0.40f),
-                            accent.copy(alpha = 0.15f),
-                        ),
-                    ),
-                    shape = RoundedCornerShape(22.dp),
-                )
-                .padding(5.dp)
                 .drawWithCache {
-                    val stroke = Stroke(
-                        width = 1.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f),
-                    )
-                    val cornerRadius = CornerRadius(17.dp.toPx())
+                    val stroke = Stroke(width = 1.dp.toPx())
+                    val corner = CornerRadius(20.dp.toPx())
                     val path = Path().apply {
                         addRoundRect(
                             RoundRect(
@@ -300,55 +313,61 @@ private fun ExlibrisHeader(
                                 top = 0f,
                                 right = size.width,
                                 bottom = size.height,
-                                radiusX = cornerRadius.x,
-                                radiusY = cornerRadius.y,
+                                radiusX = corner.x,
+                                radiusY = corner.y,
+                            ),
+                        )
+                    }
+                    // Статичная рамка: мягкий вертикальный градиент из акцентов темы.
+                    val borderBrush = if (isEInk) {
+                        SolidColor(if (isDark) Color.White.copy(alpha = 0.25f) else Color.Black.copy(alpha = 0.25f))
+                    } else if (isDark) {
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = 0.40f),
+                                accent.copy(alpha = 0.30f),
+                                colors.accentVariant.copy(alpha = 0.22f),
+                                Color.Transparent,
+                            ),
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.Black.copy(alpha = 0.35f),
+                                accent.copy(alpha = 0.25f),
+                                Color.Black.copy(alpha = 0.10f),
                             ),
                         )
                     }
                     onDrawBehind {
-                        drawPath(
-                            path = path,
-                            color = accent.copy(alpha = if (isDark) 0.35f else 0.40f),
-                            style = stroke,
-                        )
+                        drawPath(path = path, brush = borderBrush, style = stroke)
                     }
                 }
-                .padding(vertical = 16.dp, horizontal = 18.dp),
+                .padding(vertical = 24.dp, horizontal = 18.dp)
+                .graphicsLayer { alpha = entrance },
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "✦ ❦ ✦",
-                    color = accent,
-                    fontSize = 13.sp,
-                    letterSpacing = 6.sp,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "CODEX SACRA",
                     style = MaterialTheme.typography.titleMedium.merge(
                         TextStyle(
                             fontFamily = FontFamily.Serif,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.Medium,
                             brush = Brush.horizontalGradient(
                                 listOf(
-                                    accent.copy(alpha = 0.85f),
+                                    accent.copy(alpha = 0.70f),
                                     colors.textPrimary,
-                                    accent.copy(alpha = 0.85f),
+                                    accent.copy(alpha = 0.70f),
                                 ),
                             ),
                         ),
                     ),
-                    letterSpacing = 3.5.sp,
+                    fontSize = 26.sp,
+                    letterSpacing = (6 - 2.5 * entrance).sp,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "❖",
-                    color = accent.copy(alpha = 0.80f),
-                    fontSize = 10.sp,
-                )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 if (bookFilter == null) {
                     Text(
                         text = stringResource(AYMR.strings.novel_quotes_collection_all),
@@ -381,15 +400,29 @@ private fun ExlibrisHeader(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Spacer(modifier = Modifier.height(5.dp))
-                Text(
-                    text = pluralStringResource(AYMR.plurals.novel_quotes_count_quotes, quotesCount, quotesCount) +
-                        " · " +
-                        pluralStringResource(AYMR.plurals.novel_quotes_count_books, booksCount, booksCount),
-                    color = colors.textSecondary.copy(alpha = 0.85f),
-                    fontSize = 10.5.sp,
-                    letterSpacing = 1.sp,
-                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = pluralStringResource(AYMR.plurals.novel_quotes_count_quotes, quotesCount, quotesCount),
+                        color = colors.textPrimary.copy(alpha = 0.90f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(width = 1.dp, height = 12.dp)
+                            .background(colors.divider),
+                    )
+                    Text(
+                        text = pluralStringResource(AYMR.plurals.novel_quotes_count_books, booksCount, booksCount),
+                        color = colors.textPrimary.copy(alpha = 0.90f),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
             }
         }
     }
