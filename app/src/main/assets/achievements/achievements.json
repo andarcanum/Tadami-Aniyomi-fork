@@ -1,5 +1,5 @@
 {
-  "version": 26,
+  "version": 27,
   "achievements": [
     {
       "id": "first_chapter",
@@ -3020,7 +3020,7 @@
       "title": "Inkwell",
       "description": "Save 5 quotes from your novels",
       "badge_icon": "ic_badge_inkwell",
-      "is_hidden": false,
+      "is_hidden": true,
       "is_secret": false,
       "rarity": "rare",
       "tags": [

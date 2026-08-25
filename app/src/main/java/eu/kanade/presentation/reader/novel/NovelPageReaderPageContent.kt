@@ -643,8 +643,14 @@ private class NovelPageReaderTextView constructor(
                 gestureStartY = event.y
                 latestX = event.x
                 latestY = event.y
+                // A down on the live selection (drag handles included) must fall through to the
+                // TextView editor so the handles can extend the selection; wiping it here made
+                // every long-press word selection impossible to grow into a phrase.
+                val downOnLiveSelection = selectionInteractionEnabled &&
+                    hasActiveSelection() &&
+                    isTouchNearSelectionBounds(event.x, event.y)
                 selectionPromotedByLongPress = false
-                if (selectionInteractionEnabled) {
+                if (selectionInteractionEnabled && !downOnLiveSelection) {
                     clearSelection()
                     finishSelectionActionMode()
                     scheduleSelectionPromotion()
@@ -855,6 +861,19 @@ private class NovelPageReaderTextView constructor(
         val start = Selection.getSelectionStart(spannable)
         val end = Selection.getSelectionEnd(spannable)
         return start >= 0 && end >= 0 && start != end
+    }
+
+    /**
+     * True when [x, y] lands on or near the painted selection bounds. Selection drag handles
+     * render just outside the rect, so the finger gets extra slack around it.
+     */
+    private fun isTouchNearSelectionBounds(x: Float, y: Float): Boolean {
+        if (selectionBoundsInView.isEmpty) return false
+        val grabSlopPx = touchSlopPx * 4f
+        return x >= selectionBoundsInView.left - grabSlopPx &&
+            x <= selectionBoundsInView.right + grabSlopPx &&
+            y >= selectionBoundsInView.top - grabSlopPx &&
+            y <= selectionBoundsInView.bottom + grabSlopPx
     }
 
     private fun clearSelection() {
