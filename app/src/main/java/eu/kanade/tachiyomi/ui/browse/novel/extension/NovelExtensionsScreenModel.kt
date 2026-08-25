@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -35,12 +36,15 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 class NovelExtensionsScreenModel(
     private val extensionManager: NovelExtensionManager = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val context: Application = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
+    private val installCoordinator: UnifiedApkExtensionInstaller = Injekt.get(),
 ) : StateScreenModel<NovelExtensionsScreenModel.State>(State()) {
 
     private val currentDownloads = MutableStateFlow<Map<String, InstallStep>>(hashMapOf())
@@ -49,8 +53,17 @@ class NovelExtensionsScreenModel(
     private val installedPluginsSnapshot = MutableStateFlow<List<NovelPlugin.Installed>>(emptyList())
     private val apkFileStore = ExtensionApkFileStore(basePreferences)
     private val activeInstallJobs = mutableMapOf<String, Job>()
-    private val installCoordinator: UnifiedApkExtensionInstaller = Injekt.get()
     private val installStateObservers = mutableMapOf<String, Job>()
+
+    /**
+     * Completed when a signature-mismatch event leaves the UI (resolved via reinstall or
+     * dismissed). Starts completed so awaiters before any mismatch are released immediately;
+     * consumed by the extension-lifecycle follow-up work.
+     */
+    private var signatureResolutionSignal = CompletableDeferred<Unit>().apply { complete(Unit) }
+
+    /** Keys this observer itself put into [currentDownloads]; cleaned when their store step completes. */
+    private val mirroredDownloadKeys = ConcurrentHashMap<String, MutableSet<String>>()
 
     init {
         screenModelScope.launchIO {
@@ -221,6 +234,9 @@ class NovelExtensionsScreenModel(
 
         extensionManager.signatureMismatchEvents
             .onEach { event ->
+                // Fresh signal per event: queue workers awaiting resolution suspend until
+                // the dialog is dismissed or the reinstall finishes (see awaitSignatureResolution).
+                signatureResolutionSignal = CompletableDeferred()
                 mutableState.update { state -> state.copy(signatureMismatchEvent = event) }
             }
             .launchIn(screenModelScope)
@@ -286,11 +302,15 @@ class NovelExtensionsScreenModel(
         }
     }
 
-    fun cancelInstall(plugin: NovelPlugin.Available) {
+    fun cancelInstall(plugin: NovelPlugin) {
         // Real cancellation: stop the install coroutine and tell the manager/coordinator to
         // abandon the attempt (including its pending-permission queue entry).
         activeInstallJobs.remove(plugin.id)?.cancel()
-        extensionManager.cancelPluginInstall(plugin)
+        when (plugin) {
+            is NovelPlugin.Available -> extensionManager.cancelPluginInstall(plugin)
+            is NovelPlugin.Installed -> extensionManager.cancelPluginInstall(plugin)
+            is NovelPlugin.Untrusted -> Unit
+        }
         removeDownloadState(plugin)
     }
 
@@ -310,12 +330,33 @@ class NovelExtensionsScreenModel(
 
     fun updateAllExtensions() {
         screenModelScope.launchIO {
-            state.value.items
-                .filter { it.status == NovelExtensionItem.Status.UpdateAvailable && it.hasUpdate }
-                .mapNotNull { it.plugin as? NovelPlugin.Installed }
-                .mapNotNull { plugin -> getSameRepoUpdate(plugin) }
-                .forEach { launchInstall(it) }
+            // Full installed set, not the rendered list: search filters and collapsed language
+            // sections hide items whose updates still must be applied (parity with c344dcc09).
+            val candidates = installedPluginsSnapshot.value.mapNotNull { installed ->
+                getSameRepoUpdate(installed)
+            }
+            // Sequential awaited queue: each update finishes (or fails into row diagnostics)
+            // before the next starts, and the loop suspends while a signature-mismatch
+            // dialog is open so the user resolves it before the queue moves on.
+            candidates.forEach { update ->
+                installAwaiting(update)
+                awaitSignatureResolution()
+            }
         }
+    }
+
+    private suspend fun installAwaiting(plugin: NovelPlugin.Available) {
+        try {
+            installExtensionNow(plugin)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            // Diagnostics already recorded by installExtensionNow; keep draining the queue.
+        }
+    }
+
+    private suspend fun awaitSignatureResolution() {
+        signatureResolutionSignal.await()
     }
 
     fun updateExtension(plugin: NovelPlugin.Installed) {
@@ -334,24 +375,33 @@ class NovelExtensionsScreenModel(
 
     fun reinstallFromRepo(installed: NovelPlugin.Installed, replacement: NovelPlugin.Available) {
         dismissRepoPicker()
-        screenModelScope.launchIO {
-            addDownloadState(installed, InstallStep.Installing)
-            try {
-                extensionManager.replacePluginFromRepo(installed, replacement)
-                clearDiagnostic(installed)
-                addDownloadState(installed, InstallStep.Installed)
-                removeDownloadState(installed)
-            } catch (e: CancellationException) {
-                removeDownloadState(installed)
-                throw e
-            } catch (e: Throwable) {
-                val diagnostic = buildDiagnostic(replacement, e)
-                lastDiagnostics.update { it + (installed.id to diagnostic) }
-                logcat(LogPriority.WARN, e) {
-                    "Failed to reinstall novel plugin ${installed.id} from ${replacement.repoUrl}\n${diagnostic.format()}"
-                }
-                addDownloadState(installed, InstallStep.Error)
+        screenModelScope.launchIO { reinstallTracked(installed, replacement) }
+    }
+
+    /**
+     * Replaces an installed plugin with [replacement] while tracking progress on the row:
+     * failures surface as a row error with diagnostics instead of escaping to the global
+     * crash handler. Also signals signature-mismatch resolution for awaiting consumers.
+     */
+    private suspend fun reinstallTracked(installed: NovelPlugin.Installed, replacement: NovelPlugin.Available) {
+        addDownloadState(installed, InstallStep.Installing)
+        try {
+            extensionManager.replacePluginFromRepo(installed, replacement)
+            clearDiagnostic(installed)
+            addDownloadState(installed, InstallStep.Installed)
+            removeDownloadState(installed)
+        } catch (e: CancellationException) {
+            removeDownloadState(installed)
+            throw e
+        } catch (e: Throwable) {
+            val diagnostic = buildDiagnostic(replacement, e)
+            lastDiagnostics.update { it + (installed.id to diagnostic) }
+            logcat(LogPriority.WARN, e) {
+                "Failed to reinstall novel plugin ${installed.id} from ${replacement.repoUrl}\n${diagnostic.format()}"
             }
+            addDownloadState(installed, InstallStep.Error)
+        } finally {
+            signatureResolutionSignal.complete(Unit) // Task 9 hook; harmless standalone
         }
     }
 
@@ -418,13 +468,12 @@ class NovelExtensionsScreenModel(
         val installed = installedPluginsSnapshot.value.firstOrNull { it.id == event.pluginId }
         dismissSignatureMismatch()
         if (installed == null || candidate == null) return
-        screenModelScope.launchIO {
-            extensionManager.replacePluginFromRepo(installed, candidate)
-        }
+        screenModelScope.launchIO { reinstallTracked(installed, candidate) }
     }
 
     fun dismissSignatureMismatch() {
         mutableState.update { it.copy(signatureMismatchEvent = null) }
+        signatureResolutionSignal.complete(Unit)
     }
 
     fun uninstallExtension(plugin: NovelPlugin.Installed) {
@@ -453,11 +502,18 @@ class NovelExtensionsScreenModel(
         currentDownloads.update { it - plugin.id }
     }
 
+    private fun removeDownloadStateById(pluginId: String) {
+        currentDownloads.update { it - pluginId }
+    }
+
     /**
      * Mirrors installer-side steps from the coordinator's state store into [currentDownloads]
      * so an install started outside this ScreenModel (auto-resume after process death, or a
-     * ScreenModel recreation mid-install) still shows progress. Only non-terminal steps are
-     * mirrored; terminal transitions stay owned by the install flows themselves.
+     * ScreenModel recreation mid-install) still shows progress. Entries this observer mirrored
+     * are removed again once the store reaches a completed step, unless the row deliberately
+     * displays an Error diagnostic that owns its own lifecycle: such rows are never overwritten
+     * by mirrored progress, and their cleanup is retried on a later terminal step once the
+     * diagnostic is gone.
      */
     private fun observeInstallStates() {
         screenModelScope.launchIO {
@@ -466,6 +522,9 @@ class NovelExtensionsScreenModel(
                 synchronized(installStateObservers) {
                     installStateObservers.keys.filter { it !in wanted }.forEach { pkgName ->
                         installStateObservers.remove(pkgName)?.cancel()
+                        mirroredDownloadKeys.remove(pkgName)?.forEach { pluginId ->
+                            removeDownloadStateById(pluginId)
+                        }
                     }
                 }
                 wanted.forEach { pkgName ->
@@ -475,9 +534,39 @@ class NovelExtensionsScreenModel(
                     if (alreadyObserved) return@forEach
                     val job = screenModelScope.launchIO {
                         installCoordinator.observe(pkgName).collect { step ->
-                            if (step == InstallStep.Pending || step == InstallStep.Installing) {
+                            if (
+                                step == InstallStep.Pending ||
+                                step == InstallStep.Downloading ||
+                                step == InstallStep.Installing
+                            ) {
                                 val pluginId = installed.firstOrNull { it.pkgName == pkgName }?.id ?: pkgName
+                                // A deliberate Error display (reinstall diagnostics) owns its own
+                                // lifecycle: never overwrite it with store-driven progress and do
+                                // not claim ownership of the row either.
+                                if (lastDiagnostics.value.containsKey(pluginId)) return@collect
+                                mirroredDownloadKeys.getOrPut(pkgName) {
+                                    Collections.newSetFromMap(ConcurrentHashMap())
+                                }.add(pluginId)
                                 currentDownloads.update { it + (pluginId to step) }
+                            } else if (step.isCompleted()) {
+                                val mirrored = mirroredDownloadKeys.remove(pkgName).orEmpty()
+                                // Decide per key BEFORE discarding ownership: rows this observer
+                                // owns are cleaned; rows still under a deliberate Error display are
+                                // re-inserted so a future terminal step retries their cleanup
+                                // instead of stranding them until disposal.
+                                val diagnosticOwned = mutableSetOf<String>()
+                                mirrored.forEach { pluginId ->
+                                    if (lastDiagnostics.value.containsKey(pluginId)) {
+                                        diagnosticOwned += pluginId
+                                    } else {
+                                        removeDownloadStateById(pluginId)
+                                    }
+                                }
+                                if (diagnosticOwned.isNotEmpty()) {
+                                    mirroredDownloadKeys.getOrPut(pkgName) {
+                                        Collections.newSetFromMap(ConcurrentHashMap())
+                                    }.addAll(diagnosticOwned)
+                                }
                             }
                         }
                     }
@@ -489,6 +578,9 @@ class NovelExtensionsScreenModel(
 
     /** Launches a tracked install so [cancelInstall] can stop the real work, not just the UI. */
     private fun launchInstall(plugin: NovelPlugin.Available) {
+        // Single-flight: a duplicate request while an install is running would race the
+        // shared <pkg>.apk.part download file and the per-package install state store.
+        if (activeInstallJobs[plugin.id]?.isActive == true) return
         val job = screenModelScope.launchIO {
             try {
                 installExtensionNow(plugin)

@@ -149,6 +149,13 @@ class SystemIntentApkInstallBackendAdapter(
 
     private companion object {
         const val APK_MIME = "application/vnd.android.package-archive"
-        const val INSTALL_TIMEOUT_MS = 5 * 60 * 1000L
+
+        /**
+         * Budget for the system installer dialog interaction. The old 5-minute window kept rows
+         * effectively spinning when the dialog was dismissed without any package broadcast; 90 s
+         * still tolerates slow OEM installers. Late confirms keep landing on Installed via the
+         * keep-listening path above — the terminal-aware screen mirror makes that safe.
+         */
+        const val INSTALL_TIMEOUT_MS = 90_000L
     }
 }

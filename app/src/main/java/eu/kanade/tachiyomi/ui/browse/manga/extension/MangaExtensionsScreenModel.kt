@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.extension.manga.model.selectMangaReinstallCandidates
 import eu.kanade.tachiyomi.extension.manga.toInstalledMangaExtensionPkgName
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -242,9 +243,45 @@ class MangaExtensionsScreenModel(
             // Source candidates from the manager flow, not the rendered list: search filters
             // and collapsed language sections hide items whose updates still must be applied.
             extensionManager.installedExtensionsFlow.value
-                .filter { it.hasUpdate && !it.needsReinstall }
-                .forEach { updateExtensionNow(it) }
+                .filter { it.hasUpdate }
+                .forEach { extension ->
+                    if (extension.needsReinstall) {
+                        // Never skip silently (B5): pause the queue until the user resolves
+                        // the reinstall dialog for this extension; null = dismissed → skip.
+                        resolveQueuedReinstall(extension)
+                    } else {
+                        updateExtensionNow(extension)
+                    }
+                }
         }
+    }
+
+    /** Set while the update-all queue waits for a reinstall decision on this extension. */
+    private var queuedReinstallResolution: CompletableDeferred<MangaExtension.Available?>? = null
+
+    private suspend fun resolveQueuedReinstall(extension: MangaExtension.Installed) {
+        mutableState.update {
+            it.copy(
+                queuedReinstallExtension = extension,
+                queuedReinstallCandidates = getReinstallCandidates(extension),
+            )
+        }
+        val resolution = CompletableDeferred<MangaExtension.Available?>()
+        queuedReinstallResolution = resolution
+        val chosen = resolution.await()
+        mutableState.update {
+            it.copy(queuedReinstallExtension = null, queuedReinstallCandidates = emptyList())
+        }
+        if (chosen != null) {
+            extensionManager
+                .replaceExtensionFromRepo(extension, chosen)
+                .collectToInstallUpdate(extension)
+        }
+    }
+
+    fun resolveQueuedReinstall(replacement: MangaExtension.Available?) {
+        queuedReinstallResolution?.complete(replacement)
+        queuedReinstallResolution = null
     }
 
     fun installExtension(extension: MangaExtension.Available) {
@@ -381,6 +418,9 @@ class MangaExtensionsScreenModel(
         val repoPickerPluginId: String? = null,
         val repoPickerOptions: List<MangaExtension.Available> = emptyList(),
         val signatureMismatchEvent: MangaExtensionManager.SignatureMismatchEvent? = null,
+        /** Set while the update-all queue is paused on an extension needing reinstall (B5). */
+        val queuedReinstallExtension: MangaExtension.Installed? = null,
+        val queuedReinstallCandidates: List<MangaExtension.Available> = emptyList(),
     ) {
         val isEmpty = items.isEmpty()
     }

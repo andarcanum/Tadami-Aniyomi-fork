@@ -19,6 +19,7 @@ class NovelPluginApi(
 ) : NovelPluginApiFacade {
     override suspend fun fetchAvailablePlugins(): List<NovelPlugin.Available> {
         return withContext(Dispatchers.IO) {
+            _repoFetchErrors.value = emptyMap() // "since the last refresh" semantics
             val repos = repoProvider.getAll()
             repos.flatMap { repo ->
                 fetchPluginsFromRepo(repo).map { plugin ->
@@ -39,7 +40,9 @@ class NovelPluginApi(
             // probing the base url candidates (plugins.*/index.*).
             val targetUrl = repo.indexUrl?.takeIf { it.isNotBlank() } ?: repo.baseUrl
             val payload = fetcher.fetch(targetUrl)
-            parser.parse(payload, targetUrl)
+            val plugins = parser.parse(payload, targetUrl)
+            _repoFetchErrors.update { it - repo.baseUrl } // recovered: drop stale error
+            plugins
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

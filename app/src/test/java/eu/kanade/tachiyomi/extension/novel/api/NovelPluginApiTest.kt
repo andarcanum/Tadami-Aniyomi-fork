@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.extension.novel.api
 
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import mihon.domain.extensionrepo.model.ExtensionRepo
@@ -145,6 +146,86 @@ class NovelPluginApiTest {
         plugins.single().apkUrl shouldBe "https://cdn.example/one.apk"
     }
 
+    @Test
+    fun `successful refetch clears previous repo error`() = runTest {
+        val repo = extensionRepo("https://repo.one")
+        val api = NovelPluginApi(
+            repoProvider = FakeRepoProvider(listOf(repo)),
+            fetcher = FlakyFetcher(
+                payloads = mapOf(
+                    "https://repo.one" to """
+                        [
+                          {
+                            "id": "one.plugin",
+                            "name": "One",
+                            "site": "https://one.example",
+                            "lang": "en",
+                            "version": 1,
+                            "url": "https://one.example/plugin.js",
+                            "hasSettings": false,
+                            "sha256": "aaa"
+                          }
+                        ]
+                    """.trimIndent(),
+                ),
+                remainingFailures = 1,
+            ),
+            parser = NovelPluginIndexParser(Json { ignoreUnknownKeys = true }),
+        )
+
+        api.fetchAvailablePlugins() // first call fails -> error recorded
+        api.repoFetchErrors.first().keys shouldBe setOf(repo.baseUrl)
+
+        api.fetchAvailablePlugins() // second call succeeds
+
+        api.repoFetchErrors.first() shouldBe emptyMap()
+    }
+
+    @Test
+    fun `new refresh resets repo errors from a previous refresh`() = runTest {
+        val failingRepo = extensionRepo("https://repo.dead")
+        val healthyRepo = extensionRepo("https://repo.one")
+        val api = NovelPluginApi(
+            // First refresh sees the dead repo; the second refresh does not see it at all.
+            repoProvider = BatchedRepoProvider(listOf(failingRepo), listOf(healthyRepo)),
+            fetcher = FlakyFetcher(
+                payloads = mapOf(
+                    "https://repo.one" to """
+                        [
+                          {
+                            "id": "one.plugin",
+                            "name": "One",
+                            "site": "https://one.example",
+                            "lang": "en",
+                            "version": 1,
+                            "url": "https://one.example/plugin.js",
+                            "hasSettings": false,
+                            "sha256": "aaa"
+                          }
+                        ]
+                    """.trimIndent(),
+                ),
+                remainingFailures = 1,
+            ),
+            parser = NovelPluginIndexParser(Json { ignoreUnknownKeys = true }),
+        )
+
+        api.fetchAvailablePlugins() // first refresh fails -> error recorded
+        api.repoFetchErrors.first().keys shouldBe setOf(failingRepo.baseUrl)
+
+        api.fetchAvailablePlugins() // second refresh no longer touches the failed repo
+
+        api.repoFetchErrors.first() shouldBe emptyMap()
+    }
+
+    private fun extensionRepo(baseUrl: String): ExtensionRepo = ExtensionRepo(
+        baseUrl = baseUrl,
+        name = baseUrl,
+        shortName = null,
+        website = baseUrl,
+        signingKeyFingerprint = "fingerprint-$baseUrl",
+    )
+
     private class FakeRepoProvider(
         private val repos: List<ExtensionRepo>,
     ) : NovelPluginRepoProvider {
@@ -159,5 +240,28 @@ class NovelPluginApiTest {
             requested.add(repoUrl)
             return payloads[repoUrl] ?: error("Missing payload for $repoUrl")
         }
+    }
+
+    /** Fails the first [remainingFailures] fetches, then serves payloads like [FakeFetcher]. */
+    private class FlakyFetcher(
+        private val payloads: Map<String, String> = emptyMap(),
+        remainingFailures: Int,
+    ) : NovelPluginIndexFetcher {
+        private var remainingFailures = remainingFailures
+        override suspend fun fetch(repoUrl: String): String {
+            if (remainingFailures > 0) {
+                remainingFailures--
+                throw IllegalStateException("Simulated repo failure")
+            }
+            return payloads[repoUrl] ?: error("Missing payload for $repoUrl")
+        }
+    }
+
+    /** Serves a different repo list on every [getAll] call, cycling through the batches. */
+    private class BatchedRepoProvider(
+        private vararg val batches: List<ExtensionRepo>,
+    ) : NovelPluginRepoProvider {
+        private var call = 0
+        override suspend fun getAll(): List<ExtensionRepo> = batches[call++ % batches.size]
     }
 }

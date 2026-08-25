@@ -40,6 +40,9 @@ interface NovelExtensionManager {
     /** Best-effort cancel of an in-flight install of [plugin]. */
     fun cancelPluginInstall(plugin: NovelPlugin.Available) {}
 
+    /** Best-effort cancel of an in-flight install of an already-installed [plugin] (update/reinstall). */
+    fun cancelPluginInstall(plugin: NovelPlugin.Installed) {}
+
     suspend fun uninstallPlugin(plugin: NovelPlugin.Installed)
 
     suspend fun uninstallPlugin(plugin: NovelPlugin.Untrusted)

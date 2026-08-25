@@ -143,6 +143,20 @@ fun mangaExtensionsTab(
                 )
             }
 
+            // Queue-driven reinstall pause during update-all (B5): owned by the ScreenModel.
+            state.queuedReinstallExtension?.let { extension ->
+                MangaExtensionReinstallDialog(
+                    extension = extension,
+                    candidates = state.queuedReinstallCandidates,
+                    onClickCandidate = { candidate ->
+                        extensionsScreenModel.resolveQueuedReinstall(candidate)
+                    },
+                    onDismissRequest = {
+                        extensionsScreenModel.resolveQueuedReinstall(null)
+                    },
+                )
+            }
+
             if (state.repoPickerOptions.isNotEmpty()) {
                 RepoPickerDialog(
                     titleRes = AYMR.strings.novel_repo_picker_title,

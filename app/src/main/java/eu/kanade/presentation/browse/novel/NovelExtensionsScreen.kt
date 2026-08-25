@@ -180,6 +180,7 @@ fun NovelExtensionScreen(
     onToggleSection: (String) -> Unit,
     onCopyDiagnostic: (NovelPlugin) -> Unit,
     onShareApk: (NovelPlugin) -> Unit,
+    onCancelInstall: ((NovelPlugin) -> Unit)?,
     onReinstallAfterSignatureMismatch: () -> Unit,
     onDismissSignatureMismatch: () -> Unit,
 ) {
@@ -234,6 +235,7 @@ fun NovelExtensionScreen(
                     onToggleSection = onToggleSection,
                     onCopyDiagnostic = onCopyDiagnostic,
                     onShareApk = onShareApk,
+                    onCancelInstall = onCancelInstall,
                 )
             }
         }
@@ -256,6 +258,7 @@ private fun NovelExtensionContent(
     onToggleSection: (String) -> Unit,
     onCopyDiagnostic: (NovelPlugin) -> Unit,
     onShareApk: (NovelPlugin) -> Unit,
+    onCancelInstall: ((NovelPlugin) -> Unit)?,
 ) {
     val grouped = state.items.groupBy { it.status }
     val context = LocalContext.current
@@ -297,6 +300,7 @@ private fun NovelExtensionContent(
                     onTrustExtension = { trustState = it },
                     onCopyDiagnostic = onCopyDiagnostic,
                     onShareApk = onShareApk,
+                    onCancelInstall = onCancelInstall,
                 )
             }
         }
@@ -321,6 +325,7 @@ private fun NovelExtensionContent(
                     onTrustExtension = { trustState = it },
                     onCopyDiagnostic = onCopyDiagnostic,
                     onShareApk = onShareApk,
+                    onCancelInstall = onCancelInstall,
                 )
             }
         }
@@ -369,6 +374,7 @@ private fun NovelExtensionContent(
                         onInstallExtension = onInstallExtension,
                         onCopyDiagnostic = onCopyDiagnostic,
                         onShareApk = onShareApk,
+                        onCancelInstall = onCancelInstall,
                     )
                 }
             }
@@ -404,6 +410,7 @@ private fun NovelExtensionItemRow(
     onTrustExtension: ((NovelPlugin.Untrusted) -> Unit)? = null,
     onCopyDiagnostic: ((NovelPlugin) -> Unit)? = null,
     onShareApk: ((NovelPlugin) -> Unit)? = null,
+    onCancelInstall: ((NovelPlugin) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val plugin = item.plugin
@@ -466,7 +473,15 @@ private fun NovelExtensionItemRow(
         },
         action = {
             when (item.installStep) {
-                InstallStep.Pending, InstallStep.Downloading, InstallStep.Installing -> Unit
+                InstallStep.Pending, InstallStep.Downloading, InstallStep.Installing -> {
+                    // Cancellation parity with manga/anime rows: a cross while the row is busy.
+                    IconButton(onClick = { onCancelInstall?.invoke(plugin) }) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = stringResource(MR.strings.action_cancel),
+                        )
+                    }
+                }
                 InstallStep.Error -> {
                     Row {
                         val retryAction = resolveNovelExtensionRowAction(item)

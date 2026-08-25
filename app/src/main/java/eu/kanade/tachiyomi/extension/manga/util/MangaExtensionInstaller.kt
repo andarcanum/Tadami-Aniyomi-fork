@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.extension.manga.util
+package eu.kanade.tachiyomi.extension.manga.util
 
 import android.app.DownloadManager
 import android.app.ForegroundServiceStartNotAllowedException
@@ -513,6 +513,9 @@ internal class MangaExtensionInstaller(private val context: Context) {
         if (downloadId >= 0) {
             downloadManager.remove(downloadId)
         }
+        // Our own LEGACY install activity may still be showing for this download; it checks
+        // the registry and self-finishes instead of reporting an install outcome (B11).
+        LegacyInstallCancelRegistry.markCancelled(downloadId)
         updateInstallStep(downloadId, InstallStep.Idle)
         InstallerManga.cancelInstallQueue(context, downloadId)
     }

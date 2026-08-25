@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import kotlinx.coroutines.flow.first
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
+import tachiyomi.domain.extension.novel.model.NovelPlugin
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -109,8 +110,11 @@ class ExtensionAutoUpdateRunner(
         ExtensionUpdateNotifier(context).notifyAutoUpdated(updated, anime = true)
     }
 
-    private suspend fun updateNovelExtensions(installer: BasePreferences.ExtensionInstaller) {
-        val manager = novelExtensionManager.get() ?: return
+    internal suspend fun updateNovelExtensions(
+        installer: BasePreferences.ExtensionInstaller,
+        manager: NovelExtensionManager? = novelExtensionManager.get(),
+    ) {
+        if (manager == null) return
         val pending = manager.updatesFlow.first()
         val available = manager.availablePluginsFlow.first()
         val userRepos = sourcePreferences.novelInstalledExtensionRepos().get()
@@ -133,8 +137,21 @@ class ExtensionAutoUpdateRunner(
 
         var updatedAny = false
         candidates.forEach { installed ->
+            // Never silently switch repos (S3.5/B10): only replace a plugin with a newer variant
+            // published to the same repo and carrying a checksum. Installed records can lose their
+            // repo attribution (e.g. Kotlin extensions loaded from the package manager), so fall
+            // back to the same unambiguous inference the manual classifier uses and skip the
+            // plugin entirely when no repo can be attributed conservatively.
+            val targetRepoUrl = installed.repoUrl.takeIf { it.isNotBlank() }
+                ?: inferInstalledRepoUrl(installed, available)
+                ?: return@forEach
             val replacement = available
-                .filter { it.id == installed.id && it.versionCode > installed.versionCode }
+                .filter {
+                    it.id == installed.id &&
+                        it.versionCode > installed.versionCode &&
+                        it.repoUrl == targetRepoUrl && // never silently switch repos (S3.5/B10)
+                        it.sha256.isNotBlank()
+                }
                 .maxByOrNull { it.versionCode }
                 ?: return@forEach
             runCatching { manager.installPlugin(replacement) }
@@ -143,7 +160,32 @@ class ExtensionAutoUpdateRunner(
         }
         if (!updatedAny) return
 
-        sourcePreferences.novelExtensionUpdatesCount().set(manager.updatesFlow.first().size)
+        val availableAll = manager.availablePluginsFlow.first()
+        val badgeCount = manager.installedPluginsFlow.first().count { installed ->
+            val variants = availableAll.filter { it.id == installed.id }
+            // Same classification the extensions screen uses (S3.5/B8): full set incl. Kotlin.
+            eu.kanade.tachiyomi.ui.browse.novel.extension.NovelPluginUpdateClassifier
+                .classify(installed, variants).hasAnyUpdate
+        }
+        sourcePreferences.novelExtensionUpdatesCount().set(badgeCount)
+    }
+
+    /**
+     * Mirrors the unambiguous-repo rule of the manual classifier
+     * (eu.kanade.tachiyomi.ui.browse.novel.extension.NovelPluginUpdateClassifier) for an installed
+     * record that carries no repo of its own. Returns null when this plugin's variants cannot be
+     * attributed to a single repo, so auto-update never guesses.
+     */
+    private fun inferInstalledRepoUrl(
+        installed: NovelPlugin.Installed,
+        variants: List<NovelPlugin.Available>,
+    ): String? {
+        val pluginVariants = variants.filter { it.id == installed.id }
+        val exactVersionMatches = pluginVariants.filter { it.versionCode == installed.versionCode }
+
+        return exactVersionMatches.singleOrNull()?.repoUrl
+            ?: pluginVariants.singleOrNull()?.repoUrl
+            ?: pluginVariants.map { it.repoUrl }.distinct().singleOrNull()
     }
 
     /**

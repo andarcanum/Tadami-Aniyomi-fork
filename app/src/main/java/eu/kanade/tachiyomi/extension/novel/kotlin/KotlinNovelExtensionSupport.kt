@@ -60,9 +60,11 @@ import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import okhttp3.OkHttpClient
 import rx.Observable
@@ -101,6 +103,14 @@ fun sweepOrphanedNovelPluginDownloads(context: Context, nowMs: Long = System.cur
 }
 
 private const val INSTALL_TIMEOUT_MS = 5 * 60 * 1000L
+
+/** Backend-reported removal should land quickly; anything longer smells like a no-op uninstall. */
+private const val UNINSTALL_VERIFY_TIMEOUT_MS = 15_000L
+
+/** The ACTION_DELETE fallback is user-driven: give the system dialog a generous budget. */
+private const val UNINSTALL_FALLBACK_TIMEOUT_MS = 120_000L
+
+private const val UNINSTALL_POLL_INTERVAL_MS = 250L
 
 class KotlinNovelExtensionInstaller(
     private val context: Context,
@@ -211,12 +221,33 @@ class KotlinNovelExtensionInstaller(
                 ),
             )
             when (result) {
-                is ApkInstallResult.Installed ->
+                is ApkInstallResult.Installed -> {
+                    // Never trust the result blindly (B1): a PRIVATE-backend "success" may have
+                    // removed only the private copy while the system package survives, which
+                    // would strand replacePluginFromRepo's removal poll until its timeout.
+                    if (!awaitPackageRemoved(pkgName, UNINSTALL_VERIFY_TIMEOUT_MS)) {
+                        logcat(LogPriority.WARN) {
+                            "Kotlin novel extension $pkgName still installed after backend uninstall; requesting system uninstall"
+                        }
+                        runCatching {
+                            Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkgName"))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                .let(context::startActivity)
+                        }.onFailure {
+                            logcat(LogPriority.WARN, it) {
+                                "Failed to launch system uninstall for Kotlin novel extension $pkgName"
+                            }
+                        }
+                        if (!awaitPackageRemoved(pkgName, UNINSTALL_FALLBACK_TIMEOUT_MS)) {
+                            error("Kotlin novel extension $pkgName was not uninstalled; keeping private copy")
+                        }
+                    }
                     withContext(Dispatchers.IO) {
                         // Delete only after confirmed removal: cancelling the dialog must keep
                         // the private copy, otherwise the extension would lose all its files.
                         KotlinNovelExtensionLoader.uninstallPrivateExtension(context, pkgName)
                     }
+                }
                 is ApkInstallResult.Cancelled -> Unit
                 is ApkInstallResult.Error -> {
                     logcat(LogPriority.WARN) { "Unified uninstall failed for $pkgName: ${result.reason}" }
@@ -238,7 +269,23 @@ class KotlinNovelExtensionInstaller(
             }
         }
     }
+
+    /** Polls until [pkgName] disappears; false when it is still installed after [timeoutMs]. */
+    private suspend fun awaitPackageRemoved(pkgName: String, timeoutMs: Long): Boolean =
+        awaitPollCondition(timeoutMs) { !context.isPackageInstalled(pkgName) }
 }
+
+/**
+ * Polls [condition] every [UNINSTALL_POLL_INTERVAL_MS] until it holds or [timeoutMs] elapses.
+ * Internal + parameterized so the polling contract stays unit-testable without Android.
+ */
+internal suspend fun awaitPollCondition(timeoutMs: Long, condition: suspend () -> Boolean): Boolean =
+    withTimeoutOrNull(timeoutMs) {
+        while (!condition()) {
+            delay(UNINSTALL_POLL_INTERVAL_MS)
+        }
+        true
+    } ?: false
 
 fun NovelPlugin.Available.toInstalledKotlin(): NovelPlugin.Installed {
     return NovelPlugin.Installed(

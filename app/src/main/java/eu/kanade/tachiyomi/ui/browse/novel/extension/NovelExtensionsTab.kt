@@ -96,6 +96,7 @@ fun novelExtensionsTab(
                     )
                 },
                 onShareApk = extensionsScreenModel::shareApk,
+                onCancelInstall = extensionsScreenModel::cancelInstall,
                 onReinstallAfterSignatureMismatch = extensionsScreenModel::reinstallAfterSignatureMismatch,
                 onDismissSignatureMismatch = extensionsScreenModel::dismissSignatureMismatch,
             )

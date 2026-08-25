@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.extension.novel.api
 
-import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoUpdateInteractor
 import io.kotest.matchers.shouldBe
@@ -24,7 +23,6 @@ class NovelExtensionApiTest {
     private lateinit var getExtensionRepo: GetNovelExtensionRepo
     private lateinit var updateExtensionRepo: UpdateNovelExtensionRepo
     private lateinit var repoUpdateInteractor: NovelPluginRepoUpdateInteractor
-    private lateinit var sourcePreferences: SourcePreferences
     private lateinit var preferenceStore: PreferenceStore
     private lateinit var lastCheckPreference: Preference<Long>
     private lateinit var updatesCountPreference: Preference<Int>
@@ -37,13 +35,11 @@ class NovelExtensionApiTest {
         getExtensionRepo = mockk()
         updateExtensionRepo = mockk()
         repoUpdateInteractor = mockk()
-        sourcePreferences = mockk()
         preferenceStore = mockk()
         lastCheckPreference = mockk()
         updatesCountPreference = mockk()
 
         every { preferenceStore.getLong(any(), any()) } returns lastCheckPreference
-        every { sourcePreferences.novelExtensionUpdatesCount() } returns updatesCountPreference
         every { updatesCountPreference.set(any<Int>()) } answers { }
         every { lastCheckPreference.set(any<Long>()) } answers { }
 
@@ -51,7 +47,6 @@ class NovelExtensionApiTest {
             getExtensionRepo = getExtensionRepo,
             updateExtensionRepo = updateExtensionRepo,
             repoUpdateInteractor = repoUpdateInteractor,
-            sourcePreferences = sourcePreferences,
             preferenceStore = preferenceStore,
             timeProvider = { nowMs },
         )
@@ -73,7 +68,7 @@ class NovelExtensionApiTest {
     }
 
     @Test
-    fun `when checked normally expect update count set`() {
+    fun `when checked normally the updates-count pref stays untouched`() {
         runTest {
             nowMs = 200_000_000L
             every { lastCheckPreference.get() } returns 0L
@@ -117,7 +112,7 @@ class NovelExtensionApiTest {
                 )
             }
             verify { lastCheckPreference.set(nowMs) }
-            verify { updatesCountPreference.set(1) }
+            verify(exactly = 0) { updatesCountPreference.set(any<Int>()) }
         }
     }
 
