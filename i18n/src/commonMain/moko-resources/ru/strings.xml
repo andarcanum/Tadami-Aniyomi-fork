@@ -189,6 +189,10 @@
     <string name="update_24hour">Ежедневно</string>
     <string name="update_48hour">Каждые 2 дня</string>
     <string name="update_6hour">Каждые 6 часов</string>
+    <string name="update_interval_custom">Своё…</string>
+    <string name="update_custom_interval_title">Интервал обновления</string>
+    <string name="update_every_hours">Каждые %1$d ч</string>
+    <string name="update_interval_battery_warning">Короткие интервалы могут увеличить расход батареи.</string>
     <string name="update_check_confirm">Загрузить</string>
     <string name="update_check_ignore_version">Не показывать эту версию снова</string>
     <string name="update_check_no_new_updates">Нет обновлений</string>
