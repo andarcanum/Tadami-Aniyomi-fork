@@ -109,10 +109,10 @@ internal fun DrawScope.drawInkWaterVignette(
     drawRect(
         brush = Brush.verticalGradient(
             listOf(
-                deepColor.copy(alpha = if (dark) 0.25f else 0.10f),
+                deepColor.copy(alpha = if (dark) 0.22f else 0.10f),
                 Color.Transparent,
                 Color.Transparent,
-                backgroundColor.copy(alpha = if (dark) 0.45f else 0.22f),
+                backgroundColor.copy(alpha = if (dark) 0.35f else 0.18f),
             ),
         ),
     )
@@ -193,9 +193,9 @@ private const val INK_WATER_AGSL = """
         half3 col = mix(u_colorDeep, u_colorMid, half(smoothstep(0.2, 0.7, v)));
         col = mix(col, u_colorAccent, half(smoothstep(0.65, 0.95, v)) * half(0.55));
 
-        // Плотность смещена к шапке, края затухают — текст не трогаем.
-        float topWeight = mix(0.55, 1.0, smoothstep(0.0, 0.45, 1.0 - uv.y));
-        float edgeFade = smoothstep(1.15, 0.35, length(uv - float2(0.5, 0.45)));
+        // Плотность смещена к шапке, но внизу сохраняется живая структура (0.80)
+        float topWeight = mix(0.80, 1.0, smoothstep(0.0, 0.45, 1.0 - uv.y));
+        float edgeFade = smoothstep(1.35, 0.35, length(uv - float2(0.5, 0.50)));
         float alpha = ink * u_alphaScale * topWeight * edgeFade;
 
         return half4(col * half(alpha), half(alpha));

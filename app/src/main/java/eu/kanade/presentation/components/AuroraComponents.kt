@@ -741,7 +741,7 @@ private fun AuroraSpecialBackgroundCanvas(
                             deepColor = palette.deep,
                             midColor = palette.mid,
                             accentColor = palette.accent,
-                            density = if (colors.isDark) 0.30f else 0.18f,
+                            density = if (colors.isDark) 0.67f else 0.22f,
                         )
                     }
                 } else {

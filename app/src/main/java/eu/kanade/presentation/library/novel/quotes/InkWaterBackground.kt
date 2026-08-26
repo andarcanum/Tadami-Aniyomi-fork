@@ -77,7 +77,7 @@ fun InkWaterBackground(modifier: Modifier = Modifier) {
                     deepColor = palette.deep,
                     midColor = palette.mid,
                     accentColor = palette.accent,
-                    density = 0.30f,
+                    density = 0.67f,
                 )
             }
         } else {
