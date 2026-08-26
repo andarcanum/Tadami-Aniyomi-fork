@@ -642,7 +642,13 @@ internal fun resolveActivePageTransitionStyle(
 internal fun shouldShowNovelAtmosphereBackground(
     usePageReader: Boolean,
     activePageTransitionStyle: NovelPageTransitionStyle,
+    isBookMode: Boolean = false,
 ): Boolean {
+    // The Compose-pager Book Flip draws opaque page cards, so the atmosphere layer behind them
+    // was skipped there. The book engine's flip is a CSS turn INSIDE the transparent WebView:
+    // the atmosphere layer behind the document is exactly what the reader must see through it,
+    // and the engine stylesheet already forces html/body transparent, so it can never double.
+    if (isBookMode) return true
     return !usePageReader || activePageTransitionStyle != NovelPageTransitionStyle.BOOK_FLIP
 }
 

@@ -2371,6 +2371,7 @@ internal fun NovelReaderContentHost(
                 shouldShowNovelAtmosphereBackground(
                     usePageReader = usePageReader,
                     activePageTransitionStyle = activePageTransitionStyle,
+                    isBookMode = state.bookMode.isEnabled,
                 )
             ) {
                 NovelAtmosphereBackground(

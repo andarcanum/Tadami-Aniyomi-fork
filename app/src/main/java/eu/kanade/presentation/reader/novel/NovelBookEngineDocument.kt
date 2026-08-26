@@ -228,15 +228,29 @@ internal fun buildNovelBookEngineDocumentHtml(
             // to be animated from here as well: a stylesheet rule can never beat an inline
             // !important transform, which is why every style looked instant.
             const TURN_DURATION_MILLIS = 320;
-            const turnOrigin = function(style) {
-              if (style === 'book' || style === 'book_flip') return 'left center';
+            // Book Flip hinges at the leading edge of the VISIBLE page with real perspective;
+            // rotating around the strip's far-left origin made the page sweep along an arc that
+            // grew with the page index. Every other style keeps its original whole-strip shape.
+            const FLIP_PERSPECTIVE_PX = 1200;
+            const FLIP_ANGLE_DEG = 76;
+            const flipOriginXPx = function(startPage, forward) {
+              return forward ? startPage * pagePitch : (startPage + 1) * pagePitch;
+            };
+            const turnOrigin = function(style, originXPx) {
+              if (style === 'book_flip') return Math.round(originXPx) + 'px center';
+              if (style === 'book') return 'left center';
               if (style === 'curl') return 'bottom right';
               return '50% 50%';
             };
-            const turnTransform = function(style, offsetPx, forward) {
+            const turnTransform = function(style, offsetPx, forward, originXPx) {
               const base = 'translateX(' + offsetPx + 'px)';
               if (style === 'depth') return base + ' scale(0.86) translateZ(-140px)';
-              if (style === 'book' || style === 'book_flip') {
+              if (style === 'book_flip') {
+                const sign = forward ? -1 : 1;
+                return base + ' perspective(' + FLIP_PERSPECTIVE_PX + 'px) rotateY(' +
+                  (sign * FLIP_ANGLE_DEG) + 'deg) scale(0.97)';
+              }
+              if (style === 'book') {
                 return base + ' rotateY(' + (forward ? -24 : 24) + 'deg) scale(0.94)';
               }
               if (style === 'curl') return base + ' rotateZ(-5deg) rotateX(9deg) scale(0.94)';
@@ -272,12 +286,16 @@ internal fun buildNovelBookEngineDocumentHtml(
               setImportant(content, 'transform', 'translateX(' + startX + 'px)');
               setImportant(content, 'opacity', '1');
               setImportant(content, 'filter', 'none');
+              // Drop any paper copied onto the column by a previous Book Flip.
+              setImportant(content, 'background-color', '');
+              setImportant(content, 'background-image', '');
               pageOffsetCache = {
                 page: target,
                 section: sectionIndexOf(sectionNodeAtPage(target)),
                 offset: measurePageOffset(target)
               };
-              setImportant(content, 'transform-origin', turnOrigin(style));
+              const flipOriginX = flipOriginXPx(startPage, forward);
+              setImportant(content, 'transform-origin', turnOrigin(style, flipOriginX));
               if (style === 'instant' || startPage === target) {
                 setImportant(content, 'transition', 'none');
                 setImportant(content, 'transform', 'translateX(' + targetX + 'px)');
@@ -298,13 +316,41 @@ internal fun buildNovelBookEngineDocumentHtml(
               setImportant(content, 'transition',
                 'transform ' + half + 'ms ease-in, opacity ' + half + 'ms ease-in, filter ' +
                 half + 'ms ease-in');
-              setImportant(content, 'transform', turnTransform(style, startX, forward));
-              setImportant(content, 'opacity', '0.82');
-              setImportant(content, 'filter', 'brightness(0.88)');
+              setImportant(content, 'transform', turnTransform(style, startX, forward, flipOriginX));
+              if (style === 'book_flip') {
+                // Paper does not fade while flipping; a light shade sells the lift instead.
+                // The underlay itself is painted on html/body and content stays transparent by
+                // design, so a tilting sheet would expose bare text over the static backdrop.
+                // Copy the body's painted background onto the sheet, phase-shifted to the page
+                // being lifted, so it carries its own paper mid-air and hands it back on land.
+                const bodyStyle = getComputedStyle(document.body);
+                const paperShiftX = Math.round(startPage * pagePitch);
+                setImportant(content, 'background-color', bodyStyle.backgroundColor);
+                if (bodyStyle.backgroundImage && bodyStyle.backgroundImage !== 'none') {
+                  setImportant(content, 'background-image', bodyStyle.backgroundImage);
+                  setImportant(content, 'background-repeat', bodyStyle.backgroundRepeat);
+                  setImportant(content, 'background-size', bodyStyle.backgroundSize);
+                  setImportant(
+                    content,
+                    'background-position',
+                    (-paperShiftX) + 'px ' + (bodyStyle.backgroundPositionY || '0px'),
+                  );
+                }
+                setImportant(content, 'opacity', '1');
+                setImportant(content, 'filter', 'brightness(0.90)');
+              } else {
+                setImportant(content, 'opacity', '0.82');
+                setImportant(content, 'filter', 'brightness(0.88)');
+              }
               turnTimer = window.setTimeout(function() {
                 turnTimer = 0;
                 settlePage(targetX, half);
-                window.setTimeout(function() { turnActive = false; }, half);
+                window.setTimeout(function() {
+                  turnActive = false;
+                  // Hand the underlay back to the fixed body layer once the sheet has landed.
+                  setImportant(content, 'background-color', '');
+                  setImportant(content, 'background-image', '');
+                }, half);
               }, half);
               return target;
             };
