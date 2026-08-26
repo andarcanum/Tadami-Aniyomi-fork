@@ -490,7 +490,8 @@ private class NovelPageReaderTextView constructor(
     }
 
     private fun setupCustomSelectionActionModeCallback() {
-        customSelectionActionModeCallback = object : ActionMode.Callback2() {            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
+        customSelectionActionModeCallback = object : ActionMode.Callback2() {
+            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
                 if (menu == null) return true
                 // Standard system-style actions first, then the reader-specific ones.
                 menu.add(Menu.NONE, MENU_ID_COPY, 10, context.getString(MR.strings.copy.resourceId))
