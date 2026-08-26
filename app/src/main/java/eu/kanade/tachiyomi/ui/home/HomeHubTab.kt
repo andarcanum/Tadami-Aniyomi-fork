@@ -1182,7 +1182,7 @@ internal fun mapNovelHomeHubCoverData(coverData: tachiyomi.domain.entries.novel.
 }
 
 internal fun resolveHomeHubHeaderTintAlpha(isDarkTheme: Boolean): Float {
-    return if (isDarkTheme) 0.12f else 0.06f
+    return 0f
 }
 
 internal fun resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha: Float): Float {

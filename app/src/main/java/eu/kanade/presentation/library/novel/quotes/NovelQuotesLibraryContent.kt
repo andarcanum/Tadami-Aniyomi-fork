@@ -119,10 +119,8 @@ fun NovelQuotesLibraryContent(
             .fillMaxSize()
             .background(colors.background),
     ) {
-        // V6 «Чернила в воде»: живой фон только на тёмной теме (внутри — свои фолбэки).
-        if (isDark) {
-            InkWaterBackground(modifier = Modifier.matchParentSize())
-        }
+        // V6 «Чернила в воде»: живой фон (внутри — свои фолбэки).
+        InkWaterBackground(modifier = Modifier.matchParentSize())
         Column(
             modifier = Modifier
                 .fillMaxSize()

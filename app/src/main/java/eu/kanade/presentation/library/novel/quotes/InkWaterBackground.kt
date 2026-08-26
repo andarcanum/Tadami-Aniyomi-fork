@@ -68,7 +68,7 @@ fun InkWaterBackground(modifier: Modifier = Modifier) {
     }
 
     Canvas(modifier = modifier) {
-        val palette = inkWaterPalette(accent, accentVariant, backgroundColor, dark = true)
+        val palette = inkWaterPalette(accent, accentVariant, backgroundColor, dark = colors.isDark)
         val activeShader = inkShader
         if (activeShader != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             with(activeShader) {
@@ -77,15 +77,15 @@ fun InkWaterBackground(modifier: Modifier = Modifier) {
                     deepColor = palette.deep,
                     midColor = palette.mid,
                     accentColor = palette.accent,
-                    density = 0.67f,
+                    density = if (colors.isDark) 0.67f else 0.40f,
                 )
             }
         } else {
             // Статичный фолбэк: мягкое акцентное пятно сверху + увод вправо.
-            drawInkWaterFallback(accent = palette.accent, accentVariant = palette.mid, dark = true)
+            drawInkWaterFallback(accent = palette.accent, accentVariant = palette.mid, dark = colors.isDark)
         }
 
         // Шейд-виньетка поверх чернил (плотность к шапке, затемнение к низу под цвет темы).
-        drawInkWaterVignette(palette.deep, palette.background, dark = true)
+        drawInkWaterVignette(palette.deep, palette.background, dark = colors.isDark)
     }
 }

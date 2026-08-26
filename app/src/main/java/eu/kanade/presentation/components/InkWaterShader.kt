@@ -8,13 +8,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.luminance
 
 /**
  * Общий рендер фона «Чернила в воде» (V6).
  * Шейдер рисуется ТОЛЬКО на API 33+ (изоляция RuntimeShader — как WeepingVoidShader),
- * всё остальное — статичный фолбэк. Тёмная вариация повторяет экран Цитат 1-в-1,
- * светлая — бледная чернильная отмывка на пергаменте (утверждена прототипом
- * prototype_ink_water_light.html: α≈0.18, чернильный индиго).
+ * всё остальное — статичный фолбэк.
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 internal class InkWaterShader private constructor() {
@@ -22,7 +21,7 @@ internal class InkWaterShader private constructor() {
     private val shader = RuntimeShader(INK_WATER_AGSL)
     private val brush = ShaderBrush(shader)
 
-    /** [density] — базовая плотность чернил: 0.30f (тёмная) / 0.18f (светлая). */
+    /** [density] — базовая плотность чернил: 0.67f (тёмная) / 0.40f (светлая). */
     fun DrawScope.drawInkWater(
         timeSec: Float,
         deepColor: Color,
@@ -61,6 +60,16 @@ internal data class InkWaterPalette(
     val dark: Boolean,
 )
 
+private fun blendColor(c1: Color, c2: Color, ratio: Float): Color {
+    val r = ratio.coerceIn(0f, 1f)
+    return Color(
+        red = c1.red * (1f - r) + c2.red * r,
+        green = c1.green * (1f - r) + c2.green * r,
+        blue = c1.blue * (1f - r) + c2.blue * r,
+        alpha = c1.alpha * (1f - r) + c2.alpha * r,
+    )
+}
+
 internal fun inkWaterPalette(
     accent: Color,
     accentVariant: Color,
@@ -68,31 +77,39 @@ internal fun inkWaterPalette(
     dark: Boolean,
 ): InkWaterPalette {
     return if (dark) {
+        // Гарантируем выразительность тела чернил даже для сверхтёмных тем (Onyx Gold, Sakura Noir, Nebula Tide)
+        val effectiveMid = if (accentVariant.luminance() < 0.18f) {
+            blendColor(accent, accentVariant, 0.35f)
+        } else {
+            accentVariant
+        }
+        val effectiveDeep = Color(
+            red = (effectiveMid.red * 0.35f + 0.04f).coerceIn(0f, 1f),
+            green = (effectiveMid.green * 0.35f + 0.04f).coerceIn(0f, 1f),
+            blue = (effectiveMid.blue * 0.35f + 0.06f).coerceIn(0f, 1f),
+        )
         InkWaterPalette(
-            deep = Color(
-                red = (accentVariant.red * 0.30f + 0.02f).coerceIn(0f, 1f),
-                green = (accentVariant.green * 0.30f + 0.02f).coerceIn(0f, 1f),
-                blue = (accentVariant.blue * 0.30f + 0.05f).coerceIn(0f, 1f),
-            ),
-            mid = accentVariant,
+            deep = effectiveDeep,
+            mid = effectiveMid,
             accent = accent,
             background = background,
             dark = true,
         )
     } else {
-        // Светлая тема: осветлённые чернила на пергаменте (значения согласованы
-        // с утверждённым прототипом светлой вариации).
+        // Светлая тема: насыщенный акварельный пигмент темы на пергаменте
+        val effectiveMid = if (accentVariant.luminance() > 0.65f) {
+            blendColor(accent, accentVariant, 0.50f)
+        } else {
+            accentVariant
+        }
+        val effectiveDeep = Color(
+            red = (effectiveMid.red * 0.55f).coerceIn(0f, 1f),
+            green = (effectiveMid.green * 0.55f).coerceIn(0f, 1f),
+            blue = (effectiveMid.blue * 0.55f).coerceIn(0f, 1f),
+        )
         InkWaterPalette(
-            deep = Color(
-                red = (accentVariant.red * 0.35f + 0.55f).coerceIn(0f, 1f),
-                green = (accentVariant.green * 0.35f + 0.52f).coerceIn(0f, 1f),
-                blue = (accentVariant.blue * 0.35f + 0.58f).coerceIn(0f, 1f),
-            ),
-            mid = Color(
-                red = (accentVariant.red * 0.45f + 0.45f).coerceIn(0f, 1f),
-                green = (accentVariant.green * 0.45f + 0.42f).coerceIn(0f, 1f),
-                blue = (accentVariant.blue * 0.45f + 0.47f).coerceIn(0f, 1f),
-            ),
+            deep = effectiveDeep,
+            mid = effectiveMid,
             accent = accent,
             background = background,
             dark = false,
@@ -109,10 +126,10 @@ internal fun DrawScope.drawInkWaterVignette(
     drawRect(
         brush = Brush.verticalGradient(
             listOf(
-                deepColor.copy(alpha = if (dark) 0.22f else 0.10f),
+                deepColor.copy(alpha = if (dark) 0.22f else 0.06f),
                 Color.Transparent,
                 Color.Transparent,
-                backgroundColor.copy(alpha = if (dark) 0.35f else 0.18f),
+                backgroundColor.copy(alpha = if (dark) 0.35f else 0.12f),
             ),
         ),
     )
