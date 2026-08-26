@@ -137,15 +137,6 @@ fun FullscreenPosterBackground(
     val containerWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val containerHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
     val placeholderPosterUrl = resolvedCoverUrlFallback?.takeIf { it.isNotBlank() } ?: anime.thumbnailUrl
-    val placeholderCover = remember(
-        anime.id,
-        anime.source,
-        anime.favorite,
-        anime.coverLastModified,
-        placeholderPosterUrl,
-    ) {
-        anime.asAnimeCover().copy(url = placeholderPosterUrl)
-    }
     var previousSuccessfulBackgroundSpec by remember(anime.id) {
         mutableStateOf<AuroraPosterBackgroundSpec?>(null)
     }
@@ -181,6 +172,7 @@ fun FullscreenPosterBackground(
                 anime.coverLastModified,
                 posterRequest,
                 containerWidthPx,
+                containerHeightPx,
             ) {
                 val baseCacheKey = "anime-bg;${anime.id};${anime.coverLastModified};" +
                     posterRequest.primaryUrl.orEmpty()

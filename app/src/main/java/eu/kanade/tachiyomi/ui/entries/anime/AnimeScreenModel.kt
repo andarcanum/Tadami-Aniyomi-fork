@@ -575,12 +575,21 @@ class AnimeScreenModel(
                     }
                     it
                 }
-                is State.Success -> func(it)
+                is State.Success -> {
+                    val updated = func(it)
+                    cacheState(updated)
+                    updated
+                }
             }
         }
     }
 
     init {
+        val restoredState = restoreStateFromCache(animeId)
+        restoredState?.let {
+            mutableState.value = it
+        }
+
         screenModelScope.launchIO {
             getAnimeAndEpisodesAndSeasons.subscribe(animeId)
                 .distinctUntilChanged()
@@ -2651,6 +2660,54 @@ class AnimeScreenModel(
                         )
                     }
             }
+        }
+    }
+
+    companion object {
+        private const val FAST_CACHE_MAX_ITEMS = 24
+        private val stateCache = object : java.util.LinkedHashMap<Long, State.Success>(
+            FAST_CACHE_MAX_ITEMS + 1,
+            1f,
+            true,
+        ) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, State.Success>?): Boolean {
+                return size > FAST_CACHE_MAX_ITEMS
+            }
+        }
+
+        @Synchronized
+        private fun restoreStateFromCache(animeId: Long): State.Success? {
+            return stateCache[animeId]
+        }
+
+        @Synchronized
+        private fun cacheState(state: State.Success?) {
+            if (state == null) return
+            val unselectedEpisodes = if (state.episodes.any { it.selected }) {
+                state.episodes.map { if (it.selected) it.copy(selected = false) else it }
+            } else {
+                state.episodes
+            }
+            stateCache[state.anime.id] = state.copy(
+                isRefreshingData = false,
+                dialog = null,
+                episodes = unselectedEpisodes,
+            )
+        }
+
+        @Synchronized
+        internal fun clearStateCacheForTest() {
+            stateCache.clear()
+        }
+
+        @Synchronized
+        internal fun cacheStateForTest(state: State.Success) {
+            cacheState(state)
+        }
+
+        @Synchronized
+        internal fun restoreStateFromCacheForTest(animeId: Long): State.Success? {
+            return restoreStateFromCache(animeId)
         }
     }
 }

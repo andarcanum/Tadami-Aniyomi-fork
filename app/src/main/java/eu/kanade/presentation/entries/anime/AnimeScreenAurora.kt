@@ -604,6 +604,8 @@ fun AnimeScreenAuroraImpl(
         Injekt.get<eu.kanade.domain.ui.UiPreferences>().metadataAuthHintShown()
     }
     var metadataHintDismissed by remember { mutableStateOf(false) }
+    val authHintMessage = stringResource(AYMR.strings.metadata_auth_hint_message)
+    val authHintAction = stringResource(AYMR.strings.metadata_auth_hint_action)
 
     // One-time Snackbar when metadata source is not authenticated
     LaunchedEffect(state.metadataError) {
@@ -613,8 +615,8 @@ fun AnimeScreenAuroraImpl(
             onTrackingClicked != null
         ) {
             val result = snackbarHostState.showSnackbar(
-                message = "Авторизуйтесь в сервисе для рейтинга, типа и обложки",
-                actionLabel = "Войти",
+                message = authHintMessage,
+                actionLabel = authHintAction,
                 withDismissAction = true, // Add dismiss button
                 duration = SnackbarDuration.Long,
             )
@@ -625,7 +627,6 @@ fun AnimeScreenAuroraImpl(
                 }
                 SnackbarResult.Dismissed -> {
                     metadataHintDismissed = true
-                    metadataAuthHintShown.set(true) // Don't show again
                 }
             }
         }

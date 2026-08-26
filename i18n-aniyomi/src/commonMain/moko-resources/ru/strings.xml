@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="metadata_auth_hint_message">Авторизуйтесь в сервисе для рейтинга, типа и обложки</string>
+    <string name="metadata_auth_hint_action">Войти</string>
     <string name="option_label_library_update_errors">Ошибки обновлений</string>
     <string name="label_library_update_errors">Ошибки обновлений</string>
     <string name="info_empty_library_update_errors">Нет ошибок обновления библиотеки</string>

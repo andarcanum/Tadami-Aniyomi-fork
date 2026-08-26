@@ -140,21 +140,6 @@ fun FullscreenPosterBackground(
     val containerWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val containerHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
     val placeholderPosterUrl = resolvedCoverUrlFallback?.takeIf { it.isNotBlank() } ?: manga.thumbnailUrl
-    val placeholderCover = remember(
-        manga.id,
-        manga.source,
-        manga.favorite,
-        manga.coverLastModified,
-        placeholderPosterUrl,
-    ) {
-        MangaCover(
-            mangaId = manga.id,
-            sourceId = manga.source,
-            isMangaFavorite = manga.favorite,
-            url = placeholderPosterUrl,
-            lastModified = manga.coverLastModified,
-        )
-    }
     // Stable preview from manga's thumbnail (the one visible in library/browse grid).
     // Full/resolves poster will fade in over it.
     val previewCoverModel = remember(manga.id) {

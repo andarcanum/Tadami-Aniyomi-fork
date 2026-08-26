@@ -432,12 +432,20 @@ class MangaScreenModel(
                     }
                     it
                 }
-                is State.Success -> func(it)
+                is State.Success -> {
+                    val updated = func(it)
+                    cacheState(updated)
+                    updated
+                }
             }
         }
     }
 
     init {
+        val restoredState = restoreStateFromCache(mangaId)
+        restoredState?.let {
+            mutableState.value = it
+        }
         screenModelScope.launchIO {
             getMangaAndChapters.subscribe(mangaId, applyScanlatorFilter = true)
                 .distinctUntilChanged()
@@ -535,10 +543,12 @@ class MangaScreenModel(
         observeDownloads()
 
         screenModelScope.launchIO {
-            val manga = getMangaAndChapters.awaitManga(mangaId)
+            val mangaDeferred = async { getMangaAndChapters.awaitManga(mangaId) }
+            val rawChaptersDeferred = async { getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true) }
+            val manga = mangaDeferred.await()
+            val rawChapters = rawChaptersDeferred.await()
 
             val source = Injekt.get<MangaSourceManager>().getOrStub(manga.source)
-            val rawChapters = getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
             val start = System.currentTimeMillis()
             // Cheap path for Aurora: list visible immediately. Real download states via observeDownloads + hydrate.
             val chapters = rawChapters.toChapterListItemsCheap(manga)
@@ -2136,6 +2146,54 @@ class MangaScreenModel(
 
     private fun SManga.safeTitle(): String {
         return runCatching { title }.getOrDefault("")
+    }
+
+    companion object {
+        private const val FAST_CACHE_MAX_ITEMS = 24
+        private val stateCache = object : java.util.LinkedHashMap<Long, State.Success>(
+            FAST_CACHE_MAX_ITEMS + 1,
+            1f,
+            true,
+        ) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, State.Success>?): Boolean {
+                return size > FAST_CACHE_MAX_ITEMS
+            }
+        }
+
+        @Synchronized
+        private fun restoreStateFromCache(mangaId: Long): State.Success? {
+            return stateCache[mangaId]
+        }
+
+        @Synchronized
+        private fun cacheState(state: State.Success?) {
+            if (state == null) return
+            val unselectedChapters = if (state.isAnySelected) {
+                state.chapters.map { if (it.selected) it.copy(selected = false) else it }
+            } else {
+                state.chapters
+            }
+            stateCache[state.manga.id] = state.copy(
+                isRefreshingData = false,
+                dialog = null,
+                chapters = unselectedChapters,
+            )
+        }
+
+        @Synchronized
+        internal fun clearStateCacheForTest() {
+            stateCache.clear()
+        }
+
+        @Synchronized
+        internal fun cacheStateForTest(state: State.Success) {
+            cacheState(state)
+        }
+
+        @Synchronized
+        internal fun restoreStateFromCacheForTest(mangaId: Long): State.Success? {
+            return restoreStateFromCache(mangaId)
+        }
     }
 }
 

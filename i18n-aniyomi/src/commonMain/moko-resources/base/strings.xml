@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Generic strings -->
+    <string name="metadata_auth_hint_message">Log in to tracker service for rating, format and cover</string>
+    <string name="metadata_auth_hint_action">Log in</string>
     <string name="option_label_library_update_errors">Library update errors</string>
     <string name="label_library_update_errors">Library update errors</string>
     <string name="info_empty_library_update_errors">No library update errors</string>
