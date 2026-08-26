@@ -350,8 +350,11 @@ fun MangaScreenAuroraImpl(
     }
 
     val lazyListState = rememberLazyListState()
-    val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
-    val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
+    // Scroll values are exposed as State and read only inside the smallest consumer scopes
+    // (poster background, hero layer, top bar row) so per-pixel scroll updates do not
+    // recompose the whole screen.
+    val scrollOffsetState = remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
+    val firstVisibleItemIndexState = remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
     val haptic = LocalHapticFeedback.current
 
     // State for chapters expansion
@@ -490,8 +493,8 @@ fun MangaScreenAuroraImpl(
             if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
                 FullscreenPosterBackground(
                     manga = manga,
-                    scrollOffset = scrollOffset,
-                    firstVisibleItemIndex = firstVisibleItemIndex,
+                    scrollOffsetState = scrollOffsetState,
+                    firstVisibleItemIndexState = firstVisibleItemIndexState,
                     resolvedCoverUrl = resolvedCover.coverUrl,
                     resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
                     refererUrl = refererUrl,
@@ -1344,15 +1347,22 @@ fun MangaScreenAuroraImpl(
             // Hero content (fixed at bottom of first screen) - fades out on scroll
             // Show when we haven't scrolled much (index 0 with scroll less than 70% of screen height)
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
+            // Derived boolean/float so scroll only invalidates when thresholds are crossed;
+            // alpha itself is read deferred inside graphicsLayer.
+            val showHero by remember(useTwoPaneLayout, isAnyChapterSelected, heroThreshold) {
+                derivedStateOf {
+                    shouldShowMangaAuroraHeroContent(
+                        useTwoPaneLayout = useTwoPaneLayout,
+                        firstVisibleItemIndex = firstVisibleItemIndexState.value,
+                        scrollOffset = scrollOffsetState.value,
+                        heroThreshold = heroThreshold,
+                        isSelectionMode = isAnyChapterSelected,
+                    )
+                }
+            }
             if (
                 titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE &&
-                shouldShowMangaAuroraHeroContent(
-                    useTwoPaneLayout = useTwoPaneLayout,
-                    firstVisibleItemIndex = firstVisibleItemIndex,
-                    scrollOffset = scrollOffset,
-                    heroThreshold = heroThreshold,
-                    isSelectionMode = isAnyChapterSelected,
-                )
+                showHero
             ) {
                 Box(
                     modifier = Modifier
@@ -1360,13 +1370,16 @@ fun MangaScreenAuroraImpl(
                         .zIndex(AuroraZIndex.HERO),
                     contentAlignment = Alignment.BottomStart,
                 ) {
-                    // Calculate fade out alpha based on scroll (0-70% range)
-                    val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
+                    // Calculate fade out alpha based on scroll (0-70% range);
+                    // deferred read keeps layer updates out of recomposition.
+                    val heroAlphaState = remember(heroThreshold) {
+                        derivedStateOf { (1f - (scrollOffsetState.value / heroThreshold.toFloat())).coerceIn(0f, 1f) }
+                    }
 
                     Box(
                         modifier = Modifier
                             .zIndex(AuroraZIndex.HERO)
-                            .graphicsLayer { alpha = heroAlpha },
+                            .graphicsLayer { alpha = heroAlphaState.value },
                     ) {
                         MangaHeroContent(
                             manga = manga,
@@ -1401,7 +1414,11 @@ fun MangaScreenAuroraImpl(
             }
 
             // Floating Play button (shows after Hero Content is hidden)
-            val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
+            val showFab by remember(heroThreshold) {
+                derivedStateOf {
+                    firstVisibleItemIndexState.value > 0 || scrollOffsetState.value > heroThreshold
+                }
+            }
             val shouldShowFab = !useTwoPaneLayout && showFab && !isAnyChapterSelected
             if (shouldShowTitleFastScrollFloatingActionButton(shouldShowFab, isThumbFastScrolling)) {
                 Box(
@@ -1431,11 +1448,6 @@ fun MangaScreenAuroraImpl(
             )
             // The lens densifies as the hero scrolls away, so list rows passing
             // under the top bar no longer blend into the buttons.
-            val topBarScrollProgress = if (firstVisibleItemIndex > 0) {
-                1f
-            } else {
-                (scrollOffset / heroThreshold.toFloat()).coerceIn(0f, 1f)
-            }
             val isPosterMode = titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE
 
             Row(
@@ -1452,6 +1464,12 @@ fun MangaScreenAuroraImpl(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Scoped read: progress is recomputed only within this row on scroll.
+                val topBarScrollProgress = if (firstVisibleItemIndexState.value > 0) {
+                    1f
+                } else {
+                    (scrollOffsetState.value / heroThreshold.toFloat()).coerceIn(0f, 1f)
+                }
                 // Back button - Aurora glassmorphism style
                 AuroraActionButton(
                     onClick = navigateUp,

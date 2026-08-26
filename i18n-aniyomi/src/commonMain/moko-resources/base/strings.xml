@@ -770,6 +770,7 @@
     <string name="novel_book_up_to_date">Book is up to date</string>
     <string name="novel_book_outdated">New chapters available — rebuild the book</string>
     <string name="novel_book_append">Append new chapters</string>
+    <string name="novel_book_build_failed">Book compilation failed</string>
     <string name="novel_book_append_available">%1$d new chapters can be appended</string>
     <string name="novel_book_appending">Appending chapters…</string>
     <string name="novel_book_cleanup_source_chapters">Delete per-chapter files</string>

@@ -475,7 +475,7 @@ fun NovelScreenAuroraImpl(
 
     val selectedIds = state.selectedChapterIds
     val isSelectionMode = selectedIds.isNotEmpty()
-    val selectedChapters = chapters.filter { it.id in selectedIds }
+    val selectedChapters = remember(chapters, selectedIds) { chapters.filter { it.id in selectedIds } }
     val downloadedChapterIds = state.downloadedChapterIds
 
     var descriptionExpanded by remember { mutableStateOf(false) }

@@ -100,6 +100,7 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.take
@@ -142,6 +143,7 @@ import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetNovelTracks
 import tachiyomi.domain.track.novel.model.NovelTrack
 import tachiyomi.i18n.MR
+import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.source.local.entries.novel.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -189,7 +191,6 @@ internal fun buildNovelChapterActionUiStates(
 
 /** How long the local-book compile waits for the chapter list of a freshly imported file. */
 private const val LOCAL_BOOK_CHAPTERS_TIMEOUT_MS = 30_000L
-private const val LOCAL_BOOK_CHAPTERS_POLL_MS = 300L
 
 class NovelScreenModel(
     private val lifecycle: Lifecycle,
@@ -330,6 +331,9 @@ class NovelScreenModel(
         val restoredState = restoreStateFromCache(novelId)
         restoredState?.let {
             mutableState.value = it
+            // Remember the restored download ids: an InvalidateAll event arriving right after
+            // open must not force a full filesystem fallback scan when we can reuse them.
+            restoredDownloadedChapterIds = it.downloadedChapterIds.takeIf { ids -> ids.isNotEmpty() }
             // Refresh chapter action states (translate/download icons) asynchronously
             // to avoid blocking the main thread with SAF filesystem operations.
             refreshChapterActionStatesAsync()
@@ -338,7 +342,10 @@ class NovelScreenModel(
         screenModelScope.launchIO {
             getNovelWithChapters.subscribe(novelId, applyScanlatorFilter = true)
                 .distinctUntilChanged()
-                .collectLatest { (novel, chapters) ->
+                // collect, not collectLatest: the follow-up side effects (syncDownloadedState /
+                // refreshChapterActionStatesAsync) must not be cancelled by a fast burst of DB
+                // emissions. The body itself is cheap (guarded state copy + job restarts).
+                .collect { (novel, chapters) ->
                     logcat(LogPriority.DEBUG) {
                         "Novel chapters flow emission id=${novel.id} source=${novel.source} " +
                             "count=${chapters.size}"
@@ -423,7 +430,9 @@ class NovelScreenModel(
         // in which case updateSuccessState() drops the update. Watch the state flow and, on the
         // first Success, re-apply the latest values so the fields are never left empty. All
         // writers read from the same DB tables, so the copy is idempotent; the guard keeps it
-        // from clobbering a selection the subscriptions already applied.
+        // from clobbering a selection the subscriptions already applied. The single-shot
+        // getNovelBookState subscription is covered the same way (bootstrap awaits the same
+        // value into initialState, but this closes any race in between).
         screenModelScope.launchIO {
             state.dropWhile { it !is State.Success }
                 .take(1)
@@ -431,15 +440,23 @@ class NovelScreenModel(
                     val excludedScanlators = getNovelExcludedScanlators.await(novelId)
                     val availableScanlators = getAvailableNovelScanlators.await(novelId)
                     val scanlatorChapterCounts = getNovelScanlatorChapterCounts.await(novelId)
+                    val bookState = getNovelBookState.await(novelId)
                     updateSuccessState { current ->
-                        if (current.novel.id != novelId || current.excludedScanlators.isNotEmpty()) {
+                        if (current.novel.id != novelId) {
                             current
                         } else {
-                            current.copy(
-                                excludedScanlators = excludedScanlators,
-                                availableScanlators = availableScanlators,
-                                scanlatorChapterCounts = scanlatorChapterCounts,
-                            )
+                            var next = current
+                            if (next.excludedScanlators.isEmpty()) {
+                                next = next.copy(
+                                    excludedScanlators = excludedScanlators,
+                                    availableScanlators = availableScanlators,
+                                    scanlatorChapterCounts = scanlatorChapterCounts,
+                                )
+                            }
+                            if (next.bookState == null && bookState != null) {
+                                next = next.copy(bookState = bookState)
+                            }
+                            next
                         }
                     }
                 }
@@ -1089,7 +1106,12 @@ class NovelScreenModel(
     ) {
         mutableState.update {
             when (it) {
-                State.Loading -> it
+                State.Loading -> {
+                    logcat(LogPriority.DEBUG) {
+                        "Dropping updateSuccessState mutation before first Success novel=$novelId"
+                    }
+                    it
+                }
                 is State.Success -> func(it)
                     .also(::cacheState)
             }
@@ -1097,6 +1119,9 @@ class NovelScreenModel(
     }
 
     private var bookBuildJob: Job? = null
+
+    /** Downloaded ids restored from the session state cache; consumed by the first InvalidateAll. */
+    private var restoredDownloadedChapterIds: Set<Long>? = null
 
     /**
      * Compiles a local book (.epub / .fb2) into the artifact the moment the title is opened.
@@ -1127,15 +1152,13 @@ class NovelScreenModel(
             try {
                 // The title screen is shown before the chapter list finished syncing. Bailing out on
                 // an empty list meant an imported .epub only became a book on the second visit, so
-                // the list is awaited here instead.
-                var chapters = successState?.chapters.orEmpty().sortedBy { it.sourceOrder }
-                var waitedMs = 0L
-                while (chapters.isEmpty() && waitedMs < LOCAL_BOOK_CHAPTERS_TIMEOUT_MS) {
-                    kotlinx.coroutines.delay(LOCAL_BOOK_CHAPTERS_POLL_MS)
-                    waitedMs += LOCAL_BOOK_CHAPTERS_POLL_MS
-                    chapters = successState?.chapters.orEmpty().sortedBy { it.sourceOrder }
+                // the synced chapter flow is awaited here instead of busy-polling the UI state.
+                val chapters = withTimeoutOrNull(LOCAL_BOOK_CHAPTERS_TIMEOUT_MS) {
+                    getNovelWithChapters.subscribe(novelId)
+                        .map { (_, chapters) -> chapters.sortedBy { it.sourceOrder } }
+                        .first { it.isNotEmpty() }
                 }
-                if (chapters.isEmpty()) return@launchIO
+                if (chapters == null || chapters.isEmpty()) return@launchIO
                 val novel = successState?.novel ?: return@launchIO
                 localNovelBookArtifactBuilder.ensureArtifact(
                     novel = novel,
@@ -1146,6 +1169,12 @@ class NovelScreenModel(
                 )
             } catch (e: Exception) {
                 logcat(LogPriority.ERROR, e) { "Local book artifact build failed for novel=$novelId" }
+                // Surface the failure instead of silently leaving the screen without a book.
+                screenModelScope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = context.stringResource(AYMR.strings.novel_book_build_failed),
+                    )
+                }
             } finally {
                 updateSuccessState { it.copy(bookBuildProgress = null) }
             }
@@ -1474,7 +1503,23 @@ class NovelScreenModel(
                 enqueueBatchDownloadEvent(event)
             }
             NovelDownloadCacheEvent.InvalidateAll -> {
-                syncDownloadedState(deferFilesystemFallback = false)
+                val restoredIds = restoredDownloadedChapterIds
+                if (restoredIds != null && successState != null) {
+                    // Coalesce: the state was just restored from the session cache, so trust its
+                    // downloaded ids instead of forcing a filesystem fallback scan on every open.
+                    // The flag is one-shot: later genuine InvalidateAll events rescan as before.
+                    restoredDownloadedChapterIds = null
+                    updateSuccessState { current ->
+                        val ids = restoredIds.intersect(current.chapters.mapTo(mutableSetOf()) { it.id })
+                        if (ids == current.downloadedChapterIds) {
+                            current
+                        } else {
+                            current.copy(downloadedChapterIds = ids)
+                        }
+                    }
+                } else {
+                    syncDownloadedState(deferFilesystemFallback = false)
+                }
             }
             is NovelDownloadCacheEvent.NovelRemoved -> {
                 updateDownloadedStateForRemovedNovel(event.novelId)
@@ -1853,6 +1898,12 @@ class NovelScreenModel(
         state: State.Success,
         manualFetch: Boolean,
     ) {
+        // PERF: resolve the rating concurrently with the details fetch instead of serializing
+        // it behind the network round-trip + DB write below.
+        refreshNovelRating(
+            state = state,
+            forceRefresh = manualFetch,
+        )
         // PERF: short-lived details cache (mirrors recentChapterListCache) so re-opening a
         // title shortly after a refresh does not re-hit the network; manual refresh bypasses
         // the read but still refreshes the entry with the fresh response.
@@ -1926,10 +1977,6 @@ class NovelScreenModel(
                 rating = current.rating,
             )
         }
-        refreshNovelRating(
-            state = state,
-            forceRefresh = manualFetch,
-        )
     }
 
     private fun refreshNovelRating(
@@ -3158,10 +3205,51 @@ class NovelScreenModel(
             val trackingAvailable: Boolean
                 get() = trackingCount > 0
 
-            val processedChapters by lazy {
-                val displayChapters = chapterSourcePreview ?: chapters
+            val processedChapters: List<NovelChapter>
+                get() {
+                    synchronized(processedMemoLock) {
+                        if (processedMemoKey?.matches(this) != true) {
+                            recomputeProcessedChaptersMemo()
+                        }
+                        return processedMemoProcessed
+                    }
+                }
+
+            val targetChapterIndex: Int
+                get() {
+                    synchronized(processedMemoLock) {
+                        if (processedMemoKey?.matches(this) != true) {
+                            recomputeProcessedChaptersMemo()
+                        }
+                        var index = processedMemoTargetIndex
+                        if (index == null) {
+                            index = TargetChapterCalculator.calculate(processedMemoProcessed) { it.read }
+                            processedMemoTargetIndex = index
+                        }
+                        return index
+                    }
+                }
+
+            private fun displayChaptersForProcessing(): List<NovelChapter> =
+                chapterSourcePreview ?: chapters
+
+            private fun recomputeProcessedChaptersMemo() {
+                processedMemoKey = ProcessedChaptersKey(
+                    display = displayChaptersForProcessing(),
+                    preview = chapterSourcePreview,
+                    unreadFilter = novel.unreadFilter,
+                    downloadedFilterRaw = novel.downloadedFilterRaw,
+                    downloadedOnly = downloadedOnly,
+                    bookmarkedFilter = novel.bookmarkedFilter,
+                    sorting = novel.sorting,
+                    sortDescending = novel.sortDescending(),
+                    chapterPageEnabled = chapterPageEnabled,
+                    visibleUrls = chapterPageVisibleUrls,
+                    downloadedIds = downloadedChapterIds,
+                )
+                val displayChapters = displayChaptersForProcessing()
                 val chapterSort = Comparator(getNovelChapterSort(novel))
-                displayChapters
+                processedMemoProcessed = displayChapters
                     .asSequence()
                     .filter { chapter ->
                         (
@@ -3177,10 +3265,49 @@ class NovelScreenModel(
                     }
                     .sortedWith(chapterSort)
                     .toList()
+                processedMemoTargetIndex = null
             }
 
-            val targetChapterIndex by lazy {
-                TargetChapterCalculator.calculate(processedChapters) { it.read }
+            /**
+             * PERF: updateSuccessState copies this state object on every unrelated mutation
+             * (dialog toggles, progress flags, per-chapter translation updates). Computing the
+             * filter+sort eagerly or via `by lazy` would redo an O(n log n) pass after every copy
+             * even when none of the inputs changed. The memo below caches the result across copies
+             * keyed by the actual inputs, so recomputation happens only when an input really changes.
+             */
+            private companion object {
+                private val processedMemoLock = Any()
+                private var processedMemoKey: ProcessedChaptersKey? = null
+                private var processedMemoProcessed: List<NovelChapter> = emptyList()
+                private var processedMemoTargetIndex: Int? = null
+            }
+
+            private class ProcessedChaptersKey(
+                @JvmField val display: List<NovelChapter>,
+                @JvmField val preview: List<NovelChapter>?,
+                @JvmField val unreadFilter: TriState,
+                @JvmField val downloadedFilterRaw: Long,
+                @JvmField val downloadedOnly: Boolean,
+                @JvmField val bookmarkedFilter: TriState,
+                @JvmField val sorting: Long,
+                @JvmField val sortDescending: Boolean,
+                @JvmField val chapterPageEnabled: Boolean,
+                @JvmField val visibleUrls: Set<String>,
+                @JvmField val downloadedIds: Set<Long>,
+            ) {
+                fun matches(state: Success): Boolean {
+                    return display === state.displayChaptersForProcessing() &&
+                        preview === state.chapterSourcePreview &&
+                        unreadFilter == state.novel.unreadFilter &&
+                        downloadedFilterRaw == state.novel.downloadedFilterRaw &&
+                        downloadedOnly == state.downloadedOnly &&
+                        bookmarkedFilter == state.novel.bookmarkedFilter &&
+                        sorting == state.novel.sorting &&
+                        sortDescending == state.novel.sortDescending() &&
+                        chapterPageEnabled == state.chapterPageEnabled &&
+                        visibleUrls === state.chapterPageVisibleUrls &&
+                        downloadedIds === state.downloadedChapterIds
+                }
             }
         }
     }

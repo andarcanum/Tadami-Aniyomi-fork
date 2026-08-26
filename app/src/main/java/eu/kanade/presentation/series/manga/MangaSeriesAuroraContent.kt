@@ -36,6 +36,7 @@ import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -108,6 +109,8 @@ fun MangaSeriesAuroraContent(
     }
 
     val lazyListState = rememberLazyListState()
+    val scrollOffsetState = remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
+    val firstVisibleItemIndexState = remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
 
     var showRenameDialog by remember { mutableStateOf(false) }
     var showCategoryDialog by remember { mutableStateOf(false) }
@@ -134,8 +137,8 @@ fun MangaSeriesAuroraContent(
             manga?.let {
                 FullscreenPosterBackground(
                     manga = it,
-                    scrollOffset = lazyListState.firstVisibleItemScrollOffset,
-                    firstVisibleItemIndex = lazyListState.firstVisibleItemIndex,
+                    scrollOffsetState = scrollOffsetState,
+                    firstVisibleItemIndexState = firstVisibleItemIndexState,
                     minimumBlurOverlayAlpha = 0.40f,
                     posterScrimAlpha = 0.40f,
                     resolvedCoverUrl = customCoverFile?.absolutePath,

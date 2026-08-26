@@ -89,6 +89,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -558,10 +559,22 @@ class AnimeScreenModel(
         }
     }
 
+    private var metadataLoadJob: Job? = null
+
+    private fun launchMetadataLoad(animeId: Long): Job {
+        metadataLoadJob?.cancel()
+        return screenModelScope.launchIO { loadAnimeMetadata(animeId) }.also { metadataLoadJob = it }
+    }
+
     private inline fun updateSuccessState(func: (State.Success) -> State.Success) {
         mutableState.update {
             when (it) {
-                State.Loading -> it
+                State.Loading -> {
+                    logcat(LogPriority.DEBUG) {
+                        "AnimeScreenModel: dropping updateSuccessState mutation before initial state loaded"
+                    }
+                    it
+                }
                 is State.Success -> func(it)
             }
         }
@@ -569,11 +582,8 @@ class AnimeScreenModel(
 
     init {
         screenModelScope.launchIO {
-            combine(
-                getAnimeAndEpisodesAndSeasons.subscribe(animeId).distinctUntilChanged(),
-                downloadCache.changes,
-                downloadManager.queueState,
-            ) { animeAndEpisodesAndSeasons, _, _ -> animeAndEpisodesAndSeasons }
+            getAnimeAndEpisodesAndSeasons.subscribe(animeId)
+                .distinctUntilChanged()
                 .flowWithLifecycle(lifecycle)
                 .collectLatest { (anime, episodes, seasons) ->
                     val previousAnime = successState?.anime
@@ -582,10 +592,25 @@ class AnimeScreenModel(
                         previousAnime.author != anime.author ||
                         previousAnime.genre != anime.genre
 
-                    updateSuccessState {
-                        it.copy(
+                    updateSuccessState { current ->
+                        val mappedEpisodes = mapEpisodesPreservingDownloadState(
+                            currentItems = current.episodes,
+                            newEpisodes = episodes,
                             anime = anime,
-                            episodes = episodes.toEpisodeListItems(anime),
+                            selectedIds = selectedEpisodeIds,
+                            isEpisodeDownloaded = { episode ->
+                                downloadManager.isEpisodeDownloaded(
+                                    episode.name,
+                                    episode.scanlator,
+                                    anime.title,
+                                    anime.source,
+                                )
+                            },
+                            getActiveDownload = { id -> downloadManager.getQueuedDownloadOrNull(id) },
+                        )
+                        current.copy(
+                            anime = anime,
+                            episodes = mappedEpisodes,
                             seasons = seasons.toAnimeSeasonItems(),
                             episodeSourcePreview = null, // real persisted data arrived, clear preview
                         )
@@ -596,6 +621,24 @@ class AnimeScreenModel(
                             anime = anime,
                             source = anime.toCatalogueSource(),
                         )
+                    }
+                }
+        }
+
+        screenModelScope.launchIO {
+            downloadCache.changes
+                .flowWithLifecycle(lifecycle)
+                .conflate()
+                .collectLatest {
+                    val state = successState ?: return@collectLatest
+                    val rawEpisodes = state.episodes.map { it.episode }
+                    val hydrated = rawEpisodes.toEpisodeListItems(state.anime)
+                    updateSuccessState { current ->
+                        if (current.anime.id != state.anime.id) {
+                            current
+                        } else {
+                            current.copy(episodes = mergeHydrationById(current.episodes, hydrated))
+                        }
                     }
                 }
         }
@@ -681,10 +724,12 @@ class AnimeScreenModel(
                 screenModelScope.launchIO {
                     val hydrated = rawEpisodes.toEpisodeListItems(anime)
                     updateSuccessState { current ->
-                        if (current.anime.id == anime.id) {
-                            current.copy(episodes = hydrated)
-                        } else {
+                        if (current.anime.id != anime.id) {
                             current
+                        } else {
+                            // Merge download-state fields by episode id instead of overwriting the list,
+                            // so fresher DB rows and selection changes made during hydration survive.
+                            current.copy(episodes = mergeHydrationById(current.episodes, hydrated))
                         }
                     }
                 }
@@ -706,6 +751,10 @@ class AnimeScreenModel(
             // Start observe tracking since it only needs animeId
             observeTrackers()
 
+            // Load cached/tracker metadata concurrently with the source refresh so the description
+            // appears without waiting for the network fetch. Single-flight via launchMetadataLoad.
+            launchMetadataLoad(animeId)
+
             // Fetch info-episodes when needed
             if (screenModelScope.isActive) {
                 val fetchFromSourceTasks = listOf(
@@ -719,13 +768,7 @@ class AnimeScreenModel(
                 restoreAnimeSourceRating()
             }
 
-            // Load metadata after fetching fresh data from source, off the critical path:
-            // the refresh spinner must not wait for a network metadata call.
-            if (screenModelScope.isActive) {
-                screenModelScope.launchIO {
-                    loadAnimeMetadata(animeId)
-                }
-            }
+            metadataLoadJob?.join()
 
             // Initial loading finished
             updateSuccessState { it.copy(isRefreshingData = false) }
@@ -744,7 +787,7 @@ class AnimeScreenModel(
             successState?.let { updateAiringTime(it.anime, it.trackItems, manualFetch) }
 
             // Reload metadata after refreshing from source
-            loadAnimeMetadata(successState?.anime?.id ?: return@launch)
+            successState?.anime?.id?.let { launchMetadataLoad(it).join() }
         }
     }
 
@@ -1227,8 +1270,10 @@ class AnimeScreenModel(
             screenModelScope.launch {
                 snackbarHostState.showSnackbar(message = message)
             }
+            // Do not clear isRefreshingData here: a sibling parallel fetch task may still be
+            // running; only the orchestrators (init/fetchAllFromSource) manage the flag.
             val newAnime = animeRepository.getAnimeById(animeId)
-            updateSuccessState { it.copy(anime = newAnime, isRefreshingData = false) }
+            updateSuccessState { it.copy(anime = newAnime) }
         }
     }
 
@@ -1348,8 +1393,10 @@ class AnimeScreenModel(
             screenModelScope.launch {
                 snackbarHostState.showSnackbar(message = message)
             }
+            // Do not clear isRefreshingData here: a sibling parallel fetch task may still be
+            // running; only the orchestrators (init/fetchAllFromSource) manage the flag.
             val newAnime = animeRepository.getAnimeById(animeId)
-            updateSuccessState { it.copy(anime = newAnime, isRefreshingData = false) }
+            updateSuccessState { it.copy(anime = newAnime) }
         }
     }
 
@@ -2156,7 +2203,16 @@ class AnimeScreenModel(
                     }
                 }
             }
-            successState.copy(episodes = newEpisodes)
+            // Map the new selected flags back onto the FULL episodes list by id: processedEpisodes
+            // is the filtered/sorted view, and writing that subset into `episodes` would drop the
+            // filtered-out items until the next DB emission.
+            val selectedFlagsById = newEpisodes.associate { it.id to it.selected }
+            successState.copy(
+                episodes = successState.episodes.map { item ->
+                    val flag = selectedFlagsById[item.id]
+                    if (flag != null && item.selected != flag) item.copy(selected = flag) else item
+                },
+            )
         }
     }
 
@@ -2231,11 +2287,25 @@ class AnimeScreenModel(
         }
     }
 
+    /** Signature of the inputs that determine the airing-time network fetch result. */
+    private var lastAiringFetchSignature: String? = null
+
     private suspend fun updateAiringTime(
         anime: Anime,
         trackItems: List<AnimeTrackItem>,
         manualFetch: Boolean,
     ) {
+        // Skip the AniChart/Anilist network round-trip when nothing relevant changed and the
+        // feature is disabled; manual refresh always forces a fetch.
+        if (!manualFetch) {
+            if (!trackPreferences.showNextEpisodeAiringTime().get()) return
+            val signature = "${anime.id}:" + trackItems.joinToString("|") {
+                "${it.tracker.id}:${it.track?.remoteId}:${it.track?.status}"
+            }
+            if (signature == lastAiringFetchSignature) return
+            lastAiringFetchSignature = signature
+        }
+
         val airingEpisodeData = AniChartApi().loadAiringTime(anime, trackItems, manualFetch)
         setAnimeViewerFlags.awaitSetNextEpisodeAiring(anime.id, airingEpisodeData)
         updateSuccessState { it.copy(nextAiringEpisode = airingEpisodeData) }
@@ -2649,6 +2719,91 @@ sealed class EpisodeList {
     ) : EpisodeList() {
         val id = episode.id
         val isDownloaded = downloadState == AnimeDownload.State.DOWNLOADED
+    }
+}
+
+/**
+ * Maps incoming database [newEpisodes] into [EpisodeList.Item]s incrementally.
+ * Reuses already-resolved download state and progress from [currentItems] to avoid
+ * performing expensive O(n) disk checks on every database update.
+ */
+internal fun mapEpisodesPreservingDownloadState(
+    currentItems: List<EpisodeList.Item>,
+    newEpisodes: List<Episode>,
+    anime: Anime,
+    selectedIds: Set<Long>,
+    isEpisodeDownloaded: (Episode) -> Boolean,
+    getActiveDownload: (Long) -> AnimeDownload?,
+): List<EpisodeList.Item> {
+    if (currentItems.isEmpty()) {
+        val isLocal = anime.isLocal()
+        return newEpisodes.map { episode ->
+            val activeDownload = if (isLocal) null else getActiveDownload(episode.id)
+            val downloaded = if (isLocal) true else isEpisodeDownloaded(episode)
+            val downloadState = when {
+                activeDownload != null -> activeDownload.status
+                downloaded -> AnimeDownload.State.DOWNLOADED
+                else -> AnimeDownload.State.NOT_DOWNLOADED
+            }
+            EpisodeList.Item(
+                episode = episode,
+                downloadState = downloadState,
+                downloadProgress = activeDownload?.progress ?: 0,
+                selected = episode.id in selectedIds,
+            )
+        }
+    }
+
+    val currentById = currentItems.associateBy { it.id }
+    val isLocal = anime.isLocal()
+    return newEpisodes.map { episode ->
+        val existing = currentById[episode.id]
+        val isSelected = episode.id in selectedIds
+        if (existing != null) {
+            if (existing.episode == episode && existing.selected == isSelected) {
+                existing
+            } else {
+                existing.copy(
+                    episode = episode,
+                    selected = isSelected,
+                )
+            }
+        } else {
+            val activeDownload = if (isLocal) null else getActiveDownload(episode.id)
+            val downloaded = if (isLocal) true else isEpisodeDownloaded(episode)
+            val downloadState = when {
+                activeDownload != null -> activeDownload.status
+                downloaded -> AnimeDownload.State.DOWNLOADED
+                else -> AnimeDownload.State.NOT_DOWNLOADED
+            }
+            EpisodeList.Item(
+                episode = episode,
+                downloadState = downloadState,
+                downloadProgress = activeDownload?.progress ?: 0,
+                selected = isSelected,
+            )
+        }
+    }
+}
+
+/**
+ * Merges hydrated download-state fields onto the current list by episode id.
+ * Preserves fresher `episode` rows and `selected` flags of [current]; items absent from
+ * [hydrated] are kept as-is.
+ */
+internal fun mergeHydrationById(
+    current: List<EpisodeList.Item>,
+    hydrated: List<EpisodeList.Item>,
+): List<EpisodeList.Item> {
+    val hydratedById = hydrated.associateBy { it.id }
+    return current.map { item ->
+        hydratedById[item.id]?.let { h ->
+            if (item.downloadState == h.downloadState && item.downloadProgress == h.downloadProgress) {
+                item
+            } else {
+                item.copy(downloadState = h.downloadState, downloadProgress = h.downloadProgress)
+            }
+        } ?: item
     }
 }
 

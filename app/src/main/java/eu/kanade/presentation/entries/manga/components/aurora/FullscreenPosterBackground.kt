@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,14 +56,15 @@ import uy.kohesive.injekt.api.get
  * Fixed fullscreen poster background with scroll-based dimming and blur effects.
  *
  * @param manga Manga object containing cover information
- * @param scrollOffset Current scroll offset from LazyListState
- * @param firstVisibleItemIndex Current first visible item index from LazyListState
+ * @param scrollOffsetState Scroll offset state from LazyListState; read inside this
+ * composable's scope so per-pixel updates stay confined here.
+ * @param firstVisibleItemIndexState First visible item index state from LazyListState
  */
 @Composable
 fun FullscreenPosterBackground(
     manga: Manga,
-    scrollOffset: Int,
-    firstVisibleItemIndex: Int,
+    scrollOffsetState: State<Int>,
+    firstVisibleItemIndexState: State<Int>,
     minimumBlurOverlayAlpha: Float = 0f,
     posterScrimAlpha: Float? = null,
     modifier: Modifier = Modifier,
@@ -76,6 +78,8 @@ fun FullscreenPosterBackground(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
+    val scrollOffset = scrollOffsetState.value
+    val firstVisibleItemIndex = firstVisibleItemIndexState.value
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
     val coverCache = remember { Injekt.get<MangaCoverCache>() }
     // Issue #154: surface the user-set custom cover on the details poster,
