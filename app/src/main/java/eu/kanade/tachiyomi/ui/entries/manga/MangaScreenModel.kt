@@ -294,6 +294,13 @@ class MangaScreenModel(
         if (!force && suggestionSeedUsed == seed) {
             return
         }
+        if (!force) {
+            MangaSuggestionsSessionCache.get(mangaId, seed)?.let { cached ->
+                suggestionSeedUsed = seed
+                updateSuccessState { it.copy(suggestions = cached) }
+                return
+            }
+        }
         suggestionSeedUsed = seed
 
         val currentManga = manga ?: successState?.manga
@@ -396,11 +403,14 @@ class MangaScreenModel(
                         .take(20)
                 }
 
+                val nextState = when {
+                    finalCombined.isEmpty() -> SuggestionState.Empty()
+                    else -> SuggestionState.Success(finalCombined)
+                }
+                if (nextState is SuggestionState.Success) {
+                    MangaSuggestionsSessionCache.put(mangaId, seed, nextState)
+                }
                 updateSuccessState {
-                    val nextState = when {
-                        finalCombined.isEmpty() -> SuggestionState.Empty()
-                        else -> SuggestionState.Success(finalCombined)
-                    }
                     it.copy(suggestions = nextState)
                 }
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
@@ -580,7 +590,7 @@ class MangaScreenModel(
                     isMetadataLoading = willLoadMetadata && !hasCachedMetadata,
                     mangaMetadata = cachedMetadata,
                     suggestions = if (sourcePreferences.entrySuggestionsEnabled().get()) {
-                        SuggestionState.Loading
+                        MangaSuggestionsSessionCache.get(mangaId) ?: SuggestionState.Loading
                     } else {
                         SuggestionState.Disabled
                     },
@@ -596,15 +606,19 @@ class MangaScreenModel(
             // Hydrate real download states asynchronously so Aurora sees chapters list immediately (cheap path).
             // Individual updates continue to come via observeDownloads().
             screenModelScope.launchIO {
-                val hydrated = rawChapters.toChapterListItems(manga)
-                updateSuccessState { current ->
-                    if (current.manga.id != manga.id) {
-                        current
-                    } else {
-                        // Merge download-state fields by chapter id instead of overwriting the list,
-                        // so fresher DB rows and selection changes made during hydration survive.
-                        val merged = mergeHydrationById(current.chapters, hydrated)
-                        current.copy(chapters = merged, chapterSourcePreview = null)
+                val hasDownloads = downloadManager.getDownloadCount(manga) > 0 ||
+                    downloadManager.getQueuedDownloadOrNull(manga.id) != null
+                if (hasDownloads) {
+                    val hydrated = rawChapters.toChapterListItems(manga)
+                    updateSuccessState { current ->
+                        if (current.manga.id != manga.id) {
+                            current
+                        } else {
+                            // Merge download-state fields by chapter id instead of overwriting the list,
+                            // so fresher DB rows and selection changes made during hydration survive.
+                            val merged = mergeHydrationById(current.chapters, hydrated)
+                            current.copy(chapters = merged, chapterSourcePreview = null)
+                        }
                     }
                 }
             }
@@ -649,11 +663,14 @@ class MangaScreenModel(
             }
 
             // Fetch suggestions asynchronously after source refresh has been started.
-            loadSuggestions(
-                buildSuggestionSeed(manga, cachedMetadata),
-                manga = manga,
-                source = manga.toCatalogueSource(),
-            )
+            // If metadata is loading right now and not cached, defer to launchMetadataLoad to use the rich seed.
+            if (!willLoadMetadata || hasCachedMetadata) {
+                loadSuggestions(
+                    buildSuggestionSeed(manga, cachedMetadata),
+                    manga = manga,
+                    source = manga.toCatalogueSource(),
+                )
+            }
 
             // Start observe tracking since it only needs mangaId
             observeTrackers()
@@ -2329,5 +2346,34 @@ sealed class ChapterList {
     ) : ChapterList() {
         val id = chapter.id
         val isDownloaded = downloadState == MangaDownload.State.DOWNLOADED
+    }
+}
+
+/**
+ * In-memory session cache for suggestions to avoid re-fetching on back navigation or re-open.
+ */
+private object MangaSuggestionsSessionCache {
+    private const val TTL_MS = 12 * 60 * 60 * 1000L
+
+    private data class Entry(
+        val seed: SuggestionSeed,
+        val state: SuggestionState.Success,
+        val cachedAt: Long,
+    )
+
+    private val entries = java.util.concurrent.ConcurrentHashMap<Long, Entry>()
+
+    fun get(mangaId: Long, seed: SuggestionSeed? = null): SuggestionState.Success? {
+        val entry = entries[mangaId] ?: return null
+        if (System.currentTimeMillis() - entry.cachedAt > TTL_MS) {
+            entries.remove(mangaId)
+            return null
+        }
+        if (seed != null && entry.seed != seed) return null
+        return entry.state
+    }
+
+    fun put(mangaId: Long, seed: SuggestionSeed, state: SuggestionState.Success) {
+        entries[mangaId] = Entry(seed, state, System.currentTimeMillis())
     }
 }

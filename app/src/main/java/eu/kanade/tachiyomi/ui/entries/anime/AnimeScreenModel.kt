@@ -436,6 +436,13 @@ class AnimeScreenModel(
         if (!force && suggestionSeedUsed == seed) {
             return
         }
+        if (!force) {
+            AnimeSuggestionsSessionCache.get(animeId, seed)?.let { cached ->
+                suggestionSeedUsed = seed
+                updateSuccessState { it.copy(suggestions = cached) }
+                return
+            }
+        }
         suggestionSeedUsed = seed
 
         val currentAnime = anime ?: successState?.anime
@@ -538,11 +545,14 @@ class AnimeScreenModel(
                         .take(20)
                 }
 
+                val nextState = when {
+                    finalCombined.isEmpty() -> SuggestionState.Empty()
+                    else -> SuggestionState.Success(finalCombined)
+                }
+                if (nextState is SuggestionState.Success) {
+                    AnimeSuggestionsSessionCache.put(animeId, seed, nextState)
+                }
                 updateSuccessState {
-                    val nextState = when {
-                        finalCombined.isEmpty() -> SuggestionState.Empty()
-                        else -> SuggestionState.Success(finalCombined)
-                    }
                     it.copy(suggestions = nextState)
                 }
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
@@ -660,7 +670,6 @@ class AnimeScreenModel(
             // loading are deferred below.
             val animeDeferred = async { getAnimeAndEpisodesAndSeasons.awaitAnime(animeId) }
             val rawEpisodesDeferred = async { getAnimeAndEpisodesAndSeasons.awaitEpisodes(animeId) }
-            val seasonsDeferred = async { getAnimeAndEpisodesAndSeasons.awaitSeasons(animeId) }
             val anime = animeDeferred.await()
             val source = sourceManager.getOrStub(anime.source)
 
@@ -680,7 +689,7 @@ class AnimeScreenModel(
             val seasons = if (anime.fetchType == FetchType.Episodes) {
                 emptyList()
             } else {
-                seasonsDeferred.await()
+                getAnimeAndEpisodesAndSeasons.awaitSeasons(animeId)
                     .toAnimeSeasonItems()
             }
 
@@ -709,7 +718,7 @@ class AnimeScreenModel(
                     isMetadataLoading = willLoadMetadata && !hasCachedMetadata,
                     animeMetadata = cachedMetadata,
                     suggestions = if (sourcePreferences.entrySuggestionsEnabled().get()) {
-                        SuggestionState.Loading
+                        AnimeSuggestionsSessionCache.get(animeId) ?: SuggestionState.Loading
                     } else {
                         SuggestionState.Disabled
                     },
@@ -731,14 +740,18 @@ class AnimeScreenModel(
             // Individual updates continue to come via observeDownloads().
             if (anime.fetchType != FetchType.Seasons) {
                 screenModelScope.launchIO {
-                    val hydrated = rawEpisodes.toEpisodeListItems(anime)
-                    updateSuccessState { current ->
-                        if (current.anime.id != anime.id) {
-                            current
-                        } else {
-                            // Merge download-state fields by episode id instead of overwriting the list,
-                            // so fresher DB rows and selection changes made during hydration survive.
-                            current.copy(episodes = mergeHydrationById(current.episodes, hydrated))
+                    val hasDownloads = downloadManager.getDownloadCount(anime) > 0 ||
+                        downloadManager.getQueuedDownloadOrNull(anime.id) != null
+                    if (hasDownloads) {
+                        val hydrated = rawEpisodes.toEpisodeListItems(anime)
+                        updateSuccessState { current ->
+                            if (current.anime.id != anime.id) {
+                                current
+                            } else {
+                                // Merge download-state fields by episode id instead of overwriting the list,
+                                // so fresher DB rows and selection changes made during hydration survive.
+                                current.copy(episodes = mergeHydrationById(current.episodes, hydrated))
+                            }
                         }
                     }
                 }
@@ -752,11 +765,13 @@ class AnimeScreenModel(
             }
 
             // Fetch suggestions asynchronously
-            loadSuggestions(
-                buildSuggestionSeed(anime, cachedMetadata),
-                anime = anime,
-                source = anime.toCatalogueSource(),
-            )
+            if (!willLoadMetadata || hasCachedMetadata) {
+                loadSuggestions(
+                    buildSuggestionSeed(anime, cachedMetadata),
+                    anime = anime,
+                    source = anime.toCatalogueSource(),
+                )
+            }
             // Start observe tracking since it only needs animeId
             observeTrackers()
 
@@ -2870,4 +2885,33 @@ internal fun shouldApplyDefaultEpisodeFlags(anime: Anime): Boolean {
 
 internal fun shouldApplyDefaultSeasonFlags(anime: Anime): Boolean {
     return !anime.favorite && anime.seasonFlags == Anime.SHOW_ALL
+}
+
+/**
+ * In-memory session cache for suggestions to avoid re-fetching on back navigation or re-open.
+ */
+private object AnimeSuggestionsSessionCache {
+    private const val TTL_MS = 12 * 60 * 60 * 1000L
+
+    private data class Entry(
+        val seed: SuggestionSeed,
+        val state: SuggestionState.Success,
+        val cachedAt: Long,
+    )
+
+    private val entries = java.util.concurrent.ConcurrentHashMap<Long, Entry>()
+
+    fun get(animeId: Long, seed: SuggestionSeed? = null): SuggestionState.Success? {
+        val entry = entries[animeId] ?: return null
+        if (System.currentTimeMillis() - entry.cachedAt > TTL_MS) {
+            entries.remove(animeId)
+            return null
+        }
+        if (seed != null && entry.seed != seed) return null
+        return entry.state
+    }
+
+    fun put(animeId: Long, seed: SuggestionSeed, state: SuggestionState.Success) {
+        entries[animeId] = Entry(seed, state, System.currentTimeMillis())
+    }
 }

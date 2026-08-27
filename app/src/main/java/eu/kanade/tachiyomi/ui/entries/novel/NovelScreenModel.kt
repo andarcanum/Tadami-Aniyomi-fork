@@ -642,11 +642,13 @@ class NovelScreenModel(
             }
 
             // Fetch suggestions asynchronously
-            loadSuggestions(
-                buildSuggestionSeed(displayNovel),
-                novel = displayNovel,
-                source = displayNovel.toCatalogueSource(),
-            )
+            if (!shouldAutoRefreshNovel) {
+                loadSuggestions(
+                    buildSuggestionSeed(displayNovel),
+                    novel = displayNovel,
+                    source = displayNovel.toCatalogueSource(),
+                )
+            }
             // Seed the UI with lightweight neutral Gemini actions immediately, then
             // resolve translated download and translation cache state in the background.
             queuedChapterIds = translationQueueManager.queue.value.mapTo(mutableSetOf()) { it.chapterId }
