@@ -151,8 +151,8 @@ class ReelsFeedScreenModelTest {
             id = "vid-1",
             title = "Test Reel 1",
             author = "Alice",
+            videoUrl = "https://example.com/sd1.mp4",
             videoUrlHd = "https://example.com/hd1.mp4",
-            videoUrlSd = "https://example.com/sd1.mp4",
             posterUrl = "https://example.com/poster1.jpg",
             durationSec = 10f,
             hasAudio = true,
@@ -162,8 +162,8 @@ class ReelsFeedScreenModelTest {
             id = "vid-2",
             title = "Test Reel 2",
             author = "Bob",
+            videoUrl = "https://example.com/sd2.mp4",
             videoUrlHd = "https://example.com/hd2.mp4",
-            videoUrlSd = "https://example.com/sd2.mp4",
             posterUrl = "https://example.com/poster2.jpg",
             durationSec = 12f,
             hasAudio = true,
@@ -305,7 +305,7 @@ class ReelsFeedScreenModelTest {
     fun `does not persist reels history while incognito`() = runTest(testDispatcher) {
         val incognitoItem = ShortVideoItem(
             id = "vid-x",
-            videoUrlHd = "https://example.com/x.mp4",
+            videoUrl = "https://example.com/x.mp4",
             posterUrl = "https://example.com/x.jpg",
         )
         val feedSource = object : AnimeFeedSource {
@@ -377,7 +377,7 @@ class ReelsFeedScreenModelTest {
                 val videos = (0 until 5).map { idx ->
                     ShortVideoItem(
                         id = "vid-p$page-$idx",
-                        videoUrlHd = "https://example.com/p${page}v$idx.mp4",
+                        videoUrl = "https://example.com/p${page}v$idx.mp4",
                         posterUrl = "https://example.com/p${page}v$idx.jpg",
                     )
                 }
@@ -463,7 +463,7 @@ class ReelsFeedScreenModelTest {
         screenModel.toggleLike(
             ShortVideoItem(
                 id = "ghost",
-                videoUrlHd = "https://example.com/ghost.mp4",
+                videoUrl = "https://example.com/ghost.mp4",
                 posterUrl = "https://example.com/ghost.jpg",
             ),
         )
@@ -477,7 +477,7 @@ class ReelsFeedScreenModelTest {
     fun `unlike during favorites load is not resurrected by the stale snapshot`() = runTest(testDispatcher) {
         val gateItem = ShortVideoItem(
             id = "vid-1",
-            videoUrlHd = "https://example.com/v1.mp4",
+            videoUrl = "https://example.com/v1.mp4",
             posterUrl = "https://example.com/v1.jpg",
         )
         val feedSource = object : AnimeFeedSource {
@@ -609,7 +609,7 @@ class ReelsFeedScreenModelTest {
                     videos = listOf(
                         ShortVideoItem(
                             id = "vid-p$page",
-                            videoUrlHd = "https://example.com/p$page.mp4",
+                            videoUrl = "https://example.com/p$page.mp4",
                             posterUrl = "https://example.com/p$page.jpg",
                         ),
                     ),
@@ -807,8 +807,8 @@ class ReelsFeedScreenModelTest {
             sourceId = 905L,
             title = null,
             author = null,
-            videoUrlHd = "https://example.com/vid-x.mp4",
-            videoUrlSd = null,
+            videoUrl = "https://example.com/vid-x.mp4",
+            videoUrlHd = null,
             posterUrl = "https://example.com/vid-x.jpg",
             posterUrlVertical = null,
             webUrl = null,
@@ -869,7 +869,7 @@ class ReelsFeedScreenModelTest {
 
     private fun videoItem(id: String) = ShortVideoItem(
         id = id,
-        videoUrlHd = "https://example.com/$id.mp4",
+        videoUrl = "https://example.com/$id.mp4",
         posterUrl = "https://example.com/$id.jpg",
     )
 
@@ -878,8 +878,8 @@ class ReelsFeedScreenModelTest {
         sourceId = 301L,
         title = "Saved $videoId",
         author = "Alice",
-        videoUrlHd = "https://example.com/$videoId.mp4",
-        videoUrlSd = null,
+        videoUrl = "https://example.com/$videoId.mp4",
+        videoUrlHd = null,
         posterUrl = "https://example.com/$videoId.jpg",
         posterUrlVertical = null,
         webUrl = null,
@@ -946,8 +946,8 @@ class ReelsFeedScreenModelTest {
             sourceId = 301L,
             title = "Saved reel",
             author = "Alice",
-            videoUrlHd = "https://example.com/f.mp4",
-            videoUrlSd = null,
+            videoUrl = "https://example.com/f.mp4",
+            videoUrlHd = null,
             posterUrl = "https://example.com/f.jpg",
             posterUrlVertical = null,
             webUrl = "https://www.redgifs.com/watch/vid-f",
@@ -985,7 +985,7 @@ class ReelsFeedScreenModelTest {
         screenModel.state.value.isOffline shouldBe true
         screenModel.state.value.items.shouldHaveSize(1)
         screenModel.state.value.items.first().id shouldBe "vid-f"
-        screenModel.state.value.items.first().videoUrlHd shouldBe "https://example.com/f.mp4"
+        screenModel.state.value.items.first().videoUrl shouldBe "https://example.com/f.mp4"
         screenModel.state.value.likedIds shouldBe setOf("vid-f")
 
         // Network entry points are no-ops in offline mode.

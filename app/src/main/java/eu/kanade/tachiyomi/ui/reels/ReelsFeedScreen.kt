@@ -201,7 +201,7 @@ data class ReelsFeedScreen(
                                 onToggleMute = screenModel::toggleMute,
                                 onShare = {
                                     // Prefer the watch page URL; raw CDN links can expire.
-                                    val shareUrl = item.webUrl ?: item.videoUrlHd
+                                    val shareUrl = item.webUrl ?: item.videoUrl
                                     val sendIntent = Intent().apply {
                                         action = Intent.ACTION_SEND
                                         putExtra(Intent.EXTRA_TEXT, shareUrl)

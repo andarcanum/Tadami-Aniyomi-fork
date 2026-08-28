@@ -6,8 +6,11 @@ data class ShortVideoItem(
     val id: String,
     val title: String? = null,
     val author: String? = null,
-    val videoUrlHd: String,
-    val videoUrlSd: String? = null,
+    // Guaranteed playable URL: the lowest/only quality variant the source provides.
+    // videoUrlHd is an optional higher-quality upgrade; never swap the two —
+    // the player must always be able to fall back to videoUrl.
+    val videoUrl: String,
+    val videoUrlHd: String? = null,
     val posterUrl: String,
     // Vertical (9:16) poster variant when the source provides one (e.g. RedGIFs `vposter`).
     val posterUrlVertical: String? = null,

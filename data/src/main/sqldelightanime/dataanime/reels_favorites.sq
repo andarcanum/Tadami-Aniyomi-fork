@@ -5,8 +5,8 @@ CREATE TABLE reels_favorites(
     source_id INTEGER NOT NULL,
     title TEXT,
     author TEXT,
-    video_url_hd TEXT NOT NULL,
-    video_url_sd TEXT,
+    video_url TEXT NOT NULL,
+    video_url_hd TEXT,
     poster_url TEXT NOT NULL,
     poster_url_vertical TEXT,
     web_url TEXT,
@@ -40,7 +40,7 @@ WHERE source_id = :sourceId;
 
 insert:
 INSERT OR REPLACE INTO reels_favorites(
-    video_id, source_id, title, author, video_url_hd, video_url_sd,
+    video_id, source_id, title, author, video_url, video_url_hd,
     poster_url, poster_url_vertical, web_url, duration_sec, has_audio, added_at
 )
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);

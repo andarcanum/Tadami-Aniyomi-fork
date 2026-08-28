@@ -78,7 +78,7 @@ fun ReelsVideoPage(
     val hapticFeedback = LocalHapticFeedback.current
 
     val videoUrl = remember(item, isHdQuality) {
-        if (isHdQuality) item.videoUrlHd else (item.videoUrlSd ?: item.videoUrlHd)
+        if (isHdQuality) (item.videoUrlHd ?: item.videoUrl) else item.videoUrl
     }
 
     Box(
