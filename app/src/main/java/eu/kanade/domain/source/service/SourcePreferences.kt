@@ -168,6 +168,24 @@ class SourcePreferences(
         Preference.appStateKey("last_novel_catalogue_source"),
         -1,
     )
+    fun lastUsedReelsSource() = preferenceStore.getLong(
+        Preference.appStateKey("last_reels_feed_source"),
+        -1L,
+    )
+    fun lastReelsQuery(sourceId: Long) = preferenceStore.getString(
+        Preference.appStateKey("last_reels_query_$sourceId"),
+        "",
+    )
+    fun lastReelsFilter(sourceId: Long) = preferenceStore.getString(
+        Preference.appStateKey("last_reels_filter_$sourceId"),
+        "",
+    )
+    fun autoAdvanceReels() = preferenceStore.getBoolean("pref_reels_auto_advance", true)
+    fun reelsCropMode() = preferenceStore.getBoolean("pref_reels_crop_mode", false)
+    fun reelsMuted() = preferenceStore.getBoolean("pref_reels_muted", false)
+    fun reelsHdQuality() = preferenceStore.getBoolean("pref_reels_hd_quality", true)
+    fun reelsPreloadEnabled() = preferenceStore.getBoolean("pref_reels_preload", true)
+    fun reelsPreloadWifiOnly() = preferenceStore.getBoolean("pref_reels_preload_wifi_only", false)
 
     fun animeExtensionUpdatesCount() = preferenceStore.getInt("animeext_updates_count", 0)
     fun mangaExtensionUpdatesCount() = preferenceStore.getInt("ext_updates_count", 0)

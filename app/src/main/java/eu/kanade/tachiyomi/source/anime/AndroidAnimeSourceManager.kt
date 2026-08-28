@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.source.anime
+package eu.kanade.tachiyomi.source.anime
 
 import android.content.Context
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
@@ -53,6 +53,10 @@ class AndroidAnimeSourceManager(
     private val sourcesMapFlow = MutableStateFlow(ConcurrentHashMap<Long, AnimeSource>())
 
     private val stubSourcesMap = ConcurrentHashMap<Long, StubAnimeSource>()
+
+    override val sources: Flow<List<AnimeSource>> = sourcesMapFlow.map {
+        it.values.toList()
+    }
 
     override val catalogueSources: Flow<List<AnimeCatalogueSource>> = sourcesMapFlow.map {
         it.values.filterIsInstance<AnimeCatalogueSource>()

@@ -11,6 +11,8 @@ interface AnimeSourceManager {
 
     val isInitialized: StateFlow<Boolean>
 
+    val sources: Flow<List<AnimeSource>>
+
     val catalogueSources: Flow<List<AnimeCatalogueSource>>
 
     fun get(sourceKey: Long): AnimeSource?

@@ -17,6 +17,7 @@ import data.Mangas
 import dataanime.Animehistory
 import dataanime.Animes
 import dataanime.Episodes
+import dataanime.Reels_favorites
 import datanovel.Novel_chapters
 import datanovel.Novel_history
 import datanovel.Novels
@@ -513,6 +514,9 @@ class AppModule(val app: Application) : InjektModule {
                     custom_genreAdapter = StringListColumnAdapter,
                     update_strategyAdapter = AnimeUpdateStrategyColumnAdapter,
                     fetch_typeAdapter = FetchTypeColumnAdapter,
+                ),
+                reels_favoritesAdapter = Reels_favorites.Adapter(
+                    added_atAdapter = DateColumnAdapter,
                 ),
             )
         }

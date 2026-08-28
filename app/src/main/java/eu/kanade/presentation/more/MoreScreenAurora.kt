@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.ReportProblem
+import androidx.compose.material.icons.outlined.SlowMotionVideo
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.VideoSettings
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -100,6 +101,8 @@ fun MoreScreenAurora(
     onHelpClick: () -> Unit,
     latticeGridAvailable: Boolean,
     onOpenLatticeGridClick: () -> Unit,
+    showReelsEntry: Boolean = false,
+    onReelsClick: () -> Unit = {},
 ) {
     val colors = AuroraTheme.colors
     val hostScaffoldContentPadding = LocalHostScaffoldContentPadding.current
@@ -139,6 +142,15 @@ fun MoreScreenAurora(
                     onClick = onClickAlt,
                     darkRimLightEnabled = darkRimLightEnabled,
                 )
+
+                if (showReelsEntry) {
+                    AuroraSettingItem(
+                        title = stringResource(MR.strings.reels_sources_section_header),
+                        icon = Icons.Outlined.SlowMotionVideo,
+                        onClick = onReelsClick,
+                        darkRimLightEnabled = darkRimLightEnabled,
+                    )
+                }
 
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_settings),

@@ -24,7 +24,7 @@ class GetEnabledAnimeSources(
             repository.getAnimeSources(),
         ) { pinnedSourceIds, enabledLanguages, disabledSources, lastUsedSource, sources ->
             sources
-                .filter { it.lang in enabledLanguages || it.id == LocalAnimeSource.ID }
+                .filter { it.lang in enabledLanguages || it.id == LocalAnimeSource.ID || it.isFeedSource }
                 .filterNot { it.id.toString() in disabledSources }
                 .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
                 .flatMap {

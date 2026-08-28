@@ -367,6 +367,10 @@ dependencies {
 
     // mpv-android
     implementation(aniyomilibs.aniyomi.mpv)
+    // ExoPlayer for the short-video (Reels) feed player
+    implementation(libs.media3.exoplayer)
+    // OkHttp-backed media data source so reels use the app network stack (cookies/DoH/proxy)
+    implementation(libs.media3.datasource.okhttp)
     // FFmpeg-kit
     implementation(aniyomilibs.ffmpeg.kit)
     implementation(aniyomilibs.arthenica.smartexceptions)

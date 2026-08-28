@@ -91,6 +91,7 @@ class StatsReadCountSqlTest {
                 update_strategyAdapter = tachiyomi.data.AnimeUpdateStrategyColumnAdapter,
                 fetch_typeAdapter = tachiyomi.data.FetchTypeColumnAdapter,
             ),
+            reels_favoritesAdapter = dataanime.Reels_favorites.Adapter(added_atAdapter = DateColumnAdapter),
         )
 
         db.animesQueries.insertAnime(id = 1)
