@@ -178,11 +178,11 @@ class ReelsFeedScreenModelTest {
 
             override fun getFilterList(): AnimeFilterList = AnimeFilterList(SortFilter())
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage {
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
                 return FeedPage(videos = listOf(sampleItem1), hasNextPage = true)
             }
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage {
+            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage {
                 return FeedPage(videos = listOf(sampleItem1), hasNextPage = false)
             }
         }
@@ -194,11 +194,11 @@ class ReelsFeedScreenModelTest {
 
             override fun getFilterList(): AnimeFilterList = AnimeFilterList()
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage {
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
                 return FeedPage(videos = listOf(sampleItem2), hasNextPage = true)
             }
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage {
+            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage {
                 return FeedPage(videos = listOf(sampleItem2), hasNextPage = false)
             }
         }
@@ -313,11 +313,11 @@ class ReelsFeedScreenModelTest {
             override val name: String = "Incognito Feed"
             override val lang: String = "all"
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage =
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
                 FeedPage(videos = listOf(incognitoItem), hasNextPage = false)
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, filters)
+            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
+                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -372,7 +372,7 @@ class ReelsFeedScreenModelTest {
             override val name: String = "Pager Feed"
             override val lang: String = "all"
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage {
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
                 requestedPages += page
                 val videos = (0 until 5).map { idx ->
                     ShortVideoItem(
@@ -384,8 +384,8 @@ class ReelsFeedScreenModelTest {
                 return FeedPage(videos = videos, hasNextPage = true)
             }
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, filters)
+            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
+                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -428,11 +428,11 @@ class ReelsFeedScreenModelTest {
             override val name: String = "Displaced Item Feed"
             override val lang: String = "all"
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage =
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
                 FeedPage(emptyList(), false)
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, filters)
+            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
+                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -485,11 +485,11 @@ class ReelsFeedScreenModelTest {
             override val name: String = "Gate Feed"
             override val lang: String = "all"
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage =
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
                 FeedPage(videos = listOf(gateItem), hasNextPage = false)
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, filters)
+            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
+                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -542,10 +542,10 @@ class ReelsFeedScreenModelTest {
             override val name: String = name
             override val lang: String = "all"
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage = FeedPage(emptyList(), false)
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage = FeedPage(emptyList(), false)
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, filters)
+            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
+                getFeed(page, cursor, filters)
         }
 
         val sourceA = feedSource(601L, "Feed A")
@@ -602,7 +602,7 @@ class ReelsFeedScreenModelTest {
             override val name: String = "Failing Append Feed"
             override val lang: String = "all"
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage {
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
                 requestedPages += page
                 if (page == 2 && failedAttempts.add(page)) throw RuntimeException("CDN exploded")
                 return FeedPage(
@@ -617,8 +617,8 @@ class ReelsFeedScreenModelTest {
                 )
             }
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, filters)
+            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
+                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -771,11 +771,11 @@ class ReelsFeedScreenModelTest {
 
             override fun getFilterList(): AnimeFilterList = AnimeFilterList(SortFilter(), NsfwFilter())
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage =
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
                 FeedPage(listOf(videoItem("filtered")), hasNextPage = false)
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, filters)
+            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
+                getFeed(page, cursor, filters)
         }
 
         val preferences = SourcePreferences(MapPreferenceStore())
@@ -898,12 +898,12 @@ class ReelsFeedScreenModelTest {
 
         override val lang: String = "all"
 
-        override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage {
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
             requestedPages += page
             return feedProvider(page)
         }
 
-        override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage {
+        override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage {
             requestedPages += page
             return (searchProvider ?: feedProvider)(page)
         }

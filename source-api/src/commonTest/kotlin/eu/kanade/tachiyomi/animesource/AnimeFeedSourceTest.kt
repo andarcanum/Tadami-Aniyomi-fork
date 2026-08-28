@@ -32,11 +32,16 @@ class AnimeFeedSourceTest {
             override val lang: String = "en"
             override val supportsTags: Boolean = true
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage {
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
                 return FeedPage(videos = listOf(sampleItem), hasNextPage = true)
             }
 
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage {
+            override suspend fun getSearchFeed(
+                page: Int,
+                cursor: String?,
+                query: String,
+                filters: AnimeFilterList,
+            ): FeedPage {
                 return FeedPage(videos = listOf(sampleItem), hasNextPage = false)
             }
         }
@@ -44,7 +49,7 @@ class AnimeFeedSourceTest {
         feedSource.isFeedSource shouldBe true
         feedSource.supportsTags shouldBe true
 
-        val feed = feedSource.getFeed(1, AnimeFilterList())
+        val feed = feedSource.getFeed(1, null, AnimeFilterList())
         feed.videos.size shouldBe 1
         feed.videos.first().id shouldBe "test-123"
         feed.videos.first().hasAudio shouldBe true
@@ -58,10 +63,7 @@ class AnimeFeedSourceTest {
             override val name: String = "Defaults Reels"
             override val lang: String = "en"
 
-            override suspend fun getFeed(page: Int, filters: AnimeFilterList): FeedPage =
-                FeedPage(emptyList(), false)
-
-            override suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage =
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
                 FeedPage(emptyList(), false)
         }
 
@@ -76,5 +78,30 @@ class AnimeFeedSourceTest {
 
         page.videos.size shouldBe 0
         page.hasNextPage shouldBe false
+    }
+
+    @Test
+    fun `FeedPage defaults nextCursor to null for page-int sources`() {
+        val page = FeedPage(videos = emptyList(), hasNextPage = false)
+        page.nextCursor shouldBe null
+    }
+
+    @Test
+    fun `getSearchFeed default delegates to getFeed with cursor passed through`() = runTest {
+        var seen: Pair<Int, String?>? = null
+        val source = object : AnimeFeedSource {
+            override val id: Long = 1003L
+            override val name: String = "Default Search Feed"
+            override val lang: String = "all"
+
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
+                seen = page to cursor
+                return FeedPage(emptyList(), hasNextPage = false, nextCursor = "c-next")
+            }
+        }
+
+        val result = source.getSearchFeed(3, "c-token", "tag", AnimeFilterList())
+        seen shouldBe (3 to "c-token")
+        result.nextCursor shouldBe "c-next"
     }
 }

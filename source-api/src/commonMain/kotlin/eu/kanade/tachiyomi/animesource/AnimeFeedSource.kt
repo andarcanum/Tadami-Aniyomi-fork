@@ -31,19 +31,25 @@ interface AnimeFeedSource : AnimeSource {
     /**
      * Fetches a page of video feed items.
      *
-     * @param page Page index to fetch (1-based).
+     * Pagination modes (contract v17): when [cursor] is null the host is in page-int mode and
+     * [page] is authoritative. Once a [FeedPage.nextCursor] is returned, the host locks into
+     * cursor mode for the whole generation and passes the token here on every later request
+     * ([page] keeps counting as a hint only). The returned [FeedPage] must echo a fresh
+     * [FeedPage.nextCursor] as long as more pages exist; returning a null cursor with
+     * hasNextPage == true in cursor mode stops the host's pagination (protocol violation).
+     *
+     * @param page 1-based page index (hint in cursor mode).
+     * @param cursor continuation token from the previous response, or null.
      * @param filters Filters applied to the feed.
      */
-    suspend fun getFeed(page: Int, filters: AnimeFilterList = getFilterList()): FeedPage
+    suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList = getFilterList()): FeedPage
 
     /**
-     * Searches for video feed items by query/tag.
-     *
-     * @param page Page index to fetch (1-based).
-     * @param query The search query or tag.
-     * @param filters Filters applied to the search.
+     * Searches for video feed items by query/tag. Defaults to [getFeed] for sources without
+     * search/tag support; the host hides the search UI for those via [supportsTags].
      */
-    suspend fun getSearchFeed(page: Int, query: String, filters: AnimeFilterList): FeedPage
+    suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
+        getFeed(page, cursor, filters)
 
     // Unused standard AnimeSource defaults for clean feed sources
     override suspend fun getAnimeDetails(anime: SAnime): SAnime = anime

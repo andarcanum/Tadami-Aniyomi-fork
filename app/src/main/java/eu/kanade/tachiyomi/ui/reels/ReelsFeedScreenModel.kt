@@ -234,9 +234,9 @@ class ReelsFeedScreenModel(
                 val filters = state.value.filters
                 val page = state.value.nextPageIndex
                 val pageData = if (query.isNotBlank()) {
-                    src.getSearchFeed(page, query, filters)
+                    src.getSearchFeed(page, null, query, filters)
                 } else {
-                    src.getFeed(page, filters)
+                    src.getFeed(page, null, filters)
                 }
                 // Re-check cancellation: the suspend calls above may have completed right
                 // before this job was superseded by a reset.
