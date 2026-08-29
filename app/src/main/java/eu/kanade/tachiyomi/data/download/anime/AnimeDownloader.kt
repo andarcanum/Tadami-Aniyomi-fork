@@ -387,7 +387,7 @@ class AnimeDownloader(
     private suspend fun downloadEpisode(download: AnimeDownload) {
         val animeDir = provider.getAnimeDir(download.anime.title, download.source)
 
-        val availSpace = DiskUtil.getAvailableStorageSpace(animeDir)
+        val availSpace = DiskUtil.getAvailableStorageSpace(context, animeDir)
         if (availSpace != -1L && availSpace < MIN_DISK_SPACE) {
             download.status = AnimeDownload.State.ERROR
             notifier.onError(

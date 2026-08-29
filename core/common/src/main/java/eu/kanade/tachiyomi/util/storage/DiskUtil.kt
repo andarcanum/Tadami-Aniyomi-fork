@@ -3,8 +3,11 @@ package eu.kanade.tachiyomi.util.storage
 import android.content.Context
 import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.StatFs
+import android.os.storage.StorageManager
+import android.provider.DocumentsContract
 import androidx.core.content.ContextCompat
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.util.lang.Hash
@@ -70,15 +73,58 @@ object DiskUtil {
     }
 
     /**
-     * Gets the available space for the disk that a file path points to, in bytes.
+     * Gets the available space for the disk that backs the given [UniFile], in bytes.
+     * Supports raw file paths and SAF tree URIs (resolved to their storage volume).
      */
-    fun getAvailableStorageSpace(f: UniFile): Long {
+    fun getAvailableStorageSpace(context: Context, f: UniFile): Long {
         return try {
-            val stat = StatFs(f.uri.path)
+            val path = resolveVolumeDirectoryPath(context, f.uri) ?: return -1L
+            val stat = StatFs(path)
             stat.availableBlocksLong * stat.blockSizeLong
         } catch (_: Exception) {
             -1L
         }
+    }
+
+    /**
+     * Resolves the filesystem path of the storage volume that backs the given [uri].
+     * Accepts file paths and SAF tree URIs; returns null when the volume cannot be determined.
+     */
+    fun resolveVolumeDirectoryPath(context: Context, uri: Uri): String? {
+        when (uri.scheme) {
+            "file" -> return uri.path
+            "content" -> Unit
+            else -> return null
+        }
+
+        val documentId = try {
+            DocumentsContract.getTreeDocumentId(uri)
+        } catch (_: Exception) {
+            return null
+        }
+        val volumeId = volumeIdFromTreeDocumentId(documentId) ?: return null
+
+        val storageManager = context.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
+            ?: return null
+        val volume = storageManager.storageVolumes.firstOrNull { candidate ->
+            (volumeId == "primary" && candidate.isPrimary) || candidate.uuid == volumeId
+        } ?: return null
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            volume.directory?.absolutePath?.let { return it }
+        }
+        return if (volume.isPrimary) {
+            Environment.getExternalStorageDirectory()?.absolutePath
+        } else {
+            File("/storage/$volumeId").takeIf { it.exists() }?.absolutePath
+        }
+    }
+
+    /**
+     * Extracts the volume identifier from a SAF tree document id ("volumeId:relativePath").
+     */
+    fun volumeIdFromTreeDocumentId(documentId: String): String? {
+        return documentId.substringBefore(':', missingDelimiterValue = "").ifEmpty { null }
     }
 
     /**

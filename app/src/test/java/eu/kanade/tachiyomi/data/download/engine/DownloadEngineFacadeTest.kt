@@ -110,11 +110,6 @@ class DownloadEngineFacadeTest {
     }
 
     @Test
-    fun `file path free space returns null for pathless SAF directory`() {
-        freeSpaceFromFilePath(null) shouldBe null
-    }
-
-    @Test
     fun `snapshot with anime-only active items computes counts correctly`() {
         val snapshot = DownloadEngineSnapshot(
             animeItems = 10,

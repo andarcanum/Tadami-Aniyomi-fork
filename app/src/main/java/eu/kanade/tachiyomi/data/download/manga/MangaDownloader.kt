@@ -359,7 +359,7 @@ class MangaDownloader(
     private suspend fun downloadChapter(download: MangaDownload) {
         val mangaDir = provider.getMangaDir(download.manga.title, download.source)
 
-        val availSpace = DiskUtil.getAvailableStorageSpace(mangaDir)
+        val availSpace = DiskUtil.getAvailableStorageSpace(context, mangaDir)
         if (availSpace != -1L && availSpace < MIN_DISK_SPACE) {
             download.status = MangaDownload.State.ERROR
             notifier.onError(

@@ -62,65 +62,130 @@ class StorageManager(
             .takeIf { it?.exists() == true }
     }
 
-    fun canWriteTo(uri: Uri): Boolean {
-        val baseDir = UniFile.fromUri(context, uri)
-            ?.takeIf { it.exists() && it.isDirectory }
-            ?: return false
-
+    /**
+     * Runs an end-to-end write smoke test against [uri], mirroring the operations the
+     * downloaders perform (create/write/rename/read/delete through SAF).
+     *
+     * @return null when [uri] is writable, otherwise a [StorageWriteTestFailure]
+     * describing the first failed step.
+     */
+    fun canWriteTo(uri: Uri): StorageWriteTestFailure? {
         var testDir: UniFile? = null
         var cleanupSuccessful = false
 
         return try {
-            val createdTestDir = baseDir.createDirectory("$STORAGE_TEST_DIR_PREFIX${UUID.randomUUID()}") ?: return false
+            val baseDir = storageTestStep("access the selected folder") {
+                UniFile.fromUri(context, uri)
+                    ?.takeIf { it.exists() && it.isDirectory }
+            }
+
+            val createdTestDir = storageTestStep("create the test directory") {
+                baseDir.createDirectory("$STORAGE_TEST_DIR_PREFIX${UUID.randomUUID()}")
+            }
             testDir = createdTestDir
 
-            val downloadsDir = createdTestDir.createDirectory(DOWNLOADS_PATH) ?: return false
-            if (createdTestDir.createDirectory(DOWNLOADS_PATH) == null) return false
-
-            val sourceDir = downloadsDir.createDirectory(STORAGE_TEST_SOURCE_DIR) ?: return false
-            if (downloadsDir.createDirectory(STORAGE_TEST_SOURCE_DIR) == null) return false
-
-            val mangaDir = sourceDir.createDirectory(STORAGE_TEST_MANGA_DIR) ?: return false
-            if (sourceDir.createDirectory(STORAGE_TEST_MANGA_DIR) == null) return false
-
-            var chapterDir = mangaDir.createDirectory(STORAGE_TEST_CHAPTER_DIR_TMP) ?: return false
-            var pageFile = chapterDir.createFile(STORAGE_TEST_PAGE_FILE_TMP) ?: return false
-
-            pageFile.openOutputStream().use { output ->
-                output.write(STORAGE_TEST_CONTENT)
+            val downloadsDir = storageTestStep("create the downloads subdirectory") {
+                createdTestDir.createDirectory(DOWNLOADS_PATH)
+            }
+            storageTestStep("re-open the downloads subdirectory") {
+                createdTestDir.createDirectory(DOWNLOADS_PATH)
             }
 
-            pageFile.renameToOrCopy(STORAGE_TEST_PAGE_FILE)
-            pageFile = chapterDir.findFile(STORAGE_TEST_PAGE_FILE) ?: return false
-            pageFile.openInputStream().use { input ->
-                if (input.read() != STORAGE_TEST_CONTENT.first().toInt()) return false
+            val sourceDir = storageTestStep("create the source subdirectory") {
+                downloadsDir.createDirectory(STORAGE_TEST_SOURCE_DIR)
             }
-            if (chapterDir.listFiles().orEmpty().none { it.name == STORAGE_TEST_PAGE_FILE }) return false
-
-            val comicInfoFile = chapterDir.createFile(STORAGE_TEST_COMIC_INFO_FILE) ?: return false
-            comicInfoFile.openOutputStream().use { output ->
-                output.write(STORAGE_TEST_COMIC_INFO_CONTENT)
+            storageTestStep("re-open the source subdirectory") {
+                downloadsDir.createDirectory(STORAGE_TEST_SOURCE_DIR)
             }
 
-            val archiveFile = mangaDir.createFile(STORAGE_TEST_ARCHIVE_FILE_TMP) ?: return false
-            archiveFile.openOutputStream().use { output ->
-                output.write(STORAGE_TEST_CONTENT)
+            val mangaDir = storageTestStep("create the manga subdirectory") {
+                sourceDir.createDirectory(STORAGE_TEST_MANGA_DIR)
             }
-            archiveFile.renameToOrCopy(STORAGE_TEST_ARCHIVE_FILE)
-            if (mangaDir.findFile(STORAGE_TEST_ARCHIVE_FILE) == null) return false
+            storageTestStep("re-open the manga subdirectory") {
+                sourceDir.createDirectory(STORAGE_TEST_MANGA_DIR)
+            }
 
-            chapterDir.renameToOrCopy(STORAGE_TEST_CHAPTER_DIR)
-            chapterDir = mangaDir.findFile(STORAGE_TEST_CHAPTER_DIR) ?: return false
-            pageFile = chapterDir.findFile(STORAGE_TEST_PAGE_FILE) ?: return false
-            if (chapterDir.findFile(STORAGE_TEST_COMIC_INFO_FILE) == null) return false
-            if (chapterDir.listFiles().orEmpty().none { it.name == pageFile.name }) return false
+            var chapterDir = storageTestStep("create the chapter subdirectory") {
+                mangaDir.createDirectory(STORAGE_TEST_CHAPTER_DIR_TMP)
+            }
+            var pageFile = storageTestStep("create the page file") {
+                chapterDir.createFile(STORAGE_TEST_PAGE_FILE_TMP)
+            }
 
-            DiskUtil.createNoMediaFile(chapterDir, context)
+            storageTestStep("write the page file") {
+                pageFile.openOutputStream().use { output ->
+                    output.write(STORAGE_TEST_CONTENT)
+                }
+            }
+            storageTestStep("rename the page file") {
+                pageFile.renameToOrCopy(STORAGE_TEST_PAGE_FILE)
+            }
+            pageFile = storageTestStep("find the renamed page file") {
+                chapterDir.findFile(STORAGE_TEST_PAGE_FILE)
+            }
 
-            cleanupSuccessful = createdTestDir.deleteTree()
-            cleanupSuccessful
-        } catch (_: Throwable) {
-            false
+            storageTestStep("read the page file back") {
+                pageFile.openInputStream().use { input ->
+                    if (input.read() == STORAGE_TEST_CONTENT.first().toInt()) Unit else null
+                }
+            }
+            storageTestStep("list the chapter directory") {
+                if (chapterDir.listFiles().orEmpty().none { it.name == STORAGE_TEST_PAGE_FILE }) null else Unit
+            }
+
+            val comicInfoFile = storageTestStep("create the ComicInfo file") {
+                chapterDir.createFile(STORAGE_TEST_COMIC_INFO_FILE)
+            }
+            storageTestStep("write the ComicInfo file") {
+                comicInfoFile.openOutputStream().use { output ->
+                    output.write(STORAGE_TEST_COMIC_INFO_CONTENT)
+                }
+            }
+
+            val archiveFile = storageTestStep("create the archive file") {
+                mangaDir.createFile(STORAGE_TEST_ARCHIVE_FILE_TMP)
+            }
+            storageTestStep("write the archive file") {
+                archiveFile.openOutputStream().use { output ->
+                    output.write(STORAGE_TEST_CONTENT)
+                }
+            }
+            storageTestStep("rename the archive file") {
+                archiveFile.renameToOrCopy(STORAGE_TEST_ARCHIVE_FILE)
+            }
+            storageTestStep("find the renamed archive file") {
+                mangaDir.findFile(STORAGE_TEST_ARCHIVE_FILE)
+            }
+
+            storageTestStep("rename the chapter directory") {
+                chapterDir.renameToOrCopy(STORAGE_TEST_CHAPTER_DIR)
+            }
+            chapterDir = storageTestStep("find the renamed chapter directory") {
+                mangaDir.findFile(STORAGE_TEST_CHAPTER_DIR)
+            }
+            pageFile = storageTestStep("find the page file after rename") {
+                chapterDir.findFile(STORAGE_TEST_PAGE_FILE)
+            }
+            storageTestStep("find the ComicInfo file after rename") {
+                chapterDir.findFile(STORAGE_TEST_COMIC_INFO_FILE)
+            }
+            storageTestStep("list the chapter directory after rename") {
+                if (chapterDir.listFiles().orEmpty().none { it.name == pageFile.name }) null else Unit
+            }
+
+            storageTestStep("create the .nomedia file") {
+                DiskUtil.createNoMediaFile(chapterDir, context)
+            }
+            storageTestStep("delete the test directory") {
+                if (createdTestDir.deleteTree()) Unit else null
+            }
+            cleanupSuccessful = true
+
+            null
+        } catch (e: StorageWriteTestStepException) {
+            StorageWriteTestFailure(e.step, e.cause)
+        } catch (e: Throwable) {
+            StorageWriteTestFailure("unexpected error", e)
         } finally {
             if (!cleanupSuccessful) {
                 testDir?.takeIf { it.exists() }?.deleteTree()
@@ -208,4 +273,25 @@ private fun UniFile.deleteTree(): Boolean {
         false
     }
     return childrenDeleted && selfDeleted
+}
+
+/**
+ * The step that failed while verifying a candidate storage location, plus its cause, if any.
+ */
+class StorageWriteTestFailure(
+    val step: String,
+    val cause: Throwable? = null,
+)
+
+private class StorageWriteTestStepException(val step: String, cause: Throwable?) :
+    RuntimeException(step, cause)
+
+private inline fun <T> storageTestStep(step: String, block: () -> T?): T {
+    val result = try {
+        block()
+    } catch (e: Throwable) {
+        throw StorageWriteTestStepException(step, e)
+    }
+    if (result == null) throw StorageWriteTestStepException(step, null)
+    return result
 }

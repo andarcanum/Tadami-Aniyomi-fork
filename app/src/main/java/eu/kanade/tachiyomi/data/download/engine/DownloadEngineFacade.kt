@@ -1,8 +1,6 @@
 package eu.kanade.tachiyomi.data.download.engine
 
 import android.app.Application
-import android.app.usage.StorageStatsManager
-import android.os.Build
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
@@ -10,6 +8,7 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
+import eu.kanade.tachiyomi.util.storage.DiskUtil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,9 +26,7 @@ import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.Closeable
-import java.io.File
 import java.util.concurrent.atomic.AtomicReference
-import android.os.storage.StorageManager as AndroidStorageManager
 
 /**
  * Combines anime, manga, and novel backend queue states into one aggregated
@@ -47,11 +44,6 @@ class DownloadEngineFacade(
     private val telemetryCollector = DownloadTelemetryCollector(speedTracker)
     private val storageManager: StorageManager = Injekt.get()
     private val application: Application? = runCatching { Injekt.get<Application>() }.getOrNull()
-    private val storageStatsManager: StorageStatsManager? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        application?.getSystemService(StorageStatsManager::class.java)
-    } else {
-        null
-    }
     private val storageStatsRefreshMs = 5_000L
     private var lastStorageStatsAtMs = 0L
     private var storageStatsJob: Job? = null
@@ -181,12 +173,9 @@ class DownloadEngineFacade(
     }
 
     private fun resolveDownloadFreeSpaceBytes(downloadsDir: UniFile?): Long? {
-        val filePathFreeSpace = runCatching { freeSpaceFromFilePath(downloadsDir?.filePath) }.getOrNull()
-        if (filePathFreeSpace != null) return filePathFreeSpace
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
-        val manager = storageStatsManager ?: return null
-        return runCatching { manager.getFreeBytes(AndroidStorageManager.UUID_DEFAULT) }.getOrNull()
+        val context = application ?: return null
+        val dir = downloadsDir ?: return null
+        return DiskUtil.getAvailableStorageSpace(context, dir).takeIf { it != -1L }
     }
 
     fun pauseAll() {
@@ -246,13 +235,6 @@ internal fun shouldStartStorageStatsRefresh(
     isRefreshRunning: Boolean,
 ): Boolean {
     return !isRefreshRunning && nowMs - lastRefreshMs >= refreshIntervalMs
-}
-
-internal fun freeSpaceFromFilePath(path: String?): Long? {
-    return path
-        ?.let(::File)
-        ?.takeIf { it.exists() }
-        ?.freeSpace
 }
 
 internal fun combineDownloadEngineInputs(
