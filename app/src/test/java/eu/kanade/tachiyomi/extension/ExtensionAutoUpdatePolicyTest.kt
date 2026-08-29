@@ -114,6 +114,21 @@ class ExtensionAutoUpdatePolicyTest {
     }
 
     @Test
+    fun `novel auto-update skips system-installed kotlin extensions`() = runTest {
+        val installed = novelInstalled(id = PLUGIN_ID, versionCode = 1, repoUrl = REPO_A, isShared = true)
+        val candidates = listOf(
+            novelAvailable(id = PLUGIN_ID, versionCode = 2, repoUrl = REPO_A, sha256 = "cd"),
+        )
+        val fake = FakeAutoUpdateNovelManager(listOf(installed), candidates)
+
+        novelRunner().updateNovelExtensions(BasePreferences.ExtensionInstaller.PRIVATE, fake)
+
+        // A private replacement next to a system copy would strand a second install (policy:
+        // shared installs stay manual, same as manga/anime).
+        fake.installedPlugins shouldBe emptyList()
+    }
+
+    @Test
     fun `novel auto-update badge counts classifier updates including kotlin`() = runTest {
         val jsUpdated = novelInstalled(id = "js1", versionCode = 1, repoUrl = REPO_A, isKotlinExtension = false)
         val kotlinStale = novelInstalled(id = PLUGIN_ID, versionCode = 1, repoUrl = REPO_A)
@@ -150,6 +165,7 @@ class ExtensionAutoUpdatePolicyTest {
         versionCode: Int,
         repoUrl: String,
         isKotlinExtension: Boolean = true,
+        isShared: Boolean = false,
     ): NovelPlugin.Installed = NovelPlugin.Installed(
         id = id,
         name = "Plugin $id",
@@ -165,6 +181,7 @@ class ExtensionAutoUpdatePolicyTest {
         sha256 = "",
         repoUrl = repoUrl,
         isKotlinExtension = isKotlinExtension,
+        isShared = isShared,
     )
 
     private fun novelAvailable(

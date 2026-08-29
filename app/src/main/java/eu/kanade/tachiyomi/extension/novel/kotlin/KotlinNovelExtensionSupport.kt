@@ -21,6 +21,7 @@ import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.canReplacePrivateExtension
 import eu.kanade.tachiyomi.extension.installer.ApkExtensionKind
+import eu.kanade.tachiyomi.extension.installer.ApkInstallBackend
 import eu.kanade.tachiyomi.extension.installer.ApkInstallRequest
 import eu.kanade.tachiyomi.extension.installer.ApkInstallResult
 import eu.kanade.tachiyomi.extension.installer.ApkUninstallRequest
@@ -119,6 +120,7 @@ class KotlinNovelExtensionInstaller(
     private val unifiedInstaller: UnifiedApkExtensionInstaller,
 ) {
     private val pendingInstallStore = PendingApkInstallStore(basePreferences)
+    private val trustExtension: TrustNovelExtension by injectLazy()
 
     suspend fun install(plugin: NovelPlugin.Available): NovelPlugin.Installed {
         val apkUrl = plugin.apkUrl ?: plugin.url
@@ -153,6 +155,12 @@ class KotlinNovelExtensionInstaller(
         }
 
         val installer = basePreferences.extensionInstaller().get()
+        // Keep a private-only copy private: updating it through a system backend would add a
+        // second install of the same package next to the private file (mirrors the manga/anime
+        // isUpdateForPrivatelyInstalled routing).
+        val keepPrivate = !context.isPackageInstalled(pkgName) &&
+            KotlinNovelExtensionLoader.hasPrivateExtensionFile(context, pkgName)
+        val backend = if (keepPrivate) ApkInstallBackend.PRIVATE else installer.toApkInstallBackend()
         val terminalStep = unifiedInstaller.install(
             ApkInstallRequest(
                 id = pkgName,
@@ -160,7 +168,7 @@ class KotlinNovelExtensionInstaller(
                 displayName = plugin.name,
                 uri = apkFile.getUriCompat(context),
                 file = apkFile,
-                backend = installer.toApkInstallBackend(),
+                backend = backend,
                 kind = ApkExtensionKind.NOVEL_KOTLIN,
             ),
         ).first { it.isCompleted() }
@@ -172,7 +180,30 @@ class KotlinNovelExtensionInstaller(
             }
             error("Failed to install Kotlin novel extension $pkgName using ${installer.name}: $terminalStep")
         }
+        // A system install finished — carry the user's trust to the new version when the signing
+        // key is unchanged, so an update does not silently flip the extension back to Untrusted
+        // (mirrors the manga/anime manager's carryTrustToNewVersion; the private path handles this
+        // inside installPrivateExtensionFile).
+        carryTrustToNewVersion(pkgName)
         return plugin.toInstalledKotlin()
+    }
+
+    private fun carryTrustToNewVersion(pkgName: String) {
+        val info = runCatching {
+            context.packageManager.getPackageInfo(pkgName, 0)
+        }.getOrNull() ?: return
+        val signatures = ExtensionSignatureComparison.installedSignatures(context, pkgName) ?: return
+        signatures.lastOrNull()?.let { signatureHash ->
+            runCatching {
+                trustExtension.trustIfSameSigner(
+                    pkgName,
+                    PackageInfoCompat.getLongVersionCode(info),
+                    signatureHash,
+                )
+            }.onFailure {
+                logcat(LogPriority.WARN, it) { "Failed to carry trust to new version for $pkgName" }
+            }
+        }
     }
 
     private fun novelManager(): NovelExtensionManager? =
@@ -447,6 +478,11 @@ object KotlinNovelExtensionLoader {
         File(getPrivateExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION").delete()
     }
 
+    /** Whether the private store holds a copy of [pkgName] (no system package needed). */
+    fun hasPrivateExtensionFile(context: Context, pkgName: String): Boolean {
+        return File(getPrivateExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION").isFile
+    }
+
     fun loadExtensions(context: Context): List<KotlinNovelExtensionLoadResult> {
         val pkgManager = context.packageManager
         val installedPkgs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -622,6 +658,7 @@ object KotlinNovelExtensionLoader {
             apkUrl = null,
             isKotlinExtension = true,
             isNsfw = isNsfw,
+            isShared = extensionInfo.isShared,
         )
         return KotlinNovelExtensionLoadResult(plugin, sources)
     }

@@ -136,6 +136,18 @@ fun novelExtensionsTab(
                 )
             }
 
+            // Queue-driven reinstall pause during update-all (B5): owned by the ScreenModel.
+            state.queuedReinstallPlugin?.let { plugin ->
+                NovelRepoReinstallDialog(
+                    plugin = plugin,
+                    candidates = state.queuedReinstallCandidates,
+                    onClickCandidate = { candidate ->
+                        extensionsScreenModel.resolveQueuedReinstall(candidate)
+                    },
+                    onDismissRequest = { extensionsScreenModel.resolveQueuedReinstall(null) },
+                )
+            }
+
             if (state.repoPickerOptions.isNotEmpty()) {
                 NovelRepoPickerDialog(
                     pluginName = state.repoPickerOptions.first().name,

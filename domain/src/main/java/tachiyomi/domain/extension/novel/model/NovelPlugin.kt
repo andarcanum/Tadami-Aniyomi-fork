@@ -56,6 +56,11 @@ sealed class NovelPlugin {
         val apkUrl: String? = null,
         val isKotlinExtension: Boolean = false,
         override val isNsfw: Boolean = false,
+        /**
+         * Whether a Kotlin extension copy lives as a system package (vs. the app-private store).
+         * Only meaningful for `isKotlinExtension` records; JS plugins never have a system copy.
+         */
+        val isShared: Boolean = false,
     ) : NovelPlugin()
 
     data class Untrusted(

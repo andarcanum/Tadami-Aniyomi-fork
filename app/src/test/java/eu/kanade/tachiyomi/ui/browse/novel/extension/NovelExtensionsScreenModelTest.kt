@@ -838,6 +838,63 @@ class NovelExtensionsScreenModelTest {
         }
     }
 
+    @Test
+    fun `update-all pauses on a reinstall-needing plugin and applies the chosen candidate`() {
+        runBlocking {
+            val installed = pluginInstalled("kid", 1)
+            val crossRepo = pluginAvailable("kid", 2).copy(
+                repoUrl = "https://other.example/index.json",
+                repoName = "Other",
+            )
+            val extensionManager = FakeNovelExtensionManager(
+                installed = listOf(installed),
+                available = listOf(crossRepo),
+                updates = listOf(installed),
+            )
+            val screenModel = createScreenModel(extensionManager)
+            awaitWithin { !screenModel.state.value.isLoading }
+
+            screenModel.updateAllExtensions()
+
+            // B5 (manga/anime parity): the queue suspends on the reinstall dialog instead of
+            // silently skipping the plugin, and nothing installs until the user decides.
+            awaitWithin { screenModel.state.value.queuedReinstallPlugin?.id == "kid" }
+            extensionManager.installStarts shouldBe 0
+
+            screenModel.resolveQueuedReinstall(crossRepo)
+
+            awaitWithin { extensionManager.installStarts == 1 }
+            screenModel.state.value.queuedReinstallPlugin shouldBe null
+        }
+    }
+
+    @Test
+    fun `update-all skips a reinstall-needing plugin when the queued dialog is dismissed`() {
+        runBlocking {
+            val installed = pluginInstalled("kid", 1)
+            val crossRepo = pluginAvailable("kid", 2).copy(
+                repoUrl = "https://other.example/index.json",
+                repoName = "Other",
+            )
+            val extensionManager = FakeNovelExtensionManager(
+                installed = listOf(installed),
+                available = listOf(crossRepo),
+                updates = listOf(installed),
+            )
+            val screenModel = createScreenModel(extensionManager)
+            awaitWithin { !screenModel.state.value.isLoading }
+
+            screenModel.updateAllExtensions()
+            awaitWithin { screenModel.state.value.queuedReinstallPlugin?.id == "kid" }
+
+            screenModel.resolveQueuedReinstall(null)
+
+            awaitWithin { screenModel.state.value.queuedReinstallPlugin == null }
+            delay(100)
+            extensionManager.installStarts shouldBe 0
+        }
+    }
+
     private suspend fun awaitWithin(millis: Long = 1_000, condition: () -> Boolean) {
         withTimeout(millis) {
             while (!condition()) yield()

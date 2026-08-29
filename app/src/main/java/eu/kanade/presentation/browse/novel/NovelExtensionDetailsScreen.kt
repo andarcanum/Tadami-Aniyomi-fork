@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Launch
+import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,11 +33,14 @@ import coil3.compose.AsyncImage
 import com.tadami.aurora.R
 import eu.kanade.domain.extension.novel.interactor.NovelExtensionSourceItem
 import eu.kanade.presentation.browse.components.ExtensionAuroraButton
+import eu.kanade.presentation.browse.components.ExtensionBannerTone
 import eu.kanade.presentation.browse.components.ExtensionDetailsGlassCard
+import eu.kanade.presentation.browse.components.ExtensionStatusBanner
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.AppBarActions
 import eu.kanade.presentation.more.settings.widget.TextPreferenceWidget
 import eu.kanade.presentation.more.settings.widget.TrailingWidgetBuffer
+import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
 import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
 import eu.kanade.tachiyomi.ui.browse.novel.extension.details.NovelExtensionDetailsScreenModel
@@ -60,6 +65,8 @@ fun NovelExtensionDetailsScreen(
     onClickDisableAll: () -> Unit,
     onClickClearCookies: () -> Unit,
     onClickUninstall: () -> Unit,
+    onClickUpdate: () -> Unit,
+    onClickReinstall: () -> Unit,
     onClickSource: (sourceId: Long) -> Unit,
     onClickIncognito: (Boolean) -> Unit,
 ) {
@@ -120,10 +127,15 @@ fun NovelExtensionDetailsScreen(
         ExtensionDetails(
             contentPadding = paddingValues,
             extension = extension,
+            hasUpdate = state.hasUpdate,
+            needsReinstall = state.needsReinstall,
+            installStep = state.installStep,
             sources = state.sources,
             incognitoMode = state.isIncognito,
             onClickSourcePreferences = onClickSourcePreferences,
             onClickUninstall = onClickUninstall,
+            onClickUpdate = onClickUpdate,
+            onClickReinstall = onClickReinstall,
             onClickSource = onClickSource,
             onClickIncognito = onClickIncognito,
         )
@@ -134,14 +146,29 @@ fun NovelExtensionDetailsScreen(
 private fun ExtensionDetails(
     contentPadding: PaddingValues,
     extension: NovelPlugin.Installed,
+    hasUpdate: Boolean,
+    needsReinstall: Boolean,
+    installStep: InstallStep,
     sources: ImmutableList<NovelExtensionSourceItem>,
     incognitoMode: Boolean,
     onClickSourcePreferences: (sourceId: Long) -> Unit,
     onClickUninstall: () -> Unit,
+    onClickUpdate: () -> Unit,
+    onClickReinstall: () -> Unit,
     onClickSource: (sourceId: Long) -> Unit,
     onClickIncognito: (Boolean) -> Unit,
 ) {
     ScrollbarLazyColumn(contentPadding = contentPadding) {
+        item {
+            ExtensionProblemBanners(
+                hasUpdate = hasUpdate,
+                needsReinstall = needsReinstall,
+                installStep = installStep,
+                onClickUpdate = onClickUpdate,
+                onClickReinstall = onClickReinstall,
+            )
+        }
+
         item {
             DetailsHeader(
                 extension = extension,
@@ -160,6 +187,48 @@ private fun ExtensionDetails(
                 source = source,
                 onClickSourcePreferences = onClickSourcePreferences,
                 onClickSource = onClickSource,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExtensionProblemBanners(
+    hasUpdate: Boolean,
+    needsReinstall: Boolean,
+    installStep: InstallStep,
+    onClickUpdate: () -> Unit,
+    onClickReinstall: () -> Unit,
+) {
+    val busy = !installStep.isCompleted()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = MaterialTheme.padding.medium),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
+    ) {
+        when {
+            needsReinstall -> ExtensionStatusBanner(
+                icon = Icons.Outlined.Warning,
+                title = stringResource(MR.strings.ext_reinstall_required),
+                message = stringResource(MR.strings.ext_reinstall_required_hint),
+                tone = ExtensionBannerTone.Warning,
+                actionLabel = stringResource(
+                    if (busy) MR.strings.ext_installing else MR.strings.ext_reinstall_required,
+                ),
+                actionEnabled = !busy,
+                onAction = onClickReinstall,
+            )
+            hasUpdate -> ExtensionStatusBanner(
+                icon = Icons.Outlined.GetApp,
+                title = stringResource(MR.strings.ext_update),
+                message = stringResource(MR.strings.ext_update_available_banner),
+                tone = ExtensionBannerTone.Info,
+                actionLabel = stringResource(
+                    if (busy) MR.strings.ext_installing else MR.strings.ext_update,
+                ),
+                actionEnabled = !busy,
+                onAction = onClickUpdate,
             )
         }
     }

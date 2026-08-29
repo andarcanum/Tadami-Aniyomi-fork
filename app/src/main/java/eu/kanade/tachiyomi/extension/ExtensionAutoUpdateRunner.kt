@@ -36,7 +36,7 @@ class ExtensionAutoUpdateRunner(
             .onFailure { logcat(LogPriority.WARN, it) { "Manga extension auto-update failed" } }
         runCatching { updateAnimeExtensions(context, installer) }
             .onFailure { logcat(LogPriority.WARN, it) { "Anime extension auto-update failed" } }
-        runCatching { updateNovelExtensions(installer) }
+        runCatching { updateNovelExtensions(installer, context = context) }
             .onFailure { logcat(LogPriority.WARN, it) { "Novel extension auto-update failed" } }
     }
 
@@ -113,14 +113,19 @@ class ExtensionAutoUpdateRunner(
     internal suspend fun updateNovelExtensions(
         installer: BasePreferences.ExtensionInstaller,
         manager: NovelExtensionManager? = novelExtensionManager.get(),
+        context: Context? = null,
     ) {
         if (manager == null) return
         val pending = manager.updatesFlow.first()
         val available = manager.availablePluginsFlow.first()
         val userRepos = sourcePreferences.novelInstalledExtensionRepos().get()
+        // A system-installed (shared) Kotlin extension must not be replaced by a private copy:
+        // that would leave a second copy of the package behind (same rule as manga/anime shared
+        // installs). Those updates stay manual.
+        val sharedSkipped = pending.filter { it.isKotlinExtension && it.isShared }
         val candidates = pending.filter { plugin ->
             if (plugin.isKotlinExtension) {
-                canAutoUpdateExtension(true, installer, isSharedInstall = false)
+                canAutoUpdateExtension(true, installer, isSharedInstall = plugin.isShared)
             } else {
                 // JS plugins are plain files executed inside the app process and carry no
                 // signature, so auto-update them only when the plugin comes from a repo the user
@@ -133,7 +138,10 @@ class ExtensionAutoUpdateRunner(
                     }
             }
         }
-        if (candidates.isEmpty()) return
+        if (candidates.isEmpty()) {
+            notifyNovelSharedSkipped(context, sharedSkipped)
+            return
+        }
 
         var updatedAny = false
         candidates.forEach { installed ->
@@ -158,7 +166,10 @@ class ExtensionAutoUpdateRunner(
                 .onSuccess { updatedAny = true }
                 .onFailure { logcat(LogPriority.WARN, it) { "Failed to auto-update novel extension ${installed.id}" } }
         }
-        if (!updatedAny) return
+        if (!updatedAny) {
+            notifyNovelSharedSkipped(context, sharedSkipped)
+            return
+        }
 
         val availableAll = manager.availablePluginsFlow.first()
         val badgeCount = manager.installedPluginsFlow.first().count { installed ->
@@ -168,6 +179,15 @@ class ExtensionAutoUpdateRunner(
                 .classify(installed, variants).hasAnyUpdate
         }
         sourcePreferences.novelExtensionUpdatesCount().set(badgeCount)
+    }
+
+    /**
+     * Reports shared system installs whose novel auto-update was skipped, so the user knows why
+     * the badge did not clear. Only fires when a context is supplied (production path).
+     */
+    private fun notifyNovelSharedSkipped(context: Context?, skipped: List<NovelPlugin.Installed>) {
+        if (context == null || skipped.isEmpty()) return
+        ExtensionUpdateNotifier(context).notifySharedAutoUpdateSkipped(skipped.map { it.name })
     }
 
     /**

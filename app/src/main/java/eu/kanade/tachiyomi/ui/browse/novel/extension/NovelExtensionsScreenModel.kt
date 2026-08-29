@@ -332,17 +332,54 @@ class NovelExtensionsScreenModel(
         screenModelScope.launchIO {
             // Full installed set, not the rendered list: search filters and collapsed language
             // sections hide items whose updates still must be applied (parity with c344dcc09).
-            val candidates = installedPluginsSnapshot.value.mapNotNull { installed ->
-                getSameRepoUpdate(installed)
-            }
             // Sequential awaited queue: each update finishes (or fails into row diagnostics)
             // before the next starts, and the loop suspends while a signature-mismatch
             // dialog is open so the user resolves it before the queue moves on.
-            candidates.forEach { update ->
-                installAwaiting(update)
-                awaitSignatureResolution()
+            installedPluginsSnapshot.value.forEach { installed ->
+                val updateState = NovelPluginUpdateClassifier.classify(
+                    installed = installed,
+                    variants = allPluginVariants.value[installed.id].orEmpty(),
+                )
+                when {
+                    updateState.sameRepoUpdate != null -> {
+                        installAwaiting(updateState.sameRepoUpdate)
+                        awaitSignatureResolution()
+                    }
+                    // Never silently skip a reinstall-needing plugin (B5, parity with manga/anime):
+                    // pause the queue until the user resolves the reinstall dialog for this
+                    // plugin; dismissing it skips it.
+                    updateState.hasOtherRepoUpdate -> {
+                        resolveQueuedReinstall(installed, updateState.otherRepoUpdates)
+                    }
+                }
             }
         }
+    }
+
+    /** Set while the update-all queue is waiting for a reinstall decision on this plugin (B5). */
+    private var queuedReinstallResolution: CompletableDeferred<NovelPlugin.Available?>? = null
+
+    private suspend fun resolveQueuedReinstall(
+        installed: NovelPlugin.Installed,
+        candidates: List<NovelPlugin.Available>,
+    ) {
+        mutableState.update {
+            it.copy(queuedReinstallPlugin = installed, queuedReinstallCandidates = candidates)
+        }
+        val resolution = CompletableDeferred<NovelPlugin.Available?>()
+        queuedReinstallResolution = resolution
+        val chosen = resolution.await()
+        mutableState.update {
+            it.copy(queuedReinstallPlugin = null, queuedReinstallCandidates = emptyList())
+        }
+        if (chosen != null) {
+            reinstallTracked(installed, chosen)
+        }
+    }
+
+    fun resolveQueuedReinstall(replacement: NovelPlugin.Available?) {
+        queuedReinstallResolution?.complete(replacement)
+        queuedReinstallResolution = null
     }
 
     private suspend fun installAwaiting(plugin: NovelPlugin.Available) {
@@ -624,6 +661,9 @@ class NovelExtensionsScreenModel(
         val repoPickerPluginId: String? = null,
         val repoPickerOptions: List<NovelPlugin.Available> = emptyList(),
         val signatureMismatchEvent: NovelExtensionManager.SignatureMismatchEvent? = null,
+        /** Set while the update-all queue is paused on a plugin needing reinstall (B5). */
+        val queuedReinstallPlugin: NovelPlugin.Installed? = null,
+        val queuedReinstallCandidates: List<NovelPlugin.Available> = emptyList(),
     )
 
     private companion object {
