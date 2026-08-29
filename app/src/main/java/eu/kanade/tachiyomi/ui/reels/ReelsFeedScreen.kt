@@ -256,6 +256,7 @@ data class ReelsFeedScreen(
                                 isHdQuality = effectiveHd,
                                 isAutoAdvance = state.isAutoAdvance,
                                 isCropMode = state.isCropMode,
+                                chromeVisible = chromeVisible,
                                 onTogglePlayPause = {
                                     chromeVisible = true
                                     screenModel.togglePlayPause()

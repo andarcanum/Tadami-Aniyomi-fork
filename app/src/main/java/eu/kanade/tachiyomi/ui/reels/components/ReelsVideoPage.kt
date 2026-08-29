@@ -8,6 +8,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -60,6 +62,8 @@ fun ReelsVideoPage(
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isLastPage: Boolean = false,
+    // Feed-level immersive chrome flag: the side action bar hides together with the top bar.
+    chromeVisible: Boolean = true,
     // Stable per-source prefix; the page appends item id + the PINNED quality to build the
     // progressive cache key.
     cachePrefix: String? = null,
@@ -252,26 +256,32 @@ fun ReelsVideoPage(
             )
         }
 
-        // 5. Right Action Bar (Like, Follow?, Mute, Share)
-        ReelsActionsColumn(
-            isLiked = isLiked,
-            isMuted = isMuted,
-            onToggleLike = {
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                onToggleLike()
-            },
-            onToggleMute = onToggleMute,
-            onShare = onShare,
-            showFollow = showFollowAction,
-            isFollowing = isFollowingCreator,
-            onToggleFollow = {
-                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                onToggleFollowCreator()
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = 12.dp, bottom = 48.dp),
-        )
+        // 5. Right Action Bar (Like, Follow?, Mute, Share) — hides with the immersive
+        // chrome, sliding out to the trailing edge like the top bar slides up.
+        AnimatedVisibility(
+            visible = chromeVisible,
+            enter = fadeIn() + slideInHorizontally { it },
+            exit = fadeOut() + slideOutHorizontally { it },
+            modifier = Modifier.align(Alignment.BottomEnd),
+        ) {
+            ReelsActionsColumn(
+                isLiked = isLiked,
+                isMuted = isMuted,
+                onToggleLike = {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onToggleLike()
+                },
+                onToggleMute = onToggleMute,
+                onShare = onShare,
+                showFollow = showFollowAction,
+                isFollowing = isFollowingCreator,
+                onToggleFollow = {
+                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onToggleFollowCreator()
+                },
+                modifier = Modifier.padding(end = 12.dp, bottom = 48.dp),
+            )
+        }
 
         // 6. Bottom Meta info (Author, Title, Clickable Tags)
         ReelsBottomMeta(

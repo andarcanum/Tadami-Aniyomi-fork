@@ -127,24 +127,32 @@ private fun ActionIconItem(
         verticalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier,
     ) {
+        // Visual circle matches the reels top-bar buttons (36dp/18dp); the outer box keeps
+        // a 44dp touch target — the column sits against the screen edge.
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .background(Color.Black.copy(alpha = 0.45f), CircleShape)
-                .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = tint,
-                modifier = Modifier.size(24.dp),
-            )
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(Color.Black.copy(alpha = 0.45f), CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = tint,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             color = Color.White,
             style = MaterialTheme.typography.labelSmall,
         )
