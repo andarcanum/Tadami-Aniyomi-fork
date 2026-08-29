@@ -11,6 +11,8 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -19,8 +21,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -40,7 +45,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
@@ -64,6 +71,10 @@ fun ReelsVideoPage(
     isLastPage: Boolean = false,
     // Feed-level immersive chrome flag: the side action bar hides together with the top bar.
     chromeVisible: Boolean = true,
+    // Landscape fullscreen: the page content is rendered rotated 90° inside the locked
+    // portrait activity (software rotation — no orientation request, no player rebuild).
+    isLandscapeFullscreen: Boolean = false,
+    onLandscapeFullscreenChange: (Boolean) -> Unit = {},
     // Stable per-source prefix; the page appends item id + the PINNED quality to build the
     // progressive cache key.
     cachePrefix: String? = null,
@@ -97,6 +108,9 @@ fun ReelsVideoPage(
     var retrySignal by remember { mutableIntStateOf(0) }
     val heartScale = remember { Animatable(0f) }
     val hapticFeedback = LocalHapticFeedback.current
+    // Real orientation of the media, reported by the player; only landscape reels get
+    // the fullscreen affordance.
+    var isLandscapeVideo by remember(item) { mutableStateOf(false) }
 
     // The effective (data-saver aware) quality is re-read only when the page ACTIVATES:
     // mid-playback network changes must not rebuild the player and interrupt the clip.
@@ -111,7 +125,7 @@ fun ReelsVideoPage(
     val cacheKey = cachePrefix?.let { prefix -> "$prefix:${item.id}:${if (pinnedHd) "hd" else "sd"}" }
 
     Box(
-        modifier = modifier
+        modifier = (if (isLandscapeFullscreen) modifier.rotatedLandscapeFill() else modifier)
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
@@ -184,6 +198,7 @@ fun ReelsVideoPage(
             // The player-reported duration is authoritative; the server value is only a
             // placeholder until STATE_READY (wrong server durations must not stick).
             onDurationKnown = { durationSec = it },
+            onVideoLandscapeKnown = { isLandscapeVideo = it },
             onPlaybackError = { msg -> onPlaybackError(msg) { retrySignal++ } },
             onBufferingChanged = { isBuffering = it },
             playbackSpeed = playbackSpeed,
@@ -283,6 +298,35 @@ fun ReelsVideoPage(
             )
         }
 
+        // Landscape fullscreen affordance: only landscape reels can expand, and the
+        // buttons ride the same chrome visibility as the rest of the overlay UI.
+        AnimatedVisibility(
+            visible = chromeVisible && isLandscapeVideo && !isLandscapeFullscreen,
+            enter = fadeIn() + slideInHorizontally { it },
+            exit = fadeOut() + slideOutHorizontally { it },
+            modifier = Modifier.align(Alignment.CenterEnd),
+        ) {
+            ReelsLandscapeButton(
+                icon = Icons.Filled.Fullscreen,
+                contentDescription = stringResource(MR.strings.reels_landscape_fullscreen),
+                modifier = Modifier.padding(end = 12.dp),
+            ) { onLandscapeFullscreenChange(true) }
+        }
+        AnimatedVisibility(
+            visible = isLandscapeFullscreen,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopEnd),
+        ) {
+            // Lives inside the rotated frame so it appears at the video's own top-right
+            // corner once the phone is turned.
+            ReelsLandscapeButton(
+                icon = Icons.Filled.FullscreenExit,
+                contentDescription = stringResource(MR.strings.reels_landscape_exit),
+                modifier = Modifier.padding(end = 12.dp, top = 12.dp),
+            ) { onLandscapeFullscreenChange(false) }
+        }
+
         // 6. Bottom Meta info (Author, Title, Clickable Tags)
         ReelsBottomMeta(
             item = item,
@@ -307,6 +351,53 @@ fun ReelsVideoPage(
             },
             onScrubStart = onScrubStart,
             modifier = Modifier.align(Alignment.BottomCenter),
+        )
+    }
+}
+
+/**
+ * Software landscape fill for the locked-portrait reels screen: measures the content
+ * with width/height swapped and rotates it 90° about the center, so a landscape video
+ * covers the physical screen exactly. No orientation request is made — the activity
+ * stays portrait, the player is never rebuilt, and touch input follows the rotation.
+ */
+private fun Modifier.rotatedLandscapeFill(): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(
+        Constraints(
+            minWidth = 0,
+            maxWidth = constraints.maxHeight,
+            minHeight = 0,
+            maxHeight = constraints.maxWidth,
+        ),
+    )
+    layout(constraints.maxWidth, constraints.maxHeight) {
+        placeable.placeRelative(
+            x = (constraints.maxWidth - placeable.width) / 2,
+            y = (constraints.maxHeight - placeable.height) / 2,
+        )
+    }
+}.graphicsLayer { rotationZ = 90f }
+
+@Composable
+private fun ReelsLandscapeButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .size(36.dp)
+            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(18.dp),
         )
     }
 }

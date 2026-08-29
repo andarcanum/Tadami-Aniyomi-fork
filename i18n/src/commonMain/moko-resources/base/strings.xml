@@ -1868,6 +1868,8 @@
     <string name="reels_aspect">Aspect</string>
     <string name="reels_quality">Quality</string>
     <string name="reels_more">More options</string>
+    <string name="reels_landscape_fullscreen">Watch in landscape</string>
+    <string name="reels_landscape_exit">Exit landscape fullscreen</string>
     <string name="reels_open_favorites">Open favorites</string>
     <string name="reels_preload">Preload</string>
     <string name="reels_preload_wifi_only">Wi-Fi only preload</string>

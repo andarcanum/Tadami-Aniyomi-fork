@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -50,6 +51,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
@@ -151,6 +155,25 @@ data class ReelsFeedScreen(
         // so playback never rebuilds mid-clip when connectivity changes.
         val effectiveHd = if (state.dataSaverMetered && !isOnWifi) false else state.isHdQuality
         var chromeVisible by remember { mutableStateOf(true) }
+        // Landscape fullscreen (software-rotated overlay, see ReelsVideoPage): entered from
+        // the expand button on landscape reels, left via the button or system back.
+        var landscapeFullscreen by remember { mutableStateOf(false) }
+        BackHandler(enabled = landscapeFullscreen) { landscapeFullscreen = false }
+
+        // Hide the system bars while the rotated video owns the screen; restore on exit
+        // and on screen disposal so the rest of the app is unaffected.
+        DisposableEffect(landscapeFullscreen) {
+            val window = (context as? Activity)?.window
+            val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+            if (landscapeFullscreen && controller != null) {
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+            }
+            onDispose {
+                controller?.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
 
         // Immersive: auto-hide the top bar after 3s of playback; any tap reveals it.
         LaunchedEffect(chromeVisible, state.isPlaying) {
@@ -237,6 +260,9 @@ data class ReelsFeedScreen(
                     VerticalPager(
                         state = pagerState,
                         beyondViewportPageCount = 1,
+                        // Swiping away underneath the rotated fullscreen overlay would
+                        // orphan it; the feed only scrolls in normal portrait mode.
+                        userScrollEnabled = !landscapeFullscreen,
                         modifier = Modifier.fillMaxSize(),
                     ) { page ->
                         val item = state.items.getOrNull(page)
@@ -254,9 +280,11 @@ data class ReelsFeedScreen(
                                 isMuted = state.isMuted,
                                 isLiked = (item.id in state.likedIds),
                                 isHdQuality = effectiveHd,
-                                isAutoAdvance = state.isAutoAdvance,
+                                isAutoAdvance = state.isAutoAdvance && !landscapeFullscreen,
                                 isCropMode = state.isCropMode,
-                                chromeVisible = chromeVisible,
+                                chromeVisible = chromeVisible && !landscapeFullscreen,
+                                isLandscapeFullscreen = landscapeFullscreen,
+                                onLandscapeFullscreenChange = { landscapeFullscreen = it },
                                 onTogglePlayPause = {
                                     chromeVisible = true
                                     screenModel.togglePlayPause()
@@ -334,7 +362,7 @@ data class ReelsFeedScreen(
             // "Tap to unmute" (approved variant A): visible while the session sound is
             // undecided; tapping unmutes (and decides), otherwise it auto-dismisses.
             AnimatedVisibility(
-                visible = state.showUnmuteHint && state.isMuted,
+                visible = state.showUnmuteHint && state.isMuted && !landscapeFullscreen,
                 enter = fadeIn() + scaleIn(initialScale = 0.85f),
                 exit = fadeOut() + scaleOut(targetScale = 0.85f),
                 modifier = Modifier
@@ -375,8 +403,11 @@ data class ReelsFeedScreen(
             // Top Bar Overlay; auto-hidden in immersive mode, revealed on tap or when a
             // search/filter/source sheet is open.
             AnimatedVisibility(
-                visible = chromeVisible || state.isSearchBarOpen || state.isFilterDialogOpen ||
-                    state.isSourcePickerOpen,
+                visible = !landscapeFullscreen &&
+                    (
+                        chromeVisible || state.isSearchBarOpen || state.isFilterDialogOpen ||
+                            state.isSourcePickerOpen
+                        ),
                 modifier = Modifier.align(Alignment.TopCenter),
             ) {
                 ReelsTopBar(

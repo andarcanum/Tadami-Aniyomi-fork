@@ -94,6 +94,9 @@ fun ReelsPlayerView(
     // TalkBack description of the playing video (title/author from the item).
     videoDescription: String? = null,
     onDurationKnown: (Float) -> Unit = {},
+    // Fired from onVideoSizeChanged once real dimensions are known: true for
+    // landscape reels (the only ones offered the landscape-fullscreen affordance).
+    onVideoLandscapeKnown: (Boolean) -> Unit = {},
     onPlaybackError: (String) -> Unit = {},
     onBufferingChanged: (Boolean) -> Unit = {},
     playbackSpeed: Float = 1f,
@@ -271,6 +274,9 @@ fun ReelsPlayerView(
                             videoWidth = videoSize.width
                             videoHeight = videoSize.height
                             updateMatrix(textureViewRef, videoSize.width, videoSize.height, currentCropMode)
+                            if (videoSize.width > 0 && videoSize.height > 0) {
+                                onVideoLandscapeKnown(videoSize.width > videoSize.height)
+                            }
                         }
 
                         override fun onRenderedFirstFrame() {
