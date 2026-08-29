@@ -110,6 +110,7 @@ class ReelsFeedScreenModel(
     // Snapshot of the unfiltered feed, used to restore position when a search is cleared.
     // Written only from main-thread entry points (search/clearSearch/switchSource).
     private var baseItems: ImmutableList<ShortVideoItem> = persistentListOf()
+    private var baseSeenIds: ImmutableSet<String> = persistentSetOf()
     private var baseNextPageIndex = 1
     private var baseNextCursor: String? = null
     private var baseCursorMode = false
@@ -136,6 +137,7 @@ class ReelsFeedScreenModel(
                 it.copy(
                     isOffline = true,
                     items = initialFavorites.map { fav -> fav.toShortVideoItem() }.toImmutableList(),
+                    seenIds = initialFavorites.map { it.videoId }.toImmutableSet(),
                     likedIds = initialFavorites.map { it.videoId }.toImmutableSet(),
                     isLoading = false,
                     feedGeneration = 1,
@@ -295,10 +297,11 @@ class ReelsFeedScreenModel(
                     // Re-check inside the CAS: a reset may have landed between the outer guard
                     // and this update; writing a stale page would corrupt the newer feed.
                     if (loadGeneration.get() != generation) return@update current
+                    val incoming = pageData.videos.distinctBy { it.id }
                     val newItems = if (reset) {
-                        pageData.videos
+                        incoming
                     } else {
-                        current.items + pageData.videos
+                        incoming.filterNot { it.id in current.seenIds }
                     }
                     // Sticky cursor mode (contract v17): the first non-null cursor locks the
                     // whole generation into cursor mode.
@@ -312,7 +315,12 @@ class ReelsFeedScreenModel(
                         }
                     }
                     current.copy(
-                        items = newItems.distinctBy { it.id }.toImmutableList(),
+                        items = (if (reset) newItems else current.items + newItems).toImmutableList(),
+                        seenIds = if (reset) {
+                            newItems.map { it.id }.toImmutableSet()
+                        } else {
+                            (current.seenIds + newItems.map { it.id }).toImmutableSet()
+                        },
                         isLoading = false,
                         canLoadMore = pageData.hasNextPage && !cursorLost,
                         nextPageIndex = page + 1,
@@ -363,6 +371,7 @@ class ReelsFeedScreenModel(
         // query can restore the browsing position instead of reloading from scratch.
         if (state.value.searchQuery.isBlank()) {
             baseItems = state.value.items
+            baseSeenIds = state.value.seenIds
             baseNextPageIndex = state.value.nextPageIndex
             baseNextCursor = state.value.nextCursor
             baseCursorMode = state.value.cursorMode
@@ -387,6 +396,7 @@ class ReelsFeedScreenModel(
                     searchQuery = "",
                     isSearchBarOpen = false,
                     items = baseItems,
+                    seenIds = baseSeenIds,
                     isLoading = false,
                     error = null,
                     canLoadMore = baseCanLoadMore,
@@ -643,6 +653,9 @@ class ReelsFeedScreenModel(
         val availableSources: ImmutableList<AnimeSource> = persistentListOf(),
         val sourceIcons: ImmutableMap<Long, ImageBitmap> = persistentHashMapOf(),
         val items: ImmutableList<ShortVideoItem> = persistentListOf(),
+        // Ids already present in [items]: the append path filters incoming pages against this
+        // set, keeping long sessions at O(page) instead of distinctBy's O(n²) per append.
+        val seenIds: ImmutableSet<String> = persistentSetOf(),
         val isLoading: Boolean = true,
         // Pagination cursor: index of the next feed page to fetch and whether the source
         // reported more pages. Lives in State so stale loads cannot corrupt it.

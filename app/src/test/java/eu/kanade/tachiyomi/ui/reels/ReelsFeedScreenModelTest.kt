@@ -1199,6 +1199,25 @@ class ReelsFeedScreenModelTest {
         screenModel.state.value.nextCursor shouldBe "bc2"
     }
 
+    @Test
+    fun `search during a cursor session starts a new generation with a null cursor`() = runTest(testDispatcher) {
+        val source = RecordingCursorFeedSource(1005L) { page, _ ->
+            FeedPage(listOf(videoItem("cs$page")), hasNextPage = true, nextCursor = "s$page")
+        }
+        val screenModel = buildModel(sourceId = 1005L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle() // (1, null)
+        screenModel.onPageChanged(0)
+        testDispatcher.scheduler.advanceUntilIdle() // (2, "s1") — cursor mode locked
+        screenModel.state.value.cursorMode shouldBe true
+
+        screenModel.search("tag")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // The search generation must restart at page 1 with the token dropped; handing the
+        // old feed's cursor to getSearchFeed would skip straight past page 1 results.
+        source.requested shouldBe listOf(1 to null as String?, 2 to "s1", 1 to null as String?)
+    }
+
     private class RecordingCursorFeedSource(
         override val id: Long,
         private val provider: (Int, String?) -> FeedPage,
