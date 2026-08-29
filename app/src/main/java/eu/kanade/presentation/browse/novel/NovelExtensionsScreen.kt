@@ -23,9 +23,11 @@ import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -274,10 +276,14 @@ private fun NovelExtensionContent(
                     textRes = MR.strings.ext_updates_pending,
                     action = {
                         if (updates.any { it.hasUpdate }) {
-                            IconButton(onClick = onUpdateAll) {
-                                Icon(
-                                    imageVector = Icons.Outlined.GetApp,
-                                    contentDescription = stringResource(MR.strings.ext_update_all),
+                            // Parity with the manga/anime extensions header: a labeled
+                            // "Update all" button, not a bare download-looking icon.
+                            Button(onClick = onUpdateAll) {
+                                Text(
+                                    text = stringResource(MR.strings.ext_update_all),
+                                    style = LocalTextStyle.current.copy(
+                                        color = MaterialTheme.colorScheme.onPrimary,
+                                    ),
                                 )
                             }
                         }
