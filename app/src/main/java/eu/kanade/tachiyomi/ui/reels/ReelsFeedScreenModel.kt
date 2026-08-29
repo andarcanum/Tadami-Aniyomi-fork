@@ -91,6 +91,8 @@ class ReelsFeedScreenModel(
     // Written only from main-thread entry points (search/clearSearch/switchSource).
     private var baseItems: ImmutableList<ShortVideoItem> = persistentListOf()
     private var baseNextPageIndex = 1
+    private var baseNextCursor: String? = null
+    private var baseCursorMode = false
     private var baseCanLoadMore = true
     private var basePosition = 0
 
@@ -157,6 +159,8 @@ class ReelsFeedScreenModel(
             persistUnlessIncognito { sourcePreferences.lastUsedReelsSource().set(newSourceId) }
             baseItems = persistentListOf()
             baseNextPageIndex = 1
+            baseNextCursor = null
+            baseCursorMode = false
             baseCanLoadMore = true
             basePosition = 0
             decidedIds.clear()
@@ -222,6 +226,8 @@ class ReelsFeedScreenModel(
                     error = null,
                     pageError = null,
                     nextPageIndex = 1,
+                    nextCursor = null,
+                    cursorMode = false,
                     canLoadMore = true,
                 )
             } else {
@@ -233,10 +239,13 @@ class ReelsFeedScreenModel(
                 val query = state.value.searchQuery
                 val filters = state.value.filters
                 val page = state.value.nextPageIndex
+                // Contract v17: while locked into cursor mode the token is authoritative;
+                // in page-int mode the source always receives a null cursor.
+                val cursor = if (state.value.cursorMode) state.value.nextCursor else null
                 val pageData = if (query.isNotBlank()) {
-                    src.getSearchFeed(page, null, query, filters)
+                    src.getSearchFeed(page, cursor, query, filters)
                 } else {
-                    src.getFeed(page, null, filters)
+                    src.getFeed(page, cursor, filters)
                 }
                 // Re-check cancellation: the suspend calls above may have completed right
                 // before this job was superseded by a reset.
@@ -254,11 +263,24 @@ class ReelsFeedScreenModel(
                     } else {
                         current.items + pageData.videos
                     }
+                    // Sticky cursor mode (contract v17): the first non-null cursor locks the
+                    // whole generation into cursor mode.
+                    val newCursorMode = current.cursorMode || pageData.nextCursor != null
+                    // Cursor lost mid-feed while more pages are claimed is a protocol
+                    // violation: stop pagination, keep the feed usable.
+                    val cursorLost = newCursorMode && pageData.nextCursor == null && pageData.hasNextPage
+                    if (cursorLost) {
+                        logcat(LogPriority.WARN) {
+                            "Feed ${current.currentSourceId} dropped its cursor mid-feed; stopping pagination (contract v17)."
+                        }
+                    }
                     current.copy(
                         items = newItems.distinctBy { it.id }.toImmutableList(),
                         isLoading = false,
-                        canLoadMore = pageData.hasNextPage,
+                        canLoadMore = pageData.hasNextPage && !cursorLost,
                         nextPageIndex = page + 1,
+                        nextCursor = pageData.nextCursor,
+                        cursorMode = newCursorMode,
                         feedGeneration = if (reset) current.feedGeneration + 1 else current.feedGeneration,
                         // A fresh feed always starts at the top; only the clearSearch restore
                         // path sets a non-zero targetPageIndex.
@@ -304,6 +326,8 @@ class ReelsFeedScreenModel(
         if (state.value.searchQuery.isBlank()) {
             baseItems = state.value.items
             baseNextPageIndex = state.value.nextPageIndex
+            baseNextCursor = state.value.nextCursor
+            baseCursorMode = state.value.cursorMode
             baseCanLoadMore = state.value.canLoadMore
             basePosition = state.value.activeIndex
         }
@@ -329,6 +353,8 @@ class ReelsFeedScreenModel(
                     error = null,
                     canLoadMore = baseCanLoadMore,
                     nextPageIndex = baseNextPageIndex,
+                    nextCursor = baseNextCursor,
+                    cursorMode = baseCursorMode,
                     feedGeneration = current.feedGeneration + 1,
                     targetPageIndex = basePosition.coerceIn(0, (baseItems.size - 1).coerceAtLeast(0)),
                 )
@@ -563,6 +589,11 @@ class ReelsFeedScreenModel(
         // Pagination cursor: index of the next feed page to fetch and whether the source
         // reported more pages. Lives in State so stale loads cannot corrupt it.
         val nextPageIndex: Int = 1,
+        // Continuation token for cursor mode (contract v17 sticky protocol): set from every
+        // successful FeedPage.nextCursor; null while in page-int mode.
+        val nextCursor: String? = null,
+        // Sticky per generation: locked true on the first response with a non-null cursor.
+        val cursorMode: Boolean = false,
         val canLoadMore: Boolean = true,
         val isMuted: Boolean = false,
         val isHdQuality: Boolean = true,

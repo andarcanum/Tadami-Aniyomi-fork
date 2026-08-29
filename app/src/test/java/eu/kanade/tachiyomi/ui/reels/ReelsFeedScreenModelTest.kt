@@ -182,7 +182,12 @@ class ReelsFeedScreenModelTest {
                 return FeedPage(videos = listOf(sampleItem1), hasNextPage = true)
             }
 
-            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage {
+            override suspend fun getSearchFeed(
+                page: Int,
+                cursor: String?,
+                query: String,
+                filters: AnimeFilterList,
+            ): FeedPage {
                 return FeedPage(videos = listOf(sampleItem1), hasNextPage = false)
             }
         }
@@ -198,7 +203,12 @@ class ReelsFeedScreenModelTest {
                 return FeedPage(videos = listOf(sampleItem2), hasNextPage = true)
             }
 
-            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage {
+            override suspend fun getSearchFeed(
+                page: Int,
+                cursor: String?,
+                query: String,
+                filters: AnimeFilterList,
+            ): FeedPage {
                 return FeedPage(videos = listOf(sampleItem2), hasNextPage = false)
             }
         }
@@ -315,9 +325,6 @@ class ReelsFeedScreenModelTest {
 
             override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
                 FeedPage(videos = listOf(incognitoItem), hasNextPage = false)
-
-            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -383,9 +390,6 @@ class ReelsFeedScreenModelTest {
                 }
                 return FeedPage(videos = videos, hasNextPage = true)
             }
-
-            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -430,9 +434,6 @@ class ReelsFeedScreenModelTest {
 
             override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
                 FeedPage(emptyList(), false)
-
-            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -487,9 +488,6 @@ class ReelsFeedScreenModelTest {
 
             override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
                 FeedPage(videos = listOf(gateItem), hasNextPage = false)
-
-            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -542,10 +540,10 @@ class ReelsFeedScreenModelTest {
             override val name: String = name
             override val lang: String = "all"
 
-            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage = FeedPage(emptyList(), false)
-
-            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, cursor, filters)
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage = FeedPage(
+                emptyList(),
+                false,
+            )
         }
 
         val sourceA = feedSource(601L, "Feed A")
@@ -616,9 +614,6 @@ class ReelsFeedScreenModelTest {
                     hasNextPage = true,
                 )
             }
-
-            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, cursor, filters)
         }
 
         val fakeSourceManager = object : AnimeSourceManager {
@@ -773,9 +768,6 @@ class ReelsFeedScreenModelTest {
 
             override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
                 FeedPage(listOf(videoItem("filtered")), hasNextPage = false)
-
-            override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage =
-                getFeed(page, cursor, filters)
         }
 
         val preferences = SourcePreferences(MapPreferenceStore())
@@ -903,7 +895,12 @@ class ReelsFeedScreenModelTest {
             return feedProvider(page)
         }
 
-        override suspend fun getSearchFeed(page: Int, cursor: String?, query: String, filters: AnimeFilterList): FeedPage {
+        override suspend fun getSearchFeed(
+            page: Int,
+            cursor: String?,
+            query: String,
+            filters: AnimeFilterList,
+        ): FeedPage {
             requestedPages += page
             return (searchProvider ?: feedProvider)(page)
         }
@@ -994,5 +991,102 @@ class ReelsFeedScreenModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         screenModel.state.value.items.shouldHaveSize(1)
         screenModel.state.value.searchQuery shouldBe ""
+    }
+
+    @Test
+    fun `first non-null nextCursor locks cursor mode and token is echoed on the next page`() = runTest(testDispatcher) {
+        val source = RecordingCursorFeedSource(1001L) { page, _ ->
+            if (page == 1) {
+                FeedPage(listOf(videoItem("cv1")), hasNextPage = true, nextCursor = "c1")
+            } else {
+                FeedPage(listOf(videoItem("cv2")), hasNextPage = false, nextCursor = null)
+            }
+        }
+        val screenModel = buildModel(sourceId = 1001L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.cursorMode shouldBe true
+        screenModel.state.value.nextCursor shouldBe "c1"
+
+        screenModel.onPageChanged(0)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        source.requested shouldBe listOf(1 to null as String?, 2 to "c1")
+        screenModel.state.value.cursorMode shouldBe true
+        screenModel.state.value.canLoadMore shouldBe false
+    }
+
+    @Test
+    fun `append failure in cursor mode retries the same cursor, not a skipped page`() = runTest(testDispatcher) {
+        val failed = booleanArrayOf(false)
+        val source = RecordingCursorFeedSource(1002L) { page, _ ->
+            if (page == 2 && !failed[0]) {
+                failed[0] = true
+                throw RuntimeException("CDN exploded")
+            }
+            FeedPage(listOf(videoItem("cf$page")), hasNextPage = true, nextCursor = "c$page")
+        }
+        val screenModel = buildModel(sourceId = 1002L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.onPageChanged(0) // page 2 fails
+        testDispatcher.scheduler.advanceUntilIdle()
+        screenModel.state.value.pageError shouldBe "CDN exploded"
+
+        screenModel.onPageChanged(0) // retry page 2 with the same cursor "c1"
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.requested shouldBe listOf(1 to null as String?, 2 to "c1", 2 to "c1")
+    }
+
+    @Test
+    fun `cursor mode with null cursor and hasNextPage true is a violation and stops pagination`() = runTest(
+        testDispatcher,
+    ) {
+        val source = RecordingCursorFeedSource(1003L) { page, _ ->
+            if (page == 1) {
+                FeedPage(listOf(videoItem("v1")), hasNextPage = true, nextCursor = "c1")
+            } else {
+                FeedPage(listOf(videoItem("v2")), hasNextPage = true, nextCursor = null)
+            }
+        }
+        val screenModel = buildModel(sourceId = 1003L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+        screenModel.onPageChanged(0)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.canLoadMore shouldBe false
+        screenModel.state.value.items.shouldHaveSize(2)
+    }
+
+    @Test
+    fun `clearSearch restores the snapshotted cursor mode and token`() = runTest(testDispatcher) {
+        val source = RecordingCursorFeedSource(1004L) { page, _ ->
+            FeedPage(listOf(videoItem("cv$page")), hasNextPage = true, nextCursor = "bc$page")
+        }
+        val screenModel = buildModel(sourceId = 1004L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+        screenModel.onPageChanged(0)
+        testDispatcher.scheduler.advanceUntilIdle()
+        screenModel.search("x")
+        testDispatcher.scheduler.advanceUntilIdle()
+        screenModel.clearSearch()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.cursorMode shouldBe true
+        screenModel.state.value.nextCursor shouldBe "bc2"
+    }
+
+    private class RecordingCursorFeedSource(
+        override val id: Long,
+        private val provider: (Int, String?) -> FeedPage,
+    ) : AnimeFeedSource {
+        override val name: String = "Cursor Feed $id"
+        override val lang: String = "all"
+        val requested = mutableListOf<Pair<Int, String?>>()
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
+            requested += page to cursor
+            return provider(page, cursor)
+        }
     }
 }
