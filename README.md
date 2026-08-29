@@ -97,11 +97,22 @@ and put real OAuth credentials only in the ignored local file.
 - `domain`: business logic, use cases, and repository contracts
 - `data`: repository implementations, database handlers, and SQLDelight schemas
 - `core/common`: shared networking, preferences, JS helpers, and utility code
-- `source-api`: extension contracts and source-facing APIs
+- `source-api`: extension contracts and source-facing APIs (including the Reels feed contract — see [`FEED_CONTRACT.md`](source-api/FEED_CONTRACT.md))
 - `source-local`: local source implementation details
 - `presentation-core` and `presentation-widget`: shared Compose UI building blocks
 - `i18n` and `i18n-aniyomi`: resource bundles and translations
 - `private-modules`: optional private bridges loaded from local configuration
+
+## Reels Feed Plugin Contract
+
+Short-video feed (“Reels”) sources are built against the `AnimeFeedSource`
+contract in `:source-api`. The full author-facing specification — the sticky
+cursor/page-int pagination protocol, `ShortVideoItem` URL semantics, plugin
+API versioning rules, and a source skeleton — lives in
+**[`source-api/FEED_CONTRACT.md`](source-api/FEED_CONTRACT.md)**
+(current contract version: **17**). Feed plugins declare compatibility via the
+`tachiyomix.extensionLib` manifest metadata; the host rejects plugins outside
+the supported range instead of crashing at runtime.
 
 ## Contributing
 
