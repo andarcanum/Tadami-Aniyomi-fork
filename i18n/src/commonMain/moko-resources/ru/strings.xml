@@ -1658,4 +1658,11 @@
     <string name="reels_data_saver_metered">SD в мобильных сетях</string>
     <string name="reels_favorites_removed_snackbar">Видео удалено из избранного</string>
     <string name="reels_unknown_source">Неизвестный источник</string>
+    <string name="reels_follow">Подписаться</string>
+    <string name="reels_following">Вы подписаны</string>
+    <string name="reels_following_feed">Лента подписок</string>
+    <string name="reels_follows_empty">Вы пока ни на кого не подписаны</string>
+    <string name="reels_follows_empty_hint">Нажмите на значок автора в видео, чтобы подписаться</string>
+    <string name="reels_follow_cap_reached">Достигнут лимит — не более 100 авторов на источник</string>
+    <string name="reels_follows_removed_snackbar">Автор удалён из подписок</string>
 </resources>

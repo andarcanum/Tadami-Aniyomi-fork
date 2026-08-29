@@ -89,6 +89,7 @@ class ExtensionRepoToStoreMigrationIntegrationTest {
                 fetch_typeAdapter = FetchTypeColumnAdapter,
             ),
             reels_favoritesAdapter = dataanime.Reels_favorites.Adapter(added_atAdapter = DateColumnAdapter),
+            reels_followsAdapter = dataanime.Reels_follows.Adapter(added_atAdapter = DateColumnAdapter),
         )
         novelDatabase = NovelDatabase(
             driver = novelDriver,

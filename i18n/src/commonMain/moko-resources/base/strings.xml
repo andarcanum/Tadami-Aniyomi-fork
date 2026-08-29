@@ -1875,4 +1875,11 @@
     <string name="reels_data_saver_metered">SD on metered networks</string>
     <string name="reels_favorites_removed_snackbar">Video removed from favorites</string>
     <string name="reels_unknown_source">Unknown source</string>
+    <string name="reels_follow">Follow</string>
+    <string name="reels_following">Following</string>
+    <string name="reels_following_feed">Following feed</string>
+    <string name="reels_follows_empty">No creators followed yet</string>
+    <string name="reels_follows_empty_hint">Tap the person icon on a creator\'s video to follow them</string>
+    <string name="reels_follow_cap_reached">Follow limit reached — 100 creators per source</string>
+    <string name="reels_follows_removed_snackbar">Creator unfollowed</string>
 </resources>

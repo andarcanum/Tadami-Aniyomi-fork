@@ -34,11 +34,14 @@ import androidx.compose.material.icons.filled.DataSaverOn
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.HighQuality
+import androidx.compose.material.icons.outlined.Subscriptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -95,6 +98,14 @@ fun ReelsTopBar(
     preloadWifiOnly: Boolean,
     isOffline: Boolean,
     showSearch: Boolean = true,
+    showFilter: Boolean = true,
+    // Creator chrome (contract v18): Follow/Following action on the creator page and the
+    // follows-screen entry (Subscriptions icon), both capability-gated by the caller.
+    showFollowToggle: Boolean = false,
+    isFollowingCreator: Boolean = false,
+    onToggleFollow: () -> Unit = {},
+    showFollowsEntry: Boolean = false,
+    onOpenFollows: () -> Unit = {},
     showSourcePicker: Boolean,
     onBackClick: () -> Unit,
     onOpenSourcePicker: () -> Unit,
@@ -127,8 +138,10 @@ fun ReelsTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // Left: Back button + Source Title
+            // Left: Back button + Source Title. Weighted (fill=false) so a long title
+            // ellipsizes instead of stealing width from the action buttons.
             Row(
+                modifier = Modifier.weight(1f, fill = false),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -160,6 +173,7 @@ fun ReelsTopBar(
                 if (sourceName.isNotBlank()) {
                     Box(
                         modifier = Modifier
+                            .weight(1f, fill = false)
                             .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
                             .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
                             .clickable(enabled = showSourcePicker) { onOpenSourcePicker() }
@@ -185,6 +199,9 @@ fun ReelsTopBar(
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                                // Weighted so the fixed icon/dropdown are measured first and
+                                // never squeezed out by a long name.
+                                modifier = Modifier.weight(1f, fill = false),
                             )
                             if (showSourcePicker) {
                                 Icon(
@@ -199,8 +216,11 @@ fun ReelsTopBar(
                 }
             }
 
-            // Right Actions: Search, Filter (online only), Favorites, More
+            // Right Actions: Search, Filter (online only), Favorites, Follows, Follow, More.
+            // Horizontally scrollable: the fixed-size circles must never be squeezed to
+            // slivers when the row runs out of width (long creator names, large fonts).
             Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
@@ -234,7 +254,7 @@ fun ReelsTopBar(
                     }
                 }
 
-                if (!isOffline) {
+                if (!isOffline && showFilter) {
                     // Filter / Sort button
                     Box(
                         modifier = Modifier
@@ -268,6 +288,57 @@ fun ReelsTopBar(
                         tint = Color.White,
                         modifier = Modifier.size(18.dp),
                     )
+                }
+
+                // Follows entry (Subscriptions): opens the followed-creators manager.
+                if (showFollowsEntry) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+                            .clickable { onOpenFollows() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Subscriptions,
+                            contentDescription = stringResource(MR.strings.reels_following_feed),
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+
+                // Follow / Following toggle on the creator page.
+                if (showFollowToggle) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(
+                                if (isFollowingCreator) {
+                                    AuroraTheme.colors.accent.copy(alpha = 0.35f)
+                                } else {
+                                    Color.Black.copy(alpha = 0.5f)
+                                },
+                                CircleShape,
+                            )
+                            .border(
+                                1.dp,
+                                if (isFollowingCreator) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
+                                CircleShape,
+                            )
+                            .clickable { onToggleFollow() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = if (isFollowingCreator) Icons.Filled.Person else Icons.Filled.PersonAdd,
+                            contentDescription = stringResource(
+                                if (isFollowingCreator) MR.strings.reels_following else MR.strings.reels_follow,
+                            ),
+                            tint = if (isFollowingCreator) AuroraTheme.colors.accent else Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
 
                 // More (settings: auto-advance, aspect, quality)

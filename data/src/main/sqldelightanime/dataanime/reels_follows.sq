@@ -1,0 +1,37 @@
+import java.util.Date;
+
+-- Followed creators on Reels feed sources (contract v18). Explicit user data:
+-- persists regardless of incognito. Keyed per source because a creator name is only
+-- meaningful inside one source.
+CREATE TABLE reels_follows(
+    source_id INTEGER NOT NULL,
+    creator TEXT NOT NULL,
+    added_at INTEGER AS Date NOT NULL,
+    PRIMARY KEY (source_id, creator)
+);
+
+CREATE INDEX reels_follows_source_id_index ON reels_follows(source_id);
+
+getAll:
+SELECT *
+FROM reels_follows
+ORDER BY added_at DESC;
+
+getBySource:
+SELECT *
+FROM reels_follows
+WHERE source_id = :sourceId
+ORDER BY added_at DESC;
+
+getCreatorsBySource:
+SELECT creator
+FROM reels_follows
+WHERE source_id = :sourceId;
+
+insert:
+INSERT OR REPLACE INTO reels_follows(source_id, creator, added_at)
+VALUES (?, ?, ?);
+
+delete:
+DELETE FROM reels_follows
+WHERE source_id = :sourceId AND creator = :creator;

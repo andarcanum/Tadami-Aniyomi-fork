@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reels
 
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
@@ -12,8 +13,10 @@ import eu.kanade.tachiyomi.animesource.model.SEpisode
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,7 +34,9 @@ import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
+import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
+import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import java.util.Date
@@ -239,6 +244,7 @@ class ReelsFeedScreenModelTest {
             isIncognito = { false },
             sourceIconProvider = { null },
             reelsFavoriteRepository = fakeFavorites,
+            reelsFollowRepository = FakeReelsFollowRepository(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -349,6 +355,7 @@ class ReelsFeedScreenModelTest {
             isIncognito = { true },
             sourceIconProvider = { null },
             reelsFavoriteRepository = fakeFavorites,
+            reelsFollowRepository = FakeReelsFollowRepository(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -411,6 +418,7 @@ class ReelsFeedScreenModelTest {
             isIncognito = { false },
             sourceIconProvider = { null },
             reelsFavoriteRepository = FakeReelsFavoriteRepository(),
+            reelsFollowRepository = FakeReelsFollowRepository(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -456,6 +464,7 @@ class ReelsFeedScreenModelTest {
             isIncognito = { false },
             sourceIconProvider = { null },
             reelsFavoriteRepository = fakeFavorites,
+            reelsFollowRepository = FakeReelsFollowRepository(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -513,6 +522,7 @@ class ReelsFeedScreenModelTest {
             isIncognito = { false },
             sourceIconProvider = { null },
             reelsFavoriteRepository = fakeFavorites,
+            reelsFollowRepository = FakeReelsFollowRepository(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
         screenModel.state.value.items.shouldHaveSize(1)
@@ -575,6 +585,7 @@ class ReelsFeedScreenModelTest {
             isIncognito = { false },
             sourceIconProvider = { null },
             reelsFavoriteRepository = fakeFavorites,
+            reelsFollowRepository = FakeReelsFollowRepository(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -635,6 +646,7 @@ class ReelsFeedScreenModelTest {
             isIncognito = { false },
             sourceIconProvider = { null },
             reelsFavoriteRepository = FakeReelsFavoriteRepository(),
+            reelsFollowRepository = FakeReelsFollowRepository(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
         screenModel.state.value.items.shouldHaveSize(1)
@@ -781,6 +793,7 @@ class ReelsFeedScreenModelTest {
             isIncognito = { false },
             sourceIconProvider = { null },
             reelsFavoriteRepository = FakeReelsFavoriteRepository(),
+            reelsFollowRepository = FakeReelsFollowRepository(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -921,21 +934,27 @@ class ReelsFeedScreenModelTest {
         sourceId: Long,
         manager: AnimeSourceManager,
         repository: ReelsFavoriteRepository = FakeReelsFavoriteRepository(),
+        followRepository: ReelsFollowRepository = FakeReelsFollowRepository(),
         incognito: Boolean = false,
         initialFavorites: List<ReelsFavorite> = emptyList(),
         initialPage: Int = 0,
+        creator: String? = null,
+        followingFeed: Boolean = false,
         preferences: SourcePreferences = SourcePreferences(MapPreferenceStore()),
         sessionSound: ReelsSessionSoundState = ReelsSessionSoundState(),
     ) = ReelsFeedScreenModel(
         initialSourceId = sourceId,
         initialFavorites = initialFavorites,
         initialPage = initialPage,
+        creator = creator,
+        followingFeed = followingFeed,
         sourceManager = manager,
         sourcePreferences = preferences,
         ioDispatcher = testDispatcher,
         isIncognito = { incognito },
         sourceIconProvider = { null },
         reelsFavoriteRepository = repository,
+        reelsFollowRepository = followRepository,
         sessionSound = sessionSound,
     )
 
@@ -1099,6 +1118,7 @@ class ReelsFeedScreenModelTest {
             isIncognito = { false },
             sourceIconProvider = { null },
             reelsFavoriteRepository = FakeReelsFavoriteRepository(),
+            reelsFollowRepository = FakeReelsFollowRepository(),
         )
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -1230,5 +1250,297 @@ class ReelsFeedScreenModelTest {
             requested += page to cursor
             return provider(page, cursor)
         }
+    }
+
+    // ---- Contract v18: creator subscriptions ----
+
+    private class FakeReelsFollowRepository : ReelsFollowRepository {
+        val follows = mutableMapOf<Pair<Long, String>, ReelsFollow>()
+
+        override fun subscribeAll(): Flow<List<ReelsFollow>> = MutableStateFlow(follows.values.toList())
+
+        override suspend fun getAll(): List<ReelsFollow> = follows.values.toList()
+
+        override suspend fun getBySource(sourceId: Long): List<ReelsFollow> =
+            follows.values.filter { it.sourceId == sourceId }
+
+        override suspend fun getCreatorsBySource(sourceId: Long): List<String> =
+            follows.values.filter { it.sourceId == sourceId }.map { it.creator }
+
+        override suspend fun insert(follow: ReelsFollow) {
+            follows[follow.sourceId to follow.creator] = follow
+        }
+
+        override suspend fun delete(sourceId: Long, creator: String) {
+            follows.remove(sourceId to creator)
+        }
+    }
+
+    private fun timedItem(id: String, createdAtSec: Long) = ShortVideoItem(
+        id = id,
+        videoUrl = "https://example.com/$id.mp4",
+        posterUrl = "https://example.com/$id.jpg",
+        createdAtEpochSec = createdAtSec,
+    )
+
+    private class RecordingCreatorFeedSource(
+        override val id: Long,
+        private val provider: (String, Int, String?) -> FeedPage,
+    ) : AnimeFeedSource, AnimeCreatorFeedSource {
+        override val name: String = "Creator Feed $id"
+        override val lang: String = "all"
+        val creatorRequests = mutableListOf<Triple<String, Int, String?>>()
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            FeedPage(emptyList(), false)
+
+        override suspend fun getCreatorFeed(creator: String, page: Int, cursor: String?): FeedPage {
+            creatorRequests += Triple(creator, page, cursor)
+            return provider(creator, page, cursor)
+        }
+    }
+
+    @Test
+    fun `creator page on a non-capable source surfaces an error without touching getFeed`() = runTest(testDispatcher) {
+        var feedCalls = 0
+        val plain = object : AnimeFeedSource {
+            override val id: Long = 1101L
+            override val name: String = "Plain Feed"
+            override val lang: String = "all"
+
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
+                feedCalls++
+                return FeedPage(listOf(videoItem("should-not-appear")), hasNextPage = false)
+            }
+        }
+        val screenModel = buildModel(sourceId = 1101L, manager = sourceManagerOf(plain), creator = "alice")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.error shouldBe "Source does not support creator feeds"
+        screenModel.state.value.isLoading shouldBe false
+        screenModel.state.value.items.shouldHaveSize(0)
+        screenModel.state.value.isCreatorCapable shouldBe false
+        feedCalls shouldBe 0
+    }
+
+    @Test
+    fun `non-capable source keeps the global chrome free of creator state`() = runTest(testDispatcher) {
+        val plain = RecordingFeedSource(1102L) { FeedPage(listOf(videoItem("g1")), hasNextPage = false) }
+        val screenModel = buildModel(sourceId = 1102L, manager = sourceManagerOf(plain))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.isCreatorCapable shouldBe false
+        screenModel.state.value.mode shouldBe ReelsFeedScreenModel.FeedMode.GLOBAL
+        screenModel.state.value.followingCreators.isEmpty() shouldBe true
+    }
+
+    @Test
+    fun `creator page routes through getCreatorFeed and replays the exact page and cursor pairs`() =
+        runTest(testDispatcher) {
+            val failed = booleanArrayOf(false)
+            val source = RecordingCreatorFeedSource(1103L) { creator, page, _ ->
+                if (page == 2 && !failed[0]) {
+                    failed[0] = true
+                    throw RuntimeException("CDN exploded")
+                }
+                FeedPage(listOf(videoItem("$creator-p$page")), hasNextPage = page < 3, nextCursor = "u$page")
+            }
+            val screenModel = buildModel(sourceId = 1103L, manager = sourceManagerOf(source), creator = "alice")
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            screenModel.state.value.mode shouldBe ReelsFeedScreenModel.FeedMode.CREATOR
+            screenModel.state.value.creator shouldBe "alice"
+            screenModel.state.value.isCreatorCapable shouldBe true
+            screenModel.state.value.items.map { it.id } shouldBe listOf("alice-p1")
+
+            // Append: the first non-null token locked cursor mode, so page 2 must carry "u1".
+            screenModel.onPageChanged(0)
+            testDispatcher.scheduler.advanceUntilIdle()
+            screenModel.state.value.pageError shouldBe "CDN exploded"
+
+            // The failed page is retried with the exact same (page, cursor) pair, not skipped.
+            screenModel.onPageChanged(0)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            source.creatorRequests shouldBe listOf(
+                Triple("alice", 1, null),
+                Triple("alice", 2, "u1"),
+                Triple("alice", 2, "u1"),
+            )
+            screenModel.state.value.items.map { it.id } shouldBe listOf("alice-p1", "alice-p2")
+        }
+
+    @Test
+    fun `toggleFollow persists both directions, restores per source and refuses past the cap`() =
+        runTest(testDispatcher) {
+            val sourceA = RecordingCreatorFeedSource(1104L) { _, _, _ -> FeedPage(emptyList(), false) }
+            val sourceB = RecordingCreatorFeedSource(1105L) { _, _, _ -> FeedPage(emptyList(), false) }
+            val follows = FakeReelsFollowRepository()
+            val screenModel = buildModel(
+                sourceId = 1104L,
+                manager = sourceManagerOf(sourceA, sourceB),
+                followRepository = follows,
+            )
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            screenModel.toggleFollow("alice") shouldBe true
+            testDispatcher.scheduler.advanceUntilIdle()
+            screenModel.state.value.followingCreators.contains("alice") shouldBe true
+            follows.follows.keys shouldBe setOf(1104L to "alice")
+
+            // Re-switching back to the source restores the set from the repository...
+            screenModel.switchSource(1105L)
+            testDispatcher.scheduler.advanceUntilIdle()
+            screenModel.state.value.followingCreators.isEmpty() shouldBe true
+            screenModel.switchSource(1104L)
+            testDispatcher.scheduler.advanceUntilIdle()
+            screenModel.state.value.followingCreators.contains("alice") shouldBe true
+
+            // ...and unfollowing removes the row.
+            screenModel.toggleFollow("alice") shouldBe true
+            testDispatcher.scheduler.advanceUntilIdle()
+            follows.follows.isEmpty() shouldBe true
+
+            // Soft cap: 100 rows per source, the 101st is refused without any DB write.
+            repeat(100) { index -> check(screenModel.toggleFollow("creator-$index")) }
+            testDispatcher.scheduler.advanceUntilIdle()
+            screenModel.toggleFollow("over-cap") shouldBe false
+            screenModel.state.value.followingCreators.contains("over-cap") shouldBe false
+            follows.follows.size shouldBe 100
+            follows.follows.keys.none { it.second == "over-cap" } shouldBe true
+        }
+
+    @Test
+    fun `following feed k-way merges creator streams newest first`() = runTest(testDispatcher) {
+        val follows = FakeReelsFollowRepository()
+        follows.follows[1106L to "alice"] = ReelsFollow(1106L, "alice", Date(0))
+        follows.follows[1106L to "bob"] = ReelsFollow(1106L, "bob", Date(0))
+        val source = RecordingCreatorFeedSource(1106L) { creator, page, _ ->
+            when {
+                creator == "alice" && page == 1 ->
+                    FeedPage(listOf(timedItem("a300", 300), timedItem("a100", 100)), hasNextPage = false)
+                creator == "bob" && page == 1 ->
+                    FeedPage(listOf(timedItem("b200", 200)), hasNextPage = false)
+                else -> FeedPage(emptyList(), false)
+            }
+        }
+        val screenModel = buildModel(
+            sourceId = 1106L,
+            manager = sourceManagerOf(source),
+            followRepository = follows,
+            followingFeed = true,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.mode shouldBe ReelsFeedScreenModel.FeedMode.FOLLOWING
+        screenModel.state.value.items.map { it.id } shouldBe listOf("a300", "b200", "a100")
+        screenModel.state.value.error shouldBe null
+        screenModel.state.value.canLoadMore shouldBe false
+    }
+
+    @Test
+    fun `following feed survives one failed creator stream and surfaces it as a page error`() =
+        runTest(testDispatcher) {
+            val follows = FakeReelsFollowRepository()
+            follows.follows[1107L to "alice"] = ReelsFollow(1107L, "alice", Date(0))
+            follows.follows[1107L to "bob"] = ReelsFollow(1107L, "bob", Date(0))
+            val source = RecordingCreatorFeedSource(1107L) { creator, _, _ ->
+                if (creator == "bob") throw RuntimeException("bob is gone")
+                FeedPage(listOf(videoItem("a1")), hasNextPage = false)
+            }
+            val screenModel = buildModel(
+                sourceId = 1107L,
+                manager = sourceManagerOf(source),
+                followRepository = follows,
+                followingFeed = true,
+            )
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            screenModel.state.value.error shouldBe null
+            screenModel.state.value.items.map { it.id } shouldBe listOf("a1")
+            screenModel.state.value.pageError shouldContain "'bob'"
+            screenModel.state.value.pageError shouldContain "bob is gone"
+        }
+
+    @Test
+    fun `following feed turns an all-failed fan-out into the full error state`() = runTest(testDispatcher) {
+        val follows = FakeReelsFollowRepository()
+        follows.follows[1108L to "alice"] = ReelsFollow(1108L, "alice", Date(0))
+        follows.follows[1108L to "bob"] = ReelsFollow(1108L, "bob", Date(0))
+        val source = RecordingCreatorFeedSource(1108L) { creator, _, _ ->
+            throw RuntimeException("$creator exploded")
+        }
+        val screenModel = buildModel(
+            sourceId = 1108L,
+            manager = sourceManagerOf(source),
+            followRepository = follows,
+            followingFeed = true,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.items.shouldHaveSize(0)
+        screenModel.state.value.isLoading shouldBe false
+        screenModel.state.value.error shouldContain "alice exploded"
+        screenModel.state.value.error shouldContain "bob exploded"
+    }
+
+    @Test
+    fun `following topup fetches only alive streams and echoes each stream cursor`() =
+        runTest(testDispatcher) {
+            val follows = FakeReelsFollowRepository()
+            follows.follows[1109L to "alice"] = ReelsFollow(1109L, "alice", Date(0))
+            follows.follows[1109L to "bob"] = ReelsFollow(1109L, "bob", Date(0))
+            val source = RecordingCreatorFeedSource(1109L) { creator, page, _ ->
+                when {
+                    // alice: cursor API (v17 sticky), still alive.
+                    creator == "alice" && page == 1 ->
+                        FeedPage(listOf(videoItem("a1")), hasNextPage = true, nextCursor = "ac1")
+                    creator == "alice" && page == 2 ->
+                        FeedPage(listOf(videoItem("a2")), hasNextPage = false)
+                    // bob: exhausted after page 1 — must never be fetched again.
+                    creator == "bob" && page == 1 -> FeedPage(listOf(videoItem("b1")), hasNextPage = false)
+                    else -> FeedPage(emptyList(), false)
+                }
+            }
+            val screenModel = buildModel(
+                sourceId = 1109L,
+                manager = sourceManagerOf(source),
+                followRepository = follows,
+                followingFeed = true,
+            )
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            screenModel.state.value.items.map { it.id } shouldBe listOf("a1", "b1")
+            screenModel.state.value.canLoadMore shouldBe true
+
+            // Near the merged tail only alice is topped up — with its own locked cursor.
+            screenModel.onPageChanged(1)
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            source.creatorRequests shouldBe listOf(
+                Triple("alice", 1, null),
+                Triple("bob", 1, null),
+                Triple("alice", 2, "ac1"),
+            )
+            screenModel.state.value.items.map { it.id } shouldBe listOf("a1", "b1", "a2")
+            screenModel.state.value.canLoadMore shouldBe false
+        }
+
+    @Test
+    fun `following feed with no follows comes up empty instead of errored`() = runTest(testDispatcher) {
+        val source = RecordingCreatorFeedSource(1110L) { _, _, _ -> FeedPage(emptyList(), false) }
+        val screenModel = buildModel(
+            sourceId = 1110L,
+            manager = sourceManagerOf(source),
+            followRepository = FakeReelsFollowRepository(),
+            followingFeed = true,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.error shouldBe null
+        screenModel.state.value.items.shouldHaveSize(0)
+        screenModel.state.value.isLoading shouldBe false
+        screenModel.state.value.canLoadMore shouldBe false
+        source.creatorRequests.shouldBeEmpty()
     }
 }

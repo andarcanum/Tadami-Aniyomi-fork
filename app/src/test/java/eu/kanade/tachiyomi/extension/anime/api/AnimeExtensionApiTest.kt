@@ -98,14 +98,15 @@ class AnimeExtensionApiTest {
     }
 
     @Test
-    fun `supported library versions accept the full 12-17 range including minor versions`() {
+    fun `supported library versions accept the full 12-18 range including minor versions`() {
         (12.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (14.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (14.4 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (16.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (17.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        (18.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (11.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
-        (17.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
+        (18.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
     }
 
     @Test

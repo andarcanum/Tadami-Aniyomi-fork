@@ -77,14 +77,19 @@ data class ReelsFeedScreen(
     // Non-empty => offline playlist mode (opened from the Favorites screen).
     val initialFavorites: List<ReelsFavorite> = emptyList(),
     val initialPage: Int = 0,
+    // Contract v18: one creator's page (creator != null) or the aggregated Following feed
+    // (followingFeed = true). Mutually exclusive; never combined with offline playlists.
+    val creator: String? = null,
+    val followingFeed: Boolean = false,
 ) : Screen {
     // Voyager disposes screens (and their ScreenModels) by screen.key. The default key is only
     // the class name, so a popped offline playlist would share the live feed's key and never be
     // disposed -> models accumulate in ScreenModelStore. A deterministic content-based key makes
     // each pushed playlist unique so it is correctly disposed on pop. Do NOT use a random UUID
-    // (the saveable state would orphan models across recreation).
+    // (the saveable state would orphan models across recreation). Creator and Following pages
+    // ride the same rule: their keys must include creator/followingFeed.
     override val key: String
-        get() = "ReelsFeedScreen:$sourceId:$initialPage:${initialFavorites.hashCode()}"
+        get() = "ReelsFeedScreen:$sourceId:$initialPage:${initialFavorites.hashCode()}:$creator:$followingFeed"
 
     @Composable
     override fun Content() {
@@ -110,11 +115,22 @@ data class ReelsFeedScreen(
                 initialSourceId = sourceId,
                 initialFavorites = initialFavorites,
                 initialPage = initialPage,
+                creator = creator,
+                followingFeed = followingFeed,
             )
         }
         val state by screenModel.state.collectAsStateWithLifecycle()
         val snackbarHostState = remember { SnackbarHostState() }
         val retryLabel = stringResource(MR.strings.action_retry)
+        val followCapMessage = stringResource(MR.strings.reels_follow_cap_reached)
+
+        // Follow tap at the per-source cap: no state/DB change, just the refusal snackbar.
+        fun handleFollowToggle(creatorName: String?) {
+            if (creatorName == null) return
+            if (!screenModel.toggleFollow(creatorName)) {
+                coroutineScope.launch { snackbarHostState.showSnackbar(followCapMessage) }
+            }
+        }
         // Preload gating must be reactive: a plain context.isOnWifi() call here would be
         // recomputed (stale) on every recomposition instead of tracking network changes.
         var isOnWifi by remember { mutableStateOf(context.isOnWifi()) }
@@ -259,6 +275,30 @@ data class ReelsFeedScreen(
                                 onTagClick = { tag ->
                                     screenModel.search(tag)
                                 },
+                                // Contract v18 creator surfaces: capability + author gated.
+                                showFollowAction = state.isCreatorCapable && !state.isOffline && item.author != null,
+                                isFollowingCreator = item.author?.let { it in state.followingCreators } == true,
+                                onToggleFollowCreator = { handleFollowToggle(item.author) },
+                                onAuthorClick = if (
+                                    state.isCreatorCapable && !state.isOffline && item.author != null &&
+                                    // Already on that creator's page: self-push would only stack
+                                    // a duplicate screen.
+                                    !(
+                                        state.mode == ReelsFeedScreenModel.FeedMode.CREATOR &&
+                                            item.author == state.creator
+                                        )
+                                ) {
+                                    {
+                                        navigator.push(
+                                            ReelsFeedScreen(
+                                                sourceId = state.currentSourceId,
+                                                creator = item.author,
+                                            ),
+                                        )
+                                    }
+                                } else {
+                                    null
+                                },
                                 onVideoCompleted = {
                                     coroutineScope.launch {
                                         if (pagerState.currentPage < state.items.size - 1) {
@@ -339,10 +379,13 @@ data class ReelsFeedScreen(
                 modifier = Modifier.align(Alignment.TopCenter),
             ) {
                 ReelsTopBar(
-                    sourceName = if (state.isOffline) {
-                        stringResource(MR.strings.reels_favorites_title)
-                    } else {
-                        state.sourceName
+                    sourceName = when {
+                        state.isOffline -> stringResource(MR.strings.reels_favorites_title)
+                        state.mode == ReelsFeedScreenModel.FeedMode.FOLLOWING ->
+                            stringResource(MR.strings.reels_following_feed)
+                        state.mode == ReelsFeedScreenModel.FeedMode.CREATOR ->
+                            "@${state.creator.orEmpty()}"
+                        else -> state.sourceName
                     },
                     sourceIcon = state.sourceIcons[state.currentSourceId],
                     searchQuery = state.searchQuery,
@@ -354,8 +397,18 @@ data class ReelsFeedScreen(
                     preloadEnabled = state.preloadEnabled,
                     preloadWifiOnly = state.preloadWifiOnly,
                     isOffline = state.isOffline,
-                    showSearch = state.supportsTags,
-                    showSourcePicker = !state.isOffline && state.availableSources.size > 1,
+                    // Search, filters and source picking belong to the global feed only.
+                    showSearch = state.supportsTags && state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                    showFilter = state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                    showSourcePicker = !state.isOffline &&
+                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL &&
+                        state.availableSources.size > 1,
+                    showFollowToggle = state.mode == ReelsFeedScreenModel.FeedMode.CREATOR &&
+                        state.isCreatorCapable,
+                    isFollowingCreator = state.creator?.let { it in state.followingCreators } == true,
+                    onToggleFollow = { handleFollowToggle(state.creator) },
+                    showFollowsEntry = state.isCreatorCapable && !state.isOffline,
+                    onOpenFollows = { navigator.push(ReelsFollowsScreen(sourceId = state.currentSourceId)) },
                     onBackClick = { navigator.pop() },
                     onOpenSourcePicker = { screenModel.toggleSourcePicker(true) },
                     onToggleAutoAdvance = screenModel::toggleAutoAdvance,

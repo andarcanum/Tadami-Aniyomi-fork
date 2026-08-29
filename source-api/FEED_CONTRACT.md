@@ -1,8 +1,9 @@
 # Reels Feed Contract
 
-**Current version: 17** (`extensionLib` 12.0–17.0 accepted by the host) ·
+**Current version: 18** (`extensionLib` 12.0–18.0 accepted by the host) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
+[`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
 [`FeedPage`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedPage.kt),
 [`ShortVideoItem`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/ShortVideoItem.kt)
 
@@ -30,7 +31,28 @@ data class FeedPage(
     val hasNextPage: Boolean,
     val nextCursor: String? = null,
 )
+
+interface AnimeCreatorFeedSource {
+    suspend fun getCreatorFeed(creator: String, page: Int, cursor: String?): FeedPage
+}
 ```
+
+## Creator feeds (v18 capability interface)
+
+`AnimeCreatorFeedSource` is an **optional capability**: a feed source that can also
+serve one creator's own video feed. The host detects support with
+`rawSource is AnimeCreatorFeedSource` (instanceof) and only then shows the creator
+page, the follow button and the Following aggregation. Old plugins are untouched —
+they simply don't opt in.
+
+- The [sticky pagination protocol](#pagination-the-sticky-protocol-the-important-part)
+  applies **per stream**: the creator page and each stream of the host's aggregated
+  Following feed lock their own cursor independently.
+- `creator` is exactly a `ShortVideoItem.author` value previously returned by this
+  source; implementations must replay safely — the host retries failed pages with
+  the identical `(page, cursor)` pair.
+- A nonexistent/deleted creator should return an empty `FeedPage`, not throw.
+- Implementing the capability means bumping `extensionLib` to 18.0.
 
 ## Pagination: the sticky protocol (the important part)
 
@@ -84,6 +106,13 @@ Rules for sources:
 3. Never repurpose a field's semantics while keeping its number/type (lesson:
    the v16→v17 hd/sd inversion shipped together with a version bump and a
    recreate-table DB migration).
+4. Extend capabilities **only** via new marker-style interfaces checked with
+   `instanceof` (like `AnimeCreatorFeedSource` in v18) — never by adding default
+   members to existing interfaces. Kotlin interface default methods are not
+   binary-safe for plugin classes compiled without `-Xjvm-default=all`: a missing
+   bridge becomes `AbstractMethodError` on the old plugin at runtime (same class
+   of incident as the v17 `ShortVideoItem` break). This is the established Mihon
+   pattern (`is CatalogueSource`, `isStub`).
 
 ## Rebuilding a plugin against a new API (the chain)
 
@@ -133,5 +162,6 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
+| 18 | Optional creator-feed capability: `AnimeCreatorFeedSource.getCreatorFeed(creator, page, cursor)` (instanceof-detected, no default members added to existing interfaces). Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 18.0 as the discipline stamp. |
 | 17 | Sticky cursor pagination (`FeedPage.nextCursor`, `cursor` parameters), `getSearchFeed` default, URL semantics flip (`videoUrl` base + optional `videoUrlHd`). Breaking: all feed plugins rebuild. |
 | ≤16 | Initial feed contract (page-int pagination, `videoUrlHd` required). |

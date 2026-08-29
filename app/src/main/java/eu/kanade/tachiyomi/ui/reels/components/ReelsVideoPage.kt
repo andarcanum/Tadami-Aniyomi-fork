@@ -63,6 +63,12 @@ fun ReelsVideoPage(
     // Stable per-source prefix; the page appends item id + the PINNED quality to build the
     // progressive cache key.
     cachePrefix: String? = null,
+    // Creator follow affordances (contract v18): the caller gates both on
+    // `source is AnimeCreatorFeedSource && item.author != null`.
+    showFollowAction: Boolean = false,
+    isFollowingCreator: Boolean = false,
+    onToggleFollowCreator: () -> Unit = {},
+    onAuthorClick: (() -> Unit)? = null,
     onTogglePlayPause: () -> Unit,
     onToggleLike: () -> Unit,
     onToggleMute: () -> Unit,
@@ -246,7 +252,7 @@ fun ReelsVideoPage(
             )
         }
 
-        // 5. Right Action Bar (Like, Mute, Share)
+        // 5. Right Action Bar (Like, Follow?, Mute, Share)
         ReelsActionsColumn(
             isLiked = isLiked,
             isMuted = isMuted,
@@ -256,6 +262,12 @@ fun ReelsVideoPage(
             },
             onToggleMute = onToggleMute,
             onShare = onShare,
+            showFollow = showFollowAction,
+            isFollowing = isFollowingCreator,
+            onToggleFollow = {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                onToggleFollowCreator()
+            },
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 12.dp, bottom = 48.dp),
@@ -265,6 +277,7 @@ fun ReelsVideoPage(
         ReelsBottomMeta(
             item = item,
             onTagClick = onTagClick,
+            onAuthorClick = onAuthorClick,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 16.dp, end = 76.dp, bottom = 24.dp),

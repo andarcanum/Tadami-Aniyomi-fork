@@ -15,6 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
@@ -40,6 +42,11 @@ fun ReelsActionsColumn(
     onToggleLike: () -> Unit,
     onToggleMute: () -> Unit,
     onShare: () -> Unit,
+    // Creator follow slot (contract v18): shown by the caller only when the source is
+    // AnimeCreatorFeedSource and the item has an author.
+    showFollow: Boolean = false,
+    isFollowing: Boolean = false,
+    onToggleFollow: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val heartColor = MaterialTheme.colorScheme.error
@@ -47,6 +54,11 @@ fun ReelsActionsColumn(
         targetValue = if (isLiked) 1.15f else 1.0f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "heart_scale",
+    )
+    val scalePerson by animateFloatAsState(
+        targetValue = if (isFollowing) 1.15f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "follow_scale",
     )
 
     Column(
@@ -68,6 +80,21 @@ fun ReelsActionsColumn(
             modifier = Modifier.scale(scaleHeart),
             onClick = onToggleLike,
         )
+
+        // Creator Follow (v18)
+        if (showFollow) {
+            ActionIconItem(
+                icon = if (isFollowing) Icons.Filled.Person else Icons.Filled.PersonAdd,
+                label = if (isFollowing) {
+                    stringResource(MR.strings.reels_following)
+                } else {
+                    stringResource(MR.strings.reels_follow)
+                },
+                tint = if (isFollowing) AuroraTheme.colors.accent else Color.White,
+                modifier = Modifier.scale(scalePerson),
+                onClick = onToggleFollow,
+            )
+        }
 
         // Audio Mute/Unmute
         ActionIconItem(

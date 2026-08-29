@@ -104,4 +104,41 @@ class AnimeFeedSourceTest {
         seen shouldBe (3 to "c-token")
         result.nextCursor shouldBe "c-next"
     }
+
+    @Test
+    fun `creator capability is detected by instanceof and leaves plain feed sources behind`() = runTest {
+        // The vals are typed as the root AnimeSource on purpose: the `is` checks below must
+        // stay dynamic, mirroring the host's runtime `rawSource is AnimeCreatorFeedSource`
+        // detection (a statically provable type would be a compile-time tautology).
+        val plainFeed: AnimeSource = object : AnimeFeedSource {
+            override val id: Long = 1004L
+            override val name: String = "Plain Feed"
+            override val lang: String = "all"
+
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                FeedPage(emptyList(), false)
+        }
+        var seen: Triple<String, Int, String?>? = null
+        val creatorFeed: AnimeSource = object : AnimeFeedSource, AnimeCreatorFeedSource {
+            override val id: Long = 1005L
+            override val name: String = "Creator Feed"
+            override val lang: String = "all"
+
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                FeedPage(emptyList(), false)
+
+            override suspend fun getCreatorFeed(creator: String, page: Int, cursor: String?): FeedPage {
+                seen = Triple(creator, page, cursor)
+                return FeedPage(emptyList(), hasNextPage = false, nextCursor = "u2")
+            }
+        }
+
+        (plainFeed is AnimeCreatorFeedSource) shouldBe false
+        (creatorFeed is AnimeCreatorFeedSource) shouldBe true
+
+        val capability = creatorFeed as AnimeCreatorFeedSource
+        val result = capability.getCreatorFeed("babyemmy", 2, "u1")
+        seen shouldBe Triple("babyemmy", 2, "u1")
+        result.nextCursor shouldBe "u2"
+    }
 }

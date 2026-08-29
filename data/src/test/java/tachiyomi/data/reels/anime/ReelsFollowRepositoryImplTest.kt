@@ -26,13 +26,18 @@ import tachiyomi.data.MemoColumnAdapter
 import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.handlers.anime.AndroidAnimeDatabaseHandler
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
-import tachiyomi.domain.reels.anime.model.ReelsFavorite
+import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.mi.data.AnimeDatabase
 import java.util.Date
 
-class ReelsFavoriteRepositoryImplTest {
+/**
+ * Mirrors [ReelsFavoriteRepositoryImplTest] for the contract-v18 creator follows table.
+ * The 100-follows-per-source cap is a host-side rule, so this repository must happily
+ * store any number of rows.
+ */
+class ReelsFollowRepositoryImplTest {
 
-    private fun buildRepository(): Pair<ReelsFavoriteRepositoryImpl, JdbcSqliteDriver> {
+    private fun buildRepository(): Pair<ReelsFollowRepositoryImpl, JdbcSqliteDriver> {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         AnimeDatabase.Schema.create(driver)
         val db = AnimeDatabase(
@@ -53,89 +58,78 @@ class ReelsFavoriteRepositoryImplTest {
         // single-threaded virtual-time dispatcher because the transaction blocks the only
         // driven thread waiting for a nested dispatch.
         val handler = AndroidAnimeDatabaseHandler(db, driver)
-        return ReelsFavoriteRepositoryImpl(handler) to driver
+        return ReelsFollowRepositoryImpl(handler) to driver
     }
 
-    private fun favorite(videoId: String, sourceId: Long, addedAt: Date = Date(1000L)) = ReelsFavorite(
-        videoId = videoId,
+    private fun follow(sourceId: Long, creator: String, addedAt: Date = Date(1000L)) = ReelsFollow(
         sourceId = sourceId,
-        title = "Title $videoId",
-        author = "Author",
-        videoUrl = "https://example.com/$videoId.mp4",
-        videoUrlHd = null,
-        posterUrl = "https://example.com/$videoId.jpg",
-        posterUrlVertical = null,
-        webUrl = "https://example.com/watch/$videoId",
-        durationSec = 12.0,
-        hasAudio = true,
+        creator = creator,
         addedAt = addedAt,
     )
 
     @Test
-    fun `insert, getBySource and delete roundtrip`() = runBlocking {
+    fun `insert, getBySource, getCreatorsBySource and delete roundtrip`() = runBlocking {
         val (repo, driver) = buildRepository()
 
-        repo.insert(favorite("vid-1", 101L))
-        repo.insert(favorite("vid-2", 101L, addedAt = Date(2000L)))
-        repo.insert(favorite("vid-3", 202L))
+        repo.insert(follow(101L, "alice"))
+        repo.insert(follow(101L, "bob", addedAt = Date(2000L)))
+        repo.insert(follow(202L, "carol"))
 
-        repo.getBySource(101L).map { it.videoId } shouldBe listOf("vid-2", "vid-1")
-        repo.getIdsBySource(202L) shouldBe listOf("vid-3")
-        repo.getAll() shouldHaveSize 3
+        // added_at DESC
+        repo.getBySource(101L).map { it.creator } shouldBe listOf("bob", "alice")
+        repo.getCreatorsBySource(202L) shouldBe listOf("carol")
+        repo.getAll().map { it.creator }.sorted() shouldBe listOf("alice", "bob", "carol")
 
-        repo.delete("vid-1", 101L)
-        repo.getBySource(101L).map { it.videoId } shouldBe listOf("vid-2")
+        repo.delete(101L, "alice")
+        repo.getBySource(101L).map { it.creator } shouldBe listOf("bob")
+        // Deletes are keyed per source: carol on the other source is untouched.
+        repo.getBySource(202L) shouldHaveSize 1
 
         driver.close()
     }
 
     @Test
-    fun `insertAll persists all rows in one call`() = runBlocking {
+    fun `re-insert of the same creator replaces the row, PK keeps one entry`() = runBlocking {
         val (repo, driver) = buildRepository()
 
-        repo.insertAll(
-            listOf(
-                favorite("vid-1", 101L),
-                favorite("vid-2", 101L),
-                favorite("vid-3", 202L),
-            ),
-        )
+        repo.insert(follow(101L, "alice", addedAt = Date(1000L)))
+        repo.insert(follow(101L, "alice", addedAt = Date(5000L)))
 
-        repo.getAll() shouldHaveSize 3
-        repo.getBySource(101L) shouldHaveSize 2
+        repo.getBySource(101L) shouldHaveSize 1
+        repo.getBySource(101L).single().addedAt shouldBe Date(5000L)
 
         driver.close()
     }
 
     @Test
     fun `sqlite failures are swallowed and not propagated to the caller`() = runBlocking {
-        val repo = ReelsFavoriteRepositoryImpl(ThrowingHandler(android.database.sqlite.SQLiteException("disk full")))
+        val repo =
+            ReelsFollowRepositoryImpl(ThrowingFollowHandler(android.database.sqlite.SQLiteException("disk full")))
 
-        // Like taps are fire-and-forget: DB failures are logged, not surfaced to the caller.
-        repo.insert(favorite("vid-1", 101L))
-        repo.insertAll(listOf(favorite("vid-2", 101L)))
-        repo.delete("vid-1", 101L)
+        // Follow taps are fire-and-forget: DB failures are logged, not surfaced to the caller.
+        repo.insert(follow(101L, "alice"))
+        repo.delete(101L, "alice")
     }
 
     @Test
     fun `cancellation is rethrown and not swallowed`() = runBlocking<Unit> {
-        val repo = ReelsFavoriteRepositoryImpl(ThrowingHandler(CancellationException("scope cancelled")))
+        val repo = ReelsFollowRepositoryImpl(ThrowingFollowHandler(CancellationException("scope cancelled")))
 
         org.junit.jupiter.api.assertThrows<CancellationException> {
-            repo.insert(favorite("vid-1", 101L))
+            repo.insert(follow(101L, "alice"))
         }
         org.junit.jupiter.api.assertThrows<CancellationException> {
-            repo.delete("vid-1", 101L)
+            repo.delete(101L, "alice")
         }
     }
 
     @Test
-    fun `schema has an index on source_id for per-source favorite lookups`() {
+    fun `schema has an index on source_id for per-source follow lookups`() {
         val (_, driver) = buildRepository()
 
-        val names = indexNames(driver, "reels_favorites")
-        // sqlite_autoindex_reels_favorites_1 also exists for the composite PK.
-        names shouldContainAll listOf("reels_favorites_added_at_index", "reels_favorites_source_id_index")
+        val names = indexNames(driver, "reels_follows")
+        // sqlite_autoindex_reels_follows_1 also exists for the composite PK.
+        names shouldContainAll listOf("reels_follows_source_id_index")
     }
 
     private fun indexNames(driver: JdbcSqliteDriver, tableName: String): List<String> {
@@ -156,7 +150,7 @@ class ReelsFavoriteRepositoryImplTest {
     }
 }
 
-private class ThrowingHandler(private val error: Exception) : AnimeDatabaseHandler {
+private class ThrowingFollowHandler(private val error: Exception) : AnimeDatabaseHandler {
     override suspend fun <T> await(inTransaction: Boolean, block: suspend (AnimeDatabase) -> T): T = throw error
     override suspend fun <T : Any> awaitList(
         inTransaction: Boolean,

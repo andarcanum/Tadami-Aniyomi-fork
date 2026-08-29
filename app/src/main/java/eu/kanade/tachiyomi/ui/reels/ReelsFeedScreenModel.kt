@@ -7,10 +7,12 @@ import androidx.core.graphics.drawable.toBitmap
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.FeedPage
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import kotlinx.collections.immutable.ImmutableList
@@ -28,6 +30,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -36,7 +41,9 @@ import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
+import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
+import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
@@ -58,6 +65,11 @@ class ReelsFeedScreenModel(
     // Non-empty when opened as an offline playlist (e.g. from the Favorites screen).
     private val initialFavorites: List<ReelsFavorite> = emptyList(),
     private val initialPage: Int = 0,
+    // Contract v18 creator modes (mutually exclusive, never combined with offline playlists):
+    // [creator] serves one creator's feed via AnimeCreatorFeedSource; [followingFeed] merges
+    // the latest videos of every followed creator of [initialSourceId].
+    private val creator: String? = null,
+    private val followingFeed: Boolean = false,
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -73,6 +85,7 @@ class ReelsFeedScreenModel(
             ?.asImageBitmap()
     },
     private val reelsFavoriteRepository: ReelsFavoriteRepository = Injekt.get(),
+    private val reelsFollowRepository: ReelsFollowRepository = Injekt.get(),
     private val sessionSound: ReelsSessionSoundState = sharedSessionSound,
 ) : StateScreenModel<ReelsFeedScreenModel.State>(
     State(
@@ -92,6 +105,20 @@ class ReelsFeedScreenModel(
 
     companion object {
         val sharedSessionSound = ReelsSessionSoundState()
+
+        // Fan-out protection for the FOLLOWING aggregation: a generation fetches one page
+        // per followed creator, so the cap bounds concurrent requests. Enforced host-side
+        // (the repository stores whatever it is told).
+        const val MAX_FOLLOWS_PER_SOURCE = 100
+    }
+
+    /** Which feed [loadFeed] generates. Fixed for the model's lifetime (per screen key). */
+    enum class FeedMode { GLOBAL, CREATOR, FOLLOWING }
+
+    private val mode: FeedMode = when {
+        followingFeed -> FeedMode.FOLLOWING
+        creator != null -> FeedMode.CREATOR
+        else -> FeedMode.GLOBAL
     }
 
     private var source: AnimeFeedSource? = null
@@ -130,6 +157,30 @@ class ReelsFeedScreenModel(
     // resurrect an unlike or override a fresh like. Cleared on source switch.
     private val decidedIds = mutableSetOf<String>()
 
+    // Creators the user followed/unfollowed this session (main-confined): the same merge
+    // protection as [decidedIds], applied to the follows snapshot. Cleared on source switch.
+    private val decidedFollows = mutableSetOf<String>()
+
+    // ---------------------------------------------------------------------------
+    // FOLLOWING aggregation (contract v18)
+    //
+    // One stream per followed creator of the current source. Unfollows apply on the NEXT
+    // generation (refresh / re-entry): splicing live streams would re-sort pages the user
+    // has already seen — documented v1 limitation.
+    // ---------------------------------------------------------------------------
+
+    private class FollowingStream(val creator: String) {
+        var pagesFetched: Int = 0
+        var cursor: String? = null
+        var cursorMode: Boolean = false
+        var exhausted: Boolean = false
+        val buffer = ArrayDeque<ShortVideoItem>()
+    }
+
+    // Replaced wholesale on a FOLLOWING reset generation; appends mutate stream objects in
+    // place and only drop failed ones. Read/written from generation-guarded load jobs only.
+    private var followingStreams: List<FollowingStream> = emptyList()
+
     init {
         if (initialFavorites.isNotEmpty()) {
             offlineSourceIds = initialFavorites.associate { it.videoId to it.sourceId }
@@ -146,6 +197,7 @@ class ReelsFeedScreenModel(
                 )
             }
         } else {
+            mutableState.update { it.copy(mode = mode, creator = creator) }
             // Collect installed feed sources (with their extension icons) for quick switching.
             // Sources disabled in Browse are excluded, consistent with the sources list.
             screenModelScope.launch(ioDispatcher) {
@@ -182,6 +234,21 @@ class ReelsFeedScreenModel(
         if (state.value.isOffline) return
         val rawSource = sourceManager.get(newSourceId)
         if (rawSource is AnimeFeedSource) {
+            val creatorCapable = rawSource is AnimeCreatorFeedSource
+            if (mode != FeedMode.GLOBAL && !creatorCapable) {
+                // A creator/FOLLOWING page opened on a source without the v18 capability
+                // (plugin downgraded between sessions): surface it instead of silently
+                // serving someone else's global feed.
+                source = null
+                mutableState.update {
+                    it.copy(
+                        error = "Source does not support creator feeds",
+                        isLoading = false,
+                        isSourcePickerOpen = false,
+                    )
+                }
+                return
+            }
             source = rawSource
             persistUnlessIncognito { sourcePreferences.lastUsedReelsSource().set(newSourceId) }
             baseItems = persistentListOf()
@@ -191,14 +258,26 @@ class ReelsFeedScreenModel(
             baseCanLoadMore = true
             basePosition = 0
             decidedIds.clear()
-            pendingRestorePosition = sourcePreferences.lastReelsPosition(newSourceId).get().coerceAtLeast(0)
-            restorePositionPending = true
-            val savedQuery = sourcePreferences.lastReelsQuery(newSourceId).get()
-            val initialFilters = rawSource.getFilterList()
+            decidedFollows.clear()
+            followingStreams = emptyList()
+            // Only the global feed restores a per-source browsing position; creator and
+            // FOLLOWING pages always start at the top.
+            pendingRestorePosition = if (mode == FeedMode.GLOBAL) {
+                sourcePreferences.lastReelsPosition(newSourceId).get().coerceAtLeast(0)
+            } else {
+                0
+            }
+            restorePositionPending = mode == FeedMode.GLOBAL
+            // The creator page and the FOLLOWING aggregation have no search/filter surface
+            // and must never touch the saved global query or filters.
+            val initialFilters = if (mode == FeedMode.GLOBAL) rawSource.getFilterList() else AnimeFilterList()
+            val savedQuery = if (mode == FeedMode.GLOBAL) sourcePreferences.lastReelsQuery(newSourceId).get() else ""
 
             // Restore saved filter values
-            val savedFiltersSerialized = sourcePreferences.lastReelsFilter(newSourceId).get()
-            restoreFilters(initialFilters, savedFiltersSerialized)
+            if (mode == FeedMode.GLOBAL) {
+                val savedFiltersSerialized = sourcePreferences.lastReelsFilter(newSourceId).get()
+                restoreFilters(initialFilters, savedFiltersSerialized)
+            }
 
             mutableState.update {
                 it.copy(
@@ -219,11 +298,16 @@ class ReelsFeedScreenModel(
                     // videoId in the new source doesn't show a phantom heart; the new source's
                     // likes are loaded by loadPersistedFavorites below.
                     likedIds = persistentSetOf(),
+                    // Follows are per source too: drop the previous source's set before the
+                    // new one is loaded by loadPersistedFollows below.
+                    isCreatorCapable = creatorCapable,
+                    followingCreators = persistentSetOf(),
                     isSourcePickerOpen = false,
                     error = null,
                 )
             }
             loadPersistedFavorites(newSourceId)
+            loadPersistedFollows(newSourceId)
             loadFeed(reset = true)
         } else {
             mutableState.update {
@@ -265,6 +349,10 @@ class ReelsFeedScreenModel(
             }
         }
         loadJob = screenModelScope.launch(ioDispatcher) {
+            if (mode == FeedMode.FOLLOWING) {
+                loadFollowing(generation = generation, reset = reset, src = src)
+                return@launch
+            }
             try {
                 val query = state.value.searchQuery
                 val filters = state.value.filters
@@ -272,10 +360,14 @@ class ReelsFeedScreenModel(
                 // Contract v17: while locked into cursor mode the token is authoritative;
                 // in page-int mode the source always receives a null cursor.
                 val cursor = if (state.value.cursorMode) state.value.nextCursor else null
-                val pageData = if (query.isNotBlank()) {
-                    src.getSearchFeed(page, cursor, query, filters)
-                } else {
-                    src.getFeed(page, cursor, filters)
+                // The creator page shares the sticky cursor protocol with the global feed,
+                // just on its own per-stream token space (contract v18). switchSource has
+                // already refused a non-capable source in this mode.
+                val pageData = when {
+                    mode == FeedMode.CREATOR -> (src as AnimeCreatorFeedSource)
+                        .getCreatorFeed(creator.orEmpty(), page, cursor)
+                    query.isNotBlank() -> src.getSearchFeed(page, cursor, query, filters)
+                    else -> src.getFeed(page, cursor, filters)
                 }
                 // Re-check cancellation: the suspend calls above may have completed right
                 // before this job was superseded by a reset.
@@ -361,6 +453,222 @@ class ReelsFeedScreenModel(
     fun loadNextPageIfNeeded(visibleIndex: Int) {
         if (visibleIndex >= state.value.items.size - 2 && state.value.canLoadMore && !state.value.isLoading) {
             loadFeed(reset = false)
+        }
+    }
+
+    /**
+     * FOLLOWING generation (contract v18): fan out one page per followed creator in
+     * parallel, merge the buffers newest-first, and top up only the streams whose buffers
+     * ran dry. A failing stream is dropped from this generation (its error joins
+     * [State.pageError]); the feed survives as long as one stream is alive. All streams
+     * failing on a reset generation is the only way to reach the full error state.
+     */
+    private suspend fun loadFollowing(generation: Int, reset: Boolean, src: AnimeFeedSource) {
+        val capable = src as? AnimeCreatorFeedSource ?: run {
+            if (loadGeneration.get() != generation) return
+            mutableState.update { current ->
+                current.copy(isLoading = false, error = "Source does not support creator feeds")
+            }
+            return
+        }
+        try {
+            val requests: List<Triple<FollowingStream, Int, String?>> = if (reset) {
+                val creators = reelsFollowRepository.getCreatorsBySource(state.value.currentSourceId)
+                creators.map { Triple(FollowingStream(it), 1, null as String?) }
+            } else {
+                followingStreams.filter { !it.exhausted && it.buffer.isEmpty() }
+                    .map { Triple(it, it.pagesFetched + 1, if (it.cursorMode) it.cursor else null) }
+            }
+            currentCoroutineContext().ensureActive()
+            if (requests.isEmpty()) {
+                if (reset) {
+                    // Follows exist per source; an empty follow set is an empty feed, not an error.
+                    followingStreams = emptyList()
+                    mutableState.update { current ->
+                        if (loadGeneration.get() != generation) return@update current
+                        current.copy(
+                            items = persistentListOf(),
+                            seenIds = persistentSetOf(),
+                            isLoading = false,
+                            error = null,
+                            pageError = null,
+                            canLoadMore = false,
+                            feedGeneration = current.feedGeneration + 1,
+                            targetPageIndex = 0,
+                            activeIndex = 0,
+                        )
+                    }
+                } else {
+                    mutableState.update { current ->
+                        if (loadGeneration.get() != generation) return@update current
+                        current.copy(isLoading = false, canLoadMore = false)
+                    }
+                }
+                return
+            }
+
+            val outcomes: List<Result<FeedPage>> = coroutineScope {
+                requests.map { (stream, page, cursor) ->
+                    async { runCatching { capable.getCreatorFeed(stream.creator, page, cursor) } }
+                }.map { it.await() }
+            }
+            currentCoroutineContext().ensureActive()
+            if (loadGeneration.get() != generation) return
+
+            val failures = mutableListOf<String>()
+            val alive = mutableListOf<FollowingStream>()
+            requests.forEachIndexed { index, (stream, page, _) ->
+                val result = outcomes[index]
+                val pageData = result.getOrNull()
+                if (pageData == null) {
+                    val t = result.exceptionOrNull()
+                    logcat(LogPriority.ERROR, throwable = t) { "Following stream '${stream.creator}' failed" }
+                    failures += "'${stream.creator}': ${t?.localizedMessage ?: "failed"}"
+                    return@forEachIndexed
+                }
+                stream.buffer.addAll(pageData.videos)
+                stream.pagesFetched = page
+                // Per-stream v17 sticky cursor rules: the first non-null token locks the
+                // stream; losing it mid-stream stops that stream only, not the feed.
+                val newCursorMode = stream.cursorMode || pageData.nextCursor != null
+                val cursorLost = newCursorMode && pageData.nextCursor == null && pageData.hasNextPage
+                if (cursorLost) {
+                    logcat(LogPriority.WARN) {
+                        "Following stream '${stream.creator}' dropped its cursor mid-feed; stopping it (contract v18)."
+                    }
+                }
+                stream.cursorMode = newCursorMode
+                stream.cursor = pageData.nextCursor
+                stream.exhausted = !pageData.hasNextPage || cursorLost
+                alive += stream
+            }
+            val failedStreams = requests.filterIndexed { index, _ -> outcomes[index].isFailure }
+                .map { it.first }
+                .toSet()
+            followingStreams = if (reset) alive else followingStreams.filterNot { it in failedStreams }
+            val merged = mergeFollowingStreams(followingStreams)
+            val failedText = failures.joinToString("; ")
+
+            mutableState.update { current ->
+                if (loadGeneration.get() != generation) return@update current
+                val anyAlive = followingStreams.any { !it.exhausted }
+                if (reset) {
+                    val newItems = merged.distinctBy { it.id }
+                    if (newItems.isEmpty() && failures.isNotEmpty() && alive.isEmpty()) {
+                        // All-failed fan-out: nothing to show, surface the combined error.
+                        current.copy(
+                            isLoading = false,
+                            error = failedText,
+                            canLoadMore = false,
+                            feedGeneration = current.feedGeneration + 1,
+                            targetPageIndex = 0,
+                            activeIndex = 0,
+                        )
+                    } else {
+                        current.copy(
+                            items = newItems.toImmutableList(),
+                            seenIds = newItems.map { it.id }.toImmutableSet(),
+                            isLoading = false,
+                            error = null,
+                            pageError = failedText.takeIf { it.isNotEmpty() },
+                            canLoadMore = anyAlive,
+                            feedGeneration = current.feedGeneration + 1,
+                            targetPageIndex = 0,
+                            activeIndex = 0,
+                        )
+                    }
+                } else {
+                    val fresh = merged.filterNot { it.id in current.seenIds }
+                    current.copy(
+                        items = (current.items + fresh).toImmutableList(),
+                        seenIds = (current.seenIds + fresh.map { it.id }).toImmutableSet(),
+                        isLoading = false,
+                        pageError = failedText.takeIf { it.isNotEmpty() },
+                        canLoadMore = anyAlive,
+                    )
+                }
+            }
+        } catch (e: CancellationException) {
+            // Superseded by a newer reset/switch: keep whatever state the new load owns.
+        } catch (t: Throwable) {
+            logcat(LogPriority.ERROR, t) { "Failed to load following feed from source ${state.value.currentSourceId}" }
+            if (loadGeneration.get() != generation) return
+            mutableState.update { current ->
+                if (current.items.isEmpty()) {
+                    current.copy(isLoading = false, error = t.localizedMessage ?: "Failed to load feed")
+                } else {
+                    current.copy(isLoading = false, pageError = t.localizedMessage ?: "Failed to load feed")
+                }
+            }
+        }
+    }
+
+    /**
+     * k-way merge over the streams' buffer heads: newest first by
+     * [ShortVideoItem.createdAtEpochSec]; heads without a timestamp keep their own stream
+     * order and are pulled round-robin among themselves. Drains every buffer — the merged
+     * result is the feed tail until the next top-up.
+     */
+    private fun mergeFollowingStreams(streams: List<FollowingStream>): List<ShortVideoItem> {
+        val merged = mutableListOf<ShortVideoItem>()
+        var roundRobin = 0
+        while (true) {
+            val withItems = streams.filter { it.buffer.isNotEmpty() }
+            if (withItems.isEmpty()) return merged
+            val anyTimed = withItems.any { it.buffer.first().createdAtEpochSec != null }
+            val pick = if (anyTimed) {
+                // maxBy returns the first maximal element: equal timestamps keep stream order.
+                withItems.maxBy { it.buffer.first().createdAtEpochSec ?: Long.MIN_VALUE }
+            } else {
+                withItems[roundRobin++ % withItems.size]
+            }
+            merged += pick.buffer.removeFirst()
+        }
+    }
+
+    /**
+     * Follow/unfollow the given creator on the current source. Explicit user data: the
+     * write persists regardless of incognito (same rule as favorite removal).
+     *
+     * @return false when the new-follow would cross [MAX_FOLLOWS_PER_SOURCE] (no state or
+     * DB change happens; the caller surfaces the refusal, e.g. with a snackbar).
+     */
+    fun toggleFollow(creator: String): Boolean {
+        val sourceId = state.value.currentSourceId
+        val willFollow = creator !in state.value.followingCreators
+        if (willFollow && state.value.followingCreators.size >= MAX_FOLLOWS_PER_SOURCE) return false
+        decidedFollows += creator
+        mutableState.update { state ->
+            val newFollows = if (willFollow) {
+                state.followingCreators + creator
+            } else {
+                state.followingCreators - creator
+            }
+            state.copy(followingCreators = newFollows.toImmutableSet())
+        }
+        // The tap is authoritative for this session; the DB write must survive screen
+        // disposal (NonCancellable), and repository errors are logged, not surfaced.
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            if (willFollow) {
+                reelsFollowRepository.insert(ReelsFollow(sourceId = sourceId, creator = creator, addedAt = Date()))
+            } else {
+                reelsFollowRepository.delete(sourceId, creator)
+            }
+        }
+        return true
+    }
+
+    private fun loadPersistedFollows(sourceId: Long) {
+        screenModelScope.launch(ioDispatcher) {
+            val creators = reelsFollowRepository.getCreatorsBySource(sourceId)
+            mutableState.update { current ->
+                // The read raced a source switch: its result belongs to the old source.
+                if (current.currentSourceId != sourceId) return@update current
+                // Skip creators the user already toggled this session: a stale snapshot must
+                // not resurrect an unfollow or drop a fresh follow.
+                val persisted = creators.filterNot { it in decidedFollows }
+                current.copy(followingCreators = (current.followingCreators + persisted).toImmutableSet())
+            }
         }
     }
 
@@ -587,7 +895,9 @@ class ReelsFeedScreenModel(
 
     fun onPageChanged(index: Int) {
         mutableState.update { it.copy(activeIndex = index, isPlaying = true) }
-        if (!state.value.isOffline) {
+        // Only the global feed has a per-source browsing position; creator and FOLLOWING
+        // pages must not clobber it.
+        if (!state.value.isOffline && mode == FeedMode.GLOBAL) {
             persistUnlessIncognito {
                 sourcePreferences.lastReelsPosition(state.value.currentSourceId).set(index)
             }
@@ -650,6 +960,16 @@ class ReelsFeedScreenModel(
         val sourceName: String = "",
         val isOffline: Boolean = false,
         val supportsTags: Boolean = true,
+        // Feed generation mode (contract v18): drives the creator chrome in the TopBar and
+        // which loadFeed pipeline runs.
+        val mode: FeedMode = FeedMode.GLOBAL,
+        // Creator name for [FeedMode.CREATOR]; null in every other mode.
+        val creator: String? = null,
+        // The current source implements AnimeCreatorFeedSource: gates the author chip,
+        // the follow action and the follows-screen entry.
+        val isCreatorCapable: Boolean = false,
+        // Followed creator names on the current source (follows are per source in v1).
+        val followingCreators: ImmutableSet<String> = persistentSetOf(),
         val availableSources: ImmutableList<AnimeSource> = persistentListOf(),
         val sourceIcons: ImmutableMap<Long, ImageBitmap> = persistentHashMapOf(),
         val items: ImmutableList<ShortVideoItem> = persistentListOf(),

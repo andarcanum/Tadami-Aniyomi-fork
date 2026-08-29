@@ -41,6 +41,9 @@ import java.util.Locale
 fun ReelsBottomMeta(
     item: ShortVideoItem,
     onTagClick: (String) -> Unit,
+    // Non-null (capability- and author-gated by the caller) makes the author chip open the
+    // creator's page (contract v18).
+    onAuthorClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -49,6 +52,11 @@ fun ReelsBottomMeta(
     ) {
         // Author Row
         Row(
+            modifier = Modifier.then(
+                onAuthorClick?.let { click ->
+                    Modifier.clickable(onClick = click)
+                } ?: Modifier,
+            ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
