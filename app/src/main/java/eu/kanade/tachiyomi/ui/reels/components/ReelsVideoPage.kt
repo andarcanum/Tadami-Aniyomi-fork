@@ -23,8 +23,10 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,6 +45,8 @@ import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import tachiyomi.i18n.MR
+import tachiyomi.presentation.core.i18n.stringResource
 
 @Composable
 fun ReelsVideoPage(
@@ -55,13 +59,19 @@ fun ReelsVideoPage(
     isHdQuality: Boolean,
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
+    isLastPage: Boolean = false,
+    // Stable per-source prefix; the page appends item id + the PINNED quality to build the
+    // progressive cache key.
+    cachePrefix: String? = null,
     onTogglePlayPause: () -> Unit,
     onToggleLike: () -> Unit,
     onToggleMute: () -> Unit,
     onShare: () -> Unit,
     onTagClick: (String) -> Unit,
     onVideoCompleted: () -> Unit,
-    onPlaybackError: (String) -> Unit = {},
+    // Second parameter retries the current video (snackbar "Retry" action).
+    onPlaybackError: (String, retry: () -> Unit) -> Unit = { _, _ -> },
+    onScrubStart: () -> Unit = {},
     headers: Map<String, String> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
@@ -74,12 +84,21 @@ fun ReelsVideoPage(
     var showHeartPop by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var playbackSpeed by remember { mutableFloatStateOf(1f) }
+    var retrySignal by remember { mutableIntStateOf(0) }
     val heartScale = remember { Animatable(0f) }
     val hapticFeedback = LocalHapticFeedback.current
 
-    val videoUrl = remember(item, isHdQuality) {
-        if (isHdQuality) (item.videoUrlHd ?: item.videoUrl) else item.videoUrl
+    // The effective (data-saver aware) quality is re-read only when the page ACTIVATES:
+    // mid-playback network changes must not rebuild the player and interrupt the clip.
+    var pinnedHd by remember(item.id) { mutableStateOf(isHdQuality) }
+    LaunchedEffect(isActive) {
+        if (isActive) pinnedHd = isHdQuality
     }
+
+    val videoUrl = remember(item, pinnedHd) {
+        if (pinnedHd) (item.videoUrlHd ?: item.videoUrl) else item.videoUrl
+    }
+    val cacheKey = cachePrefix?.let { prefix -> "$prefix:${item.id}:${if (pinnedHd) "hd" else "sd"}" }
 
     Box(
         modifier = modifier
@@ -146,13 +165,19 @@ fun ReelsVideoPage(
             isPlaying = isPlaying,
             isAutoAdvance = isAutoAdvance,
             isCropMode = isCropMode,
+            isLastPage = isLastPage,
+            cacheKey = cacheKey,
+            videoDescription = listOfNotNull(item.author, item.title).joinToString(" — ").ifBlank { null },
             seekToFraction = seekFraction,
             onProgressUpdate = { progressState.floatValue = it },
             onVideoCompleted = onVideoCompleted,
-            onDurationKnown = { if (durationSec <= 0f) durationSec = it },
-            onPlaybackError = onPlaybackError,
+            // The player-reported duration is authoritative; the server value is only a
+            // placeholder until STATE_READY (wrong server durations must not stick).
+            onDurationKnown = { durationSec = it },
+            onPlaybackError = { msg -> onPlaybackError(msg) { retrySignal++ } },
             onBufferingChanged = { isBuffering = it },
             playbackSpeed = playbackSpeed,
+            retrySignal = retrySignal,
             headers = headers,
             modifier = Modifier.fillMaxSize(),
         )
@@ -194,7 +219,9 @@ fun ReelsVideoPage(
             ) {
                 Icon(
                     imageVector = if (!isPlaying) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                    contentDescription = null,
+                    contentDescription = stringResource(
+                        if (!isPlaying) MR.strings.action_play else MR.strings.action_pause,
+                    ),
                     tint = Color.White.copy(alpha = 0.9f),
                     modifier = Modifier.size(40.dp),
                 )
@@ -255,6 +282,7 @@ fun ReelsVideoPage(
                     seekFraction = null
                 }
             },
+            onScrubStart = onScrubStart,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }

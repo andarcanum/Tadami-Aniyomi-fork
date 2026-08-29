@@ -27,6 +27,7 @@
     <string name="action_next_chapter">Следующая глава</string>
     <string name="action_open_in_browser">Открыть в браузере</string>
     <string name="action_pause">Пауза</string>
+    <string name="action_play">Воспроизвести</string>
     <string name="action_previous_chapter">Предыдущая глава</string>
     <string name="reader_boundary_release_to_open">Отпустите, чтобы открыть</string>
     <string name="action_remove">Удалить</string>
@@ -1653,4 +1654,8 @@
     <string name="reels_open_favorites">Открыть избранное</string>
     <string name="reels_preload">Предзагрузка</string>
     <string name="reels_preload_wifi_only">Предзагрузка только по Wi-Fi</string>
+    <string name="reels_unmute_hint">Нажмите, чтобы включить звук</string>
+    <string name="reels_data_saver_metered">SD в мобильных сетях</string>
+    <string name="reels_favorites_removed_snackbar">Видео удалено из избранного</string>
+    <string name="reels_unknown_source">Неизвестный источник</string>
 </resources>

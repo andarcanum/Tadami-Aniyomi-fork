@@ -41,4 +41,12 @@ class ReelsFavoritesScreenModel(
             repository.delete(favorite.videoId, favorite.sourceId)
         }
     }
+
+    // Undo path for the remove snackbar: INSERT OR REPLACE restores the row with its
+    // original addedAt, so the favorite keeps its sort position.
+    fun restoreFavorite(favorite: ReelsFavorite) {
+        screenModelScope.launch {
+            repository.insert(favorite)
+        }
+    }
 }

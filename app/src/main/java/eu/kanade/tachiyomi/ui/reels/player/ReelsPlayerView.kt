@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -27,6 +28,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -44,7 +47,7 @@ import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
@@ -80,6 +83,15 @@ fun ReelsPlayerView(
     seekToFraction: Float?,
     onProgressUpdate: (Float) -> Unit,
     onVideoCompleted: () -> Unit,
+    // Increment to re-prepare the current media from 0 after a playback error (retry action).
+    retrySignal: Int = 0,
+    // The last feed page loops instead of ending (auto-advance has nowhere to go).
+    isLastPage: Boolean = false,
+    // Stable progressive-stream cache key (sourceId:videoId:quality) so re-watches hit the
+    // disk cache even after signed CDN URLs rotate.
+    cacheKey: String? = null,
+    // TalkBack description of the playing video (title/author from the item).
+    videoDescription: String? = null,
     onDurationKnown: (Float) -> Unit = {},
     onPlaybackError: (String) -> Unit = {},
     onBufferingChanged: (Boolean) -> Unit = {},
@@ -89,6 +101,9 @@ fun ReelsPlayerView(
 ) {
     val context = LocalContext.current
     val networkClient = remember { Injekt.get<NetworkHelper>().client }
+    // Listener and surface callbacks are created once with the player; they must read the
+    // CURRENT composition values, not the ones captured on first composition.
+    val currentCropMode by rememberUpdatedState(isCropMode)
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
     var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
     var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
@@ -99,6 +114,10 @@ fun ReelsPlayerView(
 
     // Playback position to restore after a quality (URL) switch within the same page.
     var restorePositionMs by remember { mutableLongStateOf(0L) }
+    // The media URL the current player instance was built for, so a URL change (quality
+    // toggle) is handled explicitly inside the lifecycle effect instead of via the
+    // DisposableEffect disposal order.
+    var createdForUrl by remember { mutableStateOf<String?>(null) }
 
     fun updateMatrix(tv: TextureView?, vw: Int, vh: Int, crop: Boolean) {
         if (tv == null || vw <= 0 || vh <= 0) return
@@ -146,8 +165,20 @@ fun ReelsPlayerView(
                 p.release()
             }
             player = null
+            createdForUrl = null
             isFirstFrameRendered = false
             return@LaunchedEffect
+        }
+
+        if (createdForUrl != null && createdForUrl != videoUrl) {
+            // Quality switch within the page: capture the position BEFORE releasing so it
+            // seeks back once the new source reaches STATE_READY.
+            player?.let { p ->
+                if (p.duration > 0) restorePositionMs = p.currentPosition
+                p.release()
+            }
+            player = null
+            isFirstFrameRendered = false
         }
 
         if (player == null) {
@@ -171,7 +202,7 @@ fun ReelsPlayerView(
                 .setLoadControl(loadControl)
                 .build()
                 .apply {
-                    repeatMode = if (isAutoAdvance) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
+                    repeatMode = if (isAutoAdvance && !isLastPage) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
                     volume = if (isMuted) 0f else 1f
                     // App network stack (cookies/DoH/proxy) + disk cache for repeat watches.
                     val upstream = OkHttpDataSource.Factory(networkClient)
@@ -180,10 +211,14 @@ fun ReelsPlayerView(
                         .setCache(getReelsVideoCache(context.applicationContext))
                         .setUpstreamDataSourceFactory(upstream)
                         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-                    setMediaSource(
-                        ProgressiveMediaSource.Factory(dataSourceFactory)
-                            .createMediaSource(MediaItem.fromUri(videoUrl)),
-                    )
+                    // DefaultMediaSourceFactory infers the type (progressive today, HLS/DASH
+                    // ready); customCacheKey keys the progressive cache by the stable reel id
+                    // instead of the signed CDN URL. Not valid for adaptive streams.
+                    val mediaItem = MediaItem.Builder()
+                        .setUri(videoUrl)
+                        .apply { if (cacheKey != null) setCustomCacheKey(cacheKey) }
+                        .build()
+                    setMediaSource(DefaultMediaSourceFactory(dataSourceFactory).createMediaSource(mediaItem))
                     playWhenReady = false
                     addListener(object : Player.Listener {
                         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -198,10 +233,11 @@ fun ReelsPlayerView(
                                     }
                                 }
                                 Player.STATE_ENDED -> {
-                                    // repeatMode==ONE (auto-advance off) never reaches ENDED and a
-                                    // preload player has playWhenReady=false, so reaching ENDED here
-                                    // means the active page finished -> advance. Do NOT capture
-                                    // isActive/isAutoAdvance (they go stale on preload->active).
+                                    // repeatMode==ONE (auto-advance off, or the last page) never
+                                    // reaches ENDED and a preload player has playWhenReady=false,
+                                    // so reaching ENDED here means the active page finished ->
+                                    // advance. Do NOT capture isActive/isAutoAdvance (they go
+                                    // stale on preload->active).
                                     onVideoCompleted()
                                 }
                             }
@@ -210,7 +246,7 @@ fun ReelsPlayerView(
                         override fun onVideoSizeChanged(videoSize: VideoSize) {
                             videoWidth = videoSize.width
                             videoHeight = videoSize.height
-                            updateMatrix(textureViewRef, videoSize.width, videoSize.height, isCropMode)
+                            updateMatrix(textureViewRef, videoSize.width, videoSize.height, currentCropMode)
                         }
 
                         override fun onRenderedFirstFrame() {
@@ -227,6 +263,7 @@ fun ReelsPlayerView(
                     prepare()
                 }
             player = exoPlayer
+            createdForUrl = videoUrl
         }
 
         player?.let { p ->
@@ -265,9 +302,20 @@ fun ReelsPlayerView(
         }
     }
 
-    // React to auto-advance changes dynamically.
-    LaunchedEffect(isAutoAdvance) {
-        player?.repeatMode = if (isAutoAdvance) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
+    // React to auto-advance / last-page changes dynamically.
+    LaunchedEffect(isAutoAdvance, isLastPage) {
+        player?.repeatMode = if (isAutoAdvance && !isLastPage) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
+    }
+
+    // Retry after a playback error: re-prepare the same media from the beginning.
+    LaunchedEffect(retrySignal) {
+        if (retrySignal > 0) {
+            player?.apply {
+                seekTo(0)
+                prepare()
+                playWhenReady = true
+            }
+        }
     }
 
     // React to play / pause changes.
@@ -287,9 +335,10 @@ fun ReelsPlayerView(
         player?.setPlaybackSpeed(playbackSpeed)
     }
 
-    // Track playback progress.
-    LaunchedEffect(isActive, isPlaying) {
-        while (isActive && isPlaying) {
+    // Track playback progress. Runs while the page is active (also while paused) so seek
+    // math and the scrubber stay correct when playback is stopped.
+    LaunchedEffect(isActive) {
+        while (isActive) {
             player?.let { p ->
                 val duration = p.duration
                 if (duration > 0) {
@@ -314,7 +363,9 @@ fun ReelsPlayerView(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    DisposableEffect(videoUrl) {
+    // Unmount-only release: URL changes are handled explicitly inside the lifecycle effect
+    // (createdForUrl) so the position capture cannot race the disposal order.
+    DisposableEffect(Unit) {
         onDispose {
             player?.let { p ->
                 if (p.duration > 0) restorePositionMs = p.currentPosition
@@ -358,11 +409,11 @@ fun ReelsPlayerView(
                                 val s = Surface(st)
                                 currentSurface = s
                                 player?.setVideoSurface(s)
-                                updateMatrix(this@apply, videoWidth, videoHeight, isCropMode)
+                                updateMatrix(this@apply, videoWidth, videoHeight, currentCropMode)
                             }
 
                             override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) {
-                                updateMatrix(this@apply, videoWidth, videoHeight, isCropMode)
+                                updateMatrix(this@apply, videoWidth, videoHeight, currentCropMode)
                             }
 
                             override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
@@ -384,9 +435,17 @@ fun ReelsPlayerView(
                 },
                 update = { tv ->
                     textureViewRef = tv
-                    updateMatrix(tv, videoWidth, videoHeight, isCropMode)
+                    updateMatrix(tv, videoWidth, videoHeight, currentCropMode)
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (videoDescription != null) {
+                            Modifier.semantics { contentDescription = videoDescription }
+                        } else {
+                            Modifier
+                        },
+                    ),
             )
         }
 

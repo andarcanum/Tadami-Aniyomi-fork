@@ -1,18 +1,38 @@
 package eu.kanade.tachiyomi.ui.reels
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -26,13 +46,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.SourceFilterAnimeDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsEmptySearchState
 import eu.kanade.tachiyomi.ui.reels.components.ReelsErrorState
@@ -68,6 +91,17 @@ data class ReelsFeedScreen(
         val navigator = LocalNavigator.currentOrThrow
         val context = LocalContext.current
         val coroutineScope = rememberCoroutineScope()
+        // Reels are a portrait-first experience; restore the previous orientation on dispose.
+        DisposableEffect(Unit) {
+            val activity = context as? Activity
+            val previousOrientation = activity?.requestedOrientation
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            onDispose {
+                if (activity != null && previousOrientation != null) {
+                    activity.requestedOrientation = previousOrientation
+                }
+            }
+        }
         // The screen's content-based `key` (see above) already distinguishes the live feed from
         // an offline playlist, so a plain rememberScreenModel yields the right model per screen
         // and Voyager disposes each correctly on pop.
@@ -80,6 +114,7 @@ data class ReelsFeedScreen(
         }
         val state by screenModel.state.collectAsStateWithLifecycle()
         val snackbarHostState = remember { SnackbarHostState() }
+        val retryLabel = stringResource(MR.strings.action_retry)
         // Preload gating must be reactive: a plain context.isOnWifi() call here would be
         // recomputed (stale) on every recomposition instead of tracking network changes.
         var isOnWifi by remember { mutableStateOf(context.isOnWifi()) }
@@ -96,6 +131,9 @@ data class ReelsFeedScreen(
             }
         }
         val preloadAllowed = state.preloadEnabled && (!state.preloadWifiOnly || isOnWifi)
+        // Data saver: force SD on metered networks. The page pins this value at activation,
+        // so playback never rebuilds mid-clip when connectivity changes.
+        val effectiveHd = if (state.dataSaverMetered && !isOnWifi) false else state.isHdQuality
         var chromeVisible by remember { mutableStateOf(true) }
 
         // Immersive: auto-hide the top bar after 3s of playback; any tap reveals it.
@@ -103,6 +141,15 @@ data class ReelsFeedScreen(
             if (chromeVisible && state.isPlaying) {
                 delay(3000)
                 chromeVisible = false
+            }
+        }
+
+        // The unmute hint disappears on its own after 6 s; a later re-entry shows it again
+        // while the session stays undecided.
+        LaunchedEffect(state.showUnmuteHint) {
+            if (state.showUnmuteHint) {
+                delay(6000)
+                screenModel.dismissUnmuteHint()
             }
         }
 
@@ -190,7 +237,7 @@ data class ReelsFeedScreen(
                                 isPlaying = state.isPlaying,
                                 isMuted = state.isMuted,
                                 isLiked = (item.id in state.likedIds),
-                                isHdQuality = state.isHdQuality,
+                                isHdQuality = effectiveHd,
                                 isAutoAdvance = state.isAutoAdvance,
                                 isCropMode = state.isCropMode,
                                 onTogglePlayPause = {
@@ -219,9 +266,18 @@ data class ReelsFeedScreen(
                                         }
                                     }
                                 },
-                                onPlaybackError = { msg ->
-                                    coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
+                                onPlaybackError = { msg, retry ->
+                                    coroutineScope.launch {
+                                        val result = snackbarHostState.showSnackbar(
+                                            message = msg,
+                                            actionLabel = retryLabel,
+                                        )
+                                        if (result == SnackbarResult.ActionPerformed) retry()
+                                    }
                                 },
+                                onScrubStart = { chromeVisible = true },
+                                cachePrefix = state.currentSourceId.toString(),
+                                isLastPage = page == state.items.lastIndex,
                                 headers = state.sourceHeaders,
                             )
                         }
@@ -231,6 +287,47 @@ data class ReelsFeedScreen(
                     if (state.isLoading && state.items.isNotEmpty()) {
                         ReelsNextPageLoader(modifier = Modifier.align(Alignment.BottomCenter))
                     }
+                }
+            }
+
+            // "Tap to unmute" (approved variant A): visible while the session sound is
+            // undecided; tapping unmutes (and decides), otherwise it auto-dismisses.
+            AnimatedVisibility(
+                visible = state.showUnmuteHint && state.isMuted,
+                enter = fadeIn() + scaleIn(initialScale = 0.85f),
+                exit = fadeOut() + scaleOut(targetScale = 0.85f),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 150.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.Black.copy(alpha = 0.62f))
+                        .border(1.dp, AuroraTheme.colors.accent.copy(alpha = 0.45f), RoundedCornerShape(999.dp))
+                        .clickable { screenModel.toggleMute() }
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(9.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .background(AuroraTheme.colors.accent, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.VolumeOff,
+                            contentDescription = null,
+                            tint = Color.Black,
+                            modifier = Modifier.size(15.dp),
+                        )
+                    }
+                    Text(
+                        text = stringResource(MR.strings.reels_unmute_hint),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
 
@@ -253,6 +350,7 @@ data class ReelsFeedScreen(
                     isAutoAdvance = state.isAutoAdvance,
                     isCropMode = state.isCropMode,
                     isHdQuality = state.isHdQuality,
+                    dataSaverEnabled = state.dataSaverMetered,
                     preloadEnabled = state.preloadEnabled,
                     preloadWifiOnly = state.preloadWifiOnly,
                     isOffline = state.isOffline,
@@ -263,6 +361,7 @@ data class ReelsFeedScreen(
                     onToggleAutoAdvance = screenModel::toggleAutoAdvance,
                     onToggleCropMode = screenModel::toggleCropMode,
                     onToggleQuality = screenModel::toggleQuality,
+                    onToggleDataSaver = screenModel::toggleDataSaver,
                     onTogglePreload = screenModel::togglePreload,
                     onTogglePreloadWifiOnly = screenModel::togglePreloadWifiOnly,
                     onToggleSearchBar = { screenModel.toggleSearchBar(!state.isSearchBarOpen) },

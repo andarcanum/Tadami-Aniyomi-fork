@@ -106,6 +106,7 @@
     <string name="action_edit_cover">Edit cover</string>
     <string name="action_view_chapters">View chapters</string>
     <string name="action_pause">Pause</string>
+    <string name="action_play">Play</string>
     <string name="action_previous_chapter">Previous chapter</string>
     <string name="action_next_chapter">Next chapter</string>
     <string name="action_retry">Retry</string>
@@ -1869,4 +1870,8 @@
     <string name="reels_open_favorites">Open favorites</string>
     <string name="reels_preload">Preload</string>
     <string name="reels_preload_wifi_only">Wi-Fi only preload</string>
+    <string name="reels_unmute_hint">Tap to unmute</string>
+    <string name="reels_data_saver_metered">SD on metered networks</string>
+    <string name="reels_favorites_removed_snackbar">Video removed from favorites</string>
+    <string name="reels_unknown_source">Unknown source</string>
 </resources>

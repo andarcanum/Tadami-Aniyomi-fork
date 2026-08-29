@@ -30,6 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,6 +44,7 @@ fun ReelsProgressBar(
     progressState: State<Float>,
     durationSec: Float,
     onSeek: (Float) -> Unit,
+    onScrubStart: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var isDragging by remember { mutableStateOf(false) }
@@ -58,11 +62,18 @@ fun ReelsProgressBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(32.dp)
+            // 48dp interactive height (invisible — the track anchors to the bottom edge);
+            // keeps the gesture area above the a11y minimum without changing the visuals.
+            .height(48.dp)
+            // TalkBack: expose the scrubber as an adjustable progress control.
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(currentFraction, 0f..1f)
+            }
             .onSizeChanged { barWidthPx = it.width.toFloat().coerceAtLeast(1f) }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = { offset ->
+                        onScrubStart()
                         isDragging = true
                         dragProgress = (offset.x / barWidthPx).coerceIn(0f, 1f)
                         tryAwaitRelease()
@@ -74,6 +85,7 @@ fun ReelsProgressBar(
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragStart = { offset ->
+                        onScrubStart()
                         isDragging = true
                         dragProgress = (offset.x / barWidthPx).coerceIn(0f, 1f)
                     },
@@ -92,14 +104,15 @@ fun ReelsProgressBar(
             },
         contentAlignment = Alignment.BottomCenter,
     ) {
-        // Floating Time Indicator when dragging
+        // Floating Time Indicator when dragging (bottom-anchored so the taller touch box
+        // does not shift it relative to the bar).
         AnimatedVisibility(
             visible = isDragging,
             enter = fadeIn() + scaleIn(initialScale = 0.85f),
             exit = fadeOut() + scaleOut(targetScale = 0.85f),
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(bottom = 8.dp),
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 24.dp),
         ) {
             val totalSec = durationSec.coerceAtLeast(0f).roundToInt()
             val currentSec = (currentFraction * durationSec).coerceAtLeast(0f).roundToInt()

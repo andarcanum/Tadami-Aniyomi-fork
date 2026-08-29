@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupReelsFavorite
 import eu.kanade.tachiyomi.data.backup.models.toBackupReelsFavorite
 import eu.kanade.tachiyomi.data.backup.models.toReelsFavorite
 import eu.kanade.tachiyomi.data.backup.restore.restorers.ReelsFavoritesRestorer
+import io.kotest.matchers.comparables.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,6 +55,17 @@ class ReelsFavoritesBackupRoundTripTest {
     fun `mapper preserves all fields`() {
         val round = favorite.toBackupReelsFavorite().toReelsFavorite()
         round shouldBe favorite
+    }
+
+    @Test
+    fun `restore maps a zero addedAt to now instead of the epoch`() {
+        val backupFavorite = favorite.copy(videoId = "no-ts").toBackupReelsFavorite().copy(addedAt = 0L)
+
+        val restored = backupFavorite.toReelsFavorite()
+
+        // Proto3 cannot distinguish "absent" from 0; the restored favorite must not sort
+        // to the bottom of the list below every real like.
+        restored.addedAt.time shouldBeGreaterThan 1_700_000_000_000L
     }
 
     @Test

@@ -34,6 +34,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
+import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -188,10 +189,13 @@ private fun MetricItem(
 
 /** 1234 -> 1.2K, 1234567 -> 1.2M, etc. */
 fun formatCompactCount(value: Long): String {
+    // Explicit (default) locale: user-facing compact counts localize the decimal separator
+    // intentionally instead of relying on the implicit default.
+    val locale = Locale.getDefault()
     return when {
-        value >= 1_000_000_000 -> "%.1fB".format(value / 1_000_000_000.0)
-        value >= 1_000_000 -> "%.1fM".format(value / 1_000_000.0)
-        value >= 1_000 -> "%.1fK".format(value / 1_000.0)
+        value >= 1_000_000_000 -> "%.1fB".format(locale, value / 1_000_000_000.0)
+        value >= 1_000_000 -> "%.1fM".format(locale, value / 1_000_000.0)
+        value >= 1_000 -> "%.1fK".format(locale, value / 1_000.0)
         else -> value.toString()
     }
 }

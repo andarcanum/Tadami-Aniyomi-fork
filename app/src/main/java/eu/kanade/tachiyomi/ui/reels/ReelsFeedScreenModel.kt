@@ -22,6 +22,7 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toImmutableSet
+import kotlinx.collections.immutable.toPersistentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,16 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
+
+/**
+ * Session-scoped "user has not decided sound yet" flag. Process-wide by default: every
+ * fresh app launch starts the feed muted (Play-policy friendly), and once the user toggles
+ * sound ON/OFF the persisted preference applies for the rest of the session. Injectable so
+ * tests get a hermetic instance.
+ */
+class ReelsSessionSoundState {
+    var decided = false
+}
 
 class ReelsFeedScreenModel(
     val initialSourceId: Long,
@@ -62,17 +73,26 @@ class ReelsFeedScreenModel(
             ?.asImageBitmap()
     },
     private val reelsFavoriteRepository: ReelsFavoriteRepository = Injekt.get(),
+    private val sessionSound: ReelsSessionSoundState = sharedSessionSound,
 ) : StateScreenModel<ReelsFeedScreenModel.State>(
     State(
         currentSourceId = initialSourceId,
         isAutoAdvance = sourcePreferences.autoAdvanceReels().get(),
         isCropMode = sourcePreferences.reelsCropMode().get(),
-        isMuted = sourcePreferences.reelsMuted().get(),
+        // Undecided session: always start muted (with the unmute hint); afterwards the
+        // persisted preference wins.
+        isMuted = if (sessionSound.decided) sourcePreferences.reelsMuted().get() else true,
         isHdQuality = sourcePreferences.reelsHdQuality().get(),
+        dataSaverMetered = sourcePreferences.reelsDataSaverMetered().get(),
         preloadEnabled = sourcePreferences.reelsPreloadEnabled().get(),
         preloadWifiOnly = sourcePreferences.reelsPreloadWifiOnly().get(),
+        showUnmuteHint = !sessionSound.decided,
     ),
 ) {
+
+    companion object {
+        val sharedSessionSound = ReelsSessionSoundState()
+    }
 
     private var source: AnimeFeedSource? = null
 
@@ -95,6 +115,11 @@ class ReelsFeedScreenModel(
     private var baseCursorMode = false
     private var baseCanLoadMore = true
     private var basePosition = 0
+
+    // One-shot feed-position restore: snapshotted on source switch, consumed by the first
+    // successful load after it, so re-entry lands on the video the user left off at.
+    private var pendingRestorePosition = 0
+    private var restorePositionPending = false
 
     // videoId -> sourceId for offline playlists, so likes persist against the right source.
     private var offlineSourceIds: Map<String, Long> = emptyMap()
@@ -164,6 +189,8 @@ class ReelsFeedScreenModel(
             baseCanLoadMore = true
             basePosition = 0
             decidedIds.clear()
+            pendingRestorePosition = sourcePreferences.lastReelsPosition(newSourceId).get().coerceAtLeast(0)
+            restorePositionPending = true
             val savedQuery = sourcePreferences.lastReelsQuery(newSourceId).get()
             val initialFilters = rawSource.getFilterList()
 
@@ -183,7 +210,8 @@ class ReelsFeedScreenModel(
                     // against an older source-api.
                     sourceHeaders = (rawSource as? AnimeHttpSource)?.headers
                         ?.associate { it.first to it.second }
-                        .orEmpty(),
+                        .orEmpty()
+                        .toPersistentHashMap(),
                     // Likes are stored per (videoId, sourceId) in the DB; likedIds is only the
                     // current source's set. Drop the previous source's likes so a colliding
                     // videoId in the new source doesn't show a phantom heart; the new source's
@@ -254,6 +282,15 @@ class ReelsFeedScreenModel(
                 // returned; writing now would corrupt the newer feed's cursor/items.
                 if (loadGeneration.get() != generation) return@launch
 
+                // Consume the one-shot position restore OUTSIDE the CAS: update lambdas may
+                // re-run under contention and must stay side-effect-free.
+                val restorePosition = if (reset && restorePositionPending) {
+                    restorePositionPending = false
+                    pendingRestorePosition
+                } else {
+                    0
+                }
+
                 mutableState.update { current ->
                     // Re-check inside the CAS: a reset may have landed between the outer guard
                     // and this update; writing a stale page would corrupt the newer feed.
@@ -282,9 +319,10 @@ class ReelsFeedScreenModel(
                         nextCursor = pageData.nextCursor,
                         cursorMode = newCursorMode,
                         feedGeneration = if (reset) current.feedGeneration + 1 else current.feedGeneration,
-                        // A fresh feed always starts at the top; only the clearSearch restore
-                        // path sets a non-zero targetPageIndex.
-                        targetPageIndex = if (reset) 0 else current.targetPageIndex,
+                        // A fresh feed starts at the saved position on source entry, at the top
+                        // on search/filter resets; only the clearSearch restore path sets a
+                        // non-zero targetPageIndex otherwise.
+                        targetPageIndex = if (reset) restorePosition else current.targetPageIndex,
                         activeIndex = if (reset) 0 else current.activeIndex,
                         // A recovered append must not leave a stale transient error.
                         pageError = null,
@@ -508,8 +546,23 @@ class ReelsFeedScreenModel(
 
     fun toggleMute() {
         val next = !state.value.isMuted
+        // Any manual toggle ends the "undecided" part of the session: from now on the
+        // persisted preference applies on re-entry.
+        sessionSound.decided = true
         sourcePreferences.reelsMuted().set(next)
-        mutableState.update { it.copy(isMuted = next) }
+        mutableState.update { it.copy(isMuted = next, showUnmuteHint = false) }
+    }
+
+    fun dismissUnmuteHint() {
+        // Timeout dismissal is NOT a decision: a later re-entry shows the hint again while
+        // the session stays undecided.
+        mutableState.update { it.copy(showUnmuteHint = false) }
+    }
+
+    fun toggleDataSaver() {
+        val next = !state.value.dataSaverMetered
+        sourcePreferences.reelsDataSaverMetered().set(next)
+        mutableState.update { it.copy(dataSaverMetered = next) }
     }
 
     fun toggleQuality() {
@@ -524,6 +577,11 @@ class ReelsFeedScreenModel(
 
     fun onPageChanged(index: Int) {
         mutableState.update { it.copy(activeIndex = index, isPlaying = true) }
+        if (!state.value.isOffline) {
+            persistUnlessIncognito {
+                sourcePreferences.lastReelsPosition(state.value.currentSourceId).set(index)
+            }
+        }
         loadNextPageIfNeeded(index)
     }
 
@@ -597,6 +655,8 @@ class ReelsFeedScreenModel(
         val canLoadMore: Boolean = true,
         val isMuted: Boolean = false,
         val isHdQuality: Boolean = true,
+        // Force SD while on metered (non-Wi-Fi) networks; applied when a page activates.
+        val dataSaverMetered: Boolean = true,
         val isAutoAdvance: Boolean = true,
         val isCropMode: Boolean = false,
         val preloadEnabled: Boolean = true,
@@ -612,7 +672,7 @@ class ReelsFeedScreenModel(
         val targetPageIndex: Int = 0,
         val searchQuery: String = "",
         // Headers for the player's HTTP data source, captured from the current source.
-        val sourceHeaders: Map<String, String> = emptyMap(),
+        val sourceHeaders: ImmutableMap<String, String> = persistentHashMapOf(),
         val filters: AnimeFilterList = AnimeFilterList(),
         val isFilterDialogOpen: Boolean = false,
         val isSearchBarOpen: Boolean = false,
@@ -620,5 +680,7 @@ class ReelsFeedScreenModel(
         val error: String? = null,
         // Transient append failure while the feed is non-empty; surfaced as a snackbar.
         val pageError: String? = null,
+        // Session-scoped "tap to unmute" pill: visible while the user has not decided sound.
+        val showUnmuteHint: Boolean = false,
     )
 }

@@ -25,6 +25,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -33,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +54,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.kanade.presentation.components.AppBar
+import kotlinx.coroutines.launch
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -63,6 +68,10 @@ class ReelsFavoritesScreen : Screen {
         val navigator = LocalNavigator.currentOrThrow
         val screenModel = rememberScreenModel { ReelsFavoritesScreenModel() }
         val state by screenModel.state.collectAsStateWithLifecycle()
+        val scope = rememberCoroutineScope()
+        val snackbarHostState = remember { SnackbarHostState() }
+        val removedMessage = stringResource(MR.strings.reels_favorites_removed_snackbar)
+        val undoLabel = stringResource(MR.strings.action_undo)
         var sort by remember { mutableStateOf(FavoritesSort.DateDesc) }
 
         val sorted = remember(state.favorites, sort) {
@@ -109,6 +118,7 @@ class ReelsFavoritesScreen : Screen {
                     },
                 )
             },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         ) { contentPadding ->
             if (sorted.isEmpty()) {
                 Column(
@@ -151,7 +161,18 @@ class ReelsFavoritesScreen : Screen {
                         SwipeToRemoveFavorite(
                             favorite = fav,
                             sourceName = state.sourceNames[fav.sourceId],
-                            onRemove = { screenModel.removeFavorite(fav) },
+                            onRemove = {
+                                screenModel.removeFavorite(fav)
+                                scope.launch {
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = removedMessage,
+                                        actionLabel = undoLabel,
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) {
+                                        screenModel.restoreFavorite(fav)
+                                    }
+                                }
+                            },
                             onClick = {
                                 navigator.push(
                                     ReelsFeedScreen(
@@ -184,6 +205,10 @@ private fun SwipeToRemoveFavorite(
     )
     SwipeToDismissBox(
         state = dismissState,
+        // One-directional removal (end-to-start only): the accidental edge-swipe from the
+        // left edge is the navigation gesture and must not delete favorites.
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = true,
         backgroundContent = {
             Box(
                 modifier = Modifier
@@ -244,6 +269,17 @@ private fun FavoriteCell(
                 text = sourceName,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 2.dp, end = 2.dp),
+            )
+        } else {
+            // The source plugin was uninstalled: show an explicit fallback instead of
+            // silently dropping the line (approved design).
+            Text(
+                text = stringResource(MR.strings.reels_unknown_source),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 2.dp, end = 2.dp),

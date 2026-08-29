@@ -924,17 +924,140 @@ class ReelsFeedScreenModelTest {
         incognito: Boolean = false,
         initialFavorites: List<ReelsFavorite> = emptyList(),
         initialPage: Int = 0,
+        preferences: SourcePreferences = SourcePreferences(MapPreferenceStore()),
+        sessionSound: ReelsSessionSoundState = ReelsSessionSoundState(),
     ) = ReelsFeedScreenModel(
         initialSourceId = sourceId,
         initialFavorites = initialFavorites,
         initialPage = initialPage,
         sourceManager = manager,
-        sourcePreferences = SourcePreferences(MapPreferenceStore()),
+        sourcePreferences = preferences,
         ioDispatcher = testDispatcher,
         isIncognito = { incognito },
         sourceIconProvider = { null },
         reelsFavoriteRepository = repository,
+        sessionSound = sessionSound,
     )
+
+    @Test
+    fun `feed position is persisted per source and restored on re-entry`() = runTest(testDispatcher) {
+        val source = RecordingFeedSource(907L) {
+            FeedPage((0 until 5).map { videoItem("res-p1-$it") }, hasNextPage = true)
+        }
+        val preferences = SourcePreferences(MapPreferenceStore())
+        val first = buildModel(sourceId = 907L, manager = sourceManagerOf(source), preferences = preferences)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        first.onPageChanged(3)
+        testDispatcher.scheduler.advanceUntilIdle()
+        preferences.lastReelsPosition(907L).get() shouldBe 3
+
+        // A fresh model (process restart / re-entry) resumes where the user left off.
+        val second = buildModel(sourceId = 907L, manager = sourceManagerOf(source), preferences = preferences)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        second.state.value.targetPageIndex shouldBe 3
+    }
+
+    @Test
+    fun `incognito session does not persist feed position`() = runTest(testDispatcher) {
+        val source = RecordingFeedSource(908L) {
+            FeedPage((0 until 5).map { videoItem("inc-p1-$it") }, hasNextPage = true)
+        }
+        val preferences = SourcePreferences(MapPreferenceStore())
+        val first = buildModel(
+            sourceId = 908L,
+            manager = sourceManagerOf(source),
+            preferences = preferences,
+            incognito = true,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        first.onPageChanged(3)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        preferences.lastReelsPosition(908L).get() shouldBe 0
+
+        val second = buildModel(sourceId = 908L, manager = sourceManagerOf(source), preferences = preferences)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        second.state.value.targetPageIndex shouldBe 0
+    }
+
+    @Test
+    fun `undecided session starts muted with the unmute hint until the user decides`() = runTest(testDispatcher) {
+        val source = RecordingFeedSource(911L) { FeedPage(listOf(videoItem("mute-a")), hasNextPage = false) }
+        val preferences = SourcePreferences(MapPreferenceStore())
+        val sessionSound = ReelsSessionSoundState()
+
+        val first = buildModel(
+            sourceId = 911L,
+            manager = sourceManagerOf(source),
+            preferences = preferences,
+            sessionSound = sessionSound,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Fresh launch: always muted, hint visible — regardless of the persisted preference.
+        first.state.value.isMuted shouldBe true
+        first.state.value.showUnmuteHint shouldBe true
+
+        first.toggleMute()
+        first.state.value.isMuted shouldBe false
+        first.state.value.showUnmuteHint shouldBe false
+        preferences.reelsMuted().get() shouldBe false
+
+        // Re-entry within the same session respects the user's decision.
+        val second = buildModel(
+            sourceId = 911L,
+            manager = sourceManagerOf(source),
+            preferences = preferences,
+            sessionSound = sessionSound,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        second.state.value.isMuted shouldBe false
+        second.state.value.showUnmuteHint shouldBe false
+    }
+
+    @Test
+    fun `unmute hint clears on dismiss without deciding the session`() = runTest(testDispatcher) {
+        val source = RecordingFeedSource(912L) { FeedPage(listOf(videoItem("mute-b")), hasNextPage = false) }
+        val sessionSound = ReelsSessionSoundState()
+
+        val model = buildModel(
+            sourceId = 912L,
+            manager = sourceManagerOf(source),
+            sessionSound = sessionSound,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.dismissUnmuteHint()
+        model.state.value.showUnmuteHint shouldBe false
+        // Dismissing is not deciding: a new model shows the hint again.
+        val second = buildModel(
+            sourceId = 912L,
+            manager = sourceManagerOf(source),
+            sessionSound = sessionSound,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+        second.state.value.showUnmuteHint shouldBe true
+    }
+
+    @Test
+    fun `data saver toggle persists and defaults to on`() = runTest(testDispatcher) {
+        val source = RecordingFeedSource(913L) { FeedPage(listOf(videoItem("ds")), hasNextPage = false) }
+        val preferences = SourcePreferences(MapPreferenceStore())
+
+        preferences.reelsDataSaverMetered().set(false)
+        val model = buildModel(sourceId = 913L, manager = sourceManagerOf(source), preferences = preferences)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.dataSaverMetered shouldBe false
+        model.toggleDataSaver()
+        model.state.value.dataSaverMetered shouldBe true
+        preferences.reelsDataSaverMetered().get() shouldBe true
+    }
 
     @Test
     fun `offline favorites playlist opens liked videos without a live source`() = runTest(testDispatcher) {

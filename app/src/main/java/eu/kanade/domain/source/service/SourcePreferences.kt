@@ -180,10 +180,15 @@ class SourcePreferences(
         Preference.appStateKey("last_reels_filter_$sourceId"),
         "",
     )
+    fun lastReelsPosition(sourceId: Long) = preferenceStore.getInt(
+        Preference.appStateKey("last_reels_position_$sourceId"),
+        0,
+    )
     fun autoAdvanceReels() = preferenceStore.getBoolean("pref_reels_auto_advance", true)
     fun reelsCropMode() = preferenceStore.getBoolean("pref_reels_crop_mode", false)
     fun reelsMuted() = preferenceStore.getBoolean("pref_reels_muted", false)
     fun reelsHdQuality() = preferenceStore.getBoolean("pref_reels_hd_quality", true)
+    fun reelsDataSaverMetered() = preferenceStore.getBoolean("pref_reels_data_saver_metered", true)
     fun reelsPreloadEnabled() = preferenceStore.getBoolean("pref_reels_preload", true)
     fun reelsPreloadWifiOnly() = preferenceStore.getBoolean("pref_reels_preload_wifi_only", false)
 

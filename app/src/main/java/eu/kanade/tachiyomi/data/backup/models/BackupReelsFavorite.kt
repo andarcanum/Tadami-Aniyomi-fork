@@ -51,6 +51,8 @@ fun BackupReelsFavorite.toReelsFavorite(): ReelsFavorite {
         webUrl = webUrl,
         durationSec = durationSec,
         hasAudio = hasAudio,
-        addedAt = Date(addedAt),
+        // Proto3 scalars cannot distinguish "absent" from 0: a missing timestamp must not
+        // sort the restored favorite to the very bottom of the list, so it becomes "now".
+        addedAt = if (addedAt == 0L) Date() else Date(addedAt),
     )
 }

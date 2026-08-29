@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DataSaverOn
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
@@ -89,6 +90,7 @@ fun ReelsTopBar(
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isHdQuality: Boolean,
+    dataSaverEnabled: Boolean,
     preloadEnabled: Boolean,
     preloadWifiOnly: Boolean,
     isOffline: Boolean,
@@ -99,6 +101,7 @@ fun ReelsTopBar(
     onToggleAutoAdvance: () -> Unit,
     onToggleCropMode: () -> Unit,
     onToggleQuality: () -> Unit,
+    onToggleDataSaver: () -> Unit,
     onTogglePreload: () -> Unit,
     onTogglePreloadWifiOnly: () -> Unit,
     onToggleSearchBar: () -> Unit,
@@ -129,21 +132,28 @@ fun ReelsTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // Back Button
+                // Back Button — visual circle stays 40dp; the outer 48dp box provides the
+                // minimum touch target.
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+                        .size(48.dp)
                         .clickable { onBackClick() },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(MR.strings.action_bar_up_description),
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(MR.strings.action_bar_up_description),
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
                 }
 
                 // Source Title Badge (with dropdown if multiple sources available)
@@ -295,6 +305,7 @@ fun ReelsTopBar(
                             isAutoAdvance = isAutoAdvance,
                             isCropMode = isCropMode,
                             isHdQuality = isHdQuality,
+                            dataSaverEnabled = dataSaverEnabled,
                             preloadEnabled = preloadEnabled,
                             preloadWifiOnly = preloadWifiOnly,
                             onToggleAutoAdvance = {
@@ -307,6 +318,10 @@ fun ReelsTopBar(
                             },
                             onToggleQuality = {
                                 onToggleQuality()
+                                moreMenuOpen = false
+                            },
+                            onToggleDataSaver = {
+                                onToggleDataSaver()
                                 moreMenuOpen = false
                             },
                             onTogglePreload = {
@@ -480,11 +495,13 @@ private fun ReelsMoreMenu(
     isAutoAdvance: Boolean,
     isCropMode: Boolean,
     isHdQuality: Boolean,
+    dataSaverEnabled: Boolean,
     preloadEnabled: Boolean,
     preloadWifiOnly: Boolean,
     onToggleAutoAdvance: () -> Unit,
     onToggleCropMode: () -> Unit,
     onToggleQuality: () -> Unit,
+    onToggleDataSaver: () -> Unit,
     onTogglePreload: () -> Unit,
     onTogglePreloadWifiOnly: () -> Unit,
     onDismiss: () -> Unit,
@@ -573,6 +590,20 @@ private fun ReelsMoreMenu(
                 value = null,
                 checked = preloadWifiOnly,
                 onClick = onTogglePreloadWifiOnly,
+            )
+            MoreMenuRow(
+                icon = {
+                    Icon(
+                        Icons.Filled.DataSaverOn,
+                        null,
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                },
+                label = stringResource(MR.strings.reels_data_saver_metered),
+                value = null,
+                checked = dataSaverEnabled,
+                onClick = onToggleDataSaver,
             )
         }
     }

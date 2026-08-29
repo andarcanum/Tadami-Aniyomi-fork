@@ -189,8 +189,13 @@ class BackupCreator(
             val backupFeeds = BackupDiagnosticLog.measure(context, "collect_feeds") {
                 feedBackupCreator()
             }
+            // sisterAppCompatible exports drop reels favorites anyway — skip the table read.
             val backupReelsFavorites = BackupDiagnosticLog.measure(context, "collect_reels_favorites") {
-                if (options.reelsFavorites) reelsFavoritesBackupCreator() else emptyList()
+                if (options.reelsFavorites && !options.sisterAppCompatible) {
+                    reelsFavoritesBackupCreator()
+                } else {
+                    emptyList()
+                }
             }
 
             val finalBackupManga = if (options.sisterAppCompatible) {

@@ -1,7 +1,11 @@
 package eu.kanade.tachiyomi.animesource.model
 
+import androidx.compose.runtime.Immutable
 import java.io.Serializable
 
+// All fields are vals and treated as immutable after construction — the annotation lets
+// Compose skip reel pages whose inputs have not changed (annotation only, ABI-neutral).
+@Immutable
 data class ShortVideoItem(
     val id: String,
     val title: String? = null,
