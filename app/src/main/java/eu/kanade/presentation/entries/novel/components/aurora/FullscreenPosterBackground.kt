@@ -102,15 +102,6 @@ fun FullscreenPosterBackground(
                 coverLastModified = novel.coverLastModified,
             )
         }
-    val placeholderCover = remember(
-        novel.id,
-        novel.source,
-        novel.favorite,
-        novel.thumbnailUrl,
-        novel.coverLastModified,
-    ) {
-        sourceAwareNovelCoverModel(novel)
-    }
     // Stable preview from the thumbnail shown in list/grid before open.
     // We keep this layer always visible initially so enter never shows black,
     // then overlay the (possibly higher-quality or full-screen-sized) poster.

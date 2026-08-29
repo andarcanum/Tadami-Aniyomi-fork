@@ -122,8 +122,15 @@ class LegacyActivityDataMigrator(
                 }
             }
 
-            // Mark migration as complete
-            prefs.edit().putBoolean(MIGRATION_COMPLETE_KEY, true).apply()
+            // Mark migration as complete only when every record succeeded;
+            // otherwise retry on the next launch (upsert is idempotent).
+            if (recordsFailed == 0) {
+                prefs.edit().putBoolean(MIGRATION_COMPLETE_KEY, true).apply()
+            } else {
+                logcat(LogPriority.WARN) {
+                    "[ActivityMigration] $recordsFailed records failed, will retry on next launch"
+                }
+            }
 
             val duration = System.currentTimeMillis() - startTime
             logcat(LogPriority.INFO) {
@@ -131,7 +138,7 @@ class LegacyActivityDataMigrator(
             }
 
             return MigrationResult(
-                success = true,
+                success = recordsFailed == 0,
                 recordsMigrated = recordsMigrated,
                 recordsFailed = recordsFailed,
                 duration = duration,

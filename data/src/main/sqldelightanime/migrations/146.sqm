@@ -1,0 +1,18 @@
+-- Liked/saved short videos (Reels feature). Likes were session-only before; persisting
+-- them keeps favorites across restarts and lets future screens list saved reels.
+CREATE TABLE IF NOT EXISTS reels_favorites(
+    video_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    title TEXT,
+    author TEXT,
+    video_url_hd TEXT NOT NULL,
+    video_url_sd TEXT,
+    poster_url TEXT NOT NULL,
+    poster_url_vertical TEXT,
+    web_url TEXT,
+    duration_sec REAL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (video_id, source_id)
+);
+
+CREATE INDEX IF NOT EXISTS reels_favorites_added_at_index ON reels_favorites(added_at DESC);

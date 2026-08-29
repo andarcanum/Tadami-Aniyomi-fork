@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.updates.pacing
 
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.AnimesPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
@@ -163,10 +165,10 @@ class LibraryUpdatePacingScreenModelTest {
     }
 
     private class FakeAnimeSourceManager : tachiyomi.domain.source.anime.service.AnimeSourceManager {
-        val sources = MutableStateFlow<List<AnimeCatalogueSource>>(emptyList())
+        override val sources = MutableStateFlow<List<AnimeSource>>(emptyList())
 
         override val isInitialized = MutableStateFlow(true)
-        override val catalogueSources = sources
+        override val catalogueSources = sources.map { it.filterIsInstance<AnimeCatalogueSource>() }
 
         override fun get(sourceKey: Long) = sources.value.firstOrNull { it.id == sourceKey }
 
@@ -175,7 +177,7 @@ class LibraryUpdatePacingScreenModelTest {
 
         override fun getOnlineSources() = emptyList<eu.kanade.tachiyomi.animesource.online.AnimeHttpSource>()
 
-        override fun getCatalogueSources() = sources.value
+        override fun getCatalogueSources() = sources.value.filterIsInstance<AnimeCatalogueSource>()
 
         override fun getStubSources() = emptyList<tachiyomi.domain.source.anime.model.StubAnimeSource>()
     }

@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.tutorial.TutorialPreferences
@@ -56,6 +57,7 @@ import eu.kanade.presentation.reader.novel.importNovelReaderCustomFont
 import eu.kanade.presentation.reader.novel.removeNovelReaderCustomFont
 import eu.kanade.presentation.theme.rememberAppFontFamily
 import eu.kanade.presentation.tutorial.CoachTipRegistry
+import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.ui.home.HomeHeaderLayoutEditorScreen
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
@@ -67,6 +69,7 @@ import kotlinx.collections.immutable.toPersistentList
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.domain.achievement.model.AchievementEvent
+import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -201,68 +204,97 @@ object SettingsAppearanceScreen : SearchableSettings {
             UiPreferences.dateFormat(dateFormat).format(now)
         }
 
+        val animeSourceManager = remember { Injekt.get<AnimeSourceManager>() }
+        val animeSources by animeSourceManager.sources.collectAsStateWithLifecycle(initialValue = emptyList())
+        val hasReelsSources = remember(animeSources) {
+            animeSources.any { it is AnimeFeedSource }
+        }
+
         return Preference.PreferenceGroup(
             title = stringResource(AYMR.strings.pref_category_app_interface),
-            preferenceItems = persistentListOf(
-                Preference.PreferenceItem.TextPreference(
-                    title = stringResource(MR.strings.pref_app_language),
-                    onClick = { navigator.push(AppLanguageScreen()) },
-                ),
-                Preference.PreferenceItem.ListPreference(
-                    preference = uiPreferences.tabletUiMode(),
-                    entries = TabletUiMode.entries
-                        .associateWith { stringResource(it.titleRes) }
-                        .toImmutableMap(),
-                    title = stringResource(MR.strings.pref_tablet_ui_mode),
-                    onValueChanged = {
-                        context.toast(MR.strings.requires_app_restart)
-                        true
-                    },
-                ),
-                Preference.PreferenceItem.ListPreference(
-                    preference = uiPreferences.startScreen(),
-                    entries = StartScreen.entries
-                        .associateWith { stringResource(it.titleRes) }
-                        .toImmutableMap(),
-                    title = stringResource(AYMR.strings.pref_start_screen),
-                    onValueChanged = {
-                        context.toast(MR.strings.requires_app_restart)
-                        true
-                    },
-                ),
-                Preference.PreferenceItem.ListPreference(
-                    preference = uiPreferences.dateFormat(),
-                    entries = DateFormats
-                        .associateWith {
-                            val formattedDate = UiPreferences.dateFormat(it).format(now)
-                            "${it.ifEmpty { stringResource(MR.strings.label_default) }} ($formattedDate)"
-                        }
-                        .toImmutableMap(),
-                    title = stringResource(MR.strings.pref_date_format),
-                ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = uiPreferences.relativeTime(),
-                    title = stringResource(MR.strings.pref_relative_format),
-                    subtitle = stringResource(
-                        MR.strings.pref_relative_format_summary,
-                        stringResource(MR.strings.relative_time_today),
-                        formattedNow,
+            preferenceItems = buildList {
+                add(
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.pref_app_language),
+                        onClick = { navigator.push(AppLanguageScreen()) },
                     ),
-                ),
-                Preference.PreferenceItem.SwitchPreference(
-                    preference = uiPreferences.showAchievementNotifications(),
-                    title = stringResource(AYMR.strings.pref_show_achievement_notifications),
-                    subtitle = stringResource(AYMR.strings.pref_show_achievement_notifications_summary),
-                ),
-                Preference.PreferenceItem.ListPreference(
-                    preference = uiPreferences.episodeListDensity(),
-                    entries = EpisodeListDensity.entries
-                        .associateWith { stringResource(it.titleRes) }
-                        .toImmutableMap(),
-                    title = stringResource(AYMR.strings.pref_episode_list_density),
-                    subtitle = stringResource(AYMR.strings.pref_episode_list_density_summary),
-                ),
-            ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.tabletUiMode(),
+                        entries = TabletUiMode.entries
+                            .associateWith { stringResource(it.titleRes) }
+                            .toImmutableMap(),
+                        title = stringResource(MR.strings.pref_tablet_ui_mode),
+                        onValueChanged = {
+                            context.toast(MR.strings.requires_app_restart)
+                            true
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.startScreen(),
+                        entries = StartScreen.entries
+                            .associateWith { stringResource(it.titleRes) }
+                            .toImmutableMap(),
+                        title = stringResource(AYMR.strings.pref_start_screen),
+                        onValueChanged = {
+                            context.toast(MR.strings.requires_app_restart)
+                            true
+                        },
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.dateFormat(),
+                        entries = DateFormats
+                            .associateWith {
+                                val formattedDate = UiPreferences.dateFormat(it).format(now)
+                                "${it.ifEmpty { stringResource(MR.strings.label_default) }} ($formattedDate)"
+                            }
+                            .toImmutableMap(),
+                        title = stringResource(MR.strings.pref_date_format),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.relativeTime(),
+                        title = stringResource(MR.strings.pref_relative_format),
+                        subtitle = stringResource(
+                            MR.strings.pref_relative_format_summary,
+                            stringResource(MR.strings.relative_time_today),
+                            formattedNow,
+                        ),
+                    ),
+                )
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.showAchievementNotifications(),
+                        title = stringResource(AYMR.strings.pref_show_achievement_notifications),
+                        subtitle = stringResource(AYMR.strings.pref_show_achievement_notifications_summary),
+                    ),
+                )
+                if (hasReelsSources) {
+                    add(
+                        Preference.PreferenceItem.SwitchPreference(
+                            preference = uiPreferences.showReelsVideoFeed(),
+                            title = stringResource(MR.strings.pref_enable_reels_video_feed),
+                            subtitle = stringResource(MR.strings.pref_enable_reels_video_feed_summary),
+                        ),
+                    )
+                }
+                add(
+                    Preference.PreferenceItem.ListPreference(
+                        preference = uiPreferences.episodeListDensity(),
+                        entries = EpisodeListDensity.entries
+                            .associateWith { stringResource(it.titleRes) }
+                            .toImmutableMap(),
+                        title = stringResource(AYMR.strings.pref_episode_list_density),
+                        subtitle = stringResource(AYMR.strings.pref_episode_list_density_summary),
+                    ),
+                )
+            }.toPersistentList(),
         )
     }
 

@@ -326,6 +326,25 @@ class KotlinNovelExtensionSupportTest {
         KotlinNovelExtensionLoader.SUPPORTED_LIB_VERSIONS.contains(1.7) shouldBe true
     }
 
+    @Test
+    fun `poll condition resolves true once it holds`() = runTest {
+        var calls = 0
+        val result = awaitPollCondition(timeoutMs = 10_000) {
+            calls += 1
+            calls >= 3
+        }
+
+        result shouldBe true
+        calls shouldBe 3
+    }
+
+    @Test
+    fun `poll condition reports false after timeout without holding`() = runTest {
+        val result = awaitPollCondition(timeoutMs = 500) { false }
+
+        result shouldBe false
+    }
+
     private class RecordingCatalogueSource : CatalogueSource {
         override val id: Long = 123L
         override val name: String = "Recording source"

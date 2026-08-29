@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
 import eu.kanade.tachiyomi.extension.manga.model.selectMangaRegularUpdate
 import eu.kanade.tachiyomi.extension.manga.model.selectMangaReinstallCandidates
+import eu.kanade.tachiyomi.extension.manga.toInstalledMangaExtensionPkgName
 import mihon.data.extension.mapper.toMangaExtensionAvailable
 import mihon.data.extension.repository.ExtensionStoreFetcher
 import mihon.domain.extensionrepo.manga.interactor.UpdateMangaExtensionRepo
@@ -81,7 +82,9 @@ internal class MangaExtensionApi(
             findExtensions().extensions.also { lastExtCheck.set(nowMs) }
         }
 
-        val extensionVariantsByPkgName = extensions.groupBy { it.pkgName }
+        // Installed names are normalized (numeric suffix stripped at install time), so the
+        // grouping key must be normalized too or suffixed store entries never match.
+        val extensionVariantsByPkgName = extensions.groupBy { it.pkgName.toInstalledMangaExtensionPkgName() }
 
         val installedExtensions = extensionManager.installedExtensionsFlow.value
 

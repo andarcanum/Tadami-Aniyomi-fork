@@ -1,7 +1,9 @@
 package eu.kanade.tachiyomi.ui.reader.novel.cache
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 
 /**
@@ -13,13 +15,20 @@ import kotlin.math.max
  */
 class NovelReaderCacheCoordinator(
     private val maxTotalBytes: Long,
+    private val nowMs: () -> Long = System::currentTimeMillis,
+    budgetExecutor: Executor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "NovelCacheBudget").apply { isDaemon = true }
+    },
 ) {
     private data class RegisteredCache(
         val reporter: NovelReaderCacheReporter,
-        val registeredAtMs: Long = System.currentTimeMillis(),
+        val registeredAtMs: Long,
+        // Monotonic tie-break so equal wall-clock timestamps still preserve registration order.
+        val registrationSeq: Long,
     )
 
     private val caches = ConcurrentHashMap<String, RegisteredCache>()
+    private val registrationSeq = AtomicLong(0L)
 
     /**
      * Size accounting touches the disk (every reporter walks its cache directory), so it must
@@ -27,13 +36,16 @@ class NovelReaderCacheCoordinator(
      * a chapter is loading, and a synchronous walk there blocked the reader for tens of seconds
      * (ANR watchdog: NovelBookSectionDiskCacheStore$1.currentBytes on the main thread).
      */
-    private val budgetExecutor = Executors.newSingleThreadExecutor { runnable ->
-        Thread(runnable, "NovelCacheBudget").apply { isDaemon = true }
-    }
+    private val enforcementExecutor = budgetExecutor
+    private val shutdownableExecutor = budgetExecutor as? java.util.concurrent.ExecutorService
 
     fun register(reporter: NovelReaderCacheReporter) {
-        caches[reporter.cacheId()] = RegisteredCache(reporter)
-        budgetExecutor.execute { enforceBudget() }
+        caches[reporter.cacheId()] = RegisteredCache(
+            reporter = reporter,
+            registeredAtMs = nowMs(),
+            registrationSeq = registrationSeq.incrementAndGet(),
+        )
+        enforcementExecutor.execute { enforceBudget() }
     }
 
     fun unregister(cacheId: String) {
@@ -52,8 +64,10 @@ class NovelReaderCacheCoordinator(
         var excess = total - maxTotalBytes
         if (excess <= 0) return
 
-        // Trim oldest-first (by registration time)
-        val sorted = caches.values.sortedBy { it.registeredAtMs }
+        // Trim oldest-first (by registration time; sequence breaks timestamp ties).
+        val sorted = caches.values.sortedWith(
+            compareBy({ it.registeredAtMs }, { it.registrationSeq }),
+        )
         for (entry in sorted) {
             if (excess <= 0) break
             val before = sizes[entry.reporter.cacheId()] ?: continue
@@ -71,7 +85,7 @@ class NovelReaderCacheCoordinator(
     fun dispose() {
         caches.values.forEach { it.reporter.dispose() }
         caches.clear()
-        budgetExecutor.shutdown()
+        shutdownableExecutor?.shutdown()
     }
 }
 

@@ -7,7 +7,14 @@ import okhttp3.HttpUrl
 
 class AndroidCookieJar : CookieJar {
 
-    private val manager = CookieManager.getInstance()
+    /**
+     * Resolved on first use, not in the constructor. CookieManager.getInstance() initializes
+     * the WebView framework; on Android 16 that dereferences ActivityThread.currentApplication()
+     * and crashes when the jar is constructed from a background thread before the app is fully
+     * attached (early DI warmup, resumed workers). By first-use time a real network request is
+     * being served and the application is always attached.
+     */
+    private val manager by lazy { CookieManager.getInstance() }
 
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         val urlString = url.toString()

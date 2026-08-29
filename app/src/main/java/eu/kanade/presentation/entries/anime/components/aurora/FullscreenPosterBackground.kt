@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -54,15 +55,16 @@ import uy.kohesive.injekt.api.get
  * Fixed fullscreen poster background with scroll-based dimming and blur effects.
  *
  * @param anime Anime object containing cover information
- * @param scrollOffset Current scroll offset from LazyListState
- * @param firstVisibleItemIndex Current first visible item index from LazyListState
+ * @param scrollOffsetState Scroll offset state from LazyListState; read inside this
+ * composable's scope so per-pixel updates stay confined here.
+ * @param firstVisibleItemIndexState First visible item index state from LazyListState
  * @param resolvedCoverUrl Resolved cover URL to display (null to skip loading)
  */
 @Composable
 fun FullscreenPosterBackground(
     anime: Anime,
-    scrollOffset: Int,
-    firstVisibleItemIndex: Int,
+    scrollOffsetState: State<Int>,
+    firstVisibleItemIndexState: State<Int>,
     modifier: Modifier = Modifier,
     resolvedCoverUrl: String?,
     resolvedCoverUrlFallback: String? = null,
@@ -74,6 +76,8 @@ fun FullscreenPosterBackground(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
+    val scrollOffset = scrollOffsetState.value
+    val firstVisibleItemIndex = firstVisibleItemIndexState.value
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter(AuroraCoverPlaceholderVariant.Wide)
     val coverCache = remember { Injekt.get<AnimeCoverCache>() }
     // Issue #154: surface the user-set custom cover on the details poster,
@@ -133,15 +137,6 @@ fun FullscreenPosterBackground(
     val containerWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
     val containerHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
     val placeholderPosterUrl = resolvedCoverUrlFallback?.takeIf { it.isNotBlank() } ?: anime.thumbnailUrl
-    val placeholderCover = remember(
-        anime.id,
-        anime.source,
-        anime.favorite,
-        anime.coverLastModified,
-        placeholderPosterUrl,
-    ) {
-        anime.asAnimeCover().copy(url = placeholderPosterUrl)
-    }
     var previousSuccessfulBackgroundSpec by remember(anime.id) {
         mutableStateOf<AuroraPosterBackgroundSpec?>(null)
     }
@@ -177,6 +172,7 @@ fun FullscreenPosterBackground(
                 anime.coverLastModified,
                 posterRequest,
                 containerWidthPx,
+                containerHeightPx,
             ) {
                 val baseCacheKey = "anime-bg;${anime.id};${anime.coverLastModified};" +
                     posterRequest.primaryUrl.orEmpty()

@@ -125,6 +125,7 @@ import tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker
 import tachiyomi.data.achievement.handler.checkers.TimeBasedAchievementChecker
 import tachiyomi.data.achievement.repository.AchievementRepositoryImpl
 import tachiyomi.data.book.novel.NovelBookStateRepositoryImpl
+import tachiyomi.data.book.novel.NovelHighlightRepositoryImpl
 import tachiyomi.data.category.anime.AnimeCategoryRepositoryImpl
 import tachiyomi.data.category.manga.MangaCategoryRepositoryImpl
 import tachiyomi.data.category.novel.NovelCategoryRepositoryImpl
@@ -142,6 +143,8 @@ import tachiyomi.data.history.novel.NovelHistoryRepositoryImpl
 import tachiyomi.data.items.chapter.ChapterRepositoryImpl
 import tachiyomi.data.items.episode.EpisodeRepositoryImpl
 import tachiyomi.data.items.novelchapter.NovelChapterRepositoryImpl
+import tachiyomi.data.reels.anime.ReelsFavoriteRepositoryImpl
+import tachiyomi.data.reels.anime.ReelsFollowRepositoryImpl
 import tachiyomi.data.release.ReleaseServiceImpl
 import tachiyomi.data.series.manga.MangaSeriesRepositoryImpl
 import tachiyomi.data.series.novel.NovelSeriesRepositoryImpl
@@ -160,12 +163,18 @@ import tachiyomi.data.updates.manga.MangaUpdatesRepositoryImpl
 import tachiyomi.data.updates.novel.NovelUpdatesRepositoryImpl
 import tachiyomi.domain.achievement.repository.AchievementRepository
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
+import tachiyomi.domain.book.novel.interactor.AddNovelHighlight
 import tachiyomi.domain.book.novel.interactor.DeleteNovelBookState
+import tachiyomi.domain.book.novel.interactor.DeleteNovelHighlight
+import tachiyomi.domain.book.novel.interactor.GetAllNovelHighlights
 import tachiyomi.domain.book.novel.interactor.GetNovelBookState
+import tachiyomi.domain.book.novel.interactor.GetNovelHighlights
 import tachiyomi.domain.book.novel.interactor.SetNovelBookEnabled
 import tachiyomi.domain.book.novel.interactor.SetNovelBookProgress
+import tachiyomi.domain.book.novel.interactor.UpdateNovelHighlight
 import tachiyomi.domain.book.novel.interactor.UpsertNovelBookState
 import tachiyomi.domain.book.novel.repository.NovelBookStateRepository
+import tachiyomi.domain.book.novel.repository.NovelHighlightRepository
 import tachiyomi.domain.category.anime.interactor.CreateAnimeCategoryWithName
 import tachiyomi.domain.category.anime.interactor.DeleteAnimeCategory
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
@@ -278,6 +287,8 @@ import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.items.season.interactor.GetAnimeSeasonsByParentId
 import tachiyomi.domain.items.season.interactor.SetAnimeDefaultSeasonFlags
 import tachiyomi.domain.items.season.interactor.ShouldUpdateDbSeason
+import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
+import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.domain.release.service.AppUpdatePreferences
 import tachiyomi.domain.release.service.ReleaseService
@@ -410,6 +421,13 @@ class DomainModule : InjektModule {
         addFactory { SetNovelBookEnabled(get()) }
         addFactory { SetNovelBookProgress(get()) }
         addFactory { DeleteNovelBookState(get()) }
+
+        addSingletonFactory<NovelHighlightRepository> { NovelHighlightRepositoryImpl(get()) }
+        addFactory { AddNovelHighlight(get()) }
+        addFactory { UpdateNovelHighlight(get()) }
+        addFactory { DeleteNovelHighlight(get()) }
+        addFactory { GetNovelHighlights(get()) }
+        addFactory { GetAllNovelHighlights(get()) }
 
         addSingletonFactory<AnimeRepository> { AnimeRepositoryImpl(get(), get()) }
         addFactory { GetDuplicateLibraryAnime(get()) }
@@ -640,6 +658,8 @@ class DomainModule : InjektModule {
 
         addSingletonFactory<AnimeSourceRepository> { AnimeSourceRepositoryImpl(get(), get()) }
         addSingletonFactory<AnimeStubSourceRepository> { AnimeStubSourceRepositoryImpl(get()) }
+        addSingletonFactory<ReelsFavoriteRepository> { ReelsFavoriteRepositoryImpl(get()) }
+        addSingletonFactory<ReelsFollowRepository> { ReelsFollowRepositoryImpl(get()) }
         addFactory { GetEnabledAnimeSources(get(), get()) }
         addFactory { GetLanguagesWithAnimeSources(get(), get()) }
         addFactory { GetRemoteAnime(get()) }
@@ -762,7 +782,7 @@ class DomainModule : InjektModule {
         addSingletonFactory { FeatureUsageCollector(get()) }
         addSingletonFactory { TimeBasedAchievementChecker(get(), get()) }
         addSingletonFactory { FeatureBasedAchievementChecker(get(), get()) }
-        addSingletonFactory { AchievementRuleRegistry(get(), get(), get()) }
+        addSingletonFactory { AchievementRuleRegistry(get(), get(), get(), get()) }
         addSingletonFactory {
             AchievementCalculator(
                 get(), get(), get(), get(), get(),

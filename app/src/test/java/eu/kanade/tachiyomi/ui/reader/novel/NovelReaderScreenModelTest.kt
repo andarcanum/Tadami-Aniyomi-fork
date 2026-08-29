@@ -55,6 +55,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -1016,8 +1017,10 @@ class NovelReaderScreenModelTest {
             }
 
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
-            state.html.contains("<h1 class=\"an-reader-chapter-title\">Том 1 Глава 0 - Система сил(?)</h1>") shouldBe
-                true
+            // state.html carries data-an-b anchors on every block since highlight support, so
+            // assert the reader-class heading and its text separately instead of one raw tag.
+            state.html.contains("<h1 class=\"an-reader-chapter-title\"") shouldBe true
+            state.html.contains(">Том 1 Глава 0 - Система сил(?)</h1>") shouldBe true
             state.textBlocks.firstOrNull() shouldBe "Том 1 Глава 0 - Система сил(?)"
         }
     }
@@ -2827,6 +2830,55 @@ class NovelReaderScreenModelTest {
         }
     }
 
+    private class FakeNovelHighlightRepository : tachiyomi.domain.book.novel.repository.NovelHighlightRepository {
+        val items = mutableListOf<tachiyomi.domain.book.novel.model.NovelHighlight>()
+        private val flow = MutableStateFlow<List<tachiyomi.domain.book.novel.model.NovelHighlight>>(emptyList())
+        private var nextId = 1L
+
+        override fun subscribeForNovel(
+            novelId: Long,
+        ): Flow<List<tachiyomi.domain.book.novel.model.NovelHighlight>> = flow
+
+        override fun subscribeForChapter(
+            chapterId: Long,
+        ): Flow<List<tachiyomi.domain.book.novel.model.NovelHighlight>> = flow
+
+        override fun subscribeAll(): Flow<List<tachiyomi.domain.book.novel.model.NovelHighlightWithChapter>> =
+            kotlinx.coroutines.flow.flowOf(emptyList())
+
+        override suspend fun countAll(): Int = items.size
+
+        override suspend fun getForNovel(novelId: Long): List<tachiyomi.domain.book.novel.model.NovelHighlight> =
+            items.filter { it.novelId == novelId }
+
+        override suspend fun add(highlight: tachiyomi.domain.book.novel.model.NovelHighlight): Long {
+            val stored = highlight.copy(id = nextId++)
+            items += stored
+            flow.value = items.toList()
+            return stored.id
+        }
+
+        override suspend fun updateNoteAndColor(
+            highlightId: Long,
+            note: String,
+            colorArgb: Long,
+            updatedAt: Long,
+        ) = Unit
+
+        override suspend fun reanchor(
+            highlightId: Long,
+            blockIndex: Int,
+            charStart: Int,
+            charEndExclusive: Int,
+            updatedAt: Long,
+        ) = Unit
+
+        override suspend fun delete(highlightId: Long) {
+            items.removeAll { it.id == highlightId }
+            flow.value = items.toList()
+        }
+    }
+
     private fun createNovelReaderPreferences(
         selectedTextTranslationEnabled: Boolean = false,
         ttsEnabled: Boolean = false,
@@ -2856,8 +2908,21 @@ class NovelReaderScreenModelTest {
         translationQueueManager: TranslationQueueManager = this.translationQueueManager,
         novelDownloadManager: NovelDownloadManager? = null,
         activityDataRepository: ActivityDataRepository = mockk(relaxed = true),
+        addNovelHighlight: tachiyomi.domain.book.novel.interactor.AddNovelHighlight =
+            tachiyomi.domain.book.novel.interactor.AddNovelHighlight(FakeNovelHighlightRepository()),
+        novelHighlightRepository: tachiyomi.domain.book.novel.repository.NovelHighlightRepository? = null,
     ): NovelReaderScreenModel {
         ensureReaderScreenModelDependencies()
+        val resolvedHighlightRepository = novelHighlightRepository ?: run {
+            runCatching { Injekt.get<tachiyomi.domain.book.novel.repository.NovelHighlightRepository>() }
+                .getOrNull()
+                ?: FakeNovelHighlightRepository().also {
+                    Injekt.addSingleton(
+                        fullType<tachiyomi.domain.book.novel.repository.NovelHighlightRepository>(),
+                        it,
+                    )
+                }
+        }
         return NovelReaderScreenModel(
             chapterId = chapterId,
             novelChapterRepository = novelChapterRepository,
@@ -2882,6 +2947,8 @@ class NovelReaderScreenModelTest {
             googleTranslationService = googleTranslationService,
             translationQueueManager = translationQueueManager,
             activityDataRepository = activityDataRepository,
+            addNovelHighlight = addNovelHighlight,
+            novelHighlightRepository = resolvedHighlightRepository,
         ).also(activeScreenModels::add)
     }
 
@@ -3021,6 +3088,31 @@ class NovelReaderScreenModelTest {
                 Injekt.addSingleton(
                     fullType<BasePreferences>(),
                     BasePreferences(Injekt.get<Application>(), ReactivePreferenceStore()),
+                )
+            }
+
+        runCatching { Injekt.get<tachiyomi.domain.book.novel.repository.NovelHighlightRepository>() }
+            .getOrElse {
+                val highlightRepository = FakeNovelHighlightRepository()
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.repository.NovelHighlightRepository>(),
+                    highlightRepository,
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.AddNovelHighlight>(),
+                    tachiyomi.domain.book.novel.interactor.AddNovelHighlight(highlightRepository),
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.UpdateNovelHighlight>(),
+                    tachiyomi.domain.book.novel.interactor.UpdateNovelHighlight(highlightRepository),
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.DeleteNovelHighlight>(),
+                    tachiyomi.domain.book.novel.interactor.DeleteNovelHighlight(highlightRepository),
+                )
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.book.novel.interactor.GetNovelHighlights>(),
+                    tachiyomi.domain.book.novel.interactor.GetNovelHighlights(highlightRepository),
                 )
             }
     }
@@ -3265,6 +3357,211 @@ class NovelReaderScreenModelTest {
             val state = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
             state.selectedTextTranslationSelection shouldBe selection
             state.selectedTextTranslationUiState.shouldBeInstanceOf<NovelSelectedTextTranslationUiState.Translating>()
+        }
+    }
+
+    @Test
+    fun `saveHighlight persists anchor and default color`() {
+        runBlocking {
+            ensureReaderScreenModelDependencies()
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                lastPageRead = encodePageReaderProgress(index = 7, totalItems = 10),
+            )
+            val prefs = createNovelReaderPreferences(selectedTextTranslationEnabled = false)
+            val highlightRepository = FakeNovelHighlightRepository()
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+                addNovelHighlight = tachiyomi.domain.book.novel.interactor.AddNovelHighlight(highlightRepository),
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            val selection = NovelSelectedTextSelection(
+                sessionId = 123L,
+                renderer = NovelSelectedTextRenderer.PAGE_READER,
+                text = "  stored   snippet ",
+                anchor = NovelSelectedTextAnchor(0, 0, 0, 0),
+                triggerAction = SelectedTextAction.HIGHLIGHT,
+                selectionAnchor = NovelSelectionAnchor(
+                    chapterId = chapter.id,
+                    blockIndex = 3,
+                    charStart = 10,
+                    charEndExclusive = 25,
+                ),
+            )
+
+            screenModel.saveHighlight(selection)
+
+            withTimeout(1_000) {
+                while (highlightRepository.items.isEmpty()) {
+                    yield()
+                }
+            }
+
+            val stored = highlightRepository.items.single()
+            stored.novelId shouldBe 1L
+            stored.chapterId shouldBe 5L
+            stored.blockIndex shouldBe 3
+            stored.charStart shouldBe 10
+            stored.charEndExclusive shouldBe 25
+            stored.normalizedText shouldBe "stored snippet"
+            stored.colorArgb shouldBe eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+                .Companion.DEFAULT_HIGHLIGHT_COLOR_ARGB
+            stored.pageIndex shouldBe 8
+            stored.pageCount shouldBe 10
+        }
+    }
+
+    @Test
+    fun `saveHighlight without page reader progress stores zeros`() {
+        runBlocking {
+            ensureReaderScreenModelDependencies()
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val prefs = createNovelReaderPreferences()
+            val highlightRepository = FakeNovelHighlightRepository()
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+                addNovelHighlight = tachiyomi.domain.book.novel.interactor.AddNovelHighlight(highlightRepository),
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.saveHighlight(
+                NovelSelectedTextSelection(
+                    sessionId = 1L,
+                    renderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
+                    text = "hello",
+                    anchor = NovelSelectedTextAnchor(0, 0, 0, 0),
+                    triggerAction = SelectedTextAction.HIGHLIGHT,
+                    selectionAnchor = NovelSelectionAnchor(
+                        chapterId = 5L,
+                        blockIndex = 0,
+                        charStart = 0,
+                        charEndExclusive = 5,
+                    ),
+                ),
+            )
+
+            withTimeout(1_000) {
+                while (highlightRepository.items.isEmpty()) {
+                    yield()
+                }
+            }
+
+            val stored = highlightRepository.items.single()
+            stored.pageIndex shouldBe 0
+            stored.pageCount shouldBe 0
+        }
+    }
+
+    @Test
+    fun `setDefaultHighlightColor persists pref and subscribeNovelHighlightItems joins chapters`() {
+        runBlocking {
+            ensureReaderScreenModelDependencies()
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val first = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                sourceOrder = 0,
+            )
+            val second = NovelChapter.create().copy(
+                id = 6L,
+                novelId = 1L,
+                name = "Chapter 2",
+                url = "https://example.org/ch2",
+                sourceOrder = 1,
+            )
+            val prefs = createNovelReaderPreferences()
+            val highlightRepository = FakeNovelHighlightRepository()
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = first.id,
+                novelChapterRepository = FakeNovelChapterRepository(
+                    chapter = first,
+                    chaptersByNovel = listOf(first, second),
+                ),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+                addNovelHighlight = tachiyomi.domain.book.novel.interactor.AddNovelHighlight(highlightRepository),
+                novelHighlightRepository = highlightRepository,
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            // Хайлайт главы 2 вставлен раньше, но порядок чтения должен поставить его после главы 1.
+            highlightRepository.add(
+                tachiyomi.domain.book.novel.model.NovelHighlight(
+                    id = 0L, novelId = 1L, chapterId = 6L, blockIndex = 0, charStart = 0, charEndExclusive = 3,
+                    normalizedText = "hel", colorArgb = 1L, note = "", createdAt = 0L, updatedAt = 0L,
+                ),
+            )
+            highlightRepository.add(
+                tachiyomi.domain.book.novel.model.NovelHighlight(
+                    id = 0L, novelId = 1L, chapterId = 5L, blockIndex = 2, charStart = 0, charEndExclusive = 3,
+                    normalizedText = "hel", colorArgb = 1L, note = "", createdAt = 0L, updatedAt = 0L,
+                ),
+            )
+
+            screenModel.setDefaultHighlightColor(0xFF90CAF9)
+
+            prefs.novelHighlightLastColor().get() shouldBe 0xFF90CAF9
+            screenModel.getDefaultHighlightColor() shouldBe 0xFF90CAF9
+
+            val items = screenModel.subscribeNovelHighlightItems().first()
+            items.map { it.highlight.blockIndex } shouldBe listOf(2, 0)
+            items.map { it.chapterName } shouldBe listOf("Chapter 1", "Chapter 2")
+
+            // Осиротевший хайлайт (глава удалена) в общем списке не показывается.
+            highlightRepository.add(
+                tachiyomi.domain.book.novel.model.NovelHighlight(
+                    id = 0L, novelId = 1L, chapterId = 99L, blockIndex = 0, charStart = 0, charEndExclusive = 3,
+                    normalizedText = "orphan", colorArgb = 1L, note = "", createdAt = 0L, updatedAt = 0L,
+                ),
+            )
+            screenModel.subscribeNovelHighlightItems().first().none { it.highlight.normalizedText == "orphan" } shouldBe
+                true
         }
     }
 }

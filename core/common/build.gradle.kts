@@ -61,4 +61,8 @@ dependencies {
 
     // Tests
     testImplementation(libs.bundles.test)
+    testImplementation(libs.robolectric)
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("junit:junit:4.13.2")
+    testRuntimeOnly(libs.junitVintageEngine)
 }

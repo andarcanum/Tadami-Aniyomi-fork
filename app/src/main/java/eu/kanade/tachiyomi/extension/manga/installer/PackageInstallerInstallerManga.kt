@@ -140,8 +140,12 @@ class PackageInstallerInstallerManga(private val service: Service) : InstallerMa
             if (activeEntry == entry) {
                 clearSessionTimeout()
                 activeSession = null
-                packageInstaller.abandonSession(sessionId)
-                return false
+                // Abandoning a committed session may throw, and the failure callback is dropped
+                // anyway (activeSession is already null). Return true so the caller unsticks the
+                // queue immediately instead of waiting for a callback that never arrives.
+                runCatching { packageInstaller.abandonSession(sessionId) }
+                    .onFailure { e -> logcat(LogPriority.ERROR, e) { "Failed to abandon install session $sessionId" } }
+                return true
             }
         }
         return true

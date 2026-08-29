@@ -18,6 +18,7 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.achievement.screen.AchievementScreenVoyager
 import eu.kanade.presentation.more.MoreScreen
@@ -28,13 +29,16 @@ import eu.kanade.presentation.more.settings.screen.SettingsReaderScreen
 import eu.kanade.presentation.more.settings.screen.SettingsTreasuryScreen
 import eu.kanade.presentation.more.settings.screen.about.AboutScreen
 import eu.kanade.presentation.util.Tab
+import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.download.DownloadsTab
+import eu.kanade.tachiyomi.ui.library.novel.quotes.NovelQuotesLibraryScreen
 import eu.kanade.tachiyomi.ui.libraryUpdateError.LibraryUpdateErrorScreen
 import eu.kanade.tachiyomi.ui.more.DebugAppUpdatePreviewScreen
 import eu.kanade.tachiyomi.ui.more.DebugUpdatedChangelogPreviewScreen
+import eu.kanade.tachiyomi.ui.reels.ReelsFeedScreen
 import eu.kanade.tachiyomi.ui.setting.PlayerSettingsScreen
 import eu.kanade.tachiyomi.ui.setting.SettingsScreen
 import eu.kanade.tachiyomi.ui.stats.StatsTab
@@ -47,6 +51,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import uy.kohesive.injekt.Injekt
@@ -92,6 +97,20 @@ data object MoreTab : Tab {
         // from the Achievements screen instead.
         val latticeGridAvailable = latticeManager.shouldShowMoreEntry()
 
+        val animeSourceManager = remember { Injekt.get<AnimeSourceManager>() }
+        val sourcePreferences = remember { Injekt.get<SourcePreferences>() }
+        val animeSources by animeSourceManager.sources.collectAsStateWithLifecycle(emptyList())
+        val showReelsVideoFeed by uiPreferences.showReelsVideoFeed().preferenceCollectAsState()
+        val lastUsedReelsSourceId by sourcePreferences.lastUsedReelsSource().preferenceCollectAsState()
+        // Respect the Browse sources toggle: a disabled feed source must not be reachable here.
+        val disabledSources by sourcePreferences.disabledAnimeSources().preferenceCollectAsState()
+        val targetReelsSource = remember(animeSources, lastUsedReelsSourceId, disabledSources) {
+            val feeds = animeSources.filterIsInstance<AnimeFeedSource>()
+                .filterNot { it.id.toString() in disabledSources }
+            feeds.firstOrNull { it.id == lastUsedReelsSourceId } ?: feeds.firstOrNull()
+        }
+        val showReelsEntry = showReelsVideoFeed && targetReelsSource != null
+
         if (theme.isAuroraStyle) {
             val downloadedOnly by screenModel.downloadedOnlyFlow.collectAsStateWithLifecycle()
             val incognitoMode by screenModel.incognitoModeFlow.collectAsStateWithLifecycle()
@@ -110,6 +129,7 @@ data object MoreTab : Tab {
                 onPlayerSettingsClick = { navigator.push(PlayerSettingsScreen(mainSettings = false)) },
                 onMangaReaderSettingsClick = { navigator.push(SettingsReaderScreen) },
                 onNovelReaderSettingsClick = { navigator.push(SettingsNovelReaderScreen) },
+                onNovelQuotesClick = { navigator.push(NovelQuotesLibraryScreen()) },
                 onSettingsClick = { navigator.push(SettingsScreen()) },
                 onAboutClick = { navigator.push(AboutScreen) },
                 onHelpClick = { navigator.push(HelpScreen) },
@@ -150,6 +170,8 @@ data object MoreTab : Tab {
                 onOpenLatticeGridClick = {
                     screenModel.screenModelScope.launchIO { latticeManager.requestBreach() }
                 },
+                showReelsEntry = showReelsEntry,
+                onReelsClick = { targetReelsSource?.let { navigator.push(ReelsFeedScreen(it.id)) } },
             )
         } else {
             MoreScreen(
@@ -169,6 +191,7 @@ data object MoreTab : Tab {
                 onClickPlayerSettings = { navigator.push(PlayerSettingsScreen(mainSettings = false)) },
                 onClickMangaReaderSettings = { navigator.push(SettingsReaderScreen) },
                 onClickNovelReaderSettings = { navigator.push(SettingsNovelReaderScreen) },
+                onClickNovelQuotes = { navigator.push(NovelQuotesLibraryScreen()) },
                 onClickSettings = { navigator.push(SettingsScreen()) },
                 onClickAbout = { navigator.push(AboutScreen) },
                 onClickHelp = { navigator.push(HelpScreen) },
@@ -205,6 +228,8 @@ data object MoreTab : Tab {
                 onClickOpenLatticeGrid = {
                     screenModel.screenModelScope.launchIO { latticeManager.requestBreach() }
                 },
+                showReelsEntry = showReelsEntry,
+                onClickReels = { targetReelsSource?.let { navigator.push(ReelsFeedScreen(it.id)) } },
             )
         }
     }

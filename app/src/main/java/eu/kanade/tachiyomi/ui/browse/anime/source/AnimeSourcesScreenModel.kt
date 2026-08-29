@@ -8,9 +8,11 @@ import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
 import eu.kanade.domain.source.anime.interactor.ToggleAnimeSource
 import eu.kanade.domain.source.anime.interactor.ToggleAnimeSourcePin
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.browse.anime.AnimeSourceUiModel
 import eu.kanade.tachiyomi.util.system.LAST_USED_KEY
 import eu.kanade.tachiyomi.util.system.PINNED_KEY
+import eu.kanade.tachiyomi.util.system.REELS_KEY
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -36,6 +38,7 @@ import java.util.TreeMap
 class AnimeSourcesScreenModel(
     private val preferences: BasePreferences = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
+    private val uiPreferences: UiPreferences = Injekt.get(),
     private val getEnabledAnimeSources: GetEnabledAnimeSources = Injekt.get(),
     private val toggleSource: ToggleAnimeSource = Injekt.get(),
     private val toggleSourcePin: ToggleAnimeSourcePin = Injekt.get(),
@@ -65,22 +68,34 @@ class AnimeSourcesScreenModel(
                 updateState()
             }
             .launchIn(screenModelScope)
+        uiPreferences.showReelsVideoFeed().changes()
+            .onEach {
+                updateState()
+            }
+            .launchIn(screenModelScope)
     }
 
     private fun updateState() {
         val query = state.value.searchQuery
         val collapsed = state.value.collapsedLanguages
         val verticalLayout = state.value.verticalPinnedLayout
+        val showReels = uiPreferences.showReelsVideoFeed().get()
 
         // 1. Separate Pinned (only if no search query AND not vertical layout)
         val (pinned, others) = when {
-            query.isBlank() && !verticalLayout -> rawSources.partition { Pin.Actual in it.pin }
+            query.isBlank() && !verticalLayout -> {
+                val pinnedList = rawSources.filter { !it.isFeedSource && Pin.Actual in it.pin }
+                val othersList = rawSources.filter { it.isFeedSource || Pin.Actual !in it.pin }
+                Pair(pinnedList, othersList)
+            }
             else -> Pair(emptyList(), rawSources)
         }
 
-        // 2. Filter by query
-        val filtered = others.filter {
-            query.isBlank() || it.name.contains(query, ignoreCase = true) || it.lang.contains(query, ignoreCase = true)
+        // 2. Filter by query and reels preference
+        val filtered = others.filter { source ->
+            if (source.isFeedSource && !showReels) return@filter false
+            query.isBlank() || source.name.contains(query, ignoreCase = true) ||
+                source.lang.contains(query, ignoreCase = true)
         }
 
         // 3. Group by Lang
@@ -90,6 +105,8 @@ class AnimeSourcesScreenModel(
                 d2 == PINNED_KEY && d1 != PINNED_KEY -> 1
                 d1 == LAST_USED_KEY && d2 != LAST_USED_KEY -> -1
                 d2 == LAST_USED_KEY && d1 != LAST_USED_KEY -> 1
+                d1 == REELS_KEY && d2 != REELS_KEY -> -1
+                d2 == REELS_KEY && d1 != REELS_KEY -> 1
                 d1 == "" && d2 != "" -> 1
                 d2 == "" && d1 != "" -> -1
                 else -> d1.compareTo(d2)
@@ -97,6 +114,7 @@ class AnimeSourcesScreenModel(
         }
         val byLang = filtered.groupByTo(map) {
             when {
+                it.isFeedSource -> REELS_KEY
                 verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
                 it.isUsedLast -> LAST_USED_KEY
                 else -> it.lang
@@ -144,6 +162,9 @@ class AnimeSourcesScreenModel(
     }
 
     fun togglePin(source: AnimeSource) {
+        // Feed (Reels) sources are always grouped under the fixed REELS key; pinning one is
+        // a no-op (and would drop it from the pinned grid in vertical layout), so ignore it.
+        if (source.isFeedSource) return
         toggleSourcePin.await(source)
     }
 

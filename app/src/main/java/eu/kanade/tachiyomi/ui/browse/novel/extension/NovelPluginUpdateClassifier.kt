@@ -11,6 +11,16 @@ data class NovelPluginUpdateState(
     val hasAnyUpdate: Boolean = hasSameRepoUpdate || hasOtherRepoUpdate
 }
 
+/**
+ * Single source of truth for how an installed novel plugin can be updated when the same plugin is
+ * published by multiple repos, potentially signed with different keys — the novel counterpart of
+ * the manga/anime `*ExtensionUpdateResolver`:
+ * - A "regular update" is a newer build from the repo the plugin was installed from (same signing
+ *   key, installs on top).
+ * - "Reinstall candidates" are newer builds from other repos (potentially different signing keys,
+ *   require uninstall + install). They only exist when no regular update does, and only in the
+ *   newest version group — offering older cross-repo builds would invite needless downgrades.
+ */
 internal object NovelPluginUpdateClassifier {
     fun classify(
         installed: NovelPlugin.Installed,
@@ -24,17 +34,27 @@ internal object NovelPluginUpdateClassifier {
                 .filter { it.repoUrl == repoUrl }
                 .maxByOrNull { it.versionCode }
         }
-        val otherRepoUpdates = newerVariants
-            .filter { installedRepoUrl == null || it.repoUrl != installedRepoUrl }
-            .sortedWith(
-                compareByDescending<NovelPlugin.Available> { it.versionCode }
-                    .thenBy { it.repoName.ifBlank { it.repoUrl } },
-            )
+        val otherRepoUpdates = if (sameRepoUpdate != null) {
+            emptyList()
+        } else {
+            newerVariants
+                .filter { installedRepoUrl == null || it.repoUrl != installedRepoUrl }
+                .latestVersionGroup()
+        }
 
         return NovelPluginUpdateState(
             sameRepoUpdate = sameRepoUpdate,
             otherRepoUpdates = otherRepoUpdates,
         )
+    }
+
+    private fun List<NovelPlugin.Available>.latestVersionGroup(): List<NovelPlugin.Available> {
+        val latest = maxOfOrNull { it.versionCode } ?: return emptyList()
+        return filter { it.versionCode == latest }
+            .sortedWith(
+                compareBy<NovelPlugin.Available> { it.repoName.ifBlank { it.repoUrl } }
+                    .thenBy { it.repoUrl },
+            )
     }
 
     private fun inferInstalledRepoUrl(

@@ -75,3 +75,12 @@ object NovelReaderChapterWindow {
         return NavigationResult(window, target, reloadRequired = true)
     }
 }
+
+internal fun novelReaderNovelCompleted(
+    fullChapterList: List<NovelChapter>,
+    visibleWindow: List<NovelChapter>,
+): Boolean {
+    return fullChapterList
+        .ifEmpty { visibleWindow }
+        .all { it.read }
+}

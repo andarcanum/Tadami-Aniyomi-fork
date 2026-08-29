@@ -9,6 +9,7 @@ import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,6 +26,10 @@ private const val AURORA_ENTRY_HOLD_REFRESH_TRIGGER_THRESHOLD = 1.0f
 private const val AURORA_ENTRY_HOLD_REFRESH_RESET_THRESHOLD = 0.1f
 private const val AURORA_ENTRY_HOLD_REFRESH_DELAY_MS = 360L
 
+internal fun isAuroraHoldThresholdReached(distanceFraction: Float): Boolean {
+    return distanceFraction >= AURORA_ENTRY_HOLD_REFRESH_TRIGGER_THRESHOLD
+}
+
 internal fun shouldStartAuroraEntryHoldRefresh(
     distanceFraction: Float,
     refreshing: Boolean,
@@ -32,7 +37,7 @@ internal fun shouldStartAuroraEntryHoldRefresh(
 ): Boolean {
     return !refreshing &&
         !hasTriggeredForCurrentPull &&
-        distanceFraction >= AURORA_ENTRY_HOLD_REFRESH_TRIGGER_THRESHOLD
+        isAuroraHoldThresholdReached(distanceFraction)
 }
 
 internal fun shouldResetAuroraEntryHoldRefreshLatch(distanceFraction: Float): Boolean {
@@ -64,6 +69,9 @@ fun AuroraEntryHoldToRefresh(
     val pullRefreshState = rememberPullToRefreshState()
     val haptic = LocalHapticFeedback.current
     var hasTriggeredForCurrentPull by remember { mutableStateOf(false) }
+    val isHoldThresholdReached by remember(pullRefreshState) {
+        derivedStateOf { isAuroraHoldThresholdReached(pullRefreshState.distanceFraction) }
+    }
 
     fun triggerRefresh(playHapticFeedback: Boolean) {
         if (!shouldTriggerAuroraEntryRefresh(
@@ -84,7 +92,7 @@ fun AuroraEntryHoldToRefresh(
     LaunchedEffect(
         enabled,
         refreshing,
-        pullRefreshState.distanceFraction,
+        isHoldThresholdReached,
         hasTriggeredForCurrentPull,
         holdDelayMillis,
     ) {
@@ -95,27 +103,18 @@ fun AuroraEntryHoldToRefresh(
             return@LaunchedEffect
         }
 
-        if (!shouldStartAuroraEntryHoldRefresh(
-                distanceFraction = pullRefreshState.distanceFraction,
-                refreshing = refreshing,
-                hasTriggeredForCurrentPull = hasTriggeredForCurrentPull,
-            )
-        ) {
+        if (!isHoldThresholdReached || refreshing || hasTriggeredForCurrentPull) {
             return@LaunchedEffect
         }
 
         delay(holdDelayMillis)
 
-        if (!shouldStartAuroraEntryHoldRefresh(
-                distanceFraction = pullRefreshState.distanceFraction,
-                refreshing = refreshing,
-                hasTriggeredForCurrentPull = hasTriggeredForCurrentPull,
-            )
+        if (isAuroraHoldThresholdReached(pullRefreshState.distanceFraction) &&
+            !refreshing &&
+            !hasTriggeredForCurrentPull
         ) {
-            return@LaunchedEffect
+            triggerRefresh(playHapticFeedback = true)
         }
-
-        triggerRefresh(playHapticFeedback = true)
     }
 
     val colors = AuroraTheme.colors

@@ -275,7 +275,9 @@ class NovelCoverFetcherTest {
             readFromNetwork = false,
         )
 
-        assertEquals("no-store", networkRequest.header("Cache-Control"))
+        // Online requests keep OkHttp's cache eligible so repeat loads can be
+        // served by conditional GETs instead of full downloads.
+        assertNull(networkRequest.header("Cache-Control"))
         assertEquals("no-cache, only-if-cached", offlineRequest.header("Cache-Control"))
     }
 

@@ -103,7 +103,7 @@ class NovelTranslatedDownloadManagerTest {
             }
         val readableFile = translatedReadableFile(
             tempDir.resolve("downloads").toFile(),
-            source.label,
+            source.name,
             novel.title,
             chapter,
         )
@@ -157,6 +157,43 @@ class NovelTranslatedDownloadManagerTest {
     }
 
     @Test
+    fun `chapter exported under source name directory is detected and deleted`() {
+        val source = JsStyleNovelSource(id = 10L)
+        val manager = createManager(source)
+        val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel A")
+        val chapter = NovelChapter.create().copy(
+            id = 3L,
+            novelId = novel.id,
+            chapterNumber = 1.0,
+            name = "Prologue",
+        )
+
+        val namedFile = translatedReadableFile(
+            tempDir.resolve("downloads").toFile(),
+            source.name,
+            novel.title,
+            chapter,
+        ).apply {
+            parentFile?.mkdirs()
+            writeText("translated content")
+        }
+
+        manager.isTranslatedChapterDownloaded(
+            novel = novel,
+            chapter = chapter,
+            format = NovelTranslatedDownloadFormat.TXT,
+        ) shouldBe true
+
+        manager.deleteTranslatedChapter(
+            novel = novel,
+            chapter = chapter,
+            format = NovelTranslatedDownloadFormat.TXT,
+        )
+
+        namedFile.exists() shouldBe false
+    }
+
+    @Test
     fun `getDownloadSize includes readable translated exports and updates after delete`() {
         val source = MutableNovelSource(id = 10L, label = "Source A")
         val manager = createManager(source)
@@ -189,7 +226,7 @@ class NovelTranslatedDownloadManagerTest {
         manager.getDownloadSize() shouldBe 0L
     }
 
-    private fun createManager(source: MutableNovelSource): NovelTranslatedDownloadManager {
+    private fun createManager(source: eu.kanade.tachiyomi.novelsource.NovelSource): NovelTranslatedDownloadManager {
         val storageManager = mockk<StorageManager>()
         every { storageManager.getDownloadsDirectory() } returns fakeUniFile(
             tempDir.resolve("downloads").toFile().apply { mkdirs() },
@@ -278,6 +315,19 @@ class NovelTranslatedDownloadManagerTest {
                 FileOutputStream(normalized, firstArg())
             }
         }
+    }
+
+    private class JsStyleNovelSource(
+        override val id: Long,
+    ) : eu.kanade.tachiyomi.novelsource.NovelSource {
+        override val name: String = "My Plugin Source"
+        override val lang: String = "en"
+
+        override suspend fun getNovelDetails(novel: eu.kanade.tachiyomi.novelsource.model.SNovel) = novel
+        override suspend fun getChapterList(
+            novel: eu.kanade.tachiyomi.novelsource.model.SNovel,
+        ) = emptyList<eu.kanade.tachiyomi.novelsource.model.SNovelChapter>()
+        override suspend fun getChapterText(chapter: eu.kanade.tachiyomi.novelsource.model.SNovelChapter) = ""
     }
 
     private class MutableNovelSource(

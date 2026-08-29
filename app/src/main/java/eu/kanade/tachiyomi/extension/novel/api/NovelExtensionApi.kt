@@ -1,6 +1,5 @@
 package eu.kanade.tachiyomi.extension.novel.api
 
-import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoEntry
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoUpdateInteractor
 import mihon.domain.extensionrepo.novel.interactor.GetNovelExtensionRepo
@@ -16,7 +15,6 @@ internal class NovelExtensionApi(
     private val getExtensionRepo: GetNovelExtensionRepo = Injekt.get(),
     private val updateExtensionRepo: UpdateNovelExtensionRepo = Injekt.get(),
     private val repoUpdateInteractor: NovelPluginRepoUpdateInteractor = Injekt.get(),
-    private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val preferenceStore: PreferenceStore = Injekt.get(),
     private val timeProvider: () -> Long = { Instant.now().toEpochMilli() },
 ) {
@@ -47,7 +45,8 @@ internal class NovelExtensionApi(
         if (!fromAvailableExtensionList) {
             lastExtCheck.set(timeProvider())
         }
-        sourcePreferences.novelExtensionUpdatesCount().set(updates.size)
+        // B8: the badge pref (novelExtensionUpdatesCount) is written only by the screen model's
+        // classifier path and the auto-update runner; this fetch must not touch it.
         return updates
     }
 }

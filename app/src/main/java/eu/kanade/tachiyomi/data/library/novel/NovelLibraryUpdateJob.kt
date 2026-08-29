@@ -21,6 +21,7 @@ import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdatePacingPolicy
+import eu.kanade.tachiyomi.data.library.processEntriesWithPacing
 import eu.kanade.tachiyomi.data.library.shouldRetryLegacyAutoUpdateRun
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorMedia
 import eu.kanade.tachiyomi.data.library.updateerror.LibraryUpdateErrorRunType
@@ -41,7 +42,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.getAndSet
@@ -147,7 +147,7 @@ class NovelLibraryUpdateJob(
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
         return ForegroundInfo(
-            Notifications.ID_LIBRARY_PROGRESS,
+            Notifications.ID_NOVEL_LIBRARY_UPDATE_PROGRESS,
             notifier.progressNotificationBuilder.build(),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -276,18 +276,15 @@ class NovelLibraryUpdateJob(
 
         novelToUpdate = listToUpdate
             .distinctBy { it.novel.id }
-            .filter { libraryNovel ->
-                val isEligible = isNovelEligibleForAutoUpdate(
+            .mapNotNull { libraryNovel ->
+                val reason = getNovelAutoUpdateSkipReason(
                     item = libraryNovel,
                     restrictions = restrictions,
                     fetchWindowUpperBound = fetchWindowUpperBound,
                 )
-                if (!isEligible) {
-                    val reason = getNovelAutoUpdateSkipReason(
-                        item = libraryNovel,
-                        restrictions = restrictions,
-                        fetchWindowUpperBound = fetchWindowUpperBound,
-                    )
+                if (reason == null) {
+                    libraryNovel
+                } else {
                     skippedUpdates.add(
                         libraryNovel.novel to when (reason) {
                             NovelAutoUpdateSkipReason.NOT_ALWAYS_UPDATE ->
@@ -300,11 +297,10 @@ class NovelLibraryUpdateJob(
                                 context.stringResource(MR.strings.skipped_reason_not_started)
                             NovelAutoUpdateSkipReason.OUTSIDE_RELEASE_PERIOD ->
                                 context.stringResource(MR.strings.skipped_reason_not_in_release_period)
-                            null -> null
                         },
                     )
+                    null
                 }
-                isEligible
             }
             .sortedBy { it.novel.title }
 
@@ -330,13 +326,15 @@ class NovelLibraryUpdateJob(
             novelToUpdate.groupBy { it.novel.source }.values
                 .map { novelsInSource ->
                     async {
-                        semaphore.withPermit {
-                            novelsInSource.forEachIndexed { index, libraryNovel ->
+                        processEntriesWithPacing(
+                            entries = novelsInSource,
+                            semaphore = semaphore,
+                            process = { libraryNovel ->
                                 val novel = libraryNovel.novel
                                 ensureActive()
 
                                 if (getNovel.await(novel.id)?.favorite != true) {
-                                    return@forEachIndexed
+                                    return@processEntriesWithPacing false
                                 }
 
                                 withUpdateNotification(
@@ -402,13 +400,16 @@ class NovelLibraryUpdateJob(
                                     }
                                 }
 
+                                true
+                            },
+                            paceAfter = {
                                 pacingPolicy.delayAfterUpdate(
                                     mediaTag = LibraryUpdatePacingPolicy.MEDIA_NOVEL,
-                                    sourceId = novel.source,
-                                    shouldDelay = index != novelsInSource.lastIndex,
+                                    sourceId = novelsInSource.first().novel.source,
+                                    shouldDelay = true,
                                 )
-                            }
-                        }
+                            },
+                        )
                     }
                 }
                 .awaitAll()
@@ -458,18 +459,20 @@ class NovelLibraryUpdateJob(
         if (!downloadPreferences.downloadNewNovelChapters().get()) return emptyList()
 
         val included = downloadPreferences.downloadNewNovelChapterCategories().get().map { it.toLong() }.toSet()
-        if (included.isNotEmpty() && categoryIds.intersect(included).isEmpty()) return emptyList()
-
         val excluded = downloadPreferences.downloadNewNovelChapterCategoriesExclude().get().map { it.toLong() }.toSet()
-        if (categoryIds.any { it in excluded }) return emptyList()
-
         val unreadOnly = downloadPreferences.downloadNewUnreadNovelChaptersOnly().get()
 
-        return newChapters
-            .asSequence()
-            .filter { !unreadOnly || !it.read }
-            .filterNot { novelDownloadManager.isChapterDownloaded(novel, it.id) }
-            .toList()
+        // One directory walk for all new chapters instead of two file stats per chapter.
+        val downloadedChapterIds = novelDownloadManager.getDownloadedChapterIds(novel)
+
+        return filterNovelChaptersForDownload(
+            newChapters = newChapters,
+            unreadOnly = unreadOnly,
+            includedCategories = included,
+            excludedCategories = excluded,
+            categoryIds = categoryIds,
+            downloadedChapterIds = downloadedChapterIds,
+        )
     }
 
     private fun writeErrorFile(errors: List<LibraryUpdateFailure>): File {
@@ -648,4 +651,29 @@ internal fun isNovelEligibleForAutoUpdate(
         restrictions = restrictions,
         fetchWindowUpperBound = fetchWindowUpperBound,
     ) == null
+}
+
+/**
+ * Decides which freshly synced chapters should be queued for download.
+ * Downloaded state is provided as a precomputed [downloadedChapterIds] set so the caller
+ * pays one directory walk instead of per-chapter file checks.
+ */
+internal fun filterNovelChaptersForDownload(
+    newChapters: List<NovelChapter>,
+    unreadOnly: Boolean,
+    includedCategories: Set<Long>,
+    excludedCategories: Set<Long>,
+    categoryIds: Set<Long>,
+    downloadedChapterIds: Set<Long>,
+): List<NovelChapter> {
+    if (includedCategories.isNotEmpty() && categoryIds.intersect(includedCategories).isEmpty()) {
+        return emptyList()
+    }
+    if (categoryIds.any { it in excludedCategories }) return emptyList()
+
+    return newChapters
+        .asSequence()
+        .filter { !unreadOnly || !it.read }
+        .filterNot { it.id in downloadedChapterIds }
+        .toList()
 }

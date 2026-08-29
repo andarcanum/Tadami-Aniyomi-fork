@@ -78,5 +78,6 @@ sealed class AchievementEvent {
         THEME_CHANGE,
         LOGO_CLICK,
         SECRET_HALL_UNLOCKED,
+        QUOTE_SAVED,
     }
 }

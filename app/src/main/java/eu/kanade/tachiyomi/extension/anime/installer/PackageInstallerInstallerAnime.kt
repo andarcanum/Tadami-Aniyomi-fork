@@ -140,8 +140,12 @@ class PackageInstallerInstallerAnime(private val service: Service) : InstallerAn
             if (activeEntry == entry) {
                 clearSessionTimeout()
                 activeSession = null
-                packageInstaller.abandonSession(sessionId)
-                return false
+                // Abandoning a committed session may throw, and the failure callback is dropped
+                // anyway (activeSession is already null). Return true so the caller unsticks the
+                // queue immediately instead of waiting for a callback that never arrives.
+                runCatching { packageInstaller.abandonSession(sessionId) }
+                    .onFailure { e -> logcat(LogPriority.ERROR, e) { "Failed to abandon install session $sessionId" } }
+                return true
             }
         }
         return true
@@ -182,8 +186,8 @@ class PackageInstallerInstallerAnime(private val service: Service) : InstallerAn
     private fun notifyFallbackSuggestion(entry: Entry, reason: String) {
         fallbackNotifier.show(
             ApkInstallFallbackSuggestion(
-                packageName = "download-${entry.downloadId}",
-                displayName = "Extension ${entry.downloadId}",
+                packageName = entry.pkgName ?: "download-${entry.downloadId}",
+                displayName = entry.pkgName ?: "Extension ${entry.downloadId}",
                 kind = ApkExtensionKind.ANIME,
                 failedBackend = ApkInstallBackend.PACKAGE_INSTALLER,
                 reason = reason,

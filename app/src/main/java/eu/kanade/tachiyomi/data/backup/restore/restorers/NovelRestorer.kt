@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.data.backup.models.BackupChapter
 import eu.kanade.tachiyomi.data.backup.models.BackupHistory
 import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupNovelBookState
+import eu.kanade.tachiyomi.data.backup.models.BackupNovelHighlight
 import eu.kanade.tachiyomi.data.backup.restore.resolveRestoredText
 import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
@@ -68,6 +69,7 @@ class NovelRestorer(
                 history = backupNovel.history,
                 excludedScanlators = backupNovel.excludedScanlators,
                 bookState = backupNovel.bookState,
+                highlights = backupNovel.highlights,
             )
         }
     }
@@ -308,17 +310,59 @@ class NovelRestorer(
         history: List<BackupHistory>,
         excludedScanlators: List<String>,
         bookState: BackupNovelBookState? = null,
+        highlights: List<BackupNovelHighlight> = emptyList(),
     ): Novel {
         restoreCategories(novel, categories, backupCategories)
         restoreChapters(novel, chapters)
         restoreHistory(history)
         restoreExcludedScanlators(novel, excludedScanlators)
         restoreBookState(novel, bookState)
+        restoreHighlights(novel, highlights)
         // Recompute the expected next release date from the restored chapter rhythm so restored
         // novels appear in the Upcoming calendar right away (parity with MangaRestorer).
         updateNovelUseCase.awaitUpdateFetchInterval(novel, now, currentFetchWindow)
         return novel
     }
+
+    /**
+     * Restores saved highlights. Chapters resolve by URL; unknown URLs are skipped silently.
+     * Duplicates of an earlier restore (same chapter, range and text) are not re-inserted.
+     */
+    private suspend fun restoreHighlights(novel: Novel, highlights: List<BackupNovelHighlight>) {
+        if (highlights.isEmpty()) return
+        val chaptersByUrl = chapterRepository.getChapterByNovelId(novel.id).associateBy { it.url }
+        val existingKeys = handler.awaitList { db -> db.novel_highlightsQueries.getForNovel(novel.id) }
+            .map { HighlightKey(it.chapter_id, it.block_index.toInt(), it.char_start.toInt(), it.normalized_text) }
+            .toSet()
+        handler.await(true) { db ->
+            highlights.forEach { backup ->
+                val chapterId = chaptersByUrl[backup.chapterUrl]?.id ?: return@forEach
+                val key = HighlightKey(chapterId, backup.blockIndex, backup.charStart, backup.normalizedText)
+                if (key in existingKeys) return@forEach
+                db.novel_highlightsQueries.insert(
+                    novelId = novel.id,
+                    chapterId = chapterId,
+                    blockIndex = backup.blockIndex.toLong(),
+                    charStart = backup.charStart.toLong(),
+                    charEndExclusive = backup.charEndExclusive.toLong(),
+                    normalizedText = backup.normalizedText,
+                    colorArgb = backup.colorArgb,
+                    note = backup.note,
+                    createdAt = backup.createdAt,
+                    updatedAt = backup.updatedAt,
+                    pageIndex = backup.pageIndex.toLong(),
+                    pageCount = backup.pageCount.toLong(),
+                )
+            }
+        }
+    }
+
+    private data class HighlightKey(
+        val chapterId: Long,
+        val blockIndex: Int,
+        val charStart: Int,
+        val normalizedText: String,
+    )
 
     /**
      * Restores the compiled-book state without the artifact: the reading offset and the chapter-set

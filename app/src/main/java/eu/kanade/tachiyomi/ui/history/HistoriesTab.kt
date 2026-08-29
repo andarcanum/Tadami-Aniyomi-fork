@@ -5,10 +5,13 @@ import android.content.Intent
 import androidx.compose.animation.graphics.res.animatedVectorResource
 import androidx.compose.animation.graphics.res.rememberAnimatedVectorPainter
 import androidx.compose.animation.graphics.vector.AnimatedImageVector
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -18,6 +21,7 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.components.TabbedScreen
 import eu.kanade.presentation.components.TabbedScreenAurora
@@ -33,6 +37,7 @@ import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.flow.collectLatest
 import tachiyomi.domain.history.anime.repository.AnimeHistoryRepository
 import tachiyomi.domain.history.manga.repository.MangaHistoryRepository
 import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
@@ -44,6 +49,7 @@ import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Date
+import java.util.Locale
 
 data object HistoriesTab : Tab {
 
@@ -86,7 +92,8 @@ data object HistoriesTab : Tab {
         val animeHistoryScreenModel = rememberScreenModel { AnimeHistoryScreenModel() }
         val animeSearchQuery by animeHistoryScreenModel.query.collectAsStateWithLifecycle()
 
-        val tabs = historyContentTabs(showAnimeSection, showMangaSection, showNovelSection)
+        val sectionTabs = historyContentTabs(showAnimeSection, showMangaSection, showNovelSection)
+        val tabs = sectionTabs
             .map { tab ->
                 when (tab) {
                     HistoryContentTab.ANIME -> animeHistoryTab(context, fromMore)
@@ -96,10 +103,29 @@ data object HistoriesTab : Tab {
             }
             .toPersistentList()
 
+        // Start on the section the user actually visited last (survives process death);
+        // fall back to the first enabled tab when the stored value is missing or hidden.
+        val userProfilePreferences = remember { Injekt.get<UserProfilePreferences>() }
+        val initialPageIndex = remember(sectionTabs) {
+            val stored = userProfilePreferences.historyLastSection().get()
+            val byName = HistoryContentTab.entries.firstOrNull { it.name.equals(stored, ignoreCase = true) }
+            sectionTabs.indexOf(byName).takeIf { it >= 0 } ?: 0
+        }
+        val state = rememberPagerState(initialPage = initialPageIndex) { tabs.size }
+
+        LaunchedEffect(state, sectionTabs) {
+            snapshotFlow { state.currentPage }.collectLatest { page ->
+                sectionTabs.getOrNull(page)?.let { section ->
+                    userProfilePreferences.historyLastSection().set(section.name.lowercase(Locale.ROOT))
+                }
+            }
+        }
+
         if (theme.isAuroraStyle) {
             TabbedScreenAurora(
                 titleRes = MR.strings.label_recent_manga,
                 tabs = tabs,
+                state = state,
                 mangaSearchQuery = mangaSearchQuery,
                 onChangeMangaSearchQuery = mangaHistoryScreenModel::search,
                 animeSearchQuery = animeSearchQuery,
@@ -111,6 +137,7 @@ data object HistoriesTab : Tab {
             TabbedScreen(
                 titleRes = MR.strings.label_recent_manga,
                 tabs = tabs,
+                state = state,
                 mangaSearchQuery = mangaSearchQuery,
                 onChangeMangaSearchQuery = mangaHistoryScreenModel::search,
                 animeSearchQuery = animeSearchQuery,

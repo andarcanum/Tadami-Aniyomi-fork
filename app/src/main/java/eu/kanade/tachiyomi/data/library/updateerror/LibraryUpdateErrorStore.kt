@@ -111,7 +111,12 @@ object LibraryUpdateErrorStore {
 
     @Synchronized
     private fun mutate(block: (List<LibraryUpdateErrorRecord>) -> List<LibraryUpdateErrorRecord>) {
-        val next = block(_errors.value).trimAndSort()
+        val candidate = block(_errors.value)
+        val next = candidate.trimAndSort()
+        // Hot path guard: library update jobs call markResolved() for every successfully
+        // updated entry, usually when there is nothing to remove. Skip the full re-sort and
+        // JSON rewrite when the list did not actually change.
+        if (next == _errors.value) return
         _errors.value = next
         persist(next)
     }

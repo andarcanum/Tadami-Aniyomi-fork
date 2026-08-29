@@ -13,17 +13,18 @@ import org.robolectric.annotation.Config
 class NovelReaderWebViewFocusTest {
 
     @Test
-    fun `webView factory disables native focus to prevent compose writer reentrancy crash`() {
+    fun `webView factory keeps native focus for selection drag handles without stealing tap focus`() {
         val context = ApplicationProvider.getApplicationContext<Application>()
         val webView = createNovelReaderWebView(context)
 
-        // Before fix: WebView defaults to isFocusable=true, which triggers
-        // rootViewRequestFocus during removeView → focusSearch into Compose tree
-        // → re-entrant compose write → "Cannot start a writer when another writer is pending"
-        //
-        // After fix: both flags are false so the View system won't request focus
-        // into the Compose tree when this View is removed.
-        webView.isFocusable shouldBe false
+        // History: the view was once created unfocusable to prevent a compose writer
+        // reentrancy crash ("Cannot start a writer when another writer is pending") on
+        // removeView. That also disabled Chromium's selection drag handles, which only
+        // show for a focusable WebView, so the current contract is:
+        // - isFocusable = true — required for long-press selection drag handles;
+        // - isFocusableInTouchMode = false — taps must not steal key/input focus from
+        //   the reader.
+        webView.isFocusable shouldBe true
         webView.isFocusableInTouchMode shouldBe false
     }
 }

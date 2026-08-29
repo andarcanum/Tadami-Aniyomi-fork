@@ -106,9 +106,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -131,7 +134,10 @@ import org.jsoup.nodes.TextNode
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
+import tachiyomi.domain.achievement.model.AchievementEvent
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
+import tachiyomi.domain.book.novel.model.NovelHighlight
+import tachiyomi.domain.book.novel.model.NovelHighlightWithChapter
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
@@ -183,6 +189,11 @@ class NovelReaderScreenModel(
     ),
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
     private val activityDataRepository: ActivityDataRepository = Injekt.get(),
+    private val addNovelHighlight: tachiyomi.domain.book.novel.interactor.AddNovelHighlight = Injekt.get(),
+    private val updateNovelHighlight: tachiyomi.domain.book.novel.interactor.UpdateNovelHighlight = Injekt.get(),
+    private val deleteNovelHighlight: tachiyomi.domain.book.novel.interactor.DeleteNovelHighlight = Injekt.get(),
+    private val novelHighlightRepository:
+    tachiyomi.domain.book.novel.repository.NovelHighlightRepository = Injekt.get(),
     private val isSystemDark: () -> Boolean = { Injekt.get<Application>().isNightMode() },
     private val geminiTranslationService: GeminiTranslationService = run {
         val app = Injekt.get<Application>()
@@ -740,6 +751,87 @@ class NovelReaderScreenModel(
         currentNovel?.source?.let { sourceManager.get(it)?.lang }
 
     override fun selectionUpdateContent(settings: NovelReaderSettings) = updateContent(settings)
+
+    /** Live highlights of one chapter, for renderer painting and the highlights panel. */
+    fun subscribeChapterHighlights(chapterId: Long): Flow<List<NovelHighlight>> =
+        novelHighlightRepository.subscribeForChapter(chapterId)
+
+    fun getDefaultHighlightColor(): Long =
+        novelReaderPreferences.novelHighlightLastColor().get()
+
+    fun defaultHighlightColorChanges(): Flow<Long> =
+        novelReaderPreferences.novelHighlightLastColor().changes()
+
+    fun setDefaultHighlightColor(colorArgb: Long) {
+        novelReaderPreferences.novelHighlightLastColor().set(colorArgb)
+    }
+
+    /**
+     * Общий список хайлайтов новеллы для панели/цитат: join с именами и порядком глав,
+     * сортировка по порядку чтения. Осиротевшие записи (глава удалена) скрываются.
+     */
+    fun subscribeNovelHighlightItems(): Flow<List<NovelHighlightWithChapter>> {
+        val novel = currentNovel ?: return emptyFlow()
+        return novelHighlightRepository.subscribeForNovel(novel.id).map { highlights ->
+            if (highlights.isEmpty()) return@map emptyList()
+            val chaptersById = novelChapterRepository.getChapterByNovelId(novel.id).associateBy { it.id }
+            highlights.mapNotNull { highlight ->
+                val chapter = chaptersById[highlight.chapterId] ?: return@mapNotNull null
+                NovelHighlightWithChapter(highlight, novel.title, chapter.name, chapter.sourceOrder)
+            }.sortedWith(
+                compareBy({ it.chapterSourceOrder }, { it.highlight.blockIndex }, { it.highlight.charStart }),
+            )
+        }
+    }
+
+    fun updateHighlight(highlightId: Long, note: String, colorArgb: Long) {
+        screenModelScope.launch {
+            updateNovelHighlight.await(
+                highlightId = highlightId,
+                note = note,
+                colorArgb = colorArgb,
+                updatedAt = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    fun deleteHighlight(highlightId: Long) {
+        screenModelScope.launch {
+            deleteNovelHighlight.await(highlightId)
+        }
+    }
+
+    override fun saveHighlight(selection: NovelSelectedTextSelection) {
+        val anchor = selection.selectionAnchor ?: return
+        val novel = currentNovel ?: return
+        val now = System.currentTimeMillis()
+        val colorArgb = novelReaderPreferences.novelHighlightLastColor().get()
+        // Страница фиксируется на момент создания; в режимах без страниц остаётся 0/0.
+        val pageProgress = (mutableState.value as? State.Success)?.lastSavedPageReaderProgress
+        screenModelScope.launch {
+            addNovelHighlight.await(
+                NovelHighlight(
+                    id = 0L,
+                    novelId = novel.id,
+                    chapterId = anchor.chapterId,
+                    blockIndex = anchor.blockIndex,
+                    charStart = anchor.charStart,
+                    charEndExclusive = anchor.charEndExclusive,
+                    normalizedText = normalizeNovelSelectedText(selection.text),
+                    colorArgb = colorArgb,
+                    note = "",
+                    createdAt = now,
+                    updatedAt = now,
+                    pageIndex = pageProgress?.let { it.index + 1 } ?: 0,
+                    pageCount = pageProgress?.totalItems ?: 0,
+                ),
+            )
+            // «Чернильница»: пересчёт прогресса по факту БД (QuoteRule слушает это событие).
+            eventBus?.tryEmit(
+                AchievementEvent.FeatureUsed(AchievementEvent.Feature.QUOTE_SAVED),
+            )
+        }
+    }
 
     // ---------------------------------------------------------------------------------------------
     // NovelTranslationBatchHost implementation: the batch executor reaches the shared reader state
@@ -1304,10 +1396,17 @@ class NovelReaderScreenModel(
         )
         val pluginCss = customCss
         val pluginJs = customJs
-        val baseContent = model.getNormalizedHtml(
-            settings = settings,
-            customCss = pluginCss,
-            customJs = pluginJs,
+        // Anchor every top-level block with data-an-b so persistent selection addresses exist in
+        // every non-book renderer: native scroll reads them back as block anchors, and the WebView
+        // engine mounts this exact HTML, so its selection bridge can report the same domId.
+        // Book-mode sections arrive pre-annotated from their own pipeline.
+        val baseContent = annotateNovelBlockAnchors(
+            rawHtml = model.getNormalizedHtml(
+                settings = settings,
+                customCss = pluginCss,
+                customJs = pluginJs,
+            ),
+            chapterId = chapter.id,
         )
         val baseContentBlocks = currentParsedContentBlocks()
         val baseTextBlocks = baseContentBlocks
@@ -1510,7 +1609,11 @@ class NovelReaderScreenModel(
             chapter = chapter,
             becameRead = becameRead,
         )
-        val shouldEmitNovelCompleted = becameRead && chapterOrderList.all { it.read }
+        val shouldEmitNovelCompleted = becameRead &&
+            novelReaderNovelCompleted(
+                fullChapterList = fullChapterOrderList,
+                visibleWindow = chapterOrderList,
+            )
         progressPersistenceController.enqueueProgressPersistence(
             PendingProgressPersistence(
                 chapterId = chapter.id,
@@ -1631,6 +1734,15 @@ class NovelReaderScreenModel(
                     read = read,
                     lastPageRead = progress,
                 )
+            }
+        }
+        // The novel-completed check runs against the full chapter list, so the in-memory read mark
+        // has to reach it too (same as bookMarkChapterReadInMemory); the DB write arrives
+        // asynchronously through the progress pipeline.
+        val fullChapterIndex = fullChapterOrderList.indexOfFirst { it.id == chapter.id }
+        if (fullChapterIndex >= 0 && fullChapterOrderList[fullChapterIndex].read != read) {
+            fullChapterOrderList = fullChapterOrderList.toMutableList().also { list ->
+                list[fullChapterIndex] = list[fullChapterIndex].copy(read = read)
             }
         }
         val currentState = mutableState.value

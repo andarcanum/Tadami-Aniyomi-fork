@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.novel
 
+import android.content.Context
 import android.os.SystemClock
 import android.view.GestureDetector
 import android.view.KeyEvent
@@ -173,9 +174,13 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.resolvePlainPageReaderTtsAnchors
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import tachiyomi.domain.book.novel.model.NovelHighlight
+import tachiyomi.domain.book.novel.model.NovelHighlightWithChapter
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -190,6 +195,7 @@ import java.io.File
 import kotlin.coroutines.resume
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.runtime.collectAsState as androidxCollectAsState
 
 @Suppress("ktlint:standard:max-line-length", "UNNECESSARY_SAFE_CALL", "USELESS_ELVIS")
 @OptIn(ExperimentalFoundationApi::class)
@@ -203,6 +209,10 @@ internal fun NovelReaderContentHost(
     // Explicit move requested by the core (resume, seek bar, chapter picker, TTS, search).
     bookSeekRequest: BookSeekRequest? = null,
     bookWindow: NovelBookWindowState = NovelBookWindowState.EMPTY,
+    chapterHighlights: Flow<List<NovelHighlight>> = emptyFlow(),
+    // Novel-wide highlight items (joined with chapter names) for the panel/quotes surfaces.
+    highlightItems: Flow<List<NovelHighlightWithChapter>> = emptyFlow(),
+    defaultHighlightColor: Long = 0L,
     actions: NovelReaderScreenActions,
 ) {
     val onBack = actions.onBack
@@ -478,6 +488,80 @@ internal fun NovelReaderContentHost(
     }
     var requestedTtsChapterSyncTarget by remember(state.chapter.id) { mutableStateOf<Long?>(null) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+
+    // Paint saved highlights into whichever WebView is mounted: re-applied when the WebView
+    // becomes ready, when the highlight list changes, and after each document load from
+    // onPageFinished.
+    val chapterHighlightList by chapterHighlights.androidxCollectAsState(emptyList())
+    val highlightItemList by highlightItems.androidxCollectAsState(emptyList())
+    var editingHighlightId by remember { mutableStateOf<Long?>(null) }
+    var showHighlightsPanel by remember { mutableStateOf(false) }
+    LaunchedEffect(webViewInstance, chapterHighlightList) {
+        webViewInstance?.applyNovelHighlightsToPage(chapterHighlightList)
+    }
+
+    val panelContext = LocalContext.current
+    NovelHighlightsPanel(
+        visible = showHighlightsPanel,
+        novelTitle = state.novel.title,
+        items = highlightItemList,
+        defaultColorArgb = defaultHighlightColor,
+        onDefaultColorChange = actions.onDefaultHighlightColorChanged,
+        onDismiss = { showHighlightsPanel = false },
+        onEdit = { highlightId ->
+            showHighlightsPanel = false
+            editingHighlightId = highlightId
+        },
+        onDelete = { highlightId -> actions.onDeleteHighlight(highlightId) },
+        onCopy = { text ->
+            val clipboard = panelContext.getSystemService(Context.CLIPBOARD_SERVICE)
+                as android.content.ClipboardManager
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("highlight", text))
+            android.widget.Toast.makeText(
+                panelContext,
+                panelContext.getString(AYMR.strings.novel_highlight_action_copy.resourceId),
+                android.widget.Toast.LENGTH_SHORT,
+            ).show()
+        },
+    )
+
+    val editingHighlight = editingHighlightId?.let { id ->
+        highlightItemList.firstOrNull { it.highlight.id == id }?.highlight
+    }
+    if (editingHighlight != null) {
+        val context = LocalContext.current
+        NovelHighlightEditorSheet(
+            highlight = editingHighlight,
+            onDismiss = { editingHighlightId = null },
+            onSave = { note, colorArgb ->
+                actions.onUpdateHighlight(editingHighlight.id, note, colorArgb)
+                // Выбранный цвет запоминается как последний использованный для новых выделений.
+                actions.onDefaultHighlightColorChanged(colorArgb)
+                editingHighlightId = null
+            },
+            onDelete = {
+                actions.onDeleteHighlight(editingHighlight.id)
+                editingHighlightId = null
+            },
+            onCopy = { text ->
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                    as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("highlight", text))
+                Toast.makeText(
+                    context,
+                    context.getString(AYMR.strings.novel_highlight_action_copy.resourceId),
+                    Toast.LENGTH_SHORT,
+                ).show()
+            },
+            onShare = { text ->
+                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(android.content.Intent.EXTRA_TEXT, text)
+                }
+                context.startActivity(android.content.Intent.createChooser(intent, null))
+            },
+        )
+    }
     var pendingProgrammaticTtsBlockIndex by remember(state.chapter.id) { mutableStateOf<Int?>(null) }
     var suppressManualTtsPauseUntilMs by remember(state.chapter.id) { mutableLongStateOf(0L) }
     val shouldHideWebViewUntilReveal = state.enableJs
@@ -2287,6 +2371,7 @@ internal fun NovelReaderContentHost(
                 shouldShowNovelAtmosphereBackground(
                     usePageReader = usePageReader,
                     activePageTransitionStyle = activePageTransitionStyle,
+                    isBookMode = state.bookMode.isEnabled,
                 )
             ) {
                 NovelAtmosphereBackground(
@@ -2518,6 +2603,7 @@ internal fun NovelReaderContentHost(
                         ComposePagerPageRenderer(
                             pagerState = pagerState,
                             contentPages = pageReaderContentPages,
+                            chapterId = state.chapter.id,
                             spreadColumns = novelSpreadColumns,
                             transitionStyle = activePageTransitionStyle,
                             showBoundaryChapterPages = !seamlessChapterTransitionEnabled,
@@ -2962,6 +3048,8 @@ internal fun NovelReaderContentHost(
                                                         textShadowY = state.readerSettings.textShadowY,
                                                         selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                                                         selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                                                        selectionAnchorChapterId = state.chapter.id,
+                                                        selectionAnchorBlockIndex = index,
                                                         onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                                                         onPlainTap = { tapX, tapY, width, height ->
                                                             latestReaderShortTapHandler(tapX, tapY, width, height)
@@ -3001,6 +3089,8 @@ internal fun NovelReaderContentHost(
                                                     textShadowY = state.readerSettings.textShadowY,
                                                     selectionRenderer = NovelSelectedTextRenderer.NATIVE_SCROLL,
                                                     selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
+                                                    selectionAnchorChapterId = state.chapter.id,
+                                                    selectionAnchorBlockIndex = index,
                                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                                                     onPlainTap = { tapX, tapY, width, height ->
                                                         latestReaderShortTapHandler(tapX, tapY, width, height)
@@ -3245,6 +3335,8 @@ internal fun NovelReaderContentHost(
                                         bionicReadingEnabled = state.readerSettings.bionicReading,
                                     )
 
+                                    view?.applyNovelHighlightsToPage(chapterHighlightList)
+
                                     if (state.readerSettings.customJS.isNotEmpty()) {
                                         view?.evaluateJavascript(
                                             """
@@ -3260,7 +3352,7 @@ internal fun NovelReaderContentHost(
                                         view?.restoreWebViewScroll(
                                             progressPercent = state.lastSavedWebProgressPercent.coerceIn(0, 100),
                                             onComplete = { restored ->
-                                                shouldRestoreWebScroll = !restored
+                                                shouldRestoreWebScroll = resolveWebViewRestoreGate(restored)
                                                 if (restored) {
                                                     val settledProgress = view.resolveCurrentWebViewProgressPercent()
                                                     if (shouldDispatchWebProgressUpdate(
@@ -3317,6 +3409,7 @@ internal fun NovelReaderContentHost(
                                 registerWebReaderSelectionBridge(
                                     selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                                    onHighlightClicked = { highlightId -> editingHighlightId = highlightId },
                                 )
 
                                 webViewClient = factoryWebViewClient
@@ -3371,6 +3464,7 @@ internal fun NovelReaderContentHost(
                             webView.registerWebReaderSelectionBridge(
                                 selectionSessionIdProvider = nextSelectedTextSelectionSessionId,
                                 onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
+                                onHighlightClicked = { highlightId -> editingHighlightId = highlightId },
                             )
                             val minWebSwipeDistancePx = minVerticalChapterSwipeDistancePx
                             val webSwipeHorizontalTolerancePx = verticalChapterSwipeHorizontalTolerancePx
@@ -3642,6 +3736,8 @@ internal fun NovelReaderContentHost(
                                     )
                                     appliedWebCssFingerprint = styleFingerprint
 
+                                    view?.applyNovelHighlightsToPage(chapterHighlightList)
+
                                     if (currentCustomJs.isNotEmpty()) {
                                         view?.evaluateJavascript(
                                             """
@@ -3657,7 +3753,7 @@ internal fun NovelReaderContentHost(
                                         view?.restoreWebViewScroll(
                                             progressPercent = currentRestoreProgress,
                                             onComplete = { restored ->
-                                                shouldRestoreWebScroll = !restored
+                                                shouldRestoreWebScroll = resolveWebViewRestoreGate(restored)
                                                 if (restored) {
                                                     val settledProgress = view.resolveCurrentWebViewProgressPercent()
                                                     if (shouldDispatchWebProgressUpdate(
@@ -3944,6 +4040,7 @@ internal fun NovelReaderContentHost(
                 modifier = Modifier.align(androidx.compose.ui.Alignment.TopCenter),
                 onBack = onBack,
                 onToggleBookmark = onToggleBookmark,
+                onOpenHighlights = { showHighlightsPanel = true },
                 onHapticTap = { appHaptics.tap() },
                 onIntervalChange = { persistAutoScrollIntervalPreference(it) },
                 onAdaptiveDelayChange = { persistAutoScrollAdaptiveDelayPreference(it) },
@@ -4256,4 +4353,9 @@ internal fun NovelReaderContentHost(
             }
         }
     }
+}
+
+/** Paints [highlights] into the reader WebView; idempotent, safe to call repeatedly. */
+private fun WebView.applyNovelHighlightsToPage(highlights: List<NovelHighlight>) {
+    evaluateJavascript(buildApplyNovelHighlightsJs(buildNovelHighlightsPayloadJson(highlights)), null)
 }

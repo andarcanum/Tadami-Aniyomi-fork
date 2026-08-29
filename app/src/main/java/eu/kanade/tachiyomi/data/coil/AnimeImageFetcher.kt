@@ -17,11 +17,16 @@ import eu.kanade.tachiyomi.data.cache.AnimeBackgroundCache
 import eu.kanade.tachiyomi.data.cache.AnimeCoverCache
 import eu.kanade.tachiyomi.data.coil.AnimeImageFetcher.Companion.USE_CUSTOM_COVER_KEY
 import eu.kanade.tachiyomi.network.await
+import eu.kanade.tachiyomi.network.interceptor.CoverRequestPolicy
+import eu.kanade.tachiyomi.network.withCoverTimeouts
 import eu.kanade.tachiyomi.util.debugTitleCoverFlow
 import eu.kanade.tachiyomi.util.previewTitleCoverUrl
+import kotlinx.coroutines.delay
 import logcat.LogPriority
 import okhttp3.CacheControl
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okio.FileSystem
@@ -221,13 +226,42 @@ class AnimeImageFetcher(
     }
 
     private suspend fun executeNetworkRequest(url: String): Response {
-        val client = sourceLazy.value?.client ?: callFactoryLazy.value
-        val response = client.newCall(newRequest(url)).await()
-        if (!response.isSuccessful && response.code != HTTP_NOT_MODIFIED) {
-            response.close()
-            throw IOException("HTTP ${response.code}: ${response.message.ifBlank { "No response message" }}")
+        val client = (sourceLazy.value?.client ?: callFactoryLazy.value)
+            .let { factory ->
+                if (factory is OkHttpClient) factory.withCoverTimeouts() else factory
+            }
+        // A blacklisted host is refused by CoverRecoveryInterceptor before any
+        // network I/O; retrying would only add a fixed delay to every cover.
+        if (CoverRequestPolicy.isBlacklisted(url.toHttpUrlOrNull()?.host.orEmpty())) {
+            throw IOException("Skipped blacklisted cover host: ${url.toHttpUrlOrNull()?.host}")
         }
-        return response
+        var lastException: IOException? = null
+        repeat(ANIME_COVER_NETWORK_ATTEMPTS) { attempt ->
+            val response = try {
+                client.newCall(newRequest(url)).await()
+            } catch (e: IOException) {
+                lastException = e
+                if (attempt < ANIME_COVER_NETWORK_ATTEMPTS - 1) {
+                    // Transient DNS/connect failures (UnknownHostException, timeouts) usually
+                    // resolve within a moment; retry once before giving up. Manga and novel
+                    // covers already do this, so anime gets the same resilience.
+                    debugTitleCoverFlow(scope = "anime-fetcher") {
+                        "network-retry url=${previewTitleCoverUrl(url)} error=${e.message}"
+                    }
+                    delay(ANIME_COVER_NETWORK_RETRY_DELAY_MS)
+                }
+                null
+            }
+            if (response != null) {
+                // HTTP errors are not retried here (CoverRecoveryInterceptor handles those).
+                if (!response.isSuccessful && response.code != HTTP_NOT_MODIFIED) {
+                    response.close()
+                    throw IOException("HTTP ${response.code}: ${response.message.ifBlank { "No response message" }}")
+                }
+                return response
+            }
+        }
+        throw lastException ?: IOException("Failed to fetch cover")
     }
 
     private fun newRequest(url: String): Request {
@@ -246,14 +280,18 @@ class AnimeImageFetcher(
 
         when {
             options.networkCachePolicy.readEnabled -> {
-                // don't take up okhttp cache
-                request.cacheControl(CACHE_CONTROL_NO_STORE)
+                // Keep OkHttp's cache in play so repeat loads can be served by
+                // conditional GETs (304) instead of full downloads.
             }
             else -> {
                 // This causes the request to fail with a 504 Unsatisfiable Request.
                 request.cacheControl(CACHE_CONTROL_NO_NETWORK_NO_CACHE)
             }
         }
+
+        // Opt into the cover-host blacklist: repeated recoverable failures on
+        // this host are remembered so later covers skip it immediately.
+        CoverRequestPolicy.markCoverRequest(request)
 
         return request.build()
     }
@@ -447,9 +485,14 @@ class AnimeImageFetcher(
     companion object {
         val USE_CUSTOM_COVER_KEY = Extras.Key(true)
 
-        private val CACHE_CONTROL_NO_STORE = CacheControl.Builder().noStore().build()
         private val CACHE_CONTROL_NO_NETWORK_NO_CACHE = CacheControl.Builder().noCache().onlyIfCached().build()
 
         private const val HTTP_NOT_MODIFIED = 304
+
+        /** Cover network attempts before giving up (first try + one retry). */
+        private const val ANIME_COVER_NETWORK_ATTEMPTS = 2
+
+        /** Delay between the first failed attempt and the retry. */
+        private const val ANIME_COVER_NETWORK_RETRY_DELAY_MS = 500L
     }
 }

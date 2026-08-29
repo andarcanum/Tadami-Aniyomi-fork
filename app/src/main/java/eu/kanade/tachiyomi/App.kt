@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.core.content.ContextCompat
@@ -69,10 +70,12 @@ import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.data.updater.AppUpdateFileManager
 import eu.kanade.tachiyomi.di.AppModule
 import eu.kanade.tachiyomi.di.PreferenceModule
+import eu.kanade.tachiyomi.di.bootstrapInjektModules
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.installer.PendingApkInstallStore
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.extension.novel.NovelPluginSourceFactory
+import eu.kanade.tachiyomi.extension.novel.kotlin.sweepOrphanedNovelPluginDownloads
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelRuntimeCacheTrimCallbacks
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.network.NetworkPreferences
@@ -130,12 +133,20 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var isMainProcess = false
 
+    override fun attachBaseContext(base: android.content.Context) {
+        super.attachBaseContext(base)
+        // Register the Injekt graph before any ContentProvider runs: WorkManager initializes
+        // in a provider and may dispatch a pending library-update worker right after process
+        // death, before onCreate() would have imported the modules. Without this the workers
+        // died with InjektionException in a fresh background process (crash log #bug 0.60).
+        isMainProcess = bootstrapInjektModules()
+    }
+
     @SuppressLint("LaunchActivityFromNotification")
     @OptIn(DelicateCoilApi::class)
     override fun onCreate() {
         LogcatLogger.install(AndroidLogcatLogger(LogPriority.VERBOSE))
         super<Application>.onCreate()
-        patchInjekt()
 
         GlobalExceptionHandler.initialize(applicationContext, CrashActivity::class.java)
 
@@ -149,12 +160,8 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         }
 
         // Avoid potential crashes
-        isMainProcess = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val process = getProcessName()
-            if (packageName != process) WebView.setDataDirectorySuffix(process)
-            packageName == process
-        } else {
-            true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && packageName != getProcessName()) {
+            WebView.setDataDirectorySuffix(getProcessName())
         }
 
         // Warm up the WebView default user agent on the main thread before any source loads.
@@ -164,22 +171,20 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
         if (isMainProcess) {
             try {
                 WebSettings.getDefaultUserAgent(this)
+                // Initialize the WebView cookie provider here too: CookieManager.getInstance()
+                // crashes with NPE inside WebViewFactory when first called from a background
+                // thread before the app is fully attached (Android 16, crash log 0.60.4).
+                CookieManager.getInstance()
             } catch (e: Throwable) {
                 logcat(LogPriority.ERROR) { "Failed to warm up WebView user agent: ${e.message}" }
             }
         }
 
-        Injekt.importModule(PreferenceModule(this))
-        // Register domain interactors before app managers. Some app managers can be touched by
-        // async platform callbacks during AppModule registration, so their domain dependencies
-        // must already exist in Injekt.
-        Injekt.importModule(DomainModule())
-        // SY -->
-        Injekt.importModule(SYDomainModule())
-        // SY <--
-        if (isMainProcess) {
-            Injekt.importModule(AppModule(this))
+        // Modules were imported in attachBaseContext (see bootstrapInjektModules) so the DI
+        // graph already exists here, including for workers dispatched by WorkManager's
+        // ContentProvider before onCreate ran.
 
+        if (isMainProcess) {
             // Setup Aurora easter egg unlock hook
             eu.kanade.domain.easteregg.aurora.AuroraEchoBus.onUnlocked = { payload ->
                 achievementScope.launch {
@@ -535,7 +540,9 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 add(NovelPluginImageKeyer())
             }
 
-            crossfade((300 * this@App.animatorDurationScale).toInt())
+            val crossfadeMs = (300 * this@App.animatorDurationScale).toInt()
+            // Long animations delay first paint of each cover; cap the scaled value.
+            crossfade(crossfadeMs.coerceAtMost(MAX_CROSSFADE_MS))
             allowRgb565(DeviceUtil.isLowRamDevice(this@App))
             memoryCache {
                 MemoryCache.Builder()
@@ -545,14 +552,18 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             diskCache {
                 DiskCache.Builder()
                     .directory(this@App.cacheDir.resolve("coil_cache").toOkioPath())
-                    .maxSizeBytes(128 * 1024 * 1024)
+                    .maxSizeBytes(diskCacheSizeBytes(this@App))
                     .build()
             }
             if (networkPreferences.verboseLogging().get()) logger(DebugLogger())
 
             // Coil spawns a new thread for every image load by default
             val isLowRam = DeviceUtil.isLowRamDevice(this@App)
-            fetcherCoroutineContext(Dispatchers.IO.limitedParallelism(if (isLowRam) 8 else 16))
+            fetcherCoroutineContext(
+                Dispatchers.IO.limitedParallelism(
+                    if (isLowRam) 8 else COVER_FETCH_PARALLELISM,
+                ),
+            )
             decoderCoroutineContext(Dispatchers.IO.limitedParallelism(if (isLowRam) 3 else 4))
         }
             .build()
@@ -567,9 +578,19 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
                 // Creating the extension managers synchronously loads every installed extension on
                 // the main thread (MangaExtensionManager.initExtensions), so only touch them when
                 // there are orphaned downloads to actually recover.
-                if (basePreferences.extensionActiveDownloads().get().isNotEmpty()) {
+                if (
+                    basePreferences.mangaExtensionActiveDownloads().get().isNotEmpty() ||
+                    basePreferences.animeExtensionActiveDownloads().get().isNotEmpty()
+                ) {
                     runCatching { Injekt.get<MangaExtensionManager>().resumeOrphanedDownloads() }
                     runCatching { Injekt.get<AnimeExtensionManager>().resumeOrphanedDownloads() }
+                }
+                // Truncated or abandoned novel-plugin downloads are re-downloadable; sweep them.
+                runCatching {
+                    val swept = sweepOrphanedNovelPluginDownloads(this@App)
+                    if (swept.isNotEmpty()) {
+                        logcat(LogPriority.INFO) { "Deleted orphaned novel plugin downloads: ${swept.size}" }
+                    }
                 }
             }
             val libraryPreferences = Injekt.get<tachiyomi.domain.library.service.LibraryPreferences>()
@@ -642,6 +663,18 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
 }
 
 private const val ACTION_DISABLE_INCOGNITO_MODE = "tachi.action.DISABLE_INCOGNITO_MODE"
+
+/** Parallel cover fetches on non-low-RAM devices (was 16; grids of 30+ cells). */
+private const val COVER_FETCH_PARALLELISM = 24
+
+/** Coil disk cache for covers/posters on devices that can afford it. */
+private fun diskCacheSizeBytes(context: android.content.Context): Long {
+    val isLowRam = eu.kanade.tachiyomi.util.system.DeviceUtil.isLowRamDevice(context)
+    return if (isLowRam) 128L * 1024 * 1024 else 256L * 1024 * 1024
+}
+
+/** Crossfade above this value delays first paint more than it helps. */
+private const val MAX_CROSSFADE_MS = 300
 
 private class MainThreadWatchdog(
     private val intervalMs: Long = 500,

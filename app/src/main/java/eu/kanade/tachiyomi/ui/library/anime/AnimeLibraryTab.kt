@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -109,6 +110,7 @@ import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
+import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.category.visualName
@@ -219,6 +221,11 @@ data object AnimeLibraryTab : Tab {
 
     private var lastAuroraSection: Section = Section.Anime
 
+    /** One-shot restore of the persisted section on the first composition after process death. */
+    private var lastAuroraSectionRestored = false
+
+    private val userProfilePreferences: UserProfilePreferences by injectLazy()
+
     private const val AURORA_LIBRARY_IDLE_PRELOAD_DELAY_MS = 300L
 
     @OptIn(ExperimentalAnimationGraphicsApi::class)
@@ -301,6 +308,17 @@ data object AnimeLibraryTab : Tab {
             Section.Novel.takeIf { showNovelSection },
         )
         val auroraPageCount = availableSections.size.coerceAtLeast(1)
+        // Restore the section the user actually worked in (survives process death); fall back
+        // to the first enabled one when the stored value is missing or now hidden.
+        if (!lastAuroraSectionRestored) {
+            val stored = userProfilePreferences.libraryLastSection().get()
+            Section.entries.firstOrNull { it.name.equals(stored, ignoreCase = true) }
+                ?.let { lastAuroraSection = it }
+            if (lastAuroraSection !in availableSections) {
+                lastAuroraSection = availableSections.firstOrNull() ?: lastAuroraSection
+            }
+            lastAuroraSectionRestored = true
+        }
         val initialAuroraPage = availableSections.indexOf(lastAuroraSection)
             .takeIf { it >= 0 }
             ?.coerceIn(0, auroraPageCount - 1)
@@ -355,13 +373,36 @@ data object AnimeLibraryTab : Tab {
 
         val snackbarHostState = remember { SnackbarHostState() }
         val epubImportLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.OpenDocument(),
+            contract = ActivityResultContracts.OpenMultipleDocuments(),
+            onResult = { uris ->
+                if (!uris.isNullOrEmpty()) {
+                    val activeNovelScreenModel = novelScreenModel ?: return@rememberLauncherForActivityResult
+                    scope.launchIO {
+                        val (succeeded, total) = activeNovelScreenModel.importLocalBooks(uris)
+                        snackbarHostState.showSnackbar(
+                            context.stringResource(
+                                if (succeeded > 0) {
+                                    AYMR.strings.novel_library_import_result
+                                } else {
+                                    AYMR.strings.novel_library_import_failed
+                                },
+                                succeeded,
+                                total,
+                            ),
+                            duration = SnackbarDuration.Short,
+                        )
+                    }
+                }
+            },
+        )
+        val folderImportLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.OpenDocumentTree(),
             onResult = { uri ->
                 if (uri != null) {
                     val activeNovelScreenModel = novelScreenModel ?: return@rememberLauncherForActivityResult
                     scope.launchIO {
                         try {
-                            activeNovelScreenModel.importEpub(uri)
+                            activeNovelScreenModel.importLocalBookFolder(uri)
                             snackbarHostState.showSnackbar(
                                 context.stringResource(AYMR.strings.novel_library_import_success),
                                 duration = SnackbarDuration.Short,
@@ -745,6 +786,9 @@ data object AnimeLibraryTab : Tab {
                                 eu.kanade.domain.entries.novel.LocalNovelBookImport.PICKER_MIME_TYPES,
                             )
                         },
+                        onImportFolder = {
+                            folderImportLauncher.launch(null)
+                        },
                         showInlineHeader = false,
                         libraryPreferences = activeNovelScreenModel.libraryPreferences,
                     )
@@ -773,6 +817,7 @@ data object AnimeLibraryTab : Tab {
             if (isAurora) {
                 sectionAtPage(auroraPagerState.currentPage.coerceAtMost(auroraPageCount - 1))?.let {
                     lastAuroraSection = it
+                    userProfilePreferences.libraryLastSection().set(it.name.lowercase(Locale.ROOT))
                 }
             }
         }
@@ -1141,7 +1186,16 @@ data object AnimeLibraryTab : Tab {
                     }
                 }
             },
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+            snackbarHost = {
+                // The Aurora bottom nav is a floating glass pill drawn over tab
+                // content; lift snackbars above it or they render underneath.
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(bottom = 80.dp),
+                )
+            },
         ) { contentPadding ->
             when {
                 isLoading -> LoadingScreen(Modifier.padding(contentPadding))
@@ -1199,6 +1253,13 @@ data object AnimeLibraryTab : Tab {
                                             epubImportLauncher.launch(
                                                 eu.kanade.domain.entries.novel.LocalNovelBookImport.PICKER_MIME_TYPES,
                                             )
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                    onImportFolder = if (shouldShowLibraryBookImport(auroraCurrentSection)) {
+                                        {
+                                            folderImportLauncher.launch(null)
                                         }
                                     } else {
                                         null
@@ -1624,6 +1685,7 @@ data object AnimeLibraryTab : Tab {
 
         LaunchedEffect(Unit) {
             launch { queryEvent.receiveAsFlow().collect(screenModel::search) }
+            launch { mangaQueryEvent.receiveAsFlow().collect { mangaScreenModel.search(it) } }
             launch {
                 novelQueryEvent.receiveAsFlow().collect { query ->
                     pendingNovelSearchQuery = query
@@ -1656,6 +1718,27 @@ data object AnimeLibraryTab : Tab {
     // For invoking search from other screen
     private val queryEvent = Channel<String>()
     suspend fun search(query: String) = queryEvent.send(query)
+
+    private val mangaQueryEvent = Channel<String>()
+
+    /**
+     * Searches the section the user is actually in (per the persisted Aurora section) instead
+     * of always landing on anime — mirrors [searchNovel]'s section routing.
+     */
+    suspend fun searchActive(query: String) {
+        when (lastAuroraSection) {
+            Section.Anime -> {
+                requestSection(Section.Anime)
+                queryEvent.send(query)
+            }
+            Section.Manga -> {
+                requestSection(Section.Manga)
+                mangaQueryEvent.send(query)
+            }
+            Section.Novel -> searchNovel(query)
+        }
+    }
+
     private val novelQueryEvent = Channel<String>(capacity = Channel.BUFFERED)
     suspend fun searchNovel(query: String) {
         requestSection(Section.Novel)
@@ -1686,6 +1769,7 @@ private fun AuroraLibraryPinnedHeader(
     onRefreshGlobal: () -> Unit,
     onOpenRandomEntry: () -> Unit,
     onImportEpub: (() -> Unit)?,
+    onImportFolder: (() -> Unit)?,
     categories: List<Category>,
     selectedCategoryIndex: Int,
     showCategories: Boolean,
@@ -1813,6 +1897,7 @@ private fun AuroraLibraryPinnedHeader(
                                 ) {
                                     auroraLibraryPinnedHeaderMenuItems(
                                         includeImportEpub = onImportEpub != null,
+                                        includeImportFolder = onImportFolder != null,
                                     ).forEach { item ->
                                         AuroraEntryDropdownMenuItem(
                                             text = when (item) {
@@ -1824,6 +1909,8 @@ private fun AuroraLibraryPinnedHeader(
                                                     stringResource(MR.strings.action_open_random_manga)
                                                 AuroraLibraryPinnedHeaderMenuItem.ImportEpub ->
                                                     stringResource(AYMR.strings.novel_library_import_epub)
+                                                AuroraLibraryPinnedHeaderMenuItem.ImportFolder ->
+                                                    stringResource(AYMR.strings.novel_library_import_folder)
                                             },
                                             leadingIcon = when (item) {
                                                 AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent,
@@ -1833,6 +1920,9 @@ private fun AuroraLibraryPinnedHeader(
                                                     Icons.Filled.Shuffle
                                                 }
                                                 AuroraLibraryPinnedHeaderMenuItem.ImportEpub -> {
+                                                    Icons.Filled.Add
+                                                }
+                                                AuroraLibraryPinnedHeaderMenuItem.ImportFolder -> {
                                                     Icons.Filled.Add
                                                 }
                                             },
@@ -1849,6 +1939,9 @@ private fun AuroraLibraryPinnedHeader(
                                                     }
                                                     AuroraLibraryPinnedHeaderMenuItem.ImportEpub -> {
                                                         onImportEpub?.invoke()
+                                                    }
+                                                    AuroraLibraryPinnedHeaderMenuItem.ImportFolder -> {
+                                                        onImportFolder?.invoke()
                                                     }
                                                 }
                                                 showMenu = false
@@ -1892,10 +1985,12 @@ internal enum class AuroraLibraryPinnedHeaderMenuItem {
     RefreshGlobal,
     OpenRandomEntry,
     ImportEpub,
+    ImportFolder,
 }
 
 internal fun auroraLibraryPinnedHeaderMenuItems(
     includeImportEpub: Boolean,
+    includeImportFolder: Boolean,
 ): List<AuroraLibraryPinnedHeaderMenuItem> {
     return buildList {
         add(AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent)
@@ -1903,6 +1998,9 @@ internal fun auroraLibraryPinnedHeaderMenuItems(
         add(AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry)
         if (includeImportEpub) {
             add(AuroraLibraryPinnedHeaderMenuItem.ImportEpub)
+        }
+        if (includeImportFolder) {
+            add(AuroraLibraryPinnedHeaderMenuItem.ImportFolder)
         }
     }
 }

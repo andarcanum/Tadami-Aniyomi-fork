@@ -15,6 +15,17 @@ data class TranslationBatchSelection(
     val skippedAlreadyTranslatedCount: Int,
 )
 
+/**
+ * Resolves chapter ids to enqueue for a translation batch.
+ *
+ * RANGE is POSITIONAL: [rangeStart]/[rangeEnd] are 1-based positions in the passed list,
+ * which must already be sorted in the desired visible order (see [TranslationBatchScope.RANGE]).
+ * Out-of-range ends clamp to the last position; a range lying fully past the end of the list
+ * (normalized start > [chapters].size) yields an empty result instead of clamping to the tail.
+ *
+ * When [limit] > 0 it acts as a global post-filter applied across ALL scopes, capping the total
+ * number of enqueued ids (protects translation quota for SELECTED/DOWNLOADED/UNREAD).
+ */
 fun resolveTranslationBatchChapterIds(
     scope: TranslationBatchScope,
     limit: Int,
@@ -25,7 +36,7 @@ fun resolveTranslationBatchChapterIds(
     rangeEnd: Int = limit,
 ): List<Long> {
     val orderedChapters = chapters.asSequence()
-    return when (scope) {
+    val resolved = when (scope) {
         TranslationBatchScope.SELECTED ->
             orderedChapters
                 .filter { it.id in selectedChapterIds }
@@ -59,6 +70,9 @@ fun resolveTranslationBatchChapterIds(
 
             val normalizedStart = minOf(rangeStart, rangeEnd).coerceAtLeast(1)
             val normalizedEnd = maxOf(rangeStart, rangeEnd).coerceAtLeast(normalizedStart)
+            if (normalizedStart > chapters.size) {
+                return emptyList()
+            }
             val startIndex = (normalizedStart - 1).coerceAtMost(chapters.lastIndex)
             val endIndex = (normalizedEnd - 1).coerceAtMost(chapters.lastIndex)
             if (startIndex > endIndex) {
@@ -71,6 +85,11 @@ fun resolveTranslationBatchChapterIds(
                     .toList()
             }
         }
+    }
+    return if (limit > 0 && scope != TranslationBatchScope.FIRST_N_VISIBLE) {
+        resolved.take(limit)
+    } else {
+        resolved
     }
 }
 

@@ -7,6 +7,7 @@ import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Spacer
@@ -53,6 +54,9 @@ import android.graphics.Color as AndroidColor
 @Composable
 internal fun AuroraReaderSheet(
     onDismissRequest: () -> Unit,
+    // Drawn over the full sheet surface (including the handle strip), behind all content:
+    // texture veils, hanging ribbons, etc.
+    glassOverlay: (@Composable BoxScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val aurora = AuroraTheme.colors
@@ -143,10 +147,13 @@ internal fun AuroraReaderSheet(
                     }
             }
 
-            Column {
-                AuroraSheetDragHandle()
-                content()
-                Spacer(Modifier.height(4.dp))
+            Box {
+                glassOverlay?.invoke(this)
+                Column {
+                    AuroraSheetDragHandle()
+                    content()
+                    Spacer(Modifier.height(4.dp))
+                }
             }
         }
     }

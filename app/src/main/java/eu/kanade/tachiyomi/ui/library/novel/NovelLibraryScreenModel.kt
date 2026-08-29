@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.documentfile.provider.DocumentFile
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.core.preference.asState
@@ -1441,7 +1442,7 @@ class NovelLibraryScreenModel(
             val sanitizedName = LocalNovelBookImport.sanitizeFileName(displayName)
             if (!LocalNovelBookImport.isSupportedImportFileName(sanitizedName)) {
                 throw IOException(
-                    "Only EPUB or FB2 files can be imported as local novels (got: $sanitizedName)",
+                    "Unsupported local novel format (got: $sanitizedName)",
                 )
             }
 
@@ -1502,6 +1503,86 @@ class NovelLibraryScreenModel(
         val author: String?,
         val description: String?,
     )
+
+    /**
+     * Imports several picked book files one by one; a failure of any single file
+     * does not abort the rest. Returns (succeeded, total).
+     */
+    suspend fun importLocalBooks(uris: List<Uri>): Pair<Int, Int> {
+        var succeeded = 0
+        uris.forEach { uri ->
+            runCatching { importLocalBook(uri) }.onSuccess { succeeded++ }
+        }
+        return succeeded to uris.size
+    }
+
+    /**
+     * Imports a SAF-picked folder as a local novel: every supported file inside
+     * (any nesting depth) is copied into localnovel/<folderName>/ preserving the
+     * relative structure, and a LocalNovel row is inserted. Chapters come from the
+     * regular LocalNovelSource directory pipeline (one file = one chapter).
+     */
+    suspend fun importLocalBookFolder(treeUri: Uri) {
+        withContext(Dispatchers.IO) {
+            val context = Injekt.get<Application>()
+            val storageManager = Injekt.get<StorageManager>()
+            val localDir = storageManager.getLocalNovelSourceDirectory()
+                ?: throw IOException("Local novel directory not configured. Set a storage location first.")
+            val novelRepository = Injekt.get<NovelRepository>()
+            val sourcePreferences = Injekt.get<SourcePreferences>()
+
+            val tree = DocumentFile.fromTreeUri(context, treeUri)
+                ?: throw IOException("Cannot open selected folder")
+            val folderName = LocalNovelBookImport.sanitizeFileName(
+                tree.name?.takeIf { it.isNotBlank() } ?: "imported-folder",
+            )
+            val targetDir = localDir.findFile(folderName)?.takeIf { it.isDirectory }
+                ?: localDir.createDirectory(folderName)
+                ?: throw IOException("Cannot create folder: $folderName")
+
+            val copied = copySupportedFilesRecursively(context, tree, targetDir)
+            if (copied == 0) throw IOException("No supported files found in the selected folder")
+
+            val addToLibrary = sourcePreferences.importEpubAddToLibrary().get()
+            val novel = Novel.create().copy(
+                source = LocalNovelSource.ID,
+                url = folderName,
+                title = folderName,
+                favorite = addToLibrary,
+                dateAdded = if (addToLibrary) System.currentTimeMillis() else 0L,
+                initialized = true,
+            )
+            novelRepository.insertNovel(novel)
+        }
+    }
+
+    private fun copySupportedFilesRecursively(
+        context: Application,
+        sourceDir: DocumentFile,
+        targetDir: com.hippo.unifile.UniFile,
+    ): Int {
+        var copied = 0
+        for (entry in sourceDir.listFiles()) {
+            val entryName = entry.name.orEmpty()
+            if (entryName.isBlank() || entryName.startsWith('.')) continue
+            if (entry.isDirectory) {
+                val childTarget = targetDir.findFile(entryName)
+                    ?.takeIf { it.isDirectory }
+                    ?: targetDir.createDirectory(entryName) ?: continue
+                copied += copySupportedFilesRecursively(context, entry, childTarget)
+            } else {
+                if (!LocalNovelBookImport.isSupportedImportFileName(entryName)) continue
+                val safeName = LocalNovelBookImport.sanitizeFileName(entryName)
+                val target = targetDir.findFile(safeName)?.takeIf { it.isFile }
+                    ?: targetDir.createFile(safeName) ?: continue
+                context.contentResolver.openInputStream(entry.uri)?.use { input ->
+                    target.openOutputStream().use { output -> input.copyTo(output) }
+                } ?: continue
+                copied++
+            }
+        }
+        return copied
+    }
 
     private fun readLocalBookMetadata(
         context: Application,

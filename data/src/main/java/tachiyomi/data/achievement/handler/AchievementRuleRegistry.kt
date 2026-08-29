@@ -23,6 +23,7 @@ import tachiyomi.data.achievement.rules.LibraryRule
 import tachiyomi.data.achievement.rules.MetaRule
 import tachiyomi.data.achievement.rules.OnePieceRule
 import tachiyomi.data.achievement.rules.QuantityRule
+import tachiyomi.data.achievement.rules.QuoteRule
 import tachiyomi.data.achievement.rules.RankUpRule
 import tachiyomi.data.achievement.rules.ReadingImmersionRule
 import tachiyomi.data.achievement.rules.SaitamaRule
@@ -34,6 +35,7 @@ import tachiyomi.data.achievement.rules.TimeParadoxRule
 import tachiyomi.data.achievement.rules.TrinityRule
 import tachiyomi.domain.achievement.model.AchievementCategory
 import tachiyomi.domain.achievement.rule.AchievementRule
+import tachiyomi.domain.book.novel.repository.NovelHighlightRepository
 import tachiyomi.domain.entries.anime.repository.AnimeRepository
 import tachiyomi.domain.entries.manga.repository.MangaRepository
 import tachiyomi.domain.entries.novel.repository.NovelRepository
@@ -42,6 +44,7 @@ class AchievementRuleRegistry(
     private val mangaRepository: MangaRepository,
     private val animeRepository: AnimeRepository,
     private val novelRepository: NovelRepository,
+    private val novelHighlightRepository: NovelHighlightRepository,
 ) {
     val rules: List<AchievementRule> by lazy {
         listOf(
@@ -150,6 +153,9 @@ class AchievementRuleRegistry(
             FeatureBasedRule("theme_changer"),
             FeatureBasedRule("persistent_clicker"),
             FeatureBasedRule("secret_hall_unlocked"),
+
+            // Quotes: DB-backed count (retroactive via evaluateFull)
+            QuoteRule(novelHighlightRepository),
 
             // Secret rules
             SaitamaRule(),

@@ -573,7 +573,9 @@ object HomeScreen : Screen() {
                                     AnimeLibraryTab.searchNovel(it)
                                 }
                                 defaultTab == AnimeLibraryTab -> {
-                                    AnimeLibraryTab.search(it)
+                                    // Search the section the user is actually in (manga/anime/novel),
+                                    // not unconditionally anime.
+                                    AnimeLibraryTab.searchActive(it)
                                 }
                                 defaultTab == MangaLibraryTab -> MangaLibraryTab.search(it)
                                 else -> Unit

@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.download.novel
 
 import android.app.Application
 import com.hippo.unifile.UniFile
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
@@ -98,6 +99,46 @@ class NovelDownloadManagerTest {
     }
 
     @Test
+    fun `downloaded chapter is published atomically without leftover temp files`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val manager = createManager(source = source, chapterText = "updated text")
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
+            val chapter = NovelChapter.create().copy(id = 2L, novelId = 1L, url = "/chapter-2")
+            val chapterDir = tempDir.resolve("downloads").toFile()
+                .resolve("novels/${source.name}/${novel.title}")
+            chapterDir.mkdirs()
+            // A truncated file from a previous interrupted download must be fully replaced.
+            File(chapterDir, "${chapter.id}.html").writeText("stale partial")
+
+            manager.downloadChapter(novel = novel, chapter = chapter) shouldBe true
+
+            File(chapterDir, "${chapter.id}.html").readText() shouldBe "updated text"
+            chapterDir.listFiles()?.filter { it.name.endsWith(".tmp") }.orEmpty().shouldBeEmpty()
+            manager.getDownloadedChapterText(novel, chapter.id) shouldBe "updated text"
+        }
+    }
+
+    @Test
+    fun `failed fetch leaves previously downloaded content untouched`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val manager = createManager(source = source, chapterText = null)
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
+            val chapter = NovelChapter.create().copy(id = 2L, novelId = 1L, url = "/chapter-2")
+            val chapterDir = tempDir.resolve("downloads").toFile()
+                .resolve("novels/${source.name}/${novel.title}")
+            chapterDir.mkdirs()
+            File(chapterDir, "${chapter.id}.html").writeText("good content")
+
+            manager.downloadChapter(novel = novel, chapter = chapter) shouldBe false
+
+            File(chapterDir, "${chapter.id}.html").readText() shouldBe "good content"
+            chapterDir.listFiles()?.filter { it.name.endsWith(".tmp") }.orEmpty().shouldBeEmpty()
+        }
+    }
+
+    @Test
     fun `stable numeric chapter files are migrated to readable directories`() {
         runBlocking {
             val source = MutableNovelSource(id = 10L, label = "Source A")
@@ -178,10 +219,60 @@ class NovelDownloadManagerTest {
         }
     }
 
+    @Test
+    fun `failed scan is not repeated within ttl and is retried after it expires`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapterId = 2L
+
+            var now = 1_000_000L
+            val manager = createManager(source = source, chapterText = null) { now }
+
+            // First miss walks the whole downloads tree and records a negative result.
+            manager.isChapterDownloaded(novel, chapterId) shouldBe false
+            val scansAfterFirst = manager.debugScanCount()
+
+            // Second miss within the TTL must be served from the negative cache: no rescan.
+            manager.isChapterDownloaded(novel, chapterId) shouldBe false
+            manager.debugScanCount() shouldBe scansAfterFirst
+
+            // After the TTL expires the scan runs again.
+            now += 61_000L
+            manager.isChapterDownloaded(novel, chapterId) shouldBe false
+            manager.debugScanCount() shouldBe scansAfterFirst + 1
+        }
+    }
+
+    @Test
+    fun `download clears the negative scan cache so the file is found immediately`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(id = 2L, novelId = 1L, url = "/chapter-2")
+
+            var now = 2_000_000L
+            val manager = createManager(source = source, chapterText = "downloaded text") { now }
+
+            // Miss first: the scan finds nothing and the negative cache is populated.
+            manager.isChapterDownloaded(novel, chapter.id) shouldBe false
+            val scansAfterMiss = manager.debugScanCount()
+            (scansAfterMiss > 0) shouldBe true
+
+            // Downloading the chapter must invalidate the negative cache...
+            manager.downloadChapter(novel, chapter) shouldBe true
+
+            // ...so the next lookup finds the file via the positive dir cache without a rescan.
+            manager.isChapterDownloaded(novel, chapter.id) shouldBe true
+            manager.debugScanCount() shouldBe scansAfterMiss
+        }
+    }
+
     private fun createManager(
         source: MutableNovelSource,
         chapterText: String?,
         applicationFilesDir: File? = null,
+        clock: () -> Long = System::currentTimeMillis,
     ): NovelDownloadManager {
         val storageManager = mockk<StorageManager>()
         every { storageManager.getDownloadsDirectory() } returns fakeUniFile(
@@ -203,6 +294,7 @@ class NovelDownloadManagerTest {
             storageManager = storageManager,
             downloadCache = null,
             fetchChapterText = { _, _ -> chapterText },
+            clock = clock,
         )
     }
 
@@ -228,6 +320,12 @@ class NovelDownloadManagerTest {
         return mockk(relaxed = true) {
             every { getName() } returns normalized.name
             every { getFilePath() } returns normalized.absolutePath
+            every { getParentFile() } answers {
+                normalized.parentFile?.let { fakeUniFile(it) }
+            }
+            every { renameTo(any()) } answers {
+                normalized.renameTo(File(normalized.parentFile, firstArg<String>()))
+            }
             every { isDirectory() } answers { normalized.isDirectory }
             every { isFile() } answers { normalized.isFile }
             every { exists() } answers { normalized.exists() }

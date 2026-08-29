@@ -1,5 +1,6 @@
 package eu.kanade.presentation.entries.components.aurora
 
+import android.os.Build
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
@@ -8,7 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 
@@ -95,18 +96,25 @@ fun rememberTitleScreenStaggerState(enabled: Boolean): AuroraTitleStaggerState {
 
 /**
  * Applies the Deep Zoom Blur Reveal to the background poster / backdrop layer.
- * As the screen opens, the poster smoothly de-blurs from 24dp to 0dp.
+ * As the screen opens, the poster smoothly de-blurs from 24dp to 0dp in graphicsLayer phase.
  */
 fun Modifier.titleScreenPosterEntrance(
     state: AuroraTitleStaggerState?,
 ): Modifier {
     if (state == null) return this
-    val progress = state.posterProgress()
-    val blurRadius = 24.dp * (1f - progress)
-    return if (blurRadius.value > 0.5f) {
-        this.blur(blurRadius)
-    } else {
-        this
+    return graphicsLayer {
+        val progress = state.posterProgress()
+        alpha = (0.4f + 0.6f * progress).coerceIn(0f, 1f)
+        if (progress < 0.999f && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val blurPx = (24.dp.toPx() * (1f - progress)).coerceAtLeast(0.1f)
+            renderEffect = android.graphics.RenderEffect.createBlurEffect(
+                blurPx,
+                blurPx,
+                android.graphics.Shader.TileMode.CLAMP,
+            ).asComposeRenderEffect()
+        } else {
+            renderEffect = null
+        }
     }
 }
 

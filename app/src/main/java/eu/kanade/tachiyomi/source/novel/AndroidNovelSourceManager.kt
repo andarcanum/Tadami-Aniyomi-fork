@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.source.novel
+﻿package eu.kanade.tachiyomi.source.novel
 
 import android.content.Context
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
@@ -6,9 +6,10 @@ import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import tachiyomi.domain.source.novel.repository.NovelStubSourceRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
@@ -35,7 +38,16 @@ class AndroidNovelSourceManager(
     private val _isInitialized = MutableStateFlow(false)
     override val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
 
-    private val scope = CoroutineScope(Job() + dispatcher)
+    // Source registration is best-effort: a failure inside one collector must be logged
+    // instead of crashing the process via the default uncaught handler or leaking into
+    // unrelated threads.
+    private val scope = CoroutineScope(
+        SupervisorJob() +
+            dispatcher +
+            CoroutineExceptionHandler { _, error ->
+                logcat(LogPriority.ERROR, error) { "Novel source registration failed" }
+            },
+    )
 
     private val sourcesMapFlow = MutableStateFlow(ConcurrentHashMap<Long, NovelSource>())
 

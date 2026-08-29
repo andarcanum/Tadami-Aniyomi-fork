@@ -110,22 +110,6 @@ internal fun HomeHubPinnedHeader(
     val colors = AuroraTheme.colors
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
-    val isDarkTheme = colors.background.luminance() < 0.5f
-    val headerTintAlpha = if (colors.isEInk) {
-        0.03f
-    } else {
-        resolveHomeHubHeaderTintAlpha(isDarkTheme = isDarkTheme)
-    }
-    val headerTintSecondaryAlpha = resolveHomeHubHeaderTintSecondaryAlpha(primaryAlpha = headerTintAlpha)
-    val headerBackgroundBrush = remember(colors.accent, headerTintAlpha, headerTintSecondaryAlpha) {
-        Brush.verticalGradient(
-            colors = listOf(
-                colors.accent.copy(alpha = headerTintAlpha),
-                colors.accent.copy(alpha = headerTintSecondaryAlpha),
-                Color.Transparent,
-            ),
-        )
-    }
     Layout(
         content = {
             Column(
@@ -174,7 +158,6 @@ internal fun HomeHubPinnedHeader(
         },
         modifier = Modifier
             .fillMaxWidth()
-            .background(brush = headerBackgroundBrush)
             .clipToBounds(),
         measurePolicy = { measurables, constraints ->
             if (measurables.isEmpty()) {

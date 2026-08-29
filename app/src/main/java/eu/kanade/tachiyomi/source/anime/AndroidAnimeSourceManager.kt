@@ -6,9 +6,10 @@ import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.domain.source.anime.repository.AnimeStubSourceRepository
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
@@ -36,11 +39,24 @@ class AndroidAnimeSourceManager(
 
     private val downloadManager: AnimeDownloadManager by injectLazy()
 
-    private val scope = CoroutineScope(Job() + Dispatchers.IO)
+    // Source registration is best-effort: a failure inside one collector must be logged
+    // instead of crashing the process via the default uncaught handler or leaking into
+    // unrelated threads.
+    private val scope = CoroutineScope(
+        SupervisorJob() +
+            Dispatchers.IO +
+            CoroutineExceptionHandler { _, error ->
+                logcat(LogPriority.ERROR, error) { "Anime source registration failed" }
+            },
+    )
 
     private val sourcesMapFlow = MutableStateFlow(ConcurrentHashMap<Long, AnimeSource>())
 
     private val stubSourcesMap = ConcurrentHashMap<Long, StubAnimeSource>()
+
+    override val sources: Flow<List<AnimeSource>> = sourcesMapFlow.map {
+        it.values.toList()
+    }
 
     override val catalogueSources: Flow<List<AnimeCatalogueSource>> = sourcesMapFlow.map {
         it.values.filterIsInstance<AnimeCatalogueSource>()

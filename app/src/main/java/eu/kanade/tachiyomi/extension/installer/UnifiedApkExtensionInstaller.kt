@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.Flow
 interface UnifiedApkExtensionInstaller {
     fun install(request: ApkInstallRequest): Flow<InstallStep>
 
+    /** Observes the install step tracked in the shared state store for [packageName]. */
+    fun observe(packageName: String): Flow<InstallStep>
+
     fun cancel(packageName: String)
 
     suspend fun uninstall(request: ApkUninstallRequest): ApkInstallResult

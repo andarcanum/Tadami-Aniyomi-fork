@@ -7,6 +7,7 @@ import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.automirrored.outlined.Label
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Info
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.QueryStats
 import androidx.compose.material.icons.outlined.ReportProblem
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SlowMotionVideo
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.VideoSettings
 import androidx.compose.material3.HorizontalDivider
@@ -54,6 +56,7 @@ fun MoreScreen(
     onClickPlayerSettings: () -> Unit,
     onClickMangaReaderSettings: () -> Unit,
     onClickNovelReaderSettings: () -> Unit,
+    onClickNovelQuotes: () -> Unit,
     onClickSettings: () -> Unit,
     onClickAbout: () -> Unit,
     onClickHelp: () -> Unit,
@@ -64,6 +67,8 @@ fun MoreScreen(
     onClickDebugForceLatticeBreach: () -> Unit,
     latticeGridAvailable: Boolean,
     onClickOpenLatticeGrid: () -> Unit,
+    showReelsEntry: Boolean = false,
+    onClickReels: () -> Unit = {},
 ) {
     TutorialScreenEntry(TipAnchor.MORE_TAB)
     Scaffold { contentPadding ->
@@ -100,6 +105,16 @@ fun MoreScreen(
                     icon = navStyle.moreIcon,
                     onPreferenceClick = onClickAlt,
                 )
+            }
+
+            if (showReelsEntry) {
+                item {
+                    TextPreferenceWidget(
+                        title = stringResource(MR.strings.reels_sources_section_header),
+                        icon = Icons.Outlined.SlowMotionVideo,
+                        onPreferenceClick = onClickReels,
+                    )
+                }
             }
 
             item {
@@ -195,6 +210,13 @@ fun MoreScreen(
                     subtitle = stringResource(AYMR.strings.pref_novel_reader_summary),
                     icon = Icons.Outlined.Book,
                     onPreferenceClick = onClickNovelReaderSettings,
+                )
+            }
+            item {
+                TextPreferenceWidget(
+                    title = stringResource(AYMR.strings.novel_quotes_library_title),
+                    icon = Icons.Outlined.FormatQuote,
+                    onPreferenceClick = onClickNovelQuotes,
                 )
             }
             item {

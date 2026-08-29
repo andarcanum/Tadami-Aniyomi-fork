@@ -407,10 +407,13 @@ internal class NovelTranslationController(
         }
     }
 
+    private fun targetTranslationChapterId(): Long? =
+        host.translationActiveChapterId() ?: host.translationCurrentChapter()?.id
+
     private fun novelIdForQueue(): Long = host.translationCurrentChapter()?.novelId ?: 0L
 
     fun stopGeminiTranslation() {
-        val chapter = host.translationCurrentChapter() ?: return
+        val chapterId = targetTranslationChapterId() ?: return
         geminiTranslationJob?.cancel()
         geminiTranslationJob = null
         updateState {
@@ -420,9 +423,9 @@ internal class NovelTranslationController(
                 geminiTranslationProgress = 0,
             )
         }
-        addAiTranslationLog("?? Stop requested")
+        addAiTranslationLog("⏹️ Stop requested")
         host.translationScope.launch(Dispatchers.IO) {
-            val wasActive = translationQueueManager.cancelChapter(chapter.id)
+            val wasActive = translationQueueManager.cancelChapter(chapterId)
             val appContext = Injekt.get<Application>()
             if (wasActive) {
                 TranslationJob.stop(appContext)
@@ -439,7 +442,7 @@ internal class NovelTranslationController(
         if (host.translationHolderIsEmpty("gemini")) return
         updateState { it.copy(isGeminiTranslationVisible = !it.isGeminiTranslationVisible) }
         addAiTranslationLog(
-            "??? Visibility: ${if (state.isGeminiTranslationVisible) "ON" else "OFF"}",
+            "👁️ Visibility: ${if (state.isGeminiTranslationVisible) "ON" else "OFF"}",
         )
         // Book mode shows its own document, so re-rendering the chapter reader alone left the
         // translated markup on screen and the button looked dead.
@@ -449,7 +452,7 @@ internal class NovelTranslationController(
     }
 
     fun clearGeminiTranslation() {
-        val chapter = host.translationCurrentChapter() ?: return
+        val chapterId = targetTranslationChapterId() ?: return
         if (state.isGeminiTranslating) {
             stopGeminiTranslation()
         }
@@ -464,8 +467,8 @@ internal class NovelTranslationController(
                 hasGeminiTranslationCache = false,
             )
         }
-        NovelReaderTranslationDiskCacheStore.remove(chapter.id)
-        addAiTranslationLog("??? Cleared chapter cache")
+        NovelReaderTranslationDiskCacheStore.remove(chapterId)
+        addAiTranslationLog("🗑️ Cleared chapter cache")
         host.translationRefreshBookModeTranslationVariant()
         val settings = host.translationReaderSettings() ?: return
         host.translationUpdateContent(settings)
@@ -568,7 +571,7 @@ internal class NovelTranslationController(
                     .filterValues { translated -> translated.isNotBlank() }
                 addGoogleLog(
                     "Finished: translatedSegments=${results.values.count { it.isNotBlank() }}/" +
-                        "$baseTextBlocks.size, rateLimited=false",
+                        "${baseTextBlocks.size}, rateLimited=false",
                 )
                 host.translationHolderPut("google", results)
                 googleSessionCache.put(
@@ -634,7 +637,7 @@ internal class NovelTranslationController(
     }
 
     fun clearGoogleTranslation() {
-        val chapter = host.translationCurrentChapter() ?: return
+        val chapterId = targetTranslationChapterId() ?: return
         googleTranslationJob?.cancel()
         googleTranslationJob = null
         host.translationHolderClear("google")
@@ -650,7 +653,7 @@ internal class NovelTranslationController(
             )
         }
         googleSessionCache.remove(
-            chapterId = chapter.id,
+            chapterId = chapterId,
             sourceLang = host.translationReaderSettings()?.googleTranslationSourceLang ?: "auto",
             targetLang = host.translationReaderSettings()?.googleTranslationTargetLang ?: "Russian",
         )
@@ -660,9 +663,9 @@ internal class NovelTranslationController(
     }
 
     private fun restoreGoogleTranslationFromSessionCache(settings: NovelReaderSettings) {
-        val chapter = host.translationCurrentChapter() ?: return
+        val chapterId = targetTranslationChapterId() ?: return
         val cached = googleSessionCache.get(
-            chapterId = chapter.id,
+            chapterId = chapterId,
             sourceLang = settings.googleTranslationSourceLang,
             targetLang = settings.googleTranslationTargetLang,
         )
@@ -709,9 +712,9 @@ internal class NovelTranslationController(
 
     fun clearAllGeminiTranslationCache() {
         NovelReaderTranslationDiskCacheStore.clear()
-        addAiTranslationLog("??? Clear ALL cache")
-        val chapter = host.translationCurrentChapter() ?: return
-        if (NovelReaderTranslationDiskCacheStore.get(chapter.id) == null) {
+        addAiTranslationLog("🗑️ Clear ALL cache")
+        val chapterId = targetTranslationChapterId() ?: return
+        if (NovelReaderTranslationDiskCacheStore.get(chapterId) == null) {
             updateState { it.copy(hasGeminiTranslationCache = false) }
         }
     }

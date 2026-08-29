@@ -387,6 +387,14 @@ internal fun achievementTextResourceRefs(achievementId: String): AchievementText
             AYMR.strings.achievement_secret_weeb_awakening_hint_obvious,
         )
 
+        "save_5_quotes" -> text(
+            AYMR.strings.achievement_save_5_quotes_title,
+            AYMR.strings.achievement_save_5_quotes_desc,
+            AYMR.strings.achievement_save_5_quotes_hint_vague,
+            AYMR.strings.achievement_save_5_quotes_hint_direct,
+            AYMR.strings.achievement_save_5_quotes_hint_obvious,
+        )
+
         else -> AchievementTextResourceRefs(
             title = null,
             description = null,

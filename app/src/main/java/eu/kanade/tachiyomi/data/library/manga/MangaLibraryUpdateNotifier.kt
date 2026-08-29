@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloader
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailureNotificationFormatter
+import eu.kanade.tachiyomi.data.library.ProgressPostThrottle
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
@@ -50,12 +51,22 @@ class MangaLibraryUpdateNotifier(
 
     private val securityPreferences: SecurityPreferences = Injekt.get(),
     private val sourceManager: MangaSourceManager = Injekt.get(),
+    /**
+     * Library update jobs run in parallel, so each media posts its progress under its own id.
+     * The manga metadata job overrides this with its own dedicated id.
+     */
+    val progressNotificationId: Int = Notifications.ID_MANGA_LIBRARY_UPDATE_PROGRESS,
 ) {
 
     private val percentFormatter = NumberFormat.getPercentInstance().apply {
         roundingMode = RoundingMode.DOWN
         maximumFractionDigits = 0
     }
+
+    // Rate-limits the two-per-entry progress posts of long runs.
+    private val progressThrottle = ProgressPostThrottle(
+        ProgressPostThrottle.DEFAULT_PROGRESS_INTERVAL_MILLIS,
+    )
 
     /**
      * Pending intent of action that cancels the library update
@@ -97,6 +108,8 @@ class MangaLibraryUpdateNotifier(
      * @param total the total progress.
      */
     fun showProgressNotification(manga: List<Manga>, current: Int, total: Int) {
+        if (!progressThrottle.shouldPostNow()) return
+
         progressNotificationBuilder
             .setContentTitle(
                 context.stringResource(
@@ -111,7 +124,7 @@ class MangaLibraryUpdateNotifier(
         }
 
         context.notify(
-            Notifications.ID_LIBRARY_PROGRESS,
+            progressNotificationId,
             progressNotificationBuilder
                 .setProgress(total, current, false)
                 .build(),
@@ -323,7 +336,7 @@ class MangaLibraryUpdateNotifier(
      * Cancels the progress notification.
      */
     fun cancelProgressNotification() {
-        context.cancelNotification(Notifications.ID_LIBRARY_PROGRESS)
+        context.cancelNotification(progressNotificationId)
     }
 
     private suspend fun getMangaIcon(manga: Manga): Bitmap? {

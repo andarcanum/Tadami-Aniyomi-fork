@@ -362,6 +362,89 @@ class DefaultNovelExtensionManagerTest {
         event.candidate?.versionCode shouldBe 3
     }
 
+    @Test
+    fun `reportSignatureMismatch prefers the newest candidate over repo listing order`() = runTest {
+        val repo = FakePluginRepository()
+        val api = FakePluginApi(
+            listOf(
+                // The first-listed repo carries an older variant: selection must not depend
+                // on listing order.
+                availablePlugin(versionCode = 2, repoUrl = "https://repo.one"),
+                availablePlugin(versionCode = 3, repoUrl = "https://repo.two"),
+            ),
+        )
+        val installer = FakePluginInstaller(repo)
+        val sourceFactory = FakeSourceFactory()
+        val manager = DefaultNovelExtensionManager(repo, api, installer, sourceFactory)
+        repo.upsert(installedPlugin(versionCode = 1, repoUrl = "https://repo.one"))
+
+        manager.refreshAvailablePlugins()
+        manager.availablePluginsFlow.first { it.isNotEmpty() }
+        manager.installedPluginsFlow.first { it.isNotEmpty() }
+
+        val eventDeferred = async { manager.signatureMismatchEvents.first() }
+        yield()
+        manager.reportSignatureMismatch("one")
+
+        eventDeferred.await().candidate?.versionCode shouldBe 3
+    }
+
+    @Test
+    fun `reportSignatureMismatch never offers a variant older than the installed one`() = runTest {
+        val repo = FakePluginRepository()
+        val api = FakePluginApi(
+            listOf(availablePlugin(versionCode = 2, repoUrl = "https://repo.one")),
+        )
+        val installer = FakePluginInstaller(repo)
+        val sourceFactory = FakeSourceFactory()
+        val manager = DefaultNovelExtensionManager(repo, api, installer, sourceFactory)
+        repo.upsert(installedPlugin(versionCode = 5, repoUrl = "https://repo.one"))
+
+        manager.refreshAvailablePlugins()
+        manager.availablePluginsFlow.first { it.isNotEmpty() }
+        manager.installedPluginsFlow.first { it.isNotEmpty() }
+
+        val eventDeferred = async { manager.signatureMismatchEvents.first() }
+        yield()
+        manager.reportSignatureMismatch("one")
+
+        val event = eventDeferred.await()
+        event.candidate shouldBe null
+        event.displayName shouldBe "One"
+    }
+
+    private fun availablePlugin(versionCode: Int, repoUrl: String) = NovelPlugin.Available(
+        id = "one",
+        name = "One",
+        site = "https://one.example",
+        lang = "ru",
+        versionCode = versionCode,
+        versionName = "$versionCode.0",
+        url = "https://one.example/plugin.js",
+        iconUrl = null,
+        customJs = null,
+        customCss = null,
+        hasSettings = false,
+        sha256 = "aaa",
+        repoUrl = repoUrl,
+    )
+
+    private fun installedPlugin(versionCode: Int, repoUrl: String) = NovelPlugin.Installed(
+        id = "one",
+        name = "One",
+        site = "https://one.example",
+        lang = "ru",
+        versionCode = versionCode,
+        versionName = "$versionCode.0",
+        url = "https://one.example/plugin.js",
+        iconUrl = null,
+        customJs = null,
+        customCss = null,
+        hasSettings = false,
+        sha256 = "aaa",
+        repoUrl = repoUrl,
+    )
+
     private class FakePluginInstaller(
         private val repository: NovelPluginRepository,
     ) : NovelPluginInstallerFacade {

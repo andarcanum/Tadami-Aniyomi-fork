@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.data.download.novel
 
+import io.kotest.matchers.comparables.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
@@ -39,12 +40,46 @@ class NovelDownloadQueueManagerTest {
     fun `runtime state starts worker only once until released`() {
         val runtime = NovelDownloadQueueRuntimeState()
 
-        runtime.tryStartWorker() shouldBe true
-        runtime.tryStartWorker() shouldBe false
+        val generation = runtime.tryStartWorker()
+        generation shouldBeGreaterThan 0L
+        runtime.tryStartWorker() shouldBe NovelDownloadQueueRuntimeState.WORKER_GENERATION_NONE
 
-        runtime.markWorkerStopped()
+        runtime.releaseWorker(generation)
 
-        runtime.tryStartWorker() shouldBe true
+        runtime.tryStartWorker() shouldBeGreaterThan 0L
+    }
+
+    @Test
+    fun `stale generation release does not clear active worker latch`() {
+        val runtime = NovelDownloadQueueRuntimeState()
+
+        val firstGeneration = runtime.tryStartWorker()
+        runtime.releaseWorker(firstGeneration)
+
+        val secondGeneration = runtime.tryStartWorker()
+        secondGeneration shouldBeGreaterThan firstGeneration
+
+        runtime.releaseWorker(firstGeneration)
+
+        runtime.tryStartWorker() shouldBe NovelDownloadQueueRuntimeState.WORKER_GENERATION_NONE
+
+        runtime.releaseWorker(secondGeneration)
+        runtime.tryStartWorker() shouldBeGreaterThan 0L
+    }
+
+    @Test
+    fun `release with unknown or none generation is a no-op`() {
+        val runtime = NovelDownloadQueueRuntimeState()
+
+        val generation = runtime.tryStartWorker()
+
+        runtime.releaseWorker(NovelDownloadQueueRuntimeState.WORKER_GENERATION_NONE)
+        runtime.releaseWorker(generation + 100L)
+
+        runtime.tryStartWorker() shouldBe NovelDownloadQueueRuntimeState.WORKER_GENERATION_NONE
+
+        runtime.releaseWorker(generation)
+        runtime.tryStartWorker() shouldBeGreaterThan 0L
     }
 
     @Test
@@ -161,6 +196,22 @@ class NovelDownloadQueueManagerTest {
             job.cancelAndJoin()
             job.isCancelled shouldBe true
         }
+    }
+
+    @Test
+    fun `clear queue cancel set includes every task regardless of status`() {
+        val runtime = NovelDownloadQueueRuntimeState()
+        val tasks = listOf(
+            queuedTask(status = NovelQueuedDownloadStatus.DOWNLOADING).copy(taskId = 1L),
+            queuedTask(status = NovelQueuedDownloadStatus.QUEUED).copy(taskId = 2L),
+            queuedTask(status = NovelQueuedDownloadStatus.FAILED).copy(taskId = 3L),
+        )
+
+        runtime.markCanceled(novelQueueTaskIdsToCancelOnClear(tasks))
+
+        runtime.consumeCanceled(1L) shouldBe true
+        runtime.consumeCanceled(2L) shouldBe true
+        runtime.consumeCanceled(3L) shouldBe true
     }
 
     @Test

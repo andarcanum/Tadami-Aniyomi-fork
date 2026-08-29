@@ -17,6 +17,9 @@ import tachiyomi.domain.category.anime.interactor.SetAnimeCategories
 import tachiyomi.domain.entries.anime.interactor.NetworkToLocalAnime
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeUpdate
+import tachiyomi.domain.history.anime.interactor.GetAnimeHistory
+import tachiyomi.domain.history.anime.interactor.UpsertAnimeHistory
+import tachiyomi.domain.history.anime.model.AnimeHistoryUpdate
 import tachiyomi.domain.items.episode.interactor.GetEpisodesByAnimeId
 import tachiyomi.domain.items.episode.interactor.UpdateEpisode
 import tachiyomi.domain.items.episode.model.toEpisodeUpdate
@@ -47,6 +50,8 @@ class MigrateAnimeUseCase(
     private val coverCache: AnimeCoverCache = Injekt.get(),
     private val backgroundCache: AnimeBackgroundCache = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
+    private val getHistory: GetAnimeHistory = Injekt.get(),
+    private val upsertHistory: UpsertAnimeHistory = Injekt.get(),
 ) {
 
     private val enhancedServices by lazy {
@@ -88,9 +93,9 @@ class MigrateAnimeUseCase(
     ) {
         val migrateEpisodes = AnimeMigrationFlags.hasEpisodes(flags)
         val migrateCategories = AnimeMigrationFlags.hasCategories(flags)
+        val deleteDownloaded = AnimeMigrationFlags.hasDeleteDownloaded(flags)
         val migrateCustomCover = AnimeMigrationFlags.hasCustomCover(flags)
         val migrateCustomBackground = AnimeMigrationFlags.hasCustomBackground(flags)
-        val deleteDownloaded = AnimeMigrationFlags.hasDeleteDownloaded(flags)
 
         try {
             syncEpisodesWithSource.await(sourceEpisodes, newAnime, newSource)
@@ -106,6 +111,8 @@ class MigrateAnimeUseCase(
             val maxEpisodeSeen = prevAnimeEpisodes
                 .filter { it.seen }
                 .maxOfOrNull { it.episodeNumber }
+            val prevHistoryByEpisodeId = getHistory.await(oldAnime.id).associateBy { it.episodeId }
+            val historyUpdates = mutableListOf<AnimeHistoryUpdate>()
 
             val updatedAnimeEpisodes = animeEpisodes.map { animeEpisode ->
                 var updatedEpisode = animeEpisode
@@ -115,12 +122,20 @@ class MigrateAnimeUseCase(
 
                     if (prevEpisode != null) {
                         updatedEpisode = updatedEpisode.copy(
+                            seen = prevEpisode.seen,
                             dateFetch = prevEpisode.dateFetch,
                             bookmark = prevEpisode.bookmark,
+                            fillermark = prevEpisode.fillermark,
+                            lastSecondSeen = prevEpisode.lastSecondSeen,
+                            totalSeconds = prevEpisode.totalSeconds,
                         )
-                    }
-
-                    if (maxEpisodeSeen != null && updatedEpisode.episodeNumber <= maxEpisodeSeen) {
+                        prevHistoryByEpisodeId[prevEpisode.id]?.let { prevHistory ->
+                            historyUpdates += AnimeHistoryUpdate(
+                                episodeId = animeEpisode.id,
+                                seenAt = prevHistory.seenAt ?: return@let,
+                            )
+                        }
+                    } else if (maxEpisodeSeen != null && updatedEpisode.episodeNumber <= maxEpisodeSeen) {
                         updatedEpisode = updatedEpisode.copy(seen = true)
                     }
                 }
@@ -130,6 +145,7 @@ class MigrateAnimeUseCase(
 
             val episodeUpdates = updatedAnimeEpisodes.map { it.toEpisodeUpdate() }
             updateEpisode.awaitAll(episodeUpdates)
+            historyUpdates.forEach { upsertHistory.await(it) }
         }
 
         // Update categories
@@ -161,10 +177,6 @@ class MigrateAnimeUseCase(
             }
         }
 
-        if (replace) {
-            updateAnime.awaitUpdateFavorite(oldAnime.id, favorite = false)
-        }
-
         // Update custom cover (recheck if custom cover exists)
         if (migrateCustomCover && oldAnime.hasCustomCover(coverCache)) {
             coverCache.setCustomCoverToCache(
@@ -181,6 +193,7 @@ class MigrateAnimeUseCase(
             )
         }
 
+        // Add/favorite new entry first to guarantee no data loss if subsequent operations fail
         updateAnime.await(
             AnimeUpdate(
                 id = newAnime.id,
@@ -190,5 +203,9 @@ class MigrateAnimeUseCase(
                 dateAdded = if (replace) oldAnime.dateAdded else Instant.now().toEpochMilli(),
             ),
         )
+
+        if (replace) {
+            updateAnime.awaitUpdateFavorite(oldAnime.id, favorite = false)
+        }
     }
 }

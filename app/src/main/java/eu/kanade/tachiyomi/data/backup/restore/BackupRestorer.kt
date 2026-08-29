@@ -34,6 +34,7 @@ import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelExtensionStoreRest
 import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.NovelSeriesRestorer
 import eu.kanade.tachiyomi.data.backup.restore.restorers.PreferenceRestorer
+import eu.kanade.tachiyomi.data.backup.restore.restorers.ReelsFavoritesRestorer
 import eu.kanade.tachiyomi.util.system.createFileInCacheDir
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
@@ -78,6 +79,7 @@ class BackupRestorer(
     private val mangaSeriesRestorer: MangaSeriesRestorer = MangaSeriesRestorer(),
     private val novelSeriesRestorer: NovelSeriesRestorer = NovelSeriesRestorer(),
     private val feedRestorer: FeedRestorer = FeedRestorer(),
+    private val reelsFavoritesRestorer: ReelsFavoritesRestorer = ReelsFavoritesRestorer(),
     private val extensionsRestorer: ExtensionsRestorer = ExtensionsRestorer(context),
     private val achievementRestorer: AchievementRestorer = AchievementRestorer(),
 ) {
@@ -323,6 +325,11 @@ class BackupRestorer(
             // Restore feeds (always if present in backup)
             if (backup.backupFeeds.isNotEmpty()) {
                 feedRestorer.restoreFeeds(backup.backupFeeds)
+            }
+
+            // Restore reels favorites when the user kept the option enabled
+            if (options.reelsFavorites && backup.backupReelsFavorites.isNotEmpty()) {
+                reelsFavoritesRestorer.restoreReelsFavorites(backup.backupReelsFavorites)
             }
 
             // Restore achievements if option enabled

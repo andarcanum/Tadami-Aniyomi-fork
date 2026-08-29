@@ -233,12 +233,12 @@ class HomeHubHeaderBehaviorTest {
 
     @Test
     fun `resolveHomeHubHeaderTintAlpha returns expected dark value`() {
-        resolveHomeHubHeaderTintAlpha(isDarkTheme = true) shouldBe 0.12f
+        resolveHomeHubHeaderTintAlpha(isDarkTheme = true) shouldBe 0f
     }
 
     @Test
     fun `resolveHomeHubHeaderTintAlpha returns expected light value`() {
-        resolveHomeHubHeaderTintAlpha(isDarkTheme = false) shouldBe 0.06f
+        resolveHomeHubHeaderTintAlpha(isDarkTheme = false) shouldBe 0f
     }
 
     @Test

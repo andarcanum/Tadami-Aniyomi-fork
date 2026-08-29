@@ -23,4 +23,16 @@
         <item quantity="many">%d глав</item>
         <item quantity="other">%d главы</item>
     </plurals>
+    <plurals name="novel_quotes_count_quotes">
+        <item quantity="one">%d цитата</item>
+        <item quantity="few">%d цитаты</item>
+        <item quantity="many">%d цитат</item>
+        <item quantity="other">%d цитаты</item>
+    </plurals>
+    <plurals name="novel_quotes_count_books">
+        <item quantity="one">%d книга</item>
+        <item quantity="few">%d книги</item>
+        <item quantity="many">%d книг</item>
+        <item quantity="other">%d книги</item>
+    </plurals>
 </resources>

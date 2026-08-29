@@ -113,7 +113,7 @@ fun resolveAuroraControlContainerColor(colors: AuroraColors): Color {
         }
         EInkProfile.COLOR -> resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass)
         EInkProfile.OFF -> if (colors.isDark) {
-            Color.White.copy(alpha = 0.05f)
+            Color.White.copy(alpha = 0.035f)
         } else {
             resolveAuroraSurfaceColor(colors, AuroraSurfaceLevel.Glass)
         }

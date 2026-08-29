@@ -39,6 +39,8 @@ data class BackupNovel(
      * detect that the book must be rebuilt travel with the backup.
      */
     @ProtoNumber(900) var bookState: BackupNovelBookState? = null,
+    /** Saved text highlights; chapters travel by URL (see [BackupNovelHighlight]). */
+    @ProtoNumber(901) var highlights: List<BackupNovelHighlight> = emptyList(),
 ) {
     fun getNovelImpl(): Novel {
         return Novel.create().copy(

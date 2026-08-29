@@ -19,7 +19,20 @@ data class NovelSelectedTextAnchor(
 enum class SelectedTextAction {
     DICTIONARY,
     TRANSLATION,
+    HIGHLIGHT,
 }
+
+/**
+ * Persistent address of a saved selection: character offsets inside one block of one chapter.
+ * The same addressing the TTS sync uses (`NovelBlockAnchor` / `data-an-b`), so every renderer
+ * resolves the highlight to the same text.
+ */
+data class NovelSelectionAnchor(
+    val chapterId: Long,
+    val blockIndex: Int,
+    val charStart: Int,
+    val charEndExclusive: Int,
+)
 
 data class NovelSelectedTextSelection(
     val sessionId: Long,
@@ -27,6 +40,8 @@ data class NovelSelectedTextSelection(
     val text: String,
     val anchor: NovelSelectedTextAnchor,
     val triggerAction: SelectedTextAction? = null,
+    /** Persistent block address of the selection, when the renderer could capture one. */
+    val selectionAnchor: NovelSelectionAnchor? = null,
 ) {
     val normalizedText: String = normalizeNovelSelectedText(text)
 

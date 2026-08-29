@@ -17,8 +17,11 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.category.visualName
+import eu.kanade.presentation.more.settings.CUSTOM_UPDATE_INTERVAL_ENTRY
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.PreferenceItem
+import eu.kanade.presentation.more.settings.customUpdateIntervalSubtitle
+import eu.kanade.presentation.more.settings.widget.CustomUpdateIntervalDialog
 import eu.kanade.presentation.more.settings.widget.TriStateListDialog
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
@@ -54,6 +57,14 @@ import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+/** Which interval preference opened the custom-interval slider dialog. */
+private enum class UpdateIntervalTarget {
+    GLOBAL,
+    ANIME,
+    MANGA,
+    NOVEL,
+}
 
 object SettingsLibraryScreen : SearchableSettings {
 
@@ -203,6 +214,13 @@ object SettingsLibraryScreen : SearchableSettings {
 
         val autoUpdateIntervalPref = libraryPreferences.autoUpdateInterval()
         val autoUpdateInterval by autoUpdateIntervalPref.collectAsStateWithLifecycle()
+        val animeAutoUpdateIntervalPref = libraryPreferences.animeUpdateInterval()
+        val mangaAutoUpdateIntervalPref = libraryPreferences.mangaUpdateInterval()
+        val novelAutoUpdateIntervalPref = libraryPreferences.novelUpdateInterval()
+        val animeUpdateInterval by animeAutoUpdateIntervalPref.collectAsStateWithLifecycle()
+        val mangaUpdateInterval by mangaAutoUpdateIntervalPref.collectAsStateWithLifecycle()
+        val novelUpdateInterval by novelAutoUpdateIntervalPref.collectAsStateWithLifecycle()
+        var customIntervalTarget by rememberSaveable { mutableStateOf<UpdateIntervalTarget?>(null) }
         val autoUpdateDeviceRestrictionsPref = libraryPreferences.autoUpdateDeviceRestrictions()
         val autoUpdateWifiAndChargingOnlyPref = libraryPreferences.autoUpdateWifiAndChargingOnly()
         val autoUpdateWifiAndChargingOnly by autoUpdateWifiAndChargingOnlyPref.collectAsStateWithLifecycle()
@@ -287,14 +305,48 @@ object SettingsLibraryScreen : SearchableSettings {
             )
         }
 
+        customIntervalTarget?.let { target ->
+            val currentHours = when (target) {
+                UpdateIntervalTarget.GLOBAL -> autoUpdateInterval
+                UpdateIntervalTarget.ANIME -> animeUpdateInterval
+                UpdateIntervalTarget.MANGA -> mangaUpdateInterval
+                UpdateIntervalTarget.NOVEL -> novelUpdateInterval
+            }
+            CustomUpdateIntervalDialog(
+                initialHours = currentHours,
+                onDismiss = { customIntervalTarget = null },
+                onConfirm = { hours ->
+                    when (target) {
+                        UpdateIntervalTarget.GLOBAL -> {
+                            autoUpdateIntervalPref.set(hours)
+                            MangaLibraryUpdateJob.setupTask(context, hours)
+                            AnimeLibraryUpdateJob.setupTask(context, hours)
+                            NovelLibraryUpdateJob.setupTask(context, hours)
+                        }
+                        UpdateIntervalTarget.ANIME -> animeAutoUpdateIntervalPref.set(hours)
+                        UpdateIntervalTarget.MANGA -> mangaAutoUpdateIntervalPref.set(hours)
+                        UpdateIntervalTarget.NOVEL -> novelAutoUpdateIntervalPref.set(hours)
+                    }
+                    if (target != UpdateIntervalTarget.GLOBAL) {
+                        ContextCompat.getMainExecutor(context).execute {
+                            MangaLibraryUpdateJob.setupTask(context)
+                        }
+                    }
+                    customIntervalTarget = null
+                },
+            )
+        }
+
         val categoryIntervalEntries = persistentMapOf(
             -2 to stringResource(AYMR.strings.update_use_general),
             0 to stringResource(MR.strings.update_never),
+            6 to stringResource(MR.strings.update_6hour),
             12 to stringResource(MR.strings.update_12hour),
             24 to stringResource(MR.strings.update_24hour),
             48 to stringResource(MR.strings.update_48hour),
             72 to stringResource(MR.strings.update_72hour),
             168 to stringResource(MR.strings.update_weekly),
+            CUSTOM_UPDATE_INTERVAL_ENTRY to stringResource(MR.strings.update_interval_custom),
         )
 
         return Preference.PreferenceGroup(
@@ -305,51 +357,89 @@ object SettingsLibraryScreen : SearchableSettings {
                     entries = persistentMapOf(
                         0 to stringResource(MR.strings.update_never),
                         -1 to stringResource(MR.strings.update_on_app_start),
+                        6 to stringResource(MR.strings.update_6hour),
                         12 to stringResource(MR.strings.update_12hour),
                         24 to stringResource(MR.strings.update_24hour),
                         48 to stringResource(MR.strings.update_48hour),
                         72 to stringResource(MR.strings.update_72hour),
                         168 to stringResource(MR.strings.update_weekly),
+                        CUSTOM_UPDATE_INTERVAL_ENTRY to stringResource(MR.strings.update_interval_custom),
                     ),
                     title = stringResource(MR.strings.pref_library_update_interval),
+                    subtitleProvider = { value, entries ->
+                        entries[value]
+                            ?: customUpdateIntervalSubtitle(value, stringResource(MR.strings.update_every_hours))
+                    },
                     onValueChanged = {
-                        MangaLibraryUpdateJob.setupTask(context, it)
-                        AnimeLibraryUpdateJob.setupTask(context, it)
-                        NovelLibraryUpdateJob.setupTask(context, it)
-                        true
+                        if (it == CUSTOM_UPDATE_INTERVAL_ENTRY) {
+                            customIntervalTarget = UpdateIntervalTarget.GLOBAL
+                            false
+                        } else {
+                            MangaLibraryUpdateJob.setupTask(context, it)
+                            AnimeLibraryUpdateJob.setupTask(context, it)
+                            NovelLibraryUpdateJob.setupTask(context, it)
+                            true
+                        }
                     },
                 ),
                 Preference.PreferenceItem.ListPreference(
-                    preference = libraryPreferences.animeUpdateInterval(),
+                    preference = animeAutoUpdateIntervalPref,
                     entries = categoryIntervalEntries,
                     title = stringResource(AYMR.strings.pref_anime_library_update_interval_category),
+                    subtitleProvider = { value, entries ->
+                        entries[value]
+                            ?: customUpdateIntervalSubtitle(value, stringResource(MR.strings.update_every_hours))
+                    },
                     onValueChanged = {
-                        ContextCompat.getMainExecutor(context).execute {
-                            MangaLibraryUpdateJob.setupTask(context)
+                        if (it == CUSTOM_UPDATE_INTERVAL_ENTRY) {
+                            customIntervalTarget = UpdateIntervalTarget.ANIME
+                            false
+                        } else {
+                            ContextCompat.getMainExecutor(context).execute {
+                                MangaLibraryUpdateJob.setupTask(context)
+                            }
+                            true
                         }
-                        true
                     },
                 ),
                 Preference.PreferenceItem.ListPreference(
-                    preference = libraryPreferences.mangaUpdateInterval(),
+                    preference = mangaAutoUpdateIntervalPref,
                     entries = categoryIntervalEntries,
                     title = stringResource(AYMR.strings.pref_manga_library_update_interval_category),
+                    subtitleProvider = { value, entries ->
+                        entries[value]
+                            ?: customUpdateIntervalSubtitle(value, stringResource(MR.strings.update_every_hours))
+                    },
                     onValueChanged = {
-                        ContextCompat.getMainExecutor(context).execute {
-                            MangaLibraryUpdateJob.setupTask(context)
+                        if (it == CUSTOM_UPDATE_INTERVAL_ENTRY) {
+                            customIntervalTarget = UpdateIntervalTarget.MANGA
+                            false
+                        } else {
+                            ContextCompat.getMainExecutor(context).execute {
+                                MangaLibraryUpdateJob.setupTask(context)
+                            }
+                            true
                         }
-                        true
                     },
                 ),
                 Preference.PreferenceItem.ListPreference(
-                    preference = libraryPreferences.novelUpdateInterval(),
+                    preference = novelAutoUpdateIntervalPref,
                     entries = categoryIntervalEntries,
                     title = stringResource(AYMR.strings.pref_novel_library_update_interval_category),
+                    subtitleProvider = { value, entries ->
+                        entries[value]
+                            ?: customUpdateIntervalSubtitle(value, stringResource(MR.strings.update_every_hours))
+                    },
                     onValueChanged = {
-                        ContextCompat.getMainExecutor(context).execute {
-                            MangaLibraryUpdateJob.setupTask(context)
+                        if (it == CUSTOM_UPDATE_INTERVAL_ENTRY) {
+                            customIntervalTarget = UpdateIntervalTarget.NOVEL
+                            false
+                        } else {
+                            ContextCompat.getMainExecutor(context).execute {
+                                MangaLibraryUpdateJob.setupTask(context)
+                            }
+                            true
                         }
-                        true
                     },
                 ),
                 Preference.PreferenceItem.SwitchPreference(

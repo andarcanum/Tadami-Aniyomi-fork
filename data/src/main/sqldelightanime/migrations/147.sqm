@@ -1,0 +1,8 @@
+-- 146.sqm originally created reels_favorites without has_audio on devices that installed
+-- an intermediate build. Add the column for those installs; fresh installs get it from the
+-- CREATE TABLE definition. DEFAULT 0 keeps existing rows valid (NOT NULL).
+ALTER TABLE reels_favorites ADD COLUMN has_audio INTEGER NOT NULL DEFAULT 0;
+
+-- Same index as the fresh-install schema (reels_favorites.sq): per-source favorites
+-- lookups filter on source_id and need an index.
+CREATE INDEX IF NOT EXISTS reels_favorites_source_id_index ON reels_favorites(source_id);

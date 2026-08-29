@@ -147,6 +147,7 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.runningFold
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeCover
@@ -259,16 +260,25 @@ fun AnimeScreenAuroraImpl(
         }
     }
 
-    val distinctVirtualSeasons = remember(episodes) {
+    // Cheap content signature (ids + names + numbers): keeps the regex-heavy season
+    // classification below from re-running on download/selection ticks that merely
+    // swap the list instance without changing classified fields.
+    val seasonsSignature = remember(episodes) {
+        var hash = 7
+        for (item in episodes) {
+            val episode = (item as? EpisodeList.Item)?.episode ?: continue
+            hash = hash * 31 + episode.id.hashCode()
+            hash = hash * 31 + episode.name.hashCode()
+            hash = hash * 31 + episode.episodeNumber.hashCode()
+        }
+        hash
+    }
+
+    val distinctVirtualSeasons = remember(seasonsSignature) {
         val items = episodes.filterIsInstance<EpisodeList.Item>()
         if (items.isEmpty()) {
             emptyList<String>()
         } else {
-            val seasonRegex = Regex("""(?i)(?:^|\b|\s|\[|_)(?:s|season\s*)(\d+)(?:\s|e|x|\||-|\.|\b|\]|_|$)""")
-            val specialKeywordsRegex =
-                Regex(
-                    """(?i)\b(ova|oav|ona|movie|pv|trailer|bonus|recap|summary|prologue|extra|special|omake|teaser|clip|interview|preview)s?\b""",
-                )
             val seasonsList = items.map { item ->
                 val name = item.episode.name
                 val num = item.episode.episodeNumber
@@ -322,16 +332,11 @@ fun AnimeScreenAuroraImpl(
         }
     }
 
-    val episodeIdToVirtualSeason = remember(episodes) {
+    val episodeIdToVirtualSeason = remember(seasonsSignature) {
         val items = episodes.filterIsInstance<EpisodeList.Item>()
         if (items.isEmpty()) {
             emptyMap<Long, String>()
         } else {
-            val seasonRegex = Regex("""(?i)(?:^|\b|\s|\[|_)(?:s|season\s*)(\d+)(?:\s|e|x|\||-|\.|\b|\]|_|$)""")
-            val specialKeywordsRegex =
-                Regex(
-                    """(?i)\b(ova|oav|ona|movie|pv|trailer|bonus|recap|summary|prologue|extra|special|omake|teaser|clip|interview|preview)s?\b""",
-                )
             items.associate { item ->
                 val name = item.episode.name
                 val num = item.episode.episodeNumber
@@ -446,8 +451,11 @@ fun AnimeScreenAuroraImpl(
     }
 
     val lazyListState = rememberLazyListState()
-    val scrollOffset by remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
-    val firstVisibleItemIndex by remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
+    // Scroll values are exposed as State and read only inside the smallest consumer scopes
+    // (poster background, hero layer, top bar row) so per-pixel scroll updates do not
+    // recompose the whole screen.
+    val scrollOffsetState = remember { derivedStateOf { lazyListState.firstVisibleItemScrollOffset } }
+    val firstVisibleItemIndexState = remember { derivedStateOf { lazyListState.firstVisibleItemIndex } }
     val context = LocalContext.current
     val animeDetailsSnapshot = remember(
         anime,
@@ -596,6 +604,8 @@ fun AnimeScreenAuroraImpl(
         Injekt.get<eu.kanade.domain.ui.UiPreferences>().metadataAuthHintShown()
     }
     var metadataHintDismissed by remember { mutableStateOf(false) }
+    val authHintMessage = stringResource(AYMR.strings.metadata_auth_hint_message)
+    val authHintAction = stringResource(AYMR.strings.metadata_auth_hint_action)
 
     // One-time Snackbar when metadata source is not authenticated
     LaunchedEffect(state.metadataError) {
@@ -605,8 +615,8 @@ fun AnimeScreenAuroraImpl(
             onTrackingClicked != null
         ) {
             val result = snackbarHostState.showSnackbar(
-                message = "Авторизуйтесь в сервисе для рейтинга, типа и обложки",
-                actionLabel = "Войти",
+                message = authHintMessage,
+                actionLabel = authHintAction,
                 withDismissAction = true, // Add dismiss button
                 duration = SnackbarDuration.Long,
             )
@@ -617,7 +627,6 @@ fun AnimeScreenAuroraImpl(
                 }
                 SnackbarResult.Dismissed -> {
                     metadataHintDismissed = true
-                    metadataAuthHintShown.set(true) // Don't show again
                 }
             }
         }
@@ -699,8 +708,8 @@ fun AnimeScreenAuroraImpl(
             if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
                 FullscreenPosterBackground(
                     anime = anime,
-                    scrollOffset = scrollOffset,
-                    firstVisibleItemIndex = firstVisibleItemIndex,
+                    scrollOffsetState = scrollOffsetState,
+                    firstVisibleItemIndexState = firstVisibleItemIndexState,
                     resolvedCoverUrl = resolvedCover.coverUrl,
                     resolvedCoverUrlFallback = resolvedCover.coverUrlFallback,
                     refererUrl = refererUrl,
@@ -993,7 +1002,7 @@ fun AnimeScreenAuroraImpl(
                                     .fillMaxSize()
                                     .padding(start = 6.dp, end = 12.dp),
                             ) {
-                                item {
+                                item(key = "season-rail") {
                                     if (seasons.size > 1) {
                                         AnimeSeasonRailAurora(
                                             anime = anime,
@@ -1007,7 +1016,7 @@ fun AnimeScreenAuroraImpl(
                                     }
                                 }
 
-                                item {
+                                item(key = "episodes-header") {
                                     EpisodesHeader(
                                         itemCount = if (state.anime.fetchType == FetchType.Seasons) {
                                             seasons.size
@@ -1026,7 +1035,7 @@ fun AnimeScreenAuroraImpl(
                                     )
                                 }
 
-                                item {
+                                item(key = "season-switcher") {
                                     if (showSeasonTabs && seasonSwitcherItems.size > 1) {
                                         AnimeSeasonSwitcherAurora(
                                             items = seasonSwitcherItems,
@@ -1038,7 +1047,7 @@ fun AnimeScreenAuroraImpl(
                                     }
                                 }
 
-                                item {
+                                item(key = "virtual-season-switcher") {
                                     if (showSeasonTabs && distinctVirtualSeasons.size > 1) {
                                         VirtualSeasonSwitcherAurora(
                                             seasons = distinctVirtualSeasons,
@@ -1053,10 +1062,12 @@ fun AnimeScreenAuroraImpl(
 
                                 if (state.anime.fetchType == FetchType.Episodes && state.airingTime > 0L) {
                                     item(key = "airing-time") {
-                                        // Handles the second by second countdown
+                                        // Handles the second by second countdown; keyed on the
+                                        // upstream deadline so refreshed airing values restart cleanly.
                                         var timer by remember { mutableLongStateOf(state.airingTime) }
-                                        LaunchedEffect(key1 = timer) {
-                                            if (timer > 0L) {
+                                        LaunchedEffect(state.airingTime) {
+                                            timer = state.airingTime
+                                            while (isActive && timer > 0L) {
                                                 delay(1000L)
                                                 timer -= 1000L
                                             }
@@ -1710,15 +1721,22 @@ fun AnimeScreenAuroraImpl(
 
             // Hero content (fixed at bottom of first screen) - fades out on scroll
             val heroThreshold = (screenHeight.value * 0.7f).toInt()
+            // Derived booleans/floats so scroll only invalidates when thresholds are crossed;
+            // alpha itself is read deferred inside graphicsLayer.
+            val showHero by remember(useTwoPaneLayout, isAnyEpisodeSelected, heroThreshold) {
+                derivedStateOf {
+                    shouldShowAnimeAuroraHeroContent(
+                        useTwoPaneLayout = useTwoPaneLayout,
+                        firstVisibleItemIndex = firstVisibleItemIndexState.value,
+                        scrollOffset = scrollOffsetState.value,
+                        heroThreshold = heroThreshold,
+                        isSelectionMode = isAnyEpisodeSelected,
+                    )
+                }
+            }
             if (
                 titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE &&
-                shouldShowAnimeAuroraHeroContent(
-                    useTwoPaneLayout = useTwoPaneLayout,
-                    firstVisibleItemIndex = firstVisibleItemIndex,
-                    scrollOffset = scrollOffset,
-                    heroThreshold = heroThreshold,
-                    isSelectionMode = isAnyEpisodeSelected,
-                )
+                showHero
             ) {
                 Box(
                     modifier = Modifier
@@ -1726,12 +1744,14 @@ fun AnimeScreenAuroraImpl(
                         .zIndex(AuroraZIndex.HERO),
                     contentAlignment = Alignment.BottomStart,
                 ) {
-                    val heroAlpha = (1f - (scrollOffset / heroThreshold.toFloat())).coerceIn(0f, 1f)
+                    val heroAlphaState = remember(heroThreshold) {
+                        derivedStateOf { (1f - (scrollOffsetState.value / heroThreshold.toFloat())).coerceIn(0f, 1f) }
+                    }
 
                     Box(
                         modifier = Modifier
                             .zIndex(AuroraZIndex.HERO)
-                            .graphicsLayer { alpha = heroAlpha },
+                            .graphicsLayer { alpha = heroAlphaState.value },
                     ) {
                         AnimeHeroContent(
                             anime = anime,
@@ -1770,7 +1790,11 @@ fun AnimeScreenAuroraImpl(
             }
 
             // Floating Play button (shows after Hero Content is hidden)
-            val showFab = firstVisibleItemIndex > 0 || scrollOffset > heroThreshold
+            val showFab by remember(heroThreshold) {
+                derivedStateOf {
+                    firstVisibleItemIndexState.value > 0 || scrollOffsetState.value > heroThreshold
+                }
+            }
             val shouldShowFab = !useTwoPaneLayout && showFab && !isAnyEpisodeSelected
             if (shouldShowTitleFastScrollFloatingActionButton(shouldShowFab, isThumbFastScrolling)) {
                 Box(
@@ -1798,13 +1822,6 @@ fun AnimeScreenAuroraImpl(
                 targetValue = if (!isAnyEpisodeSelected && showAnimeOverlayChrome) 0f else -1f,
                 label = "overlayChromeOffsetY",
             )
-            // The lens densifies as the hero scrolls away, so list rows passing
-            // under the top bar no longer blend into the buttons.
-            val topBarScrollProgress = if (firstVisibleItemIndex > 0) {
-                1f
-            } else {
-                (scrollOffset / heroThreshold.toFloat()).coerceIn(0f, 1f)
-            }
             val isPosterMode = titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE
 
             Row(
@@ -1821,6 +1838,12 @@ fun AnimeScreenAuroraImpl(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // Scoped read: progress is recomputed only within this row on scroll.
+                val topBarScrollProgress = if (firstVisibleItemIndexState.value > 0) {
+                    1f
+                } else {
+                    (scrollOffsetState.value / heroThreshold.toFloat()).coerceIn(0f, 1f)
+                }
                 // Back button - Aurora glassmorphism style
                 AuroraActionButton(
                     onClick = navigateUp,
@@ -2192,6 +2215,13 @@ private fun AnimeSeasonRailAurora(
             }
     }
 }
+
+private val seasonRegex = Regex("""(?i)(?:^|\b|\s|\[|_)(?:s|season\s*)(\d+)(?:\s|e|x|\||-|\.|\b|\]|_|$)""")
+
+private val specialKeywordsRegex =
+    Regex(
+        """(?i)\b(ova|oav|ona|movie|pv|trailer|bonus|recap|summary|prologue|extra|special|omake|teaser|clip|interview|preview)s?\b""",
+    )
 
 internal fun shouldUseAnimeAuroraTwoPane(deviceClass: AuroraDeviceClass): Boolean {
     return deviceClass == AuroraDeviceClass.TabletExpanded

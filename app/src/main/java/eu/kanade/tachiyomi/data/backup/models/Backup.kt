@@ -106,6 +106,8 @@ data class Backup(
     @ProtoNumber(621) var backupNovelSeries: List<BackupNovelSeries> = emptyList(),
     // Feed
     @ProtoNumber(622) var backupFeeds: List<BackupFeed> = emptyList(),
+    // Reels favorites
+    @ProtoNumber(623) var backupReelsFavorites: List<BackupReelsFavorite> = emptyList(),
 )
 
 /**

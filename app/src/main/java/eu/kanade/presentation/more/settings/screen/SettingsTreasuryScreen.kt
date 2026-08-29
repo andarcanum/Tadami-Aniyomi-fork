@@ -566,6 +566,15 @@ object SettingsTreasuryScreen : SearchableSettings {
                 onApply = { uiPreferences.specialBackgroundStyle().set("void_weeping_red") },
                 onDeactivate = { uiPreferences.specialBackgroundStyle().set("none") },
             ),
+            TreasuryPreset(
+                unlockableId = "special_background_ink_water",
+                title = stringResource(AYMR.strings.treasury_bg_ink_water_title),
+                description = stringResource(AYMR.strings.treasury_bg_ink_water_desc),
+                accentColor = Color(0xFF6C7CE0),
+                isActive = { specialBackgroundStyleKey == "ink_water" },
+                onApply = { uiPreferences.specialBackgroundStyle().set("ink_water") },
+                onDeactivate = { uiPreferences.specialBackgroundStyle().set("none") },
+            ),
         )
 
         val tabCustomizationPresets = listOf(
@@ -2956,6 +2965,7 @@ private fun getRewardIconResourceId(rewardId: String, context: android.content.C
         "special_background_shadow_realm" -> "ic_reward_background_shadow_realm"
         "special_background_event_horizon_library" -> "ic_reward_background_event_horizon_library"
         "special_background_void_weeping_red" -> "ic_reward_background_void_weeping_red"
+        "special_background_ink_water" -> "ic_reward_background_ink_water"
         "special_tab_glow" -> "ic_reward_tab_glow"
         "special_navbar_aurora_celestial" -> "ic_reward_navbar_aurora_celestial"
         "special_navbar_lattice_circuit" -> "ic_reward_navbar_lattice_circuit"

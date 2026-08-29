@@ -80,9 +80,16 @@ class GetApplicationRelease(
             val newSemVer = newVersion.split(".").map { it.toInt() }
             val oldSemVer = oldVersion.split(".").map { it.toInt() }
 
-            oldSemVer.mapIndexed { index, i ->
-                if (newSemVer[index] > i) {
-                    return true
+            // Compare per segment; a missing segment counts as 0 so tags with fewer/more
+            // parts than the local version ("v0.61" vs local "0.60.4") never index out
+            // of bounds. First differing segment decides.
+            val segmentCount = maxOf(newSemVer.size, oldSemVer.size)
+            for (index in 0 until segmentCount) {
+                val newPart = newSemVer.getOrElse(index) { 0 }
+                val oldPart = oldSemVer.getOrElse(index) { 0 }
+                when {
+                    newPart > oldPart -> return true
+                    newPart < oldPart -> return false
                 }
             }
 

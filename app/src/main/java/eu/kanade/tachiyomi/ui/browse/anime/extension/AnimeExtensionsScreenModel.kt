@@ -15,9 +15,10 @@ import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.extension.anime.model.newestByVersion
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeInstalledRepoDisplayName
-import eu.kanade.tachiyomi.extension.anime.model.selectAnimeRegularUpdate
 import eu.kanade.tachiyomi.extension.anime.model.selectAnimeReinstallCandidates
+import eu.kanade.tachiyomi.extension.anime.toInstalledAnimeExtensionPkgName
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -119,7 +120,11 @@ class AnimeExtensionsScreenModel(
 
                 val itemsGroups: ItemGroups = mutableMapOf()
                 availableExtensionVariants.value = _available.groupBy { it.pkgName }
-                updateExtensionVariants.value = rawAvailable.groupBy { it.pkgName }
+                // Installed names are normalized (suffix stripped at install time): the update
+                // variants map must use the same key or lookups by extension.pkgName miss.
+                updateExtensionVariants.value = rawAvailable.groupBy {
+                    it.pkgName.toInstalledAnimeExtensionPkgName()
+                }
                 val availableRepoCounts = _available
                     .groupBy { it.pkgName }
                     .mapValues { (_, variants) -> variants.map { it.repoUrl }.distinct().size }
@@ -235,12 +240,48 @@ class AnimeExtensionsScreenModel(
 
     fun updateAllExtensions() {
         screenModelScope.launchIO {
-            state.value.items.values.flatten()
-                .map { it.extension }
-                .filterIsInstance<AnimeExtension.Installed>()
-                .filter { it.hasUpdate && !it.needsReinstall }
-                .forEach { updateExtensionNow(it) }
+            // Source candidates from the manager flow, not the rendered list: search filters
+            // and collapsed language sections hide items whose updates still must be applied.
+            extensionManager.installedExtensionsFlow.value
+                .filter { it.hasUpdate }
+                .forEach { extension ->
+                    if (extension.needsReinstall) {
+                        // Never skip silently (B5): pause the queue until the user resolves
+                        // the reinstall dialog for this extension; null = dismissed → skip.
+                        resolveQueuedReinstall(extension)
+                    } else {
+                        updateExtensionNow(extension)
+                    }
+                }
         }
+    }
+
+    /** Set while the update-all queue waits for a reinstall decision on this extension. */
+    private var queuedReinstallResolution: CompletableDeferred<AnimeExtension.Available?>? = null
+
+    private suspend fun resolveQueuedReinstall(extension: AnimeExtension.Installed) {
+        mutableState.update {
+            it.copy(
+                queuedReinstallExtension = extension,
+                queuedReinstallCandidates = getReinstallCandidates(extension),
+            )
+        }
+        val resolution = CompletableDeferred<AnimeExtension.Available?>()
+        queuedReinstallResolution = resolution
+        val chosen = resolution.await()
+        mutableState.update {
+            it.copy(queuedReinstallExtension = null, queuedReinstallCandidates = emptyList())
+        }
+        if (chosen != null) {
+            extensionManager
+                .replaceExtensionFromRepo(extension, chosen)
+                .collectToInstallUpdate(extension)
+        }
+    }
+
+    fun resolveQueuedReinstall(replacement: AnimeExtension.Available?) {
+        queuedReinstallResolution?.complete(replacement)
+        queuedReinstallResolution = null
     }
 
     fun installExtension(extension: AnimeExtension.Available) {
@@ -256,9 +297,13 @@ class AnimeExtensionsScreenModel(
 
     fun updateExtension(extension: AnimeExtension.Installed) {
         screenModelScope.launchIO {
-            if (extension.needsReinstall || getRegularUpdate(extension) == null) {
+            if (extension.needsReinstall) {
+                // Reinstall-from-repo owns this case; the row already offers its dialog.
                 return@launchIO
             }
+            // No silent miss here: the manager refreshes the repo list once and emits
+            // InstallStep.Error when no installable variant remains, surfacing in the UI
+            // through collectToInstallUpdate.
             updateExtensionNow(extension)
         }
     }
@@ -270,13 +315,6 @@ class AnimeExtensionsScreenModel(
 
     fun getReinstallCandidates(extension: AnimeExtension.Installed): List<AnimeExtension.Available> {
         return selectAnimeReinstallCandidates(
-            extension = extension,
-            variants = updateExtensionVariants.value[extension.pkgName].orEmpty(),
-        )
-    }
-
-    private fun getRegularUpdate(extension: AnimeExtension.Installed): AnimeExtension.Available? {
-        return selectAnimeRegularUpdate(
             extension = extension,
             variants = updateExtensionVariants.value[extension.pkgName].orEmpty(),
         )
@@ -380,6 +418,9 @@ class AnimeExtensionsScreenModel(
         val repoPickerPluginId: String? = null,
         val repoPickerOptions: List<AnimeExtension.Available> = emptyList(),
         val signatureMismatchEvent: AnimeExtensionManager.SignatureMismatchEvent? = null,
+        /** Set while the update-all queue is paused on an extension needing reinstall (B5). */
+        val queuedReinstallExtension: AnimeExtension.Installed? = null,
+        val queuedReinstallCandidates: List<AnimeExtension.Available> = emptyList(),
     ) {
         val isEmpty = items.isEmpty()
     }

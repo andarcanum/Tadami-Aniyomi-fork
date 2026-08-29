@@ -7,6 +7,7 @@ import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import mihon.domain.extensionstore.model.ExtensionStore
+import mihon.domain.extensionstore.model.repoDisplayNameFallback
 import mihon.domain.extensionstore.novel.repository.NovelExtensionStoreRepository
 import org.junit.jupiter.api.Test
 
@@ -56,6 +57,9 @@ class CreateNovelExtensionRepoTest {
         val indexUrl = "https://example.org/.dist/plugins.min.json"
         val baseUrl = "https://example.org/.dist"
         val fingerprint = "NOFINGERPRINT-${Hash.sha256(baseUrl)}"
+        // Since 73210d327 the display name falls back to a readable label
+        // (repoDisplayNameFallback), not the bare url.
+        val label = baseUrl.repoDisplayNameFallback()
 
         val result = interactor.await(indexUrl)
 
@@ -64,8 +68,8 @@ class CreateNovelExtensionRepoTest {
             repository.upsertStore(
                 ExtensionStore(
                     indexUrl = baseUrl,
-                    name = baseUrl,
-                    badgeLabel = baseUrl,
+                    name = label,
+                    badgeLabel = label,
                     signingKey = fingerprint,
                     contact = ExtensionStore.Contact(website = baseUrl, discord = null),
                     isLegacy = true,

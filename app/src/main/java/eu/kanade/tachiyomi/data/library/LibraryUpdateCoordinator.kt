@@ -1,79 +1,40 @@
 package eu.kanade.tachiyomi.data.library
 
 import android.content.Context
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequest
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
-import eu.kanade.tachiyomi.util.system.isRunning
-import eu.kanade.tachiyomi.util.system.workManager
 
 object LibraryUpdateCoordinator {
 
-    const val CHAIN_TAG = "LibraryUpdate-chain"
-
+    /**
+     * Starts the enabled media library updates as independent WorkManager jobs.
+     *
+     * The three jobs are enqueued under their own unique names, so they run in parallel —
+     * same as the auto-update path and the per-tab refreshes. Each job's own guard skips a
+     * media that is already running or enqueued, so this returns true when at least one
+     * media actually started.
+     */
     fun startAll(
         context: Context,
         updateAnime: Boolean,
         updateManga: Boolean,
         updateNovel: Boolean,
-        workManager: WorkManager = context.workManager,
     ): Boolean {
-        if (workManager.isRunning("AnimeLibraryUpdate") ||
-            workManager.isRunning("LibraryUpdate") ||
-            workManager.isRunning("NovelLibraryUpdate")
-        ) {
-            return false
-        }
-
-        val requests = mutableListOf<OneTimeWorkRequest>()
+        var started = false
         if (updateAnime) {
-            requests.add(
-                OneTimeWorkRequestBuilder<AnimeLibraryUpdateJob>()
-                    .addTag("AnimeLibraryUpdate")
-                    .addTag("AnimeLibraryUpdate-manual")
-                    .build(),
-            )
+            started = AnimeLibraryUpdateJob.startNow(context) || started
         }
         if (updateManga) {
-            requests.add(
-                OneTimeWorkRequestBuilder<MangaLibraryUpdateJob>()
-                    .addTag("LibraryUpdate")
-                    .addTag("LibraryUpdate-manual")
-                    .build(),
-            )
+            started = MangaLibraryUpdateJob.startNow(context) || started
         }
         if (updateNovel) {
-            requests.add(
-                OneTimeWorkRequestBuilder<NovelLibraryUpdateJob>()
-                    .addTag("NovelLibraryUpdate")
-                    .addTag("NovelLibraryUpdate-manual")
-                    .build(),
-            )
+            started = NovelLibraryUpdateJob.startNow(context) || started
         }
-
-        if (requests.isEmpty()) return false
-
-        var continuation = workManager.beginUniqueWork(
-            CHAIN_TAG,
-            ExistingWorkPolicy.KEEP,
-            requests[0],
-        )
-        for (i in 1 until requests.size) {
-            continuation = continuation.then(requests[i])
-        }
-        continuation.enqueue()
-        return true
+        return started
     }
 
-    fun stop(
-        context: Context,
-        workManager: WorkManager = context.workManager,
-    ) {
-        workManager.cancelAllWorkByTag(CHAIN_TAG)
+    fun stop(context: Context) {
         AnimeLibraryUpdateJob.stop(context)
         MangaLibraryUpdateJob.stop(context)
         NovelLibraryUpdateJob.stop(context)

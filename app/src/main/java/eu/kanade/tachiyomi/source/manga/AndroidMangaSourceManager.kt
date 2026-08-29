@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.source.manga
+﻿package eu.kanade.tachiyomi.source.manga
 
 import android.content.Context
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
@@ -6,9 +6,10 @@ import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.source.CatalogueSource
 import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.online.HttpSource
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import logcat.LogPriority
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.domain.source.manga.repository.MangaStubSourceRepository
 import tachiyomi.domain.source.manga.service.MangaSourceManager
@@ -36,7 +39,16 @@ class AndroidMangaSourceManager(
 
     private val downloadManager: MangaDownloadManager by injectLazy()
 
-    private val scope = CoroutineScope(Job() + Dispatchers.IO)
+    // Source registration is best-effort: a failure inside one collector must be logged
+    // instead of crashing the process via the default uncaught handler or leaking into
+    // unrelated threads.
+    private val scope = CoroutineScope(
+        SupervisorJob() +
+            Dispatchers.IO +
+            CoroutineExceptionHandler { _, error ->
+                logcat(LogPriority.ERROR, error) { "Manga source registration failed" }
+            },
+    )
 
     private val sourcesMapFlow = MutableStateFlow(ConcurrentHashMap<Long, MangaSource>())
 

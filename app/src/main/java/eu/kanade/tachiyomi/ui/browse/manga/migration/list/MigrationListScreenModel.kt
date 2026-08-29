@@ -21,9 +21,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.update
+import logcat.LogPriority
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.manga.interactor.GetManga
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.interactor.GetChaptersByMangaId
@@ -148,78 +150,63 @@ class MigrationListScreenModel(
         val hideNotFound = sourcePreferences.migrationHideNotFound().get()
         val onlyNewChapters = sourcePreferences.migrationOnlyNewChapters().get()
 
-        var currentItems = items
         items.forEach { item ->
             if (item.manga.id in cancelledSearchIds) {
-                currentItems = currentItems.map { current ->
-                    if (current.manga.id == item.manga.id) {
-                        current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
-                    } else {
-                        current
-                    }
+                updateItem(item.manga.id, hideNotFound, onlyNewChapters) { current ->
+                    current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
                 }
-                publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
                 return@forEach
             }
 
-            val result = searchSource(
-                manga = item.manga,
-                sources = sources,
-                strategy = strategy,
-                useDeepSearch = useDeepSearch,
-                useAutoMetadata = useAutoMetadata,
-                onProgress = { label ->
-                    currentItems = currentItems.map { current ->
-                        if (current.manga.id == item.manga.id) {
+            val result = runCatching {
+                searchSource(
+                    manga = item.manga,
+                    sources = sources,
+                    strategy = strategy,
+                    useDeepSearch = useDeepSearch,
+                    useAutoMetadata = useAutoMetadata,
+                    onProgress = { label ->
+                        updateItem(item.manga.id, hideNotFound, onlyNewChapters) { current ->
                             current.copy(searchLabel = label)
-                        } else {
-                            current
                         }
-                    }
-                    publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
-                },
-            )
+                    },
+                )
+            }.onFailure { error ->
+                logcat(LogPriority.ERROR, error) { "Migration search failed for manga ${item.manga.id}" }
+            }.getOrNull()
+
             if (item.manga.id in cancelledSearchIds) {
-                currentItems = currentItems.map { current ->
-                    if (current.manga.id == item.manga.id) {
-                        current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
-                    } else {
-                        current
-                    }
+                updateItem(item.manga.id, hideNotFound, onlyNewChapters) { current ->
+                    current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
                 }
-                publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
                 return@forEach
             }
 
-            val updatedItem = when (result) {
-                null -> item.copy(searchResult = SearchResult.NotFound, searchLabel = null)
-                else -> item.copy(
-                    searchLabel = null,
-                    searchResult = SearchResult.Success(
-                        manga = result.manga,
-                        source = result.source.name,
-                        chapterCount = result.chapterInfo.chapterCount,
-                        latestChapter = result.chapterInfo.latestChapter,
-                    ),
+            val updatedResult = when (result) {
+                null -> SearchResult.NotFound
+                else -> SearchResult.Success(
+                    manga = result.manga,
+                    source = result.source.name,
+                    chapterCount = result.chapterInfo.chapterCount,
+                    latestChapter = result.chapterInfo.latestChapter,
                 )
             }
 
-            currentItems = currentItems.map { current ->
-                if (current.manga.id == item.manga.id) updatedItem else current
+            updateItem(item.manga.id, hideNotFound, onlyNewChapters) { current ->
+                current.copy(searchResult = updatedResult, searchLabel = null)
             }
-
-            publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
         }
     }
 
-    private fun publishSearchItems(
-        items: List<MigratingManga>,
+    private fun updateItem(
+        mangaId: Long,
         hideNotFound: Boolean,
         onlyNewChapters: Boolean,
+        transform: (MigratingManga) -> MigratingManga,
     ) {
-        allItems = items
+        allItems = allItems.map { if (it.manga.id == mangaId) transform(it) else it }
         val visibleItems = visibleMigrationItems(
-            items = items,
+            items = allItems,
             hideNotFound = hideNotFound,
             onlyNewChapters = onlyNewChapters,
         ).toImmutableList()
@@ -408,9 +395,13 @@ class MigrationListScreenModel(
             val item = items.find { it.manga.id == mangaId } ?: return@launchIO
             val target = (item.searchResult as? SearchResult.Success)?.manga ?: return@launchIO
             val flags = getMigrationFlags(item.manga)
-            migrateManga.migrateManga(item.manga, target, replace, flags)
-            markUpdateErrorResolved(item.manga.id, replace)
-            removeManga(item)
+            runCatching {
+                migrateManga.migrateManga(item.manga, target, replace, flags)
+                markUpdateErrorResolved(item.manga.id, replace)
+                removeManga(item)
+            }.onFailure { error ->
+                logcat(LogPriority.ERROR, error) { "Failed to migrate single manga $mangaId" }
+            }
         }
     }
 
@@ -436,28 +427,38 @@ class MigrationListScreenModel(
                     item
                 }
             }
-            publishSearchItems(
+            allItems = updatedItems
+            val hideNotFound = sourcePreferences.migrationHideNotFound().get()
+            val onlyNewChapters = sourcePreferences.migrationOnlyNewChapters().get()
+            val visibleItems = visibleMigrationItems(
                 items = updatedItems,
-                hideNotFound = sourcePreferences.migrationHideNotFound().get(),
-                onlyNewChapters = sourcePreferences.migrationOnlyNewChapters().get(),
-            )
+                hideNotFound = hideNotFound,
+                onlyNewChapters = onlyNewChapters,
+            ).toImmutableList()
+            val finishedCount = visibleItems.count { it.searchResult != SearchResult.Searching }
+            val migrationComplete = isMigrationSearchComplete(visibleItems)
+
+            mutableState.update { state ->
+                state.copy(
+                    items = visibleItems,
+                    finishedCount = finishedCount,
+                    migrationComplete = migrationComplete,
+                )
+            }
         }
     }
 
     fun cancelSearch(mangaId: Long) {
         cancelledSearchIds += mangaId
-        val updatedItems = allItems.map { item ->
-            if (item.manga.id == mangaId && item.searchResult == SearchResult.Searching) {
-                item.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+        val hideNotFound = sourcePreferences.migrationHideNotFound().get()
+        val onlyNewChapters = sourcePreferences.migrationOnlyNewChapters().get()
+        updateItem(mangaId, hideNotFound, onlyNewChapters) { current ->
+            if (current.searchResult == SearchResult.Searching) {
+                current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
             } else {
-                item
+                current
             }
         }
-        publishSearchItems(
-            items = updatedItems,
-            hideNotFound = sourcePreferences.migrationHideNotFound().get(),
-            onlyNewChapters = sourcePreferences.migrationOnlyNewChapters().get(),
-        )
     }
 
     fun removeManga(mangaId: Long) {
@@ -477,9 +478,13 @@ class MigrationListScreenModel(
                 items.forEachIndexed { index, item ->
                     val target = (item.searchResult as? SearchResult.Success)?.manga ?: return@forEachIndexed
                     val flags = getMigrationFlags(item.manga)
-                    migrateManga.migrateManga(item.manga, target, replace, flags)
-                    markUpdateErrorResolved(item.manga.id, replace)
-                    migratedItems += item
+                    runCatching {
+                        migrateManga.migrateManga(item.manga, target, replace, flags)
+                        markUpdateErrorResolved(item.manga.id, replace)
+                        migratedItems += item
+                    }.onFailure { error ->
+                        logcat(LogPriority.ERROR, error) { "Failed to migrate manga ${item.manga.id}" }
+                    }
                     mutableState.update {
                         it.copy(migrationProgress = ((index + 1).toFloat() / items.size).coerceAtMost(1f))
                     }

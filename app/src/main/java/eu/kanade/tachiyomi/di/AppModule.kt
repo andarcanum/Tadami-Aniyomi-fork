@@ -17,6 +17,8 @@ import data.Mangas
 import dataanime.Animehistory
 import dataanime.Animes
 import dataanime.Episodes
+import dataanime.Reels_favorites
+import dataanime.Reels_follows
 import datanovel.Novel_chapters
 import datanovel.Novel_history
 import datanovel.Novels
@@ -514,6 +516,12 @@ class AppModule(val app: Application) : InjektModule {
                     update_strategyAdapter = AnimeUpdateStrategyColumnAdapter,
                     fetch_typeAdapter = FetchTypeColumnAdapter,
                 ),
+                reels_favoritesAdapter = Reels_favorites.Adapter(
+                    added_atAdapter = DateColumnAdapter,
+                ),
+                reels_followsAdapter = Reels_follows.Adapter(
+                    added_atAdapter = DateColumnAdapter,
+                ),
             )
         }
 
@@ -733,6 +741,7 @@ class AppModule(val app: Application) : InjektModule {
                     ShizukuApkInstallBackendAdapter(app),
                     DhizukuApkInstallBackendAdapter(app),
                 ),
+                pendingInstallStore = PendingApkInstallStore(get()),
             )
         }
         addSingletonFactory { KotlinNovelExtensionInstaller(app, get<NetworkHelper>().client, get(), get()) }

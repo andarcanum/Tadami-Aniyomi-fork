@@ -8,7 +8,6 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import uy.kohesive.injekt.Injekt
@@ -41,12 +40,19 @@ class EntryRatingCache(
             return cached.rating
         }
 
-        val fresh = loadOnce(key, loader)
+        val deferred = loadOnce(key, loader)
+        val fresh = deferred.await()
 
         mutex.withLock {
             when {
                 fresh != null -> write(key, fresh)
                 cached == null || cached.isEmptyRatingStale(nowMillis()) -> write(key, fresh)
+            }
+            // Last resolver out cleans up, AFTER the result is persisted: removing earlier
+            // (or racing the completion hook) leaves a window where a newcomer sees neither
+            // the fresh cache nor the in-flight entry and duplicates the fetch.
+            if (inFlight[key] === deferred) {
+                inFlight.remove(key)
             }
         }
 
@@ -75,23 +81,15 @@ class EntryRatingCache(
     private suspend fun loadOnce(
         key: String,
         loader: suspend () -> Float?,
-    ): Float? {
-        val deferred = mutex.withLock {
-            inFlight[key] ?: loaderScope.async { loader() }.also { newDeferred ->
-                inFlight[key] = newDeferred
-                newDeferred.invokeOnCompletion {
-                    // ponytail: app-scope load survives caller cancellation; completion cleanup is enough.
-                    loaderScope.launch {
-                        mutex.withLock {
-                            if (inFlight[key] === newDeferred) {
-                                inFlight.remove(key)
-                            }
-                        }
-                    }
-                }
-            }
+    ): Deferred<Float?> {
+        // No completion-hook cleanup here: an eager hook fires on a different thread the moment
+        // the loader finishes and can delete the in-flight entry before the resolver persists
+        // its result, so a newcomer misses both cache and in-flight and duplicates the fetch.
+        // Completed entries are harmless - awaiting them returns immediately - and the last
+        // resolver removes its entry after persisting (see resolve()).
+        return mutex.withLock {
+            inFlight.getOrPut(key) { loaderScope.async { loader() } }
         }
-        return deferred.await()
     }
 
     private fun read(key: String): CachedRating? {

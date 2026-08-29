@@ -1,0 +1,9 @@
+-- Contract v18: creator subscriptions for the Reels feed.
+CREATE TABLE IF NOT EXISTS reels_follows(
+    source_id INTEGER NOT NULL,
+    creator TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (source_id, creator)
+);
+
+CREATE INDEX IF NOT EXISTS reels_follows_source_id_index ON reels_follows(source_id);

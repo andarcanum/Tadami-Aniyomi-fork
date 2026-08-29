@@ -330,10 +330,14 @@ private fun AnimeSourceItem(
                     )
                 }
             }
-            AnimeSourcePinButton(
-                isPinned = Pin.Pinned in source.pin,
-                onClick = { onClickPin(source) },
-            )
+            // Feed (Reels) sources always live in the fixed REELS group: pinning is a no-op
+            // for them, so the affordance is hidden.
+            if (!source.isFeedSource) {
+                AnimeSourcePinButton(
+                    isPinned = Pin.Pinned in source.pin,
+                    onClick = { onClickPin(source) },
+                )
+            }
         },
     )
 }
@@ -374,14 +378,16 @@ fun AnimeSourceOptionsDialog(
         },
         text = {
             Column {
-                val textId = if (Pin.Pinned in source.pin) MR.strings.action_unpin else MR.strings.action_pin
-                Text(
-                    text = stringResource(textId),
-                    modifier = Modifier
-                        .clickable(onClick = onClickPin)
-                        .fillMaxWidth()
-                        .padding(vertical = 16.dp),
-                )
+                if (!source.isFeedSource) {
+                    val textId = if (Pin.Pinned in source.pin) MR.strings.action_unpin else MR.strings.action_pin
+                    Text(
+                        text = stringResource(textId),
+                        modifier = Modifier
+                            .clickable(onClick = onClickPin)
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                    )
+                }
                 if (source.id != LocalAnimeSource.ID) {
                     Text(
                         text = stringResource(MR.strings.action_disable),

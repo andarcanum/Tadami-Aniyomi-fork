@@ -245,7 +245,7 @@ class AnimeLibraryAuroraHeaderStateTest {
 
     @Test
     fun `aurora pinned header menu includes import action when requested`() {
-        auroraLibraryPinnedHeaderMenuItems(includeImportEpub = true) shouldBe listOf(
+        auroraLibraryPinnedHeaderMenuItems(includeImportEpub = true, includeImportFolder = false) shouldBe listOf(
             AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent,
             AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal,
             AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry,
@@ -255,7 +255,7 @@ class AnimeLibraryAuroraHeaderStateTest {
 
     @Test
     fun `aurora pinned header menu omits import action by default`() {
-        auroraLibraryPinnedHeaderMenuItems(includeImportEpub = false) shouldBe listOf(
+        auroraLibraryPinnedHeaderMenuItems(includeImportEpub = false, includeImportFolder = false) shouldBe listOf(
             AuroraLibraryPinnedHeaderMenuItem.RefreshCurrent,
             AuroraLibraryPinnedHeaderMenuItem.RefreshGlobal,
             AuroraLibraryPinnedHeaderMenuItem.OpenRandomEntry,

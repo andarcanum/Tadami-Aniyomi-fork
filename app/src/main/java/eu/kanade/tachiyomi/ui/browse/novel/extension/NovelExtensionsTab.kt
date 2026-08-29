@@ -96,6 +96,7 @@ fun novelExtensionsTab(
                     )
                 },
                 onShareApk = extensionsScreenModel::shareApk,
+                onCancelInstall = extensionsScreenModel::cancelInstall,
                 onReinstallAfterSignatureMismatch = extensionsScreenModel::reinstallAfterSignatureMismatch,
                 onDismissSignatureMismatch = extensionsScreenModel::dismissSignatureMismatch,
             )
@@ -132,6 +133,18 @@ fun novelExtensionsTab(
                         pluginToReinstall = null
                     },
                     onDismissRequest = { pluginToReinstall = null },
+                )
+            }
+
+            // Queue-driven reinstall pause during update-all (B5): owned by the ScreenModel.
+            state.queuedReinstallPlugin?.let { plugin ->
+                NovelRepoReinstallDialog(
+                    plugin = plugin,
+                    candidates = state.queuedReinstallCandidates,
+                    onClickCandidate = { candidate ->
+                        extensionsScreenModel.resolveQueuedReinstall(candidate)
+                    },
+                    onDismissRequest = { extensionsScreenModel.resolveQueuedReinstall(null) },
                 )
             }
 

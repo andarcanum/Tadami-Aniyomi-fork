@@ -8,6 +8,7 @@ data class AnimeSource(
     val isStub: Boolean,
     val pin: Pins = Pins.unpinned,
     val isUsedLast: Boolean = false,
+    val isFeedSource: Boolean = false,
 ) {
 
     val visualName: String

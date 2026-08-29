@@ -13,7 +13,7 @@ import eu.kanade.tachiyomi.util.storage.getUriCompat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
@@ -27,16 +27,74 @@ class SystemIntentApkInstallBackendAdapter(
 
     override fun supports(kind: ApkExtensionKind): Boolean = kind == ApkExtensionKind.NOVEL_KOTLIN
 
+    /**
+     * The system installer dialog has no result callback here (the intent is launched from a
+     * plain context), so completion is inferred from package broadcasts. Missing signals within
+     * [INSTALL_TIMEOUT_MS] are reported as Idle — mirroring the STATUS_FAILURE_ABORTED handling
+     * of the session-based backends — while the receiver stays registered so a late install
+     * still lands on Installed instead of being reported as an error.
+     */
     override fun install(request: ApkInstallRequest): Flow<InstallStep> = flow {
         emit(InstallStep.Installing)
         val file = request.file ?: return@flow emit(InstallStep.Error)
-        runCatching {
-            awaitSystemInstall(request, file)
-        }.onSuccess {
-            emit(InstallStep.Installed)
-        }.onFailure { error ->
-            logcat(LogPriority.WARN, error) { "System intent APK install failed for ${request.packageName}" }
-            emit(InstallStep.Error)
+
+        val outcome = CompletableDeferred<InstallStep>()
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent?) {
+                val action = intent?.action ?: return
+                val broadcastPkgName = intent.data?.encodedSchemeSpecificPart ?: return
+                if (broadcastPkgName != request.packageName) return
+                when (action) {
+                    Intent.ACTION_PACKAGE_ADDED, Intent.ACTION_PACKAGE_REPLACED -> {
+                        outcome.complete(InstallStep.Installed)
+                    }
+                    // A replacement fires REMOVED with EXTRA_REPLACING set; only a plain
+                    // removal while we are waiting is a definitive failure.
+                    Intent.ACTION_PACKAGE_REMOVED -> {
+                        if (!intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) {
+                            outcome.complete(InstallStep.Error)
+                        }
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addDataScheme("package")
+        }
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        try {
+            try {
+                installApk(request, file)
+            } catch (error: Throwable) {
+                logcat(LogPriority.WARN, error) {
+                    "System intent APK install failed for ${request.packageName}"
+                }
+                emit(InstallStep.Error)
+                return@flow
+            }
+
+            val firstOutcome = withTimeoutOrNull(INSTALL_TIMEOUT_MS) { outcome.await() }
+            if (firstOutcome != null) {
+                if (firstOutcome == InstallStep.Installed) {
+                    removePendingEntry(request.packageName)
+                }
+                emit(firstOutcome)
+                return@flow
+            }
+
+            // Timed out without any signal: report Idle now, but keep listening — a user who
+            // confirms the OEM dialog late must still land on Installed.
+            emit(InstallStep.Idle)
+            val lateOutcome = outcome.await()
+            if (lateOutcome == InstallStep.Installed) {
+                removePendingEntry(request.packageName)
+            }
+            emit(lateOutcome)
+        } finally {
+            runCatching { context.unregisterReceiver(receiver) }
         }
     }
 
@@ -53,31 +111,10 @@ class SystemIntentApkInstallBackendAdapter(
 
     override fun cancel(packageName: String) = Unit
 
-    private suspend fun awaitSystemInstall(request: ApkInstallRequest, apkFile: File) {
-        val installResult = CompletableDeferred<Unit>()
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent?) {
-                val action = intent?.action ?: return
-                if (action != Intent.ACTION_PACKAGE_ADDED && action != Intent.ACTION_PACKAGE_REPLACED) return
-                val installedPkgName = intent.data?.encodedSchemeSpecificPart ?: return
-                if (installedPkgName == request.packageName) {
-                    installResult.complete(Unit)
-                }
-            }
-        }
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_PACKAGE_ADDED)
-            addAction(Intent.ACTION_PACKAGE_REPLACED)
-            addDataScheme("package")
-        }
-        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
-        try {
-            installApk(request, apkFile)
-            withTimeout(INSTALL_TIMEOUT_MS) { installResult.await() }
-            pendingInstallStore.clear()
-        } finally {
-            runCatching { context.unregisterReceiver(receiver) }
-        }
+    /** Removes only this install's entry: clear() would wipe pending entries of the other
+     *  media types waiting for their own user permission. */
+    private fun removePendingEntry(packageName: String) {
+        pendingInstallStore.remove(packageName)
     }
 
     @Suppress("DEPRECATION")
@@ -112,6 +149,13 @@ class SystemIntentApkInstallBackendAdapter(
 
     private companion object {
         const val APK_MIME = "application/vnd.android.package-archive"
-        const val INSTALL_TIMEOUT_MS = 5 * 60 * 1000L
+
+        /**
+         * Budget for the system installer dialog interaction. The old 5-minute window kept rows
+         * effectively spinning when the dialog was dismissed without any package broadcast; 90 s
+         * still tolerates slow OEM installers. Late confirms keep landing on Installed via the
+         * keep-listening path above — the terminal-aware screen mirror makes that safe.
+         */
+        const val INSTALL_TIMEOUT_MS = 90_000L
     }
 }

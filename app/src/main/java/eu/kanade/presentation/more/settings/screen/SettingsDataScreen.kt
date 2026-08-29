@@ -116,6 +116,7 @@ import tachiyomi.domain.entries.novel.interactor.GetNovelFavorites
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.storage.service.StorageManager
 import tachiyomi.domain.storage.service.StoragePreferences
+import tachiyomi.domain.storage.service.StorageWriteTestFailure
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.TextButton
@@ -178,15 +179,20 @@ object SettingsDataScreen : SearchableSettings {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val storageManager = remember { Injekt.get<StorageManager>() }
-        var showStorageUnavailableDialog by remember { mutableStateOf(false) }
+        var storageTestFailure by remember { mutableStateOf<StorageWriteTestFailure?>(null) }
 
-        if (showStorageUnavailableDialog) {
+        storageTestFailure?.let { failure ->
             AlertDialog(
-                onDismissRequest = { showStorageUnavailableDialog = false },
+                onDismissRequest = { storageTestFailure = null },
                 title = { Text(text = stringResource(MR.strings.storage_location_unavailable)) },
-                text = { Text(text = stringResource(MR.strings.storage_location_unavailable_message)) },
+                text = {
+                    Column {
+                        Text(text = stringResource(MR.strings.storage_location_unavailable_message))
+                        Text(text = stringResource(MR.strings.storage_location_unavailable_step, failure.step))
+                    }
+                },
                 confirmButton = {
-                    TextButton(onClick = { showStorageUnavailableDialog = false }) {
+                    TextButton(onClick = { storageTestFailure = null }) {
                         Text(text = stringResource(MR.strings.action_ok))
                     }
                 },
@@ -198,14 +204,17 @@ object SettingsDataScreen : SearchableSettings {
         ) { uri ->
             uri?.let { selectedUri ->
                 scope.launch {
-                    val canWrite = withContext(Dispatchers.IO) {
+                    val failure = withContext(Dispatchers.IO) {
                         storageManager.canWriteTo(selectedUri)
                     }
 
-                    if (canWrite) {
+                    if (failure == null) {
                         persistStorageLocation(context, storageDirPref, selectedUri)
                     } else {
-                        showStorageUnavailableDialog = true
+                        logcat(LogPriority.WARN, failure.cause) {
+                            "Storage write test failed at step '${failure.step}'"
+                        }
+                        storageTestFailure = failure
                     }
                 }
             }
@@ -225,6 +234,7 @@ object SettingsDataScreen : SearchableSettings {
         } catch (e: SecurityException) {
             logcat(priority = LogPriority.ERROR, throwable = e)
             context.toast(MR.strings.file_picker_uri_permission_unsupported)
+            return
         }
 
         UniFile.fromUri(context, uri)?.let {
@@ -304,6 +314,7 @@ object SettingsDataScreen : SearchableSettings {
                 } catch (e: SecurityException) {
                     logcat(LogPriority.ERROR, e)
                     context.toast(MR.strings.file_picker_uri_permission_unsupported)
+                    return@rememberLauncherForActivityResult
                 }
                 backupPreferences.cloudBackupUri().set(uri.toString())
             }

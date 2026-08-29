@@ -475,7 +475,7 @@ fun NovelScreenAuroraImpl(
 
     val selectedIds = state.selectedChapterIds
     val isSelectionMode = selectedIds.isNotEmpty()
-    val selectedChapters = chapters.filter { it.id in selectedIds }
+    val selectedChapters = remember(chapters, selectedIds) { chapters.filter { it.id in selectedIds } }
     val downloadedChapterIds = state.downloadedChapterIds
 
     var descriptionExpanded by remember { mutableStateOf(false) }
@@ -524,8 +524,8 @@ fun NovelScreenAuroraImpl(
                 if (titleScreenStyle == TitleScreenStyle.POSTER_IMMERSIVE) {
                     FullscreenPosterBackground(
                         novel = novel,
-                        scrollOffset = 0,
-                        firstVisibleItemIndex = 0,
+                        scrollOffset = scrollOffset,
+                        firstVisibleItemIndex = firstVisibleItemIndex,
                         sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
                             ?: (state.source as? HttpSource)?.headers?.toMap(),
                         sourceClient = sourceClient,

@@ -9,6 +9,7 @@ import com.tadami.aurora.R
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailureNotificationFormatter
+import eu.kanade.tachiyomi.data.library.ProgressPostThrottle
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.ui.main.MainActivity
@@ -26,12 +27,21 @@ import tachiyomi.i18n.R as I18nR
 
 class NovelLibraryUpdateNotifier(
     private val context: Context,
+    /**
+     * Library update jobs run in parallel, so each media posts its progress under its own id.
+     */
+    val progressNotificationId: Int = Notifications.ID_NOVEL_LIBRARY_UPDATE_PROGRESS,
 ) {
 
     private val percentFormatter = NumberFormat.getPercentInstance().apply {
         roundingMode = RoundingMode.DOWN
         maximumFractionDigits = 0
     }
+
+    // Rate-limits the two-per-entry progress posts of long runs.
+    private val progressThrottle = ProgressPostThrottle(
+        ProgressPostThrottle.DEFAULT_PROGRESS_INTERVAL_MILLIS,
+    )
 
     private val cancelIntent by lazy {
         NotificationReceiver.cancelLibraryUpdatePendingBroadcast(context)
@@ -58,6 +68,8 @@ class NovelLibraryUpdateNotifier(
         updated: Int,
         failed: Int,
     ) {
+        if (!progressThrottle.shouldPostNow()) return
+
         val safeTotal = total.coerceAtLeast(1)
 
         progressNotificationBuilder
@@ -75,7 +87,7 @@ class NovelLibraryUpdateNotifier(
             )
 
         context.notify(
-            Notifications.ID_LIBRARY_PROGRESS,
+            progressNotificationId,
             progressNotificationBuilder
                 .setProgress(total, current, false)
                 .build(),
@@ -149,7 +161,7 @@ class NovelLibraryUpdateNotifier(
     }
 
     fun cancelProgressNotification() {
-        context.cancelNotification(Notifications.ID_LIBRARY_PROGRESS)
+        context.cancelNotification(progressNotificationId)
     }
 
     /**

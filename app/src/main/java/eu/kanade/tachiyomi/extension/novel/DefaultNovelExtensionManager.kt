@@ -5,8 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.PackageInfoCompat
 import eu.kanade.domain.extension.novel.interactor.TrustNovelExtension
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.extension.installer.ExtensionSignatureComparison
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginApiFacade
 import eu.kanade.tachiyomi.extension.novel.kotlin.KotlinNovelExtensionInstaller
 import eu.kanade.tachiyomi.extension.novel.kotlin.KotlinNovelExtensionLoadResult
@@ -32,7 +34,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import logcat.LogPriority
 import tachiyomi.core.common.preference.getAndSet
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.extension.novel.NovelPluginInstallerFacade
 import tachiyomi.data.extension.novel.NovelPluginKeyValueStore
 import tachiyomi.domain.extension.novel.model.NovelPlugin
@@ -103,12 +107,20 @@ class DefaultNovelExtensionManager(
         _signatureMismatchEvents.asSharedFlow()
 
     override fun reportSignatureMismatch(pluginId: String) {
-        val displayName = installedPlugins.value.firstOrNull { it.id == pluginId }?.name ?: pluginId
+        val installed = installedPlugins.value.firstOrNull { it.id == pluginId }
+        val displayName = installed?.name ?: pluginId
+        // The offered replacement must never be older than the installed copy: a mismatch
+        // reinstall uninstalls first, so the JS downgrade guard would not apply (parity with the
+        // manga/anime managers, which hand out the newest variant per package).
+        val candidate = availablePlugins.value
+            .filter { it.id == pluginId }
+            .filter { installed == null || it.versionCode >= installed.versionCode }
+            .maxByOrNull { it.versionCode }
         _signatureMismatchEvents.tryEmit(
             NovelExtensionManager.SignatureMismatchEvent(
                 pluginId = pluginId,
                 displayName = displayName,
-                candidate = availablePlugins.value.firstOrNull { it.id == pluginId },
+                candidate = candidate,
             ),
         )
     }
@@ -160,6 +172,12 @@ class DefaultNovelExtensionManager(
                             else -> KotlinNovelExtensionLoader.isExtensionPackage(context, pkgName)
                         }
                         if (shouldReload) {
+                            // An add/replace finished outside our installer paths (e.g. the user
+                            // installed the extension APK from a file manager) — keep the user's
+                            // trust across the new version when the signing key is unchanged.
+                            if (pkgName != null && intent.action != Intent.ACTION_PACKAGE_REMOVED) {
+                                carryTrustToNewVersion(pkgName)
+                            }
                             reloadInstalledKotlinExtensions()
                         }
                     }
@@ -208,6 +226,20 @@ class DefaultNovelExtensionManager(
             .filterNot { it.id == installed.id } + installed
         applyInstalledSnapshots()
         return installed
+    }
+
+    override fun cancelPluginInstall(plugin: NovelPlugin.Available) {
+        if (!plugin.isKotlinExtension) return
+        val pkgName = plugin.pkgName ?: plugin.id
+        pendingInstallRepos.remove(pkgName)
+        kotlinInstaller?.cancelInstall(pkgName)
+    }
+
+    override fun cancelPluginInstall(plugin: NovelPlugin.Installed) {
+        if (!plugin.isKotlinExtension) return
+        val pkgName = plugin.pkgName ?: plugin.id
+        pendingInstallRepos.remove(pkgName)
+        kotlinInstaller?.cancelInstall(pkgName)
     }
 
     override suspend fun uninstallPlugin(plugin: NovelPlugin.Installed) {
@@ -330,6 +362,27 @@ class DefaultNovelExtensionManager(
         val appContext = context ?: return
         installedKotlinExtensionsSnapshot = KotlinNovelExtensionLoader.loadExtensions(appContext)
         applyInstalledSnapshots()
+    }
+
+    /**
+     * Carries the user's trust to the newly installed (shared) version when the signing key is
+     * unchanged, so an update does not silently flip the extension back to Untrusted. No-op for
+     * private-only copies (handled inside the loader) and fresh installs.
+     */
+    private fun carryTrustToNewVersion(pkgName: String) {
+        val appContext = context ?: return
+        val trust = trustExtension ?: return
+        val info = runCatching {
+            appContext.packageManager.getPackageInfo(pkgName, 0)
+        }.getOrNull() ?: return
+        val signatures = ExtensionSignatureComparison.installedSignatures(appContext, pkgName) ?: return
+        signatures.lastOrNull()?.let { signatureHash ->
+            runCatching {
+                trust.trustIfSameSigner(pkgName, PackageInfoCompat.getLongVersionCode(info), signatureHash)
+            }.onFailure { e ->
+                logcat(LogPriority.WARN, e) { "Failed to carry trust to new version for $pkgName" }
+            }
+        }
     }
 
     private fun applyInstalledSnapshots() {

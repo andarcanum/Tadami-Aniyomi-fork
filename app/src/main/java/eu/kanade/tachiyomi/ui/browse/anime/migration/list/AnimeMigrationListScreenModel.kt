@@ -22,9 +22,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.update
+import logcat.LogPriority
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.anime.interactor.GetAnime
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.items.episode.interactor.GetEpisodesByAnimeId
@@ -147,78 +149,63 @@ class AnimeMigrationListScreenModel(
         val hideNotFound = sourcePreferences.migrationHideNotFound().get()
         val onlyNewEpisodes = sourcePreferences.migrationOnlyNewChapters().get()
 
-        var currentItems = items
         items.forEach { item ->
             if (item.anime.id in cancelledSearchIds) {
-                currentItems = currentItems.map { current ->
-                    if (current.anime.id == item.anime.id) {
-                        current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
-                    } else {
-                        current
-                    }
+                updateItem(item.anime.id, hideNotFound, onlyNewEpisodes) { current ->
+                    current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
                 }
-                publishSearchItems(currentItems, hideNotFound, onlyNewEpisodes)
                 return@forEach
             }
 
-            val result = searchSource(
-                anime = item.anime,
-                sources = sources,
-                strategy = strategy,
-                useDeepSearch = useDeepSearch,
-                useAutoMetadata = useAutoMetadata,
-                onProgress = { label ->
-                    currentItems = currentItems.map { current ->
-                        if (current.anime.id == item.anime.id) {
+            val result = runCatching {
+                searchSource(
+                    anime = item.anime,
+                    sources = sources,
+                    strategy = strategy,
+                    useDeepSearch = useDeepSearch,
+                    useAutoMetadata = useAutoMetadata,
+                    onProgress = { label ->
+                        updateItem(item.anime.id, hideNotFound, onlyNewEpisodes) { current ->
                             current.copy(searchLabel = label)
-                        } else {
-                            current
                         }
-                    }
-                    publishSearchItems(currentItems, hideNotFound, onlyNewEpisodes)
-                },
-            )
+                    },
+                )
+            }.onFailure { error ->
+                logcat(LogPriority.ERROR, error) { "Anime migration search failed for anime ${item.anime.id}" }
+            }.getOrNull()
+
             if (item.anime.id in cancelledSearchIds) {
-                currentItems = currentItems.map { current ->
-                    if (current.anime.id == item.anime.id) {
-                        current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
-                    } else {
-                        current
-                    }
+                updateItem(item.anime.id, hideNotFound, onlyNewEpisodes) { current ->
+                    current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
                 }
-                publishSearchItems(currentItems, hideNotFound, onlyNewEpisodes)
                 return@forEach
             }
 
-            val updatedItem = when (result) {
-                null -> item.copy(searchResult = SearchResult.NotFound, searchLabel = null)
-                else -> item.copy(
-                    searchLabel = null,
-                    searchResult = SearchResult.Success(
-                        anime = result.anime,
-                        source = result.source.name,
-                        episodeCount = result.episodeInfo.episodeCount,
-                        latestEpisode = result.episodeInfo.latestEpisode,
-                    ),
+            val updatedResult = when (result) {
+                null -> SearchResult.NotFound
+                else -> SearchResult.Success(
+                    anime = result.anime,
+                    source = result.source.name,
+                    episodeCount = result.episodeInfo.episodeCount,
+                    latestEpisode = result.episodeInfo.latestEpisode,
                 )
             }
 
-            currentItems = currentItems.map { current ->
-                if (current.anime.id == item.anime.id) updatedItem else current
+            updateItem(item.anime.id, hideNotFound, onlyNewEpisodes) { current ->
+                current.copy(searchResult = updatedResult, searchLabel = null)
             }
-
-            publishSearchItems(currentItems, hideNotFound, onlyNewEpisodes)
         }
     }
 
-    private fun publishSearchItems(
-        items: List<MigratingAnime>,
+    private fun updateItem(
+        animeId: Long,
         hideNotFound: Boolean,
         onlyNewEpisodes: Boolean,
+        transform: (MigratingAnime) -> MigratingAnime,
     ) {
-        allItems = items
+        allItems = allItems.map { if (it.anime.id == animeId) transform(it) else it }
         val visibleItems = visibleAnimeMigrationItems(
-            items = items,
+            items = allItems,
             hideNotFound = hideNotFound,
             onlyNewEpisodes = onlyNewEpisodes,
         ).toImmutableList()
@@ -408,9 +395,13 @@ class AnimeMigrationListScreenModel(
             val item = items.find { it.anime.id == animeId } ?: return@launchIO
             val target = (item.searchResult as? SearchResult.Success)?.anime ?: return@launchIO
             val flags = getMigrationFlags(item.anime)
-            migrateAnime.migrateAnime(item.anime, target, replace, flags)
-            markUpdateErrorResolved(item.anime.id, replace)
-            removeAnime(item)
+            runCatching {
+                migrateAnime.migrateAnime(item.anime, target, replace, flags)
+                markUpdateErrorResolved(item.anime.id, replace)
+                removeAnime(item)
+            }.onFailure { error ->
+                logcat(LogPriority.ERROR, error) { "Failed to migrate single anime $animeId" }
+            }
         }
     }
 
@@ -436,28 +427,38 @@ class AnimeMigrationListScreenModel(
                     item
                 }
             }
-            publishSearchItems(
+            allItems = updatedItems
+            val hideNotFound = sourcePreferences.migrationHideNotFound().get()
+            val onlyNewEpisodes = sourcePreferences.migrationOnlyNewChapters().get()
+            val visibleItems = visibleAnimeMigrationItems(
                 items = updatedItems,
-                hideNotFound = sourcePreferences.migrationHideNotFound().get(),
-                onlyNewEpisodes = sourcePreferences.migrationOnlyNewChapters().get(),
-            )
+                hideNotFound = hideNotFound,
+                onlyNewEpisodes = onlyNewEpisodes,
+            ).toImmutableList()
+            val finishedCount = visibleItems.count { it.searchResult != SearchResult.Searching }
+            val migrationComplete = isAnimeMigrationSearchComplete(visibleItems)
+
+            mutableState.update { state ->
+                state.copy(
+                    items = visibleItems,
+                    finishedCount = finishedCount,
+                    migrationComplete = migrationComplete,
+                )
+            }
         }
     }
 
     fun cancelSearch(animeId: Long) {
         cancelledSearchIds += animeId
-        val updatedItems = allItems.map { item ->
-            if (item.anime.id == animeId && item.searchResult == SearchResult.Searching) {
-                item.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+        val hideNotFound = sourcePreferences.migrationHideNotFound().get()
+        val onlyNewEpisodes = sourcePreferences.migrationOnlyNewChapters().get()
+        updateItem(animeId, hideNotFound, onlyNewEpisodes) { current ->
+            if (current.searchResult == SearchResult.Searching) {
+                current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
             } else {
-                item
+                current
             }
         }
-        publishSearchItems(
-            items = updatedItems,
-            hideNotFound = sourcePreferences.migrationHideNotFound().get(),
-            onlyNewEpisodes = sourcePreferences.migrationOnlyNewChapters().get(),
-        )
     }
 
     fun removeAnime(animeId: Long) {
@@ -477,9 +478,13 @@ class AnimeMigrationListScreenModel(
                 items.forEachIndexed { index, item ->
                     val target = (item.searchResult as? SearchResult.Success)?.anime ?: return@forEachIndexed
                     val flags = getMigrationFlags(item.anime)
-                    migrateAnime.migrateAnime(item.anime, target, replace, flags)
-                    markUpdateErrorResolved(item.anime.id, replace)
-                    migratedItems += item
+                    runCatching {
+                        migrateAnime.migrateAnime(item.anime, target, replace, flags)
+                        markUpdateErrorResolved(item.anime.id, replace)
+                        migratedItems += item
+                    }.onFailure { error ->
+                        logcat(LogPriority.ERROR, error) { "Failed to migrate anime ${item.anime.id}" }
+                    }
                     mutableState.update {
                         it.copy(migrationProgress = ((index + 1).toFloat() / items.size).coerceAtMost(1f))
                     }

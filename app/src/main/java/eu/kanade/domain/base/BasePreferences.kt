@@ -61,9 +61,16 @@ class BasePreferences(
     /**
      * Persisted "downloadId|packageName" pairs for DownloadManager downloads that have not
      * reached a terminal state, so a process restart can resume installing finished ones.
+     * Separate keys per media type: a shared key let each installer's resume rewrite the
+     * other's in-flight records.
      */
-    fun extensionActiveDownloads() = preferenceStore.getStringSet(
-        Preference.appStateKey("extension_active_downloads"),
+    fun mangaExtensionActiveDownloads() = preferenceStore.getStringSet(
+        Preference.appStateKey("manga_extension_active_downloads"),
+        emptySet(),
+    )
+
+    fun animeExtensionActiveDownloads() = preferenceStore.getStringSet(
+        Preference.appStateKey("anime_extension_active_downloads"),
         emptySet(),
     )
 
@@ -75,6 +82,16 @@ class BasePreferences(
     fun lastExtensionApkPath() = preferenceStore.getString(Preference.appStateKey("last_extension_apk_path"), "")
 
     fun lastExtensionApkKind() = preferenceStore.getString(Preference.appStateKey("last_extension_apk_kind"), "")
+
+    /**
+     * Per-package index of app-private extension APKs kept as a manual share/install fallback.
+     * Supersedes the single-slot last_extension_apk_* prefs above, which are kept only for a
+     * one-time migration read.
+     */
+    fun extensionApkFiles() = preferenceStore.getStringSet(
+        Preference.appStateKey("extension_apk_files"),
+        emptySet(),
+    )
 
     fun deviceHasPip() = context.packageManager.hasSystemFeature(
         PackageManager.FEATURE_PICTURE_IN_PICTURE,

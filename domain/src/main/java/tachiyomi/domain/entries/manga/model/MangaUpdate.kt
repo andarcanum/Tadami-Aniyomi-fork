@@ -29,6 +29,7 @@ data class MangaUpdate(
     val initialized: Boolean? = null,
     val version: Long? = null,
     /** Source-owned context (1.6 extensions keep e.g. a rotating slug here). */
+    @kotlin.jvm.Transient
     val memo: JsonObject? = null,
 )
 

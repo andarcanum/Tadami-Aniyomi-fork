@@ -23,8 +23,7 @@ please send a notice that includes all of the following:
    behalf.
 6. Your physical or electronic signature.
 
-**Where to send:** open a confidential security/legal report or contact the
-repository owner: andarcanum (GitHub) — open an issue or contact the repository owner.
+**Where to send:** please send your notice by email to **[jannople7@gmail.com](mailto:jannople7@gmail.com)** (or open a confidential security/legal report on GitHub).
 
 We will review valid notices and act accordingly, which may include removing or
 disabling the identified material.

@@ -27,10 +27,12 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Book
+import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.ReportProblem
+import androidx.compose.material.icons.outlined.SlowMotionVideo
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.VideoSettings
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -84,6 +86,7 @@ fun MoreScreenAurora(
     onPlayerSettingsClick: () -> Unit,
     onMangaReaderSettingsClick: () -> Unit,
     onNovelReaderSettingsClick: () -> Unit,
+    onNovelQuotesClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onAboutClick: () -> Unit,
     onDebugAppUpdatePreviewClick: () -> Unit,
@@ -98,6 +101,8 @@ fun MoreScreenAurora(
     onHelpClick: () -> Unit,
     latticeGridAvailable: Boolean,
     onOpenLatticeGridClick: () -> Unit,
+    showReelsEntry: Boolean = false,
+    onReelsClick: () -> Unit = {},
 ) {
     val colors = AuroraTheme.colors
     val hostScaffoldContentPadding = LocalHostScaffoldContentPadding.current
@@ -138,6 +143,15 @@ fun MoreScreenAurora(
                     darkRimLightEnabled = darkRimLightEnabled,
                 )
 
+                if (showReelsEntry) {
+                    AuroraSettingItem(
+                        title = stringResource(MR.strings.reels_sources_section_header),
+                        icon = Icons.Outlined.SlowMotionVideo,
+                        onClick = onReelsClick,
+                        darkRimLightEnabled = darkRimLightEnabled,
+                    )
+                }
+
                 AuroraSettingItem(
                     title = stringResource(AYMR.strings.aurora_settings),
                     icon = Icons.Filled.Settings,
@@ -163,6 +177,13 @@ fun MoreScreenAurora(
                     title = stringResource(AYMR.strings.pref_category_novel_reader),
                     icon = Icons.Outlined.Book,
                     onClick = onNovelReaderSettingsClick,
+                    darkRimLightEnabled = darkRimLightEnabled,
+                )
+
+                AuroraSettingItem(
+                    title = stringResource(AYMR.strings.novel_quotes_library_title),
+                    icon = Icons.Outlined.FormatQuote,
+                    onClick = onNovelQuotesClick,
                     darkRimLightEnabled = darkRimLightEnabled,
                 )
 

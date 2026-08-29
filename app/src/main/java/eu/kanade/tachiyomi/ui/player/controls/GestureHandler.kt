@@ -75,6 +75,7 @@ import tachiyomi.presentation.core.i18n.pluralStringResource
 import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.math.abs
 
 @Composable
 fun GestureHandler(
@@ -128,7 +129,11 @@ fun GestureHandler(
                 awaitPointerEventScope {
                     var startingX = 0f
                     var hasDragged = false
+                    var speedGestureAnchored = false
+                    var commitX = 0f
+                    var currentIndex = SPEED_GESTURE_BASE_PRESET_INDEX
                     val presets = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f, 5.0f)
+                    val presetStep = 40.dp.toPx()
                     while (true) {
                         val event = awaitPointerEvent(PointerEventPass.Initial)
                         val changes = event.changes
@@ -136,21 +141,37 @@ fun GestureHandler(
                         if (downChange != null) {
                             startingX = downChange.position.x
                             hasDragged = false
+                            speedGestureAnchored = false
                         }
                         if (viewModel.isDynamicSpeedActive.value) {
                             val activeChange = changes.firstOrNull { it.pressed }
                             if (activeChange != null) {
                                 val currentX = activeChange.position.x
-                                val deltaX = currentX - startingX
-                                val presetStep = 40.dp.toPx()
-                                val stepsShifted = (deltaX / presetStep).toInt()
-                                val baseIndex = 5 // 2.0f is at presets[5]
-                                val newIndex = (baseIndex + stepsShifted).coerceIn(0, presets.size - 1)
-                                val targetSpeed = presets[newIndex]
-                                if (viewModel.gesturePlaybackSpeed.value != targetSpeed) {
+                                if (!speedGestureAnchored) {
+                                    // Anchor at activation, not at finger-down: the finger
+                                    // may have drifted during the long-press hold.
+                                    speedGestureAnchored = true
+                                    startingX = currentX
+                                    commitX = currentX
+                                    val activeIndex = presets.indexOf(viewModel.gesturePlaybackSpeed.value)
+                                    currentIndex =
+                                        if (activeIndex >= 0) activeIndex else SPEED_GESTURE_BASE_PRESET_INDEX
+                                }
+                                if (!hasDragged && abs(currentX - startingX) > viewConfiguration.touchSlop) {
                                     hasDragged = true
-                                    viewModel.gesturePlaybackSpeed.update { targetSpeed }
-                                    MPVLib.setPropertyDouble("speed", targetSpeed.toDouble())
+                                }
+                                val (newIndex, newCommitX) = calculateSpeedPresetStep(
+                                    currentIndex,
+                                    commitX,
+                                    currentX,
+                                    presetStep,
+                                    presets.size,
+                                )
+                                if (newIndex != currentIndex) {
+                                    currentIndex = newIndex
+                                    commitX = newCommitX
+                                    viewModel.gesturePlaybackSpeed.update { presets[newIndex] }
+                                    MPVLib.setPropertyDouble("speed", presets[newIndex].toDouble())
                                     haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 }
                                 activeChange.consume()
@@ -428,3 +449,25 @@ fun calculateNewHorizontalGestureValue(originalValue: Int, startingX: Float, new
 fun calculateNewHorizontalGestureValue(originalValue: Float, startingX: Float, newX: Float, sensitivity: Float): Float {
     return originalValue + ((newX - startingX) * sensitivity)
 }
+
+/**
+ * Commits the next speed preset for the hold-and-slide gesture with hysteresis: a preset
+ * change requires traveling a full [presetStep] from [commitX] (the position where the
+ * current preset was committed), so finger tremor while holding still can't flip the
+ * speed back and forth across a boundary.
+ *
+ * @return the committed (preset index, commit position); unchanged when no step is crossed.
+ */
+fun calculateSpeedPresetStep(
+    currentIndex: Int,
+    commitX: Float,
+    currentX: Float,
+    presetStep: Float,
+    presetCount: Int,
+): Pair<Int, Float> {
+    val newIndex = (currentIndex + ((currentX - commitX) / presetStep).toInt()).coerceIn(0, presetCount - 1)
+    return if (newIndex == currentIndex) currentIndex to commitX else newIndex to currentX
+}
+
+/** Index of the 2.0x preset the speed gesture starts at. */
+const val SPEED_GESTURE_BASE_PRESET_INDEX = 5

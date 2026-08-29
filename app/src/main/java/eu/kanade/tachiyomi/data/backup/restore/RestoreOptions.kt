@@ -19,6 +19,7 @@ data class RestoreOptions(
     val extensions: Boolean = false,
     val achievements: Boolean = true,
     val stats: Boolean = true,
+    val reelsFavorites: Boolean = true,
     /**
      * Explicit user statement that a markerless, Mihon shaped file is an old Tadami sister export.
      *
@@ -50,6 +51,7 @@ data class RestoreOptions(
         restoreAnime,
         restoreNovel,
         legacySisterFallback,
+        reelsFavorites,
     )
 
     fun canRestore(): Boolean {
@@ -62,7 +64,8 @@ data class RestoreOptions(
             sourceSettings ||
             extensions ||
             achievements ||
-            stats
+            stats ||
+            reelsFavorites
     }
 
     companion object {
@@ -94,6 +97,11 @@ data class RestoreOptions(
                 label = MR.strings.categories,
                 getter = RestoreOptions::categories,
                 setter = { options, enabled -> options.copy(categories = enabled) },
+            ),
+            Entry(
+                label = MR.strings.reels_favorites_title,
+                getter = RestoreOptions::reelsFavorites,
+                setter = { options, enabled -> options.copy(reelsFavorites = enabled) },
             ),
             Entry(
                 label = MR.strings.app_settings,
@@ -146,6 +154,7 @@ data class RestoreOptions(
             restoreAnime = array.getOrNull(10) ?: true,
             restoreNovel = array.getOrNull(11) ?: true,
             legacySisterFallback = array.getOrNull(12) ?: false,
+            reelsFavorites = array.getOrNull(13) ?: true,
         )
     }
 

@@ -1,5 +1,5 @@
 {
-  "version": 25,
+  "version": 27,
   "achievements": [
     {
       "id": "first_chapter",
@@ -3010,6 +3010,34 @@
         }
       ],
       "season": null
+    },
+    {
+      "id": "save_5_quotes",
+      "type": "feature_based",
+      "category": "novel",
+      "threshold": 5,
+      "points": 150,
+      "title": "Inkwell",
+      "description": "Save 5 quotes from your novels",
+      "badge_icon": "ic_badge_inkwell",
+      "is_hidden": true,
+      "is_secret": false,
+      "rarity": "rare",
+      "tags": [
+        "novel",
+        "feature_based",
+        "quotes"
+      ],
+      "season": null,
+      "rewards": [
+        {
+          "type": "SPECIAL",
+          "id": "special_background_ink_water",
+          "title": "Ink in Water",
+          "description": "Living ink blooming through water"
+        }
+      ],
+      "hint": "Some lines refuse to be forgotten."
     }
   ]
 }

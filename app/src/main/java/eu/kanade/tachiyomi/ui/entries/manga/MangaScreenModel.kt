@@ -83,6 +83,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -205,6 +206,9 @@ class MangaScreenModel(
     private val selectedPositions: Array<Int> = arrayOf(-1, -1) // first and last selected index in list
     private val selectedChapterIds: HashSet<Long> = HashSet()
 
+    /** Single-flight guard so metadata loads never run concurrently (latest request wins). */
+    private var metadataLoadJob: Job? = null
+
     internal var isFromChangeCategory: Boolean = false
 
     internal val autoOpenTrack: Boolean
@@ -289,6 +293,13 @@ class MangaScreenModel(
         }
         if (!force && suggestionSeedUsed == seed) {
             return
+        }
+        if (!force) {
+            MangaSuggestionsSessionCache.get(mangaId, seed)?.let { cached ->
+                suggestionSeedUsed = seed
+                updateSuccessState { it.copy(suggestions = cached) }
+                return
+            }
         }
         suggestionSeedUsed = seed
 
@@ -392,11 +403,14 @@ class MangaScreenModel(
                         .take(20)
                 }
 
+                val nextState = when {
+                    finalCombined.isEmpty() -> SuggestionState.Empty()
+                    else -> SuggestionState.Success(finalCombined)
+                }
+                if (nextState is SuggestionState.Success) {
+                    MangaSuggestionsSessionCache.put(mangaId, seed, nextState)
+                }
                 updateSuccessState {
-                    val nextState = when {
-                        finalCombined.isEmpty() -> SuggestionState.Empty()
-                        else -> SuggestionState.Success(finalCombined)
-                    }
                     it.copy(suggestions = nextState)
                 }
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
@@ -413,22 +427,38 @@ class MangaScreenModel(
         }
     }
 
+    /** Launches metadata load, cancelling any in-flight load so calls never run concurrently. */
+    private fun launchMetadataLoad(mangaId: Long): Job {
+        metadataLoadJob?.cancel()
+        return screenModelScope.launchIO { loadMangaMetadata(mangaId) }.also { metadataLoadJob = it }
+    }
+
     private inline fun updateSuccessState(func: (State.Success) -> State.Success) {
         mutableState.update {
             when (it) {
-                State.Loading -> it
-                is State.Success -> func(it)
+                State.Loading -> {
+                    logcat(LogPriority.DEBUG) {
+                        "MangaScreenModel: dropping updateSuccessState mutation before initial state loaded"
+                    }
+                    it
+                }
+                is State.Success -> {
+                    val updated = func(it)
+                    cacheState(updated)
+                    updated
+                }
             }
         }
     }
 
     init {
+        val restoredState = restoreStateFromCache(mangaId)
+        restoredState?.let {
+            mutableState.value = it
+        }
         screenModelScope.launchIO {
-            combine(
-                getMangaAndChapters.subscribe(mangaId, applyScanlatorFilter = true).distinctUntilChanged(),
-                downloadCache.changes,
-                downloadManager.queueState,
-            ) { mangaAndChapters, _, _ -> mangaAndChapters }
+            getMangaAndChapters.subscribe(mangaId, applyScanlatorFilter = true)
+                .distinctUntilChanged()
                 .flowWithLifecycle(lifecycle)
                 .collectLatest { (manga, chapters) ->
                     val previousManga = successState?.manga
@@ -437,10 +467,25 @@ class MangaScreenModel(
                         previousManga.author != manga.author ||
                         previousManga.genre != manga.genre
 
-                    updateSuccessState {
-                        it.copy(
+                    updateSuccessState { current ->
+                        val mappedChapters = mapChaptersPreservingDownloadState(
+                            currentItems = current.chapters,
+                            newChapters = chapters,
                             manga = manga,
-                            chapters = chapters.toChapterListItems(manga),
+                            selectedIds = selectedChapterIds,
+                            isChapterDownloaded = { chapter ->
+                                downloadManager.isChapterDownloaded(
+                                    chapter.name,
+                                    chapter.scanlator,
+                                    manga.title,
+                                    manga.source,
+                                )
+                            },
+                            getActiveDownload = { id -> downloadManager.getQueuedDownloadOrNull(id) },
+                        )
+                        current.copy(
+                            manga = manga,
+                            chapters = mappedChapters,
                             chapterSourcePreview = null, // real persisted data arrived, clear preview
                         )
                     }
@@ -450,6 +495,24 @@ class MangaScreenModel(
                             manga = manga,
                             source = manga.toCatalogueSource(),
                         )
+                    }
+                }
+        }
+
+        screenModelScope.launchIO {
+            downloadCache.changes
+                .flowWithLifecycle(lifecycle)
+                .conflate()
+                .collectLatest {
+                    val state = successState ?: return@collectLatest
+                    val rawChapters = state.chapters.map { it.chapter }
+                    val hydrated = rawChapters.toChapterListItems(state.manga)
+                    updateSuccessState { current ->
+                        if (current.manga.id != state.manga.id) {
+                            current
+                        } else {
+                            current.copy(chapters = mergeHydrationById(current.chapters, hydrated))
+                        }
                     }
                 }
         }
@@ -490,14 +553,12 @@ class MangaScreenModel(
         observeDownloads()
 
         screenModelScope.launchIO {
-            val manga = getMangaAndChapters.awaitManga(mangaId)
-
-            if (shouldApplyDefaultChapterFlags(manga)) {
-                setMangaDefaultChapterFlags.await(manga)
-            }
+            val mangaDeferred = async { getMangaAndChapters.awaitManga(mangaId) }
+            val rawChaptersDeferred = async { getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true) }
+            val manga = mangaDeferred.await()
+            val rawChapters = rawChaptersDeferred.await()
 
             val source = Injekt.get<MangaSourceManager>().getOrStub(manga.source)
-            val rawChapters = getMangaAndChapters.awaitChapters(mangaId, applyScanlatorFilter = true)
             val start = System.currentTimeMillis()
             // Cheap path for Aurora: list visible immediately. Real download states via observeDownloads + hydrate.
             val chapters = rawChapters.toChapterListItemsCheap(manga)
@@ -529,24 +590,35 @@ class MangaScreenModel(
                     isMetadataLoading = willLoadMetadata && !hasCachedMetadata,
                     mangaMetadata = cachedMetadata,
                     suggestions = if (sourcePreferences.entrySuggestionsEnabled().get()) {
-                        SuggestionState.Loading
+                        MangaSuggestionsSessionCache.get(mangaId) ?: SuggestionState.Loading
                     } else {
                         SuggestionState.Disabled
                     },
                 )
             }
 
+            // Apply default chapter flags off the critical path so the DB write round-trip does not
+            // delay the first frame (deferred pattern from AnimeScreenModel).
+            if (shouldApplyDefaultChapterFlags(manga)) {
+                screenModelScope.launchIO { setMangaDefaultChapterFlags.await(manga) }
+            }
+
             // Hydrate real download states asynchronously so Aurora sees chapters list immediately (cheap path).
             // Individual updates continue to come via observeDownloads().
             screenModelScope.launchIO {
-                val hydrated = rawChapters.toChapterListItems(manga)
-                updateSuccessState { current ->
-                    if (current.manga.id ==
-                        manga.id
-                    ) {
-                        current.copy(chapters = hydrated, chapterSourcePreview = null)
-                    } else {
-                        current
+                val hasDownloads = downloadManager.getDownloadCount(manga) > 0 ||
+                    downloadManager.getQueuedDownloadOrNull(manga.id) != null
+                if (hasDownloads) {
+                    val hydrated = rawChapters.toChapterListItems(manga)
+                    updateSuccessState { current ->
+                        if (current.manga.id != manga.id) {
+                            current
+                        } else {
+                            // Merge download-state fields by chapter id instead of overwriting the list,
+                            // so fresher DB rows and selection changes made during hydration survive.
+                            val merged = mergeHydrationById(current.chapters, hydrated)
+                            current.copy(chapters = merged, chapterSourcePreview = null)
+                        }
                     }
                 }
             }
@@ -566,18 +638,20 @@ class MangaScreenModel(
             }
 
             screenModelScope.launchIO {
-                val availableScanlators = getAvailableScanlators.await(mangaId)
-                val scanlatorChapterCounts = getScanlatorChapterCounts.await(mangaId)
-                val excludedScanlators = getExcludedScanlators.await(mangaId)
-                updateSuccessState { current ->
-                    if (current.manga.id != manga.id) {
-                        current
-                    } else {
-                        current.copy(
-                            availableScanlators = availableScanlators,
-                            scanlatorChapterCounts = scanlatorChapterCounts,
-                            excludedScanlators = excludedScanlators,
-                        )
+                coroutineScope {
+                    val availableScanlatorsAsync = async { getAvailableScanlators.await(mangaId) }
+                    val scanlatorChapterCountsAsync = async { getScanlatorChapterCounts.await(mangaId) }
+                    val excludedScanlatorsAsync = async { getExcludedScanlators.await(mangaId) }
+                    updateSuccessState { current ->
+                        if (current.manga.id != manga.id) {
+                            current
+                        } else {
+                            current.copy(
+                                availableScanlators = availableScanlatorsAsync.await(),
+                                scanlatorChapterCounts = scanlatorChapterCountsAsync.await(),
+                                excludedScanlators = excludedScanlatorsAsync.await(),
+                            )
+                        }
                     }
                 }
             }
@@ -589,18 +663,25 @@ class MangaScreenModel(
             }
 
             // Fetch suggestions asynchronously after source refresh has been started.
-            loadSuggestions(
-                buildSuggestionSeed(manga, cachedMetadata),
-                manga = manga,
-                source = manga.toCatalogueSource(),
-            )
+            // If metadata is loading right now and not cached, defer to launchMetadataLoad to use the rich seed.
+            if (!willLoadMetadata || hasCachedMetadata) {
+                loadSuggestions(
+                    buildSuggestionSeed(manga, cachedMetadata),
+                    manga = manga,
+                    source = manga.toCatalogueSource(),
+                )
+            }
 
             // Start observe tracking since it only needs mangaId
             observeTrackers()
 
+            // Load cached/tracker metadata concurrently with the source refresh so the description
+            // appears without waiting for the network fetch. Single-flight via launchMetadataLoad.
+            launchMetadataLoad(mangaId)
+
             fetchFromSourceTasks.awaitAll()
 
-            loadMangaMetadata(mangaId)
+            metadataLoadJob?.join()
 
             // Initial loading finished
             updateSuccessState { it.copy(isRefreshingData = false) }
@@ -613,7 +694,7 @@ class MangaScreenModel(
             // One combined call: a 1.6 source rejects concurrent getMangaUpdate for the same entry.
             fetchMangaAndChaptersFromSource(manualFetch)
             updateSuccessState { it.copy(isRefreshingData = false) }
-            successState?.manga?.id?.let { loadMangaMetadata(it) }
+            successState?.manga?.id?.let { launchMetadataLoad(it).join() }
         }
     }
 
@@ -1170,7 +1251,9 @@ class MangaScreenModel(
         }
     }
 
-    /** Cheap version for initial state: defers expensive FS isDownloaded checks. Aurora list appears immediately. */
+    /**
+     * Cheap version for initial state: defers expensive FS isDownloaded checks. Aurora list appears immediately.
+     */
     private fun List<Chapter>.toChapterListItemsCheap(manga: Manga): List<ChapterList.Item> {
         val isLocal = manga.isLocal()
         return map { chapter ->
@@ -1818,7 +1901,16 @@ class MangaScreenModel(
                     }
                 }
             }
-            successState.copy(chapters = newChapters)
+            // Map the new selected flags back onto the FULL chapters list by id: processedChapters
+            // is the filtered/sorted view, and writing that subset into `chapters` would drop the
+            // filtered-out items until the next DB emission.
+            val selectedFlagsById = newChapters.associate { it.id to it.selected }
+            successState.copy(
+                chapters = successState.chapters.map { item ->
+                    val flag = selectedFlagsById[item.id]
+                    if (flag != null && item.selected != flag) item.copy(selected = flag) else item
+                },
+            )
         }
     }
 
@@ -2072,6 +2164,54 @@ class MangaScreenModel(
     private fun SManga.safeTitle(): String {
         return runCatching { title }.getOrDefault("")
     }
+
+    companion object {
+        private const val FAST_CACHE_MAX_ITEMS = 24
+        private val stateCache = object : java.util.LinkedHashMap<Long, State.Success>(
+            FAST_CACHE_MAX_ITEMS + 1,
+            1f,
+            true,
+        ) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, State.Success>?): Boolean {
+                return size > FAST_CACHE_MAX_ITEMS
+            }
+        }
+
+        @Synchronized
+        private fun restoreStateFromCache(mangaId: Long): State.Success? {
+            return stateCache[mangaId]
+        }
+
+        @Synchronized
+        private fun cacheState(state: State.Success?) {
+            if (state == null) return
+            val unselectedChapters = if (state.isAnySelected) {
+                state.chapters.map { if (it.selected) it.copy(selected = false) else it }
+            } else {
+                state.chapters
+            }
+            stateCache[state.manga.id] = state.copy(
+                isRefreshingData = false,
+                dialog = null,
+                chapters = unselectedChapters,
+            )
+        }
+
+        @Synchronized
+        internal fun clearStateCacheForTest() {
+            stateCache.clear()
+        }
+
+        @Synchronized
+        internal fun cacheStateForTest(state: State.Success) {
+            cacheState(state)
+        }
+
+        @Synchronized
+        internal fun restoreStateFromCacheForTest(mangaId: Long): State.Success? {
+            return restoreStateFromCache(mangaId)
+        }
+    }
 }
 
 internal fun resolveSelectedScanlator(
@@ -2104,6 +2244,91 @@ internal fun shouldApplyDefaultChapterFlags(manga: Manga): Boolean {
     return !manga.favorite && manga.chapterFlags == Manga.SHOW_ALL
 }
 
+/**
+ * Maps incoming database [newChapters] into [ChapterList.Item]s incrementally.
+ * Reuses already-resolved download state and progress from [currentItems] to avoid
+ * performing expensive O(n) disk checks on every database update.
+ */
+internal fun mapChaptersPreservingDownloadState(
+    currentItems: List<ChapterList.Item>,
+    newChapters: List<Chapter>,
+    manga: Manga,
+    selectedIds: Set<Long>,
+    isChapterDownloaded: (Chapter) -> Boolean,
+    getActiveDownload: (Long) -> MangaDownload?,
+): List<ChapterList.Item> {
+    if (currentItems.isEmpty()) {
+        val isLocal = manga.isLocal()
+        return newChapters.map { chapter ->
+            val activeDownload = if (isLocal) null else getActiveDownload(chapter.id)
+            val downloaded = if (isLocal) true else isChapterDownloaded(chapter)
+            val downloadState = when {
+                activeDownload != null -> activeDownload.status
+                downloaded -> MangaDownload.State.DOWNLOADED
+                else -> MangaDownload.State.NOT_DOWNLOADED
+            }
+            ChapterList.Item(
+                chapter = chapter,
+                downloadState = downloadState,
+                downloadProgress = activeDownload?.progress ?: 0,
+                selected = chapter.id in selectedIds,
+            )
+        }
+    }
+
+    val currentById = currentItems.associateBy { it.id }
+    val isLocal = manga.isLocal()
+    return newChapters.map { chapter ->
+        val existing = currentById[chapter.id]
+        val isSelected = chapter.id in selectedIds
+        if (existing != null) {
+            if (existing.chapter == chapter && existing.selected == isSelected) {
+                existing
+            } else {
+                existing.copy(
+                    chapter = chapter,
+                    selected = isSelected,
+                )
+            }
+        } else {
+            val activeDownload = if (isLocal) null else getActiveDownload(chapter.id)
+            val downloaded = if (isLocal) true else isChapterDownloaded(chapter)
+            val downloadState = when {
+                activeDownload != null -> activeDownload.status
+                downloaded -> MangaDownload.State.DOWNLOADED
+                else -> MangaDownload.State.NOT_DOWNLOADED
+            }
+            ChapterList.Item(
+                chapter = chapter,
+                downloadState = downloadState,
+                downloadProgress = activeDownload?.progress ?: 0,
+                selected = isSelected,
+            )
+        }
+    }
+}
+
+/**
+ * Merges hydrated download-state fields onto the current list by chapter id.
+ * Preserves fresher `chapter` rows and `selected` flags of [current]; items absent from
+ * [hydrated] are kept as-is.
+ */
+internal fun mergeHydrationById(
+    current: List<ChapterList.Item>,
+    hydrated: List<ChapterList.Item>,
+): List<ChapterList.Item> {
+    val hydratedById = hydrated.associateBy { it.id }
+    return current.map { item ->
+        hydratedById[item.id]?.let { h ->
+            if (item.downloadState == h.downloadState && item.downloadProgress == h.downloadProgress) {
+                item
+            } else {
+                item.copy(downloadState = h.downloadState, downloadProgress = h.downloadProgress)
+            }
+        } ?: item
+    }
+}
+
 @Immutable
 sealed class ChapterList {
     @Immutable
@@ -2121,5 +2346,34 @@ sealed class ChapterList {
     ) : ChapterList() {
         val id = chapter.id
         val isDownloaded = downloadState == MangaDownload.State.DOWNLOADED
+    }
+}
+
+/**
+ * In-memory session cache for suggestions to avoid re-fetching on back navigation or re-open.
+ */
+private object MangaSuggestionsSessionCache {
+    private const val TTL_MS = 12 * 60 * 60 * 1000L
+
+    private data class Entry(
+        val seed: SuggestionSeed,
+        val state: SuggestionState.Success,
+        val cachedAt: Long,
+    )
+
+    private val entries = java.util.concurrent.ConcurrentHashMap<Long, Entry>()
+
+    fun get(mangaId: Long, seed: SuggestionSeed? = null): SuggestionState.Success? {
+        val entry = entries[mangaId] ?: return null
+        if (System.currentTimeMillis() - entry.cachedAt > TTL_MS) {
+            entries.remove(mangaId)
+            return null
+        }
+        if (seed != null && entry.seed != seed) return null
+        return entry.state
+    }
+
+    fun put(mangaId: Long, seed: SuggestionSeed, state: SuggestionState.Success) {
+        entries[mangaId] = Entry(seed, state, System.currentTimeMillis())
     }
 }

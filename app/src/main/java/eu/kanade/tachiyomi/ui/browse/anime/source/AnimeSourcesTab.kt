@@ -18,6 +18,7 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourcePagerScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
+import eu.kanade.tachiyomi.ui.reels.ReelsFeedScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -50,25 +51,31 @@ fun Screen.animeSourcesTab(): TabContent {
                 state = state,
                 contentPadding = contentPadding,
                 onClickItem = { source, listing ->
-                    val sourceIds = if (state.pinnedItems.any { it.id == source.id } && !state.verticalPinnedLayout) {
-                        state.pinnedItems.map { it.id }
+                    if (source.isFeedSource) {
+                        navigator.push(ReelsFeedScreen(source.id))
                     } else {
-                        var currentHeaderLang: String? = null
-                        val groups = mutableMapOf<String, MutableList<Long>>()
-                        state.items.forEach { uiModel ->
-                            when (uiModel) {
-                                is AnimeSourceUiModel.Header -> {
-                                    currentHeaderLang = uiModel.language
-                                }
-                                is AnimeSourceUiModel.Item -> {
-                                    val lang = currentHeaderLang ?: ""
-                                    groups.getOrPut(lang) { mutableListOf() }.add(uiModel.source.id)
+                        val sourceIds = if (state.pinnedItems.any { it.id == source.id } &&
+                            !state.verticalPinnedLayout
+                        ) {
+                            state.pinnedItems.map { it.id }
+                        } else {
+                            var currentHeaderLang: String? = null
+                            val groups = mutableMapOf<String, MutableList<Long>>()
+                            state.items.forEach { uiModel ->
+                                when (uiModel) {
+                                    is AnimeSourceUiModel.Header -> {
+                                        currentHeaderLang = uiModel.language
+                                    }
+                                    is AnimeSourceUiModel.Item -> {
+                                        val lang = currentHeaderLang ?: ""
+                                        groups.getOrPut(lang) { mutableListOf() }.add(uiModel.source.id)
+                                    }
                                 }
                             }
+                            groups.values.firstOrNull { it.contains(source.id) } ?: listOf(source.id)
                         }
-                        groups.values.firstOrNull { it.contains(source.id) } ?: listOf(source.id)
+                        navigator.push(BrowseAnimeSourcePagerScreen(source.id, sourceIds, listing.query))
                     }
-                    navigator.push(BrowseAnimeSourcePagerScreen(source.id, sourceIds, listing.query))
                 },
                 onClickPin = screenModel::togglePin,
                 onLongClickItem = screenModel::showSourceDialog,

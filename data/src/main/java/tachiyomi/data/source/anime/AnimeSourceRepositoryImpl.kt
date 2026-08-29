@@ -1,6 +1,7 @@
 package tachiyomi.data.source.anime
 
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
@@ -20,12 +21,8 @@ class AnimeSourceRepositoryImpl(
 ) : AnimeSourceRepository {
 
     override fun getAnimeSources(): Flow<List<DomainSource>> {
-        return sourceManager.catalogueSources.map { sources ->
-            sources.map {
-                mapSourceToDomainSource(it).copy(
-                    supportsLatest = it.supportsLatest,
-                )
-            }
+        return sourceManager.sources.map { sources ->
+            sources.map { mapSourceToDomainSource(it) }
         }
     }
 
@@ -77,6 +74,7 @@ fun mapSourceToDomainSource(source: AnimeSource): DomainSource = DomainSource(
     id = source.id,
     lang = source.lang,
     name = source.name,
-    supportsLatest = false,
+    supportsLatest = (source as? AnimeCatalogueSource)?.supportsLatest ?: false,
     isStub = false,
+    isFeedSource = source is AnimeFeedSource,
 )

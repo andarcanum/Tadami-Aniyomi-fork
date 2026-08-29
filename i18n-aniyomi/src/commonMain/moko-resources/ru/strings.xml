@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="metadata_auth_hint_message">Авторизуйтесь в сервисе для рейтинга, типа и обложки</string>
+    <string name="metadata_auth_hint_action">Войти</string>
     <string name="option_label_library_update_errors">Ошибки обновлений</string>
     <string name="label_library_update_errors">Ошибки обновлений</string>
     <string name="info_empty_library_update_errors">Нет ошибок обновления библиотеки</string>
@@ -341,8 +343,10 @@
     <string name="label_novel">Ранобэ</string>
     <string name="label_novel_library">Библиотека</string>
     <string name="novel_library_import_epub">Импортировать книгу</string>
-    <string name="novel_library_import_success">EPUB успешно импортирован</string>
-    <string name="novel_library_import_failed">Не удалось импортировать EPUB</string>
+    <string name="novel_library_import_result">Импортировано книг: %1$d из %2$d</string>
+    <string name="novel_library_import_folder">Импортировать папку с книгой</string>
+    <string name="novel_library_import_success">Книга успешно импортирована</string>
+    <string name="novel_library_import_failed">Не удалось импортировать книгу</string>
     <string name="novel_reader_settings_title">Для этого источника</string>
     <string name="novel_reader_override_source">Переопределить для источника</string>
     <string name="novel_reader_override_summary">Использовать свои настройки только для этого источника</string>
@@ -2597,6 +2601,13 @@
     <string name="treasury_bg_deep_space_archive_desc">Древние фолианты, безмолвно дрейфующие в космической пустоте.</string>
     <string name="treasury_bg_shadow_realm_title">Царство Теней</string>
     <string name="treasury_bg_shadow_realm_desc">Вращающаяся бездна, где свет и время теряют смысл.</string>
+    <string name="achievement_save_5_quotes_title">Чернильница</string>
+    <string name="achievement_save_5_quotes_desc">Сохраните 5 цитат из своих ранобэ</string>
+    <string name="achievement_save_5_quotes_hint_vague">Иные строки отказываются исчезать.</string>
+    <string name="achievement_save_5_quotes_hint_direct">Отмечайте отрывки при чтении — сборник их запоминает.</string>
+    <string name="achievement_save_5_quotes_hint_obvious">Соберите 5 сохранённых цитат в разделе «Цитаты» (Ещё → Цитаты).</string>
+    <string name="treasury_bg_ink_water_title">Чернила в воде</string>
+    <string name="treasury_bg_ink_water_desc">Живые чернила, расцветающие в воде, — атмосфера экрана цитат для всего приложения.</string>
     <!-- Treasury misc -->
     <string name="treasury_nickname_preview">Предпросмотр ника</string>
     <string name="treasury_default_user_name">Имя пользователя</string>
@@ -2967,4 +2978,49 @@
     <string name="home_open_catalog">Открыть каталог</string>
     <string name="home_catalog_button">Каталог</string>
     <string name="home_search_cancel">Отмена</string>
+
+    <!-- Novel text selection, highlights & dictionary -->
+    <string name="novel_reader_selected_text_translation_section">Выделение текста</string>
+    <string name="novel_reader_selected_text_translation_enabled">Включить перевод выделенного текста</string>
+    <string name="novel_reader_selected_text_translation_target_language">Язык перевода</string>
+    <string name="novel_reader_selected_text_translation_global_only_summary">Этот параметр глобален и игнорирует переопределения источника.</string>
+    <string name="novel_reader_selected_text_translation_webview_unavailable">Перевод выделенного текста недоступен для этой главы WebView.</string>
+    <string name="novel_reader_selected_text_translation_too_long">Выделенный фрагмент слишком длинный для перевода.</string>
+    <string name="novel_reader_selected_text_translation_retry_cooldown">Пожалуйста, подождите перед повторной попыткой перевода.</string>
+    <string name="novel_reader_selected_text_translation_action_translate">Перевести</string>
+    <string name="novel_reader_text_selection_action_dictionary">Словарь</string>
+    <string name="novel_reader_text_selection_action_translate">Перевести</string>
+    <string name="novel_highlight_action_save">Сохранить цитату</string>
+    <string name="novel_highlight_saved">Цитата сохранена</string>
+    <string name="novel_highlight_editor_note_hint">Заметка</string>
+    <string name="novel_highlight_menu_title">Цитаты</string>
+    <string name="novel_highlight_list_empty">Нет сохраненных цитат</string>
+    <string name="novel_quotes_screen_title">Цитаты</string>
+    <string name="novel_quotes_share_all">Поделиться всеми цитатами</string>
+    <string name="novel_highlight_action_copy">Скопировано</string>
+    <string name="novel_highlight_action_delete">Удалить цитату</string>
+    <string name="novel_highlights_default_color">Цвет маркера</string>
+    <string name="novel_highlight_page_label">Стр. %1$d/%2$d</string>
+    <string name="novel_quotes_library_title">Цитаты</string>
+    <string name="novel_quotes_collection_title">Сборник цитат</string>
+    <string name="novel_quotes_collection_all">ИЗ ВСЕЙ БИБЛИОТЕКИ</string>
+    <string name="novel_quotes_collection_book">из книги „%1$s“</string>
+    <string name="novel_quotes_filter_all">Все книги</string>
+    <string name="novel_quotes_search_hint">Поиск по цитатам и заметкам…</string>
+    <string name="novel_quotes_empty">Здесь появятся все ваши выделения и заметки из книг.</string>
+    <string name="novel_quotes_empty_search">Ничего не найдено по запросу.</string>
+    <string name="novel_quotes_delete_title">Удалить цитату?</string>
+    <string name="novel_quotes_delete_message">Выделение исчезнет из книги и из сборника. Это действие нельзя отменить.</string>
+    <string name="novel_quotes_sort_toggle_cd">Переключить сортировку (дата / по тайтлу)</string>
+    <string name="novel_reader_selected_text_translation_action_retry">Повторить</string>
+    <string name="novel_reader_selected_text_translation_action_close">Закрыть</string>
+    <string name="novel_reader_selected_text_translation_loading">Перевод выделенного текста…</string>
+    <string name="novel_reader_dictionary_action_lookup">Определение</string>
+    <string name="novel_reader_dictionary_loading">Поиск определения…</string>
+    <string name="novel_reader_dictionary_enabled">Поиск в словаре</string>
+    <string name="novel_reader_dictionary_enabled_summary">Выделите текст в читалке для поиска определений онлайн</string>
+    <string name="novel_reader_dictionary_target_language">Язык поиска в словаре</string>
+    <string name="novel_reader_dictionary_source">Источник: %1$s</string>
+    <string name="novel_reader_dictionary_fallback_language">Результаты для %1$s</string>
 </resources>
+

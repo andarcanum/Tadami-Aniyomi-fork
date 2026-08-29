@@ -43,7 +43,7 @@ class NovelPluginUpdateClassifierTest {
     }
 
     @Test
-    fun `same repo and other repo updates are exposed independently`() {
+    fun `a same-repo update suppresses reinstall candidates`() {
         val installed = installed(repoUrl = "https://main.example/index.json", versionCode = 1)
         val result = NovelPluginUpdateClassifier.classify(
             installed = installed,
@@ -54,9 +54,33 @@ class NovelPluginUpdateClassifierTest {
         )
 
         assertTrue(result.hasSameRepoUpdate)
-        assertTrue(result.hasOtherRepoUpdate)
+        // Parity with the manga resolver: reinstall candidates only exist when no regular
+        // update can be installed on top.
+        assertFalse(result.hasOtherRepoUpdate)
         assertEquals(2, result.sameRepoUpdate?.versionCode)
-        assertEquals(3, result.otherRepoUpdates.single().versionCode)
+    }
+
+    @Test
+    fun `reinstall candidates only offer the newest cross-repo version group`() {
+        val installed = installed(repoUrl = "https://main.example/index.json", versionCode = 1)
+        val result = NovelPluginUpdateClassifier.classify(
+            installed = installed,
+            variants = listOf(
+                available(repoUrl = "https://main.example/index.json", versionCode = 1),
+                available(repoUrl = "https://mirror.example/index.json", versionCode = 2),
+                available(repoUrl = "https://mirror.example/index.json", versionCode = 5),
+                available(repoUrl = "https://aardvark.example/index.json", versionCode = 5),
+            ),
+        )
+
+        assertFalse(result.hasSameRepoUpdate)
+        // Older-but-still-newer variants are not offered: only the latest version group.
+        assertEquals(listOf(5, 5), result.otherRepoUpdates.map { it.versionCode })
+        // Deterministic order inside the group: by repo display name.
+        assertEquals(
+            listOf("https://aardvark.example/index.json", "https://mirror.example/index.json"),
+            result.otherRepoUpdates.map { it.repoUrl },
+        )
     }
 
     @Test

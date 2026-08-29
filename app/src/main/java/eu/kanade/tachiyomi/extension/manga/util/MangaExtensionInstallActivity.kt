@@ -54,6 +54,7 @@ class MangaExtensionInstallActivity : Activity() {
             return
         }
         if (requestCode == INSTALL_REQUEST_CODE) {
+            if (finishIfCancelled()) return
             checkInstallationResult(resultCode)
         }
         finish()
@@ -61,14 +62,29 @@ class MangaExtensionInstallActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        maybeCheckIgnoredMiuiResult()
+        if (!finishIfCancelled()) {
+            maybeCheckIgnoredMiuiResult()
+        }
     }
 
     override fun onResume() {
         super.onResume()
         // The ignored MIUI result may arrive while the activity is merely paused (not stopped),
         // in which case onStart does not fire again — re-check on every resume instead.
-        maybeCheckIgnoredMiuiResult()
+        if (!finishIfCancelled()) {
+            maybeCheckIgnoredMiuiResult()
+        }
+    }
+
+    /** True when the user cancelled this download: finish silently, never report an outcome (B11). */
+    private fun finishIfCancelled(): Boolean {
+        val downloadId = intent.extras?.getLong(MangaExtensionInstaller.EXTRA_DOWNLOAD_ID) ?: -1L
+        if (downloadId < 0 || !LegacyInstallCancelRegistry.isCancelled(downloadId)) {
+            return false
+        }
+        LegacyInstallCancelRegistry.clear(downloadId)
+        finish()
+        return true
     }
 
     private fun maybeCheckIgnoredMiuiResult() {

@@ -36,6 +36,7 @@ object LocaleHelper {
         return when (lang) {
             LAST_USED_KEY -> context.stringResource(MR.strings.last_used_source)
             PINNED_KEY -> context.stringResource(MR.strings.pinned_sources)
+            REELS_KEY -> context.stringResource(MR.strings.reels_sources_section_header)
             "other" -> context.stringResource(MR.strings.other_source)
             "all" -> context.stringResource(MR.strings.multi_lang)
             else -> getLocalizedDisplayName(lang)
@@ -88,3 +89,4 @@ object LocaleHelper {
 
 internal const val PINNED_KEY = "pinned"
 internal const val LAST_USED_KEY = "last_used"
+internal const val REELS_KEY = "reels"

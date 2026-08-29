@@ -18,6 +18,12 @@ import tachiyomi.core.common.util.lang.withUIContext
 import tachiyomi.core.common.util.system.logcat
 import java.io.File
 
+/** Pending install requests older than this are dropped instead of replayed on startup. */
+internal const val PENDING_INSTALL_TTL_MS = 7L * 24 * 60 * 60 * 1000
+
+internal fun isPendingInstallStale(createdAtMs: Long, nowMs: Long): Boolean =
+    nowMs - createdAtMs > PENDING_INSTALL_TTL_MS
+
 /**
  * Persisted pending APK install requests used when Android requires the user to grant
  * "Install unknown apps" permission before the install intent can be launched.
@@ -34,6 +40,7 @@ class PendingApkInstallStore(
         val filePath: String,
         val kind: ApkExtensionKind,
         val backend: ApkInstallBackend,
+        val createdAtMs: Long = System.currentTimeMillis(),
     )
 
     fun save(request: PendingInstall) {
@@ -84,7 +91,16 @@ class PendingApkInstallStore(
         }
 
         var resumedAny = false
+        val nowMs = System.currentTimeMillis()
         for (pending in getAll()) {
+            if (isPendingInstallStale(pending.createdAtMs, nowMs)) {
+                logcat(LogPriority.INFO) {
+                    "Dropping stale pending APK install package=${pending.packageName} " +
+                        "ageDays=${(nowMs - pending.createdAtMs) / PENDING_INSTALL_TTL_MS}"
+                }
+                remove(pending.packageName)
+                continue
+            }
             val apkFile = File(pending.filePath)
             val exists = withIOContext { apkFile.isFile }
             if (!exists) {
@@ -92,6 +108,18 @@ class PendingApkInstallStore(
                     "Pending APK install file is missing package=${pending.packageName} path=${pending.filePath}"
                 }
                 remove(pending.packageName)
+                continue
+            }
+
+            // Only the legacy system-intent installer can be replayed blindly here: launching
+            // ACTION_INSTALL_PACKAGE IS its native mechanism. Every other backend (including
+            // PackageInstaller's session flow) would bypass its own logic and never report a
+            // result back; keep the entry so the normal extensions-screen flow can retry it.
+            if (pending.backend != ApkInstallBackend.LEGACY) {
+                logcat(LogPriority.WARN) {
+                    "Skipping auto-resume of ${pending.backend} install " +
+                        "package=${pending.packageName}; retry from the extensions screen"
+                }
                 continue
             }
 
@@ -121,7 +149,9 @@ class PendingApkInstallStore(
         return resumedAny
     }
 
-    private fun remove(packageName: String) {
+    /** Removes only the entry for [packageName]: a successful install of one extension must
+     *  never wipe pending entries of other extensions (cross-media queue loss). */
+    fun remove(packageName: String) {
         basePreferences.pendingApkInstallQueue().getAndSet { queue ->
             queue.filterNot { it.decode()?.packageName == packageName }.toSet()
         }
@@ -134,6 +164,7 @@ class PendingApkInstallStore(
             put("filePath", filePath)
             put("kind", kind.name)
             put("backend", backend.name)
+            put("createdAtMs", createdAtMs)
         }.toString()
     }
 
@@ -148,6 +179,8 @@ class PendingApkInstallStore(
                     ?.toEnumOrNull<ApkExtensionKind>() ?: return null,
                 backend = obj["backend"]?.jsonPrimitive?.contentOrNull
                     ?.toEnumOrNull<ApkInstallBackend>() ?: return null,
+                createdAtMs = obj["createdAtMs"]?.jsonPrimitive?.content?.toLongOrNull()
+                    ?: System.currentTimeMillis(),
             )
         }.getOrNull()
     }

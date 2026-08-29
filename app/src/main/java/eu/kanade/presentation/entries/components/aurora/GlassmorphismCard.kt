@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -34,13 +35,29 @@ fun GlassmorphismCard(
     val shape = RoundedCornerShape(cornerRadius)
 
     val cardModifier = if (!colors.isDark && !colors.isEInk) {
-        val backgroundColors = listOf(
-            Color.White.copy(alpha = 0.78f),
-            Color.White.copy(alpha = 0.68f),
-            Color.White.copy(alpha = 0.60f),
-        )
+        // Brushes and tint lists are remembered so repeated recompositions of the
+        // card (hero/stats/info/action) do not re-allocate them every time.
+        val backgroundColors = remember {
+            listOf(
+                Color.White.copy(alpha = 0.78f),
+                Color.White.copy(alpha = 0.68f),
+                Color.White.copy(alpha = 0.60f),
+            )
+        }
         val tintedBgColors =
-            overlayColor?.let { tintAuroraCardBackgroundColors(backgroundColors, it) } ?: backgroundColors
+            remember(backgroundColors, overlayColor) {
+                overlayColor?.let { tintAuroraCardBackgroundColors(backgroundColors, it) } ?: backgroundColors
+            }
+        val backgroundBrush = remember(tintedBgColors) { Brush.verticalGradient(colors = tintedBgColors) }
+        val borderBrush = remember {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.75f),
+                    Color.White.copy(alpha = 0.28f),
+                    Color.White.copy(alpha = 0.12f),
+                ),
+            )
+        }
 
         modifier
             .padding(horizontal = horizontalPadding, vertical = verticalPadding)
@@ -71,35 +88,30 @@ fun GlassmorphismCard(
                 )
             }
             .clip(shape)
-            .background(
-                brush = Brush.verticalGradient(colors = tintedBgColors),
-                shape = shape,
-            )
+            .background(brush = backgroundBrush, shape = shape)
             .border(
                 width = 1.dp,
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        Color.White.copy(alpha = 0.75f),
-                        Color.White.copy(alpha = 0.28f),
-                        Color.White.copy(alpha = 0.12f),
-                    ),
-                ),
+                brush = borderBrush,
                 shape = shape,
             )
             .padding(innerPadding)
     } else {
         val bgColors = resolveAuroraDetailCardBackgroundColors(colors)
         val borderColors = resolveAuroraDetailCardBorderColors(colors)
-        val tintedBgColors = overlayColor?.let { tintAuroraCardBackgroundColors(bgColors, it) } ?: bgColors
+        val tintedBgColors =
+            remember(bgColors, overlayColor) {
+                overlayColor?.let { tintAuroraCardBackgroundColors(bgColors, it) } ?: bgColors
+            }
         val borderBrush = if (colors.isDark) {
             auroraMenuRimLightBrush(colors)
         } else {
-            Brush.linearGradient(colors = borderColors)
+            remember(borderColors) { Brush.linearGradient(colors = borderColors) }
         }
+        val backgroundBrush = remember(tintedBgColors) { Brush.linearGradient(colors = tintedBgColors) }
         modifier
             .padding(horizontal = horizontalPadding, vertical = verticalPadding)
             .clip(shape)
-            .background(brush = Brush.linearGradient(colors = tintedBgColors))
+            .background(brush = backgroundBrush)
             .border(
                 width = 1.dp,
                 brush = borderBrush,

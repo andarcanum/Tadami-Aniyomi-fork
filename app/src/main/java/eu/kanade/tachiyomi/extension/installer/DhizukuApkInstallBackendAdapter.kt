@@ -5,11 +5,14 @@ import com.rosan.dhizuku.api.Dhizuku
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.installer.DhizukuShellRunner.SESSION_ID_REGEX
 import eu.kanade.tachiyomi.util.system.getUriSize
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 
@@ -29,14 +32,7 @@ class DhizukuApkInstallBackendAdapter(
             emit(InstallStep.Error)
             return@flow
         }
-        if (!Dhizuku.isPermissionGranted()) {
-            Dhizuku.requestPermission(
-                object : com.rosan.dhizuku.api.DhizukuRequestPermissionListener() {
-                    override fun onRequestPermission(grantResult: Int) {
-                        // handled by retry
-                    }
-                },
-            )
+        if (!awaitDhizukuPermission()) {
             logcat(LogPriority.ERROR) { "Dhizuku permission is required for APK install" }
             emit(InstallStep.Error)
             return@flow
@@ -94,12 +90,7 @@ class DhizukuApkInstallBackendAdapter(
 
     override suspend fun uninstall(request: ApkUninstallRequest): ApkInstallResult = withContext(Dispatchers.IO) {
         if (!Dhizuku.init(context)) return@withContext ApkInstallResult.Error("Dhizuku is not ready")
-        if (!Dhizuku.isPermissionGranted()) {
-            Dhizuku.requestPermission(
-                object : com.rosan.dhizuku.api.DhizukuRequestPermissionListener() {
-                    override fun onRequestPermission(grantResult: Int) {}
-                },
-            )
+        if (!awaitDhizukuPermission()) {
             return@withContext ApkInstallResult.Error("Dhizuku permission is required")
         }
         if (!request.packageName.matches(Regex("""^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$"""))) {
@@ -117,4 +108,33 @@ class DhizukuApkInstallBackendAdapter(
 
     // cancel() is best-effort: the running exec() will time out after 120 s if the process hangs.
     override fun cancel(packageName: String) = Unit
+
+    /**
+     * Requests the Dhizuku permission and suspends until the user answers, so a first-time
+     * install continues instead of failing instantly.
+     */
+    private suspend fun awaitDhizukuPermission(): Boolean {
+        if (!Dhizuku.init(context)) return false
+        if (Dhizuku.isPermissionGranted()) return true
+        val result = CompletableDeferred<Int>()
+        Dhizuku.requestPermission(
+            object : com.rosan.dhizuku.api.DhizukuRequestPermissionListener() {
+                override fun onRequestPermission(grantResult: Int) {
+                    result.complete(grantResult)
+                }
+            },
+        )
+        try {
+            withTimeout(PERMISSION_TIMEOUT_MS) { result.await() }
+        } catch (e: TimeoutCancellationException) {
+            logcat(LogPriority.WARN) { "Timed out waiting for the Dhizuku permission" }
+            return false
+        }
+        // The callback only reports the dialog outcome; trust the authoritative check.
+        return Dhizuku.isPermissionGranted()
+    }
+
+    private companion object {
+        const val PERMISSION_TIMEOUT_MS = 60_000L
+    }
 }

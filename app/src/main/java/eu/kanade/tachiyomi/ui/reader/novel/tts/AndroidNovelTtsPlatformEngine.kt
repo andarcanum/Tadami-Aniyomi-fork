@@ -50,7 +50,7 @@ private object NoOpNovelTtsPlatformEngine : NovelTtsPlatformEngine {
     override fun shutdown() = Unit
 }
 
-private class AndroidNovelTtsPlatformEngine(
+internal open class AndroidNovelTtsPlatformEngine(
     private val context: Context,
 ) : NovelTtsPlatformEngine {
     private var tts: TextToSpeech? = null
@@ -71,6 +71,7 @@ private class AndroidNovelTtsPlatformEngine(
                 val instance = localInstance
                 if (requestGeneration != generation.get()) {
                     runCatching { instance?.shutdown() }
+                    if (tts === instance) tts = null
                     if (continuation.isActive) continuation.resume(null)
                     return@OnInitListener
                 }
@@ -78,14 +79,16 @@ private class AndroidNovelTtsPlatformEngine(
                     if (continuation.isActive) continuation.resume(instance)
                 } else {
                     runCatching { instance?.shutdown() }
+                    // Mirror the cancellation path: without this cleanup the dead
+                    // instance stays in `tts`, so a later retry of the same
+                    // (default) engine hits the fast-path guard
+                    // `tts != null && initializedEnginePackage == engine` and is
+                    // silently skipped — novel TTS stays bricked until restart.
+                    if (tts === instance) tts = null
                     if (continuation.isActive) continuation.resume(null)
                 }
             }
-            localInstance = if (normalizedEnginePackage.isNullOrBlank()) {
-                TextToSpeech(context, listener)
-            } else {
-                TextToSpeech(context, listener, normalizedEnginePackage)
-            }
+            localInstance = createTtsInstance(listener, normalizedEnginePackage)
             tts = localInstance
             continuation.invokeOnCancellation {
                 if (requestGeneration == generation.get()) {
@@ -120,6 +123,21 @@ private class AndroidNovelTtsPlatformEngine(
                 }
             },
         )
+    }
+
+    /**
+     * Creation seam for [TextToSpeech]. Overridden by tests to count instance
+     * creations and to simulate engine bind failures.
+     */
+    protected open fun createTtsInstance(
+        listener: TextToSpeech.OnInitListener,
+        enginePackage: String?,
+    ): TextToSpeech {
+        return if (enginePackage.isNullOrBlank()) {
+            TextToSpeech(context, listener)
+        } else {
+            TextToSpeech(context, listener, enginePackage)
+        }
     }
 
     override fun setProgressListener(listener: NovelTtsPlaybackProgressListener?) {

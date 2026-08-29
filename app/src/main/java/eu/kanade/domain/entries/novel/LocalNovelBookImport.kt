@@ -1,17 +1,38 @@
 package eu.kanade.domain.entries.novel
 
 /**
- * Pure helpers for the library "Import book" flow (EPUB + FB2 into localnovel/).
+ * Pure helpers for the library "Import book" flow (books, text formats and archives
+ * into localnovel/). Must stay in lockstep with LocalNovelFormats.SUPPORTED_EXTENSIONS.
  */
 object LocalNovelBookImport {
 
-    val SUPPORTED_EXTENSIONS: Set<String> = setOf("epub", "fb2")
+    val SUPPORTED_EXTENSIONS: Set<String> = setOf(
+        "epub",
+        "fb2",
+        "txt",
+        "text",
+        "md",
+        "markdown",
+        "html",
+        "htm",
+        "xhtml",
+        "zip",
+        "cbz",
+        "rar",
+        "cbr",
+    )
 
     val PICKER_MIME_TYPES: Array<String> = arrayOf(
         "application/epub+zip",
         "application/x-fictionbook+xml",
         "application/xml",
         "text/xml",
+        "text/plain",
+        "text/markdown",
+        "text/html",
+        "application/zip",
+        "application/x-zip-compressed",
+        "application/vnd.rar",
         // Some OEM file managers only expose books under application/octet-stream.
         "application/octet-stream",
     )

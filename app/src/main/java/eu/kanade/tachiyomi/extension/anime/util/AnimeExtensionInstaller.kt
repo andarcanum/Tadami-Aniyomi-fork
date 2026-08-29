@@ -1,4 +1,4 @@
-package eu.kanade.tachiyomi.extension.anime.util
+﻿package eu.kanade.tachiyomi.extension.anime.util
 
 import android.app.DownloadManager
 import android.app.ForegroundServiceStartNotAllowedException
@@ -169,7 +169,7 @@ internal class AnimeExtensionInstaller(private val context: Context) {
         downloadManagerIdRegistry.put(pkgName, id)
         activeDownloads[pkgName] = id
         downloadIdToPkgName[id] = pkgName
-        basePreferences.extensionActiveDownloads().getAndSet { it + "$id|$pkgName" }
+        basePreferences.animeExtensionActiveDownloads().getAndSet { it + "$id|$pkgName" }
 
         val downloadStateFlow = MutableStateFlow(InstallStep.Pending)
         downloadsStateFlows[id] = downloadStateFlow
@@ -476,7 +476,7 @@ internal class AnimeExtensionInstaller(private val context: Context) {
      * died mid-download: finished ones are installed, dead ones are dropped.
      */
     fun resumeOrphanedDownloads(context: Context) {
-        val saved = basePreferences.extensionActiveDownloads().get()
+        val saved = basePreferences.animeExtensionActiveDownloads().get()
         val stillActive = mutableSetOf<String>()
         saved.forEach { entry ->
             val parts = entry.split("|", limit = 2)
@@ -505,7 +505,7 @@ internal class AnimeExtensionInstaller(private val context: Context) {
                 else -> stillActive += entry
             }
         }
-        basePreferences.extensionActiveDownloads().set(stillActive)
+        basePreferences.animeExtensionActiveDownloads().set(stillActive)
     }
 
     fun cancelInstall(pkgName: String) {
@@ -523,7 +523,6 @@ internal class AnimeExtensionInstaller(private val context: Context) {
      * @param pkgName The package name of the extension to uninstall
      */
     fun uninstallApk(pkgName: String) {
-        AnimeExtensionLoader.uninstallPrivateExtension(context, pkgName)
         if (context.isPackageInstalled(pkgName)) {
             @Suppress("DEPRECATION")
             val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, "package:$pkgName".toUri())
@@ -531,15 +530,21 @@ internal class AnimeExtensionInstaller(private val context: Context) {
             context.startActivity(intent)
             // The system dialog can be dismissed, which would leave the extension in place while
             // the app already told the user it was removed. Verify the outcome and report back.
+            // The private copy is deleted only after confirmed removal, so cancelling the dialog
+            // never leaves the extension without any files.
             installerScope.launch {
                 delay(UNINSTALL_VERIFICATION_DELAY_MS)
                 if (context.isPackageInstalled(pkgName)) {
                     logcat(LogPriority.WARN) {
-                        "Uninstall of $pkgName was not completed (dialog dismissed?) — state kept as installed"
+                        "Uninstall of $pkgName was not completed (dialog dismissed?) вЂ” state kept as installed"
                     }
+                } else {
+                    AnimeExtensionLoader.uninstallPrivateExtension(context, pkgName)
                 }
             }
         } else {
+            // No system package: this can only be a private-only copy, nothing to confirm.
+            AnimeExtensionLoader.uninstallPrivateExtension(context, pkgName)
             AnimeExtensionInstallReceiver.notifyRemoved(context, pkgName)
         }
     }

@@ -21,10 +21,10 @@ import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.extension.InstallStep
 import eu.kanade.tachiyomi.extension.canReplacePrivateExtension
 import eu.kanade.tachiyomi.extension.installer.ApkExtensionKind
+import eu.kanade.tachiyomi.extension.installer.ApkInstallBackend
 import eu.kanade.tachiyomi.extension.installer.ApkInstallRequest
 import eu.kanade.tachiyomi.extension.installer.ApkInstallResult
 import eu.kanade.tachiyomi.extension.installer.ApkUninstallRequest
-import eu.kanade.tachiyomi.extension.installer.ExtensionApkFileStore
 import eu.kanade.tachiyomi.extension.installer.ExtensionSignatureComparison
 import eu.kanade.tachiyomi.extension.installer.PendingApkInstallStore
 import eu.kanade.tachiyomi.extension.installer.PrivateExtensionInstallResult
@@ -32,8 +32,7 @@ import eu.kanade.tachiyomi.extension.installer.UnifiedApkExtensionInstaller
 import eu.kanade.tachiyomi.extension.installer.toApkInstallBackend
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
-import eu.kanade.tachiyomi.network.GET
-import eu.kanade.tachiyomi.network.awaitSuccess
+import eu.kanade.tachiyomi.extension.util.OkHttpExtensionApkDownloader
 import eu.kanade.tachiyomi.novelsource.ConfigurableNovelSource
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
 import eu.kanade.tachiyomi.novelsource.NovelSource
@@ -62,9 +61,11 @@ import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
 import okhttp3.OkHttpClient
 import rx.Observable
@@ -78,7 +79,39 @@ import java.security.MessageDigest
 import eu.kanade.tachiyomi.source.Source as TachiyomiSource
 
 private const val APK_MIME = "application/vnd.android.package-archive"
+
+/** Must match OkHttpExtensionApkDownloader.DOWNLOAD_DIR — that is where orphaned parts land. */
+private const val EXTENSION_APK_DOWNLOAD_DIR = "extension_apks"
+
+/** Cached novel-plugin APKs and partial downloads older than this are swept as orphans. */
+private const val ORPHAN_DOWNLOAD_MAX_AGE_MS = 48L * 60 * 60 * 1000
+
+/**
+ * Deletes truncated downloads ("*.apk.part") and stale cached plugin APKs left behind by dead
+ * processes; everything in that cache directory is re-downloadable from the plugin repo.
+ *
+ * @return absolute paths of the deleted files, for logging at the call site.
+ */
+fun sweepOrphanedNovelPluginDownloads(context: Context, nowMs: Long = System.currentTimeMillis()): List<String> {
+    val children = File(context.cacheDir, EXTENSION_APK_DOWNLOAD_DIR).listFiles() ?: return emptyList()
+    val deleted = mutableListOf<String>()
+    for (child in children) {
+        val expired = nowMs - child.lastModified() > ORPHAN_DOWNLOAD_MAX_AGE_MS
+        if (!child.isFile || (!child.name.endsWith(".apk.part") && !expired)) continue
+        if (child.delete()) deleted += child.absolutePath
+    }
+    return deleted
+}
+
 private const val INSTALL_TIMEOUT_MS = 5 * 60 * 1000L
+
+/** Backend-reported removal should land quickly; anything longer smells like a no-op uninstall. */
+private const val UNINSTALL_VERIFY_TIMEOUT_MS = 15_000L
+
+/** The ACTION_DELETE fallback is user-driven: give the system dialog a generous budget. */
+private const val UNINSTALL_FALLBACK_TIMEOUT_MS = 120_000L
+
+private const val UNINSTALL_POLL_INTERVAL_MS = 250L
 
 class KotlinNovelExtensionInstaller(
     private val context: Context,
@@ -87,23 +120,20 @@ class KotlinNovelExtensionInstaller(
     private val unifiedInstaller: UnifiedApkExtensionInstaller,
 ) {
     private val pendingInstallStore = PendingApkInstallStore(basePreferences)
-    private val apkFileStore = ExtensionApkFileStore(basePreferences)
+    private val trustExtension: TrustNovelExtension by injectLazy()
 
     suspend fun install(plugin: NovelPlugin.Available): NovelPlugin.Installed {
         val apkUrl = plugin.apkUrl ?: plugin.url
         val pkgName = plugin.pkgName ?: plugin.id
-        val apkFile = withContext(Dispatchers.IO) {
-            val safeName = plugin.id.replace(Regex("[^A-Za-z0-9_.-]"), "_")
-            val dir = File(context.cacheDir, "novel_kotlin_extensions")
-            dir.mkdirs()
-            val file = File(dir, "$safeName.apk")
-            client.newCall(GET(apkUrl)).awaitSuccess().use { response ->
-                file.outputStream().use { output ->
-                    response.body.byteStream().use { input -> input.copyTo(output) }
-                }
-            }
-            file
-        }
+        // Reuse the shared downloader: it writes to "<name>.apk.part" and renames only after a
+        // complete download, so a dead process cannot leave a truncated APK that looks final.
+        val apkFile = OkHttpExtensionApkDownloader(context, client, basePreferences)
+            .download(
+                url = apkUrl,
+                packageName = pkgName,
+                displayName = plugin.name,
+                kind = ApkExtensionKind.NOVEL_KOTLIN,
+            )
 
         // Validate before handing the APK to a system installer: the index checksum and the
         // package identity are the only gates a shared backend has (a private install re-checks
@@ -124,16 +154,13 @@ class KotlinNovelExtensionInstaller(
             error("Downloaded APK package mismatch: expected=$pkgName actual=${archiveInfo.packageName}")
         }
 
-        apkFileStore.save(
-            ExtensionApkFileStore.ApkFile(
-                packageName = pkgName,
-                displayName = plugin.name,
-                filePath = apkFile.absolutePath,
-                kind = ApkExtensionKind.NOVEL_KOTLIN,
-            ),
-        )
-
         val installer = basePreferences.extensionInstaller().get()
+        // Keep a private-only copy private: updating it through a system backend would add a
+        // second install of the same package next to the private file (mirrors the manga/anime
+        // isUpdateForPrivatelyInstalled routing).
+        val keepPrivate = !context.isPackageInstalled(pkgName) &&
+            KotlinNovelExtensionLoader.hasPrivateExtensionFile(context, pkgName)
+        val backend = if (keepPrivate) ApkInstallBackend.PRIVATE else installer.toApkInstallBackend()
         val terminalStep = unifiedInstaller.install(
             ApkInstallRequest(
                 id = pkgName,
@@ -141,7 +168,7 @@ class KotlinNovelExtensionInstaller(
                 displayName = plugin.name,
                 uri = apkFile.getUriCompat(context),
                 file = apkFile,
-                backend = installer.toApkInstallBackend(),
+                backend = backend,
                 kind = ApkExtensionKind.NOVEL_KOTLIN,
             ),
         ).first { it.isCompleted() }
@@ -153,7 +180,30 @@ class KotlinNovelExtensionInstaller(
             }
             error("Failed to install Kotlin novel extension $pkgName using ${installer.name}: $terminalStep")
         }
+        // A system install finished — carry the user's trust to the new version when the signing
+        // key is unchanged, so an update does not silently flip the extension back to Untrusted
+        // (mirrors the manga/anime manager's carryTrustToNewVersion; the private path handles this
+        // inside installPrivateExtensionFile).
+        carryTrustToNewVersion(pkgName)
         return plugin.toInstalledKotlin()
+    }
+
+    private fun carryTrustToNewVersion(pkgName: String) {
+        val info = runCatching {
+            context.packageManager.getPackageInfo(pkgName, 0)
+        }.getOrNull() ?: return
+        val signatures = ExtensionSignatureComparison.installedSignatures(context, pkgName) ?: return
+        signatures.lastOrNull()?.let { signatureHash ->
+            runCatching {
+                trustExtension.trustIfSameSigner(
+                    pkgName,
+                    PackageInfoCompat.getLongVersionCode(info),
+                    signatureHash,
+                )
+            }.onFailure {
+                logcat(LogPriority.WARN, it) { "Failed to carry trust to new version for $pkgName" }
+            }
+        }
     }
 
     private fun novelManager(): NovelExtensionManager? =
@@ -183,11 +233,14 @@ class KotlinNovelExtensionInstaller(
         return digest.digest().joinToString("") { byte -> "%02x".format(byte) }
     }
 
+    /** Best-effort cancel of an in-flight install: stops awaiting the result and clears the
+     *  pending-permission entry. A system dialog that is already visible cannot be aborted. */
+    fun cancelInstall(pkgName: String) {
+        unifiedInstaller.cancel(pkgName)
+    }
+
     suspend fun uninstall(plugin: NovelPlugin.Installed) {
         val pkgName = plugin.pkgName ?: plugin.id
-        withContext(Dispatchers.IO) {
-            KotlinNovelExtensionLoader.uninstallPrivateExtension(context, pkgName)
-        }
         if (context.isPackageInstalled(pkgName)) {
             // Route through the backend that installed the plugin so the uninstall is performed by
             // the same mechanism (Shizuku/Dhizuku do not need the system dialog this way).
@@ -198,21 +251,72 @@ class KotlinNovelExtensionInstaller(
                     backend = basePreferences.extensionInstaller().get().toApkInstallBackend(),
                 ),
             )
-            if (result is ApkInstallResult.Error) {
-                logcat(LogPriority.WARN) { "Unified uninstall failed for $pkgName: ${result.reason}" }
-                runCatching {
-                    Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkgName"))
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .let(context::startActivity)
-                }.onFailure {
-                    logcat(LogPriority.WARN, it) {
-                        "Failed to launch system uninstall for Kotlin novel extension $pkgName"
+            when (result) {
+                is ApkInstallResult.Installed -> {
+                    // Never trust the result blindly (B1): a PRIVATE-backend "success" may have
+                    // removed only the private copy while the system package survives, which
+                    // would strand replacePluginFromRepo's removal poll until its timeout.
+                    if (!awaitPackageRemoved(pkgName, UNINSTALL_VERIFY_TIMEOUT_MS)) {
+                        logcat(LogPriority.WARN) {
+                            "Kotlin novel extension $pkgName still installed after backend uninstall; requesting system uninstall"
+                        }
+                        runCatching {
+                            Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkgName"))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                .let(context::startActivity)
+                        }.onFailure {
+                            logcat(LogPriority.WARN, it) {
+                                "Failed to launch system uninstall for Kotlin novel extension $pkgName"
+                            }
+                        }
+                        if (!awaitPackageRemoved(pkgName, UNINSTALL_FALLBACK_TIMEOUT_MS)) {
+                            error("Kotlin novel extension $pkgName was not uninstalled; keeping private copy")
+                        }
+                    }
+                    withContext(Dispatchers.IO) {
+                        // Delete only after confirmed removal: cancelling the dialog must keep
+                        // the private copy, otherwise the extension would lose all its files.
+                        KotlinNovelExtensionLoader.uninstallPrivateExtension(context, pkgName)
+                    }
+                }
+                is ApkInstallResult.Cancelled -> Unit
+                is ApkInstallResult.Error -> {
+                    logcat(LogPriority.WARN) { "Unified uninstall failed for $pkgName: ${result.reason}" }
+                    runCatching {
+                        Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkgName"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            .let(context::startActivity)
+                    }.onFailure {
+                        logcat(LogPriority.WARN, it) {
+                            "Failed to launch system uninstall for Kotlin novel extension $pkgName"
+                        }
                     }
                 }
             }
+        } else {
+            // No system package: private-only copy, nothing to confirm.
+            withContext(Dispatchers.IO) {
+                KotlinNovelExtensionLoader.uninstallPrivateExtension(context, pkgName)
+            }
         }
     }
+
+    /** Polls until [pkgName] disappears; false when it is still installed after [timeoutMs]. */
+    private suspend fun awaitPackageRemoved(pkgName: String, timeoutMs: Long): Boolean =
+        awaitPollCondition(timeoutMs) { !context.isPackageInstalled(pkgName) }
 }
+
+/**
+ * Polls [condition] every [UNINSTALL_POLL_INTERVAL_MS] until it holds or [timeoutMs] elapses.
+ * Internal + parameterized so the polling contract stays unit-testable without Android.
+ */
+internal suspend fun awaitPollCondition(timeoutMs: Long, condition: suspend () -> Boolean): Boolean =
+    withTimeoutOrNull(timeoutMs) {
+        while (!condition()) {
+            delay(UNINSTALL_POLL_INTERVAL_MS)
+        }
+        true
+    } ?: false
 
 fun NovelPlugin.Available.toInstalledKotlin(): NovelPlugin.Installed {
     return NovelPlugin.Installed(
@@ -327,15 +431,21 @@ object KotlinNovelExtensionLoader {
             }
         }
         val part = File(privateExtensionDir, "$pkgName.$PRIVATE_EXTENSION_EXTENSION.part")
+        // Set once the previous good file has been removed for the swap: staging failures
+        // before that point must never destroy a working extension.
+        var previousFileRemoved = false
         return try {
             part.delete()
             file.copyAndSetReadOnlyTo(part, overwrite = true)
-            if (target.exists() && !target.delete()) {
-                logcat(LogPriority.ERROR) {
-                    "Failed to replace existing private Kotlin novel extension file: ${target.absolutePath}"
+            if (target.exists()) {
+                if (!target.delete()) {
+                    logcat(LogPriority.ERROR) {
+                        "Failed to replace existing private Kotlin novel extension file: ${target.absolutePath}"
+                    }
+                    part.delete()
+                    return PrivateExtensionInstallResult.Error
                 }
-                part.delete()
-                return PrivateExtensionInstallResult.Error
+                previousFileRemoved = true
             }
             if (!part.renameTo(target)) {
                 part.copyTo(target, overwrite = true)
@@ -355,14 +465,22 @@ object KotlinNovelExtensionLoader {
             PrivateExtensionInstallResult.Success
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to install private Kotlin novel extension file for $pkgName." }
+            // Best-effort restore when the swap had already removed the previous good file.
+            if (previousFileRemoved && !target.exists() && part.exists()) {
+                runCatching { part.renameTo(target) }
+            }
             part.delete()
-            target.delete()
             PrivateExtensionInstallResult.Error
         }
     }
 
     fun uninstallPrivateExtension(context: Context, pkgName: String) {
         File(getPrivateExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION").delete()
+    }
+
+    /** Whether the private store holds a copy of [pkgName] (no system package needed). */
+    fun hasPrivateExtensionFile(context: Context, pkgName: String): Boolean {
+        return File(getPrivateExtensionDir(context), "$pkgName.$PRIVATE_EXTENSION_EXTENSION").isFile
     }
 
     fun loadExtensions(context: Context): List<KotlinNovelExtensionLoadResult> {
@@ -540,6 +658,7 @@ object KotlinNovelExtensionLoader {
             apkUrl = null,
             isKotlinExtension = true,
             isNsfw = isNsfw,
+            isShared = extensionInfo.isShared,
         )
         return KotlinNovelExtensionLoadResult(plugin, sources)
     }

@@ -1,11 +1,14 @@
 package eu.kanade.tachiyomi.data.library
 
+import android.app.Application
 import android.content.Context
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
-import androidx.work.WorkContinuation
 import androidx.work.WorkManager
+import androidx.work.WorkQuery
+import com.google.common.util.concurrent.Futures
 import eu.kanade.tachiyomi.util.system.isRunning
+import eu.kanade.tachiyomi.util.system.isRunningOrEnqueued
 import eu.kanade.tachiyomi.util.system.workManager
 import io.kotest.matchers.shouldBe
 import io.mockk.every
@@ -13,32 +16,44 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import io.mockk.verify
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.Test
+import org.junit.After
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+/**
+ * Manual "update everything" must enqueue each enabled media as an independent unique work
+ * (they run in parallel, exactly like the auto-update path and per-tab refreshes), instead of
+ * chaining anime -> manga -> novel into one sequential WorkManager continuation.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [30], application = Application::class)
 class LibraryUpdateCoordinatorTest {
 
     private val context = mockk<Context>(relaxed = true)
     private val workManager = mockk<WorkManager>(relaxed = true)
 
-    @BeforeEach
+    @Before
     fun setUp() {
         mockkStatic("eu.kanade.tachiyomi.util.system.WorkManagerExtensionsKt")
         every { context.workManager } returns workManager
+        // Deterministic defaults; individual tests override what they care about.
+        every { workManager.isRunning(any<String>()) } returns false
+        every { workManager.isRunningOrEnqueued(any<String>()) } returns false
     }
 
-    @AfterEach
+    @After
     fun tearDown() {
         unmockkAll()
     }
 
     @Test
-    fun `startAll returns false if updates are already running`() {
-        // Given
+    fun `startAll starts every enabled media even when another media is already running`() {
+        // Given: anime is busy with its own run.
         every { workManager.isRunning("AnimeLibraryUpdate") } returns true
-        every { workManager.isRunning("LibraryUpdate") } returns false
-        every { workManager.isRunning("NovelLibraryUpdate") } returns false
+        every { workManager.isRunningOrEnqueued("AnimeLibraryUpdate-manual") } returns true
 
         // When
         val result = LibraryUpdateCoordinator.startAll(
@@ -46,67 +61,111 @@ class LibraryUpdateCoordinatorTest {
             updateAnime = true,
             updateManga = true,
             updateNovel = true,
-            workManager = workManager,
         )
 
-        // Then
-        result shouldBe false
-    }
-
-    @Test
-    fun `startAll chains enabled update jobs sequentially`() {
-        // Given
-        every { workManager.isRunning("AnimeLibraryUpdate") } returns false
-        every { workManager.isRunning("LibraryUpdate") } returns false
-        every { workManager.isRunning("NovelLibraryUpdate") } returns false
-
-        val continuation1 = mockk<WorkContinuation>(relaxed = true)
-        val continuation2 = mockk<WorkContinuation>(relaxed = true)
-
-        every {
-            workManager.beginUniqueWork(
-                "LibraryUpdate-chain",
+        // Then: manga & novel start independently; only anime's own guard skips it.
+        result shouldBe true
+        verify(exactly = 0) {
+            workManager.enqueueUniqueWork(
+                "AnimeLibraryUpdate-manual",
                 ExistingWorkPolicy.KEEP,
                 any<OneTimeWorkRequest>(),
             )
-        } returns continuation1
+        }
+        verify {
+            workManager.enqueueUniqueWork(
+                "LibraryUpdate-manual",
+                ExistingWorkPolicy.KEEP,
+                any<OneTimeWorkRequest>(),
+            )
+            workManager.enqueueUniqueWork(
+                "NovelLibraryUpdate-manual",
+                ExistingWorkPolicy.KEEP,
+                any<OneTimeWorkRequest>(),
+            )
+        }
+    }
 
-        every {
-            continuation1.then(any<OneTimeWorkRequest>())
-        } returns continuation2
+    @Test
+    fun `startAll enqueues each media independently without a work chain`() {
+        every { workManager.isRunning(any<String>()) } returns false
 
-        // When
         val result = LibraryUpdateCoordinator.startAll(
             context = context,
             updateAnime = true,
             updateManga = true,
             updateNovel = false,
-            workManager = workManager,
         )
 
-        // Then
         result shouldBe true
+        // The sequential chain API must not be used at all anymore.
+        verify(exactly = 0) {
+            workManager.beginUniqueWork(any<String>(), any<ExistingWorkPolicy>(), any<OneTimeWorkRequest>())
+        }
         verify {
-            workManager.beginUniqueWork(
-                "LibraryUpdate-chain",
+            workManager.enqueueUniqueWork(
+                "AnimeLibraryUpdate-manual",
                 ExistingWorkPolicy.KEEP,
-                match<OneTimeWorkRequest> { it.tags.contains("AnimeLibraryUpdate") },
+                any<OneTimeWorkRequest>(),
             )
-            continuation1.then(
-                match<OneTimeWorkRequest> { it.tags.contains("LibraryUpdate") },
+            workManager.enqueueUniqueWork(
+                "LibraryUpdate-manual",
+                ExistingWorkPolicy.KEEP,
+                any<OneTimeWorkRequest>(),
             )
-            continuation2.enqueue()
+        }
+        verify(exactly = 0) {
+            workManager.enqueueUniqueWork(
+                "NovelLibraryUpdate-manual",
+                ExistingWorkPolicy.KEEP,
+                any<OneTimeWorkRequest>(),
+            )
         }
     }
 
     @Test
-    fun `stop cancels the chain work request`() {
-        // When
-        LibraryUpdateCoordinator.stop(context, workManager)
+    fun `startAll returns false when all enabled media are busy`() {
+        every { workManager.isRunning(any<String>()) } returns true
+        every { workManager.isRunningOrEnqueued(any<String>()) } returns true
 
-        // Then
-        verify {
-            workManager.cancelAllWorkByTag("LibraryUpdate-chain")
+        val result = LibraryUpdateCoordinator.startAll(
+            context = context,
+            updateAnime = true,
+            updateManga = true,
+            updateNovel = true,
+        )
+
+        result shouldBe false
+        verify(exactly = 0) {
+            workManager.enqueueUniqueWork(any<String>(), any<ExistingWorkPolicy>(), any<OneTimeWorkRequest>())
+        }
+    }
+
+    @Test
+    fun `startAll returns false when no media enabled`() {
+        val result = LibraryUpdateCoordinator.startAll(
+            context = context,
+            updateAnime = false,
+            updateManga = false,
+            updateNovel = false,
+        )
+
+        result shouldBe false
+        verify(exactly = 0) {
+            workManager.enqueueUniqueWork(any<String>(), any<ExistingWorkPolicy>(), any<OneTimeWorkRequest>())
+        }
+    }
+
+    @Test
+    fun `stop cancels each media job independently`() {
+        every { workManager.getWorkInfos(any<WorkQuery>()) } returns Futures.immediateFuture(emptyList())
+
+        LibraryUpdateCoordinator.stop(context)
+
+        listOf("AnimeLibraryUpdate", "LibraryUpdate", "NovelLibraryUpdate").forEach { tag ->
+            verify {
+                workManager.getWorkInfos(match<WorkQuery> { query -> query.tags.contains(tag) })
+            }
         }
     }
 }

@@ -1,0 +1,35 @@
+-- Feed contract v17: URL semantics flip. Old video_url_hd was the *primary* URL
+-- (sources stored `hd ?: sd` there); old video_url_sd was a downgrade variant,
+-- not an HD upgrade, so it is dropped. New: video_url = base, video_url_hd = optional
+-- upgrade. Recreate pattern instead of RENAME COLUMN because RENAME requires SQLite 3.25+
+-- and the project's minSdk ships an older system SQLite.
+CREATE TABLE reels_favorites_new(
+    video_id TEXT NOT NULL,
+    source_id INTEGER NOT NULL,
+    title TEXT,
+    author TEXT,
+    video_url TEXT NOT NULL,
+    video_url_hd TEXT,
+    poster_url TEXT NOT NULL,
+    poster_url_vertical TEXT,
+    web_url TEXT,
+    duration_sec REAL,
+    has_audio INTEGER NOT NULL DEFAULT 0,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (video_id, source_id)
+);
+
+INSERT INTO reels_favorites_new(
+    video_id, source_id, title, author, video_url, video_url_hd,
+    poster_url, poster_url_vertical, web_url, duration_sec, has_audio, added_at
+)
+SELECT
+    video_id, source_id, title, author, video_url_hd, NULL,
+    poster_url, poster_url_vertical, web_url, duration_sec, has_audio, added_at
+FROM reels_favorites;
+
+DROP TABLE reels_favorites;
+ALTER TABLE reels_favorites_new RENAME TO reels_favorites;
+
+CREATE INDEX IF NOT EXISTS reels_favorites_added_at_index ON reels_favorites(added_at DESC);
+CREATE INDEX IF NOT EXISTS reels_favorites_source_id_index ON reels_favorites(source_id);

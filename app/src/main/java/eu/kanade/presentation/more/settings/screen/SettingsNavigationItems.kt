@@ -10,6 +10,7 @@ import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.FormatQuote
 import androidx.compose.material.icons.outlined.Gesture
 import androidx.compose.material.icons.outlined.GetApp
 import androidx.compose.material.icons.outlined.Info
@@ -38,6 +39,7 @@ import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsTorrentS
 import eu.kanade.presentation.more.settings.screen.player.custombutton.PlayerSettingsCustomButtonScreen
 import eu.kanade.presentation.more.settings.screen.player.editor.PlayerSettingsEditorScreen
 import eu.kanade.presentation.more.settings.screen.player.layout.PlayerSettingsLayoutMainScreen
+import eu.kanade.tachiyomi.ui.library.novel.quotes.NovelQuotesLibraryScreen
 import eu.kanade.tachiyomi.ui.setting.PlayerSettingsScreen
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -117,6 +119,12 @@ internal fun mainSettingsNavigationItems(): List<SettingsNavigationItem> = listO
         subtitleRes = AYMR.strings.pref_treasury_summary,
         icon = Icons.Outlined.Inventory2,
         screen = SettingsTreasuryScreen,
+    ),
+    SettingsNavigationItem(
+        key = "novel_quotes",
+        titleRes = AYMR.strings.novel_quotes_library_title,
+        icon = Icons.Outlined.FormatQuote,
+        screen = NovelQuotesLibraryScreen(),
     ),
     SettingsNavigationItem(
         key = "downloads",

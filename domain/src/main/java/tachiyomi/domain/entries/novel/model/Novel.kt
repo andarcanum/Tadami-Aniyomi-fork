@@ -40,8 +40,18 @@ data class Novel(
     val customDescription: String? = null,
     val customGenre: List<String>? = null,
     val customStatus: Long? = null,
+    @kotlin.jvm.Transient
     val memo: JsonObject = JsonObject.EMPTY,
 ) : Serializable {
+
+    private fun readResolve(): Any {
+        @Suppress("SENSELESS_COMPARISON")
+        return if (memo == null) {
+            copy(memo = JsonObject.EMPTY)
+        } else {
+            this
+        }
+    }
 
     val displayTitle: String get() = customTitle?.takeIf { it.isNotBlank() } ?: title
     val displayAuthor: String? get() = customAuthor ?: author

@@ -184,6 +184,7 @@ private fun resolveComposePagerPageKey(
 internal fun ComposePagerPageRenderer(
     pagerState: PagerState,
     contentPages: List<NovelPageContentPage>,
+    chapterId: Long,
     // How many content pages one pager slot shows side by side. 1 is the ordinary single-page
     // reader; 2 is a landscape two-page spread. contentPageCount below (and therefore the pager's
     // own slot count) is expressed in slots, not raw content pages, so a slot always addresses
@@ -466,6 +467,7 @@ internal fun ComposePagerPageRenderer(
                     ttsHighlightState = ttsHighlightState,
                     ttsHighlightColor = ttsHighlightColor,
                     selectionSessionIdProvider = selectionSessionIdProvider,
+                    selectionAnchorChapterId = chapterId,
                     onSelectedTextSelectionChanged = onSelectedTextSelectionChanged,
                     onPlainTap = onTextTap,
                     onImageLongClick = onImageLongClick,

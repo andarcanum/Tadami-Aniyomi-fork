@@ -182,6 +182,8 @@ class UnlockableManagerTest {
             tachiyomi.i18n.MR.strings.unlockable_theme_EVENT_HORIZON
         manager.getUnlockableNameRes("special_background_event_horizon_library") shouldBe
             tachiyomi.i18n.MR.strings.unlockable_special_background_event_horizon_library
+        manager.getUnlockableNameRes("special_background_ink_water") shouldBe
+            tachiyomi.i18n.MR.strings.unlockable_special_background_ink_water
 
         val invalidRes = manager.getUnlockableNameRes("nonexistent_reward")
         invalidRes shouldBe null

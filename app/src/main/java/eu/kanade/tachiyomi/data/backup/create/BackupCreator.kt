@@ -29,6 +29,7 @@ import eu.kanade.tachiyomi.data.backup.create.creators.NovelExtensionStoreBackup
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelSeriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.NovelSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.PreferenceBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.ReelsFavoritesBackupCreator
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource
@@ -100,6 +101,7 @@ class BackupCreator(
     private val mangaSeriesBackupCreator: MangaSeriesBackupCreator = MangaSeriesBackupCreator(),
     private val novelSeriesBackupCreator: NovelSeriesBackupCreator = NovelSeriesBackupCreator(),
     private val feedBackupCreator: FeedBackupCreator = FeedBackupCreator(),
+    private val reelsFavoritesBackupCreator: ReelsFavoritesBackupCreator = ReelsFavoritesBackupCreator(),
     private val extensionsBackupCreator: ExtensionsBackupCreator = ExtensionsBackupCreator(context),
     private val achievementBackupCreator: AchievementBackupCreator = AchievementBackupCreator(),
     private val achievementHandler: AchievementHandler = Injekt.get(),
@@ -187,6 +189,14 @@ class BackupCreator(
             val backupFeeds = BackupDiagnosticLog.measure(context, "collect_feeds") {
                 feedBackupCreator()
             }
+            // sisterAppCompatible exports drop reels favorites anyway — skip the table read.
+            val backupReelsFavorites = BackupDiagnosticLog.measure(context, "collect_reels_favorites") {
+                if (options.reelsFavorites && !options.sisterAppCompatible) {
+                    reelsFavoritesBackupCreator()
+                } else {
+                    emptyList()
+                }
+            }
 
             val finalBackupManga = if (options.sisterAppCompatible) {
                 backupManga + backupNovel.map { it.toBackupManga() }
@@ -253,6 +263,11 @@ class BackupCreator(
                 backupMangaSeries = if (options.sisterAppCompatible) emptyList() else backupMangaSeries,
                 backupNovelSeries = if (options.sisterAppCompatible) emptyList() else backupNovelSeries,
                 backupFeeds = if (options.sisterAppCompatible) emptyList() else backupFeeds,
+                backupReelsFavorites = if (options.sisterAppCompatible) {
+                    emptyList()
+                } else {
+                    backupReelsFavorites
+                },
             )
 
             val byteArray = BackupDiagnosticLog.measure(context, "serialize") {

@@ -27,7 +27,14 @@ object Notifications {
      */
     private const val GROUP_LIBRARY = "group_library"
     const val CHANNEL_LIBRARY_PROGRESS = "library_progress_channel"
+
+    // Owned by MangaMetadataUpdateJob (foreground info + progress).
     const val ID_LIBRARY_PROGRESS = -101
+
+    // Per-media progress ids for the three library update jobs, which may run in parallel.
+    const val ID_MANGA_LIBRARY_UPDATE_PROGRESS = -104
+    const val ID_ANIME_LIBRARY_UPDATE_PROGRESS = -105
+    const val ID_NOVEL_LIBRARY_UPDATE_PROGRESS = -106
     const val ID_ANIME_LIBRARY_PROGRESS = -121
     const val ID_NOVEL_LIBRARY_PROGRESS = -111
     const val ID_LIBRARY_SIZE_WARNING = -103
