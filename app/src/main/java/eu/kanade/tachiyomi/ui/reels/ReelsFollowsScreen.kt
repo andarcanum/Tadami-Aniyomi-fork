@@ -31,6 +31,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -167,12 +168,14 @@ private fun SwipeToRemoveFollow(
     onRemove: () -> Unit,
     onClick: () -> Unit,
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            if (value != SwipeToDismissBoxValue.Settled) onRemove()
-            value != SwipeToDismissBoxValue.Settled
-        },
-    )
+    // material3 1.4: confirmValueChange is deprecated without replacement — handle the swipe
+    // outcome by observing currentValue (same pattern as NovelDictionaryHistoryScreen).
+    val dismissState = rememberSwipeToDismissBoxState()
+    LaunchedEffect(dismissState.currentValue) {
+        if (dismissState.currentValue == SwipeToDismissBoxValue.EndToStart) {
+            onRemove()
+        }
+    }
     SwipeToDismissBox(
         state = dismissState,
         // One-directional removal (end-to-start only): the accidental edge-swipe from the
