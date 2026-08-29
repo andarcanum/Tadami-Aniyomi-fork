@@ -357,17 +357,25 @@ class NovelExtensionsScreenModel(
     }
 
     /** Set while the update-all queue is waiting for a reinstall decision on this plugin (B5). */
+    // @Volatile: written by the update-all coroutine on IO right after publishing the dialog
+    // state, read by the caller thread completing the decision — without it the completion
+    // may observe a stale null and the reinstall dialog never dismisses.
+    @Volatile
     private var queuedReinstallResolution: CompletableDeferred<NovelPlugin.Available?>? = null
 
     private suspend fun resolveQueuedReinstall(
         installed: NovelPlugin.Installed,
         candidates: List<NovelPlugin.Available>,
     ) {
+        // Publish the resolution slot BEFORE the dialog state: a completion can only be
+        // sent after the caller observes the dialog, so ordering the slot first closes
+        // the race where the decision lands on the previous (null) slot and the dialog
+        // never dismisses.
+        val resolution = CompletableDeferred<NovelPlugin.Available?>()
+        queuedReinstallResolution = resolution
         mutableState.update {
             it.copy(queuedReinstallPlugin = installed, queuedReinstallCandidates = candidates)
         }
-        val resolution = CompletableDeferred<NovelPlugin.Available?>()
-        queuedReinstallResolution = resolution
         val chosen = resolution.await()
         mutableState.update {
             it.copy(queuedReinstallPlugin = null, queuedReinstallCandidates = emptyList())

@@ -24,6 +24,7 @@ private class FakeNovelHighlightRepository : NovelHighlightRepository {
     override fun subscribeForNovel(novelId: Long) = flow
     override fun subscribeForChapter(chapterId: Long) = flow
     override fun subscribeAll(): Flow<List<NovelHighlightWithChapter>> = flowOf(emptyList())
+    override suspend fun countAll(): Int = items.size
     override suspend fun getForNovel(novelId: Long) = items.filter { it.novelId == novelId }
     override suspend fun add(highlight: NovelHighlight): Long {
         val stored = highlight.copy(id = nextId++)
