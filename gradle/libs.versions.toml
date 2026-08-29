@@ -2,7 +2,7 @@
 aboutlib_plugin_version = "14.0.0-b03"
 aboutlib_runtime_version = "14.0.0-b03"
 leakcanary = "2.14"
-media3 = "1.4.1"
+media3 = "1.11.0"
 google-api-version = "v3-rev197-1.25.0"
 moko = "0.26.1"
 okhttp_version = "5.4.0"
