@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reels.player
 
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
+import android.os.SystemClock
 import android.view.Surface
 import android.view.TextureView
 import androidx.compose.animation.AnimatedVisibility
@@ -106,6 +107,10 @@ fun ReelsPlayerView(
     val currentCropMode by rememberUpdatedState(isCropMode)
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
     var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
+    // First-frame wall-clock anchor for the minimum-dwell rule (see reelsEndHold).
+    var firstFrameAtMs by remember(videoUrl) { mutableLongStateOf(0L) }
+    // Non-null while holding a finished still/short reel on screen before advancing.
+    var endHold by remember(videoUrl) { mutableStateOf<ReelsEndHold?>(null) }
     var textureViewRef by remember { mutableStateOf<TextureView?>(null) }
     var currentSurface by remember { mutableStateOf<Surface?>(null) }
 
@@ -167,6 +172,7 @@ fun ReelsPlayerView(
             player = null
             createdForUrl = null
             isFirstFrameRendered = false
+            endHold = null
             return@LaunchedEffect
         }
 
@@ -238,7 +244,25 @@ fun ReelsPlayerView(
                                     // so reaching ENDED here means the active page finished ->
                                     // advance. Do NOT capture isActive/isAutoAdvance (they go
                                     // stale on preload->active).
-                                    onVideoCompleted()
+                                    // Stills and very short clips reach ENDED within moments and
+                                    // would flip to the next page before they can be seen: hold
+                                    // them for the minimum dwell, looping real videos meanwhile.
+                                    val shownMs = if (firstFrameAtMs == 0L) {
+                                        0L
+                                    } else {
+                                        SystemClock.elapsedRealtime() - firstFrameAtMs
+                                    }
+                                    val hold = reelsEndHold(
+                                        durationMs = duration.coerceAtLeast(0L),
+                                        shownMs = shownMs,
+                                        minDwellMs = REELS_MIN_DWELL_MS,
+                                    )
+                                    if (hold == null) {
+                                        onVideoCompleted()
+                                    } else {
+                                        if (hold.loop) repeatMode = Player.REPEAT_MODE_ONE
+                                        endHold = hold
+                                    }
                                 }
                             }
                         }
@@ -251,6 +275,7 @@ fun ReelsPlayerView(
 
                         override fun onRenderedFirstFrame() {
                             isFirstFrameRendered = true
+                            if (firstFrameAtMs == 0L) firstFrameAtMs = SystemClock.elapsedRealtime()
                         }
 
                         override fun onPlayerError(error: PlaybackException) {
@@ -274,6 +299,19 @@ fun ReelsPlayerView(
                 // Preload: buffer without rendering or playing audio.
                 p.setVideoSurface(null)
                 p.playWhenReady = false
+            }
+        }
+    }
+
+    // Minimum-dwell hold: keep a finished short clip looping / a still image on screen,
+    // then advance. Re-evaluated against auto-advance and pause so the feed never moves
+    // on by itself while the user switched it off or paused to look at the frame.
+    endHold?.let { hold ->
+        LaunchedEffect(hold, isAutoAdvance, isPlaying) {
+            if (isAutoAdvance && isPlaying) {
+                delay(hold.remainingMs)
+                endHold = null
+                onVideoCompleted()
             }
         }
     }
@@ -343,6 +381,10 @@ fun ReelsPlayerView(
                 val duration = p.duration
                 if (duration > 0) {
                     onProgressUpdate((p.currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f))
+                } else if (firstFrameAtMs > 0L) {
+                    // Still image (no media duration): run the bar over the dwell window.
+                    val shownMs = SystemClock.elapsedRealtime() - firstFrameAtMs
+                    onProgressUpdate((shownMs.toFloat() / REELS_MIN_DWELL_MS).coerceIn(0f, 1f))
                 }
             }
             delay(250)
@@ -474,6 +516,31 @@ private const val REELS_CACHE_BYTES = 200L * 1024 * 1024
 
 // One decode size shared by the blurred background and the placeholder overlay.
 private const val POSTER_DECODE_SIZE = 480
+
+/** Minimum time a reel stays on screen before auto-advance moves on (stills/short clips). */
+const val REELS_MIN_DWELL_MS = 5_000L
+
+/**
+ * What the player should do when the active reel reaches its natural end while
+ * auto-advance is on: [remainingMs] of hold before advancing, and whether a real
+ * video should loop meanwhile (stills have nothing to loop).
+ */
+data class ReelsEndHold(val remainingMs: Long, val loop: Boolean)
+
+/**
+ * Decides the end-of-reel action. Stills (unknown/zero duration) and clips shorter
+ * than [minDwellMs] would otherwise flip to the next page before they can be seen.
+ *
+ * @param durationMs media duration at the end (<= 0 / unset for stills)
+ * @param shownMs wall-clock time the reel has already been on screen (anchored at the
+ *   first rendered frame), so loading time and pauses don't shorten the dwell
+ * @return null to advance right away once the dwell is satisfied
+ */
+internal fun reelsEndHold(durationMs: Long, shownMs: Long, minDwellMs: Long = REELS_MIN_DWELL_MS): ReelsEndHold? {
+    val remainingMs = minDwellMs - shownMs
+    if (remainingMs <= 0) return null
+    return ReelsEndHold(remainingMs = remainingMs, loop = durationMs > 0)
+}
 
 private var reelsVideoCache: SimpleCache? = null
 
