@@ -9,6 +9,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeReelsFeedbackSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -816,6 +817,20 @@ class ReelsFeedScreenModel(
             } else {
                 reelsFavoriteRepository.delete(videoId, sourceId)
             }
+            // Let a feedback-capable feed source adapt its recommendations to likes (opt-in,
+            // fire-and-forget; the local favorite stays authoritative for the offline playlist).
+            val feedback = source as? AnimeReelsFeedbackSource
+            if (feedback != null) {
+                runCatching { feedback.onVideoLiked(videoId, willLike) }
+            }
+        }
+    }
+
+    /** Reports playback of a reel to a feedback-capable source (drives remote personalization). */
+    fun reportVideoView(itemId: String, secondsWatched: Float, duration: Float) {
+        val feedback = source as? AnimeReelsFeedbackSource ?: return
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            runCatching { feedback.onVideoViewed(itemId, secondsWatched.toDouble(), duration.toDouble()) }
         }
     }
 

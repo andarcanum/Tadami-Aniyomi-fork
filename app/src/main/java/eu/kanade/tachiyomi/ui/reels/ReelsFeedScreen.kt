@@ -345,6 +345,9 @@ data class ReelsFeedScreen(
                                     }
                                 },
                                 onScrubStart = { chromeVisible = true },
+                                onViewReported = { watched, duration ->
+                                    screenModel.reportVideoView(item.id, watched, duration)
+                                },
                                 cachePrefix = state.currentSourceId.toString(),
                                 isLastPage = page == state.items.lastIndex,
                                 headers = state.sourceHeaders,

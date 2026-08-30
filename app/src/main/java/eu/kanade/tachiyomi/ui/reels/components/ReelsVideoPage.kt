@@ -93,6 +93,9 @@ fun ReelsVideoPage(
     // Second parameter retries the current video (snackbar "Retry" action).
     onPlaybackError: (String, retry: () -> Unit) -> Unit = { _, _ -> },
     onScrubStart: () -> Unit = {},
+    // Reported once when the clip is left (swipe/completion): actual watched seconds + full
+    // duration, so a feedback-capable feed source can adapt its recommendations.
+    onViewReported: (secondsWatched: Float, duration: Float) -> Unit = { _, _ -> },
     headers: Map<String, String> = emptyMap(),
     modifier: Modifier = Modifier,
 ) {
@@ -111,6 +114,28 @@ fun ReelsVideoPage(
     // Real orientation of the media, reported by the player; only landscape reels get
     // the fullscreen affordance.
     var isLandscapeVideo by remember(item) { mutableStateOf(false) }
+
+    // Accumulated playback seconds, reported once when the clip is left (drives the feed
+    // source's personalization). Re-counts from zero on every (re)activation.
+    var watchedSeconds by remember(item.id) { mutableFloatStateOf(0f) }
+    var wasActivated by remember(item.id) { mutableStateOf(false) }
+    var viewReported by remember(item.id) { mutableStateOf(false) }
+    LaunchedEffect(item.id, isActive, isPlaying, isBuffering) {
+        while (isActive && isPlaying && !isBuffering) {
+            delay(1000)
+            watchedSeconds += 1f
+        }
+    }
+    LaunchedEffect(isActive) {
+        if (isActive) {
+            wasActivated = true
+            viewReported = false
+        } else if (wasActivated && !viewReported) {
+            viewReported = true
+            onViewReported(watchedSeconds, durationSec)
+            watchedSeconds = 0f
+        }
+    }
 
     // The effective (data-saver aware) quality is re-read only when the page ACTIVATES:
     // mid-playback network changes must not rebuild the player and interrupt the clip.

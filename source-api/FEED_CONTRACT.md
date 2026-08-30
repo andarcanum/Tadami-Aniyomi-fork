@@ -4,6 +4,7 @@
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
+[`AnimeReelsFeedbackSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeReelsFeedbackSource.kt),
 [`FeedPage`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedPage.kt),
 [`ShortVideoItem`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/ShortVideoItem.kt)
 
@@ -35,6 +36,11 @@ data class FeedPage(
 interface AnimeCreatorFeedSource {
     suspend fun getCreatorFeed(creator: String, page: Int, cursor: String?): FeedPage
 }
+
+interface AnimeReelsFeedbackSource {
+    suspend fun onVideoViewed(itemId: String, secondsWatched: Double, duration: Double)
+    suspend fun onVideoLiked(itemId: String, liked: Boolean)
+}
 ```
 
 ## Creator feeds (v18 capability interface)
@@ -53,6 +59,24 @@ they simply don't opt in.
   the identical `(page, cursor)` pair.
 - A nonexistent/deleted creator should return an empty `FeedPage`, not throw.
 - Implementing the capability means bumping `extensionLib` to 18.0.
+
+## View & like feedback (v18 capability interface)
+
+`AnimeReelsFeedbackSource` is an **optional capability**: the source accepts
+per-video signals so the remote service can adapt its recommendations to the
+viewer's taste. The host detects support with `rawSource is AnimeReelsFeedbackSource`
+(instanceof); sources without the interface are simply never asked for feedback,
+and no default members are added to existing interfaces (same rule as creator feeds).
+
+- `onVideoViewed` is called **once** when a clip is left (swiped away) or finishes:
+  `secondsWatched` is the actual playback time, `duration` the full clip length
+  (both seconds). A source that personalizes remotely pushes a "view" event here.
+- `onVideoLiked` is called on every like/unlike toggle (`liked` reflects the new
+  state). Whether unlike maps to a distinct remote action is up to the source.
+- Both calls are fire-and-forget from the host's perspective: failures must be
+  swallowed, never surfaced to the user or written into feed state.
+- Implementing the capability does **not** change `LIB_VERSION` — it is additive
+  and detected with instanceof only.
 
 ## Pagination: the sticky protocol (the important part)
 
@@ -162,6 +186,6 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
-| 18 | Optional creator-feed capability: `AnimeCreatorFeedSource.getCreatorFeed(creator, page, cursor)` (instanceof-detected, no default members added to existing interfaces). Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 18.0 as the discipline stamp. |
+| 18 | Optional creator-feed capability: `AnimeCreatorFeedSource.getCreatorFeed(creator, page, cursor)` and optional feedback capability `AnimeReelsFeedbackSource` (both instanceof-detected, no default members added to existing interfaces). Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 18.0 as the discipline stamp. |
 | 17 | Sticky cursor pagination (`FeedPage.nextCursor`, `cursor` parameters), `getSearchFeed` default, URL semantics flip (`videoUrl` base + optional `videoUrlHd`). Breaking: all feed plugins rebuild. |
 | ≤16 | Initial feed contract (page-int pagination, `videoUrlHd` required). |
