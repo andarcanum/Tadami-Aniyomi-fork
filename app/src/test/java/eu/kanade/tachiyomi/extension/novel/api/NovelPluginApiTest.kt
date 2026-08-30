@@ -218,6 +218,43 @@ class NovelPluginApiTest {
         api.repoFetchErrors.first() shouldBe emptyMap()
     }
 
+    @Test
+    fun `blank store name collapses to owner repo instead of raw url`() = runTest {
+        val repo = ExtensionRepo(
+            baseUrl = "https://github.com/novelsourcery/extensions",
+            name = "",
+            shortName = null,
+            website = "https://github.com/novelsourcery",
+            signingKeyFingerprint = "fingerprint-1",
+        )
+        val api = NovelPluginApi(
+            repoProvider = FakeRepoProvider(listOf(repo)),
+            fetcher = FakeFetcher(
+                payloads = mapOf(
+                    "https://github.com/novelsourcery/extensions" to """
+                        [
+                          {
+                            "id": "one.plugin",
+                            "name": "One",
+                            "site": "https://one.example",
+                            "lang": "en",
+                            "version": 1,
+                            "url": "https://one.example/plugin.js",
+                            "hasSettings": false,
+                            "sha256": "aaa"
+                          }
+                        ]
+                    """.trimIndent(),
+                ),
+            ),
+            parser = NovelPluginIndexParser(Json { ignoreUnknownKeys = true }),
+        )
+
+        val plugins = api.fetchAvailablePlugins()
+
+        plugins.single().repoName shouldBe "novelsourcery/extensions"
+    }
+
     private fun extensionRepo(baseUrl: String): ExtensionRepo = ExtensionRepo(
         baseUrl = baseUrl,
         name = baseUrl,

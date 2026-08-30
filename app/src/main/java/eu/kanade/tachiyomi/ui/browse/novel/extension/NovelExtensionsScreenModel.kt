@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import logcat.LogPriority
+import mihon.domain.extensionstore.model.repoDisplayNameFallback
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.extension.novel.model.NovelPlugin
@@ -728,8 +729,15 @@ private fun NovelPlugin.Installed.settingsSourceId(
 private fun NovelPlugin.Installed.fallbackRepoDisplayName(
     variants: List<NovelPlugin.Available>,
 ): String? {
+    // The name persisted at install time is a snapshot: it goes stale when the user renames the
+    // store. Prefer the label of the current store serving this exact repo URL, fall back to the
+    // snapshot, then to a human-readable form of the URL.
+    val freshName = repoUrl.takeIf { it.isNotBlank() }?.let { url ->
+        variants.firstOrNull { it.repoUrl == url }?.repoName?.takeIf { it.isNotBlank() }
+    }
+    freshName?.let { return it }
     repoName?.takeIf { it.isNotBlank() }?.let { return it }
-    repoUrl.takeIf { it.isNotBlank() }?.let { return it }
+    repoUrl.takeIf { it.isNotBlank() }?.let { return it.repoDisplayNameFallback() }
 
     val exactVersionMatches = variants.filter {
         it.versionCode == versionCode
@@ -737,5 +745,5 @@ private fun NovelPlugin.Installed.fallbackRepoDisplayName(
     val displayCandidate = exactVersionMatches.singleOrNull()
         ?: variants.singleOrNull()
 
-    return displayCandidate?.repoName?.ifBlank { displayCandidate.repoUrl }
+    return displayCandidate?.repoName?.ifBlank { displayCandidate.repoUrl.repoDisplayNameFallback() }
 }

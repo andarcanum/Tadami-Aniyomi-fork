@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import mihon.domain.extensionrepo.model.ExtensionRepo
+import mihon.domain.extensionstore.model.repoDisplayNameFallback
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.extension.novel.model.NovelPlugin
 
@@ -24,7 +25,9 @@ class NovelPluginApi(
             repos.flatMap { repo ->
                 fetchPluginsFromRepo(repo).map { plugin ->
                     plugin.copy(
-                        repoName = repo.name.ifBlank { repo.shortName ?: repo.baseUrl },
+                        // A blank store name must not surface as a raw url label: collapse it to
+                        // owner/repo-style text like the manga/anime store badges do.
+                        repoName = repo.name.ifBlank { repo.shortName ?: repo.baseUrl.repoDisplayNameFallback() },
                     )
                 }
             }

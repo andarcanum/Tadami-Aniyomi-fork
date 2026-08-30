@@ -895,6 +895,25 @@ class NovelExtensionsScreenModelTest {
         }
     }
 
+    @Test
+    fun `installed repo label follows a store rename`() {
+        runBlocking {
+            val installed = pluginInstalled("kid", 1).copy(repoName = "Old Store Name")
+            // Same repoUrl as the installed snapshot, published under the store's new name.
+            val renamedVariant = pluginAvailable("kid", 1).copy(repoName = "My Shop")
+            val extensionManager = FakeNovelExtensionManager(
+                installed = listOf(installed),
+                available = listOf(renamedVariant),
+                updates = emptyList(),
+            )
+            val screenModel = createScreenModel(extensionManager)
+            awaitWithin { !screenModel.state.value.isLoading }
+
+            val item = screenModel.state.value.items.first { it.plugin.id == "kid" }
+            item.repoDisplayName shouldBe "My Shop"
+        }
+    }
+
     private suspend fun awaitWithin(millis: Long = 1_000, condition: () -> Boolean) {
         withTimeout(millis) {
             while (!condition()) yield()
