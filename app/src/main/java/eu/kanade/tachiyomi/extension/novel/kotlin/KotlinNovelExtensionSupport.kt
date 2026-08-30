@@ -64,6 +64,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
@@ -76,6 +78,7 @@ import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import eu.kanade.tachiyomi.source.Source as TachiyomiSource
 
 private const val APK_MIME = "application/vnd.android.package-archive"
@@ -914,6 +917,20 @@ private open class KotlinMangaNovelSourceAdapter(
     protected val source: TachiyomiSource,
     override val pluginId: String,
 ) : NovelSource, NovelSiteSource, NovelPluginIdentitySource, NovelImageRequestSource {
+
+    /**
+     * tachiyomix 1.6 sources (KeiSource-based) serve details and chapters only through
+     * [MangaSource.getMangaUpdate] and throw from the legacy fetch hooks, so the combined
+     * call is the only route that reaches them. KeiSource rejects concurrent
+     * getMangaUpdate calls for the same manga url while the app refreshes them in
+     * parallel, hence the per-manga lock.
+     */
+    private val mangaUpdateLocks = ConcurrentHashMap<String, Mutex>()
+
+    private suspend fun <T> withMangaUpdateLock(mangaUrl: String, block: suspend () -> T): T {
+        return mangaUpdateLocks.getOrPut(mangaUrl) { Mutex() }.withLock { block() }
+    }
+
     override val id: Long = source.id
     override val name: String = source.name
     override val lang: String = source.lang
@@ -926,11 +943,23 @@ private open class KotlinMangaNovelSourceAdapter(
     }
 
     override suspend fun getNovelDetails(novel: SNovel): SNovel {
-        return source.getMangaDetails(novel.toManga()).toNovel(source)
+        val manga = novel.toManga()
+        return withMangaUpdateLock(manga.url) {
+            (source as? MangaSource)
+                ?.getMangaUpdate(manga, emptyList(), fetchDetails = true, fetchChapters = false)
+                ?.manga
+                ?: source.getMangaDetails(manga)
+        }.toNovel(source)
     }
 
     override suspend fun getChapterList(novel: SNovel): List<SNovelChapter> {
-        return source.getChapterList(novel.toManga()).map { it.toNovelChapter(source) }
+        val manga = novel.toManga()
+        return withMangaUpdateLock(manga.url) {
+            (source as? MangaSource)
+                ?.getMangaUpdate(manga, emptyList(), fetchDetails = false, fetchChapters = true)
+                ?.chapters
+                ?: source.getChapterList(manga)
+        }.map { it.toNovelChapter(source) }
     }
 
     override suspend fun getChapterText(chapter: SNovelChapter): String {
