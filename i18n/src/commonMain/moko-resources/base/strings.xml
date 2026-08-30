@@ -308,6 +308,20 @@
     <string name="pref_reader_summary">Reading mode, display, navigation</string>
     <string name="pref_downloads_summary">Automatic download, download ahead</string>
     <string name="pref_tracking_summary">One-way progress sync, enhanced sync</string>
+    <!-- Discord Rich Presence -->
+    <string name="pref_discord_rpc">Discord Rich Presence</string>
+    <string name="pref_discord_rpc_enabled">Show reading and watching activity in Discord</string>
+    <string name="pref_discord_rpc_token">Discord account token</string>
+    <string name="pref_discord_rpc_token_dialog">Paste your Discord account token. It is stored only on this device and is never logged.</string>
+    <string name="pref_discord_rpc_status">Connection status</string>
+    <string name="pref_discord_rpc_status_connected">Connected</string>
+    <string name="pref_discord_rpc_status_connecting">Connecting…</string>
+    <string name="pref_discord_rpc_status_disconnected">Disconnected (no active session)</string>
+    <string name="pref_discord_rpc_status_invalid_token">Invalid token</string>
+    <string name="pref_discord_rpc_warning_title">Unofficial integration</string>
+    <string name="pref_discord_rpc_warning">Discord does not officially support Rich Presence on mobile. This feature connects to Discord with your account token, which violates Discord Terms of Service and may put your account at risk. Use at your own risk.</string>
+    <string name="pref_discord_rpc_warning_confirm">I understand the risks</string>
+
     <string name="pref_browse_summary">Sources, extensions, global search</string>
     <string name="pref_backup_summary">Manual &amp; automatic backups, storage space</string>
     <string name="pref_security_summary">App lock, secure screen</string>

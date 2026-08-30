@@ -33,6 +33,9 @@ import eu.kanade.tachiyomi.data.cache.ChapterCache
 import eu.kanade.tachiyomi.data.cache.MangaCoverCache
 import eu.kanade.tachiyomi.data.cache.NovelCoverCache
 import eu.kanade.tachiyomi.data.cache.SeriesCoverCache
+import eu.kanade.tachiyomi.data.discord.DiscordPreferences
+import eu.kanade.tachiyomi.data.discord.DiscordPresenceManager
+import eu.kanade.tachiyomi.data.discord.RealDiscordGatewayClient
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadProvider
@@ -765,6 +768,7 @@ class AppModule(val app: Application) : InjektModule {
 
         addSingletonFactory { MangaDownloadProvider(app) }
         addSingletonFactory { MangaDownloadManager(app) }
+        addSingletonFactory { DiscordPresenceManager(DiscordPreferences(get()), RealDiscordGatewayClient()) }
         addSingletonFactory { MangaDownloadCache(app) }
 
         addSingletonFactory { AnimeDownloadProvider(app) }

@@ -756,6 +756,20 @@
     <string name="pref_reader_summary">Режим чтения, отображение, навигация</string>
     <string name="pref_downloads_summary">Автоматическая загрузка, загрузка наперёд</string>
     <string name="pref_tracking_summary">Односторонняя синхронизация прогресса, расширенная синхронизация</string>
+    <!-- Discord Rich Presence -->
+    <string name="pref_discord_rpc">Discord Rich Presence</string>
+    <string name="pref_discord_rpc_enabled">Показывать активность чтения и просмотра в Discord</string>
+    <string name="pref_discord_rpc_token">Токен аккаунта Discord</string>
+    <string name="pref_discord_rpc_token_dialog">Вставьте токен своего аккаунта Discord. Он хранится только на этом устройстве и никогда не логируется.</string>
+    <string name="pref_discord_rpc_status">Состояние подключения</string>
+    <string name="pref_discord_rpc_status_connected">Подключено</string>
+    <string name="pref_discord_rpc_status_connecting">Подключение…</string>
+    <string name="pref_discord_rpc_status_disconnected">Не подключено (нет активной сессии)</string>
+    <string name="pref_discord_rpc_status_invalid_token">Неверный токен</string>
+    <string name="pref_discord_rpc_warning_title">Неофициальная интеграция</string>
+    <string name="pref_discord_rpc_warning">Discord официально не поддерживает Rich Presence на мобильных. Функция подключается к Discord с токеном вашего аккаунта — это нарушает условия использования Discord и может привести к ограничению аккаунта. Используйте на свой риск.</string>
+    <string name="pref_discord_rpc_warning_confirm">Понимаю риски</string>
+
     <string name="pref_browse_summary">Источники, расширения, глобальный поиск</string>
     <string name="pref_backup_summary">Ручные и автоматические резервные копий, хранилище</string>
     <string name="pref_security_summary">Блокировка приложения, защита экрана</string>

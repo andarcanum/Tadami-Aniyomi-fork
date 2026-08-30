@@ -27,8 +27,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +55,9 @@ import eu.kanade.presentation.more.settings.AuroraTopBarIconButton
 import eu.kanade.presentation.more.settings.Preference
 import eu.kanade.presentation.more.settings.SettingsUiStyle
 import eu.kanade.presentation.more.settings.rememberResolvedSettingsUiStyle
+import eu.kanade.tachiyomi.data.discord.ConnectionStatus
+import eu.kanade.tachiyomi.data.discord.DiscordPreferences
+import eu.kanade.tachiyomi.data.discord.DiscordPresenceManager
 import eu.kanade.tachiyomi.data.track.EnhancedAnimeTracker
 import eu.kanade.tachiyomi.data.track.EnhancedMangaTracker
 import eu.kanade.tachiyomi.data.track.Tracker
@@ -119,6 +124,8 @@ object SettingsTrackingScreen : SearchableSettings {
         val trackerManager = remember { Injekt.get<TrackerManager>() }
         val mangaSourceManager = remember { Injekt.get<MangaSourceManager>() }
         val animeSourceManager = remember { Injekt.get<AnimeSourceManager>() }
+        val discordPreferences = remember { Injekt.get<DiscordPreferences>() }
+        val discordPresenceManager = remember { Injekt.get<DiscordPresenceManager>() }
 
         var dialog by remember { mutableStateOf<Any?>(null) }
         dialog?.run {
@@ -141,6 +148,24 @@ object SettingsTrackingScreen : SearchableSettings {
                         trackerManager = trackerManager,
                         trackPreferences = trackPreferences,
                         onDismissRequest = { dialog = null },
+                    )
+                }
+                DiscordRpcWarningDialog -> {
+                    AlertDialog(
+                        onDismissRequest = { dialog = null },
+                        title = { Text(stringResource(MR.strings.pref_discord_rpc_warning_title)) },
+                        text = { Text(stringResource(MR.strings.pref_discord_rpc_warning)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                discordPreferences.enabled().set(true)
+                                dialog = null
+                            }) { Text(stringResource(MR.strings.pref_discord_rpc_warning_confirm)) }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { dialog = null }) {
+                                Text(stringResource(MR.strings.action_cancel))
+                            }
+                        },
                     )
                 }
             }
@@ -166,6 +191,14 @@ object SettingsTrackingScreen : SearchableSettings {
                 (enhancedMangaTrackers.second + enhancedAnimeTrackers.second).joinToString { it.name },
             )
             enhancedTrackerInfo += "\n\n$missingSourcesInfo"
+        }
+
+        val discordStatus by discordPresenceManager.status.collectAsState()
+        val discordStatusText = when (discordStatus) {
+            ConnectionStatus.Connected -> stringResource(MR.strings.pref_discord_rpc_status_connected)
+            ConnectionStatus.Connecting -> stringResource(MR.strings.pref_discord_rpc_status_connecting)
+            ConnectionStatus.InvalidToken -> stringResource(MR.strings.pref_discord_rpc_status_invalid_token)
+            ConnectionStatus.Disconnected -> stringResource(MR.strings.pref_discord_rpc_status_disconnected)
         }
 
         return listOf(
@@ -372,6 +405,35 @@ object SettingsTrackingScreen : SearchableSettings {
                                 )
                             } + listOf(Preference.PreferenceItem.InfoPreference(enhancedTrackerInfo))
                     ).toImmutableList(),
+            ),
+            Preference.PreferenceGroup(
+                title = stringResource(MR.strings.pref_discord_rpc),
+                preferenceItems = persistentListOf(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = discordPreferences.enabled(),
+                        title = stringResource(MR.strings.pref_discord_rpc_enabled),
+                        onValueChanged = { value ->
+                            if (!value) {
+                                true
+                            } else {
+                                dialog = DiscordRpcWarningDialog
+                                false
+                            }
+                        },
+                    ),
+                    Preference.PreferenceItem.EditTextInfoPreference(
+                        preference = discordPreferences.token(),
+                        dialogSubtitle = stringResource(MR.strings.pref_discord_rpc_token_dialog),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        title = stringResource(MR.strings.pref_discord_rpc_token),
+                        subtitle = null,
+                    ),
+                    Preference.PreferenceItem.TextPreference(
+                        title = stringResource(MR.strings.pref_discord_rpc_status),
+                        subtitle = discordStatusText,
+                        enabled = false,
+                    ),
+                ),
             ),
         )
     }
@@ -739,3 +801,5 @@ private data class LogoutDialog(
 )
 
 private data object NovelUpdatesListMappingDialog
+
+private data object DiscordRpcWarningDialog

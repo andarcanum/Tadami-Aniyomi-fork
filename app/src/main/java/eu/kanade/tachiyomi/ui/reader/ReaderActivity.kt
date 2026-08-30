@@ -71,6 +71,7 @@ import com.tadami.aurora.R
 import com.tadami.aurora.databinding.ReaderActivityBinding
 import eu.kanade.core.util.ifMangaSourcesLoaded
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.source.manga.interactor.GetMangaIncognitoState
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.relativeDateTimeText
 import eu.kanade.presentation.reader.DisplayRefreshHost
@@ -88,6 +89,8 @@ import eu.kanade.presentation.reader.manga.MangaSeriesInterstitialOverlay
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
+import eu.kanade.tachiyomi.data.discord.DiscordPresenceInfo
+import eu.kanade.tachiyomi.data.discord.DiscordPresenceManager
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.source.online.HttpSource
@@ -113,6 +116,7 @@ import eu.kanade.tachiyomi.util.system.openInBrowser
 import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.view.setComposeContent
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
@@ -190,6 +194,9 @@ class ReaderActivity : BaseActivity() {
 
     var isScrollingThroughPages = false
         private set
+
+    private var presenceStartedAt: Long = 0L
+    private var presenceJob: Job? = null
 
     private fun isEInkMode(): Boolean = uiPreferences.eInkProfile().get().isEnabled
 
@@ -323,6 +330,46 @@ class ReaderActivity : BaseActivity() {
     /**
      * Called when the activity is destroyed. Cleans up the viewer, configuration and any view.
      */
+    override fun onStart() {
+        super.onStart()
+        presenceStartedAt = System.currentTimeMillis()
+        observePresenceChapter()
+    }
+
+    override fun onStop() {
+        presenceJob?.cancel()
+        presenceJob = null
+        Injekt.get<DiscordPresenceManager>().clearSession(this)
+        super.onStop()
+    }
+
+    private fun observePresenceChapter() {
+        val manager = Injekt.get<DiscordPresenceManager>()
+        presenceJob = viewModel.state
+            .map { it.viewerChapters?.currChapter }
+            .distinctUntilChanged()
+            .filterNotNull()
+            .onEach { readerChapter ->
+                val manga = viewModel.manga ?: return@onEach
+                val incognito = Injekt.get<GetMangaIncognitoState>().await(manga.source)
+                if (incognito) {
+                    manager.clearSession(this)
+                } else {
+                    manager.setSession(
+                        this,
+                        DiscordPresenceInfo(
+                            mediaKind = DiscordPresenceInfo.MediaKind.MANGA,
+                            title = manga.title,
+                            primaryNumber = readerChapter.chapter.chapter_number.toDouble(),
+                            secondaryLine = readerChapter.chapter.name,
+                            startedAt = presenceStartedAt,
+                        ),
+                    )
+                }
+            }
+            .launchIn(lifecycleScope)
+    }
+
     override fun onDestroy() {
         // Allow achievement notifications when exiting reader
         eu.kanade.presentation.achievement.components.AchievementBannerManager.setInReaderOrPlayer(false)

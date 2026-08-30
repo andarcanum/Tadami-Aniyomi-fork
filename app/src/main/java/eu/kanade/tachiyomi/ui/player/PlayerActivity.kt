@@ -59,12 +59,15 @@ import androidx.media.AudioFocusRequestCompat
 import androidx.media.AudioManagerCompat
 import com.hippo.unifile.UniFile
 import com.tadami.aurora.databinding.PlayerLayoutBinding
+import eu.kanade.domain.source.anime.interactor.GetAnimeIncognitoState
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.animesource.model.ChapterType
 import eu.kanade.tachiyomi.animesource.model.Hoster
 import eu.kanade.tachiyomi.animesource.model.SerializableHoster.Companion.serialize
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.data.discord.DiscordPresenceInfo
+import eu.kanade.tachiyomi.data.discord.DiscordPresenceManager
 import eu.kanade.tachiyomi.data.notification.NotificationReceiver
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.network.NetworkPreferences
@@ -83,6 +86,8 @@ import eu.kanade.tachiyomi.util.system.toShareIntent
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.view.setComposeContent
 import `is`.xyz.mpv.MPVLib
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -140,6 +145,9 @@ class PlayerActivity : BaseActivity() {
     private val torrentPlaybackResolver by lazy { TorrentPlaybackResolver(contentResolver) }
 
     private var audioFocusRequest: AudioFocusRequestCompat? = null
+
+    private var presenceStartedAt: Long = 0L
+    private var presenceJob: Job? = null
     private var restoreAudioFocus: () -> Unit = {}
 
     private var pipRect: Rect? = null
@@ -314,6 +322,10 @@ class PlayerActivity : BaseActivity() {
     }
 
     override fun onDestroy() {
+        presenceJob?.cancel()
+        presenceJob = null
+        Injekt.get<DiscordPresenceManager>().clearSession(this)
+
         // Allow achievement notifications when exiting player
         eu.kanade.presentation.achievement.components.AchievementBannerManager.setInReaderOrPlayer(false)
 
@@ -371,7 +383,36 @@ class PlayerActivity : BaseActivity() {
             viewModel.deletePendingEpisodes()
         }
 
+        presenceJob?.cancel()
+        presenceJob = null
+        Injekt.get<DiscordPresenceManager>().clearSession(this)
         super.onStop()
+    }
+
+    private fun observePresenceEpisode() {
+        val manager = Injekt.get<DiscordPresenceManager>()
+        presenceJob = combine(viewModel.currentAnime, viewModel.currentEpisode) { anime, episode ->
+            anime to episode
+        }
+            .onEach { (anime, episode) ->
+                if (anime == null || episode == null) return@onEach
+                val incognito = Injekt.get<GetAnimeIncognitoState>().await(anime.source)
+                if (incognito) {
+                    manager.clearSession(this)
+                } else {
+                    manager.setSession(
+                        this,
+                        DiscordPresenceInfo(
+                            mediaKind = DiscordPresenceInfo.MediaKind.ANIME,
+                            title = anime.title,
+                            primaryNumber = episode.episode_number.toDouble(),
+                            secondaryLine = episode.name,
+                            startedAt = presenceStartedAt,
+                        ),
+                    )
+                }
+            }
+            .launchIn(lifecycleScope)
     }
 
     override fun onUserLeaveHint() {
@@ -399,6 +440,8 @@ class PlayerActivity : BaseActivity() {
     @Suppress("DEPRECATION")
     override fun onStart() {
         super.onStart()
+        presenceStartedAt = System.currentTimeMillis()
+        observePresenceEpisode()
         setPictureInPictureParams(createPipParams())
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.setFlags(

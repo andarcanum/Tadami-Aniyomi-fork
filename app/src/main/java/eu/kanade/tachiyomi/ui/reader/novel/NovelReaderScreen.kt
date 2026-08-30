@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.domain.source.interactor.NovelReaderIncognitoState
 import eu.kanade.presentation.reader.novel.LocalNovelChapterHighlights
 import eu.kanade.presentation.reader.novel.NovelAtmosphereBackground
 import eu.kanade.presentation.reader.novel.NovelReaderBackdropSession
@@ -48,6 +50,8 @@ import eu.kanade.presentation.reader.novel.resolveReaderBackgroundImageModel
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundSelection
 import eu.kanade.presentation.reader.novel.resolveReaderSystemUiFlag
 import eu.kanade.presentation.reader.novel.safeEnum
+import eu.kanade.tachiyomi.data.discord.DiscordPresenceInfo
+import eu.kanade.tachiyomi.data.discord.DiscordPresenceManager
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.NovelDictionaryHistoryScreen
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
@@ -125,6 +129,28 @@ class NovelReaderScreen(
             }
             lifecycleOwner.lifecycle.addObserver(observer)
             onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        if (currentState is NovelReaderScreenModel.State.Success) {
+            val presenceManager = remember { Injekt.get<DiscordPresenceManager>() }
+            val presenceHandle = remember { Any() }
+            val presenceStartedAt = remember { System.currentTimeMillis() }
+            DisposableEffect(presenceManager, presenceHandle) {
+                onDispose { presenceManager.clearSession(presenceHandle) }
+            }
+            LaunchedEffect(currentState.chapter.id) {
+                if (!NovelReaderIncognitoState.active.value) {
+                    presenceManager.setSession(
+                        presenceHandle,
+                        DiscordPresenceInfo(
+                            mediaKind = DiscordPresenceInfo.MediaKind.NOVEL,
+                            title = currentState.novel.title,
+                            primaryNumber = currentState.chapter.chapterNumber,
+                            secondaryLine = currentState.chapter.name,
+                            startedAt = presenceStartedAt,
+                        ),
+                    )
+                }
+            }
         }
         var showReaderUi by remember { mutableStateOf(false) }
         val context = LocalContext.current
