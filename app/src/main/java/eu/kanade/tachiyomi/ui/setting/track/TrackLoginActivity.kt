@@ -2,6 +2,8 @@ package eu.kanade.tachiyomi.ui.setting.track
 
 import android.net.Uri
 import androidx.lifecycle.lifecycleScope
+import logcat.LogPriority
+import logcat.logcat
 import tachiyomi.core.common.util.lang.launchIO
 
 class TrackLoginActivity : BaseOAuthLoginActivity() {
@@ -10,6 +12,7 @@ class TrackLoginActivity : BaseOAuthLoginActivity() {
         when (uri?.host) {
             "anilist-auth" -> handleAnilist(uri)
             "bangumi-auth" -> handleBangumi(uri)
+            "mangabaka-auth" -> handleMangaBaka(uri)
             "myanimelist-auth" -> handleMyAnimeList(uri)
             "shikimori-auth" -> handleShikimori(uri)
             "simkl-auth" -> handleSimkl(uri)
@@ -41,6 +44,26 @@ class TrackLoginActivity : BaseOAuthLoginActivity() {
             }
         } else {
             trackerManager.bangumi.logout()
+            returnToSettings()
+        }
+    }
+
+    private fun handleMangaBaka(data: Uri) {
+        val code = data.getQueryParameter("code")
+        val state = data.getQueryParameter("state")
+        if (code != null) {
+            if (state != null && trackerManager.mangaBaka.verifyOAuthState(state)) {
+                lifecycleScope.launchIO {
+                    trackerManager.mangaBaka.login(code)
+                    returnToSettings()
+                }
+            } else {
+                logcat(LogPriority.WARN) { "Received wrong OAuth state back from MangaBaka" }
+                trackerManager.mangaBaka.logout()
+                returnToSettings()
+            }
+        } else {
+            trackerManager.mangaBaka.logout()
             returnToSettings()
         }
     }

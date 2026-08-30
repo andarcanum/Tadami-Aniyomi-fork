@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.track.jellyfin.Jellyfin
 import eu.kanade.tachiyomi.data.track.kavita.Kavita
 import eu.kanade.tachiyomi.data.track.kitsu.Kitsu
 import eu.kanade.tachiyomi.data.track.komga.Komga
+import eu.kanade.tachiyomi.data.track.mangabaka.MangaBaka
 import eu.kanade.tachiyomi.data.track.mangaupdates.MangaUpdates
 import eu.kanade.tachiyomi.data.track.myanimelist.MyAnimeList
 import eu.kanade.tachiyomi.data.track.novellist.NovelList
@@ -25,6 +26,7 @@ class TrackerManager(context: Context) {
         const val ANILIST = 2L
         const val KITSU = 3L
         const val KAVITA = 8L
+        const val MANGABAKA = 12L
         const val SIMKL = 101L
         const val JELLYFIN = 102L
         const val TMDB = 200L
@@ -42,6 +44,7 @@ class TrackerManager(context: Context) {
     val suwayomi = Suwayomi(9L)
     val novelUpdates = NovelUpdates(10L)
     val novelList = NovelList(11L)
+    val mangaBaka = MangaBaka(MANGABAKA)
     val simkl = Simkl(SIMKL)
     val jellyfin = Jellyfin(JELLYFIN)
     val tmdb = Tmdb(TMDB)
@@ -54,11 +57,12 @@ class TrackerManager(context: Context) {
         mangaUpdates,
         novelUpdates,
         novelList,
+        mangaBaka,
     )
 
     val trackers = listOf(
         myAnimeList, aniList, kitsu, shikimori, bangumi,
-        komga, mangaUpdates, kavita, suwayomi, novelUpdates, novelList, simkl, jellyfin,
+        komga, mangaUpdates, kavita, suwayomi, novelUpdates, novelList, mangaBaka, simkl, jellyfin,
         trakt, tmdb,
     )
 
