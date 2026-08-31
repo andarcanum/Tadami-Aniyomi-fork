@@ -98,6 +98,11 @@ class ReaderPreferences(
         true,
     )
 
+    fun showFinaleCard() = preferenceStore.getBoolean(
+        "show_reader_finale_card",
+        true,
+    )
+
     fun preserveReadingPosition() = preferenceStore.getBoolean(
         "pref_preserve_reading_position",
         false,

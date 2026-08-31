@@ -19,6 +19,7 @@ import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.reader.manga.MangaSeriesInterstitialState
 import eu.kanade.presentation.reader.manga.resolveMangaSeriesInterstitialState
+import eu.kanade.tachiyomi.data.database.models.manga.Chapter
 import eu.kanade.tachiyomi.data.database.models.manga.isRecognizedNumber
 import eu.kanade.tachiyomi.data.database.models.manga.toDomainChapter
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
@@ -28,13 +29,17 @@ import eu.kanade.tachiyomi.data.saver.Image
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.saver.Location
 import eu.kanade.tachiyomi.source.model.Page
+import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.reader.loader.ChapterLoader
 import eu.kanade.tachiyomi.ui.reader.loader.DownloadPageLoader
 import eu.kanade.tachiyomi.ui.reader.model.InsertPage
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
+import eu.kanade.tachiyomi.ui.reader.model.ReaderFinaleState
 import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
+import eu.kanade.tachiyomi.ui.reader.model.daysOnShelf
+import eu.kanade.tachiyomi.ui.reader.model.shouldCelebrateFinale
 import eu.kanade.tachiyomi.ui.reader.setting.MangaReaderPageDimensions
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
@@ -95,6 +100,7 @@ import tachiyomi.domain.source.manga.service.MangaSourceManager
 import tachiyomi.source.local.entries.manga.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.text.DateFormat
 import java.time.Instant
 import java.util.Date
 
@@ -177,6 +183,8 @@ class ReaderViewModel @JvmOverloads constructor(
     private var seriesId: Long? = null
     private var seriesInterstitialState: MangaSeriesInterstitialState? = null
     private var seriesInterstitialShownForChapterId: Long? = null
+    private var finaleShownForMangaId: Long? = null
+    private var pendingFinaleState: ReaderFinaleState? = null
 
     private var chapterToDownload: MangaDownload? = null
 
@@ -764,6 +772,7 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     private suspend fun updateChapterProgressOnComplete(readerChapter: ReaderChapter) {
+        val chapterWasUnread = !readerChapter.chapter.read
         readerChapter.chapter.read = true
         updateTrackChapterRead(readerChapter)
         deleteChapterIfNeeded(readerChapter)
@@ -798,6 +807,7 @@ class ReaderViewModel @JvmOverloads constructor(
         val allChapters = chapterList.map { it.chapter }
         if (allChapters.all { it.read }) {
             eventBus.tryEmit(AchievementEvent.MangaCompleted(mangaId))
+            maybeShowFinale(readerChapter, allChapters, chapterWasUnread)
         }
 
         val markDuplicateAsRead = libraryPreferences.markDuplicateReadChapterAsRead().get()
@@ -864,6 +874,63 @@ class ReaderViewModel @JvmOverloads constructor(
             setSeriesInterstitialState(resolved)
         }
     }
+
+    /**
+     * Prepares the one-time «THE END» plate when the final chapter of a truly completed manga
+     * gets read (docs/plans/2026-08-02_reader_finale.md). The plate is not shown immediately —
+     * that would steal the last page — it waits pending until the end-of-manga transition is
+     * reached ([revealPendingFinale]). A multi-work series continuation takes precedence: if the
+     * reader is about to be sent to the next work, the interstitial owns that ending and the
+     * plate silently steps aside. The plate is also rendered with priority over the interstitial,
+     * so the empty "last work" branch never stacks two modals.
+     */
+    private fun maybeShowFinale(
+        readerChapter: ReaderChapter,
+        allChapters: List<Chapter>,
+        chapterWasUnread: Boolean,
+    ) {
+        val currentManga = manga ?: return
+        if (!shouldCelebrateFinale(
+                manga = currentManga,
+                chapters = allChapters,
+                chapterWasUnread = chapterWasUnread,
+                cardEnabled = readerPreferences.showFinaleCard().get(),
+                alreadyShownForManga = finaleShownForMangaId == currentManga.id,
+            )
+        ) {
+            return
+        }
+        finaleShownForMangaId = currentManga.id
+        viewModelScope.launchIO {
+            if (seriesId != null) {
+                val interstitial = resolveSeriesInterstitialState(readerChapter)
+                if (interstitial?.nextManga != null) return@launchIO
+            }
+            pendingFinaleState = ReaderFinaleState(
+                manga = currentManga,
+                chapterCount = allChapters.size,
+                daysOnShelf = daysOnShelf(currentManga.dateAdded),
+                finishedOn = DateFormat.getDateInstance(DateFormat.SHORT).format(Date()),
+                nightVeil = eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin(),
+            )
+        }
+    }
+
+    /**
+     * Called by the viewers when the end-of-manga transition becomes active (swipe past the
+     * last page of the final chapter): that is the moment the finale plate is revealed.
+     */
+    fun revealPendingFinale() {
+        val pending = pendingFinaleState ?: return
+        pendingFinaleState = null
+        setFinaleState(pending)
+    }
+
+    private fun setFinaleState(value: ReaderFinaleState?) {
+        mutableState.update { it.copy(finaleState = value) }
+    }
+
+    fun clearFinale() = setFinaleState(null)
 
     fun restartReadTimer() {
         chapterReadStartTime = Instant.now().toEpochMilli()
@@ -1541,6 +1608,7 @@ class ReaderViewModel @JvmOverloads constructor(
         val menuVisible: Boolean = false,
         @IntRange(from = -100, to = 100) val brightnessOverlayValue: Int = 0,
         val seriesInterstitialState: MangaSeriesInterstitialState? = null,
+        val finaleState: ReaderFinaleState? = null,
 
         // Auto-scroll state
         val autoScrollEnabled: Boolean = false,

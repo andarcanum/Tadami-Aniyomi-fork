@@ -86,6 +86,7 @@ import eu.kanade.presentation.reader.appbars.BottomBarButtonFlags
 import eu.kanade.presentation.reader.appbars.ReaderAppBars
 import eu.kanade.presentation.reader.components.AutoScrollActionFab
 import eu.kanade.presentation.reader.manga.MangaSeriesInterstitialOverlay
+import eu.kanade.presentation.reader.manga.ReaderFinaleOverlay
 import eu.kanade.presentation.reader.settings.ReaderSettingsDialog
 import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.coil.TachiyomiImageDecoder
@@ -818,32 +819,46 @@ class ReaderActivity : BaseActivity() {
                         null -> {}
                     }
 
-                    state.seriesInterstitialState?.let { seriesState ->
-                        val onContinue = seriesState.nextManga?.manga?.id?.let { nextMangaId ->
-                            seriesState.nextChapterId?.let { nextChapterId ->
-                                {
-                                    viewModel.clearSeriesInterstitial()
-                                    startActivity(
-                                        ReaderActivity.newIntent(
-                                            this@ReaderActivity,
-                                            nextMangaId,
-                                            nextChapterId,
-                                            seriesId,
-                                        ),
-                                    )
-                                    finish()
-                                }
-                            }
-                        }
-
-                        MangaSeriesInterstitialOverlay(
-                            state = seriesState,
-                            onBackToSeries = {
-                                viewModel.clearSeriesInterstitial()
+                    state.finaleState?.let { finaleState ->
+                        ReaderFinaleOverlay(
+                            state = finaleState,
+                            reducedMotion = isEInkMode(),
+                            onBackToManga = {
+                                viewModel.clearFinale()
                                 finish()
                             },
-                            onContinue = onContinue,
+                            onStay = viewModel::clearFinale,
                         )
+                    }
+
+                    if (state.finaleState == null) {
+                        state.seriesInterstitialState?.let { seriesState ->
+                            val onContinue = seriesState.nextManga?.manga?.id?.let { nextMangaId ->
+                                seriesState.nextChapterId?.let { nextChapterId ->
+                                    {
+                                        viewModel.clearSeriesInterstitial()
+                                        startActivity(
+                                            ReaderActivity.newIntent(
+                                                this@ReaderActivity,
+                                                nextMangaId,
+                                                nextChapterId,
+                                                seriesId,
+                                            ),
+                                        )
+                                        finish()
+                                    }
+                                }
+                            }
+
+                            MangaSeriesInterstitialOverlay(
+                                state = seriesState,
+                                onBackToSeries = {
+                                    viewModel.clearSeriesInterstitial()
+                                    finish()
+                                },
+                                onContinue = onContinue,
+                            )
+                        }
                     }
 
                     AutoScrollActionFab(

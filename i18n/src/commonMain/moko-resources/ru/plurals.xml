@@ -6,6 +6,18 @@
         <item quantity="many">После %1$s минут</item>
         <item quantity="other">После %1$s минут</item>
     </plurals>
+    <plurals name="reader_finale_chapters">
+        <item quantity="one">%1$d глава</item>
+        <item quantity="few">%1$d главы</item>
+        <item quantity="many">%1$d глав</item>
+        <item quantity="other">%1$d глав</item>
+    </plurals>
+    <plurals name="reader_finale_days_on_shelf">
+        <item quantity="one">на полке %1$d день</item>
+        <item quantity="few">на полке %1$d дня</item>
+        <item quantity="many">на полке %1$d дней</item>
+        <item quantity="other">на полке %1$d дней</item>
+    </plurals>
     <plurals name="notification_chapters_multiple_and_more">
         <item quantity="one">Главы %1$s и ещё одна</item>
         <item quantity="few">Главы %1$s и ещё %2$d</item>

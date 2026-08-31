@@ -123,6 +123,10 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
             pref = screenModel.preferences.alwaysShowChapterTransition(),
         )
         AuroraToggleRow(
+            label = stringResource(MR.strings.pref_reader_finale_card),
+            pref = screenModel.preferences.showFinaleCard(),
+        )
+        AuroraToggleRow(
             label = stringResource(MR.strings.pref_page_transitions),
             pref = screenModel.preferences.pageTransitions(),
         )

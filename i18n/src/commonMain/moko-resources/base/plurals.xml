@@ -5,6 +5,16 @@
         <item quantity="other">After %1$s minutes</item>
     </plurals>
 
+    <plurals name="reader_finale_chapters">
+        <item quantity="one">%1$d chapter</item>
+        <item quantity="other">%1$d chapters</item>
+    </plurals>
+
+    <plurals name="reader_finale_days_on_shelf">
+        <item quantity="one">on your shelf for %1$d day</item>
+        <item quantity="other">on your shelf for %1$d days</item>
+    </plurals>
+
     <plurals name="relative_time">
         <item quantity="one">Yesterday</item>
         <item quantity="other">%1$d days ago</item>

@@ -159,6 +159,10 @@ object SettingsReaderScreen : SearchableSettings {
                     title = stringResource(MR.strings.pref_always_show_chapter_transition),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
+                    preference = readerPreferences.showFinaleCard(),
+                    title = stringResource(MR.strings.pref_reader_finale_card),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
                     preference = readerPreferences.preserveReadingPosition(),
                     title = stringResource(AYMR.strings.pref_preserve_reading_position),
                 ),

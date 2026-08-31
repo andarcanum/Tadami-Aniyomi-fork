@@ -333,6 +333,12 @@
     <string name="transition_no_previous">Предыдущей главы нет</string>
     <string name="transition_pages_loading">Идёт загрузка страниц…</string>
     <string name="transition_pages_error">Не удалось загрузить страницы: %1$s</string>
+    <string name="reader_finale_title">THE END</string>
+    <string name="reader_finale_subtitle">Здесь ты прочёл все главы</string>
+    <string name="reader_finale_back_to_manga">К странице манги</string>
+    <string name="reader_finale_stay">Остаться</string>
+    <string name="reader_finale_stamp_label">Завершено</string>
+    <string name="pref_reader_finale_card">Праздновать завершение серии</string>
     <string name="pref_read_with_long_tap">Показать действия при долгом нажатии</string>
     <string name="action_open_in_web_view">Открыть в WebView</string>
     <string name="pref_skip_read_chapters">Пропускать прочитанные главы</string>

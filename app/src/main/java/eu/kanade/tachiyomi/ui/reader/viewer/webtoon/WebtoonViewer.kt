@@ -404,6 +404,9 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
         if (toChapter != null) {
             logcat { "Request preload destination chapter because we're on the transition" }
             activity.requestPreloadChapter(toChapter)
+        } else if (transition is ChapterTransition.Next) {
+            // End-of-manga transition became active: reveal the pending finale plate (if any).
+            activity.viewModel.revealPendingFinale()
         }
     }
 
