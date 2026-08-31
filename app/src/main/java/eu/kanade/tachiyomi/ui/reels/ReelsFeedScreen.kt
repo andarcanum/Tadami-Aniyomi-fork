@@ -450,6 +450,9 @@ data class ReelsFeedScreen(
                     // Search, filters and source picking belong to the global feed only.
                     showSearch = state.supportsTags && state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
                     showFilter = state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                    // Source-supplied chips for the search bar (contract v19 addendum);
+                    // empty => the TopBar's static popular list.
+                    searchHints = state.searchHints,
                     // Favorites stays a direct circle; personal content groups into the account hub.
                     // Source switching lives on the title badge only — one affordance per action.
                     // Account hub (V1): login state, custom feeds, Following, login/logout.

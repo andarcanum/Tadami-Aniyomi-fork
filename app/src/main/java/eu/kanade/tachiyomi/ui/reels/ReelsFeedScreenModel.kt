@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeReelsFeedbackSource
+import eu.kanade.tachiyomi.animesource.AnimeSearchHintsSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
@@ -308,6 +309,9 @@ class ReelsFeedScreenModel(
                     currentSourceId = newSourceId,
                     sourceName = rawSource.name,
                     supportsTags = rawSource.supportsTags,
+                    // Search hints (v19 addendum) are per source: drop the previous list;
+                    // loadSearchHints below refills it when the capability exists.
+                    searchHints = persistentListOf(),
                     searchQuery = savedQuery,
                     filters = initialFilters,
                     // Player request headers come from the (ABI-stable) AnimeHttpSource.headers —
@@ -346,6 +350,7 @@ class ReelsFeedScreenModel(
             }
             loadPersistedFavorites(newSourceId)
             loadPersistedFollows(newSourceId)
+            loadSearchHints()
             loadFeed(reset = true)
         } else {
             mutableState.update {
@@ -800,6 +805,26 @@ class ReelsFeedScreenModel(
 
     fun toggleSearchBar(open: Boolean) {
         mutableState.update { it.copy(isSearchBarOpen = open) }
+        if (open) loadSearchHints()
+    }
+
+    /**
+     * Search hints (contract v19 addendum): pulls the source's tag list for the search-bar
+     * chips. Optional capability — sources without it (or failing calls) leave the state
+     * untouched, so the TopBar keeps showing its static fallback list. Same shape as
+     * [loadCustomFeeds]: background load, source-switch race guard, no error surface.
+     */
+    private fun loadSearchHints() {
+        val src = source as? AnimeSearchHintsSource ?: return
+        val sourceId = state.value.currentSourceId
+        screenModelScope.launch(ioDispatcher) {
+            val hints = runCatching { src.getSearchHints() }.getOrNull() ?: return@launch
+            mutableState.update { current ->
+                // The read raced a source switch: drop it if the source changed.
+                if (current.currentSourceId != sourceId) return@update current
+                current.copy(searchHints = hints.toImmutableList())
+            }
+        }
     }
 
     fun toggleSourcePicker(open: Boolean) {
@@ -1095,6 +1120,9 @@ class ReelsFeedScreenModel(
         val sourceName: String = "",
         val isOffline: Boolean = false,
         val supportsTags: Boolean = true,
+        // Source-supplied tag hints (contract v19 addendum): the reels search-bar chips.
+        // Empty => the TopBar falls back to its static popular list.
+        val searchHints: ImmutableList<String> = persistentListOf(),
         // Feed generation mode (contract v18): drives the creator chrome in the TopBar and
         // which loadFeed pipeline runs.
         val mode: FeedMode = FeedMode.GLOBAL,

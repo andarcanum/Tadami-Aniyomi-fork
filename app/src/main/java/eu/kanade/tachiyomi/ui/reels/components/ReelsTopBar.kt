@@ -102,6 +102,9 @@ fun ReelsTopBar(
     preloadWifiOnly: Boolean,
     isOffline: Boolean,
     showSearch: Boolean = true,
+    // Real tag list from the source (contract v19 addendum); the static popular list below is
+    // the fallback while the source offers no hints.
+    searchHints: List<String> = emptyList(),
     showFilter: Boolean = true,
     // Favorites keeps a first-class circle (frequent, one-tap local action) — a hub with a
     // single entry would be pure indirection. Account & personal content (custom feeds,
@@ -591,7 +594,8 @@ fun ReelsTopBar(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    POPULAR_REELS_TAGS.forEach { tag ->
+                    // Source-provided chips when available; the static list is the fallback.
+                    (searchHints.ifEmpty { POPULAR_REELS_TAGS }).forEach { tag ->
                         val isSelected = searchQuery.equals(tag, ignoreCase = true)
                         Box(
                             modifier = Modifier

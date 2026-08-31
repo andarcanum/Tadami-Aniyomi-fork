@@ -190,6 +190,7 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
+| 19+ | v19 addendum: optional search-hints capability `AnimeSearchHintsSource.getSearchHints()` (instanceof-detected, no default members added to existing interfaces); the host renders the returned tags as chips in the reels search bar. Additive: `LIB_VERSION` untouched, existing feed plugins keep working. |
 | 19 | Optional feed-source login capability `AnimeFeedLoginSource` (`login`/`isLoggedIn`/`loggedInAccount`/`logout`) and custom-feed capability `AnimeCustomFeedSource` (`getCustomFeeds`/`getCustomFeed`/`getCustomFeedTags`/`getCustomFeedDetail`/`createCustomFeed`/`updateCustomFeed`/`deleteCustomFeed`, plus `CustomFeedRef`/`CustomFeedDetail`). Both instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 19.0 as the discipline stamp. |
 | 18 | Optional creator-feed capability: `AnimeCreatorFeedSource.getCreatorFeed(creator, page, cursor)` and optional feedback capability `AnimeReelsFeedbackSource` (both instanceof-detected, no default members added to existing interfaces). Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 18.0 as the discipline stamp. |
 | 17 | Sticky cursor pagination (`FeedPage.nextCursor`, `cursor` parameters), `getSearchFeed` default, URL semantics flip (`videoUrl` base + optional `videoUrlHd`). Breaking: all feed plugins rebuild. |
