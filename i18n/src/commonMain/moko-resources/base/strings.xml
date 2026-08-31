@@ -1899,4 +1899,21 @@
     <string name="reels_follows_empty_hint">Tap the person icon on a creator\'s video to follow them</string>
     <string name="reels_follow_cap_reached">Follow limit reached — 100 creators per source</string>
     <string name="reels_follows_removed_snackbar">Creator unfollowed</string>
+    <string name="reels_login">Log in</string>
+    <string name="reels_account">Account</string>
+    <string name="reels_logged_in_as">Logged in as %1$s</string>
+    <string name="reels_logout">Log out</string>
+    <string name="reels_login_email">Email</string>
+    <string name="reels_login_password">Password</string>
+    <string name="reels_login_button">Log in</string>
+    <string name="reels_custom_feeds">Custom feeds</string>
+    <string name="reels_custom_feeds_empty">No custom feeds yet</string>
+    <string name="reels_custom_feed_new">New feed</string>
+    <string name="reels_custom_feed_edit">Edit feed</string>
+    <string name="reels_custom_feed_delete">Delete feed</string>
+    <string name="reels_custom_feed_delete_confirm">Delete this custom feed? This cannot be undone.</string>
+    <string name="reels_custom_feed_name">Name</string>
+    <string name="reels_custom_feed_search_tags">Search tags</string>
+    <string name="reels_custom_feed_save">Save</string>
+    <string name="reels_custom_feed_save_failed">Save failed</string>
 </resources>

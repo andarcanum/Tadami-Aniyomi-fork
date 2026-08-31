@@ -3,10 +3,14 @@ package eu.kanade.tachiyomi.ui.reels
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.animesource.AnimeCatalogueSource
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.CustomFeedDetail
+import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
 import eu.kanade.tachiyomi.animesource.model.FeedPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -940,6 +944,8 @@ class ReelsFeedScreenModelTest {
         initialPage: Int = 0,
         creator: String? = null,
         followingFeed: Boolean = false,
+        customFeedId: String? = null,
+        customFeedName: String? = null,
         preferences: SourcePreferences = SourcePreferences(MapPreferenceStore()),
         sessionSound: ReelsSessionSoundState = ReelsSessionSoundState(),
     ) = ReelsFeedScreenModel(
@@ -948,6 +954,8 @@ class ReelsFeedScreenModelTest {
         initialPage = initialPage,
         creator = creator,
         followingFeed = followingFeed,
+        customFeedId = customFeedId,
+        customFeedName = customFeedName,
         sourceManager = manager,
         sourcePreferences = preferences,
         ioDispatcher = testDispatcher,
@@ -1542,5 +1550,187 @@ class ReelsFeedScreenModelTest {
         screenModel.state.value.isLoading shouldBe false
         screenModel.state.value.canLoadMore shouldBe false
         source.creatorRequests.shouldBeEmpty()
+    }
+
+    // ---- Contract v19: account login + custom feeds ----
+
+    private class FakeAccountSource(
+        override val id: Long,
+        override val name: String = "Account Feed $id",
+    ) : AnimeFeedSource, AnimeFeedLoginSource, AnimeCustomFeedSource {
+        override val lang: String = "all"
+
+        val loginRequests = mutableListOf<Pair<String, String>>()
+        var loginResult: Boolean = true
+        var storedEmail: String? = null
+        val feeds = mutableListOf(CustomFeedRef("f1", "Feed 1"), CustomFeedRef("f2", "Feed 2"))
+        val requestedFeedPages = mutableListOf<Pair<String, Int>>()
+        val createdFeeds = mutableListOf<Pair<String, List<String>>>()
+        var detail = CustomFeedDetail("Feed 1", listOf("Tag A"))
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            FeedPage(emptyList(), false)
+
+        override suspend fun login(email: String, password: String): Boolean {
+            loginRequests += email to password
+            if (loginResult) storedEmail = email
+            return loginResult
+        }
+
+        override fun isLoggedIn(): Boolean = storedEmail != null
+
+        override fun loggedInAccount(): String? = storedEmail
+
+        override suspend fun logout() {
+            storedEmail = null
+        }
+
+        override suspend fun getCustomFeeds(): List<CustomFeedRef> = feeds.toList()
+
+        override suspend fun getCustomFeed(id: String, page: Int, cursor: String?): FeedPage {
+            requestedFeedPages += id to page
+            return FeedPage(
+                videos = listOf(
+                    ShortVideoItem(
+                        id = "custom-$id-p$page",
+                        videoUrl = "https://example.com/custom-$id-p$page.mp4",
+                        posterUrl = "https://example.com/custom-$id-p$page.jpg",
+                    ),
+                ),
+                hasNextPage = false,
+            )
+        }
+
+        override suspend fun getCustomFeedTags(): List<String> = listOf("Tag A", "Tag B", "Tag C")
+
+        override suspend fun getCustomFeedDetail(id: String): CustomFeedDetail = detail
+
+        override suspend fun createCustomFeed(name: String, tags: List<String>): CustomFeedRef {
+            createdFeeds += name to tags
+            return CustomFeedRef("new-1", name)
+        }
+
+        override suspend fun updateCustomFeed(id: String, name: String, tags: List<String>): Boolean = true
+
+        override suspend fun deleteCustomFeed(id: String): Boolean = feeds.removeAll { it.id == id }
+    }
+
+    @Test
+    fun `login capability is detected and a successful login updates the account state`() = runTest(testDispatcher) {
+        val source = FakeAccountSource(2001)
+        val model = buildModel(sourceId = 2001, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.isLoginCapable shouldBe true
+        model.state.value.loggedInAccount shouldBe null
+
+        model.login("a@b.c", "pw")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.loggedInAccount shouldBe "a@b.c"
+        model.state.value.loginError shouldBe null
+        model.state.value.isLoggingIn shouldBe false
+        source.loginRequests shouldBe listOf("a@b.c" to "pw")
+    }
+
+    @Test
+    fun `rejected login surfaces the generic error and stays logged out`() = runTest(testDispatcher) {
+        val source = FakeAccountSource(2002)
+        source.loginResult = false
+        val model = buildModel(sourceId = 2002, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.login("x@y.z", "bad")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.loggedInAccount shouldBe null
+        model.state.value.loginError shouldBe ReelsFeedScreenModel.LOGIN_FAILED_MESSAGE
+        model.state.value.isLoggingIn shouldBe false
+    }
+
+    @Test
+    fun `transport failure during login surfaces the exception message`() = runTest(testDispatcher) {
+        val source = object : AnimeFeedSource, AnimeFeedLoginSource {
+            override val id: Long = 2009L
+            override val name: String = "Failing Login Feed"
+            override val lang: String = "all"
+
+            override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+                FeedPage(emptyList(), false)
+
+            override suspend fun login(email: String, password: String): Boolean =
+                throw RuntimeException("network down")
+
+            override fun isLoggedIn(): Boolean = false
+            override fun loggedInAccount(): String? = null
+            override suspend fun logout() = Unit
+        }
+        val model = buildModel(sourceId = 2009, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.login("a@b.c", "pw")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.loggedInAccount shouldBe null
+        model.state.value.loginError shouldBe "network down"
+    }
+
+    @Test
+    fun `logout clears the account state`() = runTest(testDispatcher) {
+        val source = FakeAccountSource(2003)
+        source.storedEmail = "a@b.c"
+        val model = buildModel(sourceId = 2003, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.loggedInAccount shouldBe "a@b.c"
+
+        model.logout()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.loggedInAccount shouldBe null
+    }
+
+    @Test
+    fun `custom feed mode routes loadFeed through getCustomFeed with the feed id`() = runTest(testDispatcher) {
+        val source = FakeAccountSource(2004)
+        val model = buildModel(
+            sourceId = 2004,
+            manager = sourceManagerOf(source),
+            customFeedId = "f1",
+            customFeedName = "Feed 1",
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.mode shouldBe ReelsFeedScreenModel.FeedMode.CUSTOM
+        model.state.value.items.map { it.id } shouldBe listOf("custom-f1-p1")
+        source.requestedFeedPages shouldBe listOf("f1" to 1)
+    }
+
+    @Test
+    fun `custom feed mode on a non-capable source surfaces an error`() = runTest(testDispatcher) {
+        val source = RecordingFeedSource(2005) { FeedPage(emptyList(), false) }
+        val model = buildModel(sourceId = 2005, manager = sourceManagerOf(source), customFeedId = "f1")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.error shouldBe "Source does not support custom feeds"
+        model.state.value.items.shouldHaveSize(0)
+    }
+
+    @Test
+    fun `custom feeds picker loads the list and delete refreshes it`() = runTest(testDispatcher) {
+        val source = FakeAccountSource(2006)
+        val model = buildModel(sourceId = 2006, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.toggleCustomFeeds(true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.isCustomFeedsOpen shouldBe true
+        model.state.value.customFeeds.map { it.id } shouldBe listOf("f1", "f2")
+
+        model.deleteCustomFeed("f1")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.customFeeds.map { it.id } shouldBe listOf("f2")
     }
 }

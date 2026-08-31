@@ -28,12 +28,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -60,9 +62,12 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.SourceFilterAnimeDialog
+import eu.kanade.tachiyomi.ui.reels.components.ReelsCustomFeedsSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsEmptySearchState
 import eu.kanade.tachiyomi.ui.reels.components.ReelsErrorState
+import eu.kanade.tachiyomi.ui.reels.components.ReelsLoginDialog
 import eu.kanade.tachiyomi.ui.reels.components.ReelsNextPageLoader
 import eu.kanade.tachiyomi.ui.reels.components.ReelsSourcePickerSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsTopBar
@@ -85,6 +90,10 @@ data class ReelsFeedScreen(
     // (followingFeed = true). Mutually exclusive; never combined with offline playlists.
     val creator: String? = null,
     val followingFeed: Boolean = false,
+    // Contract v19: one custom feed's page (customFeedId != null). Mutually exclusive with
+    // creator/following/offline playlists.
+    val customFeedId: String? = null,
+    val customFeedName: String? = null,
 ) : Screen {
     // Voyager disposes screens (and their ScreenModels) by screen.key. The default key is only
     // the class name, so a popped offline playlist would share the live feed's key and never be
@@ -93,7 +102,8 @@ data class ReelsFeedScreen(
     // (the saveable state would orphan models across recreation). Creator and Following pages
     // ride the same rule: their keys must include creator/followingFeed.
     override val key: String
-        get() = "ReelsFeedScreen:$sourceId:$initialPage:${initialFavorites.hashCode()}:$creator:$followingFeed"
+        get() = "ReelsFeedScreen:$sourceId:$initialPage:${initialFavorites.hashCode()}" +
+            ":$creator:$followingFeed:$customFeedId"
 
     @Composable
     override fun Content() {
@@ -121,10 +131,13 @@ data class ReelsFeedScreen(
                 initialPage = initialPage,
                 creator = creator,
                 followingFeed = followingFeed,
+                customFeedId = customFeedId,
+                customFeedName = customFeedName,
             )
         }
         val state by screenModel.state.collectAsStateWithLifecycle()
         val snackbarHostState = remember { SnackbarHostState() }
+        var pendingDeleteFeed by remember { mutableStateOf<CustomFeedRef?>(null) }
         val retryLabel = stringResource(MR.strings.action_retry)
         val followCapMessage = stringResource(MR.strings.reels_follow_cap_reached)
 
@@ -409,7 +422,7 @@ data class ReelsFeedScreen(
                 visible = !landscapeFullscreen &&
                     (
                         chromeVisible || state.isSearchBarOpen || state.isFilterDialogOpen ||
-                            state.isSourcePickerOpen
+                            state.isSourcePickerOpen || state.isLoginDialogOpen || state.isCustomFeedsOpen
                         ),
                 modifier = Modifier.align(Alignment.TopCenter),
             ) {
@@ -420,6 +433,8 @@ data class ReelsFeedScreen(
                             stringResource(MR.strings.reels_following_feed)
                         state.mode == ReelsFeedScreenModel.FeedMode.CREATOR ->
                             "@${state.creator.orEmpty()}"
+                        state.mode == ReelsFeedScreenModel.FeedMode.CUSTOM ->
+                            state.customFeedName.orEmpty()
                         else -> state.sourceName
                     },
                     sourceIcon = state.sourceIcons[state.currentSourceId],
@@ -435,6 +450,15 @@ data class ReelsFeedScreen(
                     // Search, filters and source picking belong to the global feed only.
                     showSearch = state.supportsTags && state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
                     showFilter = state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                    // Favorites stays a direct circle; personal content groups into the account hub.
+                    // Source switching lives on the title badge only — one affordance per action.
+                    // Account hub (V1): login state, custom feeds, Following, login/logout.
+                    showAccount = state.isLoginCapable && !state.isOffline &&
+                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                    isLoggedIn = state.loggedInAccount != null,
+                    loggedInAccount = state.loggedInAccount,
+                    showCustomFeedsAccountRow = state.isCustomFeedCapable,
+                    showFollowsAccountRow = state.isCreatorCapable,
                     showSourcePicker = !state.isOffline &&
                         state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL &&
                         state.availableSources.size > 1,
@@ -442,10 +466,11 @@ data class ReelsFeedScreen(
                         state.isCreatorCapable,
                     isFollowingCreator = state.creator?.let { it in state.followingCreators } == true,
                     onToggleFollow = { handleFollowToggle(state.creator) },
-                    showFollowsEntry = state.isCreatorCapable && !state.isOffline,
-                    onOpenFollows = { navigator.push(ReelsFollowsScreen(sourceId = state.currentSourceId)) },
                     onBackClick = { navigator.pop() },
                     onOpenSourcePicker = { screenModel.toggleSourcePicker(true) },
+                    onLoginRequest = { screenModel.toggleLoginDialog(true) },
+                    onLogout = screenModel::logout,
+                    onOpenCustomFeeds = { screenModel.toggleCustomFeeds(true) },
                     onToggleAutoAdvance = screenModel::toggleAutoAdvance,
                     onToggleCropMode = screenModel::toggleCropMode,
                     onToggleQuality = screenModel::toggleQuality,
@@ -455,6 +480,7 @@ data class ReelsFeedScreen(
                     onToggleSearchBar = { screenModel.toggleSearchBar(!state.isSearchBarOpen) },
                     onOpenFilterDialog = { screenModel.toggleFilterDialog(true) },
                     onOpenFavorites = { navigator.push(ReelsFavoritesScreen()) },
+                    onOpenFollows = { navigator.push(ReelsFollowsScreen(sourceId = state.currentSourceId)) },
                     onSearch = screenModel::search,
                     onClearSearch = screenModel::clearSearch,
                     modifier = Modifier,
@@ -480,6 +506,77 @@ data class ReelsFeedScreen(
                     currentSourceId = state.currentSourceId,
                     onSelectSource = screenModel::switchSource,
                     icons = state.sourceIcons,
+                )
+            }
+
+            // Account / login dialog (contract v19)
+            if (state.isLoginDialogOpen) {
+                ReelsLoginDialog(
+                    loggedInAccount = state.loggedInAccount,
+                    isLoggingIn = state.isLoggingIn,
+                    loginError = state.loginError,
+                    onLogin = screenModel::login,
+                    onLogout = screenModel::logout,
+                    onDismiss = { screenModel.toggleLoginDialog(false) },
+                )
+            }
+
+            // Custom feeds picker (contract v19)
+            if (state.isCustomFeedsOpen) {
+                ReelsCustomFeedsSheet(
+                    feeds = state.customFeeds,
+                    isLoading = state.isCustomFeedsLoading,
+                    error = state.customFeedsError,
+                    onDismissRequest = { screenModel.toggleCustomFeeds(false) },
+                    onSelectFeed = { feed ->
+                        screenModel.toggleCustomFeeds(false)
+                        navigator.push(
+                            ReelsFeedScreen(
+                                sourceId = state.currentSourceId,
+                                customFeedId = feed.id,
+                                customFeedName = feed.name,
+                            ),
+                        )
+                    },
+                    onNewFeed = {
+                        screenModel.toggleCustomFeeds(false)
+                        navigator.push(ReelsCustomFeedEditorScreen(sourceId = state.currentSourceId))
+                    },
+                    onEditFeed = { feed ->
+                        screenModel.toggleCustomFeeds(false)
+                        navigator.push(
+                            ReelsCustomFeedEditorScreen(
+                                sourceId = state.currentSourceId,
+                                feedId = feed.id,
+                                initialName = feed.name,
+                            ),
+                        )
+                    },
+                    onDeleteFeed = { feed -> pendingDeleteFeed = feed },
+                )
+            }
+
+            // Delete custom-feed confirmation
+            pendingDeleteFeed?.let { feed ->
+                AlertDialog(
+                    onDismissRequest = { pendingDeleteFeed = null },
+                    title = { Text(stringResource(MR.strings.reels_custom_feed_delete)) },
+                    text = { Text(stringResource(MR.strings.reels_custom_feed_delete_confirm)) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                screenModel.deleteCustomFeed(feed.id)
+                                pendingDeleteFeed = null
+                            },
+                        ) {
+                            Text(stringResource(MR.strings.reels_custom_feed_delete))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingDeleteFeed = null }) {
+                            Text(stringResource(MR.strings.action_cancel))
+                        }
+                    },
                 )
             }
 

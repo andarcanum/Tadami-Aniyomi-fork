@@ -8,11 +8,14 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeReelsFeedbackSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
 import eu.kanade.tachiyomi.animesource.model.FeedPage
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
@@ -71,6 +74,10 @@ class ReelsFeedScreenModel(
     // the latest videos of every followed creator of [initialSourceId].
     private val creator: String? = null,
     private val followingFeed: Boolean = false,
+    // Contract v19 custom-feed mode: serves one custom feed via AnimeCustomFeedSource (never
+    // combined with offline playlists or the creator modes above).
+    private val customFeedId: String? = null,
+    private val customFeedName: String? = null,
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -91,6 +98,7 @@ class ReelsFeedScreenModel(
 ) : StateScreenModel<ReelsFeedScreenModel.State>(
     State(
         currentSourceId = initialSourceId,
+        customFeedName = customFeedName,
         isAutoAdvance = sourcePreferences.autoAdvanceReels().get(),
         isCropMode = sourcePreferences.reelsCropMode().get(),
         // Undecided session: always start muted (with the unmute hint); afterwards the
@@ -111,14 +119,19 @@ class ReelsFeedScreenModel(
         // per followed creator, so the cap bounds concurrent requests. Enforced host-side
         // (the repository stores whatever it is told).
         const val MAX_FOLLOWS_PER_SOURCE = 100
+
+        // Shown when a login returns false (rejected credentials); transport errors surface
+        // their own message instead.
+        const val LOGIN_FAILED_MESSAGE = "Login failed. Check email and password."
     }
 
     /** Which feed [loadFeed] generates. Fixed for the model's lifetime (per screen key). */
-    enum class FeedMode { GLOBAL, CREATOR, FOLLOWING }
+    enum class FeedMode { GLOBAL, CREATOR, FOLLOWING, CUSTOM }
 
     private val mode: FeedMode = when {
         followingFeed -> FeedMode.FOLLOWING
         creator != null -> FeedMode.CREATOR
+        customFeedId != null -> FeedMode.CUSTOM
         else -> FeedMode.GLOBAL
     }
 
@@ -236,14 +249,24 @@ class ReelsFeedScreenModel(
         val rawSource = sourceManager.get(newSourceId)
         if (rawSource is AnimeFeedSource) {
             val creatorCapable = rawSource is AnimeCreatorFeedSource
-            if (mode != FeedMode.GLOBAL && !creatorCapable) {
-                // A creator/FOLLOWING page opened on a source without the v18 capability
-                // (plugin downgraded between sessions): surface it instead of silently
-                // serving someone else's global feed.
+            val loginCapable = rawSource is AnimeFeedLoginSource
+            val customFeedCapable = rawSource is AnimeCustomFeedSource
+            // Non-global modes need their matching capability (e.g. the plugin was downgraded
+            // between sessions): refuse instead of silently serving the wrong feed.
+            val missingCapability = when (mode) {
+                FeedMode.CUSTOM -> !customFeedCapable
+                FeedMode.GLOBAL -> false
+                else -> !creatorCapable
+            }
+            if (missingCapability) {
                 source = null
                 mutableState.update {
                     it.copy(
-                        error = "Source does not support creator feeds",
+                        error = if (mode == FeedMode.CUSTOM) {
+                            "Source does not support custom feeds"
+                        } else {
+                            "Source does not support creator feeds"
+                        },
                         isLoading = false,
                         isSourcePickerOpen = false,
                     )
@@ -303,6 +326,20 @@ class ReelsFeedScreenModel(
                     // new one is loaded by loadPersistedFollows below.
                     isCreatorCapable = creatorCapable,
                     followingCreators = persistentSetOf(),
+                    // Login state is per source: snapshot the persisted session (non-suspend,
+                    // so safe on the main thread) and drop the previous source's account.
+                    isLoginCapable = loginCapable,
+                    loggedInAccount = (rawSource as? AnimeFeedLoginSource)
+                        ?.takeIf { it.isLoggedIn() }
+                        ?.loggedInAccount(),
+                    isLoggingIn = false,
+                    loginError = null,
+                    // Custom feeds (v19): per source, reset on switch.
+                    isCustomFeedCapable = customFeedCapable,
+                    customFeeds = persistentListOf(),
+                    isCustomFeedsOpen = false,
+                    isCustomFeedsLoading = false,
+                    customFeedsError = null,
                     isSourcePickerOpen = false,
                     error = null,
                 )
@@ -367,6 +404,8 @@ class ReelsFeedScreenModel(
                 val pageData = when {
                     mode == FeedMode.CREATOR -> (src as AnimeCreatorFeedSource)
                         .getCreatorFeed(creator.orEmpty(), page, cursor)
+                    mode == FeedMode.CUSTOM -> (src as AnimeCustomFeedSource)
+                        .getCustomFeed(customFeedId.orEmpty(), page, cursor)
                     query.isNotBlank() -> src.getSearchFeed(page, cursor, query, filters)
                     else -> src.getFeed(page, cursor, filters)
                 }
@@ -767,6 +806,45 @@ class ReelsFeedScreenModel(
         mutableState.update { it.copy(isSourcePickerOpen = open) }
     }
 
+    fun toggleLoginDialog(open: Boolean) {
+        mutableState.update { it.copy(isLoginDialogOpen = open, loginError = if (open) null else it.loginError) }
+    }
+
+    /** Opens/closes the custom-feeds picker; opening also (re)loads the feed list. */
+    fun toggleCustomFeeds(open: Boolean) {
+        mutableState.update {
+            it.copy(isCustomFeedsOpen = open, customFeedsError = if (open) null else it.customFeedsError)
+        }
+        if (open) loadCustomFeeds()
+    }
+
+    private fun loadCustomFeeds() {
+        val src = source as? AnimeCustomFeedSource ?: return
+        val sourceId = state.value.currentSourceId
+        mutableState.update { it.copy(isCustomFeedsLoading = true, customFeedsError = null) }
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val result = runCatching { src.getCustomFeeds() }
+            mutableState.update { current ->
+                // The read may race a source switch: drop it if the source changed.
+                if (current.currentSourceId != sourceId) return@update current.copy(isCustomFeedsLoading = false)
+                current.copy(
+                    isCustomFeedsLoading = false,
+                    customFeeds = result.getOrNull().orEmpty().toImmutableList(),
+                    customFeedsError = result.exceptionOrNull()?.localizedMessage,
+                )
+            }
+        }
+    }
+
+    /** Deletes a custom feed, then reloads the picker list. */
+    fun deleteCustomFeed(id: String) {
+        val src = source as? AnimeCustomFeedSource ?: return
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            runCatching { src.deleteCustomFeed(id) }
+            loadCustomFeeds()
+        }
+    }
+
     fun toggleAutoAdvance() {
         val next = !state.value.isAutoAdvance
         sourcePreferences.autoAdvanceReels().set(next)
@@ -831,6 +909,48 @@ class ReelsFeedScreenModel(
         val feedback = source as? AnimeReelsFeedbackSource ?: return
         screenModelScope.launch(NonCancellable + ioDispatcher) {
             runCatching { feedback.onVideoViewed(itemId, secondsWatched.toDouble(), duration.toDouble()) }
+        }
+    }
+
+    /**
+     * Authenticates against the current source (contract v19). On success the persisted
+     * account is reflected in state and the feed reloads (a login can change the personalized
+     * stream). A rejected credential set surfaces in [State.loginError]; transport errors log
+     * and surface their message — never a crash.
+     */
+    fun login(email: String, password: String) {
+        val loginSource = source as? AnimeFeedLoginSource ?: return
+        if (state.value.isLoggingIn) return
+        mutableState.update { it.copy(isLoggingIn = true, loginError = null) }
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val ok = runCatching { loginSource.login(email, password) }.fold(
+                onSuccess = { it },
+                onFailure = { t ->
+                    logcat(LogPriority.ERROR, t) { "Login failed for source ${state.value.currentSourceId}" }
+                    mutableState.update {
+                        it.copy(isLoggingIn = false, loginError = t.localizedMessage ?: LOGIN_FAILED_MESSAGE)
+                    }
+                    return@launch
+                },
+            )
+            mutableState.update { current ->
+                current.copy(
+                    isLoggingIn = false,
+                    loggedInAccount = if (ok) loginSource.loggedInAccount() else null,
+                    loginError = if (ok) null else LOGIN_FAILED_MESSAGE,
+                )
+            }
+            if (ok) loadFeed(reset = true)
+        }
+    }
+
+    /** Clears the persisted login session of the current source and reloads the feed. */
+    fun logout() {
+        val loginSource = source as? AnimeFeedLoginSource ?: return
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            runCatching { loginSource.logout() }
+            mutableState.update { it.copy(loggedInAccount = null, loginError = null) }
+            loadFeed(reset = true)
         }
     }
 
@@ -980,11 +1100,28 @@ class ReelsFeedScreenModel(
         val mode: FeedMode = FeedMode.GLOBAL,
         // Creator name for [FeedMode.CREATOR]; null in every other mode.
         val creator: String? = null,
+        // Custom-feed name for [FeedMode.CUSTOM] (its title); null in every other mode.
+        val customFeedName: String? = null,
         // The current source implements AnimeCreatorFeedSource: gates the author chip,
         // the follow action and the follows-screen entry.
         val isCreatorCapable: Boolean = false,
         // Followed creator names on the current source (follows are per source in v1).
         val followingCreators: ImmutableSet<String> = persistentSetOf(),
+        // Account login (contract v19): the current source implements AnimeFeedLoginSource.
+        val isLoginCapable: Boolean = false,
+        // Persisted account label (e.g. the email used to log in), null when logged out.
+        val loggedInAccount: String? = null,
+        // Login in flight: the dialog disables its confirm button while true.
+        val isLoggingIn: Boolean = false,
+        // Last login failure reason; cleared on the next attempt/source switch.
+        val loginError: String? = null,
+        // Custom feeds (v19): the current source implements AnimeCustomFeedSource.
+        val isCustomFeedCapable: Boolean = false,
+        // Loaded list for the picker sheet.
+        val customFeeds: ImmutableList<CustomFeedRef> = persistentListOf(),
+        val isCustomFeedsOpen: Boolean = false,
+        val isCustomFeedsLoading: Boolean = false,
+        val customFeedsError: String? = null,
         val availableSources: ImmutableList<AnimeSource> = persistentListOf(),
         val sourceIcons: ImmutableMap<Long, ImageBitmap> = persistentHashMapOf(),
         val items: ImmutableList<ShortVideoItem> = persistentListOf(),
@@ -1025,6 +1162,7 @@ class ReelsFeedScreenModel(
         val isFilterDialogOpen: Boolean = false,
         val isSearchBarOpen: Boolean = false,
         val isSourcePickerOpen: Boolean = false,
+        val isLoginDialogOpen: Boolean = false,
         val error: String? = null,
         // Transient append failure while the feed is non-empty; surfaced as a snackbar.
         val pageError: String? = null,

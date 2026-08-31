@@ -1,10 +1,14 @@
 # Reels Feed Contract
 
-**Current version: 18** (`extensionLib` 12.0–18.0 accepted by the host) ·
+**Current version: 19** (`extensionLib` 12.0–19.0 accepted by the host) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
 [`AnimeReelsFeedbackSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeReelsFeedbackSource.kt),
+[`AnimeFeedLoginSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedLoginSource.kt),
+[`AnimeCustomFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCustomFeedSource.kt),
+[`CustomFeedRef`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/CustomFeedRef.kt),
+[`CustomFeedDetail`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/CustomFeedDetail.kt),
 [`FeedPage`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedPage.kt),
 [`ShortVideoItem`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/ShortVideoItem.kt)
 
@@ -186,6 +190,7 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
+| 19 | Optional feed-source login capability `AnimeFeedLoginSource` (`login`/`isLoggedIn`/`loggedInAccount`/`logout`) and custom-feed capability `AnimeCustomFeedSource` (`getCustomFeeds`/`getCustomFeed`/`getCustomFeedTags`/`getCustomFeedDetail`/`createCustomFeed`/`updateCustomFeed`/`deleteCustomFeed`, plus `CustomFeedRef`/`CustomFeedDetail`). Both instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 19.0 as the discipline stamp. |
 | 18 | Optional creator-feed capability: `AnimeCreatorFeedSource.getCreatorFeed(creator, page, cursor)` and optional feedback capability `AnimeReelsFeedbackSource` (both instanceof-detected, no default members added to existing interfaces). Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 18.0 as the discipline stamp. |
 | 17 | Sticky cursor pagination (`FeedPage.nextCursor`, `cursor` parameters), `getSearchFeed` default, URL semantics flip (`videoUrl` base + optional `videoUrlHd`). Breaking: all feed plugins rebuild. |
 | ≤16 | Initial feed contract (page-int pagination, `videoUrlHd` required). |

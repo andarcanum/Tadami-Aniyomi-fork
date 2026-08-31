@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -26,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Check
@@ -54,9 +56,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -99,13 +103,27 @@ fun ReelsTopBar(
     isOffline: Boolean,
     showSearch: Boolean = true,
     showFilter: Boolean = true,
-    // Creator chrome (contract v18): Follow/Following action on the creator page and the
-    // follows-screen entry (Subscriptions icon), both capability-gated by the caller.
+    // Favorites keeps a first-class circle (frequent, one-tap local action) — a hub with a
+    // single entry would be pure indirection. Account & personal content (custom feeds,
+    // Following) live in the account hub, which always has at least two entries.
+    onOpenFavorites: () -> Unit = {},
+    onOpenFollows: () -> Unit = {},
+    // Account hub (contract v19): identity + personal content. The hub shows the login state,
+    // the custom-feeds entry (enabled only while logged in), the followed-creators entry
+    // (capability-gated) and login/logout.
+    showAccount: Boolean = false,
+    isLoggedIn: Boolean = false,
+    loggedInAccount: String? = null,
+    showCustomFeedsAccountRow: Boolean = false,
+    showFollowsAccountRow: Boolean = false,
+    onLoginRequest: () -> Unit = {},
+    onLogout: () -> Unit = {},
+    onOpenCustomFeeds: () -> Unit = {},
+    // Creator chrome (contract v18): Follow/Following action on the creator page. The
+    // follows-screen entry moved into the library hub.
     showFollowToggle: Boolean = false,
     isFollowingCreator: Boolean = false,
     onToggleFollow: () -> Unit = {},
-    showFollowsEntry: Boolean = false,
-    onOpenFollows: () -> Unit = {},
     showSourcePicker: Boolean,
     onBackClick: () -> Unit,
     onOpenSourcePicker: () -> Unit,
@@ -117,14 +135,13 @@ fun ReelsTopBar(
     onTogglePreloadWifiOnly: () -> Unit,
     onToggleSearchBar: () -> Unit,
     onOpenFilterDialog: () -> Unit,
-    onOpenFavorites: () -> Unit,
     onSearch: (String) -> Unit,
     onClearSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
     var textInput by remember(searchQuery) { mutableStateOf(searchQuery) }
-    var moreMenuOpen by remember { mutableStateOf(false) }
+    var openHub by remember { mutableStateOf(HubMenu.NONE) }
 
     Column(
         modifier = modifier
@@ -176,7 +193,10 @@ fun ReelsTopBar(
                             .weight(1f, fill = false)
                             .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
                             .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
-                            .clickable(enabled = showSourcePicker) { onOpenSourcePicker() }
+                            .clickable(enabled = showSourcePicker) {
+                                onOpenSourcePicker()
+                                openHub = HubMenu.NONE
+                            }
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
                         Row(
@@ -242,7 +262,10 @@ fun ReelsTopBar(
                                 if (isSearchBarOpen) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
                                 CircleShape,
                             )
-                            .clickable { onToggleSearchBar() },
+                            .clickable {
+                                onToggleSearchBar()
+                                openHub = HubMenu.NONE
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -261,7 +284,10 @@ fun ReelsTopBar(
                             .size(36.dp)
                             .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                             .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
-                            .clickable { onOpenFilterDialog() },
+                            .clickable {
+                                onOpenFilterDialog()
+                                openHub = HubMenu.NONE
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -273,13 +299,16 @@ fun ReelsTopBar(
                     }
                 }
 
-                // Favorites
+                // Favorites — first-class circle in every mode (frequent local action).
                 Box(
                     modifier = Modifier
                         .size(36.dp)
                         .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                         .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
-                        .clickable { onOpenFavorites() },
+                        .clickable {
+                            onOpenFavorites()
+                            openHub = HubMenu.NONE
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -288,25 +317,6 @@ fun ReelsTopBar(
                         tint = Color.White,
                         modifier = Modifier.size(18.dp),
                     )
-                }
-
-                // Follows entry (Subscriptions): opens the followed-creators manager.
-                if (showFollowsEntry) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
-                            .clickable { onOpenFollows() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Subscriptions,
-                            contentDescription = stringResource(MR.strings.reels_following_feed),
-                            tint = Color.White,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
                 }
 
                 // Follow / Following toggle on the creator page.
@@ -327,7 +337,10 @@ fun ReelsTopBar(
                                 if (isFollowingCreator) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
                                 CircleShape,
                             )
-                            .clickable { onToggleFollow() },
+                            .clickable {
+                                onToggleFollow()
+                                openHub = HubMenu.NONE
+                            },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -341,13 +354,66 @@ fun ReelsTopBar(
                     }
                 }
 
+                // Account hub (contract v19): login state, custom feeds, login/logout.
+                if (!isOffline && showAccount) {
+                    Box {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(
+                                    if (isLoggedIn) {
+                                        AuroraTheme.colors.accent.copy(alpha = 0.35f)
+                                    } else {
+                                        Color.Black.copy(alpha = 0.5f)
+                                    },
+                                    CircleShape,
+                                )
+                                .border(
+                                    1.dp,
+                                    if (isLoggedIn) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
+                                    CircleShape,
+                                )
+                                .clickable {
+                                    openHub = if (openHub ==
+                                        HubMenu.ACCOUNT
+                                    ) {
+                                        HubMenu.NONE
+                                    } else {
+                                        HubMenu.ACCOUNT
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = stringResource(MR.strings.reels_account),
+                                tint = if (isLoggedIn) AuroraTheme.colors.accent else Color.White,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                        if (openHub == HubMenu.ACCOUNT) {
+                            ReelsAccountMenu(
+                                isLoggedIn = isLoggedIn,
+                                loggedInAccount = loggedInAccount,
+                                showCustomFeedsRow = showCustomFeedsAccountRow,
+                                showFollowsRow = showFollowsAccountRow,
+                                onLoginRequest = onLoginRequest,
+                                onLogout = onLogout,
+                                onOpenCustomFeeds = onOpenCustomFeeds,
+                                onOpenFollows = onOpenFollows,
+                                onDismiss = { openHub = HubMenu.NONE },
+                            )
+                        }
+                    }
+                }
+
                 // More (settings: auto-advance, aspect, quality)
                 Box {
                     Box(
                         modifier = Modifier
                             .size(36.dp)
                             .background(
-                                if (moreMenuOpen) {
+                                if (openHub == HubMenu.MORE) {
                                     AuroraTheme.colors.accent.copy(
                                         alpha = 0.35f,
                                     )
@@ -358,10 +424,16 @@ fun ReelsTopBar(
                             )
                             .border(
                                 1.dp,
-                                if (moreMenuOpen) AuroraTheme.colors.accent else Color.White.copy(alpha = 0.2f),
+                                if (openHub ==
+                                    HubMenu.MORE
+                                ) {
+                                    AuroraTheme.colors.accent
+                                } else {
+                                    Color.White.copy(alpha = 0.2f)
+                                },
                                 CircleShape,
                             )
-                            .clickable { moreMenuOpen = true },
+                            .clickable { openHub = if (openHub == HubMenu.MORE) HubMenu.NONE else HubMenu.MORE },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
@@ -371,7 +443,7 @@ fun ReelsTopBar(
                             modifier = Modifier.size(18.dp),
                         )
                     }
-                    if (moreMenuOpen) {
+                    if (openHub == HubMenu.MORE) {
                         ReelsMoreMenu(
                             isAutoAdvance = isAutoAdvance,
                             isCropMode = isCropMode,
@@ -381,29 +453,29 @@ fun ReelsTopBar(
                             preloadWifiOnly = preloadWifiOnly,
                             onToggleAutoAdvance = {
                                 onToggleAutoAdvance()
-                                moreMenuOpen = false
+                                openHub = HubMenu.NONE
                             },
                             onToggleCropMode = {
                                 onToggleCropMode()
-                                moreMenuOpen = false
+                                openHub = HubMenu.NONE
                             },
                             onToggleQuality = {
                                 onToggleQuality()
-                                moreMenuOpen = false
+                                openHub = HubMenu.NONE
                             },
                             onToggleDataSaver = {
                                 onToggleDataSaver()
-                                moreMenuOpen = false
+                                openHub = HubMenu.NONE
                             },
                             onTogglePreload = {
                                 onTogglePreload()
-                                moreMenuOpen = false
+                                openHub = HubMenu.NONE
                             },
                             onTogglePreloadWifiOnly = {
                                 onTogglePreloadWifiOnly()
-                                moreMenuOpen = false
+                                openHub = HubMenu.NONE
                             },
-                            onDismiss = { moreMenuOpen = false },
+                            onDismiss = { openHub = HubMenu.NONE },
                         )
                     }
                 }
@@ -722,5 +794,137 @@ private fun MoreMenuRow(
                 fontWeight = FontWeight.Bold,
             )
         }
+    }
+}
+
+/** Which popup is open in the top bar; only one at a time. */
+private enum class HubMenu { NONE, MORE, ACCOUNT }
+
+/**
+ * Identity + personal-content popup (contract v19) anchored under the account button:
+ * login state, the custom-feeds entry (enabled only while logged in), the followed-creators
+ * entry (capability-gated) and the login/logout action. Always at least two rows, so the
+ * hub never becomes a one-entry indirection.
+ */
+@Composable
+private fun ReelsAccountMenu(
+    isLoggedIn: Boolean,
+    loggedInAccount: String?,
+    showCustomFeedsRow: Boolean,
+    showFollowsRow: Boolean,
+    onLoginRequest: () -> Unit,
+    onLogout: () -> Unit,
+    onOpenCustomFeeds: () -> Unit,
+    onOpenFollows: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val density = LocalDensity.current
+    Popup(
+        alignment = Alignment.TopEnd,
+        offset = with(density) { IntOffset(x = 0, y = 44.dp.roundToPx()) },
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .width(220.dp)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), RoundedCornerShape(14.dp))
+                .border(1.dp, Color.White.copy(alpha = 0.14f), RoundedCornerShape(14.dp))
+                .padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            if (isLoggedIn && loggedInAccount != null) {
+                Text(
+                    text = stringResource(MR.strings.reels_logged_in_as, loggedInAccount),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                )
+            }
+            if (showCustomFeedsRow) {
+                HubMenuRow(
+                    icon = { HubMenuIcon(Icons.AutoMirrored.Filled.List) },
+                    label = stringResource(MR.strings.reels_custom_feeds),
+                    enabled = isLoggedIn,
+                ) {
+                    if (isLoggedIn) {
+                        onOpenCustomFeeds()
+                        onDismiss()
+                    }
+                }
+            }
+            if (showFollowsRow) {
+                HubMenuRow(
+                    icon = { HubMenuIcon(Icons.Outlined.Subscriptions) },
+                    label = stringResource(MR.strings.reels_following_feed),
+                ) {
+                    onOpenFollows()
+                    onDismiss()
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.1f)),
+            )
+            if (isLoggedIn) {
+                HubMenuRow(
+                    icon = { HubMenuIcon(Icons.Filled.Person) },
+                    label = stringResource(MR.strings.reels_logout),
+                ) {
+                    onLogout()
+                    onDismiss()
+                }
+            } else {
+                HubMenuRow(
+                    icon = { HubMenuIcon(Icons.Filled.Person) },
+                    label = stringResource(MR.strings.reels_login),
+                ) {
+                    onLoginRequest()
+                    onDismiss()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HubMenuIcon(imageVector: ImageVector) {
+    Icon(
+        imageVector = imageVector,
+        contentDescription = null,
+        tint = Color.White.copy(alpha = 0.8f),
+        modifier = Modifier.size(18.dp),
+    )
+}
+
+@Composable
+private fun HubMenuRow(
+    icon: @Composable () -> Unit,
+    label: String,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.45f)
+            .clip(RoundedCornerShape(9.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        icon()
+        Text(
+            text = label,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
     }
 }

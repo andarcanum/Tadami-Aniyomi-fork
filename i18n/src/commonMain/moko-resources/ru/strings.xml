@@ -1680,4 +1680,21 @@
     <string name="reels_follows_empty_hint">Нажмите на значок автора в видео, чтобы подписаться</string>
     <string name="reels_follow_cap_reached">Достигнут лимит — не более 100 авторов на источник</string>
     <string name="reels_follows_removed_snackbar">Автор удалён из подписок</string>
+    <string name="reels_login">Войти</string>
+    <string name="reels_account">Аккаунт</string>
+    <string name="reels_logged_in_as">Вы вошли как %1$s</string>
+    <string name="reels_logout">Выйти</string>
+    <string name="reels_login_email">Email</string>
+    <string name="reels_login_password">Пароль</string>
+    <string name="reels_login_button">Войти</string>
+    <string name="reels_custom_feeds">Мои ленты</string>
+    <string name="reels_custom_feeds_empty">Пока нет своих лент</string>
+    <string name="reels_custom_feed_new">Новая лента</string>
+    <string name="reels_custom_feed_edit">Изменить ленту</string>
+    <string name="reels_custom_feed_delete">Удалить ленту</string>
+    <string name="reels_custom_feed_delete_confirm">Удалить эту ленту? Это действие необратимо.</string>
+    <string name="reels_custom_feed_name">Название</string>
+    <string name="reels_custom_feed_search_tags">Поиск тегов</string>
+    <string name="reels_custom_feed_save">Сохранить</string>
+    <string name="reels_custom_feed_save_failed">Не удалось сохранить</string>
 </resources>
