@@ -112,10 +112,14 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
     var aid: Int by TrackDelegate("aid")
 
     override fun initOptions(vo: String) {
-        setVo(if (decoderPreferences.gpuNext().get()) "gpu-next" else "gpu")
+        // gpu-next (libplacebo) is unreliable below Android 10, so ignore a stored
+        // preference (e.g. from the Mid/High decoder presets) on older devices.
+        val gpuNext = decoderPreferences.gpuNext().get() &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        setVo(if (gpuNext) "gpu-next" else "gpu")
         MPVLib.setPropertyBoolean("pause", true)
         MPVLib.setOptionString("profile", "fast")
-        MPVLib.setOptionString("hwdec", if (decoderPreferences.tryHWDecoding().get()) "auto" else "no")
+        MPVLib.setOptionString("hwdec", buildHwdecOption(decoderPreferences.tryHWDecoding().get()))
         val debanding = decoderPreferences.videoDebanding().get()
         if (debanding == Debanding.GPU) {
             MPVLib.setOptionString("deband", "yes")
@@ -147,7 +151,6 @@ class AniyomiMPVView(context: Context, attributes: AttributeSet) : BaseMPVView(c
         }
 
         val interpolationMode = decoderPreferences.motionInterpolationMode().get()
-        val gpuNext = decoderPreferences.gpuNext().get()
         val deviceSupport = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         if (interpolationMode.shouldApply(gpuNextEnabled = gpuNext, deviceSupportsInterpolation = deviceSupport)) {
             interpolationMode.mpvOptions()?.forEach { (option, value) ->

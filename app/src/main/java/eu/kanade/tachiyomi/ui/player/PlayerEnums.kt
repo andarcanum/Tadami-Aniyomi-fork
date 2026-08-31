@@ -93,7 +93,7 @@ enum class Decoder(val title: String, val value: String) {
 }
 
 fun getDecoderFromValue(value: String): Decoder {
-    return Decoder.entries.first { it.value == value }
+    return Decoder.entries.firstOrNull { it.value == value } ?: Decoder.Auto
 }
 
 enum class Debanding(val titleRes: StringResource) {
