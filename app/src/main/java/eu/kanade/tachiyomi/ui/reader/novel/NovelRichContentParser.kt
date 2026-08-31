@@ -148,6 +148,7 @@ private fun parseBlockElement(
             }
         }
         "hr" -> listOf(NovelRichContentBlock.HorizontalRule())
+        "pre" -> parsePreBlocks(element)
         "img", "picture", "source" -> {
             parseImageBlockFromElement(element)?.let(::listOf).orEmpty()
         }
@@ -223,6 +224,15 @@ private fun parseParagraphLikeOrContainerBlocks(
                     return@forEach
                 }
 
+                // A pre inside a wrapper (a normalized `<section class="nb-chapter">` does that to
+                // an imported plain-text chapter) must keep its line structure just like a pre that
+                // is a block root itself - never flatten it through the inline path.
+                if (childTag == "pre") {
+                    flushParagraph()
+                    blocks += parsePreBlocks(node)
+                    return@forEach
+                }
+
                 // Container-like nodes should preserve nested block ordering instead of flattening.
                 if (tag != "p" && childTag in richContainerBlockTags) {
                     flushParagraph()
@@ -240,6 +250,35 @@ private fun parseParagraphLikeOrContainerBlocks(
 
     flushParagraph()
     return blocks
+}
+
+/**
+ * Splits a `<pre>` body into paragraphs, reproducing what `white-space: pre-wrap` shows in the
+ * WebView renderer: a blank line ends a paragraph, a single newline stays a hard line break
+ * inside one. Plain-text chapter files (imported .txt) arrive as a single pre holding the whole
+ * file, and the inline path would collapse every newline into a space - the "wall of text".
+ */
+private fun parsePreBlocks(element: Element): List<NovelRichContentBlock.Paragraph> {
+    val textAlign = parseBlockTextAlign(element.attr("style"))
+    return prePlainText(element)
+        .split(Regex("\n{2,}"))
+        .map { paragraph -> paragraph.trim('\n') }
+        .filter { paragraph -> paragraph.any(::isRenderableParagraphChar) }
+        .map { paragraph ->
+            NovelRichContentBlock.Paragraph(
+                segments = listOf(NovelRichTextSegment(text = paragraph)),
+                textAlign = textAlign,
+            )
+        }
+}
+
+/** The raw text of a pre element with `<br>` markup turned into newlines and CRLF unified. */
+private fun prePlainText(element: Element): String {
+    val clone = element.clone()
+    clone.select("br").forEach { breakElement -> breakElement.replaceWith(TextNode("\n")) }
+    return clone.wholeText()
+        .replace("\r\n", "\n")
+        .replace('\r', '\n')
 }
 
 private fun parseInlineSegments(root: Element): List<NovelRichTextSegment> {

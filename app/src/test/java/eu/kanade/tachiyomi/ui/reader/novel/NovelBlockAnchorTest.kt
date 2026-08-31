@@ -52,6 +52,19 @@ class NovelBlockAnchorTest {
     }
 
     @Test
+    fun `a pre block expanded into paragraphs keeps dense anchors`() {
+        val html = "<pre>First para\nwrapped line\n\nSecond para</pre>"
+
+        val annotated = annotateNovelBlockAnchors(rawHtml = html, chapterId = 5L)
+        val blocks = parseNovelRichContent(annotated).blocks
+
+        blocks.map { it.anchor } shouldBe listOf(
+            NovelBlockAnchor(chapterId = 5L, blockIndex = 0),
+            NovelBlockAnchor(chapterId = 5L, blockIndex = 1),
+        )
+    }
+
+    @Test
     fun `markup without anchors still parses into blocks that carry none`() {
         val blocks = parseNovelRichContent("<p>One</p><p>Two</p>").blocks
 

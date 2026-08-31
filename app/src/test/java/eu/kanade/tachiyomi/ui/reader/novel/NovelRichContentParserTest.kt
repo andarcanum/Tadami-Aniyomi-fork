@@ -305,6 +305,89 @@ class NovelRichContentParserTest {
     }
 
     @Test
+    fun `parser splits a plain text pre block into paragraphs on blank lines`() {
+        // What LocalNovelSource's escapePlainTextToHtml produces for an imported .txt file:
+        // the whole chapter in one <pre> with its original line structure.
+        val html = "<html><body><pre style=\"white-space: pre-wrap; font-family: inherit;\">" +
+            "Line one of the first paragraph.\n" +
+            "Wrapped line of the same paragraph.\n" +
+            "\n" +
+            "Second paragraph." +
+            "</pre></body></html>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 2
+        val first = result.blocks[0] as NovelRichContentBlock.Paragraph
+        first.segments.joinToString(separator = "") { it.text } shouldBe
+            "Line one of the first paragraph.\nWrapped line of the same paragraph."
+        val second = result.blocks[1] as NovelRichContentBlock.Paragraph
+        second.segments.joinToString(separator = "") { it.text } shouldBe "Second paragraph."
+    }
+
+    @Test
+    fun `parser splits a pre block nested in a chapter section`() {
+        val html = "<section class=\"nb-chapter\"><p>Intro</p><pre>First\n\nSecond</pre></section>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 3
+        (result.blocks[0] as NovelRichContentBlock.Paragraph)
+            .segments.joinToString(separator = "") { it.text } shouldBe "Intro"
+        (result.blocks[1] as NovelRichContentBlock.Paragraph)
+            .segments.joinToString(separator = "") { it.text } shouldBe "First"
+        (result.blocks[2] as NovelRichContentBlock.Paragraph)
+            .segments.joinToString(separator = "") { it.text } shouldBe "Second"
+    }
+
+    @Test
+    fun `parser normalizes crlf line endings inside a pre block`() {
+        val html = "<pre>a\r\nb\r\n\r\nc</pre>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 2
+        (result.blocks[0] as NovelRichContentBlock.Paragraph)
+            .segments.joinToString(separator = "") { it.text } shouldBe "a\nb"
+        (result.blocks[1] as NovelRichContentBlock.Paragraph)
+            .segments.joinToString(separator = "") { it.text } shouldBe "c"
+    }
+
+    @Test
+    fun `parser converts a br inside a pre block into a line break`() {
+        val html = "<pre>a<br>b</pre>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 1
+        (result.blocks.first() as NovelRichContentBlock.Paragraph)
+            .segments.joinToString(separator = "") { it.text } shouldBe "a\nb"
+    }
+
+    @Test
+    fun `parser drops whitespace-only pre content but keeps following blocks`() {
+        val html = "<pre>\n \t \n</pre><p>After</p>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 1
+        (result.blocks.first() as NovelRichContentBlock.Paragraph)
+            .segments.joinToString(separator = "") { it.text } shouldBe "After"
+    }
+
+    @Test
+    fun `parser keeps first line indentation inside a pre paragraph`() {
+        val html = "<pre>    Indented opening line.\nPlain next line.</pre>"
+
+        val result = parseNovelRichContent(html)
+
+        result.blocks shouldHaveSize 1
+        (result.blocks.first() as NovelRichContentBlock.Paragraph)
+            .segments.joinToString(separator = "") { it.text } shouldBe
+            "    Indented opening line.\nPlain next line."
+    }
+
+    @Test
     fun `parser flags unsupported structures for webview fallback`() {
         val html = """
             <table><tr><td>Complex layout</td></tr></table>
