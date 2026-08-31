@@ -768,7 +768,8 @@ class AppModule(val app: Application) : InjektModule {
 
         addSingletonFactory { MangaDownloadProvider(app) }
         addSingletonFactory { MangaDownloadManager(app) }
-        addSingletonFactory { DiscordPresenceManager(DiscordPreferences(get()), RealDiscordGatewayClient()) }
+        addSingletonFactory { DiscordPreferences(get()) }
+        addSingletonFactory { DiscordPresenceManager(get(), RealDiscordGatewayClient()) }
         addSingletonFactory { MangaDownloadCache(app) }
 
         addSingletonFactory { AnimeDownloadProvider(app) }
