@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reels.player
 
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
+import android.net.Uri
 import android.os.SystemClock
 import android.view.Surface
 import android.view.TextureView
@@ -101,6 +102,9 @@ fun ReelsPlayerView(
     onBufferingChanged: (Boolean) -> Unit = {},
     playbackSpeed: Float = 1f,
     headers: Map<String, String> = emptyMap(),
+    // Item page URL (e.g. https://fikfap.com/post/123): origin used as the Referer fallback
+    // when the feed source exposes no headers of its own.
+    webUrl: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -214,8 +218,26 @@ fun ReelsPlayerView(
                     repeatMode = if (isAutoAdvance && !isLastPage) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
                     volume = if (isMuted) 0f else 1f
                     // App network stack (cookies/DoH/proxy) + disk cache for repeat watches.
+                    // Feed plugins implement AnimeFeedSource (not AnimeHttpSource), so `headers`
+                    // is empty for them and Bunny-CDN 403s the media requests: fall back to a
+                    // generic same-origin Referer derived from the item's page URL.
+                    val requestHeaders = if (headers.keys.none { it.equals("Referer", ignoreCase = true) }) {
+                        val referer = runCatching {
+                            val page = Uri.parse(webUrl)
+                            val host = page.host?.takeIf { it.isNotBlank() }
+                            if (host != null && (page.scheme == "http" || page.scheme == "https")) {
+                                val port = if (page.port != -1) ":${page.port}" else ""
+                                "${page.scheme}://$host$port/"
+                            } else {
+                                null
+                            }
+                        }.getOrNull()
+                        if (referer != null) headers + ("Referer" to referer) else headers
+                    } else {
+                        headers
+                    }
                     val upstream = OkHttpDataSource.Factory(networkClient)
-                        .setDefaultRequestProperties(headers)
+                        .setDefaultRequestProperties(requestHeaders)
                     val dataSourceFactory = CacheDataSource.Factory()
                         .setCache(getReelsVideoCache(context.applicationContext))
                         .setUpstreamDataSourceFactory(upstream)
@@ -223,9 +245,11 @@ fun ReelsPlayerView(
                     // DefaultMediaSourceFactory infers the type (progressive today, HLS/DASH
                     // ready); customCacheKey keys the progressive cache by the stable reel id
                     // instead of the signed CDN URL. Not valid for adaptive streams.
+                    // HLS manifests must keep the URL-derived key (media3 suffixes adaptive keys).
+                    val isAdaptiveStream = Uri.parse(videoUrl).lastPathSegment?.endsWith(".m3u8") == true
                     val mediaItem = MediaItem.Builder()
                         .setUri(videoUrl)
-                        .apply { if (cacheKey != null) setCustomCacheKey(cacheKey) }
+                        .apply { if (cacheKey != null && !isAdaptiveStream) setCustomCacheKey(cacheKey) }
                         .build()
                     setMediaSource(DefaultMediaSourceFactory(dataSourceFactory).createMediaSource(mediaItem))
                     playWhenReady = false

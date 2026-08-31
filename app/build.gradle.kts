@@ -369,6 +369,8 @@ dependencies {
     implementation(aniyomilibs.aniyomi.mpv)
     // ExoPlayer for the short-video (Reels) feed player
     implementation(libs.media3.exoplayer)
+    // HLS support (Bunny-CDN playlist.m3u8 feeds), resolved by DefaultMediaSourceFactory
+    implementation(libs.media3.exoplayer.hls)
     // OkHttp-backed media data source so reels use the app network stack (cookies/DoH/proxy)
     implementation(libs.media3.datasource.okhttp)
     // FFmpeg-kit

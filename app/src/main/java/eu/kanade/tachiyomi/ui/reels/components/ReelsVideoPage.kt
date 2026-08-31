@@ -229,6 +229,7 @@ fun ReelsVideoPage(
             playbackSpeed = playbackSpeed,
             retrySignal = retrySignal,
             headers = headers,
+            webUrl = item.webUrl,
             modifier = Modifier.fillMaxSize(),
         )
 
