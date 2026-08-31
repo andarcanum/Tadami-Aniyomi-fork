@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.ui.reader.novel
 import android.app.Application
 import android.os.SystemClock
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
-import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToHtml
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
@@ -46,7 +45,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import logcat.LogPriority
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.model.Novel
@@ -393,7 +391,7 @@ internal class NovelTtsController(
                 )
             }
         }
-        val chapterWebUrl = resolveChapterWebUrl(
+        val chapterWebUrl = resolveNovelChapterWebUrlForSource(
             source = source,
             chapterUrl = snapshot.chapter.url,
             novelUrl = snapshot.novel.url,
@@ -613,31 +611,6 @@ internal class NovelTtsController(
 
     private fun refreshTtsUiState() {
         host.ttsRefreshTtsUiState(ttsUiState)
-    }
-
-    private suspend fun resolveChapterWebUrl(
-        source: eu.kanade.tachiyomi.novelsource.NovelSource,
-        chapterUrl: String,
-        novelUrl: String,
-        pluginSite: String?,
-    ): String? {
-        val sourceResolved = (source as? NovelWebUrlSource)
-            ?.getChapterWebUrl(chapterPath = chapterUrl, novelPath = novelUrl)
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-        if (sourceResolved != null) {
-            sourceResolved.toHttpUrlOrNull()?.let { return it.toString() }
-            resolveNovelChapterWebUrl(
-                chapterUrl = sourceResolved,
-                pluginSite = pluginSite,
-                novelUrl = novelUrl,
-            )?.let { return it }
-        }
-        return resolveNovelChapterWebUrl(
-            chapterUrl = chapterUrl,
-            pluginSite = pluginSite,
-            novelUrl = novelUrl,
-        )
     }
 
     fun toggleTtsPlayback(

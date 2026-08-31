@@ -46,6 +46,7 @@ import eu.kanade.domain.easteregg.lattice.LatticeCarrier
 import eu.kanade.presentation.easteregg.lattice.LatticeCarrierSlot
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelReaderTtsUiState
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.padding
@@ -189,8 +190,16 @@ internal fun NovelReaderBottomPanel(
                         contentDescription = stringResource(MR.strings.chapters),
                     )
                 }
-                IconButton(onClick = { onOpenWebView(chapterWebUrl ?: chapterUrl ?: novelUrl ?: "") }) {
-                    Icon(imageVector = Icons.Filled.Public, contentDescription = null)
+                // Only ever open a real web page. Local imports keep file names in these urls, and
+                // feeding one to the WebView makes Chromium resolve it as a host
+                // (net::ERR_NAME_NOT_RESOLVED), so bare paths hide the button entirely.
+                val webPageUrl = chapterWebUrl?.takeIf { it.isNotBlank() }
+                    ?: (chapterUrl?.takeIf { it.isNotBlank() } ?: novelUrl?.takeIf { it.isNotBlank() })
+                        ?.takeIf { it.toHttpUrlOrNull() != null }
+                if (webPageUrl != null) {
+                    IconButton(onClick = { onOpenWebView(webPageUrl) }) {
+                        Icon(imageVector = Icons.Filled.Public, contentDescription = null)
+                    }
                 }
                 IconButton(onClick = onScrollToTop) {
                     Icon(imageVector = Icons.Filled.KeyboardArrowUp, contentDescription = null)

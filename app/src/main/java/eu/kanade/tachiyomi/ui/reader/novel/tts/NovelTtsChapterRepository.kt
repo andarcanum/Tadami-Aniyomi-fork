@@ -9,10 +9,8 @@ import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
-import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
-import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.novel.sortedByNovelReadingOrder
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
@@ -24,13 +22,13 @@ import eu.kanade.tachiyomi.ui.reader.novel.parseNovelRichContent
 import eu.kanade.tachiyomi.ui.reader.novel.prependChapterHeadingIfMissing
 import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToHtml
 import eu.kanade.tachiyomi.ui.reader.novel.resolveNovelChapterWebUrl
+import eu.kanade.tachiyomi.ui.reader.novel.resolveNovelChapterWebUrlForSource
 import eu.kanade.tachiyomi.ui.reader.novel.sanitizeChapterHtmlForReader
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.jsoup.Jsoup
 import tachiyomi.domain.entries.novel.interactor.GetNovel
@@ -123,7 +121,7 @@ class NovelTtsChapterRepository internal constructor(
         val sourceSiteUrl = (source as? NovelSiteSource)?.siteUrl
         val pluginSite = pluginPackage?.entry?.site ?: sourceSiteUrl
         val chapterWebUrl = withContext(Dispatchers.IO) {
-            resolveChapterWebUrl(
+            resolveNovelChapterWebUrlForSource(
                 source = source,
                 chapterUrl = chapter.url,
                 novelUrl = novel.url,
@@ -236,36 +234,6 @@ class NovelTtsChapterRepository internal constructor(
                 byteLength = entry.byteLength,
             ).takeIf { it.isNotBlank() }
         }.getOrNull()
-    }
-
-    private suspend fun resolveChapterWebUrl(
-        source: NovelSource,
-        chapterUrl: String,
-        novelUrl: String,
-        pluginSite: String?,
-    ): String? {
-        // A busy plugin runtime (e.g. an ongoing chapter-list refresh holds the plugin
-        // mutex) must not delay showing already-downloaded/cached chapter text; give the
-        // source a short window and otherwise fall back to string-based resolution.
-        val sourceResolved = withTimeoutOrNull(1_500L) {
-            (source as? NovelWebUrlSource)
-                ?.getChapterWebUrl(chapterPath = chapterUrl, novelPath = novelUrl)
-        }
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-        if (sourceResolved != null) {
-            sourceResolved.toHttpUrlOrNull()?.let { return it.toString() }
-            resolveNovelChapterWebUrl(
-                chapterUrl = sourceResolved,
-                pluginSite = pluginSite,
-                novelUrl = novelUrl,
-            )?.let { return it }
-        }
-        return resolveNovelChapterWebUrl(
-            chapterUrl = chapterUrl,
-            pluginSite = pluginSite,
-            novelUrl = novelUrl,
-        )
     }
 }
 
