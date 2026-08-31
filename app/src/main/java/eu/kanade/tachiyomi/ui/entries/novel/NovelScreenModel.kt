@@ -2363,15 +2363,42 @@ class NovelScreenModel(
         }
     }
 
-    fun toggleSelection(chapterId: Long) {
-        val state = successState ?: return
-        val selected = state.selectedChapterIds.contains(chapterId)
-        updateSuccessState {
-            if (selected) {
-                it.copy(selectedChapterIds = it.selectedChapterIds - chapterId)
+    fun toggleSelection(
+        chapterId: Long,
+        userSelected: Boolean = false,
+        fromLongPress: Boolean = false,
+    ) {
+        if (successState == null) return
+        updateSuccessState { state ->
+            val visible = state.processedChapters
+            val selectedIndex = visible.indexOfFirst { it.id == chapterId }
+            // Only chapters currently rendered in the list are selectable.
+            if (selectedIndex < 0) return@updateSuccessState state
+
+            val wasSelected = state.selectedChapterIds.contains(chapterId)
+            val result = state.selectedChapterIds.toMutableSet()
+            if (wasSelected) {
+                result -= chapterId
             } else {
-                it.copy(selectedChapterIds = it.selectedChapterIds + chapterId)
+                result += chapterId
+                // Long-press selection fills the gap between the tapped chapter and the
+                // existing selection range, mirroring the manga/anime chapter lists. The
+                // anchors are derived from the current visible selection on every press so
+                // filtering and chapter paging can never leave a stale index behind.
+                if (userSelected && fromLongPress) {
+                    val anchorFirst = visible.indexOfFirst { it.id in state.selectedChapterIds }
+                    val anchorLast = visible.indexOfLast { it.id in state.selectedChapterIds }
+                    if (anchorFirst >= 0 && anchorLast >= 0) {
+                        val range = when {
+                            selectedIndex < anchorFirst -> (selectedIndex + 1)..<anchorFirst
+                            selectedIndex > anchorLast -> (anchorLast + 1)..<selectedIndex
+                            else -> null
+                        }
+                        range?.forEach { index -> result += visible[index].id }
+                    }
+                }
             }
+            state.copy(selectedChapterIds = result)
         }
     }
 

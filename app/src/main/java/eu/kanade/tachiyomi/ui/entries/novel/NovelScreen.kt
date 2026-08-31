@@ -485,7 +485,7 @@ class NovelScreen(
             onOpenEpubExportDialog = { showEpubExportDialog = true },
             onChapterClick = { chapterId ->
                 if (screenModel.isAnyChapterSelected) {
-                    screenModel.toggleSelection(chapterId)
+                    screenModel.toggleSelection(chapterId, userSelected = true)
                 } else {
                     val srcId = successState.source.id
                     coroutineScope.launch {
@@ -554,7 +554,9 @@ class NovelScreen(
             chapterPageTotal = successState.chapterPageTotal,
             chapterPageLoading = successState.chapterPageLoading,
             onChapterPageChange = screenModel::selectChapterPage,
-            onChapterLongClick = screenModel::toggleSelection,
+            onChapterLongClick = { chapterId ->
+                screenModel.toggleSelection(chapterId, userSelected = true, fromLongPress = true)
+            },
             onAllChapterSelected = screenModel::toggleAllSelection,
             onInvertSelection = screenModel::invertSelection,
             onMultiBookmarkClicked = screenModel::bookmarkChapters,

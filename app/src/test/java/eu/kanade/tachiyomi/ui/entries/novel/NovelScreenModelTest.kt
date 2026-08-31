@@ -1303,6 +1303,134 @@ class NovelScreenModelTest {
     }
 
     @Test
+    fun `long press selection expands range down to in-between chapters`() {
+        runBlocking {
+            val novel = novelForResumeTests(2201L)
+            val chapters = (1L..15L).map {
+                novelChapter(id = it, novelId = novel.id, chapterNumber = it.toDouble(), read = false)
+            }
+            val screenModel = createResumeScreenModel(novel = novel, chapters = chapters)
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                screenModel.toggleSelection(1L, userSelected = true, fromLongPress = true)
+                screenModel.toggleSelection(15L, userSelected = true, fromLongPress = true)
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.selectedChapterIds shouldBe (1L..15L).toSet()
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `long press selection expands range up to in-between chapters`() {
+        runBlocking {
+            val novel = novelForResumeTests(2202L)
+            val chapters = (1L..15L).map {
+                novelChapter(id = it, novelId = novel.id, chapterNumber = it.toDouble(), read = false)
+            }
+            val screenModel = createResumeScreenModel(novel = novel, chapters = chapters)
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                screenModel.toggleSelection(15L, userSelected = true, fromLongPress = true)
+                screenModel.toggleSelection(3L, userSelected = true, fromLongPress = true)
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.selectedChapterIds shouldBe (3L..15L).toSet()
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `long press inside the current range selects only itself`() {
+        runBlocking {
+            val novel = novelForResumeTests(2203L)
+            val chapters = (1L..15L).map {
+                novelChapter(id = it, novelId = novel.id, chapterNumber = it.toDouble(), read = false)
+            }
+            val screenModel = createResumeScreenModel(novel = novel, chapters = chapters)
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                screenModel.toggleSelection(1L, userSelected = true, fromLongPress = true)
+                screenModel.toggleSelection(15L, userSelected = true, fromLongPress = true)
+                screenModel.toggleSelection(8L, userSelected = true, fromLongPress = true)
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                // Like manga: a long press on an already-selected in-range chapter toggles
+                // that single chapter off - it never re-expands or shifts the range anchors.
+                state.selectedChapterIds shouldBe (1L..15L).toSet() - 8L
+
+                screenModel.toggleSelection(20L, userSelected = true, fromLongPress = true)
+                val finalState = screenModel.state.value as NovelScreenModel.State.Success
+                // Unknown chapter id is not in the visible list: ignored, no phantom selection.
+                finalState.selectedChapterIds shouldBe (1L..15L).toSet() - 8L
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `plain toggle selection stays single without long press flags`() {
+        runBlocking {
+            val novel = novelForResumeTests(2204L)
+            val chapters = (1L..15L).map {
+                novelChapter(id = it, novelId = novel.id, chapterNumber = it.toDouble(), read = false)
+            }
+            val screenModel = createResumeScreenModel(novel = novel, chapters = chapters)
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                screenModel.toggleSelection(1L)
+                screenModel.toggleSelection(15L)
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.selectedChapterIds shouldBe setOf(1L, 15L)
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `clearing all selection resets range anchors`() {
+        runBlocking {
+            val novel = novelForResumeTests(2205L)
+            val chapters = (1L..15L).map {
+                novelChapter(id = it, novelId = novel.id, chapterNumber = it.toDouble(), read = false)
+            }
+            val screenModel = createResumeScreenModel(novel = novel, chapters = chapters)
+
+            try {
+                awaitResumeScreenModel(screenModel)
+
+                screenModel.toggleSelection(1L, userSelected = true, fromLongPress = true)
+                screenModel.toggleSelection(15L, userSelected = true, fromLongPress = true)
+                screenModel.toggleAllSelection(false)
+                screenModel.toggleSelection(7L, userSelected = true, fromLongPress = true)
+                screenModel.toggleSelection(9L, userSelected = true, fromLongPress = true)
+
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                // After the reset the new first long press starts a fresh 7..9 range,
+                // not an extension of the stale 1..15 one.
+                state.selectedChapterIds shouldBe setOf(7L, 8L, 9L)
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
     fun `run download action returns before enqueue finishes`() {
         runBlocking {
             val novel = novelForResumeTests(203L)
