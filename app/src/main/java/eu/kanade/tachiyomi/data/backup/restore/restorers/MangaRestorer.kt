@@ -120,6 +120,7 @@ class MangaRestorer(
             customDescription = newer.customDescription ?: this.customDescription,
             customGenre = newer.customGenre ?: this.customGenre,
             customStatus = newer.customStatus ?: this.customStatus,
+            completedAt = newer.completedAt ?: this.completedAt,
         )
     }
 
@@ -151,6 +152,7 @@ class MangaRestorer(
                 updateStrategy = manga.updateStrategy.let(MangaUpdateStrategyColumnAdapter::encode),
                 version = manga.version,
                 isSyncing = 1,
+                completedAt = manga.completedAt,
             )
             db.mangasQueries.updateMetadata(
                 customTitle = manga.customTitle,
@@ -301,6 +303,7 @@ class MangaRestorer(
                 updateStrategy = manga.updateStrategy,
                 version = manga.version,
                 memo = manga.memo,
+                completedAt = manga.completedAt,
             )
             val mangaId = db.mangasQueries.selectLastInsertedRowId().executeAsOne()
             db.mangasQueries.updateMetadata(

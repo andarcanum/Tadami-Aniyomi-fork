@@ -109,4 +109,5 @@ private fun Manga.toBackupManga() =
         customDescription = this.customDescription,
         customGenre = this.customGenre,
         customStatus = this.customStatus,
+        completedAt = this.completedAt,
     )

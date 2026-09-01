@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,16 +34,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.components.AuroraCoverPlaceholderVariant
 import eu.kanade.presentation.components.rememberAuroraCoverPlaceholderPainter
 import eu.kanade.presentation.components.rememberCoverReloadTick
+import eu.kanade.presentation.entries.components.FinaleStamp
 import eu.kanade.presentation.entries.components.aurora.AuroraHeroCoverImage
 import eu.kanade.presentation.entries.components.aurora.AuroraNotePreviewCard
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionButton
@@ -95,6 +99,8 @@ fun MangaGlassHeroCard(
     refererUrl: String? = null,
     sourceHeaders: Map<String, String>? = null,
     sourceClient: Call.Factory? = null,
+    showFinishedStamp: Boolean = false,
+    finishedStampDate: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = AuroraTheme.colors
@@ -203,6 +209,20 @@ fun MangaGlassHeroCard(
                         ),
                     ),
             )
+
+            // Keepsake «finished» stamp: same double-ring seal as the reader finale plate,
+            // pressed onto the top-right corner of the cover. Hidden in RTL (rotated seal).
+            if (showFinishedStamp && LocalLayoutDirection.current != LayoutDirection.Rtl) {
+                FinaleStamp(
+                    label = stringResource(MR.strings.reader_finale_stamp_label),
+                    date = finishedStampDate,
+                    accent = colors.accent,
+                    size = 76.dp,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 8.dp, y = (-8).dp),
+                )
+            }
 
             // Card Foreground Content
             Column(

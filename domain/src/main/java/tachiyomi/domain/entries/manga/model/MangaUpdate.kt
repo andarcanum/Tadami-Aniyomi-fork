@@ -28,6 +28,8 @@ data class MangaUpdate(
     val updateStrategy: UpdateStrategy? = null,
     val initialized: Boolean? = null,
     val version: Long? = null,
+    /** Set once, on first witnessed completion; coalesce in SQL keeps existing value on null. */
+    val completedAt: Long? = null,
     /** Source-owned context (1.6 extensions keep e.g. a rotating slug here). */
     @kotlin.jvm.Transient
     val memo: JsonObject? = null,
@@ -59,5 +61,6 @@ fun Manga.toMangaUpdate(): MangaUpdate {
         updateStrategy = updateStrategy,
         initialized = initialized,
         version = version,
+        completedAt = completedAt,
     )
 }

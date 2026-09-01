@@ -1753,6 +1753,8 @@
     <string name="pref_animated_aurora_background_summary">Показывать мягкие анимированные цветовые переливы на экранах Aurora</string>
     <string name="pref_aurora_dark_rim_light">Обводка rim light в тёмной теме</string>
     <string name="pref_aurora_dark_rim_light_summary">Показывать свечение по верхнему краю карточек Aurora в тёмной теме</string>
+    <string name="pref_aurora_finished_stamp">Печать завершения на экране тайтла</string>
+    <string name="pref_aurora_finished_stamp_summary">Показывать памятный круглый штамп с датой завершения на обложках дочитанных историй</string>
     <string name="pref_e_ink_profile">Профиль E-ink</string>
     <string name="pref_e_ink_profile_monochrome">Монохром</string>
     <string name="pref_e_ink_profile_color">Цвет</string>

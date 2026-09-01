@@ -825,6 +825,7 @@ class ReaderActivity : BaseActivity() {
                             reducedMotion = isEInkMode(),
                             onBackToManga = {
                                 viewModel.clearFinale()
+                                openMangaScreen()
                                 finish()
                             },
                             onStay = viewModel::clearFinale,

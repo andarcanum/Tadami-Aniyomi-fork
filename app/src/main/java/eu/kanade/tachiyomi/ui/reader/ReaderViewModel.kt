@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.manga.interactor.SetMangaViewerFlags
+import eu.kanade.domain.entries.manga.interactor.UpdateManga
 import eu.kanade.domain.entries.manga.model.readerOrientation
 import eu.kanade.domain.entries.manga.model.readingMode
 import eu.kanade.domain.items.chapter.model.toDbChapter
@@ -40,6 +41,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.model.ViewerChapters
 import eu.kanade.tachiyomi.ui.reader.model.daysOnShelf
 import eu.kanade.tachiyomi.ui.reader.model.shouldCelebrateFinale
+import eu.kanade.tachiyomi.ui.reader.model.shouldRecordCompletion
 import eu.kanade.tachiyomi.ui.reader.setting.MangaReaderPageDimensions
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderOrientation
 import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
@@ -87,6 +89,7 @@ import tachiyomi.domain.achievement.repository.ActivityDataRepository
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.manga.interactor.GetManga
 import tachiyomi.domain.entries.manga.model.Manga
+import tachiyomi.domain.entries.manga.model.MangaUpdate
 import tachiyomi.domain.history.manga.interactor.GetNextChapters
 import tachiyomi.domain.history.manga.interactor.UpsertMangaHistory
 import tachiyomi.domain.history.manga.model.MangaHistoryUpdate
@@ -126,6 +129,7 @@ class ReaderViewModel @JvmOverloads constructor(
     private val upsertHistory: UpsertMangaHistory = Injekt.get(),
     private val updateChapter: UpdateChapter = Injekt.get(),
     private val setMangaViewerFlags: SetMangaViewerFlags = Injekt.get(),
+    private val updateManga: UpdateManga = Injekt.get(),
     private val getIncognitoState: GetMangaIncognitoState = Injekt.get(),
     private val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val eventBus: AchievementEventBus = Injekt.get(),
@@ -807,6 +811,7 @@ class ReaderViewModel @JvmOverloads constructor(
         val allChapters = chapterList.map { it.chapter }
         if (allChapters.all { it.read }) {
             eventBus.tryEmit(AchievementEvent.MangaCompleted(mangaId))
+            recordCompletionIfNeeded(allChapters, chapterWasUnread)
             maybeShowFinale(readerChapter, allChapters, chapterWasUnread)
         }
 
@@ -872,6 +877,19 @@ class ReaderViewModel @JvmOverloads constructor(
         viewModelScope.launchIO {
             val resolved = resolveSeriesInterstitialState(chapter) ?: return@launchIO
             setSeriesInterstitialState(resolved)
+        }
+    }
+
+    /**
+     * Persists the first-witnessed completion timestamp (keepsake for the title-screen
+     * finished stamp; travels through backups). Independent of the plate preference.
+     */
+    private fun recordCompletionIfNeeded(chapters: List<Chapter>, chapterWasUnread: Boolean) {
+        val currentManga = manga ?: return
+        if (!shouldRecordCompletion(currentManga, chapters, chapterWasUnread)) return
+        val timestamp = System.currentTimeMillis()
+        viewModelScope.launchNonCancellable {
+            updateManga.await(MangaUpdate(id = currentManga.id, completedAt = timestamp))
         }
     }
 

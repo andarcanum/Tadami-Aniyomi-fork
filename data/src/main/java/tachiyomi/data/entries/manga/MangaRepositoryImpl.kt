@@ -139,6 +139,7 @@ class MangaRepositoryImpl(
                         updateStrategy = toInsert.updateStrategy,
                         version = toInsert.version,
                         memo = toInsert.memo,
+                        completedAt = toInsert.completedAt,
                     )
                     val insertedId = db.mangasQueries.selectLastInsertedRowId().executeAsOne()
                     toInsert.copy(id = insertedId)
@@ -178,6 +179,7 @@ class MangaRepositoryImpl(
                         updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
                         version = updated.version,
                         isSyncing = 0,
+                        completedAt = updated.completedAt,
                     )
                     // Separate statement: coalesce() drops the column adapter type.
                     db.mangasQueries.updateMemo(memo = updated.memo, mangaId = updated.id)
@@ -210,6 +212,7 @@ class MangaRepositoryImpl(
                         updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
                         version = updated.version,
                         isSyncing = 0,
+                        completedAt = updated.completedAt,
                     )
                     // Separate statement: coalesce() drops the column adapter type.
                     db.mangasQueries.updateMemo(memo = updated.memo, mangaId = updated.id)
@@ -248,6 +251,7 @@ class MangaRepositoryImpl(
                             updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
                             version = updated.version,
                             isSyncing = 0,
+                            completedAt = updated.completedAt,
                         )
                         db.mangasQueries.updateMemo(memo = updated.memo, mangaId = updated.id)
                         updated
@@ -286,6 +290,7 @@ class MangaRepositoryImpl(
                 updateStrategy = manga.updateStrategy,
                 version = manga.version,
                 memo = manga.memo,
+                completedAt = manga.completedAt,
             )
             db.mangasQueries.selectLastInsertedRowId()
         }
@@ -340,6 +345,7 @@ class MangaRepositoryImpl(
                     updateStrategy = value.updateStrategy?.let(MangaUpdateStrategyColumnAdapter::encode),
                     version = value.version,
                     isSyncing = 0,
+                    completedAt = value.completedAt,
                 )
                 value.memo?.let { memo ->
                     db.mangasQueries.updateMemo(memo = memo, mangaId = value.id)

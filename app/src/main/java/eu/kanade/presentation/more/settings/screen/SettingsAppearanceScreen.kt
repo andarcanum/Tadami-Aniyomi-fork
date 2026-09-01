@@ -187,6 +187,13 @@ object SettingsAppearanceScreen : SearchableSettings {
                         ),
                     )
                 }
+                add(
+                    Preference.PreferenceItem.SwitchPreference(
+                        preference = uiPreferences.auroraFinishedStampEnabled(),
+                        title = stringResource(AYMR.strings.pref_aurora_finished_stamp),
+                        subtitle = stringResource(AYMR.strings.pref_aurora_finished_stamp_summary),
+                    ),
+                )
             }.toPersistentList(),
         )
     }

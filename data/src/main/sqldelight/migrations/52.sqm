@@ -1,0 +1,4 @@
+-- First-completion timestamp for a manga entry (the moment the last chapter of a
+-- completed story was actually read in the reader). Nullable: old rows and entries
+-- whose completion was never witnessed by the reader carry no keepsake date.
+ALTER TABLE mangas ADD COLUMN completed_at INTEGER;

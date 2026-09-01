@@ -39,6 +39,23 @@ fun shouldCelebrateFinale(
         chapters.all { it.read }
 
 /**
+ * Pure gate for persisting the keepsake completion date. Independent of the plate setting:
+ * the fact that a story was finished outlives the celebration UI. First witnessed
+ * completion wins — an existing [Manga.completedAt] is never overwritten — and
+ * bulk-marking from the chapter list never counts (only real reading of an unread chapter).
+ */
+fun shouldRecordCompletion(
+    manga: Manga,
+    chapters: List<Chapter>,
+    chapterWasUnread: Boolean,
+): Boolean =
+    chapterWasUnread &&
+        manga.completedAt == null &&
+        manga.displayStatus == SManga.COMPLETED.toLong() &&
+        chapters.isNotEmpty() &&
+        chapters.all { it.read }
+
+/**
  * Whole days between adding to the library and [nowMs]. Null when the entry is not
  * in the library ([Manga.dateAdded] unset) or was added today, so the card never
  * claims "0 days".

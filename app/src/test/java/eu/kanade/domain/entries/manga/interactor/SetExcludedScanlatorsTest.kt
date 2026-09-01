@@ -90,6 +90,7 @@ class SetExcludedScanlatorsTest {
             version = 0L,
             rating = 0.0,
             memo = kotlinx.serialization.json.JsonObject(emptyMap()),
+            completedAt = null,
         )
         return database.mangasQueries.selectLastInsertedRowId().executeAsOne()
     }

@@ -43,6 +43,8 @@ data class Manga(
     val customDescription: String? = null,
     val customGenre: List<String>? = null,
     val customStatus: Long? = null,
+    /** Timestamp of the first witnessed completion (last chapter read in the reader). */
+    val completedAt: Long? = null,
     @kotlin.jvm.Transient
     val memo: JsonObject = JsonObject.EMPTY,
 ) : Serializable {

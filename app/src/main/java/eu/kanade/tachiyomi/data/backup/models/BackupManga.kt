@@ -48,6 +48,7 @@ data class BackupManga(
     @ProtoNumber(803) var customDescription: String? = null,
     @ProtoNumber(804) var customGenre: List<String>? = null,
     @ProtoNumber(805) var customStatus: Long? = null,
+    @ProtoNumber(806) var completedAt: Long? = null,
 ) {
     fun getMangaImpl(): Manga {
         return Manga.create().copy(
@@ -76,6 +77,7 @@ data class BackupManga(
             customDescription = this@BackupManga.customDescription,
             customGenre = this@BackupManga.customGenre,
             customStatus = this@BackupManga.customStatus,
+            completedAt = this@BackupManga.completedAt,
         )
     }
 }

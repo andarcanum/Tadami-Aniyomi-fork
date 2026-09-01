@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -42,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -64,6 +62,7 @@ import coil3.compose.AsyncImage
 import coil3.imageLoader
 import eu.kanade.presentation.components.buildAuroraCoverImageRequest
 import eu.kanade.presentation.components.rememberThemeAwareCoverErrorPainter
+import eu.kanade.presentation.entries.components.FinaleStamp
 import eu.kanade.presentation.reader.settings.auroraRimColor
 import eu.kanade.presentation.theme.AuroraColors
 import eu.kanade.presentation.theme.AuroraTheme
@@ -318,44 +317,11 @@ fun ReaderFinaleOverlay(
                             )
                         },
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(96.dp)
-                                .rotate(-12f)
-                                .border(2.dp, colors.accent, CircleShape)
-                                .padding(5.dp)
-                                .border(1.dp, colors.accent.copy(alpha = 0.55f), CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(3.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(MR.strings.reader_finale_stamp_label),
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 2.4.sp,
-                                    maxLines = 1,
-                                    color = colors.accent,
-                                )
-                                Text(
-                                    text = state.finishedOn,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Black,
-                                    letterSpacing = 0.4.sp,
-                                    maxLines = 1,
-                                    color = colors.accent,
-                                )
-                                Text(
-                                    text = "✦ tadami ✦",
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    color = colors.accent.copy(alpha = 0.85f),
-                                )
-                            }
-                        }
+                        FinaleStamp(
+                            label = stringResource(MR.strings.reader_finale_stamp_label),
+                            date = state.finishedOn,
+                            accent = colors.accent,
+                        )
                     }
                 }
             }

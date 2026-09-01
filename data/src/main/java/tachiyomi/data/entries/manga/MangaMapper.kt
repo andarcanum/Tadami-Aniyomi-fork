@@ -42,6 +42,7 @@ object MangaMapper {
         customGenre: List<String>?,
         customStatus: Long?,
         memo: JsonObject,
+        completedAt: Long?,
     ): Manga = Manga(
         id = id,
         source = source,
@@ -76,6 +77,7 @@ object MangaMapper {
         customGenre = customGenre,
         customStatus = customStatus,
         memo = memo,
+        completedAt = completedAt,
     )
 
     fun mapLibraryManga(
@@ -113,6 +115,7 @@ object MangaMapper {
         customGenre: List<String>?,
         customStatus: Long?,
         memo: JsonObject,
+        completedAt: Long?,
         totalCount: Long,
         readCount: Double,
         latestUpload: Long,
@@ -156,6 +159,7 @@ object MangaMapper {
             customGenre,
             customStatus,
             memo,
+            completedAt,
         ),
         category = category,
         totalChapters = totalCount,

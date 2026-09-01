@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -65,7 +66,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -82,6 +85,7 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
+import eu.kanade.presentation.entries.components.FinaleStamp
 import eu.kanade.presentation.entries.components.MissingItemCountListItem
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
@@ -118,6 +122,7 @@ import eu.kanade.presentation.theme.aurora.adaptive.resolveAuroraAdaptiveSpec
 import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.tachiyomi.data.download.manga.model.MangaDownload
 import eu.kanade.tachiyomi.source.manga.getNameForMangaInfo
+import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.entries.manga.ChapterList
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreenModel
@@ -141,7 +146,9 @@ import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.text.DateFormat
 import java.time.Instant
+import java.util.Date
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -308,6 +315,15 @@ fun MangaScreenAuroraImpl(
     }
     val nextChapterNum = remember(detailsSnapshot.progress) {
         detailsSnapshot.progress?.currentChapterIndex?.let { it + 1 }
+    }
+    // Keepsake «finished» stamp: live predicate (a completed story whose list is fully
+    // read), keepsake date from the persisted first completion.
+    val finishedStampEnabled by uiPreferences.auroraFinishedStampEnabled().collectAsState()
+    val showFinishedStamp = finishedStampEnabled &&
+        manga.displayStatus == SManga.COMPLETED.toLong() &&
+        detailsSnapshot.progress?.isCompleted == true
+    val finishedStampDate = remember(manga.completedAt) {
+        manga.completedAt?.let { DateFormat.getDateInstance(DateFormat.SHORT).format(Date(it)) }
     }
     val mangaActionResumeText = stringResource(MR.strings.action_resume)
     val mangaHeroTargetChText = nextChapterNum?.takeIf { it > 0 }?.let {
@@ -504,6 +520,33 @@ fun MangaScreenAuroraImpl(
                         .titleScreenPosterEntrance(titleStaggerState)
                         .hazeSource(state = hazeState),
                 )
+
+                // Keepsake «finished» stamp pinned to the poster corner, clear below the top
+                // bar row, fading out together with the poster itself while scrolling.
+                if (showFinishedStamp && LocalLayoutDirection.current != LayoutDirection.Rtl) {
+                    val stampDensity = LocalDensity.current
+                    val stampAlpha by remember(scrollOffsetState, firstVisibleItemIndexState) {
+                        derivedStateOf {
+                            if (firstVisibleItemIndexState.value > 0) {
+                                0f
+                            } else {
+                                (1f - scrollOffsetState.value / with(stampDensity) { 360.dp.toPx() })
+                                    .coerceIn(0f, 1f)
+                            }
+                        }
+                    }
+                    FinaleStamp(
+                        label = stringResource(MR.strings.reader_finale_stamp_label),
+                        date = finishedStampDate,
+                        accent = colors.accent,
+                        size = 88.dp,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .statusBarsPadding()
+                            .padding(top = 60.dp, end = 14.dp)
+                            .graphicsLayer { alpha = stampAlpha },
+                    )
+                }
             } else {
                 AuroraBackground(
                     modifier = Modifier
@@ -654,6 +697,8 @@ fun MangaScreenAuroraImpl(
                                         refererUrl = refererUrl,
                                         sourceHeaders = sourceHeaders,
                                         sourceClient = sourceClient,
+                                        showFinishedStamp = showFinishedStamp,
+                                        finishedStampDate = finishedStampDate,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 1),
@@ -1066,6 +1111,8 @@ fun MangaScreenAuroraImpl(
                                     refererUrl = refererUrl,
                                     sourceHeaders = sourceHeaders,
                                     sourceClient = sourceClient,
+                                    showFinishedStamp = showFinishedStamp,
+                                    finishedStampDate = finishedStampDate,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .auroraCenteredMaxWidth(contentMaxWidthDp)

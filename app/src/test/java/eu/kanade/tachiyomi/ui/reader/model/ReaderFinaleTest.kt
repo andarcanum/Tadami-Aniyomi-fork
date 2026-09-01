@@ -127,4 +127,40 @@ class ReaderFinaleTest {
         val now = 10L * dayMillis
         daysOnShelf(dateAdded = now - 5 * dayMillis, nowMs = now) shouldBe 5L
     }
+
+    @Test
+    fun `first witnessed completion is recorded`() {
+        shouldRecordCompletion(
+            manga = manga(),
+            chapters = readChapters,
+            chapterWasUnread = true,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `existing completion date is never overwritten`() {
+        shouldRecordCompletion(
+            manga = manga().copy(completedAt = 1L),
+            chapters = readChapters,
+            chapterWasUnread = true,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `ongoing completion is not recorded`() {
+        shouldRecordCompletion(
+            manga = manga(status = SManga.ONGOING.toLong()),
+            chapters = readChapters,
+            chapterWasUnread = true,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `bulk-marked chapter does not record a date`() {
+        shouldRecordCompletion(
+            manga = manga(),
+            chapters = readChapters,
+            chapterWasUnread = false,
+        ) shouldBe false
+    }
 }
