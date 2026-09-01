@@ -111,6 +111,7 @@ class NovelRestorer(
             customDescription = newer.customDescription ?: this.customDescription,
             customGenre = newer.customGenre ?: this.customGenre,
             customStatus = newer.customStatus ?: this.customStatus,
+            completedAt = newer.completedAt ?: this.completedAt,
         )
     }
 
@@ -140,6 +141,7 @@ class NovelRestorer(
                 updateStrategy = novel.updateStrategy.let(MangaUpdateStrategyColumnAdapter::encode),
                 version = novel.version,
                 isSyncing = 1,
+                completedAt = novel.completedAt,
             )
             db.novelsQueries.updateMetadata(
                 customTitle = novel.customTitle,
@@ -288,6 +290,7 @@ class NovelRestorer(
                 dateAdded = novel.dateAdded,
                 updateStrategy = novel.updateStrategy,
                 version = novel.version,
+                completedAt = novel.completedAt,
             )
             val novelId = db.novelsQueries.selectLastInsertedRowId().executeAsOne()
             db.novelsQueries.updateMetadata(

@@ -127,6 +127,7 @@ class NovelSourceRepositoryImplTest {
             calculateInterval = 0,
             pinned = false,
             version = 0,
+            completedAt = null,
         )
 
         val result = repository.getNovelSourcesWithFavoriteCount().first()

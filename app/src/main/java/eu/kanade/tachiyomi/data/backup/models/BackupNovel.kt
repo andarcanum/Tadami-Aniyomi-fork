@@ -33,6 +33,7 @@ data class BackupNovel(
     @ProtoNumber(803) var customDescription: String? = null,
     @ProtoNumber(804) var customGenre: List<String>? = null,
     @ProtoNumber(805) var customStatus: Long? = null,
+    @ProtoNumber(806) var completedAt: Long? = null,
     /**
      * Compiled-book state for this novel. The artifact itself is never backed up (it is derived
      * data and can weigh hundreds of megabytes); only the reading position and the flags needed to
@@ -66,6 +67,7 @@ data class BackupNovel(
             customDescription = customDescription,
             customGenre = customGenre,
             customStatus = customStatus,
+            completedAt = completedAt,
         )
     }
 }

@@ -39,6 +39,8 @@ import androidx.lifecycle.viewmodel.CreationExtras
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.entries.anime.interactor.SetAnimeViewerFlags
+import eu.kanade.domain.entries.anime.interactor.UpdateAnime
+import eu.kanade.domain.entries.shouldRecordAnimeCompletion
 import eu.kanade.domain.items.episode.model.toDbEpisode
 import eu.kanade.domain.source.anime.interactor.GetAnimeIncognitoState
 import eu.kanade.domain.source.interactor.ForegroundIncognitoState
@@ -138,6 +140,7 @@ import tachiyomi.domain.custombuttons.model.CustomButton
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.anime.interactor.GetAnime
 import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.domain.entries.anime.model.AnimeUpdate
 import tachiyomi.domain.history.anime.interactor.GetNextEpisodes
 import tachiyomi.domain.history.anime.interactor.UpsertAnimeHistory
 import tachiyomi.domain.history.anime.model.AnimeHistoryUpdate
@@ -184,6 +187,7 @@ class PlayerViewModel @JvmOverloads constructor(
     private val getTracks: GetAnimeTracks = Injekt.get(),
     private val upsertHistory: UpsertAnimeHistory = Injekt.get(),
     private val updateEpisode: UpdateEpisode = Injekt.get(),
+    private val updateAnime: UpdateAnime = Injekt.get(),
     private val setAnimeViewerFlags: SetAnimeViewerFlags = Injekt.get(),
     internal val playerPreferences: PlayerPreferences = Injekt.get(),
     internal val gesturePreferences: GesturePreferences = Injekt.get(),
@@ -2244,6 +2248,7 @@ class PlayerViewModel @JvmOverloads constructor(
         val allEpisodes = currentPlaylist.value
         if (allEpisodes.all { it.seen }) {
             eventBus.tryEmit(AchievementEvent.AnimeCompleted(animeId))
+            recordAnimeCompletionIfNeeded(currentEp, allEpisodes)
         }
 
         updateTrackEpisodeSeen(currentEp)
@@ -2266,6 +2271,28 @@ class PlayerViewModel @JvmOverloads constructor(
                 }
             }
         updateEpisode.awaitAll(duplicateUnseenEpisodes)
+    }
+
+    /**
+     * Persists the first-witnessed completion timestamp (keepsake for the title-screen
+     * finished stamp; travels through backups). Independent of any celebration UI.
+     * The caller's `if (currentEp.seen) return` guard makes this run exactly once per
+     * unseen→seen transition, so `episodeWasUnseen` is trivially true here.
+     */
+    private fun recordAnimeCompletionIfNeeded(currentEp: Episode, episodes: List<Episode>) {
+        val currentAnime = currentAnime.value ?: return
+        if (!shouldRecordAnimeCompletion(
+                currentAnime,
+                episodes,
+                finishedEpisodeIsLast = currentEp.id == episodes.lastOrNull()?.id,
+            )
+        ) {
+            return
+        }
+        val timestamp = System.currentTimeMillis()
+        viewModelScope.launchNonCancellable {
+            updateAnime.await(AnimeUpdate(id = currentAnime.id, completedAt = timestamp))
+        }
     }
 
     private fun downloadNextEpisodes() {

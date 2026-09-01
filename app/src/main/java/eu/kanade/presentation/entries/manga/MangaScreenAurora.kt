@@ -542,6 +542,7 @@ fun MangaScreenAuroraImpl(
                         size = 88.dp,
                         modifier = Modifier
                             .align(Alignment.TopEnd)
+                            .zIndex(AuroraZIndex.SNACKBAR + 1f)
                             .statusBarsPadding()
                             .padding(top = 60.dp, end = 14.dp)
                             .graphicsLayer { alpha = stampAlpha },

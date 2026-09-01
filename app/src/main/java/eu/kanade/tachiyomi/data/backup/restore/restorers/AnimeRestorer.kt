@@ -133,6 +133,7 @@ class AnimeRestorer(
             customDescription = newer.customDescription ?: this.customDescription,
             customGenre = newer.customGenre ?: this.customGenre,
             customStatus = newer.customStatus ?: this.customStatus,
+            completedAt = newer.completedAt ?: this.completedAt,
         )
     }
 
@@ -170,6 +171,7 @@ class AnimeRestorer(
                 seasonSourceOrder = anime.seasonSourceOrder,
                 backgroundUrl = anime.backgroundUrl,
                 backgroundLastModified = anime.backgroundLastModified,
+                completedAt = anime.completedAt,
             )
             db.animesQueries.updateMetadata(
                 customTitle = anime.customTitle,
@@ -333,6 +335,7 @@ class AnimeRestorer(
                 seasonSourceOrder = anime.seasonSourceOrder,
                 backgroundUrl = anime.backgroundUrl,
                 backgroundLastModified = anime.backgroundLastModified,
+                completedAt = anime.completedAt,
             )
             val animeId = db.animesQueries.selectLastInsertedRowId().executeAsOne()
             db.animesQueries.updateMetadata(

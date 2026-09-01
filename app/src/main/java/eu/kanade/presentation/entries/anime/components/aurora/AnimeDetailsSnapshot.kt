@@ -35,6 +35,10 @@ data class AnimeProgressSnapshot(
                 }
             }
         }
+
+    /** Fully watched: every episode of a non-empty list is seen (live stamp predicate). */
+    val isCompleted: Boolean
+        get() = totalEpisodes > 0 && watchedCount >= totalEpisodes
 }
 
 @Immutable

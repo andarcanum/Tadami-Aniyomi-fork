@@ -71,6 +71,7 @@ class NovelDatabaseHandlerTest {
             calculateInterval = 0,
             pinned = false,
             version = 0,
+            completedAt = null,
         )
 
         val rows = handler.awaitList { db -> db.novelsQueries.getAllNovel() }

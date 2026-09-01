@@ -51,6 +51,7 @@ object AnimeMapper {
         customGenre: List<String>?,
         customStatus: Long?,
         memo: JsonObject,
+        completedAt: Long?,
     ): Anime = Anime(
         id = id,
         source = source,
@@ -91,6 +92,7 @@ object AnimeMapper {
         customGenre = customGenre,
         customStatus = customStatus,
         memo = memo,
+        completedAt = completedAt,
     )
 
     fun mapLibraryAnime(
@@ -134,6 +136,7 @@ object AnimeMapper {
         customGenre: List<String>?,
         customStatus: Long?,
         memo: JsonObject,
+        completedAt: Long?,
         totalCount: Long,
         seenCount: Double,
         latestUpload: Long,
@@ -184,6 +187,7 @@ object AnimeMapper {
             customGenre,
             customStatus,
             memo,
+            completedAt,
         ),
         category = category,
         totalCount = totalCount,
@@ -236,6 +240,7 @@ object AnimeMapper {
         customGenre: List<String>?,
         customStatus: Long?,
         memo: JsonObject,
+        completedAt: Long?,
         totalCount: Long,
         seenCount: Double,
         latestUpload: Long,
@@ -285,6 +290,7 @@ object AnimeMapper {
             customGenre,
             customStatus,
             memo,
+            completedAt,
         ),
         totalCount = totalCount,
         seenCount = seenCount.toLong(),

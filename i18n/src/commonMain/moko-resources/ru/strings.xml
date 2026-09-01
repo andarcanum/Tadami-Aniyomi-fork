@@ -336,6 +336,7 @@
     <string name="reader_finale_title">THE END</string>
     <string name="reader_finale_subtitle">Здесь ты прочёл все главы</string>
     <string name="reader_finale_back_to_manga">К странице манги</string>
+    <string name="reader_finale_back_to_novel">К странице новеллы</string>
     <string name="reader_finale_stay">Остаться</string>
     <string name="reader_finale_stamp_label">Завершено</string>
     <string name="pref_reader_finale_card">Праздновать завершение серии</string>

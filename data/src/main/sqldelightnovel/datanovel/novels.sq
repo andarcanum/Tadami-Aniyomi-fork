@@ -35,7 +35,8 @@ CREATE TABLE novels(
     custom_description TEXT,
     custom_genre TEXT AS List<String>,
     custom_status INTEGER,
-    memo BLOB AS JsonObject NOT NULL DEFAULT '{}'
+    memo BLOB AS JsonObject NOT NULL DEFAULT '{}',
+    completed_at INTEGER
 );
 
 CREATE INDEX library_favorite_index_novels ON novels(favorite) WHERE favorite = 1;
@@ -162,8 +163,8 @@ WHERE favorite = 0
 AND source IN :sourceIds;
 
 insert:
-INSERT INTO novels(source, url, author, description, notes, genre, title, status, thumbnail_url, favorite, pinned, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified, date_added, update_strategy, calculate_interval, last_modified_at, version, is_syncing)
-VALUES (:source, :url, :author, :description, :notes, :genre, :title, :status, :thumbnailUrl, :favorite, :pinned, :lastUpdate, :nextUpdate, :initialized, :viewerFlags, :chapterFlags, :coverLastModified, :dateAdded, :updateStrategy, :calculateInterval, 0, :version, 0);
+INSERT INTO novels(source, url, author, description, notes, genre, title, status, thumbnail_url, favorite, pinned, last_update, next_update, initialized, viewer, chapter_flags, cover_last_modified, date_added, update_strategy, calculate_interval, last_modified_at, version, is_syncing, completed_at)
+VALUES (:source, :url, :author, :description, :notes, :genre, :title, :status, :thumbnailUrl, :favorite, :pinned, :lastUpdate, :nextUpdate, :initialized, :viewerFlags, :chapterFlags, :coverLastModified, :dateAdded, :updateStrategy, :calculateInterval, 0, :version, 0, :completedAt);
 
 update:
 UPDATE novels SET
@@ -188,7 +189,8 @@ UPDATE novels SET
     update_strategy = coalesce(:updateStrategy, update_strategy),
     calculate_interval = coalesce(:calculateInterval, calculate_interval),
     version = coalesce(:version, version),
-    is_syncing = coalesce(:isSyncing, is_syncing)
+    is_syncing = coalesce(:isSyncing, is_syncing),
+    completed_at = coalesce(:completedAt, completed_at)
 WHERE _id = :novelId;
 
 updateMetadata:

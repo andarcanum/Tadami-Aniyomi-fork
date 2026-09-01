@@ -25,6 +25,8 @@ data class NovelUpdate(
     val updateStrategy: UpdateStrategy? = null,
     val initialized: Boolean? = null,
     val version: Long? = null,
+    /** Set once, on first witnessed completion; coalesce in SQL keeps existing value on null. */
+    val completedAt: Long? = null,
 )
 
 fun Novel.toNovelUpdate(): NovelUpdate {
@@ -51,5 +53,6 @@ fun Novel.toNovelUpdate(): NovelUpdate {
         updateStrategy = updateStrategy,
         initialized = initialized,
         version = version,
+        completedAt = completedAt,
     )
 }

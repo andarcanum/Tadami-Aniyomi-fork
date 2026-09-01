@@ -132,6 +132,7 @@ class StatsReadCountSqlTest {
             version = 0L,
             rating = -1.0,
             memo = kotlinx.serialization.json.JsonObject(emptyMap()),
+            completedAt = null,
         )
     }
 
@@ -176,6 +177,7 @@ class StatsReadCountSqlTest {
             updateStrategy = UpdateStrategy.ALWAYS_UPDATE,
             calculateInterval = 0L,
             version = 0L,
+            completedAt = null,
         )
     }
 
@@ -228,6 +230,7 @@ class StatsReadCountSqlTest {
             seasonSourceOrder = 0L,
             backgroundUrl = null,
             backgroundLastModified = 0L,
+            completedAt = null,
         )
     }
 

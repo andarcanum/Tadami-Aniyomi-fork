@@ -93,6 +93,7 @@ class NovelRepositoryImpl(
                 dateAdded = novel.dateAdded,
                 updateStrategy = novel.updateStrategy,
                 version = novel.version,
+                completedAt = novel.completedAt,
             )
             db.novelsQueries.selectLastInsertedRowId()
         }
@@ -133,6 +134,7 @@ class NovelRepositoryImpl(
                         dateAdded = toInsert.dateAdded,
                         updateStrategy = toInsert.updateStrategy,
                         version = toInsert.version,
+                        completedAt = toInsert.completedAt,
                     )
                     val insertedId = db.novelsQueries.selectLastInsertedRowId().executeAsOne()
                     toInsert.copy(id = insertedId)
@@ -170,6 +172,7 @@ class NovelRepositoryImpl(
                         updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
                         version = updated.version,
                         isSyncing = 0,
+                        completedAt = updated.completedAt,
                     )
                     updated
                 } else if (autoFavorite && !local.favorite) {
@@ -198,6 +201,7 @@ class NovelRepositoryImpl(
                         updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
                         version = updated.version,
                         isSyncing = 0,
+                        completedAt = updated.completedAt,
                     )
                     updated
                 } else {
@@ -232,6 +236,7 @@ class NovelRepositoryImpl(
                             updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
                             version = updated.version,
                             isSyncing = 0,
+                            completedAt = updated.completedAt,
                         )
                         updated
                     } else {
@@ -332,6 +337,7 @@ class NovelRepositoryImpl(
                     updateStrategy = value.updateStrategy?.let(MangaUpdateStrategyColumnAdapter::encode),
                     version = value.version,
                     isSyncing = 0,
+                    completedAt = value.completedAt,
                 )
 
                 value.favorite?.let { isFavorite ->

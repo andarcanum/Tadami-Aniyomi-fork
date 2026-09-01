@@ -151,6 +151,7 @@ class AnimeRepositoryImpl(
                         episodeFlags = toInsert.episodeFlags,
                         coverLastModified = toInsert.coverLastModified,
                         backgroundLastModified = toInsert.backgroundLastModified,
+                        completedAt = toInsert.completedAt,
                         dateAdded = toInsert.dateAdded,
                         updateStrategy = toInsert.updateStrategy,
                         version = toInsert.version,
@@ -204,6 +205,7 @@ class AnimeRepositoryImpl(
                         seasonFlags = updated.seasonFlags,
                         seasonNumber = updated.seasonNumber,
                         seasonSourceOrder = updated.seasonSourceOrder,
+                        completedAt = updated.completedAt,
                     )
                     updated
                 } else if (autoFavorite && !local.favorite) {
@@ -240,6 +242,7 @@ class AnimeRepositoryImpl(
                         seasonFlags = updated.seasonFlags,
                         seasonNumber = updated.seasonNumber,
                         seasonSourceOrder = updated.seasonSourceOrder,
+                        completedAt = updated.completedAt,
                     )
                     updated
                 } else {
@@ -282,6 +285,7 @@ class AnimeRepositoryImpl(
                             seasonFlags = updated.seasonFlags,
                             seasonNumber = updated.seasonNumber,
                             seasonSourceOrder = updated.seasonSourceOrder,
+                            completedAt = updated.completedAt,
                         )
                         updated
                     } else {
@@ -316,6 +320,7 @@ class AnimeRepositoryImpl(
                 episodeFlags = anime.episodeFlags,
                 coverLastModified = anime.coverLastModified,
                 backgroundLastModified = anime.backgroundLastModified,
+                completedAt = anime.completedAt,
                 dateAdded = anime.dateAdded,
                 updateStrategy = anime.updateStrategy,
                 version = anime.version,
@@ -442,6 +447,7 @@ class AnimeRepositoryImpl(
                     seasonFlags = value.seasonFlags,
                     seasonNumber = value.seasonNumber,
                     seasonSourceOrder = value.seasonSourceOrder,
+                    completedAt = value.completedAt,
                 )
 
                 // Emit achievement event if favorite status changed

@@ -811,7 +811,7 @@ class ReaderViewModel @JvmOverloads constructor(
         val allChapters = chapterList.map { it.chapter }
         if (allChapters.all { it.read }) {
             eventBus.tryEmit(AchievementEvent.MangaCompleted(mangaId))
-            recordCompletionIfNeeded(allChapters, chapterWasUnread)
+            recordCompletionIfNeeded(readerChapter, allChapters)
             maybeShowFinale(readerChapter, allChapters, chapterWasUnread)
         }
 
@@ -881,12 +881,20 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     /**
-     * Persists the first-witnessed completion timestamp (keepsake for the title-screen
-     * finished stamp; travels through backups). Independent of the plate preference.
+     * Persists the keepsake completion timestamp (title-screen finished stamp; travels through
+     * backups). Independent of the plate preference. Refreshed whenever the final chapter of a
+     * completed entry is end-read again.
      */
-    private fun recordCompletionIfNeeded(chapters: List<Chapter>, chapterWasUnread: Boolean) {
+    private fun recordCompletionIfNeeded(readerChapter: ReaderChapter, chapters: List<Chapter>) {
         val currentManga = manga ?: return
-        if (!shouldRecordCompletion(currentManga, chapters, chapterWasUnread)) return
+        if (!shouldRecordCompletion(
+                currentManga,
+                chapters,
+                finishedChapterIsLast = readerChapter.chapter.id == chapters.lastOrNull()?.id,
+            )
+        ) {
+            return
+        }
         val timestamp = System.currentTimeMillis()
         viewModelScope.launchNonCancellable {
             updateManga.await(MangaUpdate(id = currentManga.id, completedAt = timestamp))
@@ -925,7 +933,8 @@ class ReaderViewModel @JvmOverloads constructor(
                 if (interstitial?.nextManga != null) return@launchIO
             }
             pendingFinaleState = ReaderFinaleState(
-                manga = currentManga,
+                title = currentManga.displayTitle,
+                coverData = currentManga,
                 chapterCount = allChapters.size,
                 daysOnShelf = daysOnShelf(currentManga.dateAdded),
                 finishedOn = DateFormat.getDateInstance(DateFormat.SHORT).format(Date()),

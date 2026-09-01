@@ -52,6 +52,8 @@ data class Anime(
     val customDescription: String? = null,
     val customGenre: List<String>? = null,
     val customStatus: Long? = null,
+    /** Timestamp of the first witnessed completion (last episode watched in the player). */
+    val completedAt: Long? = null,
     @kotlin.jvm.Transient
     val memo: JsonObject = JsonObject.EMPTY,
 ) : Serializable {

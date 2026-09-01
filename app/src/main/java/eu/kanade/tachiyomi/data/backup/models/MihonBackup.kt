@@ -92,6 +92,7 @@ fun BackupManga.toBackupNovel(): BackupNovel {
         favoriteModifiedAt = this.favoriteModifiedAt,
         excludedScanlators = this.excludedScanlators,
         version = this.version,
+        completedAt = this.completedAt,
     )
 }
 

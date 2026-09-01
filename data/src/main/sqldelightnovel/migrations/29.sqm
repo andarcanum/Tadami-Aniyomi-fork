@@ -1,0 +1,3 @@
+-- Keepsake completion timestamp for a novel entry (first time the last chapter was read
+-- in the reader). Nullable: old rows and never-witnessed completions carry no date.
+ALTER TABLE novels ADD COLUMN completed_at INTEGER;

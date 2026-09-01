@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -68,8 +69,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -86,6 +89,7 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.AuroraEntryHoldToRefresh
 import eu.kanade.presentation.entries.components.EntryBottomActionMenu
+import eu.kanade.presentation.entries.components.FinaleStamp
 import eu.kanade.presentation.entries.components.aurora.AuroraTitleHeroActionFab
 import eu.kanade.presentation.entries.components.aurora.AuroraZIndex
 import eu.kanade.presentation.entries.components.aurora.auroraPosterLongPress
@@ -121,6 +125,7 @@ import eu.kanade.presentation.theme.auroraHeaderIconSurface
 import eu.kanade.presentation.util.formatChapterNumber
 import eu.kanade.tachiyomi.novelsource.online.HttpNovelSource
 import eu.kanade.tachiyomi.novelsource.online.NovelHttpSource
+import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.online.HttpSource
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterDisplayRow
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
@@ -148,7 +153,9 @@ import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.collectAsState
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.text.DateFormat
 import java.time.Instant
+import java.util.Date
 
 @Composable
 fun NovelScreenAuroraImpl(
@@ -353,6 +360,16 @@ fun NovelScreenAuroraImpl(
     val contentMaxWidthDp = auroraAdaptiveSpec.entryMaxWidthDp
     val useTwoPaneLayout = shouldUseNovelAuroraTwoPane(auroraAdaptiveSpec.deviceClass)
     val uiPreferences = remember { Injekt.get<UiPreferences>() }
+    // Keepsake «finished» stamp: live predicate (completed status + every chapter read) + pref;
+    // keepsake date from the persisted first completion.
+    val finishedStampEnabled by uiPreferences.auroraFinishedStampEnabled().collectAsState()
+    val showFinishedStamp = finishedStampEnabled &&
+        novel.displayStatus == SManga.COMPLETED.toLong() &&
+        state.chapters.isNotEmpty() &&
+        readChapterCount >= state.chapters.size
+    val finishedStampDate = remember(novel.completedAt) {
+        novel.completedAt?.let { DateFormat.getDateInstance(DateFormat.SHORT).format(Date(it)) }
+    }
     val sourcePreferences = remember { Injekt.get<SourcePreferences>() }
     val entrySuggestionsEnabled by sourcePreferences.entrySuggestionsEnabled().collectAsState()
     val entrySuggestionsExpandInline by uiPreferences.entrySuggestionsExpandInline().collectAsState()
@@ -533,6 +550,30 @@ fun NovelScreenAuroraImpl(
                             .titleScreenPosterEntrance(titleStaggerState)
                             .hazeSource(state = hazeState),
                     )
+
+                    // Keepsake «finished» stamp pinned to the poster corner, clear below the
+                    // top bar row, fading out together with the poster while scrolling.
+                    if (showFinishedStamp && LocalLayoutDirection.current != LayoutDirection.Rtl) {
+                        val stampAlpha = if (firstVisibleItemIndex > 0) {
+                            0f
+                        } else {
+                            with(LocalDensity.current) {
+                                (1f - scrollOffset / 360.dp.toPx()).coerceIn(0f, 1f)
+                            }
+                        }
+                        FinaleStamp(
+                            label = stringResource(MR.strings.reader_finale_stamp_label),
+                            date = finishedStampDate,
+                            accent = colors.accent,
+                            size = 88.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .zIndex(AuroraZIndex.SNACKBAR + 1f)
+                                .statusBarsPadding()
+                                .padding(top = 60.dp, end = 14.dp)
+                                .graphicsLayer { alpha = stampAlpha },
+                        )
+                    }
                 } else {
                     AuroraBackground(
                         modifier = Modifier
@@ -657,6 +698,8 @@ fun NovelScreenAuroraImpl(
                                         sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
                                             ?: (state.source as? HttpSource)?.headers?.toMap(),
                                         sourceClient = sourceClient,
+                                        showFinishedStamp = showFinishedStamp,
+                                        finishedStampDate = finishedStampDate,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 1),
@@ -1603,6 +1646,8 @@ fun NovelScreenAuroraImpl(
                                 sourceHeaders = (state.source as? NovelHttpSource)?.headers?.toMap()
                                     ?: (state.source as? HttpSource)?.headers?.toMap(),
                                 sourceClient = sourceClient,
+                                showFinishedStamp = showFinishedStamp,
+                                finishedStampDate = finishedStampDate,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .auroraCenteredMaxWidth(contentMaxWidthDp)

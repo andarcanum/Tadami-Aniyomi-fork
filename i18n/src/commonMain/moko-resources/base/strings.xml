@@ -1108,6 +1108,7 @@
     <string name="reader_finale_title">THE END</string>
     <string name="reader_finale_subtitle">You\'ve read every chapter here</string>
     <string name="reader_finale_back_to_manga">Back to manga</string>
+    <string name="reader_finale_back_to_novel">Back to novel</string>
     <string name="reader_finale_stay">Stay</string>
     <string name="reader_finale_stamp_label">Finished</string>
     <string name="pref_reader_finale_card">Celebrate finishing a series</string>

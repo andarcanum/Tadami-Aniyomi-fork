@@ -35,6 +35,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.domain.source.interactor.NovelReaderIncognitoState
 import eu.kanade.presentation.reader.novel.LocalNovelChapterHighlights
 import eu.kanade.presentation.reader.novel.NovelAtmosphereBackground
+import eu.kanade.presentation.reader.novel.NovelFinaleOverlay
 import eu.kanade.presentation.reader.novel.NovelReaderBackdropSession
 import eu.kanade.presentation.reader.novel.NovelReaderChapterHandoffPolicy
 import eu.kanade.presentation.reader.novel.NovelReaderPageReaderHandoffTarget
@@ -510,40 +511,53 @@ class NovelReaderScreen(
                         ),
                     )
                 }
-                successState.seriesInterstitialState?.let { seriesInterstitialState ->
-                    val continueAction: (() -> Unit)? = seriesInterstitialState.nextNovel?.let { nextNovel ->
-                        seriesInterstitialState.nextChapterId?.let { nextChapterId ->
-                            {
-                                coroutineScope.launch {
-                                    screenModel.persistCurrentChapterExitState()
-                                    screenModel.clearSeriesInterstitial()
-                                    NovelReaderSystemUiSession.markInternalChapterReplace()
-                                    NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
-                                        NovelReaderPageReaderHandoffTarget.START,
-                                    )
-                                    navigator.replace(
-                                        NovelReaderScreen(
-                                            nextChapterId,
-                                            sourceId = nextNovel.source,
-                                            seriesId = seriesId,
-                                        ),
-                                    )
+                successState.finaleState?.let { finaleState ->
+                    NovelFinaleOverlay(
+                        state = finaleState,
+                        reducedMotion = eu.kanade.presentation.theme.AuroraTheme.colors.isEInk,
+                        onBackToNovel = {
+                            screenModel.clearFinale()
+                            navigator.pop()
+                        },
+                        onStay = screenModel::clearFinale,
+                    )
+                }
+                if (successState.finaleState == null) {
+                    successState.seriesInterstitialState?.let { seriesInterstitialState ->
+                        val continueAction: (() -> Unit)? = seriesInterstitialState.nextNovel?.let { nextNovel ->
+                            seriesInterstitialState.nextChapterId?.let { nextChapterId ->
+                                {
+                                    coroutineScope.launch {
+                                        screenModel.persistCurrentChapterExitState()
+                                        screenModel.clearSeriesInterstitial()
+                                        NovelReaderSystemUiSession.markInternalChapterReplace()
+                                        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                                            NovelReaderPageReaderHandoffTarget.START,
+                                        )
+                                        navigator.replace(
+                                            NovelReaderScreen(
+                                                nextChapterId,
+                                                sourceId = nextNovel.source,
+                                                seriesId = seriesId,
+                                            ),
+                                        )
+                                    }
                                 }
                             }
                         }
+                        SeriesInterstitialOverlay(
+                            state = seriesInterstitialState,
+                            onBackToSeries = {
+                                coroutineScope.launch {
+                                    screenModel.persistCurrentChapterExitState()
+                                    screenModel.clearSeriesInterstitial()
+                                    navigator.pop()
+                                }
+                            },
+                            onContinue = continueAction,
+                            onDismissRequest = screenModel::clearSeriesInterstitial,
+                        )
                     }
-                    SeriesInterstitialOverlay(
-                        state = seriesInterstitialState,
-                        onBackToSeries = {
-                            coroutineScope.launch {
-                                screenModel.persistCurrentChapterExitState()
-                                screenModel.clearSeriesInterstitial()
-                                navigator.pop()
-                            }
-                        },
-                        onContinue = continueAction,
-                        onDismissRequest = screenModel::clearSeriesInterstitial,
-                    )
                 }
             }
         }

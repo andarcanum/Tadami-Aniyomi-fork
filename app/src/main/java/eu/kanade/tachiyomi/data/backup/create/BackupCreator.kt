@@ -500,6 +500,7 @@ class BackupCreator(
             customDescription = this.customDescription,
             customGenre = this.customGenre,
             customStatus = this.customStatus,
+            completedAt = this.completedAt,
         )
     }
 

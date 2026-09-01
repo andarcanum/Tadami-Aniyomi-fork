@@ -7,11 +7,13 @@ import tachiyomi.domain.entries.manga.model.Manga
 
 /**
  * State for the one-time «THE END» plate shown when the last chapter of a truly
- * completed manga gets read. See docs/plans/2026-08-02_reader_finale.md.
+ * completed entry gets read. Media-agnostic: [coverData] is any model the app's
+ * cover fetchers understand (Manga, Novel, ...). See docs/plans/2026-08-02_reader_finale.md.
  */
 @Immutable
 data class ReaderFinaleState(
-    val manga: Manga,
+    val title: String,
+    val coverData: Any?,
     val chapterCount: Int,
     val daysOnShelf: Long?,
     val finishedOn: String,
@@ -40,17 +42,17 @@ fun shouldCelebrateFinale(
 
 /**
  * Pure gate for persisting the keepsake completion date. Independent of the plate setting:
- * the fact that a story was finished outlives the celebration UI. First witnessed
- * completion wins — an existing [Manga.completedAt] is never overwritten — and
- * bulk-marking from the chapter list never counts (only real reading of an unread chapter).
+ * the fact that a story was finished outlives the celebration UI. The date tracks the last
+ * witnessed end-read of the final chapter of a completed entry (finishing it again refreshes
+ * the stamp), while bulk-marking never counts because only the reader's completion path calls
+ * this gate.
  */
 fun shouldRecordCompletion(
     manga: Manga,
     chapters: List<Chapter>,
-    chapterWasUnread: Boolean,
+    finishedChapterIsLast: Boolean,
 ): Boolean =
-    chapterWasUnread &&
-        manga.completedAt == null &&
+    finishedChapterIsLast &&
         manga.displayStatus == SManga.COMPLETED.toLong() &&
         chapters.isNotEmpty() &&
         chapters.all { it.read }

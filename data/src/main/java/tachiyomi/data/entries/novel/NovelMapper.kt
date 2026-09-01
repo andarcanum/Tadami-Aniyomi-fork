@@ -39,6 +39,7 @@ object NovelMapper {
         customGenre: List<String>?,
         customStatus: Long?,
         memo: JsonObject,
+        completedAt: Long?,
     ): Novel = Novel(
         id = id,
         source = source,
@@ -70,6 +71,7 @@ object NovelMapper {
         customGenre = customGenre,
         customStatus = customStatus,
         memo = memo,
+        completedAt = completedAt,
     )
 
     fun mapLibraryNovel(
@@ -104,6 +106,7 @@ object NovelMapper {
         customGenre: List<String>?,
         customStatus: Long?,
         memo: JsonObject,
+        completedAt: Long?,
         totalCount: Long,
         readCount: Double,
         latestUpload: Long,
@@ -144,6 +147,7 @@ object NovelMapper {
             customGenre,
             customStatus,
             memo,
+            completedAt,
         ),
         category = category,
         totalChapters = totalCount,

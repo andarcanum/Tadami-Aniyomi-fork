@@ -1,10 +1,16 @@
 package eu.kanade.tachiyomi.ui.reader.model
 
+import eu.kanade.domain.entries.shouldRecordAnimeCompletion
+import eu.kanade.domain.entries.shouldRecordNovelCompletion
+import eu.kanade.tachiyomi.data.database.models.anime.EpisodeImpl
 import eu.kanade.tachiyomi.data.database.models.manga.ChapterImpl
 import eu.kanade.tachiyomi.source.model.SManga
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
+import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.manga.model.Manga
+import tachiyomi.domain.entries.novel.model.Novel
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
 
 class ReaderFinaleTest {
 
@@ -129,20 +135,29 @@ class ReaderFinaleTest {
     }
 
     @Test
-    fun `first witnessed completion is recorded`() {
+    fun `completion date is recorded when the final chapter is end-read`() {
         shouldRecordCompletion(
             manga = manga(),
             chapters = readChapters,
-            chapterWasUnread = true,
+            finishedChapterIsLast = true,
         ) shouldBe true
     }
 
     @Test
-    fun `existing completion date is never overwritten`() {
+    fun `completion date refreshes when the finale is end-read again`() {
         shouldRecordCompletion(
             manga = manga().copy(completedAt = 1L),
             chapters = readChapters,
-            chapterWasUnread = true,
+            finishedChapterIsLast = true,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `mid-chapter end-read does not touch the date`() {
+        shouldRecordCompletion(
+            manga = manga(),
+            chapters = readChapters,
+            finishedChapterIsLast = false,
         ) shouldBe false
     }
 
@@ -151,16 +166,83 @@ class ReaderFinaleTest {
         shouldRecordCompletion(
             manga = manga(status = SManga.ONGOING.toLong()),
             chapters = readChapters,
-            chapterWasUnread = true,
+            finishedChapterIsLast = true,
+        ) shouldBe false
+    }
+
+    private fun episode(seen: Boolean) = EpisodeImpl().apply {
+        id = 1L
+        this.seen = seen
+    }
+
+    private fun anime(status: Long = SManga.COMPLETED.toLong()) =
+        Anime.create().copy(id = 1L, status = status)
+
+    private fun novel(status: Long = SManga.COMPLETED.toLong()) =
+        Novel.create().copy(id = 1L, status = status)
+
+    private fun novelChapter(read: Boolean) = NovelChapter.create().copy(id = 1L, read = read)
+
+    @Test
+    fun `anime completion date is recorded on final episode end-read`() {
+        shouldRecordAnimeCompletion(
+            anime = anime(),
+            episodes = listOf(episode(seen = true)),
+            finishedEpisodeIsLast = true,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `anime completion date refreshes on rewatch of the finale`() {
+        shouldRecordAnimeCompletion(
+            anime = anime().copy(completedAt = 1L),
+            episodes = listOf(episode(seen = true)),
+            finishedEpisodeIsLast = true,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `ongoing anime is not recorded`() {
+        shouldRecordAnimeCompletion(
+            anime = anime(status = SManga.ONGOING.toLong()),
+            episodes = listOf(episode(seen = true)),
+            finishedEpisodeIsLast = true,
         ) shouldBe false
     }
 
     @Test
-    fun `bulk-marked chapter does not record a date`() {
-        shouldRecordCompletion(
-            manga = manga(),
-            chapters = readChapters,
-            chapterWasUnread = false,
+    fun `novel completion date is recorded on final chapter end-read`() {
+        shouldRecordNovelCompletion(
+            novel = novel(),
+            chapters = listOf(novelChapter(read = true)),
+            finishedChapterIsLast = true,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `novel completion date refreshes on re-read of the finale`() {
+        shouldRecordNovelCompletion(
+            novel = novel().copy(completedAt = 1L),
+            chapters = listOf(novelChapter(read = true)),
+            finishedChapterIsLast = true,
+        ) shouldBe true
+    }
+
+    @Test
+    fun `ongoing novel is not recorded`() {
+        shouldRecordNovelCompletion(
+            novel = novel(status = SManga.ONGOING.toLong()),
+            chapters = listOf(novelChapter(read = true)),
+            finishedChapterIsLast = true,
+        ) shouldBe false
+    }
+
+    @Test
+    fun `novel with unread chapters is not recorded`() {
+        shouldRecordNovelCompletion(
+            novel = novel(),
+            chapters = listOf(novelChapter(read = true), novelChapter(read = false)),
+            finishedChapterIsLast = true,
         ) shouldBe false
     }
 }

@@ -4,7 +4,9 @@ import android.os.SystemClock
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.entries.novel.model.toSNovel
+import eu.kanade.domain.entries.shouldRecordNovelCompletion
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.source.interactor.NovelReaderIncognitoState
 import eu.kanade.domain.source.novel.interactor.GetNovelIncognitoState
@@ -25,10 +27,13 @@ import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.novel.sortedByNovelReadingOrder
+import eu.kanade.tachiyomi.ui.reader.model.ReaderFinaleState
+import eu.kanade.tachiyomi.ui.reader.model.daysOnShelf
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.CompositeNovelDictionaryProvider
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.OfflineStarDictDictionaryProvider
 import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToHtml
@@ -99,6 +104,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsTextSource
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsWordTokenizer
 import eu.kanade.tachiyomi.ui.reader.novel.tts.SharedNovelTtsSessionStore
 import eu.kanade.tachiyomi.ui.reader.novel.tts.resolveNovelTtsVoiceSelection
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import eu.kanade.tachiyomi.util.system.isNightMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -140,6 +146,7 @@ import tachiyomi.domain.book.novel.model.NovelHighlight
 import tachiyomi.domain.book.novel.model.NovelHighlightWithChapter
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
+import tachiyomi.domain.entries.novel.model.NovelUpdate
 import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
@@ -150,6 +157,8 @@ import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.text.DateFormat
+import java.util.Date
 import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -189,6 +198,8 @@ class NovelReaderScreenModel(
     ),
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
     private val activityDataRepository: ActivityDataRepository = Injekt.get(),
+    private val updateNovel: UpdateNovel = Injekt.get(),
+    private val mangaReaderPreferences: ReaderPreferences = Injekt.get(),
     private val addNovelHighlight: tachiyomi.domain.book.novel.interactor.AddNovelHighlight = Injekt.get(),
     private val updateNovelHighlight: tachiyomi.domain.book.novel.interactor.UpdateNovelHighlight = Injekt.get(),
     private val deleteNovelHighlight: tachiyomi.domain.book.novel.interactor.DeleteNovelHighlight = Injekt.get(),
@@ -943,6 +954,8 @@ class NovelReaderScreenModel(
         get() = translationController.snapshot()
 
     private var seriesInterstitialState: SeriesInterstitialState? = null
+    private var finaleShownForNovelId: Long? = null
+    private var finaleState: ReaderFinaleState? = null
     private var seriesInterstitialShownForChapterId: Long? = null
 
     /**
@@ -1225,6 +1238,62 @@ class NovelReaderScreenModel(
     fun clearSeriesInterstitial() {
         setSeriesInterstitialState(null)
     }
+
+    fun clearFinale() = setFinaleState(null)
+
+    private fun setFinaleState(value: ReaderFinaleState?) {
+        finaleState = value
+        val currentState = mutableState.value
+        if (currentState is State.Success) {
+            mutableState.value = currentState.copy(finaleState = value)
+        }
+    }
+
+    /**
+     * Chapter reader and book mode both call this when a completion was witnessed
+     * (becameRead && every chapter read). Persists the keepsake date and shows the one-time
+     * «THE END» plate — novels have no end-of-series transition page, so the completion
+     * moment itself is the reveal point (documented divergence from manga).
+     */
+    override fun onNovelCompletedWitnessed(chapter: NovelChapter) {
+        recordNovelCompletionIfNeeded(chapter)
+        maybeShowNovelFinale()
+    }
+
+    private fun recordNovelCompletionIfNeeded(chapter: NovelChapter) {
+        val novel = currentNovel ?: return
+        if (!shouldRecordNovelCompletion(
+                novel,
+                fullChapterOrderList,
+                finishedChapterIsLast = chapter.id == fullChapterOrderList.lastOrNull()?.id,
+            )
+        ) {
+            return
+        }
+        val timestamp = System.currentTimeMillis()
+        screenModelScope.launch {
+            updateNovel.await(NovelUpdate(id = novel.id, completedAt = timestamp))
+        }
+    }
+
+    private fun maybeShowNovelFinale() {
+        val novel = currentNovel ?: return
+        if (!mangaReaderPreferences.showFinaleCard().get()) return
+        if (finaleShownForNovelId == novel.id) return
+        if (finaleState != null) return
+        if (novel.displayStatus != SManga.COMPLETED.toLong()) return
+        finaleShownForNovelId = novel.id
+        setFinaleState(
+            ReaderFinaleState(
+                title = novel.displayTitle,
+                coverData = novel,
+                chapterCount = fullChapterOrderList.size,
+                daysOnShelf = daysOnShelf(novel.dateAdded),
+                finishedOn = DateFormat.getDateInstance(DateFormat.SHORT).format(Date()),
+                nightVeil = eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin(),
+            ),
+        )
+    }
     private suspend fun resolveSeriesInterstitialState(): SeriesInterstitialState? {
         val targetSeriesId = seriesId ?: return null
         val novel = currentNovel ?: return null
@@ -1497,6 +1566,7 @@ class NovelReaderScreenModel(
             nextChapterId = chapterNavigation.nextChapterId,
             nextChapterName = chapterNavigation.nextChapterName,
             seriesInterstitialState = seriesInterstitialState,
+            finaleState = finaleState,
             chapterWebUrl = chapterWebUrl,
             selectedTextTranslationSelection = selectionTranslationSnapshot.selection,
             selectedTextTranslationUiState = selectionTranslationSnapshot.translationUiState,
@@ -1609,11 +1679,16 @@ class NovelReaderScreenModel(
             chapter = chapter,
             becameRead = becameRead,
         )
-        val shouldEmitNovelCompleted = becameRead &&
-            novelReaderNovelCompleted(
-                fullChapterList = fullChapterOrderList,
-                visibleWindow = chapterOrderList,
-            )
+        val allReadNow = novelReaderNovelCompleted(
+            fullChapterList = fullChapterOrderList,
+            visibleWindow = chapterOrderList,
+        )
+        val shouldEmitNovelCompleted = becameRead && allReadNow
+        // The keepsake date refreshes on every witnessed end-read of the final chapter
+        // (including re-reads); the plate itself only shows on a fresh completion.
+        if (allReadNow) {
+            onNovelCompletedWitnessed(chapter)
+        }
         progressPersistenceController.enqueueProgressPersistence(
             PendingProgressPersistence(
                 chapterId = chapter.id,
@@ -2446,6 +2521,7 @@ class NovelReaderScreenModel(
             val nextChapterId: Long?,
             val nextChapterName: String? = null,
             val seriesInterstitialState: SeriesInterstitialState? = null,
+            val finaleState: ReaderFinaleState? = null,
             val chapterWebUrl: String?,
             val selectedTextTranslationSelection: NovelSelectedTextSelection? = null,
             val selectedTextTranslationUiState: NovelSelectedTextTranslationUiState =

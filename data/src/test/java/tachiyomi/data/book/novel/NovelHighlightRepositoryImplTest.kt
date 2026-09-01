@@ -80,6 +80,7 @@ class NovelHighlightRepositoryImplTest {
             calculateInterval = 0,
             pinned = false,
             version = 0,
+            completedAt = null,
         )
         return database.novelsQueries.selectLastInsertedRowId().executeAsOne()
     }

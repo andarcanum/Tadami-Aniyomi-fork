@@ -74,6 +74,7 @@ class NovelHistoryRepositoryImplTest {
             calculateInterval = 0,
             pinned = false,
             version = 0,
+            completedAt = null,
         )
         novelId = database.novelsQueries.selectLastInsertedRowId().executeAsOne()
 

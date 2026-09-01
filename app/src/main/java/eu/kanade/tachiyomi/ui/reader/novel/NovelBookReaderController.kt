@@ -53,6 +53,7 @@ internal interface NovelBookReaderHost {
     )
     fun bookAdoptBookModeChapter(chapterId: Long)
     fun bookEnqueueProgressPersistence(update: PendingProgressPersistence)
+    fun onNovelCompletedWitnessed(chapter: NovelChapter)
     fun bookApplyBookSectionTranslation(chapterId: Long, bodyHtml: String): String
     fun bookGeminiTranslationVisible(): Boolean
     fun bookGoogleTranslationVisible(): Boolean
@@ -802,6 +803,16 @@ internal class NovelBookReaderController(
             bookModeMarkedReadChapterIds += chapterId
             val becameRead = !chapter.read
             host.bookMarkChapterReadInMemory(chapterId)
+            // "Novel completed" has to check the whole novel: the resident window is anchored
+            // to the entry chapter and does not slide like the chapter reader's window, so a
+            // window-only check would fire long before a long book is actually finished.
+            val emitNovelCompleted = becameRead &&
+                host.bookFullChapterOrderList()
+                    .ifEmpty { host.bookChapterOrderList() }
+                    .all { it.read }
+            if (emitNovelCompleted) {
+                host.onNovelCompletedWitnessed(chapter)
+            }
             host.bookEnqueueProgressPersistence(
                 PendingProgressPersistence(
                     chapterId = chapter.id,
@@ -812,13 +823,7 @@ internal class NovelBookReaderController(
                     // the chapter-by-chapter reader, and book mode resumes from its own locator.
                     lastPageRead = chapter.lastPageRead,
                     emitReadEvent = becameRead,
-                    // "Novel completed" has to check the whole novel: the resident window is anchored
-                    // to the entry chapter and does not slide like the chapter reader's window, so a
-                    // window-only check would fire long before a long book is actually finished.
-                    emitNovelCompleted = becameRead &&
-                        host.bookFullChapterOrderList()
-                            .ifEmpty { host.bookChapterOrderList() }
-                            .all { it.read },
+                    emitNovelCompleted = emitNovelCompleted,
                     sessionReadDurationMs = 0L,
                 ),
             )

@@ -148,4 +148,5 @@ private fun Novel.toBackupNovel() =
         customDescription = this.customDescription,
         customGenre = this.customGenre,
         customStatus = this.customStatus,
+        completedAt = this.completedAt,
     )

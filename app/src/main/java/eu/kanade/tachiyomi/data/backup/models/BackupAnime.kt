@@ -46,6 +46,7 @@ data class BackupAnime(
     @ProtoNumber(803) var customDescription: String? = null,
     @ProtoNumber(804) var customGenre: List<String>? = null,
     @ProtoNumber(805) var customStatus: Long? = null,
+    @ProtoNumber(806) var completedAt: Long? = null,
 
     // Aniyomi specific values
     @ProtoNumber(500) var backgroundUrl: String? = null,
@@ -89,6 +90,7 @@ data class BackupAnime(
             customDescription = this@BackupAnime.customDescription,
             customGenre = this@BackupAnime.customGenre,
             customStatus = this@BackupAnime.customStatus,
+            completedAt = this@BackupAnime.completedAt,
         )
     }
 }

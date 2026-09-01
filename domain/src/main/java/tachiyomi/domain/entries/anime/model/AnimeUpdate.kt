@@ -34,6 +34,8 @@ data class AnimeUpdate(
     val seasonFlags: Long? = null,
     val seasonNumber: Double? = null,
     val seasonSourceOrder: Long? = null,
+    /** Set once, on first witnessed completion; coalesce in SQL keeps existing value on null. */
+    val completedAt: Long? = null,
 )
 
 fun Anime.toAnimeUpdate(): AnimeUpdate {
@@ -68,5 +70,6 @@ fun Anime.toAnimeUpdate(): AnimeUpdate {
         seasonFlags = seasonFlags,
         seasonNumber = seasonNumber,
         seasonSourceOrder = seasonSourceOrder,
+        completedAt = completedAt,
     )
 }
