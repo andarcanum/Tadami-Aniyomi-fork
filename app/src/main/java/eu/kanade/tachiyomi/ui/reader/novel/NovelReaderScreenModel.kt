@@ -1563,6 +1563,7 @@ class NovelReaderScreenModel(
                 lastSavedScrollOffsetPx = lastSavedScrollOffsetPx,
                 lastSavedWebProgressPercent = lastSavedWebProgressPercent,
                 lastSavedPageReaderProgress = decodedPageReaderProgress,
+                lastSavedRawProgress = chapter.lastPageRead,
             ),
             previousChapterId = chapterNavigation.previousChapterId,
             previousChapterName = chapterNavigation.previousChapterName,
@@ -1849,6 +1850,7 @@ class NovelReaderScreenModel(
                     lastSavedScrollOffsetPx = lastSavedScrollOffsetPx,
                     lastSavedWebProgressPercent = lastSavedWebProgressPercent,
                     lastSavedPageReaderProgress = decodedPageReaderProgress,
+                    lastSavedRawProgress = progress,
                 ),
             )
         }
@@ -2557,6 +2559,7 @@ class NovelReaderScreenModel(
             val lastSavedScrollOffsetPx: Int get() = progress.lastSavedScrollOffsetPx
             val lastSavedWebProgressPercent: Int get() = progress.lastSavedWebProgressPercent
             val lastSavedPageReaderProgress: PageReaderProgress? get() = progress.lastSavedPageReaderProgress
+            val lastSavedRawProgress: Long get() = progress.lastSavedRawProgress
 
             val isGeminiTranslating: Boolean get() = geminiTranslation.isGeminiTranslating
             val geminiTranslationProgress: Int get() = geminiTranslation.geminiTranslationProgress
@@ -2609,6 +2612,12 @@ class NovelReaderScreenModel(
             val lastSavedScrollOffsetPx: Int = 0,
             val lastSavedWebProgressPercent: Int = 0,
             val lastSavedPageReaderProgress: PageReaderProgress? = null,
+            /**
+             * Raw persisted `chapter.lastPageRead` value. Its codec format (page reader / native
+             * scroll / web percent / legacy) decides the scale, so consumers that restore a
+             * position into a different renderer decode it instead of reusing derived fields.
+             */
+            val lastSavedRawProgress: Long = 0L,
         )
 
         /**

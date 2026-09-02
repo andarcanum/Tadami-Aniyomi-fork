@@ -1310,8 +1310,7 @@ internal fun NovelReaderContentHost(
         else -> nativeScrollItemsCount > 0
     }
     val initialContentPage = resolveInitialPageReaderPage(
-        savedPageReaderProgress = state.lastSavedPageReaderProgress,
-        legacyLastSavedIndex = state.lastSavedIndex,
+        savedRawProgress = state.lastSavedRawProgress,
         pageCount = pageReaderItemsCount.coerceAtLeast(1),
         chapterHandoffTarget = pageReaderChapterHandoffTarget,
     )

@@ -6,6 +6,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.decodeNativeScrollProgress
+import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
+import eu.kanade.tachiyomi.ui.reader.novel.decodeWebScrollProgressPercent
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelBookFlipAnimationSpeed
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelPageTransitionStyle
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
@@ -440,8 +443,7 @@ internal fun syncShowWebViewWithReaderSettings(
 }
 
 internal fun resolveInitialPageReaderPage(
-    savedPageReaderProgress: PageReaderProgress?,
-    legacyLastSavedIndex: Int,
+    savedRawProgress: Long,
     pageCount: Int,
     chapterHandoffTarget: NovelReaderPageReaderHandoffTarget = NovelReaderPageReaderHandoffTarget.SAVED,
 ): Int {
@@ -453,11 +455,33 @@ internal fun resolveInitialPageReaderPage(
         NovelReaderPageReaderHandoffTarget.SAVED -> Unit
     }
     if (!shouldRestoreSavedPageReaderProgress(chapterHandoffTarget)) return 0
-    val savedProgress = savedPageReaderProgress ?: return legacyLastSavedIndex.coerceIn(0, lastPageIndex)
-    if (safePageCount == 1 || savedProgress.totalItems <= 1) return 0
-    val sourceLastPageIndex = (savedProgress.totalItems - 1).coerceAtLeast(1)
-    val normalizedProgress = savedProgress.index.toFloat() / sourceLastPageIndex.toFloat()
-    return (normalizedProgress * lastPageIndex.toFloat()).roundToInt().coerceIn(0, lastPageIndex)
+    // Saved progress comes from whichever renderer was used last (see NovelReaderProgressCodec),
+    // and every format has its own scale: a native block index or a web percent must be restored
+    // by fraction, never reused as a raw page index (that clamps onto the last page and falsely
+    // trips the read threshold on the first progress report).
+    decodePageReaderProgress(savedRawProgress)?.let { saved ->
+        if (safePageCount == 1 || saved.totalItems <= 1) return 0
+        val sourceLastPageIndex = (saved.totalItems - 1).coerceAtLeast(1)
+        val normalizedProgress = saved.index.toFloat() / sourceLastPageIndex.toFloat()
+        return (normalizedProgress * lastPageIndex.toFloat()).roundToInt().coerceIn(0, lastPageIndex)
+    }
+    decodeNativeScrollProgress(savedRawProgress)?.let { saved ->
+        // The legacy no-total native format carries no scale, so the fraction is unrecoverable;
+        // start from the beginning instead of landing on a foreign-scale position.
+        val totalItems = saved.totalItems ?: return 0
+        if (safePageCount == 1 || totalItems <= 1) return 0
+        val sourceLastIndex = (totalItems - 1).coerceAtLeast(1)
+        val normalizedProgress = saved.index.toFloat() / sourceLastIndex.toFloat()
+        return (normalizedProgress * lastPageIndex.toFloat()).roundToInt().coerceIn(0, lastPageIndex)
+    }
+    decodeWebScrollProgressPercent(savedRawProgress)?.let { percent ->
+        if (safePageCount == 1) return 0
+        val normalizedProgress = percent.coerceIn(0, 100) / 100f
+        return (normalizedProgress * lastPageIndex.toFloat()).roundToInt().coerceIn(0, lastPageIndex)
+    }
+    // Pre-codec saves stored a plain page index in lastPageRead.
+    val legacyIndex = savedRawProgress.coerceAtLeast(0L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    return legacyIndex.coerceIn(0, lastPageIndex)
 }
 
 internal fun resolveInitialNativeReaderIndex(

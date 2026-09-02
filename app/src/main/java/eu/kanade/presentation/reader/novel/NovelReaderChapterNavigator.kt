@@ -48,9 +48,14 @@ internal class NovelReaderChapterNavigator(
     fun openPreviousChapterFromReader() {
         val currentState = state()
         val chapterId = currentState.previousChapterId ?: return
-        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
-            NovelReaderPageReaderHandoffTarget.END,
-        )
+        // Over a book the "chapter switch" is an in-book seek: state.chapter.id never changes, so a
+        // handoff mark set here would never be consumed and would leak into the next page-reader
+        // session of ANY novel (opening it at END and falsely tripping its read threshold).
+        if (!isBookMode()) {
+            NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                NovelReaderPageReaderHandoffTarget.END,
+            )
+        }
         // A seamless in-place chapter switch can detach the reader WebView (renderer may change
         // between chapters). If the WebView still holds view focus when it is detached, ViewGroup
         // restarts a focus search from the window root while Compose is applying the composition,
@@ -70,9 +75,13 @@ internal class NovelReaderChapterNavigator(
     fun openNextChapterFromReader() {
         val currentState = state()
         val chapterId = currentState.nextChapterId ?: return
-        NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
-            NovelReaderPageReaderHandoffTarget.START,
-        )
+        // Same book-mode reasoning as openPreviousChapterFromReader: no page-reader handoff happens
+        // over a book, so no mark may be left behind for a later session to consume.
+        if (!isBookMode()) {
+            NovelReaderChapterHandoffPolicy.markInternalChapterHandoff(
+                NovelReaderPageReaderHandoffTarget.START,
+            )
+        }
         webViewInstance()?.clearFocus()
         onOpenNextChapter?.invoke(chapterId)
     }

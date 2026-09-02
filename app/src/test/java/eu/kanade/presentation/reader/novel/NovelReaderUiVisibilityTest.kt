@@ -4449,8 +4449,7 @@ class NovelReaderUiVisibilityTest {
         assertEquals(
             8,
             resolveInitialPageReaderPage(
-                savedPageReaderProgress = PageReaderProgress(index = 4, totalItems = 5),
-                legacyLastSavedIndex = 0,
+                savedRawProgress = encodePageReaderProgress(index = 4, totalItems = 5),
                 pageCount = 9,
             ),
         )
@@ -4461,8 +4460,7 @@ class NovelReaderUiVisibilityTest {
         assertEquals(
             2,
             resolveInitialPageReaderPage(
-                savedPageReaderProgress = PageReaderProgress(index = 9, totalItems = 10),
-                legacyLastSavedIndex = 0,
+                savedRawProgress = encodePageReaderProgress(index = 9, totalItems = 10),
                 pageCount = 3,
             ),
         )
@@ -4473,8 +4471,7 @@ class NovelReaderUiVisibilityTest {
         assertEquals(
             6,
             resolveInitialPageReaderPage(
-                savedPageReaderProgress = PageReaderProgress(index = 0, totalItems = 1),
-                legacyLastSavedIndex = 0,
+                savedRawProgress = encodePageReaderProgress(index = 0, totalItems = 1),
                 pageCount = 7,
                 chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.END,
             ),
@@ -4486,10 +4483,70 @@ class NovelReaderUiVisibilityTest {
         assertEquals(
             0,
             resolveInitialPageReaderPage(
-                savedPageReaderProgress = PageReaderProgress(index = 5, totalItems = 6),
-                legacyLastSavedIndex = 5,
+                savedRawProgress = encodePageReaderProgress(index = 5, totalItems = 6),
                 pageCount = 7,
                 chapterHandoffTarget = NovelReaderPageReaderHandoffTarget.START,
+            ),
+        )
+    }
+
+    @Test
+    fun `native scroll progress restores proportionally when reopening in page reader`() {
+        // Saved at block 120 of 300 (~40%) in native scroll; the page reader paginated the same
+        // chapter into 30 pages, so the restore must land at ~40% of the page range - never by
+        // clamping the foreign-scale block index onto the last page (which also falsely trips the
+        // 95% read threshold on the first progress report).
+        assertEquals(
+            12,
+            resolveInitialPageReaderPage(
+                savedRawProgress = encodeNativeScrollProgress(index = 120, offsetPx = 0, totalItems = 300),
+                pageCount = 30,
+            ),
+        )
+    }
+
+    @Test
+    fun `legacy no-total native scroll progress restarts page reader from the beginning`() {
+        // Without totalItems the native scale is unrecoverable; restarting at page 0 is safe,
+        // jumping to a clamped foreign-scale position is not.
+        assertEquals(
+            0,
+            resolveInitialPageReaderPage(
+                savedRawProgress = encodeNativeScrollProgress(index = 120, offsetPx = 0),
+                pageCount = 30,
+            ),
+        )
+    }
+
+    @Test
+    fun `web scroll percent restores proportionally when reopening in page reader`() {
+        assertEquals(
+            12,
+            resolveInitialPageReaderPage(
+                savedRawProgress = encodeWebScrollProgressPercent(40),
+                pageCount = 30,
+            ),
+        )
+    }
+
+    @Test
+    fun `pre-codec legacy page index is still restored as a page index`() {
+        assertEquals(
+            5,
+            resolveInitialPageReaderPage(
+                savedRawProgress = 5L,
+                pageCount = 30,
+            ),
+        )
+    }
+
+    @Test
+    fun `fresh chapter without saved progress opens the first page`() {
+        assertEquals(
+            0,
+            resolveInitialPageReaderPage(
+                savedRawProgress = 0L,
+                pageCount = 30,
             ),
         )
     }
