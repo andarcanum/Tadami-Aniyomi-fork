@@ -131,11 +131,13 @@ internal class NovelTtsController(
                 flushQueue: Boolean,
                 startWordIndex: Int,
             ) {
-                val resumedText = utterance.wordRanges
+                val startChar = utterance.wordRanges
                     .getOrNull(startWordIndex.coerceAtLeast(0))
                     ?.startChar
-                    ?.let { startChar -> utterance.text.substring(startChar) }
-                    ?: utterance.text
+                    ?.coerceIn(0, utterance.text.length)
+                    ?: 0
+                ttsSpokenTextStart = utterance.id to startChar
+                val resumedText = if (startChar > 0) utterance.text.substring(startChar) else utterance.text
                 ttsEngine.speak(utterance.id, resumedText, flushQueue)
             }
 
@@ -149,6 +151,14 @@ internal class NovelTtsController(
 
     /** True once the current utterance received exact word offsets from the engine. */
     private var ttsExactWordProgressActive = false
+
+    /**
+     * Utterance id and the character offset (inside the full utterance text) where the text
+     * handed to the engine begins. A mid-utterance resume speaks only a suffix of the utterance,
+     * so engine `onRangeStart` offsets arrive suffix-relative and must be shifted back before
+     * they are mapped onto the full-text word ranges.
+     */
+    private var ttsSpokenTextStart: Pair<String, Int>? = null
 
     private val ttsRuntimeMutex = Mutex()
     private var ttsRuntimeGeneration: Long = 0L
@@ -551,7 +561,8 @@ internal class NovelTtsController(
         val sessionState = ttsSessionController.state.value
         val utterance = sessionState.session?.utterance ?: return
         if (utterance.id != utteranceId) return
-        val wordIndex = utterance.wordIndexForCharOffset(startChar) ?: return
+        val spokenTextStartChar = ttsSpokenTextStart?.takeIf { it.first == utteranceId }?.second ?: 0
+        val wordIndex = mapTtsEngineRangeStartToWordIndex(utterance, startChar, spokenTextStartChar) ?: return
         if (!ttsExactWordProgressActive) {
             ttsExactWordProgressActive = true
             ttsWordProgressJob?.cancel()
@@ -1005,3 +1016,15 @@ internal class NovelTtsController(
         private const val TTS_PREVIEW_UTTERANCE_ID = "tts-preview"
     }
 }
+
+/**
+ * Maps an engine `onRangeStart` offset onto a full-utterance word index. Engine offsets are
+ * relative to the text passed to `speak`, which after a mid-utterance resume is only a suffix
+ * of [utterance]'s text starting at [spokenTextStartChar]; the shift restores full-text
+ * coordinates before the lookup.
+ */
+internal fun mapTtsEngineRangeStartToWordIndex(
+    utterance: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsUtterance,
+    engineStartChar: Int,
+    spokenTextStartChar: Int,
+): Int? = utterance.wordIndexForCharOffset(spokenTextStartChar + engineStartChar)

@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
 import eu.kanade.domain.base.BasePreferences
+import eu.kanade.domain.entries.novel.interactor.UpdateNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
 import eu.kanade.domain.source.novel.interactor.GetNovelIncognitoState
 import eu.kanade.domain.source.service.SourcePreferences
@@ -21,6 +22,7 @@ import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
+import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
 import eu.kanade.tachiyomi.test.PersistingPreferenceStore
 import eu.kanade.tachiyomi.ui.reader.novel.SelectedTextAction
@@ -37,7 +39,9 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDis
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.types.shouldBeInstanceOf
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -2112,6 +2116,93 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `re-reading a fully read completed novel does not re-show the finale plate`() {
+        runBlocking {
+            val novel = Novel.create().copy(
+                id = 1L,
+                source = 10L,
+                title = "Novel",
+                status = SManga.COMPLETED.toLong(),
+            )
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                read = true,
+                lastPageRead = 0L,
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            // First scroll of a re-read session: the position moved but the chapter was already
+            // read, so this is not a fresh completion and the plate must stay hidden.
+            screenModel.updateReadingProgress(currentIndex = 4, totalItems = 10)
+            yield()
+
+            val success = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            success.finaleState shouldBe null
+        }
+    }
+
+    @Test
+    fun `finishing the last unread chapter of a completed novel shows the finale plate`() {
+        runBlocking {
+            val novel = Novel.create().copy(
+                id = 1L,
+                source = 10L,
+                title = "Novel",
+                status = SManga.COMPLETED.toLong(),
+            )
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            // Fresh completion: the last unread chapter crosses the read threshold.
+            screenModel.updateReadingProgress(currentIndex = 9, totalItems = 10)
+            yield()
+
+            val success = screenModel.state.value.shouldBeInstanceOf<NovelReaderScreenModel.State.Success>()
+            success.finaleState shouldNotBe null
+        }
+    }
+
+    @Test
     fun `read chapter can move saved native progress back from chapter end`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
@@ -3042,6 +3133,29 @@ class NovelReaderScreenModelTest {
         runCatching { Injekt.get<TrackNovelChapter>() }
             .getOrElse {
                 Injekt.addSingleton(fullType<TrackNovelChapter>(), mockk<TrackNovelChapter>(relaxed = true))
+            }
+
+        // Resolved from Injekt by NovelReaderScreenModel's constructor; register them here so the
+        // class also runs in an isolated test slice instead of relying on other test classes in the
+        // same JVM having populated the global Injekt scope first.
+        runCatching { Injekt.get<UpdateNovel>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<UpdateNovel>(),
+                    UpdateNovel(
+                        mockk<NovelRepository>(relaxed = true),
+                        tachiyomi.domain.entries.novel.interactor.NovelFetchInterval(
+                            tachiyomi.domain.items.novelchapter.interactor.GetNovelChapters(mockk(relaxed = true)),
+                        ),
+                    ),
+                )
+            }
+        runCatching { Injekt.get<ReaderPreferences>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<ReaderPreferences>(),
+                    ReaderPreferences(InMemoryPreferenceStore()),
+                )
             }
 
         runCatching { Injekt.get<tachiyomi.domain.book.novel.interactor.GetNovelBookState>() }

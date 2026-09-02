@@ -1686,8 +1686,10 @@ class NovelReaderScreenModel(
         val shouldEmitNovelCompleted = becameRead && allReadNow
         // The keepsake date refreshes on every witnessed end-read of the final chapter
         // (including re-reads); the plate itself only shows on a fresh completion.
-        if (allReadNow) {
+        if (shouldEmitNovelCompleted) {
             onNovelCompletedWitnessed(chapter)
+        } else if (allReadNow && reachedReadThreshold) {
+            recordNovelCompletionIfNeeded(chapter)
         }
         progressPersistenceController.enqueueProgressPersistence(
             PendingProgressPersistence(
