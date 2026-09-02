@@ -94,6 +94,68 @@ class NovelTtsPlaybackServiceTest {
         }
     }
 
+    @Test
+    fun `transport next requests audio focus before skipping`() {
+        runBlocking {
+            val controller = FakePlaybackController(
+                NovelTtsSessionUiState(
+                    playbackState = NovelTtsPlaybackState.PAUSED,
+                    session = session(),
+                ),
+            )
+            val audioFocusManager = FakeAudioFocusManager(granted = true)
+            val runtime = NovelTtsPlaybackServiceRuntime(
+                controller = controller,
+                audioFocusManager = audioFocusManager,
+            )
+
+            runtime.handleTransportAction(NovelTtsTransportAction.NEXT)
+
+            audioFocusManager.requestCalls shouldBe 1
+            controller.calls shouldContain "next"
+        }
+    }
+
+    @Test
+    fun `transport next with denied audio focus does not skip`() {
+        runBlocking {
+            val controller = FakePlaybackController(
+                NovelTtsSessionUiState(
+                    playbackState = NovelTtsPlaybackState.PAUSED,
+                    session = session(),
+                ),
+            )
+            val runtime = NovelTtsPlaybackServiceRuntime(
+                controller = controller,
+                audioFocusManager = FakeAudioFocusManager(granted = false),
+            )
+
+            runtime.handleTransportAction(NovelTtsTransportAction.NEXT)
+
+            controller.calls shouldContainExactly emptyList()
+        }
+    }
+
+    @Test
+    fun `transport previous with denied audio focus does not skip`() {
+        runBlocking {
+            val controller = FakePlaybackController(
+                NovelTtsSessionUiState(
+                    playbackState = NovelTtsPlaybackState.PAUSED,
+                    session = session(),
+                ),
+            )
+            val runtime = NovelTtsPlaybackServiceRuntime(
+                controller = controller,
+                audioFocusManager = FakeAudioFocusManager(granted = false),
+            )
+
+            runtime.handleTransportAction(NovelTtsTransportAction.PREVIOUS)
+
+            controller.calls shouldContainExactly emptyList()
+        }
+    }
+
     private fun session(): NovelTtsSession {
         val utterance = NovelTtsUtterance(
             id = "utterance-0",

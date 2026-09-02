@@ -118,6 +118,14 @@ internal open class AndroidNovelTtsPlatformEngine(
                     progressListener?.onUtteranceError(utteranceId)
                 }
 
+                override fun onStop(utteranceId: String, interrupted: Boolean) {
+                    // Deliberately not forwarded. The platform default routes onStop into
+                    // onError(utteranceId), and every user-initiated pause/skip/stop flushes the
+                    // active utterance - surfacing that as a failure painted a persistent
+                    // speak-error banner on normal transport controls. The controller cancels
+                    // its own word ticker on every stop path.
+                }
+
                 override fun onRangeStart(utteranceId: String, start: Int, end: Int, frame: Int) {
                     progressListener?.onUtteranceRangeStart(utteranceId, start, end)
                 }

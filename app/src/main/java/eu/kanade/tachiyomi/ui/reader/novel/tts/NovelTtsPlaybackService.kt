@@ -79,10 +79,15 @@ class NovelTtsPlaybackServiceRuntime(
 
     suspend fun handleTransportAction(action: NovelTtsTransportAction) {
         when (action) {
-            NovelTtsTransportAction.PREVIOUS -> controller.skipPrevious()
+            NovelTtsTransportAction.PREVIOUS -> {
+                // Skip restarts speech even from a paused state, so it must hold focus first.
+                if (audioFocusManager.requestPlaybackFocus()) controller.skipPrevious()
+            }
             NovelTtsTransportAction.PLAY -> requestPlaybackStart()
             NovelTtsTransportAction.PAUSE -> controller.pause()
-            NovelTtsTransportAction.NEXT -> controller.skipNext()
+            NovelTtsTransportAction.NEXT -> {
+                if (audioFocusManager.requestPlaybackFocus()) controller.skipNext()
+            }
             NovelTtsTransportAction.STOP -> {
                 audioFocusManager.abandonPlaybackFocus()
                 controller.stop()

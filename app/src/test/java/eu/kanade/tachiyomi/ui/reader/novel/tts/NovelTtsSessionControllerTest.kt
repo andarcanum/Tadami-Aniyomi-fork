@@ -498,6 +498,47 @@ class NovelTtsSessionControllerTest {
         }
     }
 
+    @Test
+    fun `restore from a paused checkpoint resumes as paused without speaking`() {
+        runBlocking {
+            val store = InMemoryNovelTtsSessionStore()
+            val chapters = listOf(
+                chapter(chapterId = 1L, nextChapterId = 2L),
+                chapter(chapterId = 2L),
+            )
+            val first = NovelTtsSessionController(
+                chapterSource = FakeChapterSource(chapters),
+                speaker = FakeSpeaker(),
+                sessionStore = store,
+            )
+            first.startFromCurrentPosition(
+                chapterId = 1L,
+                utteranceId = "chapter-1-utterance-0",
+                preferTranslatedText = false,
+                autoAdvanceChapter = true,
+            )
+            first.pause()
+
+            // A reader screen replace recreates the controller over the same shared store: the
+            // user's pause must survive the recreation instead of auto-resuming speech.
+            val secondSpeaker = FakeSpeaker()
+            val second = NovelTtsSessionController(
+                chapterSource = FakeChapterSource(chapters),
+                speaker = secondSpeaker,
+                sessionStore = store,
+            )
+            second.restoreFromCheckpoint()
+
+            second.state.value.playbackState shouldBe NovelTtsPlaybackState.PAUSED
+            secondSpeaker.spokenUtteranceIds shouldContainExactly emptyList()
+
+            // An explicit play still resumes from the paused position.
+            second.resume()
+            second.state.value.playbackState shouldBe NovelTtsPlaybackState.PLAYING
+            secondSpeaker.spokenUtteranceIds shouldContainExactly listOf("chapter-1-utterance-0")
+        }
+    }
+
     private fun chapter(
         chapterId: Long,
         nextChapterId: Long? = null,

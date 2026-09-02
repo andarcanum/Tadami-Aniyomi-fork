@@ -216,10 +216,17 @@ internal class NovelTtsController(
                             return@launch
                         }
                         ttsWordProgressJob?.cancel()
+                        ttsWordProgressJob = null
                         ttsUiState = ttsUiState.copy(
                             errorMessage = application.stringResource(MR.strings.novel_tts_error_speak),
                         )
                         refreshTtsUiState()
+                        // A failed utterance leaves silence behind while every surface still claims
+                        // PLAYING; park the session in PAUSED so UI/notification/service reflect
+                        // reality and an explicit play retries from the checkpointed position.
+                        if (ttsSessionController.state.value.playbackState == NovelTtsPlaybackState.PLAYING) {
+                            ttsSessionController.pause()
+                        }
                     }
                 }
             },
@@ -379,6 +386,10 @@ internal class NovelTtsController(
     ) {
         if (!settings.ttsEnabled) return
         if (!NovelReaderTtsChapterHandoffPolicy.consumePendingRestore(chapterId)) return
+        // Only a controller without a live session may be resurrected from the checkpoint: the
+        // seamless-switch path already speaks the new chapter itself (restoring here would flush
+        // and re-speak it), and a pause issued during the handoff must survive the switch.
+        if (ttsSessionController.state.value.session != null) return
         if (!ttsAudioFocusManager.requestPlaybackFocus()) return
         ttsSessionController.restoreFromCheckpoint()
     }
@@ -671,6 +682,9 @@ internal class NovelTtsController(
         host.ttsScope.launch {
             ttsWordProgressJob?.cancel()
             ttsWordProgressJob = null
+            // Skipping from a paused state (including an audio-focus-loss pause) restarts speech,
+            // so it must hold focus like every other path that starts speaking.
+            if (!ttsAudioFocusManager.requestPlaybackFocus()) return@launch
             ttsSessionController.skipNext()
         }
     }
@@ -679,6 +693,7 @@ internal class NovelTtsController(
         host.ttsScope.launch {
             ttsWordProgressJob?.cancel()
             ttsWordProgressJob = null
+            if (!ttsAudioFocusManager.requestPlaybackFocus()) return@launch
             ttsSessionController.skipPrevious()
         }
     }

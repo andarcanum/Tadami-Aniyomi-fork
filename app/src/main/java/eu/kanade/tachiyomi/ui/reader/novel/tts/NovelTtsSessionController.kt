@@ -30,6 +30,12 @@ data class NovelTtsSessionCheckpoint(
     val wordIndex: Int,
     val textSource: NovelTtsTextSource,
     val autoAdvanceChapter: Boolean,
+    /**
+     * True when the user paused at this position. The shared store outlives the controller (a
+     * reader screen replace recreates it), so the pause intent has to travel with the checkpoint:
+     * restoring a paused checkpoint must not restart speech by itself.
+     */
+    val paused: Boolean = false,
 )
 
 data class NovelTtsSession(
@@ -117,7 +123,7 @@ class NovelTtsSessionController(
         val session = mutableState.value.session ?: return
         speaker.stop()
         updateState(session, NovelTtsPlaybackState.PAUSED)
-        persistCheckpoint(session)
+        persistCheckpoint(session, paused = true)
     }
 
     override suspend fun resume() {
@@ -231,6 +237,13 @@ class NovelTtsSessionController(
             autoAdvanceChapter = checkpoint.autoAdvanceChapter,
             restoredWordIndex = checkpoint.wordIndex,
         ) ?: return
+        if (checkpoint.paused) {
+            // The user paused before this controller was recreated; keep the session parked so
+            // speech does not restart by itself - an explicit play resumes from this position.
+            updateState(session, NovelTtsPlaybackState.PAUSED)
+            persistCheckpoint(session, paused = true)
+            return
+        }
         updateState(session, NovelTtsPlaybackState.PLAYING)
         persistCheckpoint(session)
         speaker.speak(session.utterance, flushQueue = true, startWordIndex = session.wordIndex)
@@ -316,7 +329,7 @@ class NovelTtsSessionController(
         mutableState.value = state.copy(pendingChapterHandoffId = null)
     }
 
-    private suspend fun persistCheckpoint(session: NovelTtsSession) {
+    private suspend fun persistCheckpoint(session: NovelTtsSession, paused: Boolean = false) {
         sessionStore.saveCheckpoint(
             NovelTtsSessionCheckpoint(
                 chapterId = session.chapterId,
@@ -325,6 +338,7 @@ class NovelTtsSessionController(
                 wordIndex = session.wordIndex,
                 textSource = session.textSource,
                 autoAdvanceChapter = session.autoAdvanceChapter,
+                paused = paused,
             ),
         )
     }
