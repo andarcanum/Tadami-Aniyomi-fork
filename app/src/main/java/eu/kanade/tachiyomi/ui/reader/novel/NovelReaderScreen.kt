@@ -306,6 +306,11 @@ class NovelReaderScreen(
                                     // is written through before this screen goes away.
                                     screenModel.flushBookModeProgress()
                                     screenModel.persistCurrentChapterExitState()
+                                    // A true exit (unlike an internal chapter replace) ends playback:
+                                    // the session goes IDLE, which is the emission the foreground
+                                    // service self-stops on. Without it the service, media session
+                                    // and an ongoing "playing" notification outlive the dead engine.
+                                    screenModel.stopTtsPlayback()
                                     navigator.pop()
                                 }
                             },
@@ -517,6 +522,9 @@ class NovelReaderScreen(
                         reducedMotion = eu.kanade.presentation.theme.AuroraTheme.colors.isEInk,
                         onBackToNovel = {
                             screenModel.clearFinale()
+                            // Same reader-exit semantics as onBack: end TTS so the foreground
+                            // service self-stops on the IDLE emission.
+                            screenModel.stopTtsPlayback()
                             navigator.pop()
                         },
                         onStay = screenModel::clearFinale,
@@ -551,6 +559,7 @@ class NovelReaderScreen(
                                 coroutineScope.launch {
                                     screenModel.persistCurrentChapterExitState()
                                     screenModel.clearSeriesInterstitial()
+                                    screenModel.stopTtsPlayback()
                                     navigator.pop()
                                 }
                             },
