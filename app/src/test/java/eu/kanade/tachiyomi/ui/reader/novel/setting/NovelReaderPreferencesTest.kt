@@ -669,6 +669,76 @@ class NovelReaderPreferencesTest {
         gFlowSettings.lineHeight shouldBe 1.52f
     }
 
+    @Test
+    fun `legacy paragraph spacing migration is one shot and does not clobber the user value`() {
+        val store = FakePreferenceStore()
+        val json = Json { encodeDefaults = true }
+        store.getString("novel_reader_paragraph_spacing", "").set("COMPACT")
+
+        val first = NovelReaderPreferences(store, json)
+        first.paragraphSpacing().get() shouldBe 8
+
+        first.paragraphSpacing().set(24)
+
+        // Simulate the next process start: the app-scoped singleton runs its init again.
+        val second = NovelReaderPreferences(store, json)
+        second.paragraphSpacing().get() shouldBe 24
+    }
+
+    @Test
+    fun `legacy per source paragraph spacing enum migrates to dp once`() {
+        val store = FakePreferenceStore()
+        val json = Json { encodeDefaults = true }
+        val first = NovelReaderPreferences(store, json)
+        first.setSourceOverride(7L, NovelReaderOverride(legacyParagraphSpacing = "SPACIOUS"))
+
+        val second = NovelReaderPreferences(store, json)
+        val override = second.getSourceOverride(7L)
+        override?.paragraphSpacingDp shouldBe 16
+        override?.legacyParagraphSpacing shouldBe null
+    }
+
+    @Test
+    fun `resolveSettings honors an override geminiPrivateUnlocked like settingsFlow`() = runTest {
+        val store = FakePreferenceStore()
+        val prefs = NovelReaderPreferences(store, Json { encodeDefaults = true })
+        prefs.setSourceOverride(7L, NovelReaderOverride(geminiPrivateUnlocked = true))
+
+        prefs.resolveSettings(7L).geminiPrivateUnlocked shouldBe true
+        prefs.settingsFlow(7L).first().geminiPrivateUnlocked shouldBe true
+    }
+
+    @Test
+    fun `enableSourceOverride snapshots shadow parameters and page edge shadow`() {
+        val store = FakePreferenceStore()
+        val prefs = NovelReaderPreferences(store, Json { encodeDefaults = true })
+        prefs.textShadow().set(true)
+        prefs.textShadowColor().set("#FF0000")
+        prefs.textShadowBlur().set(9f)
+        prefs.textShadowX().set(3f)
+        prefs.textShadowY().set(4f)
+        prefs.pageEdgeShadow().set(true)
+        prefs.pageEdgeShadowAlpha().set(0.42f)
+
+        prefs.enableSourceOverride(7L)
+
+        // Global edits after the snapshot must not leak into the frozen per-source look.
+        prefs.textShadowColor().set("#00FF00")
+        prefs.textShadowBlur().set(1f)
+        prefs.textShadowX().set(0f)
+        prefs.textShadowY().set(0f)
+        prefs.pageEdgeShadow().set(false)
+        prefs.pageEdgeShadowAlpha().set(0.1f)
+
+        val settings = prefs.resolveSettings(7L)
+        settings.textShadowColor shouldBe "#FF0000"
+        settings.textShadowBlur shouldBe 9f
+        settings.textShadowX shouldBe 3f
+        settings.textShadowY shouldBe 4f
+        settings.pageEdgeShadow shouldBe true
+        settings.pageEdgeShadowAlpha shouldBe 0.42f
+    }
+
     private class FakePreferenceStore : PreferenceStore {
         private val strings = mutableMapOf<String, Preference<String>>()
         private val longs = mutableMapOf<String, Preference<Long>>()
@@ -715,6 +785,7 @@ class NovelReaderPreferencesTest {
         private val preferenceKey: String,
         defaultValue: T,
     ) : Preference<T> {
+        private val initialDefault = defaultValue
         private val state = MutableStateFlow(defaultValue)
 
         override fun key(): String = preferenceKey
@@ -725,9 +796,11 @@ class NovelReaderPreferencesTest {
             state.value = value
         }
 
-        override fun isSet(): Boolean = true
+        override fun isSet(): Boolean = state.value != initialDefault
 
-        override fun delete() = Unit
+        override fun delete() {
+            state.value = initialDefault
+        }
 
         override fun defaultValue(): T = state.value
 

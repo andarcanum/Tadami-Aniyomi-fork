@@ -176,6 +176,7 @@ import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -454,7 +455,16 @@ internal fun NovelReaderContentHost(
     val eInkProfile by uiPreferences.eInkProfile().collectAsState()
     val displayRefreshHost = remember { DisplayRefreshHost() }
     val sourceId = state.novel.source
-    val hasSourceOverride = remember(sourceId) { readerPreferences.getSourceOverride(sourceId) != null }
+    // Reactive on purpose: toggling "For this source" in the settings dialog must immediately
+    // redirect the auto-scroll preference writer below. A remember(sourceId) snapshot went stale
+    // for the whole session, writing per-source changes into the global prefs (and recreating a
+    // just-deleted override through updateSourceOverride's empty-default branch).
+    val hasSourceOverrideFlow = remember(sourceId) {
+        readerPreferences.sourceOverrides().changes().map { it.containsKey(sourceId) }
+    }
+    val hasSourceOverride by hasSourceOverrideFlow.androidxCollectAsState(
+        initial = readerPreferences.getSourceOverride(sourceId) != null,
+    )
     var pageViewportSize by remember(state.chapter.id) { mutableStateOf(IntSize.Zero) }
     var hasCompletedInitialReaderLayout by remember(state.chapter.id) { mutableStateOf(false) }
     val autoScrollHandoff = remember(state.chapter.id) {
