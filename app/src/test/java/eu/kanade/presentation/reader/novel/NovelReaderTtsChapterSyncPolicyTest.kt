@@ -40,4 +40,37 @@ class NovelReaderTtsChapterSyncPolicyTest {
             nextChapterId = 11L,
         ) shouldBe null
     }
+
+    @Test
+    fun `pending handoff naming the current chapter is not a navigation target`() {
+        // After a seamless in-place switch the pending handoff still names the chapter that is
+        // already on screen; navigating "to" it replaces the whole reader onto the same chapter
+        // (full reload, engine restart, re-speak).
+        resolveTtsChapterNavigationTarget(
+            pendingChapterHandoffId = 5L,
+            currentChapterId = 5L,
+            activeTtsChapterId = 5L,
+            nextChapterId = 6L,
+        ) shouldBe null
+    }
+
+    @Test
+    fun `pending handoff for the next chapter still navigates`() {
+        resolveTtsChapterNavigationTarget(
+            pendingChapterHandoffId = 6L,
+            currentChapterId = 5L,
+            activeTtsChapterId = 6L,
+            nextChapterId = 6L,
+        ) shouldBe 6L
+    }
+
+    @Test
+    fun `session derived target is used when no handoff is pending`() {
+        resolveTtsChapterNavigationTarget(
+            pendingChapterHandoffId = null,
+            currentChapterId = 10L,
+            activeTtsChapterId = 11L,
+            nextChapterId = 11L,
+        ) shouldBe 11L
+    }
 }

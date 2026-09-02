@@ -1664,13 +1664,12 @@ internal fun NovelReaderContentHost(
         state.ttsUiState.pendingChapterHandoffId,
         state.ttsUiState.activeSession?.chapterId,
     ) {
-        val targetChapterId = state.ttsUiState.pendingChapterHandoffId
-            ?: resolveTtsAutoAdvancedChapterNavigationTarget(
-                currentChapterId = state.chapter.id,
-                activeTtsChapterId = state.ttsUiState.activeSession?.chapterId,
-                nextChapterId = state.nextChapterId,
-            )
-            ?: return@LaunchedEffect
+        val targetChapterId = resolveTtsChapterNavigationTarget(
+            pendingChapterHandoffId = state.ttsUiState.pendingChapterHandoffId,
+            currentChapterId = state.chapter.id,
+            activeTtsChapterId = state.ttsUiState.activeSession?.chapterId,
+            nextChapterId = state.nextChapterId,
+        ) ?: return@LaunchedEffect
         if (requestedTtsChapterSyncTarget == targetChapterId) return@LaunchedEffect
         requestedTtsChapterSyncTarget = targetChapterId
         // The book already holds the next chapter. Opening it here reloaded the whole reader in the

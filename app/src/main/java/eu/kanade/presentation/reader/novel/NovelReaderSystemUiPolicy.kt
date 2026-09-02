@@ -104,22 +104,44 @@ internal object NovelReaderAutoScrollHandoffPolicy {
 }
 
 internal object NovelReaderTtsChapterHandoffPolicy {
+    /**
+     * A handoff mark describes one in-flight chapter switch, which completes in seconds even on
+     * slow sources. If the switch never completes (reader closed mid-handoff, failed load), a mark
+     * without a lifetime would wait for a later session that happens to open the same chapter and
+     * spontaneously start TTS there.
+     */
+    private const val PENDING_RESTORE_TTL_MS = 300_000L
+
     @Volatile
     private var pendingRestoreChapterId: Long? = null
 
-    fun markPendingRestore(chapterId: Long) {
+    @Volatile
+    private var pendingRestoreRequestedAtMs: Long = 0L
+
+    fun markPendingRestore(chapterId: Long, requestedAtMs: Long = System.currentTimeMillis()) {
         pendingRestoreChapterId = chapterId
+        pendingRestoreRequestedAtMs = requestedAtMs
     }
 
-    fun consumePendingRestore(chapterId: Long): Boolean {
-        val pendingChapterId = pendingRestoreChapterId
+    fun hasPendingRestore(chapterId: Long, nowMs: Long = System.currentTimeMillis()): Boolean {
+        val pendingChapterId = pendingRestoreChapterId ?: return false
         if (pendingChapterId != chapterId) return false
-        pendingRestoreChapterId = null
+        if (nowMs - pendingRestoreRequestedAtMs > PENDING_RESTORE_TTL_MS) {
+            clear()
+            return false
+        }
+        return true
+    }
+
+    fun consumePendingRestore(chapterId: Long, nowMs: Long = System.currentTimeMillis()): Boolean {
+        if (!hasPendingRestore(chapterId, nowMs)) return false
+        clear()
         return true
     }
 
     fun clear() {
         pendingRestoreChapterId = null
+        pendingRestoreRequestedAtMs = 0L
     }
 }
 

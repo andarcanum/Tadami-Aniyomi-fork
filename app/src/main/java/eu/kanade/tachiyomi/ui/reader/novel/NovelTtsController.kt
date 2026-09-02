@@ -205,6 +205,13 @@ internal class NovelTtsController(
                             return@launch
                         }
                         ttsWordProgressJob?.cancel()
+                        // A pause/stop landing between the engine finishing the utterance and this
+                        // queued callback must win: advancing now would silently revert it and keep
+                        // speaking. skipNext() drives onUtteranceCompleted directly and stays
+                        // unaffected (skipping is an explicit request to continue).
+                        if (ttsSessionController.state.value.playbackState != NovelTtsPlaybackState.PLAYING) {
+                            return@launch
+                        }
                         ttsSessionController.onUtteranceCompleted(utteranceId)
                     }
                 }
@@ -385,12 +392,16 @@ internal class NovelTtsController(
         settings: NovelReaderSettings,
     ) {
         if (!settings.ttsEnabled) return
-        if (!NovelReaderTtsChapterHandoffPolicy.consumePendingRestore(chapterId)) return
+        // Peek before requesting focus: grabbing focus for a restore that is not pending would
+        // duck other apps for nothing, and a denied focus leaves the fresh mark for a retry
+        // within its TTL instead of losing the restore permanently.
+        if (!NovelReaderTtsChapterHandoffPolicy.hasPendingRestore(chapterId)) return
         // Only a controller without a live session may be resurrected from the checkpoint: the
         // seamless-switch path already speaks the new chapter itself (restoring here would flush
         // and re-speak it), and a pause issued during the handoff must survive the switch.
         if (ttsSessionController.state.value.session != null) return
         if (!ttsAudioFocusManager.requestPlaybackFocus()) return
+        if (!NovelReaderTtsChapterHandoffPolicy.consumePendingRestore(chapterId)) return
         ttsSessionController.restoreFromCheckpoint()
     }
 

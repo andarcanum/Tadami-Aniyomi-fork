@@ -20,4 +20,21 @@ class NovelReaderTtsChapterHandoffPolicyTest {
         NovelReaderTtsChapterHandoffPolicy.consumePendingRestore(42L).shouldBeTrue()
         NovelReaderTtsChapterHandoffPolicy.consumePendingRestore(42L).shouldBeFalse()
     }
+
+    @Test
+    fun `pending tts chapter restore expires after its ttl`() {
+        // A handoff whose chapter switch never completed (reader closed mid-handoff, load failed)
+        // must not wait forever for a later session that happens to open the same chapter and
+        // spontaneously start TTS there.
+        val requestedAt = 1_000_000L
+        NovelReaderTtsChapterHandoffPolicy.markPendingRestore(42L, requestedAtMs = requestedAt)
+
+        NovelReaderTtsChapterHandoffPolicy.hasPendingRestore(42L, nowMs = requestedAt + 1_000L)
+            .shouldBeTrue()
+        NovelReaderTtsChapterHandoffPolicy.consumePendingRestore(42L, nowMs = requestedAt + 301_000L)
+            .shouldBeFalse()
+        // The expired mark is dropped instead of lingering for the next lookups.
+        NovelReaderTtsChapterHandoffPolicy.hasPendingRestore(42L, nowMs = requestedAt + 1_000L)
+            .shouldBeFalse()
+    }
 }
