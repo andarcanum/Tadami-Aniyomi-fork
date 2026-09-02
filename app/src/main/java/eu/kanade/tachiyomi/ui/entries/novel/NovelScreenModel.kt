@@ -3304,11 +3304,19 @@ class NovelScreenModel(
              * even when none of the inputs changed. The memo below caches the result across copies
              * keyed by the actual inputs, so recomputation happens only when an input really changes.
              */
-            private companion object {
+            companion object {
                 private val processedMemoLock = Any()
                 private var processedMemoKey: ProcessedChaptersKey? = null
                 private var processedMemoProcessed: List<NovelChapter> = emptyList()
                 private var processedMemoTargetIndex: Int? = null
+
+                fun clearProcessedMemo() {
+                    synchronized(processedMemoLock) {
+                        processedMemoKey = null
+                        processedMemoProcessed = emptyList()
+                        processedMemoTargetIndex = null
+                    }
+                }
             }
 
             private class ProcessedChaptersKey(
@@ -3540,6 +3548,11 @@ class NovelScreenModel(
                     hasTranslationCache(chapter)
             }
         }
+    }
+
+    override fun onDispose() {
+        super.onDispose()
+        State.Success.clearProcessedMemo()
     }
 }
 

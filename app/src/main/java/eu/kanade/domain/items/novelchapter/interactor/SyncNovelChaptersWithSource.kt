@@ -15,6 +15,7 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.toNovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.source.local.entries.novel.isLocal
 import java.time.Instant
 import java.time.ZonedDateTime
 
@@ -43,7 +44,7 @@ class SyncNovelChaptersWithSource(
         retainMissingChapters: Boolean = false,
         sourceOrderOffset: Long = 0L,
     ): List<NovelChapter> {
-        if (rawSourceChapters.isEmpty()) {
+        if (rawSourceChapters.isEmpty() && !source.isLocal()) {
             throw NoChaptersException()
         }
 

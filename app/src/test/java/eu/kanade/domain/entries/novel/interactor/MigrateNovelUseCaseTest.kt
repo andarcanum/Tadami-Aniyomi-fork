@@ -6,6 +6,7 @@ import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.ui.browse.novel.migration.NovelMigrationFlags
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
@@ -23,10 +24,15 @@ import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import tachiyomi.domain.track.novel.interactor.GetNovelTracks
+import tachiyomi.domain.track.novel.interactor.InsertNovelTrack
+import tachiyomi.domain.track.novel.model.NovelTrack
 import java.util.Date
 
 private const val CHAPTERS = 0b00001
 private const val CATEGORIES = 0b00010
+private const val TRACKING = 0b00100
+private const val NOTES = 0b100000
 
 class MigrateNovelUseCaseTest {
 
@@ -90,6 +96,9 @@ class MigrateNovelUseCaseTest {
         val historyUpdateSlot = slot<NovelHistoryUpdate>()
         coEvery { novelHistoryRepository.upsertNovelHistory(capture(historyUpdateSlot)) } returns Unit
 
+        val getNovelTracks = mockk<GetNovelTracks>(relaxed = true)
+        val insertNovelTrack = mockk<InsertNovelTrack>(relaxed = true)
+
         val useCase = MigrateNovelUseCase(
             sourceManager = sourceManager,
             downloadManager = downloadManager,
@@ -99,6 +108,8 @@ class MigrateNovelUseCaseTest {
             syncNovelChaptersWithSource = syncNovelChaptersWithSource,
             categoryRepository = categoryRepository,
             novelHistoryRepository = novelHistoryRepository,
+            getNovelTracks = getNovelTracks,
+            insertNovelTrack = insertNovelTrack,
         )
 
         val flags = CHAPTERS or CATEGORIES
@@ -129,6 +140,88 @@ class MigrateNovelUseCaseTest {
         coVerifyOrder {
             updateNovel.await(match { it.id == newNovel.id && it.favorite == true })
             updateNovel.await(match { it.id == oldNovel.id && it.favorite == false })
+        }
+    }
+
+    @Test
+    fun `migrateNovel preserves tracking and notes when flags are set`() = runTest {
+        val sourceManager = mockk<NovelSourceManager>()
+        val downloadManager = mockk<NovelDownloadManager>(relaxed = true)
+        val updateNovel = mockk<UpdateNovel>(relaxed = true)
+        val networkToLocalNovel = mockk<NetworkToLocalNovel>()
+        val novelChapterRepository = mockk<NovelChapterRepository>(relaxed = true)
+        val syncNovelChaptersWithSource = mockk<SyncNovelChaptersWithSource>(relaxed = true)
+        val categoryRepository = mockk<NovelCategoryRepository>(relaxed = true)
+        val novelHistoryRepository = mockk<NovelHistoryRepository>(relaxed = true)
+        val getNovelTracks = mockk<GetNovelTracks>()
+        val insertNovelTrack = mockk<InsertNovelTrack>(relaxed = true)
+        val source = mockk<NovelSource>()
+
+        val oldNovel = Novel.create().copy(
+            id = 1L,
+            source = 10L,
+            favorite = true,
+            title = "Old Novel",
+            notes = "My important novel note",
+        )
+        val newNovel = Novel.create().copy(id = 2L, source = 20L, favorite = false, title = "New Novel")
+
+        every { sourceManager.get(any()) } returns source
+        coEvery { networkToLocalNovel.await(newNovel) } returns newNovel
+        coEvery { source.getChapterList(any()) } returns emptyList()
+        coEvery { syncNovelChaptersWithSource.await(any(), any(), any()) } returns emptyList()
+
+        val track = NovelTrack(
+            id = 10L,
+            novelId = oldNovel.id,
+            trackerId = 1L,
+            remoteId = 123L,
+            libraryId = null,
+            title = "Track Title",
+            lastChapterRead = 5.0,
+            totalChapters = 100L,
+            status = 1L,
+            score = 8.5,
+            remoteUrl = "https://tracker.com",
+            startDate = 0L,
+            finishDate = 0L,
+            private = false,
+        )
+        coEvery { getNovelTracks.await(oldNovel.id) } returns listOf(track)
+
+        val tracksSlot = slot<List<NovelTrack>>()
+        coEvery { insertNovelTrack.awaitAll(capture(tracksSlot)) } returns Unit
+
+        val useCase = MigrateNovelUseCase(
+            sourceManager = sourceManager,
+            downloadManager = downloadManager,
+            updateNovel = updateNovel,
+            networkToLocalNovel = networkToLocalNovel,
+            novelChapterRepository = novelChapterRepository,
+            syncNovelChaptersWithSource = syncNovelChaptersWithSource,
+            categoryRepository = categoryRepository,
+            novelHistoryRepository = novelHistoryRepository,
+            getNovelTracks = getNovelTracks,
+            insertNovelTrack = insertNovelTrack,
+        )
+
+        val flags = TRACKING or NOTES
+
+        useCase.migrateNovel(
+            oldNovel = oldNovel,
+            newNovel = newNovel,
+            replace = true,
+            flags = flags,
+        )
+
+        // Verify tracks migrated with new novelId
+        assertEquals(1, tracksSlot.captured.size)
+        assertEquals(newNovel.id, tracksSlot.captured.first().novelId)
+        assertEquals(track.trackerId, tracksSlot.captured.first().trackerId)
+
+        // Verify notes copied to new novel
+        coVerify {
+            updateNovel.await(match { it.id == newNovel.id && it.notes == "My important novel note" })
         }
     }
 }

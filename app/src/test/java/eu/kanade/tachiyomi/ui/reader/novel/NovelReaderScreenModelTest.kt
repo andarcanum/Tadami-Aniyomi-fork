@@ -3678,4 +3678,42 @@ class NovelReaderScreenModelTest {
                 true
         }
     }
+
+    @Test
+    fun `downloadChapter downloads chapter outside sliding window`() = runBlocking {
+        val novel = Novel.create().copy(id = 1L, source = 10L, title = "Test Novel")
+        val chapters = (1L..100L).map { id ->
+            NovelChapter.create().copy(
+                id = id,
+                novelId = 1L,
+                name = "Chapter $id",
+                url = "https://example.org/ch$id",
+                sourceOrder = (id - 1L),
+            )
+        }
+        val first = chapters.first()
+        val downloadManager = mockk<NovelDownloadManager>(relaxed = true)
+        val chapterRepo = FakeNovelChapterRepository(
+            chapter = first,
+            chaptersByNovel = chapters,
+        )
+        val screenModel = trackedNovelReaderScreenModel(
+            chapterId = first.id,
+            novelChapterRepository = chapterRepo,
+            getNovel = GetNovel(FakeNovelRepository(novel)),
+            sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+            pluginStorage = FakeNovelPluginStorage(emptyList()),
+            novelReaderPreferences = createNovelReaderPreferences(),
+            isSystemDark = { false },
+            novelDownloadManager = downloadManager,
+        )
+        withTimeout(1_000) {
+            while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                yield()
+            }
+        }
+        // Chapter 90 is outside the default window radius (50) from Chapter 1
+        screenModel.downloadChapter(90L)
+        coVerify { downloadManager.downloadChapter(match { it.id == novel.id }, match { it.id == 90L }) }
+    }
 }

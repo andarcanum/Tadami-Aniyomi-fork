@@ -110,7 +110,7 @@ class NovelEpubExporter(
         options: NovelEpubExportOptions = NovelEpubExportOptions(),
         onProgress: (NovelEpubExportProgress) -> Unit = {},
     ): NovelEpubExportResult {
-        val sorted = chapters.sortedBy { it.sourceOrder }
+        val sorted = sortChaptersForExport(chapters)
         val selected = applyRange(sorted, options.startChapter, options.endChapter)
         if (selected.isEmpty()) {
             return NovelEpubExportResult.Failure(
@@ -146,6 +146,7 @@ class NovelEpubExporter(
                     totalSelected = selected.size,
                     includedChapters = 0,
                     skippedChapters = skippedChapters,
+                    warnings = warnings,
                 ),
             )
         }
@@ -156,6 +157,7 @@ class NovelEpubExporter(
                     totalSelected = selected.size,
                     includedChapters = chapterPayloads.size,
                     skippedChapters = skippedChapters,
+                    warnings = warnings,
                 ),
             )
         }
@@ -165,7 +167,7 @@ class NovelEpubExporter(
             "exports/novel",
         )
         exportDir.mkdirs()
-        val filename = DiskUtil.buildValidFilename("${novel.title}_${System.currentTimeMillis()}.epub")
+        val filename = DiskUtil.buildValidFilename("${novel.displayTitle}_${System.currentTimeMillis()}.epub")
         val epubFile = File(exportDir, filename)
         val epubLanguage = resolveLanguage(novel)
         val bookId = stableBookIdentifier(novel)
@@ -265,7 +267,7 @@ class NovelEpubExporter(
                     zip = zip,
                     path = "OEBPS/${page.fileName}",
                     content = buildCoverDocument(
-                        title = novel.title,
+                        title = novel.displayTitle,
                         coverHref = coverAsset.href,
                         language = epubLanguage,
                     ),
@@ -346,13 +348,13 @@ class NovelEpubExporter(
             writeEntry(
                 zip = zip,
                 path = "OEBPS/nav.xhtml",
-                content = buildNavDocument(novel.title, chapterItems, epubLanguage, frontMatterItem),
+                content = buildNavDocument(novel.displayTitle, chapterItems, epubLanguage, frontMatterItem),
             )
             writeEntry(
                 zip = zip,
                 path = "OEBPS/toc.ncx",
                 content = buildTocDocument(
-                    title = novel.title,
+                    title = novel.displayTitle,
                     chapterItems = chapterItems,
                     bookId = bookId,
                     language = epubLanguage,
@@ -512,15 +514,15 @@ class NovelEpubExporter(
             <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid" prefix="dcterms: http://purl.org/dc/terms/ rendition: http://www.idpf.org/vocab/rendition/#">
                 <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
                     <dc:identifier id="bookid">${escapeXml(bookId)}</dc:identifier>
-                    <dc:title>${escapeXml(novel.title)}</dc:title>
+                    <dc:title>${escapeXml(novel.displayTitle)}</dc:title>
                     <dc:language>${escapeXml(language)}</dc:language>
                     <meta property="dcterms:modified">$modified</meta>
                     <meta property="rendition:layout">reflowable</meta>
                     ${if (hasCover) """<meta name="cover" content="cover_image"/>""" else ""}
-                    ${novel.author?.takeIf {
+                    ${novel.displayAuthor?.takeIf {
             it.isNotBlank()
         }?.let { "<dc:creator>${escapeXml(it)}</dc:creator>" }.orEmpty()}
-                    ${novel.description?.takeIf {
+                    ${novel.displayDescription?.takeIf {
             it.isNotBlank()
         }?.let { "<dc:description>${escapeXml(it)}</dc:description>" }.orEmpty()}
                 </metadata>
@@ -676,11 +678,11 @@ class NovelEpubExporter(
         language: String,
         modified: String,
     ): String {
-        val creator = novel.author
+        val creator = novel.displayAuthor
             ?.takeIf { it.isNotBlank() }
             ?.let { "<p>${escapeXml(it)}</p>" }
             .orEmpty()
-        val description = novel.description
+        val description = novel.displayDescription
             ?.takeIf { it.isNotBlank() }
             ?.let { "<section><h2>Description</h2><p>${escapeXml(it)}</p></section>" }
             .orEmpty()
@@ -688,12 +690,12 @@ class NovelEpubExporter(
             <?xml version="1.0" encoding="UTF-8"?>
             <html xmlns="http://www.w3.org/1999/xhtml" lang="${escapeXml(language)}" xml:lang="${escapeXml(language)}">
                 <head>
-                    <title>${escapeXml(novel.title)}</title>
+                    <title>${escapeXml(novel.displayTitle)}</title>
                     <meta charset="UTF-8"/>
                 </head>
                 <body>
                     <section>
-                        <h1>${escapeXml(novel.title)}</h1>
+                        <h1>${escapeXml(novel.displayTitle)}</h1>
                         $creator
                         <p>Exported: ${escapeXml(modified)}</p>
                         $description
@@ -829,6 +831,20 @@ class NovelEpubExporter(
         zip.closeEntry()
     }
 
+    private fun sortChaptersForExport(chapters: List<NovelChapter>): List<NovelChapter> {
+        // Lexicographic composition of total-order keys keeps the comparator transitive. A
+        // conditional mix of chapterNumber/sourceOrder rules becomes intransitive once
+        // unrecognized chapters (-1) interleave with sources whose sourceOrder contradicts the
+        // numbering (oldest-first): TimSort then corrupts the book order or throws "Comparison
+        // method violates its general contract!". Mirrors the reader convention: ascending
+        // chapterNumber (unrecognized first), ties by oldest-first sourceOrder, then id.
+        return chapters.sortedWith(
+            compareBy<NovelChapter> { it.chapterNumber }
+                .thenByDescending { it.sourceOrder }
+                .thenBy { it.id },
+        )
+    }
+
     private fun stableBookIdentifier(novel: Novel): String {
         return "novel-${novel.id}"
     }
@@ -858,7 +874,7 @@ class NovelEpubExporter(
         options: NovelEpubExportOptions = NovelEpubExportOptions(),
         onProgress: (NovelEpubExportProgress) -> Unit = {},
     ): NovelEpubExportResult {
-        val sorted = chapters.sortedBy { it.sourceOrder }
+        val sorted = sortChaptersForExport(chapters)
         val selected = applyRange(sorted, options.startChapter, options.endChapter)
         if (selected.isEmpty()) {
             return NovelEpubExportResult.Failure(
@@ -915,18 +931,18 @@ class NovelEpubExporter(
             "exports/novel",
         )
         exportDir.mkdirs()
-        val filename = DiskUtil.buildValidFilename("${novel.title}_${System.currentTimeMillis()}.fb2")
+        val filename = DiskUtil.buildValidFilename("${novel.displayTitle}_${System.currentTimeMillis()}.fb2")
         val fb2File = File(exportDir, filename)
 
         val writeReport = NovelFb2Writer.writeTo(
             file = fb2File,
             metadata = NovelFb2Metadata(
-                title = novel.title,
+                title = novel.displayTitle,
                 bookId = stableBookIdentifier(novel),
-                author = novel.author?.takeIf { it.isNotBlank() },
-                description = novel.description?.takeIf { it.isNotBlank() },
+                author = novel.displayAuthor?.takeIf { it.isNotBlank() },
+                description = novel.displayDescription?.takeIf { it.isNotBlank() },
                 language = resolveLanguage(novel),
-                genres = novel.genre.orEmpty(),
+                genres = novel.displayGenre.orEmpty(),
                 exportedOn = Instant.now().toString().substringBefore('T'),
             ),
             chapters = fb2Chapters,

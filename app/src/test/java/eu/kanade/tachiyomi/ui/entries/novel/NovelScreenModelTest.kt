@@ -1695,6 +1695,28 @@ class NovelScreenModelTest {
         }
     }
 
+    @Test
+    fun `clearProcessedMemo empties memoized chapter cache`() {
+        runBlocking {
+            val novel = novelForResumeTests(500L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+            )
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+            )
+            try {
+                awaitResumeScreenModel(screenModel)
+                val success = screenModel.state.value as NovelScreenModel.State.Success
+                success.processedChapters.size shouldBe 1
+                NovelScreenModel.State.Success.clearProcessedMemo()
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
     private class FakeLifecycleOwner : LifecycleOwner {
         private class NoopStartedLifecycle : Lifecycle() {
             override val currentState: State

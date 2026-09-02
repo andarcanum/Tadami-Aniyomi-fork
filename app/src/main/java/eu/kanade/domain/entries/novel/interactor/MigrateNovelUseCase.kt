@@ -15,6 +15,8 @@ import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
 import tachiyomi.domain.items.novelchapter.model.toNovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
+import tachiyomi.domain.track.novel.interactor.GetNovelTracks
+import tachiyomi.domain.track.novel.interactor.InsertNovelTrack
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.time.Instant
@@ -33,6 +35,8 @@ class MigrateNovelUseCase(
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get(),
     private val categoryRepository: NovelCategoryRepository = Injekt.get(),
     private val novelHistoryRepository: NovelHistoryRepository = Injekt.get(),
+    private val getNovelTracks: GetNovelTracks = Injekt.get(),
+    private val insertNovelTrack: InsertNovelTrack = Injekt.get(),
 ) {
 
     suspend fun migrateNovel(
@@ -70,6 +74,9 @@ class MigrateNovelUseCase(
     ) {
         val migrateChapters = NovelMigrationFlags.hasChapters(flags)
         val migrateCategories = NovelMigrationFlags.hasCategories(flags)
+        val migrateTracking = NovelMigrationFlags.hasTracking(flags)
+        val migrateExtra = NovelMigrationFlags.hasExtra(flags)
+        val migrateNotes = NovelMigrationFlags.hasNotes(flags)
         val deleteDownloaded = NovelMigrationFlags.hasDeleteDownloaded(flags)
 
         try {
@@ -128,6 +135,14 @@ class MigrateNovelUseCase(
             categoryRepository.setNovelCategories(newNovel.id, categoryIds)
         }
 
+        if (migrateTracking) {
+            val tracks = getNovelTracks.await(oldNovel.id)
+                .map { it.copy(novelId = newNovel.id) }
+            if (tracks.isNotEmpty()) {
+                insertNovelTrack.awaitAll(tracks)
+            }
+        }
+
         if (deleteDownloaded && oldSource != null) {
             downloadManager.deleteNovel(oldNovel)
         }
@@ -137,9 +152,10 @@ class MigrateNovelUseCase(
             NovelUpdate(
                 id = newNovel.id,
                 favorite = true,
-                chapterFlags = oldNovel.chapterFlags,
-                viewerFlags = oldNovel.viewerFlags,
+                chapterFlags = if (migrateExtra) oldNovel.chapterFlags else null,
+                viewerFlags = if (migrateExtra) oldNovel.viewerFlags else null,
                 dateAdded = if (replace) oldNovel.dateAdded else Instant.now().toEpochMilli(),
+                notes = if (migrateNotes) oldNovel.notes else null,
             ),
         )
 

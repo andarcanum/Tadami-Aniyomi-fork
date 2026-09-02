@@ -2,8 +2,10 @@ package eu.kanade.tachiyomi.ui.updates.novel
 
 import android.app.Application
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.core.preference.asState
 import eu.kanade.core.util.addOrRemove
 import eu.kanade.core.util.insertSeparators
 import eu.kanade.presentation.updates.novel.NovelUpdatesUiModel
@@ -41,7 +43,7 @@ class NovelUpdatesScreenModel(
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
 ) : ScreenModel {
 
-    val lastUpdated = libraryPreferences.lastUpdatedTimestamp().get()
+    val lastUpdated by libraryPreferences.lastUpdatedTimestamp().asState(screenModelScope)
     private val limit = ZonedDateTime.now().minusMonths(3).toInstant()
     private val selectedChapterIds = MutableStateFlow<Set<Long>>(emptySet())
 

@@ -1338,7 +1338,10 @@ class NovelReaderScreenModel(
 
     suspend fun downloadChapter(chapterId: Long) {
         val novel = currentNovel ?: return
-        val chapter = chapterOrderList.firstOrNull { it.id == chapterId } ?: return
+        val allChapters = if (fullChapterOrderList.isNotEmpty()) fullChapterOrderList else chapterOrderList
+        val chapter = allChapters.firstOrNull { it.id == chapterId }
+            ?: withContext(Dispatchers.IO) { novelChapterRepository.getChapterById(chapterId) }
+            ?: return
         withContext(Dispatchers.IO) {
             novelDownloadManager.downloadChapter(novel, chapter)
         }

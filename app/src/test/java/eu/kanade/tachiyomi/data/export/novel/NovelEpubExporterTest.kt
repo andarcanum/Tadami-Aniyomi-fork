@@ -398,6 +398,173 @@ class NovelEpubExporterTest {
     }
 
     @Test
+    fun `export sorts chapters in ascending reading order even when source returns newest first`() {
+        runBlocking {
+            val cacheDir = tempDir.resolve("cache-order").toFile().apply { mkdirs() }
+            val application = mockk<Application>()
+            every { application.cacheDir } returns cacheDir
+
+            val downloadManager = mockk<eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager>()
+            every { downloadManager.getDownloadedChapterText(any(), any()) } answers {
+                val chId = secondArg<Long>()
+                val chName = if (chId == 101L) "Chapter 1" else "Chapter 2"
+                "<p>$chName content</p>"
+            }
+
+            val exporter = NovelEpubExporter(
+                application = application,
+                sourceManager = null,
+                downloadManager = downloadManager,
+            )
+
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Test Novel")
+            // Newest chapter has sourceOrder = 0, oldest has sourceOrder = 10
+            val chapter1 = NovelChapter.create().copy(
+                id = 101L,
+                novelId = novel.id,
+                chapterNumber = 1.0,
+                sourceOrder = 10L,
+                url = "/ch1",
+                name = "Chapter 1",
+            )
+            val chapter2 = NovelChapter.create().copy(
+                id = 102L,
+                novelId = novel.id,
+                chapterNumber = 2.0,
+                sourceOrder = 0L,
+                url = "/ch2",
+                name = "Chapter 2",
+            )
+
+            val result = exporter.exportWithResult(
+                novel = novel,
+                // Input list in reverse order (newest first)
+                chapters = listOf(chapter2, chapter1),
+            ) as NovelEpubExportResult.Success
+
+            val navXhtml = readZipText(result.cacheFile, "OEBPS/nav.xhtml")
+            val indexCh1 = navXhtml.indexOf("Chapter 1")
+            val indexCh2 = navXhtml.indexOf("Chapter 2")
+            (indexCh1 < indexCh2) shouldBe true
+
+            val ch1Content = readZipText(result.cacheFile, "OEBPS/chapter_1.xhtml")
+            ch1Content.shouldContain("Chapter 1 content")
+            val ch2Content = readZipText(result.cacheFile, "OEBPS/chapter_2.xhtml")
+            ch2Content.shouldContain("Chapter 2 content")
+        }
+    }
+
+    @Test
+    fun `export keeps a consistent order when unrecognized chapters mix with oldest-first sources`() {
+        runBlocking {
+            val cacheDir = tempDir.resolve("cache-mixed-order").toFile().apply { mkdirs() }
+            val application = mockk<Application>()
+            every { application.cacheDir } returns cacheDir
+
+            // Oldest-first source (e.g. Jaomix pages): chapter N carries sourceOrder = N - 1, so
+            // ascending numbers contradict descending sourceOrder. A comparator that mixes the two
+            // rules conditionally becomes intransitive once an unrecognized chapter interleaves:
+            // it either throws "Comparison method violates its general contract!" or silently
+            // buries the unrecognized chapter mid-book instead of the reader-convention position.
+            val recognized = (1..33).map { number ->
+                NovelChapter.create().copy(
+                    id = number.toLong(),
+                    novelId = 1L,
+                    chapterNumber = number.toDouble(),
+                    sourceOrder = (number - 1).toLong(),
+                    url = "/ch$number",
+                    name = "Chapter %03d".format(number),
+                )
+            }
+            val extra = NovelChapter.create().copy(
+                id = 999L,
+                novelId = 1L,
+                chapterNumber = -1.0,
+                sourceOrder = 8L,
+                url = "/extra",
+                name = "Extra SS",
+            )
+            val titlesById = (recognized + extra).associate { it.id to it.name }
+
+            val downloadManager = mockk<eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager>()
+            every { downloadManager.getDownloadedChapterText(any(), any()) } answers {
+                "<p>${titlesById[secondArg<Long>()]} content</p>"
+            }
+
+            val exporter = NovelEpubExporter(
+                application = application,
+                sourceManager = null,
+                downloadManager = downloadManager,
+            )
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Mixed Order Novel")
+
+            val result = exporter.exportWithResult(
+                novel = novel,
+                chapters = listOf(extra) + recognized.shuffled(java.util.Random(0)),
+            ) as NovelEpubExportResult.Success
+
+            // Reading order: the unrecognized chapter sorts first (chapterNumber = -1, same
+            // convention as the reader's novelReadingOrderComparator), then chapters 1..100.
+            val nav = readZipText(result.cacheFile, "OEBPS/nav.xhtml")
+            val positions = (listOf(extra) + recognized).map { nav.indexOf(it.name) }
+            positions.forEach { (it >= 0) shouldBe true }
+            positions shouldBe positions.sorted()
+        }
+    }
+
+    @Test
+    fun `export uses custom title, author, and description in metadata and filenames`() {
+        runBlocking {
+            val cacheDir = tempDir.resolve("cache-meta").toFile().apply { mkdirs() }
+            val application = mockk<Application>()
+            every { application.cacheDir } returns cacheDir
+
+            val downloadManager = mockk<eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager>()
+            every { downloadManager.getDownloadedChapterText(any(), any()) } returns "<p>Content</p>"
+
+            val exporter = NovelEpubExporter(
+                application = application,
+                sourceManager = null,
+                downloadManager = downloadManager,
+            )
+
+            val novel = Novel.create().copy(
+                id = 1L,
+                source = 10L,
+                title = "Original Title",
+                customTitle = "Custom Novel Title",
+                author = "Orig Author",
+                customAuthor = "Custom Author",
+                description = "Orig Description",
+                customDescription = "Custom Description",
+            )
+            val chapter = NovelChapter.create().copy(
+                id = 1L,
+                novelId = novel.id,
+                chapterNumber = 1.0,
+                sourceOrder = 0L,
+                url = "/ch1",
+                name = "Chapter 1",
+            )
+
+            val result = exporter.exportWithResult(
+                novel = novel,
+                chapters = listOf(chapter),
+            ) as NovelEpubExportResult.Success
+
+            result.cacheFile.name.startsWith("Custom Novel Title_") shouldBe true
+
+            val opf = readZipText(result.cacheFile, "OEBPS/content.opf")
+            opf.shouldContain("<dc:title>Custom Novel Title</dc:title>")
+            opf.shouldContain("<dc:creator>Custom Author</dc:creator>")
+            opf.shouldContain("<dc:description>Custom Description</dc:description>")
+
+            val nav = readZipText(result.cacheFile, "OEBPS/nav.xhtml")
+            nav.shouldContain("Custom Novel Title")
+        }
+    }
+
+    @Test
     fun `export reports progress from preparing to done`() {
         runBlocking {
             val progress = mutableListOf<NovelEpubExportProgress>()

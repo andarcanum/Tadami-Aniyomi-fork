@@ -50,6 +50,28 @@ class SyncNovelChaptersWithSourceTest {
     }
 
     @Test
+    fun `does not throw when local source returns no chapters`() = runTest {
+        val repository = FakeNovelChapterRepository()
+        val updateNovel = mockk<eu.kanade.domain.entries.novel.interactor.UpdateNovel>(relaxed = true)
+        val preferences = mockk<LibraryPreferences>(relaxed = true)
+        val interactor = SyncNovelChaptersWithSource(
+            novelChapterRepository = repository,
+            shouldUpdateDbNovelChapter = ShouldUpdateDbNovelChapter(),
+            updateNovel = updateNovel,
+            libraryPreferences = preferences,
+            getNovelExcludedScanlators = noExcludedScanlators(),
+        )
+
+        val localSource = FakeNovelSource(id = 0L)
+        val result = interactor.await(
+            rawSourceChapters = emptyList(),
+            novel = Novel.create().copy(id = 1L, source = 0L),
+            source = localSource,
+        )
+        result shouldBe emptyList()
+    }
+
+    @Test
     fun `adds new chapters and updates last update`() {
         runTest {
             val repository = FakeNovelChapterRepository()
@@ -296,8 +318,9 @@ class SyncNovelChaptersWithSourceTest {
         coEvery { await(any()) } returns emptySet()
     }
 
-    private class FakeNovelSource : NovelSource {
-        override val id = 1L
+    private class FakeNovelSource(
+        override val id: Long = 1L,
+    ) : NovelSource {
         override val name = "Test"
     }
 

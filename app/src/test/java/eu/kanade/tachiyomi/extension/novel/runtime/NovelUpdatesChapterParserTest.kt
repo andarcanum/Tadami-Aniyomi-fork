@@ -44,6 +44,10 @@ class NovelUpdatesChapterParserTest {
             "https://ext.example/chapter-1",
             "https://ext.example/chapter-2",
         )
+        chapters.mapNotNull { it.name } shouldContainExactly listOf(
+            "Chapter 1",
+            "Chapter 2",
+        )
     }
 
     @Test
@@ -72,6 +76,10 @@ class NovelUpdatesChapterParserTest {
             "/extnu/111/",
             "/extnu/222/",
         )
+        chapters.mapNotNull { it.name } shouldContainExactly listOf(
+            "Chapter 1",
+            "Chapter 2",
+        )
     }
 
     @Test
@@ -88,5 +96,15 @@ class NovelUpdatesChapterParserTest {
             href = "  ",
             siteUrl = "https://www.novelupdates.com/",
         ) shouldBe null
+    }
+
+    @Test
+    fun `formatNovelUpdatesChapterName does not distort english words with v, c, part, ss`() {
+        formatNovelUpdatesChapterName("c1", 0) shouldBe "Chapter 1"
+        formatNovelUpdatesChapterName("v1c2", 0) shouldBe "Volume 1 Chapter 2"
+        formatNovelUpdatesChapterName("v2c3 part 1", 0) shouldBe "Volume 2 Chapter 3 Part 1"
+        formatNovelUpdatesChapterName("c4 ss", 0) shouldBe "Chapter 4 SS"
+        formatNovelUpdatesChapterName("Chapter 1: Cave Adventure", 0) shouldBe "Chapter 1: Cave Adventure"
+        formatNovelUpdatesChapterName("Princess Departure", 0) shouldBe "Princess Departure"
     }
 }
