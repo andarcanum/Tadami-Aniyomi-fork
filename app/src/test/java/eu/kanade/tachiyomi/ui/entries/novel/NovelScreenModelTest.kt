@@ -373,6 +373,12 @@ class NovelScreenModelTest {
                 libraryPreferences = tachiyomi.domain.library.service.LibraryPreferences(
                     preferenceStore = preferenceStore,
                 ),
+                getNovelExcludedScanlators = GetNovelExcludedScanlators(
+                    mockk<NovelDatabaseHandler>().also { handler ->
+                        coEvery { handler.awaitList<String>(any(), any()) } returns emptyList()
+                        every { handler.subscribeToList<String>(any()) } returns MutableStateFlow(emptyList())
+                    },
+                ),
             )
             val lifecycleOwner = FakeLifecycleOwner()
             val libraryPreferences = tachiyomi.domain.library.service.LibraryPreferences(
@@ -1780,6 +1786,7 @@ class NovelScreenModelTest {
             shouldUpdateDbNovelChapter = ShouldUpdateDbNovelChapter(),
             updateNovel = updateNovel,
             libraryPreferences = libraryPreferences,
+            getNovelExcludedScanlators = GetNovelExcludedScanlators(databaseHandler),
         )
         val novelReaderPreferences = eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences(
             preferenceStore = preferenceStore,

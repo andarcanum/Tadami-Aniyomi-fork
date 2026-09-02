@@ -182,6 +182,13 @@ class NovelTtsSessionController(
                 completeSession()
                 return
             }
+            // loadChapter suspends on IO; a stop()/pause() issued during that window must win over
+            // the auto-advance instead of being overwritten by the resurrected session below.
+            val stateAfterLoad = mutableState.value
+            if (stateAfterLoad.session == null || stateAfterLoad.playbackState != NovelTtsPlaybackState.PLAYING) {
+                clearPendingChapterHandoff()
+                return
+            }
             val nextSession = buildSession(
                 resolvedChapter = nextChapter,
                 utteranceId = null,

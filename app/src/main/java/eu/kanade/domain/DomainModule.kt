@@ -615,7 +615,7 @@ class DomainModule : InjektModule {
 
         addSingletonFactory<NovelChapterRepository> { NovelChapterRepositoryImpl(get()) }
         addFactory { ShouldUpdateDbNovelChapter() }
-        addFactory { SyncNovelChaptersWithSource(get(), get(), get(), get()) }
+        addFactory { SyncNovelChaptersWithSource(get(), get(), get(), get(), get()) }
         addFactory { GetAvailableNovelScanlators(get()) }
         addFactory { GetNovelScanlatorChapterCounts(get()) }
 
