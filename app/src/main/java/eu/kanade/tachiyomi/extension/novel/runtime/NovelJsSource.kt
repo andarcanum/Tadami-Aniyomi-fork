@@ -74,6 +74,7 @@ class NovelJsSource internal constructor(
     NovelImageRequestSource,
     NovelPluginCapabilitySource,
     NovelPluginSettingsSource,
+    NovelJaomixPagedSource,
     NovelPluginIdentitySource {
     override val id: Long = NovelPluginId.toSourceId(plugin.id)
     override val name: String = plugin.name
@@ -608,7 +609,7 @@ class NovelJsSource internal constructor(
         }
     }
 
-    suspend fun getChapterListPage(
+    override suspend fun getChapterListPage(
         novel: SNovel,
         page: Int,
     ): NovelPluginChapterListPage? {
@@ -1722,7 +1723,7 @@ class NovelJsSource internal constructor(
             plugin.name.contains("jaomix", ignoreCase = true)
     }
 
-    fun isJaomixPagedPlugin(): Boolean = isJaomixPlugin()
+    override fun isJaomixPagedPlugin(): Boolean = isJaomixPlugin()
 
     private suspend fun collectChaptersFromParsePage(
         runtime: NovelJsRuntime,

@@ -70,7 +70,6 @@ import eu.kanade.tachiyomi.extension.novel.api.NovelPluginIndexFetcher
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginIndexParser
 import eu.kanade.tachiyomi.extension.novel.api.NovelPluginRepoProvider
 import eu.kanade.tachiyomi.extension.novel.kotlin.KotlinNovelExtensionInstaller
-import eu.kanade.tachiyomi.extension.novel.repo.InMemoryNovelPluginStorage
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoParser
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoService
 import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginRepoServiceContract
@@ -144,7 +143,6 @@ import uy.kohesive.injekt.api.addSingleton
 import uy.kohesive.injekt.api.addSingletonFactory
 import uy.kohesive.injekt.api.get
 import java.io.File
-import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage as NovelRepoPluginStorage
 
 class AppModule(val app: Application) : InjektModule {
     companion object {
@@ -754,7 +752,6 @@ class AppModule(val app: Application) : InjektModule {
         }
         addSingletonFactory { NovelExtensionUpdateChecker() }
         addSingletonFactory { NovelPluginRepoParser(get()) }
-        addSingletonFactory<NovelRepoPluginStorage> { InMemoryNovelPluginStorage() }
         addSingletonFactory { NovelPluginRepoService(get<NetworkHelper>().client, get()) }
         addSingletonFactory<NovelPluginRepoServiceContract> { get<NovelPluginRepoService>() }
         addSingletonFactory { NovelPluginRepoUpdateInteractor(get(), get(), get()) }

@@ -12,8 +12,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.translation.TranslationQueueItem
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.extension.novel.NovelExtensionManager
-import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
-import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
@@ -584,7 +583,7 @@ class NovelSelectedTextTranslationScreenModelTest {
                 storageManager = null,
                 downloadCache = null,
             ),
-            pluginStorage = FakeNovelPluginStorage(emptyList()),
+            pluginAssetBindings = emptyPluginAssetBindings(),
             historyRepository = null,
             novelReaderPreferences = createNovelReaderPreferences(
                 selectedTextTranslationEnabled = selectedTextTranslationEnabled,
@@ -735,12 +734,9 @@ class NovelSelectedTextTranslationScreenModelTest {
         ): Boolean = true
     }
 
-    private class FakeNovelPluginStorage(
-        private val packages: List<NovelPluginPackage>,
-    ) : NovelPluginStorage {
-        override suspend fun save(pkg: NovelPluginPackage) = Unit
-        override suspend fun get(id: String): NovelPluginPackage? = packages.firstOrNull { it.entry.id == id }
-        override suspend fun getAll(): List<NovelPluginPackage> = packages
+    private fun emptyPluginAssetBindings(): NovelPluginAssetBindings {
+        val dir = java.nio.file.Files.createTempDirectory("novel-plugin-assets").toFile()
+        return NovelPluginAssetBindings(tachiyomi.data.extension.novel.NovelPluginStorage(dir))
     }
 
     private class FakeNovelSourceManager(

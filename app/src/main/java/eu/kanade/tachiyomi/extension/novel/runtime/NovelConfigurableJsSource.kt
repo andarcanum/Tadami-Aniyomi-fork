@@ -17,6 +17,7 @@ internal class NovelConfigurableJsSource(
     NovelImageRequestSource by delegate,
     NovelPluginCapabilitySource by delegate,
     NovelPluginSettingsSource by delegate,
+    NovelJaomixPagedSource by delegate,
     NovelPluginIdentitySource by delegate,
     ConfigurableNovelSource {
 

@@ -23,8 +23,8 @@ import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
 import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
-import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
-import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelJaomixPagedSource
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.network.NetworkHelper
 import eu.kanade.tachiyomi.source.model.SManga
@@ -185,7 +185,7 @@ class NovelReaderScreenModel(
     private val getNovelBookState: tachiyomi.domain.book.novel.interactor.GetNovelBookState = Injekt.get(),
     private val setNovelBookProgress: tachiyomi.domain.book.novel.interactor.SetNovelBookProgress =
         Injekt.get(),
-    private val pluginStorage: NovelPluginStorage = Injekt.get(),
+    private val pluginAssetBindings: NovelPluginAssetBindings = Injekt.get(),
     private val historyRepository: NovelHistoryRepository? = null,
     private val basePreferences: BasePreferences = Injekt.get(),
     private val getIncognitoState: GetNovelIncognitoState = Injekt.get(),
@@ -195,7 +195,7 @@ class NovelReaderScreenModel(
         getNovel = getNovel,
         sourceManager = sourceManager,
         novelDownloadManager = novelDownloadManager,
-        pluginStorage = pluginStorage,
+        pluginAssetBindings = pluginAssetBindings,
         novelReaderPreferences = novelReaderPreferences,
     ),
     private val eventBus: AchievementEventBus? = runCatching { Injekt.get<AchievementEventBus>() }.getOrNull(),
@@ -1375,7 +1375,11 @@ class NovelReaderScreenModel(
         if (nextChapterId != null && previousChapterId != null) return
         if (adjacentJaomixPageJob?.isActive == true) return
         val novel = currentNovel ?: return
-        val source = sourceManager.get(novel.source) as? NovelJsSource ?: return
+        // Capability interface, not the concrete NovelJsSource: registered sources are wrapped in
+        // NovelConfigurableJsSource, so the old cast never succeeded and jaomix adjacent-page
+        // loading never ran.
+        val resolvedSource = sourceManager.get(novel.source) ?: return
+        val source = resolvedSource as? NovelJaomixPagedSource ?: return
         if (!source.isJaomixPagedPlugin()) return
         val currentPage = ((chapter.sourceOrder / JAOMIX_PAGE_SOURCE_ORDER_STRIDE) + 1L).toInt().coerceAtLeast(1)
         val targetPage = when {
@@ -1394,7 +1398,7 @@ class NovelReaderScreenModel(
             syncNovelChaptersWithSource.await(
                 rawSourceChapters = normalizedPageChapters,
                 novel = novel,
-                source = source,
+                source = resolvedSource,
                 manualFetch = true,
                 retainMissingChapters = true,
                 sourceOrderOffset = (pageResult.page - 1L) * JAOMIX_PAGE_SOURCE_ORDER_STRIDE,

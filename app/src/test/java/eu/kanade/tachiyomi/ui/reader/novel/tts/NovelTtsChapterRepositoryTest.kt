@@ -1,8 +1,7 @@
 package eu.kanade.tachiyomi.ui.reader.novel.tts
 
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
-import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginPackage
-import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.source.novel.NovelWebUrlSource
@@ -74,7 +73,7 @@ class NovelTtsChapterRepositoryTest {
                     chapterHtml = "<p>Hello</p><img src=\"/image.jpg\" alt=\"Cover\" />",
                 ),
                 novelDownloadManager = NovelDownloadManager(),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                pluginAssetBindings = emptyPluginAssetBindings(),
                 novelReaderPreferences = createNovelReaderPreferences(),
             )
 
@@ -118,7 +117,7 @@ class NovelTtsChapterRepositoryTest {
                 getNovel = GetNovel(FakeNovelRepository(novel)),
                 sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
                 novelDownloadManager = NovelDownloadManager(),
-                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                pluginAssetBindings = emptyPluginAssetBindings(),
                 novelReaderPreferences = createNovelReaderPreferences(),
             )
 
@@ -236,12 +235,9 @@ class NovelTtsChapterRepositoryTest {
         override fun getStubSources() = emptyList<StubNovelSource>()
     }
 
-    private class FakeNovelPluginStorage(
-        private val packages: List<NovelPluginPackage>,
-    ) : NovelPluginStorage {
-        override suspend fun save(pkg: NovelPluginPackage) = Unit
-        override suspend fun get(id: String): NovelPluginPackage? = packages.firstOrNull { it.entry.id == id }
-        override suspend fun getAll(): List<NovelPluginPackage> = packages
+    private fun emptyPluginAssetBindings(): NovelPluginAssetBindings {
+        val dir = java.nio.file.Files.createTempDirectory("novel-plugin-assets").toFile()
+        return NovelPluginAssetBindings(tachiyomi.data.extension.novel.NovelPluginStorage(dir))
     }
 
     private class ReactivePreferenceStore : PreferenceStore {

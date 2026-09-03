@@ -63,7 +63,7 @@ import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
 import eu.kanade.tachiyomi.data.translation.toTranslationQueueProfileSnapshot
-import eu.kanade.tachiyomi.extension.novel.runtime.NovelJsSource
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelJaomixPagedSource
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettings
 import eu.kanade.tachiyomi.extension.novel.runtime.hasVisiblePluginSettingsByDiscovery
 import eu.kanade.tachiyomi.novelsource.NovelCatalogueSource
@@ -2236,7 +2236,9 @@ class NovelScreenModel(
     }
 
     private fun NovelSource.isJaomixPagedSource(): Boolean {
-        return (this as? NovelJsSource)?.isJaomixPagedPlugin() == true
+        // Capability interface: sources are registered wrapped in NovelConfigurableJsSource, so a
+        // cast to the concrete NovelJsSource never succeeded here.
+        return (this as? NovelJaomixPagedSource)?.isJaomixPagedPlugin() == true
     }
 
     /**

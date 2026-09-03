@@ -7,7 +7,8 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.prefetch.AllowAllContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.AndroidContentPrefetchEnvironment
 import eu.kanade.tachiyomi.data.prefetch.ContentPrefetchService
-import eu.kanade.tachiyomi.extension.novel.repo.NovelPluginStorage
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginAssetBindings
+import eu.kanade.tachiyomi.extension.novel.runtime.NovelPluginIdentitySource
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.source.novel.NovelPluginImage
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
@@ -67,7 +68,7 @@ class NovelTtsChapterRepository internal constructor(
     private val getNovel: GetNovel = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
-    private val pluginStorage: NovelPluginStorage = Injekt.get(),
+    private val pluginAssetBindings: NovelPluginAssetBindings = Injekt.get(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
     private val contentPrefetchService: ContentPrefetchService = ContentPrefetchService(
         environment = runCatching {
@@ -116,11 +117,19 @@ class NovelTtsChapterRepository internal constructor(
                     cacheReadChapters = novelReaderPreferences.cacheReadChapters().get(),
                 )
         }
-        val pluginPackage = withContext(Dispatchers.IO) {
-            pluginStorage.getAll().firstOrNull { it.entry.id.hashCode().toLong() == novel.source }
+        // Plugin custom assets resolve by pluginId from the disk-backed asset bindings (the
+        // identity interface is delegated by the configurable source wrapper). The old path
+        // scanned the never-populated in-memory repo storage and matched entry.id.hashCode()
+        // against the SHA-256-derived source id, so customJs/customCss were always null and
+        // obfuscated chapters stayed obfuscated in the WebView reader and in TTS.
+        val pluginId = (source as? NovelPluginIdentitySource)?.pluginId?.takeIf { it.isNotBlank() }
+        val pluginCustomJs = withContext(Dispatchers.IO) {
+            pluginId?.let { pluginAssetBindings.getCustomJs(it) }
         }
-        val sourceSiteUrl = (source as? NovelSiteSource)?.siteUrl
-        val pluginSite = pluginPackage?.entry?.site ?: sourceSiteUrl
+        val pluginCustomCss = withContext(Dispatchers.IO) {
+            pluginId?.let { pluginAssetBindings.getCustomCss(it) }
+        }
+        val pluginSite = (source as? NovelSiteSource)?.siteUrl
         val chapterWebUrl = withContext(Dispatchers.IO) {
             resolveNovelChapterWebUrlForSource(
                 source = source,
@@ -194,8 +203,8 @@ class NovelTtsChapterRepository internal constructor(
             chapter = chapter,
             chapterOrderList = chapterOrderList,
             rawHtml = html,
-            customCss = pluginPackage?.customCss?.toString(Charsets.UTF_8),
-            customJs = pluginPackage?.customJs?.toString(Charsets.UTF_8),
+            customCss = pluginCustomCss,
+            customJs = pluginCustomJs,
             pluginSite = pluginSite,
             chapterWebUrl = chapterWebUrl,
             contentBlocks = contentBlocks,
