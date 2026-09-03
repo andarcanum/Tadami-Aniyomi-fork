@@ -314,6 +314,61 @@ class SyncNovelChaptersWithSourceTest {
         }
     }
 
+    @Test
+    fun `no-change sync refreshes a stale next update when given a real fetch window`() {
+        runTest {
+            val existingChapter = NovelChapter.create().copy(
+                id = 1L,
+                novelId = 10L,
+                url = "/chapter-1",
+                name = "Chapter 1",
+                chapterNumber = 1.0,
+                sourceOrder = 0L,
+            )
+            val repository = FakeNovelChapterRepository().apply {
+                chapters = listOf(existingChapter)
+            }
+            val updateNovel = mockk<eu.kanade.domain.entries.novel.interactor.UpdateNovel>()
+            val preferences = mockk<LibraryPreferences>()
+            val duplicatePref = mockk<Preference<Set<String>>>()
+
+            every { duplicatePref.get() } returns emptySet()
+            every { preferences.markDuplicateReadChapterAsRead() } returns duplicatePref
+            coEvery { updateNovel.await(any()) } returns true
+            coEvery { updateNovel.awaitUpdateFetchInterval(any(), any(), any()) } returns true
+
+            val interactor = SyncNovelChaptersWithSource(
+                novelChapterRepository = repository,
+                shouldUpdateDbNovelChapter = ShouldUpdateDbNovelChapter(),
+                updateNovel = updateNovel,
+                libraryPreferences = preferences,
+                getNovelExcludedScanlators = noExcludedScanlators(),
+            )
+
+            // A scheduled novel whose next_update slipped into the past without chapter changes
+            // must be rescheduled by the no-change path - this is what the library job's real
+            // fetch window enables (the old (0,0) sentinel made the guard dead).
+            val novel = Novel.create().copy(id = 10L, title = "Novel", fetchInterval = 7, nextUpdate = 1_000L)
+            val sChapter = SNovelChapter.create().apply {
+                url = "/chapter-1"
+                name = "Chapter 1"
+                date_upload = 0L
+                chapter_number = 1f
+            }
+
+            val result = interactor.await(
+                rawSourceChapters = listOf(sChapter),
+                novel = novel,
+                source = FakeNovelSource(),
+                manualFetch = false,
+                fetchWindow = Pair(2_000L, 9_000L),
+            )
+
+            result shouldBe emptyList()
+            coVerify { updateNovel.awaitUpdateFetchInterval(novel, any(), Pair(2_000L, 9_000L)) }
+        }
+    }
+
     private fun noExcludedScanlators(): GetNovelExcludedScanlators = mockk {
         coEvery { await(any()) } returns emptySet()
     }

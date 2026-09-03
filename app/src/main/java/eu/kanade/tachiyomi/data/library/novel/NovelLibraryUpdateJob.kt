@@ -80,6 +80,7 @@ class NovelLibraryUpdateJob(
     private val downloadPreferences: DownloadPreferences = Injekt.get()
     private val getLibraryNovel: GetLibraryNovel = Injekt.get()
     private val getNovel: GetNovel = Injekt.get()
+    private val getNovelCategories: tachiyomi.domain.category.novel.interactor.GetNovelCategories = Injekt.get()
     private val updateNovel: UpdateNovel = Injekt.get()
     private val syncNovelChaptersWithSource: SyncNovelChaptersWithSource = Injekt.get()
     private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager()
@@ -157,11 +158,15 @@ class NovelLibraryUpdateJob(
         )
     }
 
-    private suspend fun filterByCategoryId(libraryNovel: List<LibraryNovel>, categoryId: Long): List<LibraryNovel> {
+    private suspend fun filterByCategoryId(
+        libraryNovel: List<LibraryNovel>,
+        categoryId: Long,
+        fullCategoryIdsByNovelId: Map<Long, Set<Long>> = emptyMap(),
+    ): List<LibraryNovel> {
         return when {
             categoryId == -1L -> {
                 // Ungrouped
-                libraryNovel.filter { it.category == 0L }
+                filterLibraryNovelsByCategoryMembership(libraryNovel, 0L, fullCategoryIdsByNovelId)
             }
             categoryId == -2L -> {
                 // Untracked
@@ -216,13 +221,25 @@ class NovelLibraryUpdateJob(
                 libraryNovel.filter { it.novel.source == targetSourceId }
             }
             else -> {
-                libraryNovel.filter { it.category == categoryId }
+                filterLibraryNovelsByCategoryMembership(libraryNovel, categoryId, fullCategoryIdsByNovelId)
             }
         }
     }
 
     private suspend fun addNovelToQueue(categoryId: Long) {
         val libraryNovels = getLibraryNovel.await()
+        // The library view collapses categories to MIN(id) for stable UI rows; update and
+        // auto-download decisions need the real membership from the categories interactor (manga
+        // gets it from one library row per category). Novels without any category fall back to the
+        // default category (0) - the same value the collapsed view reports for them.
+        val fullCategoryIdsByNovelId = libraryNovels
+            .map { it.novel.id }
+            .distinct()
+            .associateWith { novelId ->
+                getNovelCategories.await(novelId)
+                    .mapTo(HashSet()) { it.id }
+                    .ifEmpty { hashSetOf(0L) }
+            }
         val targetEntryIds = inputData.getLongArray(KEY_ENTRY_IDS)
             ?.takeIf { it.isNotEmpty() }
             ?.toSet()
@@ -232,18 +249,23 @@ class NovelLibraryUpdateJob(
                 .filter { it.novel.id in targetEntryIds }
                 .distinctBy { it.novel.id }
         } else if (categoryId != -999L) {
-            filterByCategoryId(libraryNovels, categoryId)
+            filterByCategoryId(libraryNovels, categoryId, fullCategoryIdsByNovelId)
         } else {
-            val categoriesToUpdate = libraryPreferences.novelUpdateCategories().get().map { it.toLong() }
+            val categoriesToUpdate = libraryPreferences.novelUpdateCategories().get().map { it.toLong() }.toSet()
             val includedNovels = if (categoriesToUpdate.isNotEmpty()) {
-                libraryNovels.filter { it.category in categoriesToUpdate }
+                libraryNovels.filter {
+                    isLibraryNovelInAnyCategory(it, categoriesToUpdate, fullCategoryIdsByNovelId)
+                }
             } else {
                 libraryNovels
             }
 
-            val categoriesToExclude = libraryPreferences.novelUpdateCategoriesExclude().get().map { it.toLong() }
+            val categoriesToExclude =
+                libraryPreferences.novelUpdateCategoriesExclude().get().map { it.toLong() }.toSet()
             val excludedNovelIds = if (categoriesToExclude.isNotEmpty()) {
-                libraryNovels.filter { it.category in categoriesToExclude }.map { it.novel.id }
+                libraryNovels
+                    .filter { isLibraryNovelInAnyCategory(it, categoriesToExclude, fullCategoryIdsByNovelId) }
+                    .map { it.novel.id }
             } else {
                 emptyList()
             }
@@ -265,8 +287,10 @@ class NovelLibraryUpdateJob(
         }
 
         novelCategoryIdsByNovelId = listToUpdate
-            .groupBy { it.novel.id }
-            .mapValues { (_, entries) -> entries.map { it.category }.toSet() }
+            .distinctBy { it.novel.id }
+            .associate { item ->
+                item.novel.id to fullCategoryIdsByNovelId.getOrDefault(item.novel.id, setOf(item.category))
+            }
 
         val restrictions = libraryPreferences.autoUpdateItemRestrictions().get().takeIf {
             targetEntryIds == null
@@ -447,7 +471,10 @@ class NovelLibraryUpdateJob(
             novel = dbNovel,
             source = source,
             manualFetch = false,
-            fetchWindow = Pair(0L, 0L),
+            // Manga parity: the real window lets a no-change sync refresh a stale next_update
+            // (the (0,0) sentinel made the `nextUpdate < fetchWindow.first` guard dead, so novels
+            // never rescheduled, dropped out of Upcoming and defeated ENTRY_OUTSIDE_RELEASE_PERIOD).
+            fetchWindow = getNovelFetchWindow(ZonedDateTime.now()),
         )
     }
 
@@ -651,6 +678,31 @@ internal fun isNovelEligibleForAutoUpdate(
         restrictions = restrictions,
         fetchWindowUpperBound = fetchWindowUpperBound,
     ) == null
+}
+
+/**
+ * Category membership filter over the FULL category set of each novel (see
+ * [NovelLibraryUpdateJob.addNovelToQueue]): the collapsed `LibraryNovel.category` only names the
+ * lowest-id category, so filtering by it alone hides multi-category novels from every other
+ * category's updates. Falls back to the collapsed value for novels missing from the map.
+ */
+internal fun filterLibraryNovelsByCategoryMembership(
+    libraryNovels: List<LibraryNovel>,
+    categoryId: Long,
+    fullCategoryIdsByNovelId: Map<Long, Set<Long>>,
+): List<LibraryNovel> {
+    return libraryNovels.filter { item ->
+        categoryId in fullCategoryIdsByNovelId.getOrDefault(item.novel.id, setOf(item.category))
+    }
+}
+
+internal fun isLibraryNovelInAnyCategory(
+    item: LibraryNovel,
+    targetCategoryIds: Set<Long>,
+    fullCategoryIdsByNovelId: Map<Long, Set<Long>>,
+): Boolean {
+    val categories = fullCategoryIdsByNovelId.getOrDefault(item.novel.id, setOf(item.category))
+    return categories.any { it in targetCategoryIds }
 }
 
 /**

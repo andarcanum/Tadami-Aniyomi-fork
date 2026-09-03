@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.library.novel
 
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.UpdateStrategy
+import io.kotest.matchers.collections.shouldContainExactly
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.entries.novel.model.Novel
@@ -98,6 +99,39 @@ class NovelLibraryUpdateSmartFilterTest {
             ),
             fetchWindowUpperBound = 4_000L,
         ) shouldBe true
+    }
+
+    @Test
+    fun `category filter includes novel through a non-minimal membership`() {
+        // The library view collapses the novel to its lowest category id (3); the real membership
+        // is {3, 7}, so "update category 7" must still pick it up.
+        val item = libraryNovel().copy(category = 3L)
+        val fullMembership = mapOf(1L to setOf(3L, 7L))
+
+        filterLibraryNovelsByCategoryMembership(listOf(item), 7L, fullMembership)
+            .shouldContainExactly(item)
+        filterLibraryNovelsByCategoryMembership(listOf(item), 3L, fullMembership)
+            .shouldContainExactly(item)
+        filterLibraryNovelsByCategoryMembership(listOf(item), 9L, fullMembership) shouldBe emptyList()
+    }
+
+    @Test
+    fun `category include and exclude see every membership of a multi-category novel`() {
+        val item = libraryNovel().copy(category = 3L)
+        val fullMembership = mapOf(1L to setOf(3L, 7L))
+
+        isLibraryNovelInAnyCategory(item, setOf(7L), fullMembership) shouldBe true
+        isLibraryNovelInAnyCategory(item, setOf(3L), fullMembership) shouldBe true
+        isLibraryNovelInAnyCategory(item, setOf(9L), fullMembership) shouldBe false
+    }
+
+    @Test
+    fun `category helpers fall back to the collapsed view value without a membership row`() {
+        val item = libraryNovel().copy(category = 5L)
+
+        filterLibraryNovelsByCategoryMembership(listOf(item), 5L, emptyMap())
+            .shouldContainExactly(item)
+        isLibraryNovelInAnyCategory(item, setOf(5L), emptyMap()) shouldBe true
     }
 
     private fun baseNovel(): Novel {
