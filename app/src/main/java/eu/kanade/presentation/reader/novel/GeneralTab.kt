@@ -518,19 +518,6 @@ fun GeneralTab(
                     )
                 },
             )
-            AuroraToggleRow(
-                label = stringResource(AYMR.strings.novel_reader_auto_scroll),
-                subtitle = stringResource(AYMR.strings.novel_reader_auto_scroll_summary),
-                checked = settings.autoScrollInterval > 0,
-                onClick = {
-                    val nextInterval = if (settings.autoScrollInterval > 0) 0 else 50
-                    update(
-                        nextInterval,
-                        { o, v -> o.copy(autoScrollInterval = v) },
-                        { preferences.autoScrollInterval().set(it) },
-                    )
-                },
-            )
         }
     }
 }

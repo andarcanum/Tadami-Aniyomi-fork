@@ -2203,6 +2203,48 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `google translation setters write the source override when one exists`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+            )
+            val prefs = createNovelReaderPreferences()
+            prefs.setSourceOverride(10L, eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride())
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = FakeNovelChapterRepository(chapter),
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginStorage = FakeNovelPluginStorage(emptyList()),
+                novelReaderPreferences = prefs,
+                isSystemDark = { false },
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            screenModel.setGoogleTranslationAutoStart(true)
+            screenModel.setGoogleTranslationTargetLang("Japanese")
+
+            // With an active override the dialog edits must land in the override (resolveSettings
+            // reads it first), leaving the global defaults for all other sources untouched.
+            val override = prefs.getSourceOverride(10L)
+            override?.googleTranslationAutoStart shouldBe true
+            override?.googleTranslationTargetLang shouldBe "Japanese"
+            prefs.googleTranslationAutoStart().get() shouldBe false
+            prefs.googleTranslationTargetLang().get() shouldBe "Russian"
+        }
+    }
+
+    @Test
     fun `read chapter can move saved native progress back from chapter end`() {
         runBlocking {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")

@@ -4076,7 +4076,7 @@ internal fun NovelReaderContentHost(
                     autoScrollExpanded = nextState.autoScrollExpanded
                 },
                 onShowFloatingButtonChange = {
-                    readerPreferences.showAutoScrollFloatingButton().set(it)
+                    autoScrollPreferenceWriter.persistShowFloatingButtonPreference(it)
                 },
                 onToggleExpanded = { autoScrollExpanded = !autoScrollExpanded },
             )

@@ -63,6 +63,15 @@ internal class NovelReaderAutoScrollPreferenceWriter(
         )
     }
 
+    fun persistShowFloatingButtonPreference(visible: Boolean) {
+        writeSourceAware(
+            global = { readerPreferences.showAutoScrollFloatingButton().set(visible) },
+            source = { override ->
+                override.copy(showAutoScrollFloatingButton = visible)
+            },
+        )
+    }
+
     private inline fun writeSourceAware(
         global: () -> Unit,
         noinline source: (NovelReaderOverride) -> NovelReaderOverride,

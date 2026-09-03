@@ -2151,24 +2151,37 @@ class NovelReaderScreenModel(
     fun testMistralConnection() = aiProviderController.testMistralConnection()
 
     fun setGoogleTranslationEnabled(value: Boolean) {
-        novelReaderPreferences.googleTranslationEnabled().set(value)
+        updateGeminiSetting(
+            setGlobal = { novelReaderPreferences.googleTranslationEnabled().set(value) },
+            setOverride = { it.copy(googleTranslationEnabled = value) },
+        )
     }
 
     fun setGoogleTranslationAutoStart(value: Boolean) {
-        novelReaderPreferences.googleTranslationAutoStart().set(value)
+        updateGeminiSetting(
+            setGlobal = { novelReaderPreferences.googleTranslationAutoStart().set(value) },
+            setOverride = { it.copy(googleTranslationAutoStart = value) },
+        )
     }
 
     fun setGoogleTranslationSourceLang(value: String) {
-        novelReaderPreferences.googleTranslationSourceLang().set(value)
+        updateGeminiSetting(
+            setGlobal = { novelReaderPreferences.googleTranslationSourceLang().set(value) },
+            setOverride = { it.copy(googleTranslationSourceLang = value) },
+        )
     }
 
     fun setGoogleTranslationTargetLang(value: String) {
-        novelReaderPreferences.googleTranslationTargetLang().set(value)
+        updateGeminiSetting(
+            setGlobal = { novelReaderPreferences.googleTranslationTargetLang().set(value) },
+            setOverride = { it.copy(googleTranslationTargetLang = value) },
+        )
     }
 
     /**
      * Writes a reader setting either into the source override (when this novel has one) or into the
-     * global preference. Shared by the Gemini setters and the TTS controller.
+     * global preference. Shared by the Gemini setters, the Google translation setters and the TTS
+     * controller.
      */
     private fun updateGeminiSetting(
         setGlobal: () -> Unit,
