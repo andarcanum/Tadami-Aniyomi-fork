@@ -831,20 +831,6 @@ class NovelEpubExporter(
         zip.closeEntry()
     }
 
-    private fun sortChaptersForExport(chapters: List<NovelChapter>): List<NovelChapter> {
-        // Lexicographic composition of total-order keys keeps the comparator transitive. A
-        // conditional mix of chapterNumber/sourceOrder rules becomes intransitive once
-        // unrecognized chapters (-1) interleave with sources whose sourceOrder contradicts the
-        // numbering (oldest-first): TimSort then corrupts the book order or throws "Comparison
-        // method violates its general contract!". Mirrors the reader convention: ascending
-        // chapterNumber (unrecognized first), ties by oldest-first sourceOrder, then id.
-        return chapters.sortedWith(
-            compareBy<NovelChapter> { it.chapterNumber }
-                .thenByDescending { it.sourceOrder }
-                .thenBy { it.id },
-        )
-    }
-
     private fun stableBookIdentifier(novel: Novel): String {
         return "novel-${novel.id}"
     }
@@ -1030,7 +1016,25 @@ class NovelEpubExporter(
         val warnings: List<String> = emptyList(),
     )
 
-    private companion object {
+    internal companion object {
+        /**
+         * Canonical export chapter order. Exposed so range-selection UI counts chapters in the
+         * exact order [applyRange] later slices them (a different UI order silently shifted the
+         * exported range).
+         */
+        fun sortChaptersForExport(chapters: List<NovelChapter>): List<NovelChapter> {
+            // Lexicographic composition of total-order keys keeps the comparator transitive. A
+            // conditional mix of chapterNumber/sourceOrder rules becomes intransitive once
+            // unrecognized chapters (-1) interleave with sources whose sourceOrder contradicts the
+            // numbering (oldest-first): TimSort then corrupts the book order or throws "Comparison
+            // method violates its general contract!". Mirrors the reader convention: ascending
+            // chapterNumber (unrecognized first), ties by oldest-first sourceOrder, then id.
+            return chapters.sortedWith(
+                compareBy<NovelChapter> { it.chapterNumber }
+                    .thenByDescending { it.sourceOrder }
+                    .thenBy { it.id },
+            )
+        }
         const val EPUB_MIME_TYPE = "application/epub+zip"
         const val FB2_MIME_TYPE = "application/x-fictionbook+xml"
 

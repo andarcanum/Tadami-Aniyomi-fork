@@ -223,6 +223,10 @@ class NovelDownloadManager(
 
     fun deleteNovel(novel: Novel) {
         NovelDownloadPath.entries.forEach { path ->
+            // The legacy title-only directory can be shared by same-title novels of one source;
+            // removing it wholesale would delete the other novel's chapters. It is cleaned
+            // per-chapter by deleteChapter and removed by cleanupDirectories once empty.
+            if (path == NovelDownloadPath.READABLE_LEGACY) return@forEach
             val scopedDir = novelDirectory(novel, path = path)
             if (scopedDir?.exists() == true) {
                 scopedDir.delete()
@@ -273,6 +277,9 @@ class NovelDownloadManager(
 
     private fun resolveChapterFile(novel: Novel, chapterId: Long): UniFile? {
         chapterFile(novel, chapterId)?.let { return it }
+        // Pre-unique-naming readable directory (title only): still holds downloads from before
+        // the folder scheme gained the novel id suffix.
+        chapterFile(novel, chapterId, path = NovelDownloadPath.READABLE_LEGACY)?.let { return it }
         val stableFile = chapterFile(novel, chapterId, path = NovelDownloadPath.STABLE_ID)
             ?: return findChapterFileByScan(novel, chapterId)
         val readableFile = chapterFile(novel, chapterId, create = true) ?: return stableFile
@@ -288,11 +295,20 @@ class NovelDownloadManager(
                 }
             }
             readableFile
-        }.getOrElse { stableFile }
+        }.getOrElse { error ->
+            // A partially copied READABLE file would shadow the intact STABLE file on the next
+            // lookup (READABLE is checked first), so never leave the truncated copy behind.
+            runCatching { readableFile.delete() }
+            logcat(LogPriority.WARN, error) {
+                "NovelDownloadManager: failed to migrate chapter=$chapterId to the readable dir"
+            }
+            stableFile
+        }
     }
 
     private fun findChapterFile(novel: Novel, chapterId: Long): UniFile? {
         return chapterFile(novel, chapterId)
+            ?: chapterFile(novel, chapterId, path = NovelDownloadPath.READABLE_LEGACY)
             ?: chapterFile(novel, chapterId, path = NovelDownloadPath.STABLE_ID)
             ?: findChapterFileByScan(novel, chapterId)
     }
@@ -424,7 +440,9 @@ class NovelDownloadManager(
 
     private fun getSourceDirName(novel: Novel, path: NovelDownloadPath): String {
         return when (path) {
-            NovelDownloadPath.READABLE -> getReadableSourceDirName(novel)
+            NovelDownloadPath.READABLE,
+            NovelDownloadPath.READABLE_LEGACY,
+            -> getReadableSourceDirName(novel)
             NovelDownloadPath.STABLE_ID -> DiskUtil.buildValidFilename(novel.source.toString())
         }
     }
@@ -432,6 +450,7 @@ class NovelDownloadManager(
     private fun getNovelDirName(novel: Novel, path: NovelDownloadPath): String {
         return when (path) {
             NovelDownloadPath.READABLE -> getReadableNovelDirName(novel)
+            NovelDownloadPath.READABLE_LEGACY -> getReadableNovelDirNameLegacy(novel)
             NovelDownloadPath.STABLE_ID -> DiskUtil.buildValidFilename(novel.id.toString())
         }
     }
@@ -449,6 +468,13 @@ class NovelDownloadManager(
     }
 
     private fun getReadableNovelDirName(novel: Novel): String {
+        val title = novel.title.ifBlank { novel.id.toString() }
+        // Unique per novel id: two same-title novels of one source used to share the folder, and
+        // deleteNovel on one of them wiped the other's chapters.
+        return DiskUtil.buildValidFilename("$title [${novel.id}]")
+    }
+
+    private fun getReadableNovelDirNameLegacy(novel: Novel): String {
         val title = novel.title.ifBlank { novel.id.toString() }
         return DiskUtil.buildValidFilename(title)
     }
@@ -468,6 +494,7 @@ class NovelDownloadManager(
 
     private enum class NovelDownloadPath {
         READABLE,
+        READABLE_LEGACY,
         STABLE_ID,
     }
 }

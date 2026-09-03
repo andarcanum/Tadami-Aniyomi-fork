@@ -1158,7 +1158,9 @@ class NovelScreenModel(
                 // the synced chapter flow is awaited here instead of busy-polling the UI state.
                 val chapters = withTimeoutOrNull(LOCAL_BOOK_CHAPTERS_TIMEOUT_MS) {
                     getNovelWithChapters.subscribe(novelId)
-                        .map { (_, chapters) -> chapters.sortedBy { it.sourceOrder } }
+                        // Reading order (chapterNumber first): raw sourceOrder is newest-first on
+                        // sources with "0 = newest" numbering and compiled the book backwards.
+                        .map { (_, chapters) -> chapters.sortedByNovelReadingOrder() }
                         .first { it.isNotEmpty() }
                 }
                 if (chapters == null || chapters.isEmpty()) return@launchIO
@@ -1198,7 +1200,8 @@ class NovelScreenModel(
     ) {
         val state = successState ?: return
         if (bookBuildJob?.isActive == true) return
-        val sortedChapters = state.chapters.sortedBy { it.sourceOrder }
+        // Reading order, matching the reader and the exporters (see sortChaptersForExport).
+        val sortedChapters = state.chapters.sortedByNovelReadingOrder()
         val chapters = if (buildPartial) {
             sortedChapters.takeWhile { it.id in state.downloadedChapterIds }
         } else {
@@ -1261,7 +1264,7 @@ class NovelScreenModel(
     ) {
         val state = successState ?: return
         if (bookBuildJob?.isActive == true) return
-        val chapters = state.chapters.sortedBy { it.sourceOrder }
+        val chapters = state.chapters.sortedByNovelReadingOrder()
         if (chapters.isEmpty()) return
         updateSuccessState {
             it.copy(

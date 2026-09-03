@@ -1,15 +1,25 @@
 package eu.kanade.tachiyomi.data.download.novel
 
+import android.app.Application
 import com.hippo.unifile.UniFile
+import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.storage.service.StorageManager
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.fullType
+import uy.kohesive.injekt.api.get
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -19,6 +29,9 @@ class NovelTranslatedDownloadManagerTest {
 
     @field:TempDir
     lateinit var tempDir: Path
+
+    // When true, fakeUniFile output streams fail so export/migration write paths can be exercised.
+    private var failOutputStreams = false
 
     @Test
     fun `legacy lookup stays scoped to the current novel`() {
@@ -242,6 +255,153 @@ class NovelTranslatedDownloadManagerTest {
         )
     }
 
+    private fun ensureStoreDependencies() {
+        runCatching { Injekt.get<Json>() }.getOrElse {
+            Injekt.addSingleton(
+                fullType<Json>(),
+                Json {
+                    encodeDefaults = true
+                    ignoreUnknownKeys = true
+                },
+            )
+        }
+        runCatching { Injekt.get<Application>() }.getOrElse {
+            val app = mockk<Application>(relaxed = true)
+            every { app.cacheDir } returns tempDir.resolve("cache").toFile().apply { mkdirs() }
+            every { app.codeCacheDir } returns tempDir.resolve("code-cache").toFile().apply { mkdirs() }
+            Injekt.addSingleton(fullType<Application>(), app)
+        }
+    }
+
+    private fun cacheEntry(chapterId: Long, text: String): GeminiTranslationCacheEntry {
+        return GeminiTranslationCacheEntry(
+            chapterId = chapterId,
+            translatedByIndex = mapOf(0 to text),
+            model = "model",
+            sourceLang = "English",
+            targetLang = "Russian",
+            promptMode = GeminiPromptMode.ADULT_18,
+        )
+    }
+
+    @Test
+    fun `same-number same-name chapters do not collide on one translated file`() {
+        runBlocking {
+            ensureStoreDependencies()
+            NovelReaderTranslationDiskCacheStore.clear()
+            try {
+                val source = JsStyleNovelSource(id = 10L)
+                val manager = createManager(source)
+                val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel A")
+                val chapterA = NovelChapter.create().copy(
+                    id = 3L,
+                    novelId = 1L,
+                    chapterNumber = 1.0,
+                    name = "Prologue",
+                )
+                // Scanlator-branch duplicate: identical display number and name, different id.
+                val chapterB = NovelChapter.create().copy(
+                    id = 4L,
+                    novelId = 1L,
+                    chapterNumber = 1.0,
+                    name = "Prologue",
+                )
+                NovelReaderTranslationDiskCacheStore.put(cacheEntry(3L, "alpha"))
+                NovelReaderTranslationDiskCacheStore.put(cacheEntry(4L, "beta"))
+
+                manager.exportTranslatedChapter(novel, chapterA, NovelTranslatedDownloadFormat.TXT)
+                    .isSuccess shouldBe true
+                manager.exportTranslatedChapter(novel, chapterB, NovelTranslatedDownloadFormat.TXT)
+                    .isSuccess shouldBe true
+
+                // Pre-fix both chapters mapped to "1 - Prologue.txt": B overwrote A and both
+                // looked downloaded from one file.
+                val fileA = manager.getTranslatedFile(novel, chapterA, NovelTranslatedDownloadFormat.TXT)
+                val fileB = manager.getTranslatedFile(novel, chapterB, NovelTranslatedDownloadFormat.TXT)
+                fileA?.getFilePath() shouldNotBe fileB?.getFilePath()
+                fileA?.openInputStream()?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } shouldBe "alpha"
+                fileB?.openInputStream()?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } shouldBe "beta"
+            } finally {
+                NovelReaderTranslationDiskCacheStore.clear()
+            }
+        }
+    }
+
+    @Test
+    fun `failed translated export leaves no placeholder file`() {
+        runBlocking {
+            ensureStoreDependencies()
+            NovelReaderTranslationDiskCacheStore.clear()
+            try {
+                val source = JsStyleNovelSource(id = 10L)
+                val manager = createManager(source)
+                val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel A")
+                val chapter = NovelChapter.create().copy(
+                    id = 5L,
+                    novelId = 1L,
+                    chapterNumber = 2.0,
+                    name = "Chapter 2",
+                )
+                NovelReaderTranslationDiskCacheStore.put(cacheEntry(5L, "text"))
+
+                failOutputStreams = true
+                manager.exportTranslatedChapter(novel, chapter, NovelTranslatedDownloadFormat.TXT)
+                    .isFailure shouldBe true
+                failOutputStreams = false
+
+                // Pre-fix the created-but-never-written file survived and read as "downloaded".
+                manager.isTranslatedChapterDownloaded(
+                    novel = novel,
+                    chapter = chapter,
+                    format = NovelTranslatedDownloadFormat.TXT,
+                ) shouldBe false
+            } finally {
+                NovelReaderTranslationDiskCacheStore.clear()
+            }
+        }
+    }
+
+    @Test
+    fun `failed stable-to-readable migration removes the truncated copy`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val manager = createManager(source)
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel A")
+            val chapter = NovelChapter.create().copy(
+                id = 3L,
+                novelId = 1L,
+                chapterNumber = 1.0,
+                name = "Prologue",
+            )
+            val stableFile = translatedStableFile(tempDir.resolve("downloads").toFile(), novel, chapter)
+                .apply {
+                    parentFile?.mkdirs()
+                    writeText("stable content")
+                }
+            val readableFile = translatedReadableFile(
+                tempDir.resolve("downloads").toFile(),
+                source.name,
+                novel.title,
+                chapter,
+            )
+
+            failOutputStreams = true
+            manager.isTranslatedChapterDownloaded(
+                novel = novel,
+                chapter = chapter,
+                format = NovelTranslatedDownloadFormat.TXT,
+            ) shouldBe true
+            failOutputStreams = false
+
+            // The failed migration must not leave a truncated readable file shadowing the intact
+            // stable one on the next lookup.
+            readableFile.exists() shouldBe false
+            stableFile.exists() shouldBe true
+            manager.getTranslatedFile(novel, chapter, NovelTranslatedDownloadFormat.TXT)
+                ?.openInputStream()?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } shouldBe "stable content"
+        }
+    }
+
     private fun translatedStableFile(baseDir: File, novel: Novel, chapter: NovelChapter): File {
         return File(
             baseDir,
@@ -285,7 +445,10 @@ class NovelTranslatedDownloadManagerTest {
             every { length() } answers { normalized.length() }
             every { canRead() } answers { normalized.canRead() }
             every { canWrite() } answers { normalized.canWrite() }
-            every { delete() } answers { normalized.delete() }
+            // Production TreeUriFile deletes directories recursively; mirror that.
+            every { delete() } answers {
+                if (normalized.isDirectory) normalized.deleteRecursively() else normalized.delete()
+            }
             every { listFiles() } answers {
                 normalized.listFiles()
                     ?.map { fakeUniFile(it) }
@@ -310,8 +473,12 @@ class NovelTranslatedDownloadManagerTest {
                 fakeUniFile(child)
             }
             every { openInputStream() } answers { FileInputStream(normalized) }
-            every { openOutputStream() } answers { FileOutputStream(normalized) }
+            every { openOutputStream() } answers {
+                if (failOutputStreams) throw java.io.IOException("disk full")
+                FileOutputStream(normalized)
+            }
             every { openOutputStream(any()) } answers {
+                if (failOutputStreams) throw java.io.IOException("disk full")
                 FileOutputStream(normalized, firstArg())
             }
         }

@@ -113,6 +113,7 @@ import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadFormat
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportProgress
 import eu.kanade.tachiyomi.data.export.novel.NovelEpubExportResult
+import eu.kanade.tachiyomi.data.export.novel.NovelEpubExporter
 import eu.kanade.tachiyomi.extension.novel.runtime.resolveUrl
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.source.novel.NovelSiteSource
@@ -2201,7 +2202,9 @@ private fun calculateEpubSelectedChapterCount(
     downloadedOnly: Boolean,
 ): Int {
     if (chapters.isEmpty()) return 0
-    val ordered = chapters.sortedBy { it.sourceOrder }
+    // The exporter slices the range from ITS sorted list; counting positions in any other order
+    // (raw sourceOrder used to) made the preview count and the exported range disagree.
+    val ordered = NovelEpubExporter.sortChaptersForExport(chapters)
     val scoped = if (exportAll) {
         ordered
     } else if (rangeSelection.isValid && rangeSelection.startChapter != null && rangeSelection.endChapter != null) {

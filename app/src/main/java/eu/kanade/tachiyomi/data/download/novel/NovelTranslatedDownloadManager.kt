@@ -46,8 +46,9 @@ class NovelTranslatedDownloadManager(
         chapter: NovelChapter,
         format: NovelTranslatedDownloadFormat,
     ): Boolean {
-        val fileName = buildTranslatedFileName(chapter, format)
-        return translatedFile(novel, fileName)?.exists() == true
+        return translatedFileNameVariants(chapter, format).any { fileName ->
+            translatedFile(novel, fileName)?.exists() == true
+        }
     }
 
     fun getTranslatedChapterIds(
@@ -77,7 +78,9 @@ class NovelTranslatedDownloadManager(
         } else {
             chapters
                 .asSequence()
-                .filter { chapter -> buildTranslatedFileName(chapter, format) in translatedFileNames }
+                .filter { chapter ->
+                    translatedFileNameVariants(chapter, format).any { it in translatedFileNames }
+                }
                 .map { chapter -> chapter.id }
                 .toSet()
         }
@@ -93,8 +96,8 @@ class NovelTranslatedDownloadManager(
         chapter: NovelChapter,
         format: NovelTranslatedDownloadFormat,
     ): UniFile? {
-        val fileName = buildTranslatedFileName(chapter, format)
-        return translatedFile(novel, fileName)
+        return translatedFileNameVariants(chapter, format)
+            .firstNotNullOfOrNull { fileName -> translatedFile(novel, fileName) }
     }
 
     fun deleteTranslatedChapter(
@@ -102,27 +105,28 @@ class NovelTranslatedDownloadManager(
         chapter: NovelChapter,
         format: NovelTranslatedDownloadFormat,
     ) {
-        val fileName = buildTranslatedFileName(chapter, format)
-        translatedFileInDirectory(
-            baseDir = rootDir,
-            sourceDirName = getReadableSourceDirName(novel),
-            novelDirName = getReadableNovelDirName(novel),
-            fileName = fileName,
-        )?.delete()
-        getLegacyReadableSourceDirName(novel)?.let { legacySourceDirName ->
+        translatedFileNameVariants(chapter, format).forEach { fileName ->
             translatedFileInDirectory(
                 baseDir = rootDir,
-                sourceDirName = legacySourceDirName,
+                sourceDirName = getReadableSourceDirName(novel),
                 novelDirName = getReadableNovelDirName(novel),
                 fileName = fileName,
             )?.delete()
+            getLegacyReadableSourceDirName(novel)?.let { legacySourceDirName ->
+                translatedFileInDirectory(
+                    baseDir = rootDir,
+                    sourceDirName = legacySourceDirName,
+                    novelDirName = getReadableNovelDirName(novel),
+                    fileName = fileName,
+                )?.delete()
+            }
+            translatedFileInDirectory(
+                baseDir = rootDir,
+                sourceDirName = getStableSourceDirName(novel),
+                novelDirName = getStableNovelDirName(novel),
+                fileName = fileName,
+            )?.delete()
         }
-        translatedFileInDirectory(
-            baseDir = rootDir,
-            sourceDirName = getStableSourceDirName(novel),
-            novelDirName = getStableNovelDirName(novel),
-            fileName = fileName,
-        )?.delete()
 
         synchronized(downloadedIdsCache) {
             downloadedIdsCache.remove(Pair(novel.id, format))
@@ -168,10 +172,24 @@ class NovelTranslatedDownloadManager(
         }
 
         if (result.isSuccess) {
+            // Remove a pre-id-scheme duplicate so the same chapter is not listed/counted twice.
+            runCatching {
+                val legacyName = buildLegacyTranslatedFileName(chapter, format)
+                if (legacyName != buildTranslatedFileName(chapter, format)) {
+                    translatedFile(novel, legacyName)?.delete()
+                }
+            }
             synchronized(downloadedIdsCache) {
                 downloadedIdsCache.remove(Pair(novel.id, format))
             }
             cachedTotalSize = null
+        } else {
+            // Never leave the empty placeholder created by exportFile behind: its mere existence
+            // reads as "downloaded" while the chapter has no content on disk.
+            runCatching { file.delete() }
+            logcat(LogPriority.WARN) {
+                "NovelTranslatedDownloadManager: export failed for chapter=${chapter.id}, placeholder removed"
+            }
         }
 
         return result
@@ -245,7 +263,15 @@ class NovelTranslatedDownloadManager(
                 }
             }
             readableFile
-        }.getOrElse { null }
+        }.getOrElse { error ->
+            // A partially copied readable file would shadow the intact stable file on the next
+            // lookup (the readable branch runs first), so never leave the truncated copy behind.
+            runCatching { readableFile.delete() }
+            logcat(LogPriority.WARN, error) {
+                "NovelTranslatedDownloadManager: failed to migrate $fileName to the readable dir"
+            }
+            null
+        }
     }
 
     private fun translatedNovelDirectories(novel: Novel): List<UniFile> {
@@ -293,7 +319,31 @@ class NovelTranslatedDownloadManager(
         val ext = if (format == NovelTranslatedDownloadFormat.TXT) "txt" else "docx"
         val chapterNumber = formatChapterNumber(chapter.chapterNumber)
         val chapterName = chapter.name.ifBlank { chapter.id.toString() }
+        // The chapter id suffix keeps same-number/same-name chapters (scanlator branches,
+        // duplicates) from colliding on one file: overwrite on export, cross-delete, and a false
+        // "downloaded" state for both branches.
+        return DiskUtil.buildValidFilename("$chapterNumber - $chapterName [${chapter.id}].$ext")
+    }
+
+    /** Pre-id-scheme display-name file; still recognized for lookup and removed on re-export. */
+    private fun buildLegacyTranslatedFileName(
+        chapter: NovelChapter,
+        format: NovelTranslatedDownloadFormat,
+    ): String {
+        val ext = if (format == NovelTranslatedDownloadFormat.TXT) "txt" else "docx"
+        val chapterNumber = formatChapterNumber(chapter.chapterNumber)
+        val chapterName = chapter.name.ifBlank { chapter.id.toString() }
         return DiskUtil.buildValidFilename("$chapterNumber - $chapterName.$ext")
+    }
+
+    private fun translatedFileNameVariants(
+        chapter: NovelChapter,
+        format: NovelTranslatedDownloadFormat,
+    ): List<String> {
+        return listOf(
+            buildTranslatedFileName(chapter, format),
+            buildLegacyTranslatedFileName(chapter, format),
+        ).distinct()
     }
 
     private fun buildTranslatedText(translatedByIndex: Map<Int, String>): String {

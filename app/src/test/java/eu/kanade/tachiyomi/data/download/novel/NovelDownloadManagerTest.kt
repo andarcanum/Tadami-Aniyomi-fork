@@ -24,6 +24,9 @@ class NovelDownloadManagerTest {
     @field:TempDir
     lateinit var tempDir: Path
 
+    // When true, fakeUniFile output streams fail so migration/export write paths can be exercised.
+    private var failOutputStreams = false
+
     @Test
     fun `downloadChapter returns false when chapter fetch times out`() {
         runBlocking {
@@ -65,7 +68,7 @@ class NovelDownloadManagerTest {
 
             val downloadsDir = tempDir.resolve("downloads").toFile()
             // Folder is named after the human-readable source name...
-            readableChapterFile(downloadsDir, "Novel Ninja", novel.title, chapter.id)
+            readableChapterFile(downloadsDir, "Novel Ninja", readableNovelDirName(novel), chapter.id)
                 .exists() shouldBe true
             // ...and never after the volatile default toString().
             val sourceDirs = File(downloadsDir, "novels").listFiles()?.map { it.name }.orEmpty()
@@ -92,8 +95,12 @@ class NovelDownloadManagerTest {
             )
 
             downloaded shouldBe true
-            readableChapterFile(tempDir.resolve("downloads").toFile(), source.name, novel.title, chapter.id)
-                .exists() shouldBe true
+            readableChapterFile(
+                tempDir.resolve("downloads").toFile(),
+                source.name,
+                readableNovelDirName(novel),
+                chapter.id,
+            ).exists() shouldBe true
             manager.getDownloadedChapterText(novel, chapter.id) shouldBe expectedText
         }
     }
@@ -106,7 +113,7 @@ class NovelDownloadManagerTest {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
             val chapter = NovelChapter.create().copy(id = 2L, novelId = 1L, url = "/chapter-2")
             val chapterDir = tempDir.resolve("downloads").toFile()
-                .resolve("novels/${source.name}/${novel.title}")
+                .resolve("novels/${source.name}/${readableNovelDirName(novel)}")
             chapterDir.mkdirs()
             // A truncated file from a previous interrupted download must be fully replaced.
             File(chapterDir, "${chapter.id}.html").writeText("stale partial")
@@ -127,7 +134,7 @@ class NovelDownloadManagerTest {
             val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
             val chapter = NovelChapter.create().copy(id = 2L, novelId = 1L, url = "/chapter-2")
             val chapterDir = tempDir.resolve("downloads").toFile()
-                .resolve("novels/${source.name}/${novel.title}")
+                .resolve("novels/${source.name}/${readableNovelDirName(novel)}")
             chapterDir.mkdirs()
             File(chapterDir, "${chapter.id}.html").writeText("good content")
 
@@ -154,13 +161,72 @@ class NovelDownloadManagerTest {
                     writeText("stable")
                 }
             val readableFile =
-                readableChapterFile(tempDir.resolve("downloads").toFile(), source.name, novel.title, chapterId)
+                readableChapterFile(
+                    tempDir.resolve("downloads").toFile(),
+                    source.name,
+                    readableNovelDirName(novel),
+                    chapterId,
+                )
 
             manager.isChapterDownloaded(novel, chapterId) shouldBe true
 
             readableFile.exists() shouldBe true
             readableFile.readText() shouldBe "stable"
             stableFile.exists() shouldBe false
+        }
+    }
+
+    @Test
+    fun `failed readable migration removes the truncated copy and keeps serving the stable file`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val manager = createManager(source = source, chapterText = null)
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
+            val chapterId = 2L
+            stableChapterFile(tempDir.resolve("downloads").toFile(), novel, chapterId)
+                .apply {
+                    parentFile?.mkdirs()
+                    writeText("stable")
+                }
+            val readableFile = readableChapterFile(
+                tempDir.resolve("downloads").toFile(),
+                source.name,
+                readableNovelDirName(novel),
+                chapterId,
+            )
+
+            failOutputStreams = true
+            manager.getDownloadedChapterText(novel, chapterId) shouldBe "stable"
+            failOutputStreams = false
+
+            // The failed copy must not leave a truncated READABLE file behind: it would shadow
+            // the intact STABLE file on every following lookup.
+            readableFile.exists() shouldBe false
+            manager.getDownloadedChapterText(novel, chapterId) shouldBe "stable"
+            readableFile.readText() shouldBe "stable"
+        }
+    }
+
+    @Test
+    fun `deleteNovel does not wipe a same-title novel of the same source`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Source A")
+            val manager = createManager(source = source, chapterText = "text")
+            val novelA = Novel.create().copy(id = 1L, source = 10L, title = "Same Title")
+            val novelB = Novel.create().copy(id = 2L, source = 10L, title = "Same Title")
+            val chapterA = NovelChapter.create().copy(id = 11L, novelId = 1L, url = "/a")
+            val chapterB = NovelChapter.create().copy(id = 12L, novelId = 2L, url = "/b")
+
+            manager.downloadChapter(novelA, chapterA) shouldBe true
+            manager.downloadChapter(novelB, chapterB) shouldBe true
+
+            manager.deleteNovel(novelA)
+
+            // Pre-fix both novels shared "novels/Source A/Same Title" and deleting novel A
+            // removed novel B's chapters with it.
+            manager.isChapterDownloaded(novelB, chapterB.id) shouldBe true
+            manager.getDownloadedChapterText(novelB, chapterB.id) shouldBe "text"
+            manager.isChapterDownloaded(novelA, chapterA.id) shouldBe false
         }
     }
 
@@ -311,6 +377,9 @@ class NovelDownloadManagerTest {
         return File(baseDir, "novels/$sourceName/$novelTitle/$chapterId.html")
     }
 
+    /** READABLE novel directories carry the novel id so same-title novels never share a folder. */
+    private fun readableNovelDirName(novel: Novel): String = "${novel.title} [${novel.id}]"
+
     private fun legacyChapterFile(baseDir: File, novel: Novel, chapterId: Long): File {
         return File(baseDir, "novels/${novel.source}/${novel.id}/$chapterId.html")
     }
@@ -332,7 +401,11 @@ class NovelDownloadManagerTest {
             every { length() } answers { normalized.length() }
             every { canRead() } answers { normalized.canRead() }
             every { canWrite() } answers { normalized.canWrite() }
-            every { delete() } answers { normalized.delete() }
+            // Production TreeUriFile deletes directories recursively; mirror that (plain
+            // File.delete() fails on non-empty dirs and broke deleteNovel coverage).
+            every { delete() } answers {
+                if (normalized.isDirectory) normalized.deleteRecursively() else normalized.delete()
+            }
             every { listFiles() } answers {
                 normalized.listFiles()
                     ?.map { fakeUniFile(it) }
@@ -357,8 +430,12 @@ class NovelDownloadManagerTest {
                 fakeUniFile(child)
             }
             every { openInputStream() } answers { FileInputStream(normalized) }
-            every { openOutputStream() } answers { FileOutputStream(normalized) }
+            every { openOutputStream() } answers {
+                if (failOutputStreams) throw java.io.IOException("disk full")
+                FileOutputStream(normalized)
+            }
             every { openOutputStream(any()) } answers {
+                if (failOutputStreams) throw java.io.IOException("disk full")
                 FileOutputStream(normalized, firstArg())
             }
         }
