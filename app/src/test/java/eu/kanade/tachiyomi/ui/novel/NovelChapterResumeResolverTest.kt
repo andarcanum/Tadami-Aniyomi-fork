@@ -60,6 +60,22 @@ class NovelChapterResumeResolverTest {
         )?.id shouldBe chapter2.id
     }
 
+    @Test
+    fun `book state position wins over the per-chapter heuristics`() {
+        val chapter1 = novelChapter(id = 1L, sourceOrder = 2L, chapterNumber = 1.0, read = true)
+        val chapter2 = novelChapter(id = 2L, sourceOrder = 1L, chapterNumber = 2.0, read = true)
+        val chapter3 = novelChapter(id = 3L, sourceOrder = 0L, chapterNumber = 3.0, read = false)
+
+        val bookState = tachiyomi.domain.book.novel.model.NovelBookState
+            .create(novelId = 1L, sourceId = 10L)
+            .copy(enabled = true, lastChapterId = chapter2.id)
+
+        // Without the book state the heuristic picks the unread chapter...
+        resolveNovelResumeChapter(listOf(chapter1, chapter2, chapter3))?.id shouldBe chapter3.id
+        // ...but a title read as a compiled book resumes from the stored book position.
+        resolveNovelResumeChapter(listOf(chapter1, chapter2, chapter3), null, bookState)?.id shouldBe chapter2.id
+    }
+
     private fun novelChapter(
         id: Long,
         sourceOrder: Long,

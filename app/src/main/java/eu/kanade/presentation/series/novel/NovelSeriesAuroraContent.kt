@@ -98,10 +98,11 @@ fun NovelSeriesAuroraContent(
     val colors = AuroraTheme.colors
     val heroNovel = series.selectedCoverNovel ?: series.activeNovel
     val customCoverFile = state.customCoverFile.takeIf { series.series.coverMode == SeriesCoverMode.CUSTOM }
-    val readingTarget = remember(series, state.chapters) {
+    val readingTarget = remember(series, state.chapters, state.bookStates) {
         resolveNovelSeriesReadingTarget(
             series = series,
             chapters = state.chapters,
+            bookStateOf = { novelId -> state.bookStates[novelId] },
         )
     }
 

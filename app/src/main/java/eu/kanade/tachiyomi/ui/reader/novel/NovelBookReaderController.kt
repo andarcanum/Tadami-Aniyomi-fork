@@ -72,6 +72,7 @@ internal class NovelBookReaderController(
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
     private val getNovelBookState: tachiyomi.domain.book.novel.interactor.GetNovelBookState = Injekt.get(),
     private val setNovelBookProgress: SetNovelBookProgress = Injekt.get(),
+    internal val clock: () -> Long = System::currentTimeMillis,
 ) {
 
     /**
@@ -251,6 +252,7 @@ internal class NovelBookReaderController(
         // paused until the renderer applies the move.
         readMarkAnchorCharOffset = artifact?.let { it.chapterStartAt(it.charOffsetOf(location)) }
         bookSeekInFlight = true
+        bookSeekRequestedAtMs = clock()
         lastBookSeekRequestId += 1
         bookSeekRequestState.value = BookSeekRequest(
             id = lastBookSeekRequestId,
@@ -333,6 +335,9 @@ internal class NovelBookReaderController(
 
     /** True while a seek is requested but not yet applied by the renderer; read marking pauses. */
     private var bookSeekInFlight = false
+
+    /** When the in-flight seek was requested; a never-acked seek goes stale and stops blocking. */
+    private var bookSeekRequestedAtMs = 0L
 
     private var lastBookModeFailureLogAtMs = 0L
 
@@ -756,7 +761,16 @@ internal class NovelBookReaderController(
         if (!bookModeRuntime.isActive) return
         // While an explicit seek is in flight the renderer may still report pre-seek positions;
         // marking chapters from those would count chapters the reader jumped over (or back) as read.
-        if (bookSeekInFlight) return
+        if (bookSeekInFlight) {
+            // A renderer that never acks (crashed section, WebView reload that dropped the request)
+            // used to pause read marking for the rest of the session; treat an unacked seek older
+            // than the ack timeout as stale, recover the flag and let marking resume.
+            if (clock() - bookSeekRequestedAtMs < BOOK_SEEK_ACK_TIMEOUT_MS) return
+            logBookModeTrace {
+                "seek in flight for over ${BOOK_SEEK_ACK_TIMEOUT_MS}ms without ack; clearing stale flag"
+            }
+            bookSeekInFlight = false
+        }
         val alreadyRead = buildSet {
             addAll(bookModeMarkedReadChapterIds)
             host.bookChapterOrderList().forEach { if (it.read) add(it.id) }
@@ -920,7 +934,10 @@ internal class NovelBookReaderController(
         val novelId = host.bookCurrentNovel()?.id ?: return
         val charOffset = artifact.charOffsetOf(bookModeRuntime.location)
         val locator = artifact.locatorOf(charOffset)
-        host.bookScope.launch {
+        // NonCancellable: the final flush runs from the screen model's disposal, and a write
+        // launched on the about-to-be-cancelled scope died before reaching the database - losing
+        // exactly the progress flushAndStop() exists to save. Detached writes are idempotent.
+        host.bookScope.launch(kotlinx.coroutines.NonCancellable + kotlinx.coroutines.Dispatchers.IO) {
             setNovelBookProgress.await(
                 novelId = novelId,
                 // Whole-book offset stays stored for the progress bar and the library; the locator
@@ -1040,6 +1057,12 @@ internal class NovelBookReaderController(
          * app-wide log.
          */
         const val BOOK_MODE_LOG_TAG = "NovelBook"
+
+        /**
+         * How long an unacked book seek may pause read marking before the flag is treated as
+         * stale (renderer crashed/reloaded without applying the request).
+         */
+        private const val BOOK_SEEK_ACK_TIMEOUT_MS = 30_000L
 
         /**
          * Share of a chapter that has to be passed before book mode marks it read.

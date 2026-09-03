@@ -1322,7 +1322,10 @@ class NovelReaderScreenModel(
                     applyScanlatorFilter = true,
                 ).sortedByNovelReadingOrder()
             }
-            resolveNovelResumeChapter(chapters)
+            // The next series entry may be read as a compiled book: its resume position lives in
+            // the book state, which the 1-arg resolver overload ignores.
+            val bookState = withContext(Dispatchers.IO) { getNovelBookState.await(entryNovel.id) }
+            resolveNovelResumeChapter(chapters, null, bookState)
         }
         return SeriesInterstitialState(
             seriesTitle = wrapper.series.title,

@@ -47,6 +47,42 @@ class NovelSeriesReadingTargetResolverTest {
         assertEquals(11L, target?.chapter?.id)
     }
 
+    @Test
+    fun `book state redirects the target chapter of a compiled book entry`() {
+        val series = LibraryNovelSeries(
+            series = NovelSeries(
+                id = 1L,
+                title = "Series",
+                description = null,
+                categoryId = 0L,
+                sortOrder = 0L,
+                dateAdded = 0L,
+                coverLastModified = 0L,
+            ),
+            entries = listOf(
+                libraryNovel(id = 10L, title = "One", totalChapters = 100, readCount = 90),
+                libraryNovel(id = 20L, title = "Two", totalChapters = 20, readCount = 0),
+            ),
+        )
+        val chapters = listOf(
+            libraryNovelChapters(novelId = 10L, chapterIds = listOf(1L, 2L, 3L), read = true),
+            libraryNovelChapters(novelId = 20L, chapterIds = listOf(11L, 12L), read = false),
+        )
+        val bookState = tachiyomi.domain.book.novel.model.NovelBookState
+            .create(novelId = 20L, sourceId = 1L)
+            .copy(enabled = true, lastChapterId = 12L)
+
+        // Without the book state the heuristic targets the first unread chapter...
+        assertEquals(11L, resolveNovelSeriesReadingTarget(series, chapters)?.chapter?.id)
+        // ...a compiled book targets its stored reading position.
+        assertEquals(
+            12L,
+            resolveNovelSeriesReadingTarget(series, chapters) { novelId ->
+                bookState.takeIf { it.novelId == novelId }
+            }?.chapter?.id,
+        )
+    }
+
     private fun libraryNovel(
         id: Long,
         title: String,

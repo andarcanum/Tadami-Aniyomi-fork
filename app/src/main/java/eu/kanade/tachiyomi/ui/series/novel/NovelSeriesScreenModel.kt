@@ -43,6 +43,7 @@ class NovelSeriesScreenModel(
     private val removeNovelFromSeries: RemoveNovelFromSeries = Injekt.get(),
     private val reorderSeriesEntries: ReorderSeriesEntries = Injekt.get(),
     private val getNovelChapters: GetNovelChapters = Injekt.get(),
+    private val getNovelBookState: tachiyomi.domain.book.novel.interactor.GetNovelBookState = Injekt.get(),
     private val getNovelCategories: GetNovelCategories = Injekt.get(),
     private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val seriesCoverCache: SeriesCoverCache = Injekt.get(),
@@ -68,12 +69,29 @@ class NovelSeriesScreenModel(
         }
         .stateIn(screenModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Book-mode positions of the series entries, so the reading target resolves a compiled book
+    // to its stored chapter instead of the per-chapter heuristic.
+    private val bookStatesState: StateFlow<Map<Long, tachiyomi.domain.book.novel.model.NovelBookState>> =
+        getNovelSeriesWithEntries.subscribe(seriesId)
+            .filterNotNull()
+            .flatMapLatest { wrapper ->
+                flow {
+                    emit(
+                        getNovelBookState.awaitAll()
+                            .filter { bookState -> wrapper.series.entries.any { it.id == bookState.novelId } }
+                            .associateBy { it.novelId },
+                    )
+                }
+            }
+            .stateIn(screenModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     val state: StateFlow<State> = combine(
         getNovelSeriesWithEntries.subscribe(seriesId),
         getNovelCategories.subscribe(),
         chaptersState,
         customCoverState,
-    ) { wrapper, categories, chapters, customCoverFile ->
+        bookStatesState,
+    ) { wrapper, categories, chapters, customCoverFile, bookStates ->
         if (wrapper == null) {
             State(isLoading = false, series = null, categories = categories, chapters = chapters)
         } else {
@@ -85,6 +103,7 @@ class NovelSeriesScreenModel(
                 chapters = chapters,
                 hasCustomCover = customCoverFile?.exists() == true,
                 customCoverFile = customCoverFile,
+                bookStates = bookStates,
             )
         }
     }.stateIn(screenModelScope, SharingStarted.WhileSubscribed(5000), State())
@@ -198,5 +217,6 @@ class NovelSeriesScreenModel(
         val hasCustomCover: Boolean = false,
         val customCoverFile: File? = null,
         val searchQuery: String? = null,
+        val bookStates: Map<Long, tachiyomi.domain.book.novel.model.NovelBookState> = emptyMap(),
     )
 }

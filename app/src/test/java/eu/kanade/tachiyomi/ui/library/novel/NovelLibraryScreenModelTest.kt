@@ -77,6 +77,7 @@ class NovelLibraryScreenModelTest {
     private lateinit var deleteNovelSeries: DeleteNovelSeries
     private lateinit var updateNovelSeries: UpdateNovelSeries
     private lateinit var getLibraryNovelSeries: GetLibraryNovelSeries
+    private lateinit var getNovelBookState: tachiyomi.domain.book.novel.interactor.GetNovelBookState
     private lateinit var getNovelIdsInAnySeries: GetNovelIdsInAnySeries
     private lateinit var downloadCache: NovelDownloadCache
     private lateinit var downloadedIdsFlow: MutableStateFlow<Set<Long>>
@@ -102,6 +103,9 @@ class NovelLibraryScreenModelTest {
         deleteNovelSeries = mockk()
         updateNovelSeries = mockk(relaxed = true)
         getLibraryNovelSeries = mockk()
+        getNovelBookState = mockk {
+            coEvery { await(any()) } returns null
+        }
         getNovelIdsInAnySeries = mockk()
         downloadCache = mockk(relaxed = true)
         downloadedIdsFlow = MutableStateFlow(emptySet())
@@ -830,6 +834,7 @@ class NovelLibraryScreenModelTest {
             deleteNovelSeries = deleteNovelSeries,
             updateNovelSeries = updateNovelSeries,
             chapterRepository = chapterRepository,
+            getNovelBookState = getNovelBookState,
             basePreferences = basePreferences,
             libraryPreferences = libraryPreferences,
             sourceManager = sourceManager,

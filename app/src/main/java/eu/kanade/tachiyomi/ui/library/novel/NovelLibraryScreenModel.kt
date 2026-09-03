@@ -121,6 +121,7 @@ class NovelLibraryScreenModel(
     private val setNovelCategories: SetNovelCategories = Injekt.get(),
     private val updateNovel: UpdateNovel = Injekt.get(),
     private val chapterRepository: NovelChapterRepository = Injekt.get(),
+    private val getNovelBookState: tachiyomi.domain.book.novel.interactor.GetNovelBookState = Injekt.get(),
     private val basePreferences: BasePreferences = Injekt.get(),
     val libraryPreferences: LibraryPreferences = Injekt.get(),
     val sourceManager: NovelSourceManager = Injekt.get(),
@@ -767,7 +768,11 @@ class NovelLibraryScreenModel(
             novelId = novel.id,
             applyScanlatorFilter = true,
         )
-        return resolveNovelResumeChapter(chapters)
+        // Book-mode titles keep their reading position in the book state; without it the resolver
+        // fell back to the per-chapter heuristic and "continue" reopened the book at the wrong
+        // chapter.
+        val bookState = getNovelBookState.await(novel.id)
+        return resolveNovelResumeChapter(chapters, null, bookState)
     }
 
     suspend fun getNextUnreadChapter(item: NovelLibraryItem): NovelChapter? {

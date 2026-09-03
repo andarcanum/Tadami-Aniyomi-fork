@@ -102,6 +102,7 @@ internal class NovelHomeHubScreenModel(
     private val getLibraryNovel: GetLibraryNovel by injectLazy()
     private val getNovel: GetNovel by injectLazy()
     private val getNovelWithChapters: GetNovelWithChapters by injectLazy()
+    private val getNovelBookState: tachiyomi.domain.book.novel.interactor.GetNovelBookState by injectLazy()
     private val getNovelCategories: GetNovelCategories by injectLazy()
     private val getEnabledNovelSources: GetEnabledNovelSources by injectLazy()
     private val sourcePreferences: SourcePreferences by injectLazy()
@@ -371,7 +372,10 @@ internal class NovelHomeHubScreenModel(
 
     private suspend fun loadHeroChapterId(novelId: Long, fromChapterId: Long) {
         val chapters = getNovelWithChapters.awaitChapters(novelId, applyScanlatorFilter = true)
-        lastResolvedHeroChapterId = resolveNovelHomeHeroChapterId(chapters, fromChapterId)
+        // The hero card must resume a book-mode title at its stored book position, not at the
+        // per-chapter heuristic result.
+        val bookState = getNovelBookState.await(novelId)
+        lastResolvedHeroChapterId = resolveNovelHomeHeroChapterId(chapters, fromChapterId, bookState)
     }
 
     fun getHeroChapterId(): Long? {
@@ -499,8 +503,9 @@ internal class NovelHomeHubScreenModel(
 internal fun resolveNovelHomeHeroChapterId(
     chapters: List<tachiyomi.domain.items.novelchapter.model.NovelChapter>,
     fromChapterId: Long,
+    bookState: tachiyomi.domain.book.novel.model.NovelBookState? = null,
 ): Long? {
-    return resolveNovelResumeChapter(chapters, fromChapterId)?.id
+    return resolveNovelResumeChapter(chapters, fromChapterId, bookState)?.id
 }
 
 internal fun shouldReloadNovelHomeHeroChapterId(
