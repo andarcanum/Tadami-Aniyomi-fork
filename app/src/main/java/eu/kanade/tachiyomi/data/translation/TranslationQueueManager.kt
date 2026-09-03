@@ -112,13 +112,17 @@ class TranslationQueueManager(
         val batchToken = request.batchToken.ifBlank { UUID.randomUUID().toString() }
         val currentTime = System.currentTimeMillis()
         val profileSnapshotJson = json.encodeToString(request.profileSnapshot)
+        // Full-requirements probe: identical to the reader's restore check, so a batch never skips
+        // a chapter whose cache was produced under different settings (targetLang-only probe let
+        // the batch report "already translated" while the reader kept showing the original text).
+        val cacheRequirements = request.profileSnapshot.toTranslationCacheRequirements()
         var enqueuedCount = 0
         var skippedAlreadyTranslatedCount = 0
 
         distinctChapterIds.forEachIndexed { index, chapterId ->
             if (
                 !request.forceRetranslate &&
-                NovelReaderTranslationDiskCacheStore.has(chapterId, request.profileSnapshot.geminiTargetLang)
+                NovelReaderTranslationDiskCacheStore.has(chapterId, cacheRequirements)
             ) {
                 skippedAlreadyTranslatedCount++
                 return@forEachIndexed

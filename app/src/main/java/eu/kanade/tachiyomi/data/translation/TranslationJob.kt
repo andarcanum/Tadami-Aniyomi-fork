@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.lifecycle.asFlow
+import androidx.work.BackoffPolicy
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
@@ -33,6 +34,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.concurrent.TimeUnit
 
 class TranslationJob(
     context: Context,
@@ -136,6 +138,13 @@ class TranslationJob(
                 }
             }
 
+            // An item enqueued between the last empty poll and this terminal state would be
+            // stranded: the caller's enqueueUniqueWork(KEEP) drops its restart request while this
+            // worker still counts as "existing pending work". Re-arm via retry instead of
+            // finishing (5s linear backoff, see runImmediately).
+            if (pausedBatchState == null && !isStopped && queueManager.getNextPending() != null) {
+                return Result.retry()
+            }
             if (pausedBatchState != null) {
                 notificationManager.showBatchPaused(pausedBatchState)
             } else {
@@ -295,6 +304,8 @@ class TranslationJob(
             logcat(LogPriority.DEBUG) { "TranslationJob.runImmediately() called" }
             val request = OneTimeWorkRequestBuilder<TranslationJob>()
                 .addTag(TAG)
+                // Fast, predictable re-arm for the terminal-state race re-check (Result.retry).
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 5, TimeUnit.SECONDS)
                 .build()
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(TAG, ExistingWorkPolicy.KEEP, request)

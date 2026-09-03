@@ -4,6 +4,10 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NOVEL_TRANSLATION_EXTRACTOR_VERSION
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationCacheRequirements
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelIdOf
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationPromptModifiersFingerprintOf
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -167,4 +171,40 @@ private fun String.toStylePreset(fallback: NovelTranslationStylePreset): NovelTr
 
 private fun String.toTranslationProvider(fallback: NovelTranslationProvider): NovelTranslationProvider {
     return enumValues<NovelTranslationProvider>().firstOrNull { it.name == this } ?: fallback
+}
+
+/**
+ * Cache requirements for the batch skip-check, derived from the enqueued profile snapshot.
+ *
+ * The skip-check must answer exactly the same "is there a usable translation?" question the reader
+ * asks on restore; probing by target language alone used to skip chapters whose cache was produced
+ * by a different provider/model/prompt (the reader then showed the original text while the batch
+ * reported "already translated" and enqueued nothing).
+ */
+internal fun TranslationQueueProfileSnapshot.toTranslationCacheRequirements(): NovelReaderTranslationCacheRequirements {
+    val provider = translationProvider.toTranslationProvider(NovelTranslationProvider.GEMINI)
+    return NovelReaderTranslationCacheRequirements(
+        geminiEnabled = geminiEnabled,
+        geminiDisableCache = geminiDisableCache,
+        translationProvider = provider,
+        modelId = translationCacheModelIdOf(
+            provider = provider,
+            geminiModel = geminiModel,
+            openRouterModel = openRouterModel,
+            deepSeekModel = deepSeekModel,
+            mistralModel = mistralModel,
+            nvidiaModel = nvidiaModel,
+            ollamaCloudModel = ollamaCloudModel,
+        ),
+        sourceLang = geminiSourceLang,
+        targetLang = geminiTargetLang,
+        promptMode = geminiPromptMode.toGeminiPromptMode(GeminiPromptMode.ADULT_18),
+        stylePreset = geminiStylePreset.toStylePreset(NovelTranslationStylePreset.PROFESSIONAL),
+        extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
+        promptModifiersFingerprint = translationPromptModifiersFingerprintOf(
+            enabledIds = geminiEnabledPromptModifiers,
+            customModifier = geminiCustomPromptModifier,
+            rawModifiers = geminiPromptModifiers,
+        ),
+    )
 }

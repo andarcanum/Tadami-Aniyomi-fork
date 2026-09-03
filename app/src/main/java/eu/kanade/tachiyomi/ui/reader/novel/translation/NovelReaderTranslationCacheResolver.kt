@@ -86,10 +86,26 @@ internal fun NovelReaderSettings.toTranslationCacheRequirements(): NovelReaderTr
  * translations produced under different modifiers must not be served or re-stamped.
  */
 internal fun NovelReaderSettings.translationPromptModifiersFingerprint(): String {
+    return translationPromptModifiersFingerprintOf(
+        enabledIds = geminiEnabledPromptModifiers,
+        customModifier = geminiCustomPromptModifier,
+        rawModifiers = geminiPromptModifiers,
+    )
+}
+
+/**
+ * Shared primitive form of the modifiers fingerprint so the settings-based and the queue
+ * snapshot-based requirements cannot drift apart.
+ */
+internal fun translationPromptModifiersFingerprintOf(
+    enabledIds: List<String>,
+    customModifier: String,
+    rawModifiers: String,
+): String {
     return listOf(
-        geminiEnabledPromptModifiers.sorted().joinToString(","),
-        geminiCustomPromptModifier.trim(),
-        geminiPromptModifiers.trim(),
+        enabledIds.sorted().joinToString(","),
+        customModifier.trim(),
+        rawModifiers.trim(),
     )
         .filter { it.isNotBlank() }
         .joinToString("\u0000")
@@ -113,7 +129,28 @@ internal fun NovelReaderSettings.translationCacheNamespace(): String {
 }
 
 internal fun NovelReaderSettings.translationCacheModelId(): String {
-    return when (translationProvider) {
+    return translationCacheModelIdOf(
+        provider = translationProvider,
+        geminiModel = geminiModel,
+        openRouterModel = openRouterModel,
+        deepSeekModel = deepSeekModel,
+        mistralModel = mistralModel,
+        nvidiaModel = nvidiaModel,
+        ollamaCloudModel = ollamaCloudModel,
+    )
+}
+
+/** Shared primitive form of the cache model id (see [translationPromptModifiersFingerprintOf]). */
+internal fun translationCacheModelIdOf(
+    provider: NovelTranslationProvider,
+    geminiModel: String,
+    openRouterModel: String,
+    deepSeekModel: String,
+    mistralModel: String,
+    nvidiaModel: String,
+    ollamaCloudModel: String,
+): String {
+    return when (provider) {
         NovelTranslationProvider.GEMINI -> geminiModel.normalizeGeminiModelId()
         NovelTranslationProvider.GEMINI_PRIVATE -> geminiModel.normalizeGeminiModelId()
         NovelTranslationProvider.OPENROUTER -> openRouterModel.trim()

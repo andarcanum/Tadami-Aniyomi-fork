@@ -1079,11 +1079,15 @@ class NovelReaderScreenModel(
         progressPersistenceController.resetSessionReadTimer()
         bookController.startForChapter(chapter)
         observeReadingModeChanges(chapter)
+        // Subscribe BEFORE the cache restore: queue progress events have no replay, so a COMPLETED
+        // emitted while the previous subscription was torn down is lost forever. Restoring after
+        // subscribing closes the window - a completion either arrives through the fresh
+        // subscription or its cache entry is already on disk for the restore to pick up.
+        subscribeToQueueProgress(chapter.id)
         translationController.restoreGeminiTranslationFromCache(
             chapterId = chapter.id,
             settings = initialSettings,
         )
-        subscribeToQueueProgress(chapter.id)
         settingsJob?.cancel()
         settingsJob = screenModelScope.launch {
             var skippedInitialEmission = false
