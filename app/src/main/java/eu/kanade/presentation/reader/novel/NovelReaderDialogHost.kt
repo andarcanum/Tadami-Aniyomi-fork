@@ -266,6 +266,7 @@ internal fun NovelReaderDialogHost(
             translationPhase = state.translationPhase,
             isVisible = state.isGoogleTranslationVisible,
             hasCache = state.hasGoogleTranslationCache,
+            isRateLimited = state.isGoogleRateLimited,
             onStart = requestGoogleTranslationStart,
             onStop = onStopGoogleTranslation,
             onResume = onResumeGoogleTranslation,

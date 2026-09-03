@@ -119,6 +119,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -726,11 +727,15 @@ class NovelReaderScreenModel(
         gemini: State.ReaderGeminiState,
         google: State.ReaderGoogleState,
     ) {
-        val successState = mutableState.value as? State.Success ?: return
-        mutableState.value = successState.copy(
-            geminiTranslation = gemini,
-            googleTranslation = google,
-        )
+        // Atomic CAS update: translation state also arrives from parallel Google IO callbacks, and
+        // a read-copy-set here could clobber unrelated Success fields through a stale snapshot.
+        mutableState.update { current ->
+            val successState = current as? State.Success ?: return@update current
+            successState.copy(
+                geminiTranslation = gemini,
+                googleTranslation = google,
+            )
+        }
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -1596,6 +1601,7 @@ class NovelReaderScreenModel(
                 hasGoogleTranslationCache = googleCacheAvailableInUi,
                 googleLogs = translationState.googleLogs,
                 translationPhase = translationState.translationPhase,
+                isRateLimited = translationState.googleRateLimited,
             ),
             ttsUiState = ttsController.snapshot().copy(
                 enabled = settings.ttsEnabled,
@@ -2596,6 +2602,7 @@ class NovelReaderScreenModel(
             val hasGoogleTranslationCache: Boolean get() = googleTranslation.hasGoogleTranslationCache
             val googleLogs: List<String> get() = googleTranslation.googleLogs
             val translationPhase: TranslationPhase get() = googleTranslation.translationPhase
+            val isGoogleRateLimited: Boolean get() = googleTranslation.isRateLimited
 
             val openRouterModelIds: List<String> get() = aiProviders.openRouterModelIds
             val isOpenRouterModelsLoading: Boolean get() = aiProviders.isOpenRouterModelsLoading
@@ -2688,6 +2695,7 @@ class NovelReaderScreenModel(
             val hasGoogleTranslationCache: Boolean = false,
             val googleLogs: List<String> = emptyList(),
             val translationPhase: TranslationPhase = TranslationPhase.IDLE,
+            val isRateLimited: Boolean = false,
         )
 
         data class ReaderAiProvidersState(

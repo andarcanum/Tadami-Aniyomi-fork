@@ -2396,6 +2396,7 @@
     <string name="novel_reader_google_translate_retranslate">Перевести заново</string>
     <string name="novel_reader_google_translate_log">Лог:</string>
     <string name="novel_reader_google_translate_rate_limited">Ограничение частоты. Нажмите Продолжить для повтора.</string>
+    <string name="novel_reader_google_translate_resume">Продолжить</string>
     <string name="novel_reader_google_translate_error">Ошибка перевода: %1$s</string>
 
     <!-- Feed -->

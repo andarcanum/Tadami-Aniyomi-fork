@@ -33,18 +33,28 @@ class GoogleTranslationService(
         sourceLanguage: String,
         targetLanguage: String,
         retryCount: Int = DEFAULT_RETRY_COUNT,
-    ): String? = withContext(Dispatchers.IO) {
-        if (text.isBlank()) return@withContext text
+    ): String? = translateSingleDetailed(text, sourceLanguage, targetLanguage, retryCount).text
+
+    private class SingleTranslationResult(val text: String?, val rateLimited: Boolean)
+
+    private suspend fun translateSingleDetailed(
+        text: String,
+        sourceLanguage: String,
+        targetLanguage: String,
+        retryCount: Int = DEFAULT_RETRY_COUNT,
+    ): SingleTranslationResult = withContext(Dispatchers.IO) {
+        if (text.isBlank()) return@withContext SingleTranslationResult(text, false)
 
         val normalizedSource = normalizeSourceLanguage(sourceLanguage)
         val normalizedTarget = normalizeTargetLanguage(targetLanguage)
-        if (normalizedTarget.isBlank()) return@withContext null
+        if (normalizedTarget.isBlank()) return@withContext SingleTranslationResult(null, false)
 
         if (text.length > maxDirectTextChars) {
-            return@withContext translateLongText(text, normalizedSource, normalizedTarget)
+            return@withContext translateLongTextDetailed(text, normalizedSource, normalizedTarget)
         }
 
         var lastFailure: Throwable? = null
+        var hitRateLimit = false
         repeat(retryCount) { attempt ->
             try {
                 val request = buildSingleTranslationRequest(
@@ -56,17 +66,20 @@ class GoogleTranslationService(
                     val body = response.body.string()
                     if (!response.isSuccessful || body.isBlank()) {
                         lastFailure = IllegalStateException("HTTP ${response.code}")
-                        if (response.code == 429 && attempt < retryCount - 1) {
-                            val retryAfterMs = response.header("Retry-After")
-                                ?.toLongOrNull()
-                                ?.times(1000L)
-                                ?: (1_500L * (attempt + 1))
-                            delay(retryAfterMs.coerceIn(1_000L, 15_000L))
+                        if (response.code == 429) {
+                            hitRateLimit = true
+                            if (attempt < retryCount - 1) {
+                                val retryAfterMs = response.header("Retry-After")
+                                    ?.toLongOrNull()
+                                    ?.times(1000L)
+                                    ?: (1_500L * (attempt + 1))
+                                delay(retryAfterMs.coerceIn(1_000L, 15_000L))
+                            }
                         }
                     } else {
                         parseTranslatedText(body)?.let { translated ->
                             if (translated.isNotBlank()) {
-                                return@withContext translated
+                                return@withContext SingleTranslationResult(translated, hitRateLimit)
                             }
                         }
                     }
@@ -80,7 +93,7 @@ class GoogleTranslationService(
             }
         }
 
-        null
+        SingleTranslationResult(null, hitRateLimit)
     }
 
     suspend fun translateBatch(
@@ -100,6 +113,7 @@ class GoogleTranslationService(
         }
 
         val translations = linkedMapOf<Int, String>()
+        val rateLimited = java.util.concurrent.atomic.AtomicBoolean(false)
         val chunks = buildChunks(texts)
 
         coroutineScope {
@@ -116,11 +130,13 @@ class GoogleTranslationService(
                                     "paragraphs=${chunk.size}, chars=$chunkChars",
                             )
                             val wrappedRequest = chunk.joinToString("\n\n") { (index, text) -> "[$index]\n$text" }
-                            val translatedBody = translateSingle(
+                            val chunkResult = translateSingleDetailed(
                                 text = wrappedRequest,
                                 sourceLanguage = normalizedSource,
                                 targetLanguage = normalizedTarget,
                             )
+                            if (chunkResult.rateLimited) rateLimited.set(true)
+                            val translatedBody = chunkResult.text
 
                             if (translatedBody == null) {
                                 onLog?.invoke(
@@ -131,6 +147,7 @@ class GoogleTranslationService(
                                     sourceLanguage = normalizedSource,
                                     targetLanguage = normalizedTarget,
                                     translations = translations,
+                                    rateLimited = rateLimited,
                                 )
                                 return@async
                             }
@@ -143,11 +160,13 @@ class GoogleTranslationService(
                                 )
                                 val result = markerRegex.find(translatedBody)?.groupValues?.getOrNull(1)?.trim()
                                 if (result.isNullOrBlank()) {
-                                    translateSingle(
+                                    val fallbackResult = translateSingleDetailed(
                                         text = original,
                                         sourceLanguage = normalizedSource,
                                         targetLanguage = normalizedTarget,
-                                    )?.let { fallback ->
+                                    )
+                                    if (fallbackResult.rateLimited) rateLimited.set(true)
+                                    fallbackResult.text?.let { fallback ->
                                         synchronized(translations) {
                                             translations[index] = fallback
                                         }
@@ -171,6 +190,7 @@ class GoogleTranslationService(
         GoogleTranslationBatchResponse(
             translatedByIndex = translations,
             detectedSourceLanguage = if (normalizedSource == "auto") "auto" else normalizedSource,
+            rateLimited = rateLimited.get(),
         )
     }
 
@@ -179,13 +199,16 @@ class GoogleTranslationService(
         sourceLanguage: String,
         targetLanguage: String,
         translations: MutableMap<Int, String>,
+        rateLimited: java.util.concurrent.atomic.AtomicBoolean,
     ) {
         chunk.forEach { (index, original) ->
-            translateSingle(
+            val result = translateSingleDetailed(
                 text = original,
                 sourceLanguage = sourceLanguage,
                 targetLanguage = targetLanguage,
-            )?.let { translated ->
+            )
+            if (result.rateLimited) rateLimited.set(true)
+            result.text?.let { translated ->
                 synchronized(translations) {
                     translations[index] = translated
                 }
@@ -261,28 +284,31 @@ class GoogleTranslationService(
         return chunks
     }
 
-    private suspend fun translateLongText(
+    private suspend fun translateLongTextDetailed(
         text: String,
         sourceLanguage: String,
         targetLanguage: String,
-    ): String? {
+    ): SingleTranslationResult {
         val sentences = text.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotBlank() }
-        if (sentences.size <= 1) return null
+        if (sentences.size <= 1) return SingleTranslationResult(null, false)
 
         val midpoint = sentences.size / 2
         val firstPart = sentences.take(midpoint).joinToString(" ")
         val secondPart = sentences.drop(midpoint).joinToString(" ")
 
         return coroutineScope {
-            val first = async { translateSingle(firstPart, sourceLanguage, targetLanguage) }
-            val second = async { translateSingle(secondPart, sourceLanguage, targetLanguage) }
+            val first = async { translateSingleDetailed(firstPart, sourceLanguage, targetLanguage) }
+            val second = async { translateSingleDetailed(secondPart, sourceLanguage, targetLanguage) }
             val firstResult = first.await()
             val secondResult = second.await()
-            if (firstResult != null && secondResult != null) {
-                "$firstResult $secondResult"
-            } else {
-                null
-            }
+            SingleTranslationResult(
+                text = if (firstResult.text != null && secondResult.text != null) {
+                    "${firstResult.text} ${secondResult.text}"
+                } else {
+                    null
+                },
+                rateLimited = firstResult.rateLimited || secondResult.rateLimited,
+            )
         }
     }
 

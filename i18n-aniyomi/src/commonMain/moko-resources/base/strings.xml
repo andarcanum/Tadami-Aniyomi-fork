@@ -2632,6 +2632,7 @@
     <string name="novel_reader_google_translate_retranslate">Re-translate</string>
     <string name="novel_reader_google_translate_log">Log:</string>
     <string name="novel_reader_google_translate_rate_limited">Rate limited. Tap Resume to retry.</string>
+    <string name="novel_reader_google_translate_resume">Resume</string>
     <string name="novel_reader_google_translate_error">Translation error: %1$s</string>
 
     <!-- Feed -->

@@ -75,6 +75,7 @@ fun GoogleTranslationDialog(
     translationPhase: TranslationPhase = TranslationPhase.IDLE,
     isVisible: Boolean,
     hasCache: Boolean,
+    isRateLimited: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onResume: () -> Unit,
@@ -85,8 +86,6 @@ fun GoogleTranslationDialog(
     onSetTargetLang: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    @Suppress("UNUSED_PARAMETER")
-    val unusedResume = onResume
     var sourceLang by remember(readerSettings.googleTranslationSourceLang) {
         mutableStateOf(readerSettings.googleTranslationSourceLang)
     }
@@ -297,6 +296,15 @@ fun GoogleTranslationDialog(
                     }
                 }
 
+                if (isRateLimited) {
+                    Text(
+                        text = stringResource(AYMR.strings.novel_reader_google_translate_rate_limited),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = aurora.textSecondary,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                    )
+                }
+
                 if (hasCache) {
                     AuroraGlassSection {
                         Row(
@@ -389,6 +397,23 @@ fun GoogleTranslationDialog(
                                 ) {
                                     Text(
                                         stringResource(AYMR.strings.novel_reader_google_translate_hide_translation),
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
+                            }
+                            isRateLimited -> {
+                                // A 429 storm left the chapter partially translated; offer the
+                                // explicit retry instead of a plain Start so the state is honest.
+                                Button(
+                                    onClick = onResume,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(24.dp),
+                                ) {
+                                    Text(
+                                        stringResource(AYMR.strings.novel_reader_google_translate_resume),
                                         maxLines = 1,
                                         textAlign = TextAlign.Center,
                                     )
