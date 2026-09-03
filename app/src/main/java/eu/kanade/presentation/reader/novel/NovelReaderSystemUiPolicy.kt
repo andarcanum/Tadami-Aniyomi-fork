@@ -213,6 +213,22 @@ internal fun shouldRestoreSavedPageReaderProgress(
     return chapterHandoffTarget == NovelReaderPageReaderHandoffTarget.SAVED
 }
 
+/**
+ * The screen stays on while the reader's keep-screen-on setting is on, or while the dedicated TTS
+ * setting is on and speech is actually playing (paused playback must not hold the screen).
+ */
+internal fun resolveReaderKeepScreenOn(
+    keepScreenOn: Boolean,
+    ttsKeepScreenOnDuringPlayback: Boolean,
+    ttsPlaybackState: eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState,
+): Boolean {
+    return keepScreenOn ||
+        (
+            ttsKeepScreenOnDuringPlayback &&
+                ttsPlaybackState == eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState.PLAYING
+            )
+}
+
 internal fun WindowInsetsControllerCompat.captureReaderSystemBarsState(): ReaderSystemBarsState {
     return ReaderSystemBarsState(
         isLightStatusBars = isAppearanceLightStatusBars,

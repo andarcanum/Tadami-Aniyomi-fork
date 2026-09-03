@@ -49,6 +49,7 @@ import eu.kanade.presentation.reader.novel.resolveNovelReaderBackdropColor
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundBackdropColor
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundImageModel
 import eu.kanade.presentation.reader.novel.resolveReaderBackgroundSelection
+import eu.kanade.presentation.reader.novel.resolveReaderKeepScreenOn
 import eu.kanade.presentation.reader.novel.resolveReaderSystemUiFlag
 import eu.kanade.presentation.reader.novel.safeEnum
 import eu.kanade.tachiyomi.data.discord.DiscordPresenceInfo
@@ -182,7 +183,14 @@ class NovelReaderScreen(
 
         SystemUIController(
             fullScreenMode = fullScreenMode,
-            keepScreenOn = keepScreenOn,
+            keepScreenOn = resolveReaderKeepScreenOn(
+                keepScreenOn = keepScreenOn,
+                ttsKeepScreenOnDuringPlayback = activeReaderSettings?.ttsKeepScreenOnDuringPlayback == true,
+                ttsPlaybackState = (currentState as? NovelReaderScreenModel.State.Success)
+                    ?.ttsUiState
+                    ?.playbackState
+                    ?: NovelTtsPlaybackState.IDLE,
+            ),
             showReaderUi = showReaderUi,
         )
 

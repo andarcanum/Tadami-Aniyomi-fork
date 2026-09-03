@@ -37,6 +37,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderAppearanceMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundSource
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderBackgroundTexture
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderTapZoneAction
+import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsPlaybackState
 import eu.wewox.pagecurl.ExperimentalPageCurlApi
 import eu.wewox.pagecurl.config.PageCurlConfig
 import org.junit.jupiter.api.AfterEach
@@ -851,6 +852,41 @@ class NovelReaderUiVisibilityTest {
                 activeValue = null,
                 loadingValue = null,
                 initialValue = null,
+            ),
+        )
+    }
+
+    @Test
+    fun `keep screen on honors the tts playback setting only while playing`() {
+        // The dedicated TTS setting holds the screen while speech is actually playing...
+        assertTrue(
+            resolveReaderKeepScreenOn(
+                keepScreenOn = false,
+                ttsKeepScreenOnDuringPlayback = true,
+                ttsPlaybackState = NovelTtsPlaybackState.PLAYING,
+            ),
+        )
+        // ...but not while paused (the user is not watching), and not when disabled.
+        assertFalse(
+            resolveReaderKeepScreenOn(
+                keepScreenOn = false,
+                ttsKeepScreenOnDuringPlayback = true,
+                ttsPlaybackState = NovelTtsPlaybackState.PAUSED,
+            ),
+        )
+        assertFalse(
+            resolveReaderKeepScreenOn(
+                keepScreenOn = false,
+                ttsKeepScreenOnDuringPlayback = false,
+                ttsPlaybackState = NovelTtsPlaybackState.PLAYING,
+            ),
+        )
+        // The reader-level setting keeps working independently of TTS.
+        assertTrue(
+            resolveReaderKeepScreenOn(
+                keepScreenOn = true,
+                ttsKeepScreenOnDuringPlayback = false,
+                ttsPlaybackState = NovelTtsPlaybackState.IDLE,
             ),
         )
     }

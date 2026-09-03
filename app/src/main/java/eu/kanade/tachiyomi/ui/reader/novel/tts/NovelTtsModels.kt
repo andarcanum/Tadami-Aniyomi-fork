@@ -149,3 +149,19 @@ data class NovelTtsHighlightSelection(
 fun interface NovelTtsTokenizer {
     fun tokenize(text: String): List<NovelTtsWordRange>
 }
+
+/**
+ * Resolves the effective word-highlight mode for a TTS session.
+ *
+ * [wordHighlightEnabled] (the "Word highlight" reader setting) is the master switch: when it is
+ * off, highlighting is OFF regardless of the preferred mode. Otherwise the preferred mode is
+ * downgraded by the engine capabilities as usual.
+ */
+fun resolveActiveTtsHighlightMode(
+    wordHighlightEnabled: Boolean,
+    preferredMode: NovelTtsHighlightMode,
+    capabilities: NovelTtsEngineCapabilities,
+): NovelTtsHighlightMode {
+    if (!wordHighlightEnabled) return NovelTtsHighlightMode.OFF
+    return capabilities.resolveHighlightMode(preferredMode)
+}

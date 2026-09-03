@@ -33,6 +33,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsSessionUiState
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsTextSource
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsWordTokenizer
 import eu.kanade.tachiyomi.ui.reader.novel.tts.SharedNovelTtsSessionStore
+import eu.kanade.tachiyomi.ui.reader.novel.tts.resolveActiveTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.tts.resolveNovelTtsVoiceSelection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -364,7 +365,11 @@ internal class NovelTtsController(
                 speechRate = settings.ttsSpeechRate,
                 pitch = settings.ttsPitch,
                 capabilities = capabilities,
-                activeHighlightMode = capabilities.resolveHighlightMode(settings.ttsHighlightMode),
+                activeHighlightMode = resolveActiveTtsHighlightMode(
+                    wordHighlightEnabled = settings.ttsWordHighlightEnabled,
+                    preferredMode = settings.ttsHighlightMode,
+                    capabilities = capabilities,
+                ),
                 errorMessage = null,
             )
         }.onFailure { error ->

@@ -300,10 +300,6 @@ private fun ColumnScope.DisplayPage(
         pref = libraryPreferences.unreadBadge(),
     )
     AuroraCheckboxItem(
-        label = stringResource(MR.strings.action_display_local_badge),
-        pref = libraryPreferences.localBadge(),
-    )
-    AuroraCheckboxItem(
         label = stringResource(MR.strings.action_display_language_badge),
         pref = libraryPreferences.languageBadge(),
     )

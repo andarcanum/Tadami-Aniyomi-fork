@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel.tts
 
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import io.kotest.matchers.shouldBe
 import org.junit.Test
 
@@ -56,5 +57,36 @@ class NovelTtsModelsTest {
     fun `wordIndexForCharOffset returns null without words`() {
         val empty = utterance.copy(text = "", wordRanges = emptyList())
         empty.wordIndexForCharOffset(0) shouldBe null
+    }
+
+    @Test
+    fun `word highlight master switch forces OFF regardless of preferred mode`() {
+        val capable = NovelTtsEngineCapabilities(
+            supportsExactWordOffsets = true,
+            supportsReliablePauseResume = true,
+            supportsVoiceEnumeration = true,
+            supportsLocaleEnumeration = true,
+        )
+
+        resolveActiveTtsHighlightMode(
+            wordHighlightEnabled = false,
+            preferredMode = NovelTtsHighlightMode.AUTO,
+            capabilities = capable,
+        ) shouldBe NovelTtsHighlightMode.OFF
+
+        resolveActiveTtsHighlightMode(
+            wordHighlightEnabled = true,
+            preferredMode = NovelTtsHighlightMode.AUTO,
+            capabilities = capable,
+        ) shouldBe NovelTtsHighlightMode.EXACT
+    }
+
+    @Test
+    fun `word highlight enabled still downgrades by engine capabilities`() {
+        resolveActiveTtsHighlightMode(
+            wordHighlightEnabled = true,
+            preferredMode = NovelTtsHighlightMode.AUTO,
+            capabilities = NovelTtsEngineCapabilities.NONE,
+        ) shouldBe NovelTtsHighlightMode.ESTIMATED
     }
 }
