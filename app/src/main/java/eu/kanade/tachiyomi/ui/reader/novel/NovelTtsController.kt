@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.SystemClock
 import eu.kanade.presentation.reader.novel.NovelReaderTtsChapterHandoffPolicy
 import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToHtml
+import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
@@ -515,7 +516,9 @@ internal class NovelTtsController(
             val cached = NovelReaderTranslationDiskCacheStore.get(chapterId) ?: return null
             val settingsMatch = NovelReaderTranslationCacheResolver.matches(
                 cached = cached,
-                requirements = settings.toTranslationCacheRequirements(),
+                requirements = settings.toTranslationCacheRequirements(
+                    replaceRulesFingerprint = replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
+                ),
             )
             if (!settingsMatch) return null
             applyTranslationMapToContentBlocks(originalContentBlocks, cached.translatedByIndex)

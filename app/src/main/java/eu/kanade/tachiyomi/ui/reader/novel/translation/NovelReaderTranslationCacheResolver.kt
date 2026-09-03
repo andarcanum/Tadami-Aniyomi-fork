@@ -16,6 +16,8 @@ internal data class NovelReaderTranslationCacheRequirements(
     val stylePreset: NovelTranslationStylePreset,
     val extractorVersion: Int,
     val promptModifiersFingerprint: String = "",
+    /** Identity of the replace rules applied to the source before extraction (see D15). */
+    val replaceRulesFingerprint: String = "",
 )
 
 internal object NovelReaderTranslationCacheResolver {
@@ -36,6 +38,7 @@ internal object NovelReaderTranslationCacheResolver {
             entryStylePreset = cached.stylePreset,
             entryExtractorVersion = cached.extractorVersion,
             entryPromptModifiersFingerprint = cached.promptModifiersFingerprint,
+            entryReplaceRulesFingerprint = cached.replaceRulesFingerprint,
         )
     }
 }
@@ -54,6 +57,7 @@ internal fun NovelReaderTranslationCacheRequirements.matchesEntryMetadata(
     entryStylePreset: NovelTranslationStylePreset,
     entryExtractorVersion: Int,
     entryPromptModifiersFingerprint: String,
+    entryReplaceRulesFingerprint: String,
 ): Boolean {
     return entryProvider == translationProvider &&
         entryModel == modelId &&
@@ -62,10 +66,13 @@ internal fun NovelReaderTranslationCacheRequirements.matchesEntryMetadata(
         entryPromptMode == promptMode &&
         entryStylePreset == stylePreset &&
         entryExtractorVersion == extractorVersion &&
-        entryPromptModifiersFingerprint == promptModifiersFingerprint
+        entryPromptModifiersFingerprint == promptModifiersFingerprint &&
+        entryReplaceRulesFingerprint == replaceRulesFingerprint
 }
 
-internal fun NovelReaderSettings.toTranslationCacheRequirements(): NovelReaderTranslationCacheRequirements {
+internal fun NovelReaderSettings.toTranslationCacheRequirements(
+    replaceRulesFingerprint: String,
+): NovelReaderTranslationCacheRequirements {
     return NovelReaderTranslationCacheRequirements(
         geminiEnabled = geminiEnabled,
         geminiDisableCache = geminiDisableCache,
@@ -77,6 +84,7 @@ internal fun NovelReaderSettings.toTranslationCacheRequirements(): NovelReaderTr
         stylePreset = geminiStylePreset,
         extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
         promptModifiersFingerprint = translationPromptModifiersFingerprint(),
+        replaceRulesFingerprint = replaceRulesFingerprint,
     )
 }
 
@@ -166,6 +174,7 @@ internal fun String.normalizeGeminiModelId(): String {
         // Legacy key kept for backward compatibility with old settings.
         "gemini-3-flash" -> "gemini-3-flash-preview"
         "gemini-2.5-flash" -> "gemini-3.1-flash-lite-preview"
-        else -> this
+        // Trimmed so the cache key and the request model id cannot differ by stray whitespace.
+        else -> trim()
     }
 }

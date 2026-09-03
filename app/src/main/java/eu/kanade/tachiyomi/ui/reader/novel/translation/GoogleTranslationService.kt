@@ -66,6 +66,11 @@ class GoogleTranslationService(
                     val body = response.body.string()
                     if (!response.isSuccessful || body.isBlank()) {
                         lastFailure = IllegalStateException("HTTP ${response.code}")
+                        // 401/403 are permanent (auth/blocked): retrying them as transient only
+                        // burns three delayed attempts before returning the same null.
+                        if (response.code == 401 || response.code == 403) {
+                            return@withContext SingleTranslationResult(null, hitRateLimit)
+                        }
                         if (response.code == 429) {
                             hitRateLimit = true
                             if (attempt < retryCount - 1) {

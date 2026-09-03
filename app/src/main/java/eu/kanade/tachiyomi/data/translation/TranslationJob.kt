@@ -14,6 +14,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
+import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NOVEL_TRANSLATION_EXTRACTOR_VERSION
@@ -251,6 +252,7 @@ class TranslationJob(
                     stylePreset = settings.geminiStylePreset,
                     extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
                     promptModifiersFingerprint = settings.translationPromptModifiersFingerprint(),
+                    replaceRulesFingerprint = replaceRulesFingerprint(readerPreferences.enabledReplaceRules()),
                     sourceSegmentCount = textSegments.size,
                 ),
             )

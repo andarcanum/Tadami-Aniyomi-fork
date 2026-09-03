@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.data.translation
 
 import android.app.Application
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekPromptResolver
@@ -16,6 +17,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationServ
 import eu.kanade.tachiyomi.ui.reader.novel.translation.effectiveTranslationBatchSize
 import eu.kanade.tachiyomi.ui.reader.novel.translation.hasConfiguredTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.shouldUseSinglePrivateChapterRequestMode
+import eu.kanade.tachiyomi.ui.reader.novel.translation.supportsAdultPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toDeepSeekTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toGeminiTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toMistralTranslationParams
@@ -134,6 +136,15 @@ class NovelChapterTranslationProcessor(
         // key kept serving (and re-stamping into the disk cache) translations produced by a
         // different provider/model/prompt/style after the user switched settings.
         val cacheNamespace = settings.translationCacheNamespace()
+        if (settings.geminiPromptMode == GeminiPromptMode.ADULT_18 &&
+            !settings.translationProvider.supportsAdultPromptMode()
+        ) {
+            // Honest fallback: the provider has no 18+ prompt asset and translates with CLASSIC.
+            onLog?.invoke(
+                "Prompt mode ADULT_18 is not supported by ${settings.translationProvider.name}; " +
+                    "the CLASSIC system prompt is used instead.",
+            )
+        }
         val translated = mutableMapOf<Int, String>()
         val indexedBlocks = segments.mapIndexed { index, text -> index to text }
         val nonCachedSegments = mutableListOf<Pair<Int, String>>()

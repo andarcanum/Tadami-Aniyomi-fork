@@ -40,7 +40,7 @@ internal fun NovelReaderSettings.toOpenRouterTranslationParams(): OpenRouterTran
     return OpenRouterTranslationParams(
         baseUrl = openRouterBaseUrl,
         apiKey = openRouterApiKey,
-        model = openRouterModel,
+        model = openRouterModel.trim(),
         sourceLang = geminiSourceLang,
         targetLang = geminiTargetLang,
         promptMode = geminiPromptMode,
@@ -49,7 +49,7 @@ internal fun NovelReaderSettings.toOpenRouterTranslationParams(): OpenRouterTran
         topP = geminiTopP,
         reasoningEffort = normalizeTranslationReasoningEffort(
             provider = NovelTranslationProvider.OPENROUTER,
-            model = openRouterModel,
+            model = openRouterModel.trim(),
             value = geminiReasoningEffort,
         ),
     )
@@ -59,7 +59,7 @@ internal fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslat
     return DeepSeekTranslationParams(
         baseUrl = deepSeekBaseUrl,
         apiKey = deepSeekApiKey,
-        model = deepSeekModel,
+        model = deepSeekModel.trim(),
         sourceLang = geminiSourceLang,
         targetLang = geminiTargetLang,
         promptMode = geminiPromptMode,
@@ -68,7 +68,7 @@ internal fun NovelReaderSettings.toDeepSeekTranslationParams(): DeepSeekTranslat
         topP = geminiTopP.coerceIn(DEEPSEEK_TOP_P_MIN, DEEPSEEK_TOP_P_MAX),
         reasoningEffort = normalizeTranslationReasoningEffort(
             provider = NovelTranslationProvider.DEEPSEEK,
-            model = deepSeekModel,
+            model = deepSeekModel.trim(),
             value = geminiReasoningEffort,
         ) ?: "none",
         presencePenalty = DEEPSEEK_DEFAULT_PRESENCE_PENALTY,
@@ -80,7 +80,7 @@ internal fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslatio
     return MistralTranslationParams(
         baseUrl = mistralBaseUrl,
         apiKey = mistralApiKey,
-        model = mistralModel,
+        model = mistralModel.trim(),
         sourceLang = geminiSourceLang,
         targetLang = geminiTargetLang,
         promptMode = geminiPromptMode,
@@ -89,7 +89,7 @@ internal fun NovelReaderSettings.toMistralTranslationParams(): MistralTranslatio
         topP = geminiTopP,
         reasoningEffort = normalizeTranslationReasoningEffort(
             provider = NovelTranslationProvider.MISTRAL,
-            model = mistralModel,
+            model = mistralModel.trim(),
             value = geminiReasoningEffort,
         ),
     )
@@ -99,7 +99,7 @@ internal fun NovelReaderSettings.toNvidiaTranslationParams(): NvidiaTranslationP
     return NvidiaTranslationParams(
         baseUrl = nvidiaBaseUrl,
         apiKey = nvidiaApiKey,
-        model = nvidiaModel,
+        model = nvidiaModel.trim(),
         sourceLang = geminiSourceLang,
         targetLang = geminiTargetLang,
         promptMode = geminiPromptMode,
@@ -113,7 +113,7 @@ internal fun NovelReaderSettings.toOllamaCloudTranslationParams(): OllamaCloudTr
     return OllamaCloudTranslationParams(
         baseUrl = ollamaCloudBaseUrl,
         apiKey = ollamaCloudApiKey,
-        model = ollamaCloudModel,
+        model = ollamaCloudModel.trim(),
         sourceLang = geminiSourceLang,
         targetLang = geminiTargetLang,
         promptMode = geminiPromptMode,
@@ -122,7 +122,7 @@ internal fun NovelReaderSettings.toOllamaCloudTranslationParams(): OllamaCloudTr
         topP = geminiTopP,
         reasoningEffort = normalizeTranslationReasoningEffort(
             provider = NovelTranslationProvider.OLLAMA_CLOUD,
-            model = ollamaCloudModel,
+            model = ollamaCloudModel.trim(),
             value = geminiReasoningEffort,
         ),
     )
@@ -267,7 +267,7 @@ internal fun NovelReaderSettings.translationRequestConfigLog(): String {
             val frequencyPenalty = DEEPSEEK_DEFAULT_FREQUENCY_PENALTY.toLogFloat()
             val reasoning = normalizeTranslationReasoningEffort(
                 provider = NovelTranslationProvider.DEEPSEEK,
-                model = deepSeekModel,
+                model = deepSeekModel.trim(),
                 value = geminiReasoningEffort,
             ) ?: "none"
             "baseUrl=${deepSeekBaseUrl.trim()}, temp=${geminiTemperature.toLogFloat()}, " +

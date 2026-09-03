@@ -37,6 +37,7 @@ import eu.kanade.tachiyomi.ui.reader.model.daysOnShelf
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.CompositeNovelDictionaryProvider
 import eu.kanade.tachiyomi.ui.reader.novel.dictionary.OfflineStarDictDictionaryProvider
 import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToHtml
+import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderOverride
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
@@ -856,6 +857,9 @@ class NovelReaderScreenModel(
 
     override fun batchReaderSettings(): NovelReaderSettings? =
         (mutableState.value as? State.Success)?.readerSettings
+
+    override fun batchReplaceRulesFingerprint(): String =
+        replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules())
 
     override fun batchCurrentNovel(): Novel? = currentNovel
 
@@ -2509,7 +2513,9 @@ class NovelReaderScreenModel(
             val cached = NovelReaderTranslationDiskCacheStore.get(chapterId) ?: return bodyHtml
             val settingsMatch = NovelReaderTranslationCacheResolver.matches(
                 cached = cached,
-                requirements = settings.toTranslationCacheRequirements(),
+                requirements = settings.toTranslationCacheRequirements(
+                    replaceRulesFingerprint = replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
+                ),
             )
             if (!settingsMatch) return bodyHtml
             cached.translatedByIndex

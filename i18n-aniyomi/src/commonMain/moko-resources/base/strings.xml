@@ -1085,6 +1085,7 @@
     <string name="novel_reader_gemini_prompt_mode">Prompt mode</string>
     <string name="novel_reader_gemini_prompt_mode_classic">Classic</string>
     <string name="novel_reader_gemini_prompt_mode_adult">18+ (Original prompt)</string>
+    <string name="novel_reader_gemini_prompt_mode_adult_unsupported">The selected provider has no 18+ prompt; the classic prompt is used instead.</string>
     <string name="novel_reader_gemini_prompt_modifiers">Prompt modifiers</string>
     <string name="novel_reader_gemini_prompt_modifiers_hint">Optional extra instructions appended to the system prompt</string>
     <string name="novel_reader_gemini_enabled">Enable AI translator</string>

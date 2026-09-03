@@ -44,6 +44,8 @@ internal data class GeminiTranslationCacheEntry(
     val extractorVersion: Int = 0,
     /** Fingerprint of the prompt-shaping modifiers active at write time; part of cache identity. */
     val promptModifiersFingerprint: String = "",
+    /** Fingerprint of the replace rules applied to the source before extraction at write time. */
+    val replaceRulesFingerprint: String = "",
     /** Source segment count at write time; 0 = unknown (legacy). Fewer translations = incomplete. */
     val sourceSegmentCount: Int = 0,
 ) {

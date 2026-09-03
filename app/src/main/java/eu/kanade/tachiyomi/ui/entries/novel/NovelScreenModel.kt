@@ -75,6 +75,7 @@ import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionStateResolver
 import eu.kanade.tachiyomi.ui.entries.novel.NovelChapterActionUiState
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
 import eu.kanade.tachiyomi.ui.novel.sortedByNovelReadingOrder
+import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
@@ -3390,7 +3391,12 @@ class NovelScreenModel(
                     return@launchIO
                 }
 
-                val translationCacheRequirements = readerSettings.toTranslationCacheRequirements()
+                val batchReplaceRulesFingerprint = replaceRulesFingerprint(
+                    novelReaderPreferences.enabledReplaceRules(),
+                )
+                val translationCacheRequirements = readerSettings.toTranslationCacheRequirements(
+                    replaceRulesFingerprint = batchReplaceRulesFingerprint,
+                )
                 val alreadyTranslatedChapterIds = resolvedChapterIds.filterTo(mutableSetOf()) { chapterId ->
                     NovelReaderTranslationDiskCacheStore.has(
                         chapterId = chapterId,
@@ -3414,7 +3420,9 @@ class NovelScreenModel(
                         novelId = state.novel.id,
                         batchToken = "",
                         chapterIds = filteredSelection.chapterIdsToEnqueue,
-                        profileSnapshot = readerSettings.toTranslationQueueProfileSnapshot(),
+                        profileSnapshot = readerSettings.toTranslationQueueProfileSnapshot(
+                            replaceRulesFingerprint = batchReplaceRulesFingerprint,
+                        ),
                         forceRetranslate = forceRetranslate,
                     ),
                 )

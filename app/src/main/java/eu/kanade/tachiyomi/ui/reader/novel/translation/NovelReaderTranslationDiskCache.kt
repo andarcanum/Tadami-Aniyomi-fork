@@ -35,6 +35,7 @@ internal class NovelReaderTranslationDiskCache(
         val hasTranslatedContent: Boolean,
         val extractorVersion: Int = 0,
         val promptModifiersFingerprint: String = "",
+        val replaceRulesFingerprint: String = "",
         val sourceSegmentCount: Int = 0,
         val translatedCount: Int = 0,
     ) {
@@ -63,6 +64,7 @@ internal class NovelReaderTranslationDiskCache(
         // which never match current requirements - exactly the intended invalidation.
         val extractorVersion: Int = 0,
         val promptModifiersFingerprint: String = "",
+        val replaceRulesFingerprint: String = "",
         val sourceSegmentCount: Int = 0,
         val translatedCount: Int = 0,
     )
@@ -86,6 +88,7 @@ internal class NovelReaderTranslationDiskCache(
                     hasTranslatedContent = model.hasTranslatedContent,
                     extractorVersion = model.extractorVersion,
                     promptModifiersFingerprint = model.promptModifiersFingerprint,
+                    replaceRulesFingerprint = model.replaceRulesFingerprint,
                     sourceSegmentCount = model.sourceSegmentCount,
                     translatedCount = model.translatedCount,
                 )
@@ -112,6 +115,7 @@ internal class NovelReaderTranslationDiskCache(
             hasTranslatedContent = diskModel.translatedByIndex.isNotEmpty(),
             extractorVersion = diskModel.extractorVersion,
             promptModifiersFingerprint = diskModel.promptModifiersFingerprint,
+            replaceRulesFingerprint = diskModel.replaceRulesFingerprint,
             sourceSegmentCount = diskModel.sourceSegmentCount,
             translatedCount = diskModel.translatedByIndex.size,
         )
@@ -128,6 +132,7 @@ internal class NovelReaderTranslationDiskCache(
                 hasTranslatedContent = loaded.hasTranslatedContent,
                 extractorVersion = loaded.extractorVersion,
                 promptModifiersFingerprint = loaded.promptModifiersFingerprint,
+                replaceRulesFingerprint = loaded.replaceRulesFingerprint,
                 sourceSegmentCount = loaded.sourceSegmentCount,
                 translatedCount = loaded.translatedCount,
             )
@@ -177,8 +182,13 @@ internal class NovelReaderTranslationDiskCache(
                 )
             }
         }
-        index.clear()
-        index.putAll(rebuilt)
+        // Merge placeholders per key instead of clear()+putAll(): a put() landing while the file
+        // scan runs would otherwise be wiped from the in-memory index even though its file exists
+        // on disk, giving has()/chapterIds() false negatives until the next rebuild. Stale ids
+        // (files deleted externally) self-heal in getOrLoadEntry's disk fallback.
+        rebuilt.forEach { (chapterId, placeholder) ->
+            index.putIfAbsent(chapterId, placeholder)
+        }
     }
 
     private fun readEntryDiskModel(chapterId: Long): GeminiTranslationCacheDiskModel? {
@@ -217,6 +227,7 @@ internal class NovelReaderTranslationDiskCache(
                     hasTranslatedContent = entry.translatedByIndex.isNotEmpty(),
                     extractorVersion = entry.extractorVersion,
                     promptModifiersFingerprint = entry.promptModifiersFingerprint,
+                    replaceRulesFingerprint = entry.replaceRulesFingerprint,
                     sourceSegmentCount = entry.sourceSegmentCount,
                     translatedCount = entry.translatedByIndex.size,
                 )
@@ -233,6 +244,7 @@ internal class NovelReaderTranslationDiskCache(
                     hasTranslatedContent = entry.translatedByIndex.isNotEmpty(),
                     extractorVersion = entry.extractorVersion,
                     promptModifiersFingerprint = entry.promptModifiersFingerprint,
+                    replaceRulesFingerprint = entry.replaceRulesFingerprint,
                     sourceSegmentCount = entry.sourceSegmentCount,
                     translatedCount = entry.translatedByIndex.size,
                 )
@@ -280,6 +292,7 @@ internal class NovelReaderTranslationDiskCache(
             entryStylePreset = entry.stylePreset,
             entryExtractorVersion = entry.extractorVersion,
             entryPromptModifiersFingerprint = entry.promptModifiersFingerprint,
+            entryReplaceRulesFingerprint = entry.replaceRulesFingerprint,
         )
     }
 
@@ -344,7 +357,10 @@ internal class NovelReaderTranslationDiskCache(
         if (!directory.exists() || chapterIds.isEmpty()) return emptySet()
         return chapterIds.filter { chapterId ->
             val file = fileFor(chapterId)
-            file.isFile && readEntryLocked(chapterId)?.targetLang == targetLang
+            // Content check mirrors the index path: an entry whose translations were all blank
+            // must not light up badges during the first-rebuild fallback window.
+            file.isFile && readEntryLocked(chapterId)
+                ?.takeIf { it.targetLang == targetLang && it.translatedByIndex.isNotEmpty() } != null
         }.toSet()
     }
 
@@ -407,6 +423,7 @@ internal class NovelReaderTranslationDiskCache(
                         entryStylePreset = entry.stylePreset,
                         entryExtractorVersion = entry.extractorVersion,
                         entryPromptModifiersFingerprint = entry.promptModifiersFingerprint,
+                        entryReplaceRulesFingerprint = entry.replaceRulesFingerprint,
                     )
             }
             .map { it.key }
@@ -452,6 +469,7 @@ private data class GeminiTranslationCacheDiskModel(
     // current requirements - they are retranslated instead of overlaid onto shifted blocks.
     val extractorVersion: Int = 0,
     val promptModifiersFingerprint: String = "",
+    val replaceRulesFingerprint: String = "",
     val sourceSegmentCount: Int = 0,
 ) {
     fun toDomain(): GeminiTranslationCacheEntry {
@@ -466,6 +484,7 @@ private data class GeminiTranslationCacheDiskModel(
             stylePreset = stylePreset,
             extractorVersion = extractorVersion,
             promptModifiersFingerprint = promptModifiersFingerprint,
+            replaceRulesFingerprint = replaceRulesFingerprint,
             sourceSegmentCount = sourceSegmentCount,
         )
     }
@@ -483,6 +502,7 @@ private data class GeminiTranslationCacheDiskModel(
                 stylePreset = entry.stylePreset,
                 extractorVersion = entry.extractorVersion,
                 promptModifiersFingerprint = entry.promptModifiersFingerprint,
+                replaceRulesFingerprint = entry.replaceRulesFingerprint,
                 sourceSegmentCount = entry.sourceSegmentCount,
             )
         }

@@ -45,6 +45,8 @@ data class TranslationQueueProfileSnapshot(
     val nvidiaModel: String = "",
     val ollamaCloudBaseUrl: String = "https://ollama.com/api",
     val ollamaCloudModel: String = "gpt-oss:120b",
+    /** Replace rules applied to the source before extraction; part of the cache identity. */
+    val replaceRulesFingerprint: String = "",
 ) {
     fun toReaderSettings(baseSettings: NovelReaderSettings): NovelReaderSettings {
         return baseSettings.copy(
@@ -123,7 +125,9 @@ data class TranslationBatchState(
     val updatedAt: Long,
 )
 
-internal fun NovelReaderSettings.toTranslationQueueProfileSnapshot(): TranslationQueueProfileSnapshot {
+internal fun NovelReaderSettings.toTranslationQueueProfileSnapshot(
+    replaceRulesFingerprint: String = "",
+): TranslationQueueProfileSnapshot {
     return TranslationQueueProfileSnapshot(
         geminiEnabled = geminiEnabled,
         geminiModel = geminiModel,
@@ -158,6 +162,7 @@ internal fun NovelReaderSettings.toTranslationQueueProfileSnapshot(): Translatio
         nvidiaModel = nvidiaModel,
         ollamaCloudBaseUrl = ollamaCloudBaseUrl,
         ollamaCloudModel = ollamaCloudModel,
+        replaceRulesFingerprint = replaceRulesFingerprint,
     )
 }
 
@@ -206,5 +211,6 @@ internal fun TranslationQueueProfileSnapshot.toTranslationCacheRequirements(): N
             customModifier = geminiCustomPromptModifier,
             rawModifiers = geminiPromptModifiers,
         ),
+        replaceRulesFingerprint = replaceRulesFingerprint,
     )
 }

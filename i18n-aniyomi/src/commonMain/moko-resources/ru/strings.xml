@@ -704,6 +704,7 @@
     <string name="novel_reader_gemini_prompt_mode">Режим промпта</string>
     <string name="novel_reader_gemini_prompt_mode_classic">Классический</string>
     <string name="novel_reader_gemini_prompt_mode_adult">18+ (оригинальный промпт)</string>
+    <string name="novel_reader_gemini_prompt_mode_adult_unsupported">У выбранного провайдера нет 18+ промпта; вместо него используется классический.</string>
     <string name="novel_reader_gemini_prompt_modifiers">Модификаторы промпта</string>
     <string name="novel_reader_gemini_prompt_modifiers_hint">Дополнительные инструкции, добавляемые к системному промпту</string>
     <string name="novel_reader_gemini_enabled">Включить AI переводчик</string>

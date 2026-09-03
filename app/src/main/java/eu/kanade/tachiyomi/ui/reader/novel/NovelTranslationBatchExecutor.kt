@@ -66,6 +66,9 @@ internal interface NovelTranslationBatchHost {
 
     fun batchCacheReadChapters(): Boolean
 
+    /** Identity of the replace rules applied to source HTML before extraction (cache key part). */
+    fun batchReplaceRulesFingerprint(): String
+
     fun batchAddAiTranslationLog(message: String)
 }
 
@@ -194,6 +197,7 @@ internal class NovelTranslationBatchExecutor(
                         stylePreset = settings.geminiStylePreset,
                         extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
                         promptModifiersFingerprint = settings.translationPromptModifiersFingerprint(),
+                        replaceRulesFingerprint = host.batchReplaceRulesFingerprint(),
                         sourceSegmentCount = nextTextBlocks.size,
                     ),
                 )
@@ -215,7 +219,9 @@ internal class NovelTranslationBatchExecutor(
     ): Boolean {
         return NovelReaderTranslationDiskCacheStore.has(
             chapterId = chapterId,
-            requirements = settings.toTranslationCacheRequirements(),
+            requirements = settings.toTranslationCacheRequirements(
+                replaceRulesFingerprint = host.batchReplaceRulesFingerprint(),
+            ),
         )
     }
 

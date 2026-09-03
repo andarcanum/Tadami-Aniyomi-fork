@@ -2,8 +2,28 @@ package eu.kanade.tachiyomi.ui.reader.novel.translation
 
 import android.app.Application
 import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
+import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
+
+/**
+ * Whether the provider has a real ADULT_18 system prompt. OpenRouter/NVIDIA/OllamaCloud build
+ * their prompts inline and only carry the CLASSIC texts, so selecting ADULT_18 there silently
+ * downgrades - the UI gates the option and the processor logs the fallback instead.
+ */
+internal fun NovelTranslationProvider.supportsAdultPromptMode(): Boolean {
+    return when (this) {
+        NovelTranslationProvider.GEMINI,
+        NovelTranslationProvider.GEMINI_PRIVATE,
+        NovelTranslationProvider.DEEPSEEK,
+        NovelTranslationProvider.MISTRAL,
+        -> true
+        NovelTranslationProvider.OPENROUTER,
+        NovelTranslationProvider.NVIDIA,
+        NovelTranslationProvider.OLLAMA_CLOUD,
+        -> false
+    }
+}
 
 class GeminiPromptResolver(
     private val application: Application,

@@ -73,6 +73,25 @@ class NovelReaderTranslationDiskCacheTest {
         cache.has(22L, requirements) shouldBe true
     }
 
+    @Test
+    fun `chapter ids fallback ignores entries without translated content`() {
+        val cache = NovelReaderTranslationDiskCache(tempDir, json)
+        cache.put(cacheEntry(chapterId = 30L, translatedByIndex = emptyMap()))
+        cache.put(cacheEntry(chapterId = 31L))
+
+        // The background index is not ready right after put(), so this exercises the file-scan
+        // fallback, which used to light up badges for content-less entries (targetLang matched).
+        cache.chapterIds(listOf(30L, 31L), "Russian") shouldBe setOf(31L)
+    }
+
+    @Test
+    fun `has with requirements rejects entries from different replace rules`() {
+        val cache = NovelReaderTranslationDiskCache(tempDir, json)
+        cache.put(cacheEntry(chapterId = 40L).copy(replaceRulesFingerprint = "rule-a"))
+
+        cache.has(40L, requirements()) shouldBe false
+    }
+
     private fun requirements(): NovelReaderTranslationCacheRequirements {
         return NovelReaderTranslationCacheRequirements(
             geminiEnabled = true,

@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.data.translation.TranslationJob
 import eu.kanade.tachiyomi.data.translation.TranslationProgressUpdate
 import eu.kanade.tachiyomi.data.translation.TranslationQueueManager
 import eu.kanade.tachiyomi.data.translation.TranslationStatus
+import eu.kanade.tachiyomi.ui.reader.novel.replace.replaceRulesFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationParams
@@ -159,7 +160,9 @@ internal class NovelTranslationController(
         }
         val settingsMatch = NovelReaderTranslationCacheResolver.matches(
             cached = cached,
-            requirements = settings.toTranslationCacheRequirements(),
+            requirements = settings.toTranslationCacheRequirements(
+                replaceRulesFingerprint = replaceRulesFingerprint(novelReaderPreferences.enabledReplaceRules()),
+            ),
         )
         if (!settingsMatch) {
             updateState { it.copy(hasGeminiTranslationCache = false) }
@@ -299,7 +302,9 @@ internal class NovelTranslationController(
             isGeminiSourceLanguageEnglish(settings.geminiSourceLang)
         if (!settings.geminiEnabled || !(requestedAutoStart || englishSourceAutoStart)) return
         if (!host.translationHasConfiguredProvider(settings)) return
-        if (host.translationCurrentParsedTextBlocks().isEmpty()) return
+        // Same book bypass as startGeminiTranslation: over a book the content model belongs to the
+        // entry chapter and stays empty, so it must not gate the auto-start there.
+        if (!host.translationIsBookRuntimeActive() && host.translationCurrentParsedTextBlocks().isEmpty()) return
         if (state.isGeminiTranslating || state.hasGeminiTranslationCache ||
             !host.translationHolderIsEmpty("gemini")
         ) {

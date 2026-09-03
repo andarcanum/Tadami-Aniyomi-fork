@@ -35,8 +35,9 @@ class TranslationQueueProfileSnapshotRequirementsTest {
         every { settings.geminiCustomPromptModifier } returns " custom "
         every { settings.geminiPromptModifiers } returns " raw "
 
-        val snapshot = settings.toTranslationQueueProfileSnapshot()
+        val snapshot = settings.toTranslationQueueProfileSnapshot(replaceRulesFingerprint = "rules-fp")
 
-        snapshot.toTranslationCacheRequirements() shouldBe settings.toTranslationCacheRequirements()
+        snapshot.toTranslationCacheRequirements() shouldBe
+            settings.toTranslationCacheRequirements(replaceRulesFingerprint = "rules-fp")
     }
 }

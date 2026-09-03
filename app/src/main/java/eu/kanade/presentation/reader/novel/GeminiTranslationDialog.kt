@@ -108,6 +108,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OLLAMA_CLOUD_FREE_MODELS
 import eu.kanade.tachiyomi.ui.reader.novel.translation.resolveTranslationReasoningOptions
+import eu.kanade.tachiyomi.ui.reader.novel.translation.supportsAdultPromptMode
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -1638,10 +1639,18 @@ internal fun GeminiTranslationDialog(
                                             stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_classic)
                                         val promptModeAdultLabel =
                                             stringResource(AYMR.strings.novel_reader_gemini_prompt_mode_adult_short)
+                                        // Gate the 18+ option for providers without an adult prompt
+                                        // asset: selecting it there silently translated with CLASSIC.
+                                        val adultPromptSupported =
+                                            readerSettings.translationProvider.supportsAdultPromptMode()
                                         AuroraChipFlow {
-                                            listOf(
+                                            listOfNotNull(
                                                 GeminiPromptMode.CLASSIC to promptModeClassicLabel,
-                                                GeminiPromptMode.ADULT_18 to promptModeAdultLabel,
+                                                if (adultPromptSupported) {
+                                                    GeminiPromptMode.ADULT_18 to promptModeAdultLabel
+                                                } else {
+                                                    null
+                                                },
                                             ).forEach { option ->
                                                 AiTranslatorChoiceChip(
                                                     text = option.second,
@@ -1653,6 +1662,13 @@ internal fun GeminiTranslationDialog(
                                                     },
                                                 )
                                             }
+                                        }
+                                        if (!adultPromptSupported) {
+                                            AuroraFieldLabel(
+                                                stringResource(
+                                                    AYMR.strings.novel_reader_gemini_prompt_mode_adult_unsupported,
+                                                ),
+                                            )
                                         }
                                     }
 
