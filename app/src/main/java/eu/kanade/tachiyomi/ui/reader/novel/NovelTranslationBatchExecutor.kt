@@ -26,6 +26,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.toOpenRouterTranslationPa
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toTranslationCacheRequirements
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationConcurrencyLimit
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationPromptModifiersFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationRequestConfigLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -192,6 +193,8 @@ internal class NovelTranslationBatchExecutor(
                         promptMode = settings.geminiPromptMode,
                         stylePreset = settings.geminiStylePreset,
                         extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
+                        promptModifiersFingerprint = settings.translationPromptModifiersFingerprint(),
+                        sourceSegmentCount = nextTextBlocks.size,
                     ),
                 )
                 host.batchAddAiTranslationLog(

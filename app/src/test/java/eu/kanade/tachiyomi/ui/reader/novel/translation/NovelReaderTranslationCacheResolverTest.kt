@@ -58,6 +58,14 @@ class NovelReaderTranslationCacheResolverTest {
         ) shouldBe false
     }
 
+    @Test
+    fun `cache produced under different prompt modifiers is invalid`() {
+        NovelReaderTranslationCacheResolver.matches(
+            cached = cache(promptModifiersFingerprint = "xianxia\u0000custom-directive"),
+            requirements = requirements(),
+        ) shouldBe false
+    }
+
     private fun requirements(
         translationProvider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
         modelId: String = "gemini-3.1-flash-lite-preview",
@@ -81,6 +89,7 @@ class NovelReaderTranslationCacheResolverTest {
         sourceLang: String = "English",
         targetLang: String = "Russian",
         extractorVersion: Int = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
+        promptModifiersFingerprint: String = "",
     ): GeminiTranslationCacheEntry {
         return GeminiTranslationCacheEntry(
             chapterId = 1L,
@@ -92,6 +101,7 @@ class NovelReaderTranslationCacheResolverTest {
             promptMode = GeminiPromptMode.ADULT_18,
             stylePreset = NovelTranslationStylePreset.PROFESSIONAL,
             extractorVersion = extractorVersion,
+            promptModifiersFingerprint = promptModifiersFingerprint,
         )
     }
 }

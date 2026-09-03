@@ -18,6 +18,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEnt
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NOVEL_TRANSLATION_EXTRACTOR_VERSION
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationPromptModifiersFingerprint
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterRepository
 import eu.kanade.tachiyomi.util.system.notificationBuilder
 import eu.kanade.tachiyomi.util.system.setForegroundSafely
@@ -240,6 +241,8 @@ class TranslationJob(
                     promptMode = settings.geminiPromptMode,
                     stylePreset = settings.geminiStylePreset,
                     extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
+                    promptModifiersFingerprint = settings.translationPromptModifiersFingerprint(),
+                    sourceSegmentCount = textSegments.size,
                 ),
             )
         }

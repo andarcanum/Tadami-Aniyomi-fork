@@ -42,7 +42,18 @@ internal data class GeminiTranslationCacheEntry(
     val stylePreset: NovelTranslationStylePreset = NovelTranslationStylePreset.PROFESSIONAL,
     /** Legacy entries (disk JSON without the field) decode to 0 and never match. */
     val extractorVersion: Int = 0,
-)
+    /** Fingerprint of the prompt-shaping modifiers active at write time; part of cache identity. */
+    val promptModifiersFingerprint: String = "",
+    /** Source segment count at write time; 0 = unknown (legacy). Fewer translations = incomplete. */
+    val sourceSegmentCount: Int = 0,
+) {
+    /**
+     * A relaxed-mode run can persist a partially translated chapter; skip-checks must treat it as
+     * not-cached so a later batch heals it, while display restore may still show what exists.
+     */
+    val isTranslationComplete: Boolean
+        get() = sourceSegmentCount <= 0 || translatedByIndex.size >= sourceSegmentCount
+}
 
 data class AirforceTranslationParams(
     val baseUrl: String,

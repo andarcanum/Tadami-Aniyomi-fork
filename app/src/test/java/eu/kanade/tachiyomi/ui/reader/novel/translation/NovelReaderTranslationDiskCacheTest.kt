@@ -50,6 +50,29 @@ class NovelReaderTranslationDiskCacheTest {
         cache.chapterIds(requirements) shouldContainExactly setOf(9L)
     }
 
+    @Test
+    fun `has with requirements rejects incomplete and legacy entries`() {
+        val cache = NovelReaderTranslationDiskCache(tempDir, json)
+        val requirements = requirements()
+
+        // Relaxed-mode partial result: fewer translations than source segments - a later batch
+        // must be allowed to heal it, so skip-checks treat it as not-cached.
+        cache.put(
+            cacheEntry(chapterId = 20L).copy(
+                translatedByIndex = mapOf(0 to "a", 1 to "b"),
+                sourceSegmentCount = 5,
+            ),
+        )
+        // Legacy extractor version.
+        cache.put(cacheEntry(chapterId = 21L).copy(extractorVersion = 0))
+        // Complete entry with the current version.
+        cache.put(cacheEntry(chapterId = 22L).copy(sourceSegmentCount = 1))
+
+        cache.has(20L, requirements) shouldBe false
+        cache.has(21L, requirements) shouldBe false
+        cache.has(22L, requirements) shouldBe true
+    }
+
     private fun requirements(): NovelReaderTranslationCacheRequirements {
         return NovelReaderTranslationCacheRequirements(
             geminiEnabled = true,

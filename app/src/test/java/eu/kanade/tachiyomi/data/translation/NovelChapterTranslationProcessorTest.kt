@@ -67,6 +67,28 @@ class NovelChapterTranslationProcessorTest {
     }
 
     @Test
+    fun `segment cache is isolated per prompt shaping settings`() = runTest {
+        every { settings.translationProvider } returns NovelTranslationProvider.GEMINI
+        coEvery {
+            geminiService.translateBatch(any(), any(), any())
+        } returns listOf("Привет", "Мир")
+
+        processor.translateSegments(listOf("Hello", "World"), settings)[0] shouldBe "Привет"
+
+        // Same text and target language but a different style preset: the old (text,targetLang)-only
+        // cache key served the previous configuration's translation with zero API calls.
+        every { settings.geminiStylePreset } returns
+            NovelTranslationStylePreset.entries.first { it != NovelTranslationStylePreset.PROFESSIONAL }
+        coEvery {
+            geminiService.translateBatch(any(), any(), any())
+        } returns listOf("Здравствуй", "Свет")
+
+        val second = processor.translateSegments(listOf("Hello", "World"), settings)
+        second[0] shouldBe "Здравствуй"
+        second[1] shouldBe "Свет"
+    }
+
+    @Test
     fun `successful translation returns translated map`() = runTest {
         every { settings.translationProvider } returns NovelTranslationProvider.GEMINI
 

@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.toMistralTranslationParam
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toNvidiaTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOllamaCloudTranslationParams
 import eu.kanade.tachiyomi.ui.reader.novel.translation.toOpenRouterTranslationParams
+import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheNamespace
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationConcurrencyLimit
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationRequestConfigLog
 import kotlinx.coroutines.async
@@ -129,13 +130,16 @@ class NovelChapterTranslationProcessor(
 
         onLog?.invoke(settings.translationRequestConfigLog())
 
-        val targetLang = settings.geminiTargetLang
+        // Every prompt-shaping setting is part of the cache identity: the old (text, targetLang)
+        // key kept serving (and re-stamping into the disk cache) translations produced by a
+        // different provider/model/prompt/style after the user switched settings.
+        val cacheNamespace = settings.translationCacheNamespace()
         val translated = mutableMapOf<Int, String>()
         val indexedBlocks = segments.mapIndexed { index, text -> index to text }
         val nonCachedSegments = mutableListOf<Pair<Int, String>>()
 
         indexedBlocks.forEach { (index, text) ->
-            val cachedTranslation = segmentTranslationCache[text to targetLang]
+            val cachedTranslation = segmentTranslationCache[SegmentCacheKey(cacheNamespace, text)]
             if (!cachedTranslation.isNullOrBlank()) {
                 translated[index] = cachedTranslation
             } else {
@@ -200,7 +204,8 @@ class NovelChapterTranslationProcessor(
                                         val originalText = pair.second
                                         if (!text.isNullOrBlank()) {
                                             translated[originalIndex] = text
-                                            segmentTranslationCache[originalText to targetLang] = text
+                                            segmentTranslationCache[SegmentCacheKey(cacheNamespace, originalText)] =
+                                                text
                                         }
                                     }
                                 }
@@ -232,7 +237,7 @@ class NovelChapterTranslationProcessor(
                             val originalIndex = pair.first
                             val originalText = pair.second
                             translated[originalIndex] = text
-                            segmentTranslationCache[originalText to targetLang] = text
+                            segmentTranslationCache[SegmentCacheKey(cacheNamespace, originalText)] = text
                         }
                     }
                     onProgress?.invoke(100)
@@ -375,12 +380,18 @@ class NovelChapterTranslationProcessor(
     }
 
     companion object {
-        private val segmentTranslationCache = ConcurrentHashMap<Pair<String, String>, String>()
+        private val segmentTranslationCache = ConcurrentHashMap<SegmentCacheKey, String>()
 
         fun clearCache() {
             segmentTranslationCache.clear()
         }
     }
+
+    /** In-memory segment cache key: the settings namespace plus the source text. */
+    private data class SegmentCacheKey(
+        val namespace: String,
+        val text: String,
+    )
 }
 
 private fun NovelTranslationProvider.supportsGranularFallback(): Boolean {
