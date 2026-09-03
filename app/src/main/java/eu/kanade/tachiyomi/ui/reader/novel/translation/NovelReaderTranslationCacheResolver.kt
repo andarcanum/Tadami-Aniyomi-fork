@@ -14,6 +14,7 @@ internal data class NovelReaderTranslationCacheRequirements(
     val targetLang: String,
     val promptMode: GeminiPromptMode,
     val stylePreset: NovelTranslationStylePreset,
+    val extractorVersion: Int,
 )
 
 internal object NovelReaderTranslationCacheResolver {
@@ -30,7 +31,8 @@ internal object NovelReaderTranslationCacheResolver {
             cached.sourceLang == requirements.sourceLang &&
             cached.targetLang == requirements.targetLang &&
             cached.promptMode == requirements.promptMode &&
-            cached.stylePreset == requirements.stylePreset
+            cached.stylePreset == requirements.stylePreset &&
+            cached.extractorVersion == requirements.extractorVersion
     }
 }
 
@@ -44,6 +46,7 @@ internal fun NovelReaderSettings.toTranslationCacheRequirements(): NovelReaderTr
         targetLang = geminiTargetLang,
         promptMode = geminiPromptMode,
         stylePreset = geminiStylePreset,
+        extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
     )
 }
 

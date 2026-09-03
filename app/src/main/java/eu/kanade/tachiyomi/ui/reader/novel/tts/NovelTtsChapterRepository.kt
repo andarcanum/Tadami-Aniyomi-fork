@@ -18,6 +18,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.PageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.decodeNativeScrollProgress
 import eu.kanade.tachiyomi.ui.reader.novel.decodePageReaderProgress
 import eu.kanade.tachiyomi.ui.reader.novel.decodeWebScrollProgressPercent
+import eu.kanade.tachiyomi.ui.reader.novel.extractContentBlocks
+import eu.kanade.tachiyomi.ui.reader.novel.normalizeStructuredChapterPayload
 import eu.kanade.tachiyomi.ui.reader.novel.parseNovelRichContent
 import eu.kanade.tachiyomi.ui.reader.novel.prependChapterHeadingIfMissing
 import eu.kanade.tachiyomi.ui.reader.novel.replace.applyReplaceRulesToHtml
@@ -30,7 +32,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import org.jsoup.Jsoup
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -130,7 +131,10 @@ class NovelTtsChapterRepository internal constructor(
         }
         val normalizedChapterHtml = withContext(Dispatchers.Default) {
             prependChapterHeadingIfMissing(
-                rawHtml = html,
+                // Every renderer normalizes structured (JSON) payloads before extraction; the
+                // snapshot pipeline skipped it, so the translation worker split raw payload lines
+                // into "paragraphs" and cached garbage under real block indices.
+                rawHtml = html.normalizeStructuredChapterPayload(),
                 chapterName = chapter.name,
             )
         }
@@ -146,7 +150,10 @@ class NovelTtsChapterRepository internal constructor(
             }
         }
         val contentBlocks = withContext(Dispatchers.Default) {
-            extractSnapshotContentBlocks(
+            // Canonical collect-space extraction shared with the reader and the HTML overlay
+            // mapper: translation maps keyed by text-block index must address the same blocks in
+            // the queue worker, the native reader, TTS and the WebView/book overlays.
+            extractContentBlocks(
                 rawHtml = readerHtml,
                 chapterWebUrl = chapterWebUrl,
                 novelUrl = novel.url,
@@ -237,56 +244,6 @@ class NovelTtsChapterRepository internal constructor(
     }
 }
 
-private fun extractSnapshotContentBlocks(
-    rawHtml: String,
-    chapterWebUrl: String?,
-    novelUrl: String,
-    pluginSite: String?,
-): List<NovelReaderScreenModel.ContentBlock> {
-    val document = Jsoup.parse(rawHtml)
-    val paragraphLikeNodes = document.select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, img")
-        .filterNot { node ->
-            node.tagName().equals("p", ignoreCase = true) &&
-                node.parent()?.tagName()?.equals("li", ignoreCase = true) == true
-        }
-    if (paragraphLikeNodes.isNotEmpty()) {
-        return paragraphLikeNodes.mapNotNull { element ->
-            if (element.tagName().equals("img", ignoreCase = true)) {
-                val rawUrl = element.attr("src")
-                    .ifBlank { element.attr("data-src") }
-                    .ifBlank { element.attr("data-original") }
-                    .trim()
-                val resolvedUrl = resolveSnapshotContentResourceUrl(
-                    rawUrl = rawUrl,
-                    chapterWebUrl = chapterWebUrl,
-                    novelUrl = novelUrl,
-                    pluginSite = pluginSite,
-                ) ?: return@mapNotNull null
-                NovelReaderScreenModel.ContentBlock.Image(
-                    url = resolvedUrl,
-                    alt = element.attr("alt").sanitizeSnapshotTextBlock().ifBlank { null },
-                )
-            } else {
-                val text = element.text().sanitizeSnapshotTextBlock()
-                if (text.isBlank()) {
-                    null
-                } else {
-                    NovelReaderScreenModel.ContentBlock.Text(
-                        if (element.tagName().equals("li", ignoreCase = true)) "• $text" else text,
-                    )
-                }
-            }
-        }
-    }
-    val text = document.body().wholeText().sanitizeSnapshotTextBlock()
-    if (text.isBlank()) return emptyList()
-    return text.split(Regex("\n{2,}"))
-        .flatMap { block -> block.split('\n') }
-        .map { it.sanitizeSnapshotTextBlock() }
-        .filter { it.isNotBlank() }
-        .map(NovelReaderScreenModel.ContentBlock::Text)
-}
-
 private fun resolveSnapshotRichContentBlocks(
     blocks: List<NovelRichContentBlock>,
     chapterWebUrl: String?,
@@ -332,9 +289,3 @@ private fun resolveSnapshotContentResourceUrl(
 }
 
 private const val CHAPTER_LIST_CACHE_TTL_MS = 60_000L
-
-private fun String.sanitizeSnapshotTextBlock(): String {
-    return replace('\u00A0', ' ')
-        .replace("\r", "")
-        .trim()
-}

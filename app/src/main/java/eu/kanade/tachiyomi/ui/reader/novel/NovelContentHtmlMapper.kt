@@ -17,7 +17,6 @@ import kotlin.math.roundToInt
  */
 internal object NovelContentHtmlMapper {
 
-    private const val PARAGRAPH_LIKE_SELECTOR = "p, li, blockquote, h1, h2, h3, h4, h5, h6, pre"
     private const val TRANSLATED_TEXT_STRONG_BOUNDARY_CHARS = ".,!?;:…)]}»”’"
     private const val TRANSLATED_TEXT_OPENING_BOUNDARY_CHARS = "([{«“‘"
     private const val TRANSLATED_TEXT_SOFT_BOUNDARY_CHARS = "—–-"
@@ -42,25 +41,41 @@ internal object NovelContentHtmlMapper {
         return runCatching {
             val document = Jsoup.parse(templateHtml)
             document.outputSettings().prettyPrint(false)
-            val textBlocks = document.select(PARAGRAPH_LIKE_SELECTOR)
-                .filterNot { element ->
-                    element.tagName().equals("p", ignoreCase = true) &&
-                        element.parent()?.tagName()?.equals("li", ignoreCase = true) == true
-                }
-            if (textBlocks.isEmpty()) return@runCatching null
+            // Canonical collect-space walk (shared with extractTextBlocks and the reader): the
+            // translatedByIndex keys address text blocks in THIS order. The old select-based walk
+            // double-counted paragraph-like tags nested inside blockquotes and never saw loose
+            // text nodes, shifting every following translation onto the wrong paragraph.
+            val pairs = mutableListOf<Pair<Node, ContentBlock>>()
+            collectContentNodes(
+                node = document.body(),
+                out = pairs,
+                chapterWebUrl = null,
+                novelUrl = "",
+                pluginSite = null,
+            )
+            val textPairs = pairs.mapNotNull { (node, block) ->
+                if (block is ContentBlock.Text) node to block else null
+            }
+            if (textPairs.isEmpty()) return@runCatching null
+            // An element that emitted several text blocks (structured fragment) cannot be replaced
+            // 1:1; those indices keep the original markup.
+            val textBlocksPerNode = textPairs.groupingBy { it.first }.eachCount()
 
             var textIndex = 0
             var replacedCount = 0
-            textBlocks.forEach { element ->
-                val originalText = element.text().sanitizeTextBlock()
-                if (originalText.isBlank()) return@forEach
+            textPairs.forEach { (node, _) ->
                 val translated = translatedByIndex[textIndex]
                 textIndex += 1
                 if (translated.isNullOrBlank()) return@forEach
-                replaceElementTextPreservingInlineMarkup(
-                    element = element,
-                    translatedText = translated.normalizedForHtmlElement(element),
-                )
+                if (textBlocksPerNode.getValue(node) != 1) return@forEach
+                when (node) {
+                    is TextNode -> node.text(translated.sanitizeTranslatedDisplayText())
+                    is Element -> replaceElementTextPreservingInlineMarkup(
+                        element = node,
+                        translatedText = translated.normalizedForHtmlElement(node),
+                    )
+                    else -> Unit
+                }
                 replacedCount += 1
             }
             if (replacedCount <= 0) return@runCatching null

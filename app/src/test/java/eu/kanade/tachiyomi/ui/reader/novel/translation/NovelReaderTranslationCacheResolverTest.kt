@@ -47,6 +47,17 @@ class NovelReaderTranslationCacheResolverTest {
         ) shouldBe false
     }
 
+    @Test
+    fun `cache written by an older extractor version is invalid`() {
+        // The canonical block extraction changed the index space (select -> collect): overlaying a
+        // legacy map onto the new blocks would shift translations onto wrong paragraphs, so legacy
+        // entries (extractorVersion defaults to 0) must never match and get retranslated instead.
+        NovelReaderTranslationCacheResolver.matches(
+            cached = cache(extractorVersion = 0),
+            requirements = requirements(),
+        ) shouldBe false
+    }
+
     private fun requirements(
         translationProvider: NovelTranslationProvider = NovelTranslationProvider.GEMINI,
         modelId: String = "gemini-3.1-flash-lite-preview",
@@ -60,6 +71,7 @@ class NovelReaderTranslationCacheResolverTest {
             targetLang = "Russian",
             promptMode = GeminiPromptMode.ADULT_18,
             stylePreset = NovelTranslationStylePreset.PROFESSIONAL,
+            extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
         )
     }
 
@@ -68,6 +80,7 @@ class NovelReaderTranslationCacheResolverTest {
         model: String = "gemini-3.1-flash-lite-preview",
         sourceLang: String = "English",
         targetLang: String = "Russian",
+        extractorVersion: Int = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
     ): GeminiTranslationCacheEntry {
         return GeminiTranslationCacheEntry(
             chapterId = 1L,
@@ -78,6 +91,7 @@ class NovelReaderTranslationCacheResolverTest {
             targetLang = targetLang,
             promptMode = GeminiPromptMode.ADULT_18,
             stylePreset = NovelTranslationStylePreset.PROFESSIONAL,
+            extractorVersion = extractorVersion,
         )
     }
 }

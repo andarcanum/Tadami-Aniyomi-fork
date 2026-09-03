@@ -2876,24 +2876,17 @@ internal val STRUCTURED_NODE_TYPES = setOf(
 )
 
 internal fun extractTextBlocks(rawHtml: String): List<String> {
-    val document = Jsoup.parse(rawHtml)
-    val paragraphLikeNodes = document.select("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre")
-        .filterNot { node ->
-            node.tagName().equals("p", ignoreCase = true) &&
-                node.parent()?.tagName()?.equals("li", ignoreCase = true) == true
-        }
-        .map { element -> element.text().sanitizeTextBlock() }
-        .filter { it.isNotBlank() }
-    if (paragraphLikeNodes.isNotEmpty()) {
-        return paragraphLikeNodes
-    }
-    val text = document.body().wholeText()
-        .sanitizeTextBlock()
-    if (text.isBlank()) return emptyList()
-    return text.split(Regex("\n{2,}"))
-        .flatMap { block -> block.split('\n') }
-        .map { it.sanitizeTextBlock() }
-        .filter { it.isNotBlank() }
+    // Canonical collect-space extraction (see collectContentNodes): every translation producer and
+    // consumer indexes text blocks in this order, so blockquote stays one block, loose text nodes
+    // count, and nested paragraph-like tags are not double-counted.
+    return extractContentBlocks(
+        rawHtml = rawHtml,
+        chapterWebUrl = null,
+        novelUrl = "",
+        pluginSite = null,
+    )
+        .filterIsInstance<NovelReaderScreenModel.ContentBlock.Text>()
+        .map { it.text }
 }
 
 internal fun extractContentBlocks(
@@ -2921,11 +2914,37 @@ internal fun collectContentBlocks(
     novelUrl: String,
     pluginSite: String?,
 ) {
+    val pairs = mutableListOf<Pair<Node, NovelReaderScreenModel.ContentBlock>>()
+    collectContentNodes(
+        node = node,
+        out = pairs,
+        chapterWebUrl = chapterWebUrl,
+        novelUrl = novelUrl,
+        pluginSite = pluginSite,
+    )
+    pairs.forEach { (_, block) -> blocks += block }
+}
+
+/**
+ * Canonical content walk: emits every [NovelReaderScreenModel.ContentBlock] paired with the DOM
+ * node it came from, in the single order shared by the reader, the translation producers
+ * (queue worker, prefetch) and the HTML overlay mapper. Translation maps are keyed by the
+ * text-block index in THIS order; keeping one walker is what prevents the producer/consumer
+ * index spaces from drifting apart (a blockquote is one atomic block here, loose text nodes are
+ * blocks of their own, and nested paragraph-like tags are never double-counted).
+ */
+internal fun collectContentNodes(
+    node: Node,
+    out: MutableList<Pair<Node, NovelReaderScreenModel.ContentBlock>>,
+    chapterWebUrl: String?,
+    novelUrl: String,
+    pluginSite: String?,
+) {
     when (node) {
         is TextNode -> {
             val text = node.text().sanitizeTextBlock()
             if (text.isNotBlank()) {
-                blocks += NovelReaderScreenModel.ContentBlock.Text(text)
+                out += node to NovelReaderScreenModel.ContentBlock.Text(text)
             }
         }
         is Element -> {
@@ -2938,19 +2957,21 @@ internal fun collectContentBlocks(
                     tag == "link" ||
                     tag == "noscript" -> Unit
                 tag == "img" || tag == "picture" || tag == "source" -> {
+                    val imageBlocks = mutableListOf<NovelReaderScreenModel.ContentBlock>()
                     collectImageContentBlock(
                         node = node,
-                        blocks = blocks,
+                        blocks = imageBlocks,
                         chapterWebUrl = chapterWebUrl,
                         novelUrl = novelUrl,
                         pluginSite = pluginSite,
                     )
+                    imageBlocks.forEach { block -> out += node to block }
                 }
                 tag == "p" && node.selectFirst("img, picture, source") != null && node.text().isBlank() -> {
                     node.childNodes().forEach { child ->
-                        collectContentBlocks(
+                        collectContentNodes(
                             node = child,
-                            blocks = blocks,
+                            out = out,
                             chapterWebUrl = chapterWebUrl,
                             novelUrl = novelUrl,
                             pluginSite = pluginSite,
@@ -2976,7 +2997,7 @@ internal fun collectContentBlocks(
                         pluginSite = pluginSite,
                     )
                     if (structuredBlocks.isNotEmpty()) {
-                        blocks += structuredBlocks
+                        structuredBlocks.forEach { block -> out += node to block }
                         return
                     }
                     val normalizedText = if (tag == "li") {
@@ -2984,19 +3005,19 @@ internal fun collectContentBlocks(
                     } else {
                         text
                     }
-                    blocks += NovelReaderScreenModel.ContentBlock.Text(normalizedText)
+                    out += node to NovelReaderScreenModel.ContentBlock.Text(normalizedText)
                 }
                 node.selectFirst("p, li, blockquote, h1, h2, h3, h4, h5, h6, pre, img") == null -> {
                     val text = node.wholeText().sanitizeTextBlock()
                     if (text.isNotBlank()) {
-                        blocks += NovelReaderScreenModel.ContentBlock.Text(text)
+                        out += node to NovelReaderScreenModel.ContentBlock.Text(text)
                     }
                 }
                 else -> {
                     node.childNodes().forEach { child ->
-                        collectContentBlocks(
+                        collectContentNodes(
                             node = child,
-                            blocks = blocks,
+                            out = out,
                             chapterWebUrl = chapterWebUrl,
                             novelUrl = novelUrl,
                             pluginSite = pluginSite,

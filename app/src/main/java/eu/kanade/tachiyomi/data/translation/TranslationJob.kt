@@ -15,6 +15,7 @@ import eu.kanade.tachiyomi.data.notification.Notifications
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NOVEL_TRANSLATION_EXTRACTOR_VERSION
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.translationCacheModelId
 import eu.kanade.tachiyomi.ui.reader.novel.tts.NovelTtsChapterRepository
@@ -238,6 +239,7 @@ class TranslationJob(
                     targetLang = settings.geminiTargetLang,
                     promptMode = settings.geminiPromptMode,
                     stylePreset = settings.geminiStylePreset,
+                    extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
                 ),
             )
         }

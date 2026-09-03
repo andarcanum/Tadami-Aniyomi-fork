@@ -60,6 +60,7 @@ class NovelReaderTranslationDiskCacheTest {
             targetLang = "Russian",
             promptMode = GeminiPromptMode.ADULT_18,
             stylePreset = NovelTranslationStylePreset.PROFESSIONAL,
+            extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
         )
     }
 
@@ -77,6 +78,7 @@ class NovelReaderTranslationDiskCacheTest {
             targetLang = "Russian",
             promptMode = GeminiPromptMode.ADULT_18,
             stylePreset = NovelTranslationStylePreset.PROFESSIONAL,
+            extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
         )
     }
 }

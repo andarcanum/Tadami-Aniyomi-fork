@@ -403,6 +403,9 @@ private data class GeminiTranslationCacheDiskModel(
     val targetLang: String,
     val promptMode: GeminiPromptMode,
     val stylePreset: NovelTranslationStylePreset = NovelTranslationStylePreset.PROFESSIONAL,
+    // Legacy cache files predate extractor versioning and decode to 0, which never matches the
+    // current requirements - they are retranslated instead of overlaid onto shifted blocks.
+    val extractorVersion: Int = 0,
 ) {
     fun toDomain(): GeminiTranslationCacheEntry {
         return GeminiTranslationCacheEntry(
@@ -414,6 +417,7 @@ private data class GeminiTranslationCacheDiskModel(
             targetLang = targetLang,
             promptMode = promptMode,
             stylePreset = stylePreset,
+            extractorVersion = extractorVersion,
         )
     }
 
@@ -428,6 +432,7 @@ private data class GeminiTranslationCacheDiskModel(
                 targetLang = entry.targetLang,
                 promptMode = entry.promptMode,
                 stylePreset = entry.stylePreset,
+                extractorVersion = entry.extractorVersion,
             )
         }
     }

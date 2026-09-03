@@ -35,6 +35,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationServic
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NOVEL_TRANSLATION_EXTRACTOR_VERSION
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OpenRouterTranslationService
@@ -602,6 +603,7 @@ class NovelReaderScreenModelTest {
                     targetLang = initialState.readerSettings.geminiTargetLang,
                     promptMode = initialState.readerSettings.geminiPromptMode,
                     stylePreset = initialState.readerSettings.geminiStylePreset,
+                    extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
                 ),
             )
 
@@ -717,6 +719,7 @@ class NovelReaderScreenModelTest {
                     targetLang = initialState.readerSettings.geminiTargetLang,
                     promptMode = initialState.readerSettings.geminiPromptMode,
                     stylePreset = initialState.readerSettings.geminiStylePreset,
+                    extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
                 ),
             )
 

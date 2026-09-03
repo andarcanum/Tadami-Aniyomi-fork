@@ -21,6 +21,16 @@ data class GeminiTranslationParams(
     val privatePythonLikeMode: Boolean = false,
 )
 
+/**
+ * Version of the canonical text-block extraction that `translatedByIndex` keys address.
+ *
+ * Bumped whenever the extraction order/space changes (v2: the select-based walk was replaced by
+ * the reader's collect-based walk, where a blockquote is one block and loose text nodes count).
+ * Entries written by older extractors never match current requirements and get retranslated
+ * instead of being overlaid onto the wrong blocks.
+ */
+internal const val NOVEL_TRANSLATION_EXTRACTOR_VERSION = 2
+
 internal data class GeminiTranslationCacheEntry(
     val chapterId: Long,
     val translatedByIndex: Map<Int, String>,
@@ -30,6 +40,8 @@ internal data class GeminiTranslationCacheEntry(
     val targetLang: String,
     val promptMode: GeminiPromptMode,
     val stylePreset: NovelTranslationStylePreset = NovelTranslationStylePreset.PROFESSIONAL,
+    /** Legacy entries (disk JSON without the field) decode to 0 and never match. */
+    val extractorVersion: Int = 0,
 )
 
 data class AirforceTranslationParams(

@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationServic
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationCacheEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.NOVEL_TRANSLATION_EXTRACTOR_VERSION
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelReaderTranslationDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudTranslationService
@@ -190,6 +191,7 @@ internal class NovelTranslationBatchExecutor(
                         targetLang = settings.geminiTargetLang,
                         promptMode = settings.geminiPromptMode,
                         stylePreset = settings.geminiStylePreset,
+                        extractorVersion = NOVEL_TRANSLATION_EXTRACTOR_VERSION,
                     ),
                 )
                 host.batchAddAiTranslationLog(
