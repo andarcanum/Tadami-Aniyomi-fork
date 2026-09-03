@@ -334,9 +334,7 @@ private fun NovelLibraryGridItem(
                     .height(170.dp),
             ) {
                 ItemCover.Book(
-                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let {
-                        sourceAwareNovelCoverModel(it)
-                    },
+                    data = item.coverNovel?.let { sourceAwareNovelCoverModel(it) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(170.dp),
@@ -422,9 +420,7 @@ private fun NovelLibraryListItem(
                     .aspectRatio(0.68f),
             ) {
                 ItemCover.Book(
-                    data = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.let {
-                        sourceAwareNovelCoverModel(it)
-                    },
+                    data = item.coverNovel?.let { sourceAwareNovelCoverModel(it) },
                     modifier = Modifier
                         .height(112.dp)
                         .aspectRatio(0.68f),

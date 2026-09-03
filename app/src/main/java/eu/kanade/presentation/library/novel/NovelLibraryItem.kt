@@ -67,7 +67,7 @@ sealed interface NovelLibraryItem {
         override val lastRead = librarySeries.lastRead
         override val totalChapters = librarySeries.totalChapters
         override val hasStarted = librarySeries.hasStarted
-        override val hasBookmarks = false // or define a query for series bookmarks later
+        override val hasBookmarks = librarySeries.entries.any { it.hasBookmarks }
         override val dateAdded = librarySeries.series.dateAdded
         override val title = librarySeries.title
         override val coverNovel = librarySeries.selectedCoverNovel ?: librarySeries.coverNovels.firstOrNull()

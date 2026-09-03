@@ -197,8 +197,12 @@ class NovelLibraryScreenModel(
                                 filterPrefs.downloadedFilter
                             }
                             val downloadedNovelIds = if (effectiveDownloadedFilter != TriState.DISABLED) {
-                                val novelIdSet = library.values.flatten().mapNotNullTo(HashSet()) {
-                                    (it as? NovelLibraryItem.Single)?.libraryNovel?.novel?.id
+                                val novelIdSet = library.values.flatten().flatMapTo(HashSet()) { item ->
+                                    when (item) {
+                                        is NovelLibraryItem.Single -> listOf(item.libraryNovel.novel.id)
+                                        is NovelLibraryItem.Series ->
+                                            item.librarySeries.entries.map { it.novel.id }
+                                    }
                                 }
                                 downloadedIds.intersect(novelIdSet)
                             } else {
@@ -848,7 +852,11 @@ class NovelLibraryScreenModel(
     ): NovelLibraryMap {
         val filterFnDownloaded: (NovelLibraryItem) -> Boolean = { item ->
             applyFilter(effectiveDownloadedFilter) {
-                (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.id in downloadedNovelIds
+                when (item) {
+                    is NovelLibraryItem.Single -> item.libraryNovel.novel.id in downloadedNovelIds
+                    is NovelLibraryItem.Series ->
+                        item.librarySeries.entries.any { it.novel.id in downloadedNovelIds }
+                }
             }
         }
         val filterFnUnread: (NovelLibraryItem) -> Boolean = { item ->
@@ -858,18 +866,27 @@ class NovelLibraryScreenModel(
             applyFilter(startedFilter) { item.hasStarted }
         }
         val filterFnBookmarked: (NovelLibraryItem) -> Boolean = { item ->
-            applyFilter(bookmarkedFilter) {
-                (item as? NovelLibraryItem.Single)?.libraryNovel?.hasBookmarks == true
-            }
+            applyFilter(bookmarkedFilter) { item.hasBookmarks }
         }
         val filterFnCompleted: (NovelLibraryItem) -> Boolean = { item ->
             applyFilter(completedFilter) {
-                (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.status?.toInt() == SManga.COMPLETED
+                when (item) {
+                    is NovelLibraryItem.Single ->
+                        item.libraryNovel.novel.status.toInt() == SManga.COMPLETED
+                    // Manga parity: a series counts as completed when every entry is completed.
+                    is NovelLibraryItem.Series ->
+                        item.librarySeries.entries.isNotEmpty() &&
+                            item.librarySeries.entries.all { it.novel.status.toInt() == SManga.COMPLETED }
+                }
             }
         }
         val filterFnIntervalCustom: (NovelLibraryItem) -> Boolean = { item ->
             applyFilter(filterIntervalCustom) {
-                (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.fetchInterval?.compareTo(0) == -1
+                when (item) {
+                    is NovelLibraryItem.Single -> item.libraryNovel.novel.fetchInterval < 0
+                    is NovelLibraryItem.Series ->
+                        item.librarySeries.entries.any { it.novel.fetchInterval < 0 }
+                }
             }
         }
         val languageBySourceId = HashMap<Long, String>()
@@ -933,7 +950,11 @@ class NovelLibraryScreenModel(
         val languageBySourceId = HashMap<Long, String>()
         fun NovelLibraryItem.withBadgeMetadata(): NovelLibraryItem {
             val novel = coverNovel
-            val isDownloaded = badgePreferences.showDownloadBadge && novel?.id in downloadedIds
+            val isDownloaded = badgePreferences.showDownloadBadge && when (this) {
+                is NovelLibraryItem.Single -> novel?.id in downloadedIds
+                // Any downloaded entry earns the series the badge, not just the cover novel.
+                is NovelLibraryItem.Series -> librarySeries.entries.any { it.novel.id in downloadedIds }
+            }
             val sourceLanguage = if (badgePreferences.showLanguageBadge) {
                 novel?.source?.let { sourceId ->
                     languageBySourceId.getOrPut(sourceId) {
@@ -982,8 +1003,12 @@ class NovelLibraryScreenModel(
             LibraryGroup.BY_STATUS -> {
                 val statusCategories = LinkedHashMap<Long, Pair<Category, MutableList<NovelLibraryItem>>>()
                 items.forEach { item ->
-                    val single = item as? NovelLibraryItem.Single
-                    val status = single?.libraryNovel?.novel?.status ?: 0L
+                    // Manga parity: a series groups by its first entry (librarySeries.entries.first()).
+                    val status = when (item) {
+                        is NovelLibraryItem.Single -> item.libraryNovel.novel.status
+                        is NovelLibraryItem.Series ->
+                            item.librarySeries.entries.firstOrNull()?.novel?.status ?: 0L
+                    }
                     val statusInt = status.toInt()
                     val (statusName, statusId) = when (statusInt) {
                         SManga.ONGOING -> "Ongoing" to -21L
@@ -1013,8 +1038,11 @@ class NovelLibraryScreenModel(
             LibraryGroup.BY_SOURCE -> {
                 val sourceCategories = LinkedHashMap<Long, Pair<Category, MutableList<NovelLibraryItem>>>()
                 items.forEach { item ->
-                    val single = item as? NovelLibraryItem.Single
-                    val sourceId = single?.libraryNovel?.novel?.source ?: 0L
+                    val sourceId = when (item) {
+                        is NovelLibraryItem.Single -> item.libraryNovel.novel.source
+                        is NovelLibraryItem.Series ->
+                            item.librarySeries.entries.firstOrNull()?.novel?.source ?: 0L
+                    }
                     val sourceName = sourceManager.getOrStub(sourceId).name
                     val categoryId = -sourceId - 1000L
                     val (_, list) = sourceCategories.getOrPut(categoryId) {
@@ -1037,8 +1065,11 @@ class NovelLibraryScreenModel(
                 val trackMapper = MapNovelTrackStatusToLibrary(trackerManager)
                 val trackCategories = LinkedHashMap<Long, Pair<Category, MutableList<NovelLibraryItem>>>()
                 items.forEach { item ->
-                    val single = item as? NovelLibraryItem.Single
-                    val itemTracks = single?.libraryNovel?.novel?.id?.let { tracks[it] }.orEmpty()
+                    val representativeNovelId = when (item) {
+                        is NovelLibraryItem.Single -> item.libraryNovel.novel.id
+                        is NovelLibraryItem.Series -> item.librarySeries.entries.firstOrNull()?.novel?.id
+                    }
+                    val itemTracks = representativeNovelId?.let { tracks[it] }.orEmpty()
                     if (itemTracks.isEmpty()) {
                         val categoryId = -2L
                         val (_, list) = trackCategories.getOrPut(categoryId) {
@@ -1103,7 +1134,11 @@ class NovelLibraryScreenModel(
             val singleItems = novels.filterNot {
                 it.novel.id in idsInSeries
             }.map { NovelLibraryItem.Single(it) }
-            val seriesItems = series.map { NovelLibraryItem.Series(it) }
+            val seriesItems = series
+                // Manga parity: a series whose entries all left the library must not render as a
+                // ghost card (no cover, zero counts, and it pins the system category tab open).
+                .filter { it.entries.isNotEmpty() }
+                .map { NovelLibraryItem.Series(it) }
             (singleItems + seriesItems).groupBy { it.category }
         }
 
@@ -1155,9 +1190,7 @@ class NovelLibraryScreenModel(
                 }
                 NovelLibrarySort.Type.LastRead -> left.lastRead.compareTo(right.lastRead)
                 NovelLibrarySort.Type.LastUpdate -> {
-                    val leftLastUpdate = (left as? NovelLibraryItem.Single)?.libraryNovel?.novel?.lastUpdate ?: 0L
-                    val rightLastUpdate = (right as? NovelLibraryItem.Single)?.libraryNovel?.novel?.lastUpdate ?: 0L
-                    leftLastUpdate.compareTo(rightLastUpdate)
+                    left.lastUpdateValue().compareTo(right.lastUpdateValue())
                 }
                 NovelLibrarySort.Type.UnreadCount -> {
                     when {
@@ -1169,16 +1202,10 @@ class NovelLibraryScreenModel(
                 }
                 NovelLibrarySort.Type.TotalChapters -> left.totalChapters.compareTo(right.totalChapters)
                 NovelLibrarySort.Type.LatestChapter -> {
-                    val leftLatestUpload = (left as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
-                    val rightLatestUpload = (right as? NovelLibraryItem.Single)?.libraryNovel?.latestUpload ?: 0L
-                    leftLatestUpload.compareTo(rightLatestUpload)
+                    left.latestUploadValue().compareTo(right.latestUploadValue())
                 }
                 NovelLibrarySort.Type.ChapterFetchDate -> {
-                    val leftChapterFetchedAt =
-                        (left as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
-                    val rightChapterFetchedAt =
-                        (right as? NovelLibraryItem.Single)?.libraryNovel?.chapterFetchedAt ?: 0L
-                    leftChapterFetchedAt.compareTo(rightChapterFetchedAt)
+                    left.chapterFetchedAtValue().compareTo(right.chapterFetchedAtValue())
                 }
                 NovelLibrarySort.Type.DateAdded -> left.dateAdded.compareTo(right.dateAdded)
                 NovelLibrarySort.Type.TrackerMean -> 0
@@ -1196,6 +1223,23 @@ class NovelLibraryScreenModel(
             comparator = comparator,
             randomSeed = if (sort.type == NovelLibrarySort.Type.Random) randomSortSeed else null,
         )
+    }
+
+    // Manga parity: a series sorts by the newest activity across its entries instead of collapsing
+    // to 0 (LibraryNovelSeries.latestUpload already aggregates; lastUpdate/chapterFetchedAt do not).
+    private fun NovelLibraryItem.lastUpdateValue(): Long = when (this) {
+        is NovelLibraryItem.Single -> libraryNovel.novel.lastUpdate
+        is NovelLibraryItem.Series -> librarySeries.entries.maxOfOrNull { it.novel.lastUpdate } ?: 0L
+    }
+
+    private fun NovelLibraryItem.latestUploadValue(): Long = when (this) {
+        is NovelLibraryItem.Single -> libraryNovel.latestUpload
+        is NovelLibraryItem.Series -> librarySeries.latestUpload
+    }
+
+    private fun NovelLibraryItem.chapterFetchedAtValue(): Long = when (this) {
+        is NovelLibraryItem.Single -> libraryNovel.chapterFetchedAt
+        is NovelLibraryItem.Series -> librarySeries.entries.maxOfOrNull { it.chapterFetchedAt } ?: 0L
     }
 
     private suspend fun getCategories(): List<Category> {

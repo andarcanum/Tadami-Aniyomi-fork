@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
 import io.kotest.matchers.collections.shouldContainExactly
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.coJustRun
@@ -40,6 +41,7 @@ import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
+import tachiyomi.domain.library.model.LibraryGroup
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.novel.model.NovelLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
@@ -49,6 +51,8 @@ import tachiyomi.domain.series.novel.interactor.DeleteNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetLibraryNovelSeries
 import tachiyomi.domain.series.novel.interactor.GetNovelIdsInAnySeries
 import tachiyomi.domain.series.novel.interactor.UpdateNovelSeries
+import tachiyomi.domain.series.novel.model.LibraryNovelSeries
+import tachiyomi.domain.series.novel.model.NovelSeries
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import tachiyomi.domain.track.novel.interactor.GetTracksPerNovel
 import tachiyomi.domain.track.novel.model.NovelTrack
@@ -593,6 +597,215 @@ class NovelLibraryScreenModelTest {
         screenModel.getNextUnreadChapter(novel)?.id shouldBe 203L
     }
 
+    @Test
+    fun `downloaded filter keeps series with any downloaded entry`() = runTest(testDispatcher) {
+        libraryFlow.value = listOf(libraryNovel(id = 1L, title = "Standalone"))
+        val series = librarySeries(
+            id = 50L,
+            title = "My Series",
+            entries = listOf(
+                libraryNovel(id = 2L, title = "Series A"),
+                libraryNovel(id = 3L, title = "Series B"),
+            ),
+        )
+        givenSeriesLibrary(series)
+        downloadedIdsFlow.value = setOf(3L)
+
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.toggleDownloadedFilter()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.items.shouldContainExactly(NovelLibraryItem.Series(series))
+    }
+
+    @Test
+    fun `completed filter keeps series whose entries are all completed`() = runTest(testDispatcher) {
+        libraryFlow.value = emptyList()
+        val completedSeries = librarySeries(
+            id = 50L,
+            title = "Done Series",
+            entries = listOf(
+                libraryNovel(id = 2L, title = "A", status = SManga.COMPLETED.toLong()),
+                libraryNovel(id = 3L, title = "B", status = SManga.COMPLETED.toLong()),
+            ),
+        )
+        val mixedSeries = librarySeries(
+            id = 51L,
+            title = "Mixed Series",
+            entries = listOf(
+                libraryNovel(id = 4L, title = "C", status = SManga.COMPLETED.toLong()),
+                libraryNovel(id = 5L, title = "D", status = SManga.ONGOING.toLong()),
+            ),
+        )
+        givenSeriesLibrary(completedSeries, mixedSeries)
+
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.toggleCompletedFilter()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.items.shouldContainExactly(NovelLibraryItem.Series(completedSeries))
+    }
+
+    @Test
+    fun `bookmarked filter sees bookmarks of series entries`() = runTest(testDispatcher) {
+        libraryFlow.value = emptyList()
+        val bookmarkedSeries = librarySeries(
+            id = 50L,
+            title = "Marked Series",
+            entries = listOf(
+                libraryNovel(id = 2L, title = "A"),
+                libraryNovel(id = 3L, title = "B", bookmarkCount = 2L),
+            ),
+        )
+        givenSeriesLibrary(bookmarkedSeries)
+
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.toggleBookmarkedFilter()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.items.shouldContainExactly(NovelLibraryItem.Series(bookmarkedSeries))
+    }
+
+    @Test
+    fun `empty series are not rendered as ghost items`() = runTest(testDispatcher) {
+        libraryFlow.value = listOf(libraryNovel(id = 1L, title = "Novel"))
+        givenSeriesLibrary(librarySeries(id = 60L, title = "Ghost", entries = emptyList()))
+
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.items.shouldContainExactly(libraryNovelItem(id = 1L, title = "Novel"))
+    }
+
+    @Test
+    fun `latest chapter sort orders series by newest entry upload`() = runTest(testDispatcher) {
+        libraryPreferences.novelSortingMode().set(
+            NovelLibrarySort(NovelLibrarySort.Type.LatestChapter, NovelLibrarySort.Direction.Descending),
+        )
+        libraryFlow.value = emptyList()
+        // sortPinnedSeriesFirst keeps every series above every single, so the comparator is
+        // exercised between two series: alphabetically Alpha would win, by newest entry upload
+        // (900 vs 300) Zebra must win.
+        val freshSeries = librarySeries(
+            id = 50L,
+            title = "Zebra Series",
+            entries = listOf(
+                libraryNovel(id = 2L, title = "A", latestUpload = 100L),
+                libraryNovel(id = 3L, title = "B", latestUpload = 900L),
+            ),
+        )
+        val staleSeries = librarySeries(
+            id = 51L,
+            title = "Alpha Series",
+            entries = listOf(libraryNovel(id = 4L, title = "C", latestUpload = 300L)),
+        )
+        givenSeriesLibrary(freshSeries, staleSeries)
+
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.items.map { it.title } shouldContainExactly
+            listOf("Zebra Series", "Alpha Series")
+    }
+
+    @Test
+    fun `group by status puts series into the representative status group`() = runTest(testDispatcher) {
+        libraryPreferences.novelGroupLibraryBy().set(LibraryGroup.BY_STATUS)
+        libraryFlow.value = emptyList()
+        val series = librarySeries(
+            id = 50L,
+            title = "Done Series",
+            entries = listOf(libraryNovel(id = 2L, title = "A", status = SManga.COMPLETED.toLong())),
+        )
+        givenSeriesLibrary(series)
+
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val completedCategory = screenModel.state.value.categories.firstOrNull { it.id == -22L }
+        completedCategory.shouldNotBeNull()
+        screenModel.state.value.getLibraryItemsByCategoryId(-22L)
+            .shouldContainExactly(NovelLibraryItem.Series(series))
+    }
+
+    @Test
+    fun `download badge marks series when any entry is downloaded`() = runTest(testDispatcher) {
+        libraryPreferences.downloadBadge().set(true)
+        libraryFlow.value = emptyList()
+        val series = librarySeries(
+            id = 50L,
+            title = "Series",
+            entries = listOf(
+                libraryNovel(id = 2L, title = "A"),
+                libraryNovel(id = 3L, title = "B"),
+            ),
+        )
+        givenSeriesLibrary(series)
+        // The downloaded entry is NOT the cover novel, so a cover-only check stays false.
+        downloadedIdsFlow.value = setOf(3L)
+
+        val screenModel = trackedNovelLibraryScreenModel(
+            getLibraryNovel = getLibraryNovel,
+            chapterRepository = chapterRepository,
+            basePreferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            hasDownloadedChapters = { false },
+            downloadedIdsDispatcher = testDispatcher,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val item = screenModel.state.value.items.single() as NovelLibraryItem.Series
+        item.isDownloaded shouldBe true
+    }
+
     private fun trackedNovelLibraryScreenModel(
         getLibraryNovel: GetLibraryNovel,
         chapterRepository: NovelChapterRepository,
@@ -636,6 +849,10 @@ class NovelLibraryScreenModelTest {
         lastRead: Long = 0L,
         fetchInterval: Int = 0,
         source: Long = 1L,
+        bookmarkCount: Long = 0L,
+        latestUpload: Long = 0L,
+        chapterFetchedAt: Long = 0L,
+        lastUpdate: Long = 0L,
     ): LibraryNovel {
         return LibraryNovel(
             novel = Novel.create().copy(
@@ -646,14 +863,41 @@ class NovelLibraryScreenModelTest {
                 favorite = true,
                 status = status,
                 fetchInterval = fetchInterval,
+                lastUpdate = lastUpdate,
             ),
             category = 0L,
             totalChapters = total,
             readCount = read,
-            bookmarkCount = 0L,
-            latestUpload = 0L,
-            chapterFetchedAt = 0L,
+            bookmarkCount = bookmarkCount,
+            latestUpload = latestUpload,
+            chapterFetchedAt = chapterFetchedAt,
             lastRead = lastRead,
+        )
+    }
+
+    private fun librarySeries(
+        id: Long,
+        title: String,
+        entries: List<LibraryNovel>,
+    ): LibraryNovelSeries {
+        return LibraryNovelSeries(
+            series = NovelSeries(
+                id = id,
+                title = title,
+                description = null,
+                categoryId = 0L,
+                sortOrder = 0L,
+                dateAdded = 0L,
+                coverLastModified = 0L,
+            ),
+            entries = entries,
+        )
+    }
+
+    private fun givenSeriesLibrary(vararg series: LibraryNovelSeries) {
+        every { getLibraryNovelSeries.subscribe() } returns MutableStateFlow(series.toList())
+        every { getNovelIdsInAnySeries.subscribe() } returns MutableStateFlow(
+            series.flatMap { it.entries.map { entry -> entry.novel.id } }.toSet(),
         )
     }
 
