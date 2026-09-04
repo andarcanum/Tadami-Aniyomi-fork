@@ -4650,6 +4650,39 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `webview css paragraph spacing uses the raw dp-scale setting and clamps overshoot`() {
+        fun cssWithSpacing(spacing: Int): String = buildWebReaderCssText(
+            fontFaceCss = "",
+            paddingTop = 0,
+            paddingBottom = 0,
+            paddingHorizontal = 16,
+            fontSizePx = 16,
+            lineHeightMultiplier = 1.6f,
+            paragraphSpacingPx = spacing,
+            textAlignCss = null,
+            firstLineIndentCss = null,
+            textColorHex = "#111111",
+            backgroundHex = "#FFFFFF",
+            appearanceMode = NovelReaderAppearanceMode.THEME,
+            backgroundTexture = NovelReaderBackgroundTexture.PAPER_GRAIN,
+            oledEdgeGradient = false,
+            backgroundImageUrl = null,
+            fontFamilyName = null,
+            customCss = "",
+            textShadowCss = null,
+            forceBoldText = false,
+            forceItalicText = false,
+        )
+
+        // Call sites pass the raw dp-scale setting (CSS px == dp under the WebView viewport).
+        // A density-multiplied physical px value (e.g. 12dp at 2.75x = 33) hits the 0..32 clamp
+        // and diverges from the raw value other paths re-apply - the old spacing jump.
+        assertTrue(cssWithSpacing(12).contains("--an-reader-paragraph-spacing: 12px;"))
+        assertTrue(cssWithSpacing(12).contains("margin-bottom: 12px !important;"))
+        assertTrue(cssWithSpacing(33).contains("--an-reader-paragraph-spacing: 32px;"))
+    }
+
+    @Test
     fun `auto shadow color uses light shadow on dark background`() {
         val shadow = resolveAutoReaderShadowColor(
             customShadowColor = null,

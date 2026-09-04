@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.ImageShader
@@ -34,13 +36,19 @@ internal fun NovelPageSurfaceBackground(
                     .background(surfaceColor),
             )
         }
-        if (backgroundTexture == NovelReaderBackgroundTexture.PAPER_GRAIN ||
-            backgroundTexture == NovelReaderBackgroundTexture.LINEN
+        if (
+            backgroundTexture == NovelReaderBackgroundTexture.PAPER_GRAIN ||
+            backgroundTexture == NovelReaderBackgroundTexture.LINEN ||
+            backgroundTexture == NovelReaderBackgroundTexture.PARCHMENT
         ) {
-            val imageRes = if (backgroundTexture == NovelReaderBackgroundTexture.PAPER_GRAIN) {
-                com.tadami.aurora.R.drawable.texture_paper
-            } else {
-                com.tadami.aurora.R.drawable.texture_linen
+            // Mirrors NovelAtmosphereBackground: PARCHMENT shares the paper grain bitmap plus the
+            // radial aging layers. Page-turn surfaces (CURL/BOOK_FLIP) draw their own background
+            // through this composable, so without the PARCHMENT branch those pages came out flat.
+            val imageRes = when (backgroundTexture) {
+                NovelReaderBackgroundTexture.PAPER_GRAIN,
+                NovelReaderBackgroundTexture.PARCHMENT,
+                -> com.tadami.aurora.R.drawable.texture_paper
+                else -> com.tadami.aurora.R.drawable.texture_linen
             }
 
             val imageBitmap = ImageBitmap.imageResource(id = imageRes)
@@ -64,6 +72,33 @@ internal fun NovelPageSurfaceBackground(
                         brush = brush,
                         alpha = boostTextureAlpha,
                         blendMode = BlendMode.Multiply,
+                    )
+                }
+            }
+
+            if (backgroundTexture == NovelReaderBackgroundTexture.PARCHMENT) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val agingCenter1 = Offset(size.width * 0.2f, size.height * 0.2f)
+                    val agingCenter2 = Offset(size.width * 0.8f, size.height * 0.75f)
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colorStops = arrayOf(
+                                0.0f to Color.White.copy(alpha = 0.14f),
+                                0.45f to Color.Transparent,
+                            ),
+                            center = agingCenter1,
+                            radius = size.width * 0.9f,
+                        ),
+                    )
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colorStops = arrayOf(
+                                0.0f to Color.Black.copy(alpha = 0.12f),
+                                0.42f to Color.Transparent,
+                            ),
+                            center = agingCenter2,
+                            radius = size.width * 0.9f,
+                        ),
                     )
                 }
             }

@@ -3203,7 +3203,12 @@ internal fun NovelReaderContentHost(
                         bottomBarHeightPx = bottomBarHeight,
                         basePaddingPx = initialWebReaderPaddingPx,
                     )
-                    val initialPaddingHorizontal = with(density) { state.readerSettings.margin.dp.roundToPx() }
+                    // Canonical CSS unit for the chapter WebView is the density-independent px
+                    // (CSS px == dp under the WebView viewport), the same unit fontSize is passed
+                    // in on every path. Passing density-multiplied physical px here made the
+                    // horizontal margin ~density-times too wide and, for paragraph spacing,
+                    // visibly jump when onPageFinished re-applied the raw-dp value.
+                    val initialPaddingHorizontal = state.readerSettings.margin
                     val initialCssTextAlign = resolveWebViewTextAlignCss(state.readerSettings.textAlign)
                     val initialCssFirstLineIndent = resolveWebViewFirstLineIndentCss(
                         forceParagraphIndent = state.readerSettings.forceParagraphIndent,
@@ -3233,9 +3238,7 @@ internal fun NovelReaderContentHost(
                                     paddingHorizontal = initialPaddingHorizontal,
                                     fontSizePx = state.readerSettings.fontSize,
                                     lineHeightMultiplier = state.readerSettings.lineHeight,
-                                    paragraphSpacingPx = with(density) {
-                                        state.readerSettings.paragraphSpacing.dp.roundToPx()
-                                    },
+                                    paragraphSpacingPx = state.readerSettings.paragraphSpacing,
                                     textAlignCss = initialCssTextAlign,
                                     firstLineIndentCss = initialCssFirstLineIndent,
                                     textColorHex = colorToCssHex(textColor),
@@ -3625,7 +3628,9 @@ internal fun NovelReaderContentHost(
                                 bottomBarHeightPx = bottomBarHeight,
                                 basePaddingPx = webReaderPaddingPx,
                             )
-                            val paddingHorizontal = with(density) { state.readerSettings.margin.dp.roundToPx() }
+                            // Raw dp: the canonical CSS unit of the chapter WebView (see
+                            // initialPaddingHorizontal).
+                            val paddingHorizontal = state.readerSettings.margin
                             val cssTextAlign = resolveWebViewTextAlignCss(state.readerSettings.textAlign)
                             val cssFirstLineIndent = resolveWebViewFirstLineIndentCss(
                                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
@@ -3647,8 +3652,10 @@ internal fun NovelReaderContentHost(
                                 textColor = textColor,
                                 backgroundColor = textBackground,
                             )
-                            val paragraphSpacingPx =
-                                with(density) { state.readerSettings.paragraphSpacing.dp.roundToPx() }
+                            // Raw dp, matching what applyReaderCss below receives: the fingerprint
+                            // must describe the styles that are actually applied or it never
+                            // compares equal and the CSS gets re-applied on every pass.
+                            val paragraphSpacingCssUnits = state.readerSettings.paragraphSpacing
                             val styleFingerprint = buildWebReaderCssFingerprint(
                                 chapterId = state.chapter.id,
                                 paddingTop = paddingTop,
@@ -3656,7 +3663,7 @@ internal fun NovelReaderContentHost(
                                 paddingHorizontal = paddingHorizontal,
                                 fontSizePx = state.readerSettings.fontSize,
                                 lineHeightMultiplier = state.readerSettings.lineHeight,
-                                paragraphSpacingPx = paragraphSpacingPx,
+                                paragraphSpacingPx = paragraphSpacingCssUnits,
                                 textAlignCss = cssTextAlign,
                                 firstLineIndentCss = cssFirstLineIndent,
                                 textColorHex = colorToCssHex(textColor),
@@ -3854,7 +3861,7 @@ internal fun NovelReaderContentHost(
                                     paddingHorizontal = paddingHorizontal,
                                     fontSizePx = state.readerSettings.fontSize,
                                     lineHeightMultiplier = state.readerSettings.lineHeight,
-                                    paragraphSpacingPx = paragraphSpacingPx,
+                                    paragraphSpacingPx = paragraphSpacingCssUnits,
                                     textAlignCss = cssTextAlign,
                                     firstLineIndentCss = cssFirstLineIndent,
                                     textColorHex = colorToCssHex(textColor),
