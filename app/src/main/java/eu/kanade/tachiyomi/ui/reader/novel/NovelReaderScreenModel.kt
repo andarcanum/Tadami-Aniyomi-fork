@@ -2256,6 +2256,8 @@ class NovelReaderScreenModel(
 
     fun clearGeminiTranslation() = translationController.clearGeminiTranslation()
 
+    fun clearGeminiTranslationForSwitch() = translationController.clearGeminiTranslationForSwitch()
+
     fun startGoogleTranslation() = translationController.startGoogleTranslation()
 
     fun stopGoogleTranslation() = translationController.stopGoogleTranslation()

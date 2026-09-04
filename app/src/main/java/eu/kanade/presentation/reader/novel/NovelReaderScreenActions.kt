@@ -36,6 +36,7 @@ data class NovelReaderScreenActions(
     val onStopGeminiTranslation: () -> Unit = {},
     val onToggleGeminiTranslationVisibility: () -> Unit = {},
     val onClearGeminiTranslation: () -> Unit = {},
+    val onClearGeminiTranslationForSwitch: () -> Unit = {},
     val onClearAllGeminiTranslationCache: () -> Unit = {},
     val onAddAiTranslationLog: (String) -> Unit = {},
     val onClearGeminiLogs: () -> Unit = {},

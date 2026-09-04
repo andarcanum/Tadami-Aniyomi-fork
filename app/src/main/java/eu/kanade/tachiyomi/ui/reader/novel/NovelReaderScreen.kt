@@ -330,6 +330,7 @@ class NovelReaderScreen(
                             onStopGeminiTranslation = screenModel::stopGeminiTranslation,
                             onToggleGeminiTranslationVisibility = screenModel::toggleGeminiTranslationVisibility,
                             onClearGeminiTranslation = screenModel::clearGeminiTranslation,
+                            onClearGeminiTranslationForSwitch = screenModel::clearGeminiTranslationForSwitch,
                             onClearAllGeminiTranslationCache = screenModel::clearAllGeminiTranslationCache,
                             onAddAiTranslationLog = screenModel::addAiTranslationLog,
                             onClearGeminiLogs = screenModel::clearGeminiLogs,

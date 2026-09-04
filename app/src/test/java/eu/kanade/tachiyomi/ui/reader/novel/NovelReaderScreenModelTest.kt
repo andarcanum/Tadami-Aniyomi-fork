@@ -2577,7 +2577,9 @@ class NovelReaderScreenModelTest {
             screenModel.updateReadingProgress(currentIndex = 4, totalItems = 10)
             yield()
 
-            withTimeout(1_000) {
+            // 5s wall-clock: the 1s budget made this a reproducible flake when the class runs in
+            // one JVM slice with other heavy suites (prefetch legitimately starts, just later).
+            withTimeout(5_000) {
                 while (!requestedUrls.contains(chapter2.url)) {
                     yield()
                 }

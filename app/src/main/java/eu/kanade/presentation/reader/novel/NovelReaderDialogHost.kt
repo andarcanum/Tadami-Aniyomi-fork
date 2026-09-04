@@ -55,6 +55,7 @@ internal fun NovelReaderDialogHost(
     val onStopGeminiTranslation = actions.onStopGeminiTranslation
     val onToggleGeminiTranslationVisibility = actions.onToggleGeminiTranslationVisibility
     val onClearGeminiTranslation = actions.onClearGeminiTranslation
+    val onClearGeminiTranslationForSwitch = actions.onClearGeminiTranslationForSwitch
     val onClearAllGeminiTranslationCache = actions.onClearAllGeminiTranslationCache
     val onAddAiTranslationLog = actions.onAddAiTranslationLog
     val onClearGeminiLogs = actions.onClearGeminiLogs
@@ -302,7 +303,10 @@ internal fun NovelReaderDialogHost(
                 TextButton(
                     onClick = {
                         when (switchRequest.from) {
-                            TranslationKind.Gemini -> onClearGeminiTranslation()
+                            // The switch must not delete the chapter's disk cache: switching back
+                            // should restore the already-paid translation instead of re-running
+                            // the paid API.
+                            TranslationKind.Gemini -> onClearGeminiTranslationForSwitch()
                             TranslationKind.Google -> onClearGoogleTranslation()
                         }
                         onDismissTranslationSwitchRequest()
@@ -347,6 +351,7 @@ internal data class NovelReaderDialogActions(
     val onStopGeminiTranslation: () -> Unit,
     val onToggleGeminiTranslationVisibility: () -> Unit,
     val onClearGeminiTranslation: () -> Unit,
+    val onClearGeminiTranslationForSwitch: () -> Unit,
     val onClearAllGeminiTranslationCache: () -> Unit,
     val onAddAiTranslationLog: (String) -> Unit,
     val onClearGeminiLogs: () -> Unit,

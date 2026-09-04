@@ -468,6 +468,19 @@ internal class NovelTranslationController(
     }
 
     fun clearGeminiTranslation() {
+        clearGeminiTranslationInternal(deleteDiskCache = true)
+    }
+
+    /**
+     * Variant for the translation-kind switch dialog: hides and resets the Gemini side exactly
+     * like [clearGeminiTranslation] but keeps the chapter's disk cache - switching to Google and
+     * back must not silently throw away (paid-API) translations the user never asked to delete.
+     */
+    fun clearGeminiTranslationForSwitch() {
+        clearGeminiTranslationInternal(deleteDiskCache = false)
+    }
+
+    private fun clearGeminiTranslationInternal(deleteDiskCache: Boolean) {
         val chapterId = targetTranslationChapterId() ?: return
         if (state.isGeminiTranslating) {
             stopGeminiTranslation()
@@ -483,8 +496,10 @@ internal class NovelTranslationController(
                 hasGeminiTranslationCache = false,
             )
         }
-        NovelReaderTranslationDiskCacheStore.remove(chapterId)
-        addAiTranslationLog("🗑️ Cleared chapter cache")
+        if (deleteDiskCache) {
+            NovelReaderTranslationDiskCacheStore.remove(chapterId)
+            addAiTranslationLog("🗑️ Cleared chapter cache")
+        }
         host.translationRefreshBookModeTranslationVariant()
         val settings = host.translationReaderSettings() ?: return
         host.translationUpdateContent(settings)

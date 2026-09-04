@@ -225,6 +225,7 @@ internal fun NovelReaderContentHost(
     val onStopGeminiTranslation = actions.onStopGeminiTranslation
     val onToggleGeminiTranslationVisibility = actions.onToggleGeminiTranslationVisibility
     val onClearGeminiTranslation = actions.onClearGeminiTranslation
+    val onClearGeminiTranslationForSwitch = actions.onClearGeminiTranslationForSwitch
     val onClearAllGeminiTranslationCache = actions.onClearAllGeminiTranslationCache
     val onAddAiTranslationLog = actions.onAddAiTranslationLog
     val onClearGeminiLogs = actions.onClearGeminiLogs
@@ -4266,6 +4267,7 @@ internal fun NovelReaderContentHost(
                     onStopGeminiTranslation = onStopGeminiTranslation,
                     onToggleGeminiTranslationVisibility = onToggleGeminiTranslationVisibility,
                     onClearGeminiTranslation = onClearGeminiTranslation,
+                    onClearGeminiTranslationForSwitch = onClearGeminiTranslationForSwitch,
                     onClearAllGeminiTranslationCache = onClearAllGeminiTranslationCache,
                     onAddAiTranslationLog = onAddAiTranslationLog,
                     onClearGeminiLogs = onClearGeminiLogs,
