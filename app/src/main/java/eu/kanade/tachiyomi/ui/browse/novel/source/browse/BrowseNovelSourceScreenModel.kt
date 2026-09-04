@@ -508,6 +508,9 @@ class BrowseNovelSourceScreenModel(
                     filters = defaultFilters,
                     listing = listing,
                     toolbarQuery = listing.query,
+                    // Without the bump a second genre search produced an identical-looking state
+                    // and the results list never re-ran (UI keys the fetch on filterVersion).
+                    filterVersion = it.filterVersion + 1,
                 )
             }
         }
@@ -557,6 +560,8 @@ class BrowseNovelSourceScreenModel(
                     filters = defaultFilters,
                     listing = listing,
                     toolbarQuery = listing.query,
+                    // Same re-run guarantee as searchGenre.
+                    filterVersion = it.filterVersion + 1,
                 )
             }
         }

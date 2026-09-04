@@ -1,7 +1,9 @@
 package eu.kanade.domain.entries.novel.interactor
 
+import eu.kanade.domain.entries.novel.model.hasCustomCover
 import eu.kanade.domain.entries.novel.model.toSNovel
 import eu.kanade.domain.items.novelchapter.interactor.SyncNovelChaptersWithSource
+import eu.kanade.tachiyomi.data.cache.NovelCoverCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
@@ -37,6 +39,7 @@ class MigrateNovelUseCase(
     private val novelHistoryRepository: NovelHistoryRepository = Injekt.get(),
     private val getNovelTracks: GetNovelTracks = Injekt.get(),
     private val insertNovelTrack: InsertNovelTrack = Injekt.get(),
+    private val coverCache: NovelCoverCache = Injekt.get(),
 ) {
 
     suspend fun migrateNovel(
@@ -77,6 +80,7 @@ class MigrateNovelUseCase(
         val migrateTracking = NovelMigrationFlags.hasTracking(flags)
         val migrateExtra = NovelMigrationFlags.hasExtra(flags)
         val migrateNotes = NovelMigrationFlags.hasNotes(flags)
+        val migrateCustomCover = NovelMigrationFlags.hasCustomCover(flags)
         val deleteDownloaded = NovelMigrationFlags.hasDeleteDownloaded(flags)
 
         try {
@@ -145,6 +149,15 @@ class MigrateNovelUseCase(
 
         if (deleteDownloaded && oldSource != null) {
             downloadManager.deleteNovel(oldNovel)
+        }
+
+        // Manga/anime migrations copy the custom cover; the novel one silently dropped it, so a
+        // migrated title lost its user-set cover art.
+        if (migrateCustomCover && oldNovel.hasCustomCover(coverCache)) {
+            coverCache.setCustomCoverToCache(
+                newNovel,
+                coverCache.getCustomCoverFile(oldNovel.id).inputStream(),
+            )
         }
 
         // Add/favorite new entry first to guarantee no data loss if subsequent operations fail

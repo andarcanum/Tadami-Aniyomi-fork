@@ -1,9 +1,12 @@
 package eu.kanade.tachiyomi.ui.browse.novel.migration
 
 import dev.icerock.moko.resources.StringResource
+import eu.kanade.domain.entries.novel.model.hasCustomCover
+import eu.kanade.tachiyomi.data.cache.NovelCoverCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
+import uy.kohesive.injekt.injectLazy
 
 data class NovelMigrationFlag(
     val flag: Int,
@@ -29,8 +32,10 @@ object NovelMigrationFlags {
     private const val DELETE_DOWNLOADED = 0b01000
     private const val EXTRA = 0b10000
     private const val NOTES = 0b100000
+    private const val CUSTOM_COVER = 0b1000000
 
     private val downloadManager = NovelDownloadManager()
+    private val coverCache: NovelCoverCache by injectLazy()
 
     fun hasChapters(value: Int): Boolean {
         return value and CHAPTERS != 0
@@ -56,6 +61,10 @@ object NovelMigrationFlags {
         return value and NOTES != 0
     }
 
+    fun hasCustomCover(value: Int): Boolean {
+        return value and CUSTOM_COVER != 0
+    }
+
     fun getFlags(novel: Novel?, defaultSelectedBitMap: Int): List<NovelMigrationFlag> {
         val flags = mutableListOf<NovelMigrationFlag>()
         flags += NovelMigrationFlag.create(CHAPTERS, defaultSelectedBitMap, MR.strings.chapters)
@@ -64,6 +73,14 @@ object NovelMigrationFlags {
         flags += NovelMigrationFlag.create(EXTRA, defaultSelectedBitMap, MR.strings.migration_extra)
         if (novel == null || novel.notes.isNotBlank()) {
             flags += NovelMigrationFlag.create(NOTES, defaultSelectedBitMap, MR.strings.action_notes)
+        }
+
+        if (novel != null && novel.hasCustomCover(coverCache)) {
+            flags += NovelMigrationFlag.create(
+                CUSTOM_COVER,
+                defaultSelectedBitMap,
+                MR.strings.custom_cover,
+            )
         }
 
         if (novel != null && downloadManager.getDownloadCount(novel) > 0) {
