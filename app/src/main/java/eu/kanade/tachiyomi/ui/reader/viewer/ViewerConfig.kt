@@ -25,6 +25,13 @@ abstract class ViewerConfig(
 
     var transitionPropertyChangedListener: (() -> Unit)? = null
 
+    /**
+     * Notified when the double-page spread grouping changes (join/shift). Unlike image property
+     * changes (view recreation over the same items), regrouping requires rebuilding the adapter
+     * items, which only setChapters does.
+     */
+    var spreadPropertyChangedListener: (() -> Unit)? = null
+
     var tappingInverted = ReaderPreferences.TappingInvertMode.NONE
     var longTapEnabled = true
     var usePageTransitions = false

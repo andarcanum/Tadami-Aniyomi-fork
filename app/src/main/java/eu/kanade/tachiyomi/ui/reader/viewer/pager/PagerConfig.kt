@@ -120,13 +120,13 @@ class PagerConfig(
         readerPreferences.joinDoublePages()
             .register(
                 { joinDoublePages = it },
-                { imagePropertyChangedListener?.invoke() },
+                { spreadPropertyChangedListener?.invoke() },
             )
 
         readerPreferences.shiftDoublePages()
             .register(
                 { shiftDoublePages = it },
-                { imagePropertyChangedListener?.invoke() },
+                { spreadPropertyChangedListener?.invoke() },
             )
     }
 
