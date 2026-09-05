@@ -1,6 +1,7 @@
 package eu.kanade.domain.items.chapter.interactor
 
 import eu.kanade.domain.download.manga.interactor.DeleteChapterDownload
+import eu.kanade.tachiyomi.ui.reader.setting.ReaderPreferences
 import logcat.LogPriority
 import tachiyomi.core.common.util.lang.withNonCancellableContext
 import tachiyomi.core.common.util.system.logcat
@@ -23,6 +24,7 @@ class SetReadStatus(
     private val chapterRepository: ChapterRepository,
     private val eventBus: AchievementEventBus,
     private val activityDataRepository: ActivityDataRepository = Injekt.get(),
+    private val readerPreferences: ReaderPreferences = Injekt.get(),
 ) {
 
     private val mapper = { chapter: Chapter, read: Boolean ->
@@ -51,6 +53,15 @@ class SetReadStatus(
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
             return@withNonCancellableContext Result.InternalError(e)
+        }
+
+        if (!read) {
+            // РЕШ-8/A-M4: the webtoon long-page px cache lives outside the DB and takes priority
+            // when a chapter is reopened; after mark-unread the reader used to resurrect the old
+            // mid-chapter position. removeLongPageProgressForChapter had zero production callers.
+            chaptersToUpdate.forEach { chapter ->
+                chapter.id?.let { readerPreferences.removeLongPageProgressForChapter(it) }
+            }
         }
 
         if (read && downloadPreferences.removeAfterMarkedAsRead().get()) {

@@ -293,6 +293,10 @@ class ReaderViewModel @JvmOverloads constructor(
     }
 
     private val downloadAheadAmount = downloadPreferences.autoDownloadWhileReading().get()
+
+    // A-LOW: read on the main thread and cleared from detached IO flushes - make the handoff
+    // visibility-safe across threads.
+    @Volatile
     private var pendingWebtoonProgress: PendingWebtoonProgress? = null
     private var webtoonProgressSaveJob: Job? = null
 
@@ -306,8 +310,21 @@ class ReaderViewModel @JvmOverloads constructor(
                 if (chapterPageIndex >= 0) {
                     // Restore from SavedState
                     currentChapter.requestedPage = chapterPageIndex
-                    currentChapter.requestedPageOffset = 0
-                    currentChapter.requestedPageOffsetRatioPpm = null
+                    // A-LOW (process kill): the px offset within the page was dropped here even
+                    // though the stored progress carries it (webtoon long pages) - reopening
+                    // after a process death landed at the TOP of the restored page. Reuse the
+                    // stored offset when it belongs to the same page index.
+                    val storedProgress = decodeStoredChapterProgress(
+                        value = currentChapter.chapter.last_page_read,
+                        restoreOffset = readerPreferences.saveLongPagePosition().get(),
+                    )
+                    if (storedProgress.index == chapterPageIndex) {
+                        currentChapter.requestedPageOffset = storedProgress.offsetPx
+                        currentChapter.requestedPageOffsetRatioPpm = storedProgress.offsetRatioPpm
+                    } else {
+                        currentChapter.requestedPageOffset = 0
+                        currentChapter.requestedPageOffsetRatioPpm = null
+                    }
                 } else if (shouldRestoreSavedProgress(
                         currentChapter,
                         readerPreferences.preserveReadingPosition().get(),
@@ -410,20 +427,6 @@ class ReaderViewModel @JvmOverloads constructor(
         val pending = pendingWebtoonProgress ?: return
         pendingWebtoonProgress = null
 
-        if (readerPreferences.saveLongPagePosition().get()) {
-            val saved = readerPreferences.getLongPageProgressForChapter(
-                chapterId = pending.chapterId,
-                chapterKey = pending.chapterKey,
-            )
-            if (saved != pending.encodedProgress) {
-                readerPreferences.putLongPageProgressForChapter(
-                    chapterId = pending.chapterId,
-                    encodedProgress = pending.encodedProgress,
-                    chapterKey = pending.chapterKey,
-                )
-            }
-        }
-
         // `read` is intentionally NOT written here: the pending snapshot captured it on the main
         // thread while updateChapterProgressOnComplete flips read=true on an IO coroutine, and the
         // debounced flush landed AFTER that write - reverting freshly completed chapters to unread
@@ -431,7 +434,24 @@ class ReaderViewModel @JvmOverloads constructor(
         // the flush owns only the px-precision position. Detached scope (GlobalScope launchIO):
         // onCleared runs after viewModelScope is closed, so a child launch here never dispatched
         // and the final progress write was silently dropped on system destroy.
+        //
+        // A-LOW (progress churn): the pref-cache read/write (a JSON-backed per-chapter map,
+        // string parsing on access) ran synchronously on the MAIN thread on every flush (chapter
+        // change, pause, finish); it moved into the same detached IO block as the DB write.
         launchIO {
+            if (readerPreferences.saveLongPagePosition().get()) {
+                val saved = readerPreferences.getLongPageProgressForChapter(
+                    chapterId = pending.chapterId,
+                    chapterKey = pending.chapterKey,
+                )
+                if (saved != pending.encodedProgress) {
+                    readerPreferences.putLongPageProgressForChapter(
+                        chapterId = pending.chapterId,
+                        encodedProgress = pending.encodedProgress,
+                        chapterKey = pending.chapterKey,
+                    )
+                }
+            }
             updateChapter.await(
                 ChapterUpdate(
                     id = pending.chapterId,
@@ -1320,6 +1340,12 @@ class ReaderViewModel @JvmOverloads constructor(
             if (currChapters != null) {
                 // Save current page
                 val currChapter = currChapters.currChapter
+                // РЕШ-8 (part 2): the long-page px cache takes priority over the DB when a
+                // chapter is reopened, but only WEBTOON writes it. A mode switch left the stale
+                // webtoon entry behind: webtoon(px 50) -> pager(page 80) -> webtoon rolled back
+                // to the old px-50 position. Drop the entry so applySavedProgress resolves from
+                // the fresh DB progress written by the pager.
+                currChapter.chapter.id?.let { readerPreferences.removeLongPageProgressForChapter(it) }
                 applySavedProgress(currChapter)
 
                 mutableState.update {

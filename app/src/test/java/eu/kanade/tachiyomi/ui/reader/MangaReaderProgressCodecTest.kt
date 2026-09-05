@@ -19,6 +19,21 @@ class MangaReaderProgressCodecTest {
     }
 
     @Test
+    fun `legacy encoding of chapters over 1000 pages round-trips`() {
+        // Codec edge (red before the fix): 7e9 + 1000 * 1e6 == 8e9 (the ratio marker), so the
+        // plain legacy encoding of index >= 1000 decoded back as a ratio with a WRONG index
+        // (1500 -> 500). Big indices now route through the with-total space.
+        val encoded = encodeWebtoonScrollProgress(index = 1500, offsetPx = 700)
+
+        val decoded = decodeWebtoonScrollProgress(encoded)
+        decoded?.index shouldBe 1500
+        decoded?.offsetPx shouldBe 700
+
+        decodeStoredChapterProgress(encoded, restoreOffset = true) shouldBe
+            ChapterScrollProgress(index = 1500, offsetPx = 700)
+    }
+
+    @Test
     fun `decode clamps negative and out of range values`() {
         val encoded = encodeWebtoonScrollProgress(index = -5, offsetPx = 2_000_000)
 

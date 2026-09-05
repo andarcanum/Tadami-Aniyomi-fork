@@ -97,6 +97,20 @@ internal fun encodeWebtoonScrollProgress(
         return WEBTOON_SCROLL_RATIO_MARKER + (safeIndex * WEBTOON_SCROLL_OFFSET_BASE) + ratioPpm
     }
 
+    // Codec edge (A-LOW): at index >= 1000 the plain legacy encoding crosses into the
+    // ratio-marker space (7e9 + 1000 * 1e6 == 8e9) and decoded back as a ratio with a WRONG
+    // index (1500 -> 500). Route big indices through the with-total space, which carries
+    // index+offset unambiguously (synthetic total = index + 1). Runtime webtoon writers already
+    // pass real totalPages; this covers the legacy-import re-encode that passes none. Values
+    // stored by pre-fix versions stay misdecoded once and self-heal on the next progress write.
+    if (safeIndex >= 1000L) {
+        val syntheticTotalPages = safeIndex + 1
+        return WEBTOON_SCROLL_WITH_TOTAL_MARKER +
+            (safeIndex * WEBTOON_SCROLL_WITH_TOTAL_ITEM_BASE) +
+            (syntheticTotalPages * WEBTOON_SCROLL_WITH_TOTAL_TOTAL_BASE) +
+            safeOffset
+    }
+
     return WEBTOON_SCROLL_MARKER + (safeIndex * WEBTOON_SCROLL_OFFSET_BASE) + safeOffset
 }
 

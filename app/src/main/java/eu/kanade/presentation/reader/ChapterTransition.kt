@@ -50,6 +50,11 @@ fun ChapterTransition(
     transition: ChapterTransition,
     currChapterDownloaded: Boolean,
     goingToChapterDownloaded: Boolean,
+    // A-LOW (transition gap): the adapters decide WHETHER to show this card with the VISIBLE gap
+    // (raw gap minus intermediate chapters that are actually present), but the card displayed the
+    // RAW count - a series with side chapters showed a "missing N" warning that contradicted the
+    // show/hide decision. Callers that know the chapter list pass the visible gap.
+    visibleChapterGap: Int? = null,
 ) {
     val currChapter = transition.from.chapter.toDomainChapter()
     val goingToChapter = transition.to?.chapter?.toDomainChapter()
@@ -65,7 +70,7 @@ fun ChapterTransition(
                     bottomChapter = currChapter,
                     bottomChapterDownloaded = currChapterDownloaded,
                     fallbackLabel = stringResource(MR.strings.transition_no_previous),
-                    chapterGap = calculateChapterGap(currChapter, goingToChapter),
+                    chapterGap = visibleChapterGap ?: calculateChapterGap(currChapter, goingToChapter),
                 )
             }
             is ChapterTransition.Next -> {
@@ -77,7 +82,7 @@ fun ChapterTransition(
                     bottomChapter = goingToChapter,
                     bottomChapterDownloaded = goingToChapterDownloaded,
                     fallbackLabel = stringResource(MR.strings.transition_no_next),
-                    chapterGap = calculateChapterGap(goingToChapter, currChapter),
+                    chapterGap = visibleChapterGap ?: calculateChapterGap(goingToChapter, currChapter),
                 )
             }
         }

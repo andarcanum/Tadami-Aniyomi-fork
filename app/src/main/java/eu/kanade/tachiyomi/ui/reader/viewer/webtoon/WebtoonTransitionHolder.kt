@@ -14,6 +14,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ChapterTransition
 import eu.kanade.tachiyomi.ui.reader.model.ReaderChapter
 import eu.kanade.tachiyomi.ui.reader.model.shouldShowChapterTransitionLoading
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderTransitionView
+import eu.kanade.tachiyomi.ui.reader.viewer.calculateVisibleChapterGap
 import eu.kanade.tachiyomi.util.system.dpToPx
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -70,7 +71,15 @@ class WebtoonTransitionHolder(
         pagesContainer.removeAllViews()
         pagesContainer.isVisible = false
 
-        transitionView.bind(transition, viewer.downloadManager, viewer.activity.viewModel.manga)
+        // A-LOW (transition gap): display the VISIBLE gap (the same metric the adapter used to
+        // decide whether to show this card), not the raw number.
+        val allChapters = viewer.activity.viewModel.state.value.viewerChapters?.allChapters.orEmpty()
+        val visibleGap = calculateVisibleChapterGap(
+            higherReaderChapter = if (transition is ChapterTransition.Next) transition.to else transition.from,
+            lowerReaderChapter = if (transition is ChapterTransition.Next) transition.from else transition.to,
+            allReaderChapters = allChapters,
+        )
+        transitionView.bind(transition, viewer.downloadManager, viewer.activity.viewModel.manga, visibleGap)
         transitionView.visibility = if (transition.showInfo) View.VISIBLE else View.GONE
 
         transition.to?.let { observeStatus(it, transition) }

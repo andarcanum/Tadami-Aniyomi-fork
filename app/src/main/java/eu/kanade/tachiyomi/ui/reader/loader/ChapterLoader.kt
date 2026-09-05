@@ -44,11 +44,21 @@ class ChapterLoader(
             return
         }
 
+        // A-LOW (orphaned loader): concurrent loadChapter calls for the same chapter (navigating
+        // onto a chapter that is already being preloaded) each created a page loader; the second
+        // assignment overwrote the first, which was never recycled and whose HTTP worker kept an
+        // IO thread blocked forever. Skip when a load is already in flight.
+        if (chapter.state is ReaderChapter.State.Loading) {
+            return
+        }
+
         chapter.state = ReaderChapter.State.Loading
         withIOContext {
             logcat { "Loading pages for ${chapter.chapter.name}" }
             try {
                 val loader = getPageLoader(chapter)
+                // Defense in depth: never orphan an already-assigned loader.
+                chapter.pageLoader?.takeIf { it !== loader }?.recycle()
                 chapter.pageLoader = loader
 
                 val pages = loader.getPages()

@@ -384,7 +384,14 @@ open class ReaderPageImageView @JvmOverloads constructor(
                             val bounds = withContext(Dispatchers.IO) {
                                 WebtoonBorderDetector.detectContentBounds(data.peek().inputStream())
                             }
-                            setImage(ImageSource.inputStream(data.inputStream()).region(bounds))
+                            // A-LOW (smartFit): the detector returns an EMPTY Rect on failure
+                            // (undecodable/odd stream); that zero-size region was passed to the
+                            // image source and blanked the page. Fall back to the full image.
+                            if (!bounds.isEmpty) {
+                                setImage(ImageSource.inputStream(data.inputStream()).region(bounds))
+                            } else {
+                                setImage(ImageSource.inputStream(data.inputStream()))
+                            }
                             isVisible = true
                         }
                     } else {
