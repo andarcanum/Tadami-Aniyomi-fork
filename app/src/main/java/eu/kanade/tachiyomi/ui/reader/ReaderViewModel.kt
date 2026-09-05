@@ -711,13 +711,20 @@ class ReaderViewModel @JvmOverloads constructor(
      * If both conditions are satisfied enqueues chapter for delete
      * @param currentChapter current chapter, which is going to be marked as read.
      */
-    private fun deleteChapterIfNeeded(currentChapter: ReaderChapter) {
+    private fun deleteChapterIfNeeded(currentChapter: ReaderChapter, orderedChapters: List<Chapter>) {
         val removeAfterReadSlots = downloadPreferences.removeAfterReadSlots().get()
         if (removeAfterReadSlots == -1) return
 
-        // Determine which chapter should be deleted and enqueue
-        val currentChapterPosition = chapterList.indexOf(currentChapter)
-        val chapterToDelete = chapterList.getOrNull(currentChapterPosition - removeAfterReadSlots)
+        // Determine which chapter should be deleted and enqueue. Positions come from the FULL
+        // ordered DB snapshot (id-based): the filtered chapterList used to target the wrong
+        // chapter whenever skip filters were active, and fullChapterList holds distinct instances
+        // with stale read flags.
+        val currentPosition = orderedChapters.indexOfFirst { it.id == currentChapter.chapter.id }
+        val chapterToDelete = if (currentPosition >= 0) {
+            orderedChapters.getOrNull(currentPosition - removeAfterReadSlots)
+        } else {
+            null
+        }
 
         // If chapter is completely read, no need to download it
         chapterToDownload = null
@@ -786,14 +793,38 @@ class ReaderViewModel @JvmOverloads constructor(
         val chapterWasUnread = !readerChapter.chapter.read
         readerChapter.chapter.read = true
         updateTrackChapterRead(readerChapter)
-        deleteChapterIfNeeded(readerChapter)
+
+        // Fresh FULL chapter snapshot from the DB in reading order, with the just-finished chapter
+        // forced read (its own DB write happens after this function returns). `chapterList` is
+        // filtered (skipRead/skipFiltered/downloadedOnly/dedupe) and its sibling instances carry
+        // stale in-memory read flags, so completion, duplicate-marking and delete-after-read all
+        // used to target the wrong set: finishing the last VISIBLE chapter declared the whole
+        // entry completed (event, completedAt keepsake, THE END plate) while unread chapters were
+        // merely hidden by a filter.
+        val currentManga = manga
+        val currentChapterId = readerChapter.chapter.id
+        val completionChapters = if (currentManga != null) {
+            withIOContext {
+                getChaptersByMangaId.await(currentManga.id, applyScanlatorFilter = true)
+            }
+                .sortedWith(getChapterSort(currentManga, sortDescending = false))
+                .map { dbChapter ->
+                    dbChapter.toDbChapter().also { converted ->
+                        if (dbChapter.id == currentChapterId) converted.read = true
+                    }
+                }
+        } else {
+            emptyList()
+        }
+
+        deleteChapterIfNeeded(readerChapter, completionChapters)
         maybeShowSeriesInterstitial(readerChapter)
 
         // Emit ChapterRead event for achievement tracking. Gated on the unread->read transition:
         // re-reaching the last page of an already-read chapter re-emitted the event on every visit
         // (achievement rules recompute from the DB, so the event is only a trigger - but the
         // activity log below accumulates blindly).
-        val mangaId = manga?.id ?: return
+        val mangaId = currentManga?.id ?: return
         if (chapterWasUnread) {
             eventBus.tryEmit(
                 AchievementEvent.ChapterRead(
@@ -822,31 +853,32 @@ class ReaderViewModel @JvmOverloads constructor(
             )
         }
 
-        // Check for manga completion
-        val allChapters = chapterList.map { it.chapter }
-        if (allChapters.all { it.read }) {
-            eventBus.tryEmit(AchievementEvent.MangaCompleted(mangaId))
-            recordCompletionIfNeeded(readerChapter, allChapters)
-            maybeShowFinale(readerChapter, allChapters, chapterWasUnread)
+        // Check for manga completion against the full snapshot.
+        if (completionChapters.isNotEmpty() && completionChapters.all { it.read }) {
+            // Event-driven rules (complete_1_manga, crybaby) unlock purely from this event, so it
+            // is gated on the entry's own (possibly custom) COMPLETED status: an exhausted ONGOING
+            // series must not count as a completed manga.
+            if (currentManga.displayStatus == SManga.COMPLETED.toLong()) {
+                eventBus.tryEmit(AchievementEvent.MangaCompleted(mangaId))
+            }
+            recordCompletionIfNeeded(readerChapter, completionChapters)
+            maybeShowFinale(readerChapter, completionChapters, chapterWasUnread)
         }
 
         val markDuplicateAsRead = libraryPreferences.markDuplicateReadChapterAsRead().get()
             .contains(LibraryPreferences.MARK_DUPLICATE_CHAPTER_READ_EXISTING)
         if (!markDuplicateAsRead) return
 
-        val duplicateUnreadChapters = chapterList
-            .mapNotNull {
-                val chapter = it.chapter
-                if (
-                    !chapter.read &&
-                    chapter.isRecognizedNumber &&
-                    chapter.chapter_number == readerChapter.chapter.chapter_number
-                ) {
-                    ChapterUpdate(id = chapter.id!!, read = true)
-                } else {
-                    null
-                }
+        // Duplicates by chapter number are searched in the FULL snapshot as well: the dedupe
+        // filters (skipDupe / forced Aurora dedupe) remove exactly those duplicates from
+        // chapterList, so the feature was dead whenever dedupe was active.
+        val duplicateUnreadChapters = completionChapters
+            .filter {
+                !it.read &&
+                    it.isRecognizedNumber &&
+                    it.chapter_number == readerChapter.chapter.chapter_number
             }
+            .map { ChapterUpdate(id = it.id!!, read = true) }
         updateChapter.awaitAll(duplicateUnreadChapters)
     }
 
@@ -884,9 +916,13 @@ class ReaderViewModel @JvmOverloads constructor(
     private fun maybeShowSeriesInterstitial(chapter: ReaderChapter) {
         if (seriesId == null) return
         if (seriesInterstitialState != null) return
-        val chapterIndex = chapterList.indexOf(chapter)
-        if (chapterIndex < 0 || chapterIndex != chapterList.lastIndex) return
         val chapterId = chapter.chapter.id ?: return
+        // Full list, id-based: chapterList is filtered (the interstitial fired at the last
+        // VISIBLE chapter), and fullChapterList holds distinct ReaderChapter instances so the
+        // identity-based indexOf would always miss there.
+        val fullList = fullChapterList
+        val chapterIndex = fullList.indexOfFirst { it.chapter.id == chapterId }
+        if (chapterIndex < 0 || chapterIndex != fullList.lastIndex) return
         if (seriesInterstitialShownForChapterId == chapterId) return
         seriesInterstitialShownForChapterId = chapterId
         viewModelScope.launchIO {
@@ -1617,13 +1653,13 @@ class ReaderViewModel @JvmOverloads constructor(
      * Enqueues this [chapter] to be deleted when [deletePendingChapters] is called. The download
      * manager handles persisting it across process deaths.
      */
-    private fun enqueueDeleteReadChapters(chapter: ReaderChapter) {
-        if (!chapter.chapter.read) return
+    private fun enqueueDeleteReadChapters(chapter: Chapter) {
+        if (!chapter.read) return
         val manga = manga ?: return
 
         viewModelScope.launchNonCancellable {
             downloadManager.enqueueChaptersToDelete(
-                listOf(chapter.chapter.toDomainChapter()!!),
+                listOf(chapter.toDomainChapter()!!),
                 manga,
             )
         }

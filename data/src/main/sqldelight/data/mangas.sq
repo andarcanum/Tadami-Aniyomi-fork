@@ -291,6 +291,18 @@ SELECT EXISTS(
 );
 
 getCompletedMangaCount:
-SELECT COUNT(*) FROM mangas
-WHERE favorite = 1
-AND status = 2;
+-- Mirrors StatsCalculations.isCompletedByUserConsumption (Statistics screen) over libraryView so
+-- achievements and statistics report the SAME "completed manga" number. Previously this was
+-- favorite + source status alone: adding an UNREAD completed series silently advanced the
+-- "complete N manga" achievement, while a fully read ONGOING series never counted.
+-- custom COMPLETED(2) always counts; otherwise the entry must be fully consumed (every
+-- non-excluded chapter read) with an effective status of COMPLETED(2) or the terminal fallbacks
+-- PUBLISHING_FINISHED(4) / CANCELLED(5) / ON_HIATUS(6).
+SELECT COUNT(*) FROM libraryView
+WHERE custom_status = 2
+    OR (
+        COALESCE(custom_status, status) IN (2, 4, 5, 6)
+        AND totalCount > 0
+        AND readCount > 0
+        AND readCount >= totalCount
+    );
