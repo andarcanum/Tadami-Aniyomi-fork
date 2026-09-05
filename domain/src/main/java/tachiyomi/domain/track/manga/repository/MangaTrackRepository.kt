@@ -5,7 +5,12 @@ import tachiyomi.domain.track.manga.model.MangaTrack
 
 interface MangaTrackRepository {
 
-    suspend fun getTrackByMangaId(id: Long): MangaTrack?
+    /**
+     * Resolves a track by its `manga_sync._id` row id (NOT by manga id - that was the former
+     * `getTrackByMangaId` misnomer which masked the delayed-queue cross-medium collisions; use
+     * [getTracksByMangaId] for manga-id lookups).
+     */
+    suspend fun getTrackById(trackId: Long): MangaTrack?
 
     suspend fun getTracksByMangaId(mangaId: Long): List<MangaTrack>
 

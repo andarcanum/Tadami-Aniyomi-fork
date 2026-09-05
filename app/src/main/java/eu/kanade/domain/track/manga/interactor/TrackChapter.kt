@@ -42,9 +42,9 @@ class TrackChapter(
                                 .copy(lastChapterRead = chapterNumber)
                             service.mangaService.update(updatedTrack.toDbTrack(), true)
                             insertTrack.await(updatedTrack)
-                            delayedTrackingStore.removeMangaItem(track.id)
+                            delayedTrackingStore.removeMangaItem(track.mangaId, track.trackerId)
                         } catch (e: Exception) {
-                            delayedTrackingStore.addManga(track.id, chapterNumber)
+                            delayedTrackingStore.addManga(track.mangaId, track.trackerId, chapterNumber)
                             if (setupJobOnFailure) {
                                 DelayedMangaTrackingUpdateJob.setupTask(context)
                             }

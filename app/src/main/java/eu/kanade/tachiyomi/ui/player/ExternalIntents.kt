@@ -531,7 +531,14 @@ class ExternalIntents {
                                     tracker.animeService.update(updatedTrack.toDbTrack(), true)
                                     insertTrack.await(updatedTrack)
                                 } else {
-                                    delayedTrackingStore.addAnime(track.animeId, lastEpisodeSeen = episodeNumber)
+                                    // NEW-4 fix: this used to pass track.animeId into the old
+                                    // trackId-keyed API - the delayed job then resolved a foreign
+                                    // track row by that id (or silently dropped the entry).
+                                    delayedTrackingStore.addAnime(
+                                        track.animeId,
+                                        track.trackerId,
+                                        lastEpisodeSeen = episodeNumber,
+                                    )
                                     DelayedAnimeTrackingUpdateJob.setupTask(context)
                                 }
                             }

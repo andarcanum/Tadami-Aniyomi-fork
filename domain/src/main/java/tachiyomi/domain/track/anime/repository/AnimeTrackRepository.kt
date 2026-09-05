@@ -5,7 +5,12 @@ import tachiyomi.domain.track.anime.model.AnimeTrack
 
 interface AnimeTrackRepository {
 
-    suspend fun getTrackByAnimeId(id: Long): AnimeTrack?
+    /**
+     * Resolves a track by its `anime_sync._id` row id (NOT by anime id - that was the former
+     * `getTrackByAnimeId` misnomer which masked the delayed-queue cross-medium collisions; use
+     * [getTracksByAnimeId] for anime-id lookups).
+     */
+    suspend fun getTrackById(trackId: Long): AnimeTrack?
 
     suspend fun getTracksByAnimeId(animeId: Long): List<AnimeTrack>
 

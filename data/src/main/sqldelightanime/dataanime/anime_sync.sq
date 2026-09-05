@@ -28,7 +28,9 @@ getAnimeTracks:
 SELECT *
 FROM anime_sync;
 
-getTrackByAnimeId:
+-- Resolves a track by its anime_sync._id row id (renamed from the getTrackByAnimeId misnomer:
+-- it never searched by anime_id and masked the delayed-queue cross-medium collisions).
+getTrackById:
 SELECT *
 FROM anime_sync
 WHERE _id = :id;

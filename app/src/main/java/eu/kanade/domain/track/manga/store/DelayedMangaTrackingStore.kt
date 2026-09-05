@@ -2,43 +2,51 @@ package eu.kanade.domain.track.manga.store
 
 import android.content.Context
 import androidx.core.content.edit
+import eu.kanade.domain.track.DelayedTrackingStoreKeys
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 
 class DelayedMangaTrackingStore(context: Context) {
 
     /**
-     * Preference file where queued tracking updates are stored.
+     * Preference file where queued tracking updates are stored. Media-specific: the legacy
+     * shared "tracking_queue" file let the manga and anime delayed jobs read each other's
+     * bare-_id keys (the id spaces overlap) and push progress to the wrong medium's track.
+     * Legacy entries are migrated best-effort by [eu.kanade.domain.track.DelayedTrackingLegacyMigration].
      */
-    private val preferences = context.getSharedPreferences("tracking_queue", Context.MODE_PRIVATE)
+    private val preferences = context.getSharedPreferences("manga_tracking_queue", Context.MODE_PRIVATE)
 
-    fun addManga(trackId: Long, lastChapterRead: Double) {
-        val previousLastChapterRead = preferences.getFloat(trackId.toString(), 0f)
+    fun addManga(mangaId: Long, trackerId: Long, lastChapterRead: Double) {
+        val key = DelayedTrackingStoreKeys.build(mangaId, trackerId)
+        val previousLastChapterRead = preferences.getFloat(key, 0f)
         if (lastChapterRead > previousLastChapterRead) {
-            logcat(LogPriority.DEBUG) { "Queuing track item: $trackId, last chapter read: $lastChapterRead" }
+            logcat(LogPriority.DEBUG) { "Queuing track item: $key, last chapter read: $lastChapterRead" }
             preferences.edit {
-                putFloat(trackId.toString(), lastChapterRead.toFloat())
+                putFloat(key, lastChapterRead.toFloat())
             }
         }
     }
 
-    fun removeMangaItem(trackId: Long) {
+    fun removeMangaItem(mangaId: Long, trackerId: Long) {
         preferences.edit {
-            remove(trackId.toString())
+            remove(DelayedTrackingStoreKeys.build(mangaId, trackerId))
         }
     }
 
     fun getMangaItems(): List<DelayedTrackingItem> {
-        return preferences.all.mapNotNull {
+        return preferences.all.mapNotNull { (rawKey, value) ->
+            val (mangaId, trackerId) = DelayedTrackingStoreKeys.parse(rawKey) ?: return@mapNotNull null
             DelayedTrackingItem(
-                trackId = it.key.toLong(),
-                lastChapterRead = it.value.toString().toFloat(),
+                mangaId = mangaId,
+                trackerId = trackerId,
+                lastChapterRead = value.toString().toFloat(),
             )
         }
     }
 
     data class DelayedTrackingItem(
-        val trackId: Long,
+        val mangaId: Long,
+        val trackerId: Long,
         val lastChapterRead: Float,
     )
 }

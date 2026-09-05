@@ -10,9 +10,9 @@ class GetMangaTracks(
     private val trackRepository: MangaTrackRepository,
 ) {
 
-    suspend fun awaitOne(id: Long): MangaTrack? {
+    suspend fun awaitOne(trackId: Long): MangaTrack? {
         return try {
-            trackRepository.getTrackByMangaId(id)
+            trackRepository.getTrackById(trackId)
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
             null

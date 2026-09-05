@@ -9,8 +9,8 @@ class MangaTrackRepositoryImpl(
     private val handler: MangaDatabaseHandler,
 ) : MangaTrackRepository {
 
-    override suspend fun getTrackByMangaId(id: Long): MangaTrack? {
-        return handler.awaitOneOrNull { db -> db.manga_syncQueries.getTrackById(id, MangaTrackMapper::mapTrack) }
+    override suspend fun getTrackById(trackId: Long): MangaTrack? {
+        return handler.awaitOneOrNull { db -> db.manga_syncQueries.getTrackById(trackId, MangaTrackMapper::mapTrack) }
     }
 
     override suspend fun getTracksByMangaId(mangaId: Long): List<MangaTrack> {

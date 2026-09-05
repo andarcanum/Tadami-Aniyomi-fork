@@ -9,8 +9,8 @@ class AnimeTrackRepositoryImpl(
     private val handler: AnimeDatabaseHandler,
 ) : AnimeTrackRepository {
 
-    override suspend fun getTrackByAnimeId(id: Long): AnimeTrack? {
-        return handler.awaitOneOrNull { db -> db.anime_syncQueries.getTrackByAnimeId(id, AnimeTrackMapper::mapTrack) }
+    override suspend fun getTrackById(trackId: Long): AnimeTrack? {
+        return handler.awaitOneOrNull { db -> db.anime_syncQueries.getTrackById(trackId, AnimeTrackMapper::mapTrack) }
     }
 
     override suspend fun getTracksByAnimeId(animeId: Long): List<AnimeTrack> {

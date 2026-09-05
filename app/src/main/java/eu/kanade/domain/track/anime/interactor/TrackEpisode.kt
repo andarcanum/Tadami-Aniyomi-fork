@@ -41,9 +41,9 @@ class TrackEpisode(
                                 .copy(lastEpisodeSeen = episodeNumber)
                             service.animeService.update(updatedTrack.toDbTrack(), true)
                             insertTrack.await(updatedTrack)
-                            delayedTrackingStore.removeAnimeItem(track.id)
+                            delayedTrackingStore.removeAnimeItem(track.animeId, track.trackerId)
                         } else {
-                            delayedTrackingStore.addAnime(track.id, episodeNumber)
+                            delayedTrackingStore.addAnime(track.animeId, track.trackerId, episodeNumber)
                             if (setupJobOnFailure) {
                                 DelayedAnimeTrackingUpdateJob.setupTask(context)
                             }

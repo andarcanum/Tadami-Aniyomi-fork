@@ -8,6 +8,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
+import eu.kanade.domain.track.DelayedTrackingLegacyMigration
 import eu.kanade.domain.track.manga.interactor.TrackChapter
 import eu.kanade.domain.track.manga.store.DelayedMangaTrackingStore
 import eu.kanade.tachiyomi.util.system.workManager
@@ -33,11 +34,15 @@ class DelayedMangaTrackingUpdateJob(private val context: Context, workerParams: 
         val delayedTrackingStore = Injekt.get<DelayedMangaTrackingStore>()
 
         withIOContext {
+            DelayedTrackingLegacyMigration.migrate(context)
             delayedTrackingStore.getMangaItems()
                 .mapNotNull {
-                    val track = getTracks.awaitOne(it.trackId)
+                    // Resolve by the stable (mangaId, trackerId) key: the track row _id changes
+                    // on every ON CONFLICT REPLACE re-bind, which used to orphan pending entries.
+                    val track = getTracks.await(it.mangaId)
+                        .firstOrNull { candidate -> candidate.trackerId == it.trackerId }
                     if (track == null) {
-                        delayedTrackingStore.removeMangaItem(it.trackId)
+                        delayedTrackingStore.removeMangaItem(it.mangaId, it.trackerId)
                     }
                     track?.copy(lastChapterRead = it.lastChapterRead.toDouble())
                 }
