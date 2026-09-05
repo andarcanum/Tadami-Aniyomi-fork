@@ -38,7 +38,7 @@ import uy.kohesive.injekt.api.get
 class MigrationListScreenModel(
     mangaIds: Collection<Long>,
     private val sourceIds: Collection<Long>,
-    private val extraSearchQuery: String?,
+    private var extraSearchQuery: String?,
     val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: MangaSourceManager = Injekt.get(),
     private val getManga: GetManga = Injekt.get(),
@@ -407,7 +407,15 @@ class MigrationListScreenModel(
         mutableState.update { it.copy(dialog = null) }
     }
 
-    fun onMigrationOptionsUpdated() {
+    fun onMigrationOptionsUpdated(extraQuery: String? = null) {
+        // РЕШ-6 revival: the Options sheet hands the cleaned "extra search query" to
+        // onStartMigration, but the list screen ignored the parameter - Continue restarted the
+        // searches with the ORIGINAL query. The sheet cannot pre-distinguish "untouched" from
+        // "cleared" (both arrive as null), so a non-blank input overrides and null keeps the
+        // current query.
+        if (extraQuery != null) {
+            extraSearchQuery = extraQuery
+        }
         dismissDialog()
         startSearches(resetResults = true)
     }

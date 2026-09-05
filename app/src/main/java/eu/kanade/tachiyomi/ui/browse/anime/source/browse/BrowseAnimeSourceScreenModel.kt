@@ -339,14 +339,16 @@ class BrowseAnimeSourceScreenModel(
         mutableState.update { it.copy(listing = listing, toolbarQuery = null) }
     }
 
+    // РЕШ-9 (anime mirror): the filter sheet mutates the same FilterList instance the state
+    // holds, so the self-comparison was always equal and browse never tracked FILTER.
+    private var appliedFiltersSnapshot: String? = null
+
     fun setFilters(filters: AnimeFilterList) {
         if (source !is AnimeCatalogueSource) return
 
-        val changed = try {
-            SavedSearchFilterSerializer.serialize(filters) != SavedSearchFilterSerializer.serialize(state.value.filters)
-        } catch (e: Exception) {
-            true
-        }
+        val newSnapshot = runCatching { SavedSearchFilterSerializer.serialize(filters) }.getOrNull()
+        val changed = newSnapshot != appliedFiltersSnapshot
+        appliedFiltersSnapshot = newSnapshot
 
         mutableState.update {
             it.copy(

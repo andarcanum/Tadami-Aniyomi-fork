@@ -53,6 +53,7 @@ import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NoChaptersException
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
+import tachiyomi.domain.library.model.GroupLibraryMode
 import tachiyomi.domain.library.novel.LibraryNovel
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_HAS_UNVIEWED
@@ -251,27 +252,43 @@ class NovelLibraryUpdateJob(
         } else if (categoryId != -999L) {
             filterByCategoryId(libraryNovels, categoryId, fullCategoryIdsByNovelId)
         } else {
-            val categoriesToUpdate = libraryPreferences.novelUpdateCategories().get().map { it.toLong() }.toSet()
-            val includedNovels = if (categoriesToUpdate.isNotEmpty()) {
-                libraryNovels.filter {
-                    isLibraryNovelInAnyCategory(it, categoriesToUpdate, fullCategoryIdsByNovelId)
+            // РЕШ-15 revival (novel mirror of the manga job): novelGroupLibraryUpdateType was a
+            // dead setting. GLOBAL (default) keeps include/exclude; ALL updates every entry;
+            // ALL_BUT_UNGROUPED keeps only novels with at least one non-Default category (the
+            // Ungrouped bucket is category 0), using the real membership map.
+            when (libraryPreferences.novelGroupLibraryUpdateType().get()) {
+                GroupLibraryMode.ALL -> libraryNovels
+                GroupLibraryMode.ALL_BUT_UNGROUPED -> libraryNovels.filter { novel ->
+                    fullCategoryIdsByNovelId
+                        .getOrDefault(novel.novel.id, setOf(novel.category))
+                        .any { it != 0L }
                 }
-            } else {
-                libraryNovels
-            }
+                GroupLibraryMode.GLOBAL -> {
+                    val categoriesToUpdate = libraryPreferences.novelUpdateCategories().get().map {
+                        it.toLong()
+                    }.toSet()
+                    val includedNovels = if (categoriesToUpdate.isNotEmpty()) {
+                        libraryNovels.filter {
+                            isLibraryNovelInAnyCategory(it, categoriesToUpdate, fullCategoryIdsByNovelId)
+                        }
+                    } else {
+                        libraryNovels
+                    }
 
-            val categoriesToExclude =
-                libraryPreferences.novelUpdateCategoriesExclude().get().map { it.toLong() }.toSet()
-            val excludedNovelIds = if (categoriesToExclude.isNotEmpty()) {
-                libraryNovels
-                    .filter { isLibraryNovelInAnyCategory(it, categoriesToExclude, fullCategoryIdsByNovelId) }
-                    .map { it.novel.id }
-            } else {
-                emptyList()
-            }
+                    val categoriesToExclude =
+                        libraryPreferences.novelUpdateCategoriesExclude().get().map { it.toLong() }.toSet()
+                    val excludedNovelIds = if (categoriesToExclude.isNotEmpty()) {
+                        libraryNovels
+                            .filter { isLibraryNovelInAnyCategory(it, categoriesToExclude, fullCategoryIdsByNovelId) }
+                            .map { it.novel.id }
+                    } else {
+                        emptyList()
+                    }
 
-            includedNovels
-                .filterNot { it.novel.id in excludedNovelIds }
+                    includedNovels
+                        .filterNot { it.novel.id in excludedNovelIds }
+                }
+            }
         }
 
         if (targetEntryIds != null) {

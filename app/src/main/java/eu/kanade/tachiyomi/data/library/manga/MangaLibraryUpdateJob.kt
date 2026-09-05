@@ -59,6 +59,7 @@ import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.items.chapter.model.NoChaptersException
 import tachiyomi.domain.library.manga.LibraryManga
+import tachiyomi.domain.library.model.GroupLibraryMode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_HAS_UNVIEWED
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_COMPLETED
@@ -248,23 +249,39 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         } else if (categoryId != -999L) {
             filterByCategoryId(libraryManga, categoryId)
         } else {
-            val categoriesToUpdate = libraryPreferences.mangaUpdateCategories().get().map { it.toLong() }
-            val includedManga = if (categoriesToUpdate.isNotEmpty()) {
-                libraryManga.filter { it.category in categoriesToUpdate }
-            } else {
-                libraryManga
-            }
+            // РЕШ-15 revival: mangaGroupLibraryUpdateType was a dead setting (exactly two
+            // occurrences in the repo: the declaration and the Settings UI). Per its Settings
+            // summary ("Controls how dynamic/virtual groups behave during manual updates"):
+            // GLOBAL (default) keeps the classic include/exclude category behavior; ALL updates
+            // every entry (all dynamic groups); ALL_BUT_UNGROUPED updates every entry except the
+            // Ungrouped bucket (this job maps the Ungrouped pseudo-id -1 to category 0/Default).
+            when (libraryPreferences.mangaGroupLibraryUpdateType().get()) {
+                GroupLibraryMode.ALL -> libraryManga.distinctBy { it.manga.id }
+                GroupLibraryMode.ALL_BUT_UNGROUPED ->
+                    libraryManga
+                        .filterNot { it.category == 0L }
+                        .distinctBy { it.manga.id }
+                GroupLibraryMode.GLOBAL -> {
+                    val categoriesToUpdate = libraryPreferences.mangaUpdateCategories().get().map { it.toLong() }
+                    val includedManga = if (categoriesToUpdate.isNotEmpty()) {
+                        libraryManga.filter { it.category in categoriesToUpdate }
+                    } else {
+                        libraryManga
+                    }
 
-            val categoriesToExclude = libraryPreferences.mangaUpdateCategoriesExclude().get().map { it.toLong() }
-            val excludedMangaIds = if (categoriesToExclude.isNotEmpty()) {
-                libraryManga.filter { it.category in categoriesToExclude }.map { it.manga.id }
-            } else {
-                emptyList()
-            }
+                    val categoriesToExclude =
+                        libraryPreferences.mangaUpdateCategoriesExclude().get().map { it.toLong() }
+                    val excludedMangaIds = if (categoriesToExclude.isNotEmpty()) {
+                        libraryManga.filter { it.category in categoriesToExclude }.map { it.manga.id }
+                    } else {
+                        emptyList()
+                    }
 
-            includedManga
-                .filterNot { it.manga.id in excludedMangaIds }
-                .distinctBy { it.manga.id }
+                    includedManga
+                        .filterNot { it.manga.id in excludedMangaIds }
+                        .distinctBy { it.manga.id }
+                }
+            }
         }
 
         if (targetEntryIds != null) {

@@ -104,8 +104,8 @@ class MigrationListScreen(
                 MigrationConfigScreenSheet(
                     preferences = screenModel.sourcePreferences,
                     onDismissRequest = screenModel::dismissDialog,
-                    onStartMigration = {
-                        screenModel.onMigrationOptionsUpdated()
+                    onStartMigration = { extraQuery ->
+                        screenModel.onMigrationOptionsUpdated(extraQuery)
                     },
                 )
             }

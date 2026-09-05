@@ -35,7 +35,7 @@ import uy.kohesive.injekt.api.get
 class NovelMigrationListScreenModel(
     novelIds: Collection<Long>,
     private val sourceIds: Collection<Long>,
-    private val extraSearchQuery: String?,
+    private var extraSearchQuery: String?,
     val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
     private val getNovel: GetNovel = Injekt.get(),
@@ -393,7 +393,14 @@ class NovelMigrationListScreenModel(
         mutableState.update { it.copy(dialog = null) }
     }
 
-    fun onMigrationOptionsUpdated() {
+    fun onMigrationOptionsUpdated(extraQuery: String? = null) {
+        // РЕШ-6 revival (novel mirror of the manga fix): the Options sheet hands the cleaned
+        // "extra search query" to onStartMigration, but the list screen ignored the parameter -
+        // Continue restarted the searches with the ORIGINAL query. Non-blank input overrides;
+        // null (untouched/cleared - the sheet cannot distinguish) keeps the current query.
+        if (extraQuery != null) {
+            extraSearchQuery = extraQuery
+        }
         dismissDialog()
         startSearches(resetResults = true)
     }

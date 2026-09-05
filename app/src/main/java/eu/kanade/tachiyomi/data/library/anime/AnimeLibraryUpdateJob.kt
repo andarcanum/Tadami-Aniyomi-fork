@@ -62,6 +62,7 @@ import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.items.episode.model.NoEpisodesException
 import tachiyomi.domain.items.season.interactor.GetAnimeSeasonsByParentId
 import tachiyomi.domain.library.anime.LibraryAnime
+import tachiyomi.domain.library.model.GroupLibraryMode
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_HAS_UNVIEWED
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_COMPLETED
@@ -253,23 +254,37 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         } else if (categoryId != -999L) {
             filterByCategoryId(libraryAnime, categoryId)
         } else {
-            val categoriesToUpdate = libraryPreferences.animeUpdateCategories().get().map { it.toLong() }
-            val includedAnime = if (categoriesToUpdate.isNotEmpty()) {
-                libraryAnime.filter { it.category in categoriesToUpdate }
-            } else {
-                libraryAnime
-            }
+            // РЕШ-15 revival (anime mirror of the manga job): animeGroupLibraryUpdateType was a
+            // dead setting. GLOBAL (default) keeps include/exclude; ALL updates every entry;
+            // ALL_BUT_UNGROUPED skips the Ungrouped bucket (pseudo-id -1 = category 0/Default).
+            when (libraryPreferences.animeGroupLibraryUpdateType().get()) {
+                GroupLibraryMode.ALL -> libraryAnime.distinctBy { it.anime.id }
+                GroupLibraryMode.ALL_BUT_UNGROUPED ->
+                    libraryAnime
+                        .filterNot { it.category == 0L }
+                        .distinctBy { it.anime.id }
+                GroupLibraryMode.GLOBAL -> {
+                    val categoriesToUpdate = libraryPreferences.animeUpdateCategories().get().map { it.toLong() }
+                    val includedAnime = if (categoriesToUpdate.isNotEmpty()) {
+                        libraryAnime.filter { it.category in categoriesToUpdate }
+                    } else {
+                        libraryAnime
+                    }
 
-            val categoriesToExclude = libraryPreferences.animeUpdateCategoriesExclude().get().map { it.toLong() }
-            val excludedAnimeIds = if (categoriesToExclude.isNotEmpty()) {
-                libraryAnime.filter { it.category in categoriesToExclude }.map { it.anime.id }
-            } else {
-                emptyList()
-            }
+                    val categoriesToExclude = libraryPreferences.animeUpdateCategoriesExclude().get().map {
+                        it.toLong()
+                    }
+                    val excludedAnimeIds = if (categoriesToExclude.isNotEmpty()) {
+                        libraryAnime.filter { it.category in categoriesToExclude }.map { it.anime.id }
+                    } else {
+                        emptyList()
+                    }
 
-            includedAnime
-                .filterNot { it.anime.id in excludedAnimeIds }
-                .distinctBy { it.anime.id }
+                    includedAnime
+                        .filterNot { it.anime.id in excludedAnimeIds }
+                        .distinctBy { it.anime.id }
+                }
+            }
         }
 
         if (targetEntryIds != null) {

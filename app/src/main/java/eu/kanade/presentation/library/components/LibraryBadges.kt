@@ -8,14 +8,20 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.PreviewLightDark
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.TachiyomiPreviewTheme
+import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 @Composable
 internal fun DownloadsBadge(count: Long) {
@@ -30,7 +36,13 @@ internal fun DownloadsBadge(count: Long) {
 
 @Composable
 internal fun UnviewedBadge(count: Long) {
-    if (count > 0) {
+    // РЕШ-4 revival: the "unread badge" library preference (display_unread_badge) was collected
+    // into ItemPreferences by the manga and anime screen models but never READ - their badges
+    // rendered unconditionally in every display mode (only the novel side gated its own badge
+    // state). Gate at the shared choke point; idempotent with the novel-side pre-gating.
+    val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
+    val showUnreadBadge by libraryPreferences.unreadBadge().collectAsStateWithLifecycle()
+    if (showUnreadBadge && count > 0) {
         Badge(text = "$count")
     }
 }

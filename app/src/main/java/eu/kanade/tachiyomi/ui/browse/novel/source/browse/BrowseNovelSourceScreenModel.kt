@@ -408,15 +408,16 @@ class BrowseNovelSourceScreenModel(
         mutableState.update { it.copy(listing = listing, toolbarQuery = null) }
     }
 
+    // РЕШ-9 (novel mirror): the filter sheet mutates the same FilterList instance the state
+    // holds, so the self-comparison was always equal and browse never tracked FILTER.
+    private var appliedFiltersSnapshot: String? = null
+
     fun setFilters(filters: NovelFilterList) {
         if (source !is NovelCatalogueSource) return
 
-        val currentFilters = state.value.filters
-        val changed = try {
-            SavedSearchFilterSerializer.serialize(filters) != SavedSearchFilterSerializer.serialize(currentFilters)
-        } catch (e: Exception) {
-            true
-        }
+        val newSnapshot = runCatching { SavedSearchFilterSerializer.serialize(filters) }.getOrNull()
+        val changed = newSnapshot != appliedFiltersSnapshot
+        appliedFiltersSnapshot = newSnapshot
 
         mutableState.update { current ->
             val updatedFilters = if (current.listing == Listing.Latest && filters !== current.filters) {

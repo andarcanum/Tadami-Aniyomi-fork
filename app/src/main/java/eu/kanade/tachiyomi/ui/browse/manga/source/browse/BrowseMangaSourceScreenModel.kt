@@ -288,7 +288,6 @@ class BrowseMangaSourceScreenModel(
     /**
      * Flow of Pager flow tied to [State.listing]
      */
-    private val hideInLibraryItems = sourcePreferences.hideInMangaLibraryItems().get()
     val mangaPagerFlowFlow = state.map { it.listing }
         .distinctUntilChanged()
         .map { listing ->
@@ -307,7 +306,11 @@ class BrowseMangaSourceScreenModel(
                     }
                 }
                 .map { pagingData ->
-                    pagingData.filter { !hideInLibraryItems || !it.favorite }
+                    // РЕШ-10: the pref was snapshotted once in the constructor - toggling the
+                    // setting did not affect the open browse screen until it was recreated.
+                    // Read it live per emission (in-memory SharedPreferences read).
+                    val hideLibraryItems = sourcePreferences.hideInMangaLibraryItems().get()
+                    pagingData.filter { !hideLibraryItems || !it.favorite }
                 }
                 .cachedIn(ioCoroutineScope)
         }
@@ -345,15 +348,28 @@ class BrowseMangaSourceScreenModel(
         mutableState.update { it.copy(listing = listing, toolbarQuery = null) }
     }
 
+    // РЕШ-9: the filter sheet mutates the state's FilterList IN PLACE and hands back the same
+    // instance, so the old serialize(filters) vs serialize(state.value.filters) compared the
+    // object with itself - `changed` was always false and browse never tracked the FILTER
+    // achievement (symmetrically in all three media). Compare against a snapshot of the last
+    // applied serialization instead; the first apply in a session counts as a change (the sheet
+    // was used), identical re-applies do not.
+    private var appliedFiltersSnapshot: String? = null
+
+    private fun serializeFiltersSafely(filters: FilterList): String? {
+        return try {
+            kotlinx.serialization.json.Json.encodeToString(filterSerializer.serialize(filters))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun setFilters(filters: FilterList) {
         if (source !is CatalogueSource) return
 
-        val changed = try {
-            kotlinx.serialization.json.Json.encodeToString(filterSerializer.serialize(filters)) !=
-                kotlinx.serialization.json.Json.encodeToString(filterSerializer.serialize(state.value.filters))
-        } catch (e: Exception) {
-            true
-        }
+        val newSnapshot = serializeFiltersSafely(filters)
+        val changed = newSnapshot != appliedFiltersSnapshot
+        appliedFiltersSnapshot = newSnapshot
 
         mutableState.update {
             it.copy(

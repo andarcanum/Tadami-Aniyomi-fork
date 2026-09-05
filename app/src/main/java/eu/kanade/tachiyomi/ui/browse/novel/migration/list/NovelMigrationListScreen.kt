@@ -106,8 +106,8 @@ class NovelMigrationListScreen(
                 NovelMigrationConfigScreenSheet(
                     preferences = screenModel.sourcePreferences,
                     onDismissRequest = screenModel::dismissDialog,
-                    onStartMigration = {
-                        screenModel.onMigrationOptionsUpdated()
+                    onStartMigration = { extraQuery ->
+                        screenModel.onMigrationOptionsUpdated(extraQuery)
                     },
                 )
             }
