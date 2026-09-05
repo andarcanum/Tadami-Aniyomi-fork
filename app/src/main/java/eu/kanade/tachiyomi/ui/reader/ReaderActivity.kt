@@ -907,6 +907,18 @@ class ReaderActivity : BaseActivity() {
                     AutoScrollActionFab(
                         autoScrollEnabled = state.autoScrollEnabled,
                         showFab = showAutoScrollFloatingButton && !state.menuVisible,
+                        // B-A4: TalkBack was silent - both labels defaulted to null; the novel
+                        // reader passes i18n labels for the same FAB.
+                        contentDescription = composeStringResource(
+                            if (state.autoScrollEnabled) {
+                                AYMR.strings.reader_auto_scroll_pause_description
+                            } else {
+                                AYMR.strings.reader_auto_scroll_play_description
+                            },
+                        ),
+                        longClickLabel = composeStringResource(
+                            AYMR.strings.reader_auto_scroll_settings_description,
+                        ),
                         onClick = { viewModel.toggleAutoScroll() },
                         onLongClick = {
                             setMenuVisibility(true)

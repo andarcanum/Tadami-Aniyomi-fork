@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.novel
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import eu.kanade.presentation.entries.components.ItemCover
 import eu.kanade.presentation.novel.sourceAwareNovelCoverModel
+import eu.kanade.presentation.reader.settings.auroraRimColor
+import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -43,9 +46,18 @@ fun SeriesInterstitialOverlay(
     onDismissRequest: () -> Unit = onBackToSeries,
 ) {
     Dialog(onDismissRequest = onDismissRequest) {
+        // E3 (novel mirror of the manga interstitial): aurora surface, rim border and text
+        // colors; e-ink keeps an opaque container.
+        val aurora = AuroraTheme.colors
+        val containerColor = if (aurora.isEInk) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            aurora.surface
+        }
         Card(
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            colors = CardDefaults.cardColors(containerColor = containerColor),
+            border = BorderStroke(1.dp, auroraRimColor()),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(
@@ -56,11 +68,12 @@ fun SeriesInterstitialOverlay(
                     Text(
                         text = stringResource(AYMR.strings.series_interstitial_series_completed),
                         style = MaterialTheme.typography.titleLarge,
+                        color = aurora.textPrimary,
                     )
                     Text(
                         text = state.seriesTitle,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = aurora.textSecondary,
                     )
                 }
 
@@ -87,7 +100,7 @@ fun SeriesInterstitialOverlay(
                                     state.currentNovelTitle,
                                 ),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = aurora.textSecondary,
                             )
                             Text(
                                 text = stringResource(
@@ -95,6 +108,7 @@ fun SeriesInterstitialOverlay(
                                     state.nextNovel.title,
                                 ),
                                 style = MaterialTheme.typography.titleMedium,
+                                color = aurora.textPrimary,
                             )
                             state.nextChapterName?.let { chapterName ->
                                 Text(
@@ -103,7 +117,7 @@ fun SeriesInterstitialOverlay(
                                         chapterName,
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = aurora.textSecondary,
                                 )
                             }
                         }
@@ -112,6 +126,7 @@ fun SeriesInterstitialOverlay(
                     Text(
                         text = stringResource(AYMR.strings.series_interstitial_series_completed),
                         style = MaterialTheme.typography.titleMedium,
+                        color = aurora.textPrimary,
                     )
                 }
 

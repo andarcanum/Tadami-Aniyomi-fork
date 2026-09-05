@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import eu.kanade.presentation.theme.AuroraTheme
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -42,16 +43,27 @@ fun AutoScrollActionFab(
         exit = fadeOut() + scaleOut(),
         modifier = modifier,
     ) {
+        // B-A4: the FAB hardcoded Color.White border/tint over a translucent secondaryContainer;
+        // on e-ink (and light aurora surfaces) that was unreadable. Theme-aware colors now:
+        // e-ink gets opaque surface + text colors, glass modes keep the white-on-translucent look.
+        val aurora = AuroraTheme.colors
+        val iconTint = if (aurora.isEInk) aurora.textPrimary else Color.White
+        val containerColor = if (aurora.isEInk) {
+            aurora.surface
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+        }
+        val borderColor = (if (aurora.isEInk) aurora.textSecondary else Color.White).copy(alpha = 0.2f)
         Box(
             modifier = Modifier
                 .size(48.dp)
                 .border(
                     width = 0.5.dp,
-                    color = Color.White.copy(alpha = 0.2f),
+                    color = borderColor,
                     shape = RoundedCornerShape(16.dp),
                 )
                 .clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f))
+                .background(containerColor)
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = onLongClick,
@@ -69,7 +81,7 @@ fun AutoScrollActionFab(
                 modifier = Modifier
                     .size(24.dp)
                     .offset(x = if (!autoScrollEnabled) 1.dp else 0.dp),
-                tint = Color.White,
+                tint = iconTint,
             )
         }
     }

@@ -54,7 +54,9 @@ import kotlin.math.roundToInt
 internal fun AuroraGlassSection(
     modifier: Modifier = Modifier,
     title: String? = null,
-    titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    // B-A10: the component is aurora-styled but its default title color came from the raw
+    // Material scheme; default to the aurora text color so e-ink/aurora palettes stay coherent.
+    titleColor: Color = AuroraTheme.colors.textPrimary,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val colors = AuroraTheme.colors

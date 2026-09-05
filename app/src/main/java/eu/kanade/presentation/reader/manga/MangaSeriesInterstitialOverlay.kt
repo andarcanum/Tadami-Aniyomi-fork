@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.manga
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import coil3.request.ImageRequest
 import eu.kanade.presentation.entries.components.ItemCover
+import eu.kanade.presentation.reader.settings.auroraRimColor
 import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
+import eu.kanade.presentation.theme.AuroraTheme
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.library.manga.LibraryManga
@@ -81,10 +84,21 @@ fun MangaSeriesInterstitialOverlay(
     onDismissRequest: () -> Unit = onBackToSeries,
 ) {
     val context = LocalContext.current
+    // E3: aurora treatment for the series-complete interstitial (both pipelines were a bare
+    // Dialog+Card+MaterialTheme while the surrounding reader chrome is aurora-styled). The
+    // palette already inherits through the theme overlay; this adds the aurora surface, rim
+    // border and text colors (e-ink keeps an opaque container).
+    val aurora = AuroraTheme.colors
+    val containerColor = if (aurora.isEInk) {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+        aurora.surface
+    }
     Dialog(onDismissRequest = onDismissRequest) {
         Card(
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            colors = CardDefaults.cardColors(containerColor = containerColor),
+            border = BorderStroke(1.dp, auroraRimColor()),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(
@@ -95,11 +109,12 @@ fun MangaSeriesInterstitialOverlay(
                     Text(
                         text = stringResource(AYMR.strings.manga_series_interstitial_series_completed),
                         style = MaterialTheme.typography.titleLarge,
+                        color = aurora.textPrimary,
                     )
                     Text(
                         text = state.seriesTitle,
                         style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = aurora.textSecondary,
                     )
                 }
 
@@ -129,7 +144,7 @@ fun MangaSeriesInterstitialOverlay(
                                     state.currentMangaTitle,
                                 ),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = aurora.textSecondary,
                             )
                             Text(
                                 text = stringResource(
@@ -137,6 +152,7 @@ fun MangaSeriesInterstitialOverlay(
                                     state.nextManga.manga.title,
                                 ),
                                 style = MaterialTheme.typography.titleMedium,
+                                color = aurora.textPrimary,
                             )
                             state.nextChapterName?.let { chapterName ->
                                 Text(
@@ -145,7 +161,7 @@ fun MangaSeriesInterstitialOverlay(
                                         chapterName,
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = aurora.textSecondary,
                                 )
                             }
                         }
@@ -154,6 +170,7 @@ fun MangaSeriesInterstitialOverlay(
                     Text(
                         text = stringResource(AYMR.strings.manga_series_interstitial_series_completed),
                         style = MaterialTheme.typography.titleMedium,
+                        color = aurora.textPrimary,
                     )
                 }
 

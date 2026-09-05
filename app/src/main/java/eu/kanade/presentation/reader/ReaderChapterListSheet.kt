@@ -256,6 +256,9 @@ private fun ReaderChapterListDownloadButton(
 
 @Composable
 private fun EmptyChapterListState() {
+    // B-A7: the empty state used raw Material onSurfaceVariant inside the aurora-styled sheet
+    // (everything around it uses aurora.textPrimary/Secondary).
+    val colors = AuroraTheme.colors
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -264,13 +267,13 @@ private fun EmptyChapterListState() {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ViewList,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = colors.textSecondary,
             modifier = Modifier.size(28.dp),
         )
         Text(
             text = stringResource(MR.strings.no_chapters_error),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = colors.textSecondary,
         )
     }
 }

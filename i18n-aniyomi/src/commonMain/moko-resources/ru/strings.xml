@@ -2233,6 +2233,10 @@
     <string name="novel_reader_auto_scroll_settings_description">Открыть настройки автопрокрутки</string>
     <string name="reader_auto_scroll_collapse_description">Свернуть панель автопрокрутки</string>
     <string name="reader_auto_scroll_expand_description">Развернуть панель автопрокрутки</string>
+    <string name="reader_auto_scroll_speed">Скорость автопрокрутки</string>
+    <string name="reader_auto_scroll_play_description">Запустить автопрокрутку</string>
+    <string name="reader_auto_scroll_pause_description">Приостановить автопрокрутку</string>
+    <string name="reader_auto_scroll_settings_description">Открыть настройки автопрокрутки</string>
     <string name="reader_auto_scroll_floating_button">Показывать плавающую кнопку управления</string>
     <string name="reader_toolbar_heading">Верхняя панель</string>
     <string name="reader_toolbar_show_webview">Кнопка «Открыть в WebView»</string>
