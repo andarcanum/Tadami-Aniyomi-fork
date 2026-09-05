@@ -121,6 +121,13 @@ data object HistoriesTab : Tab {
             }
         }
 
+        // E-M2: sections are dynamic (showAnime/showManga/showNovel settings hide them), so the
+        // default page-parity routing sent manga queries to the anime model whenever the Anime
+        // section was hidden (and the novel page always routed to anime). Map pages explicitly.
+        val isMangaTab: (Int) -> Boolean = { page ->
+            sectionTabs.getOrNull(page) == HistoryContentTab.MANGA
+        }
+
         if (theme.isAuroraStyle) {
             TabbedScreenAurora(
                 titleRes = MR.strings.label_recent_manga,
@@ -132,6 +139,7 @@ data object HistoriesTab : Tab {
                 onChangeAnimeSearchQuery = animeHistoryScreenModel::search,
                 highlightSearchAction = false,
                 extraSearchToActionsGap = 4.dp,
+                isMangaTab = isMangaTab,
             )
         } else {
             TabbedScreen(
@@ -144,6 +152,7 @@ data object HistoriesTab : Tab {
                 onChangeAnimeSearchQuery = animeHistoryScreenModel::search,
                 searchActionIconTint = MaterialTheme.colorScheme.onSurface,
                 extraSearchToActionsGap = 4.dp,
+                isMangaTab = isMangaTab,
             )
         }
 

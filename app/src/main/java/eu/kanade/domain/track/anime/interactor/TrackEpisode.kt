@@ -36,11 +36,17 @@ class TrackEpisode(
                 async {
                     runCatching {
                         if (context.isOnline()) {
-                            val updatedTrack = service.animeService.refresh(track.toDbTrack())
+                            val refreshedTrack = service.animeService.refresh(track.toDbTrack())
                                 .toDomainTrack(idRequired = true)!!
-                                .copy(lastEpisodeSeen = episodeNumber)
-                            service.animeService.update(updatedTrack.toDbTrack(), true)
-                            insertTrack.await(updatedTrack)
+                            // DECISION-8 (anime mirror): never roll the remote progress back when
+                            // it is ahead of the local copy (another device).
+                            val mergedTrack = refreshedTrack.copy(
+                                lastEpisodeSeen = maxOf(refreshedTrack.lastEpisodeSeen, episodeNumber),
+                            )
+                            val pushedTrack = service.animeService.update(mergedTrack.toDbTrack(), true)
+                            // E-L (anime mirror): persist the track returned by update() so the
+                            // didWatchEpisode side effects land in the local row too.
+                            insertTrack.await(pushedTrack.toDomainTrack(idRequired = true) ?: mergedTrack)
                             delayedTrackingStore.removeAnimeItem(track.animeId, track.trackerId)
                         } else {
                             delayedTrackingStore.addAnime(track.animeId, track.trackerId, episodeNumber)

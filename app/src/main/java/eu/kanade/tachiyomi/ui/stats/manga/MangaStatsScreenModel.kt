@@ -10,10 +10,10 @@ import eu.kanade.core.util.fastFilterNot
 import eu.kanade.presentation.more.stats.StatsScreenState
 import eu.kanade.presentation.more.stats.data.StatsData
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
-import eu.kanade.tachiyomi.data.track.MangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.stats.StatsCalculations
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
@@ -23,7 +23,7 @@ import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_HAS_UNVIEWED
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_COMPLETED
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_VIEWED
-import tachiyomi.domain.track.manga.interactor.GetMangaTracks
+import tachiyomi.domain.track.manga.interactor.GetTracksPerManga
 import tachiyomi.domain.track.manga.model.MangaTrack
 import tachiyomi.source.local.entries.manga.isLocal
 import uy.kohesive.injekt.Injekt
@@ -33,12 +33,15 @@ class MangaStatsScreenModel(
     private val downloadManager: MangaDownloadManager = Injekt.get(),
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
     private val getTotalReadDuration: GetTotalReadDuration = Injekt.get(),
-    private val getTracks: GetMangaTracks = Injekt.get(),
+    private val getTracksPerManga: GetTracksPerManga = Injekt.get(),
     private val preferences: LibraryPreferences = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
 ) : StateScreenModel<StatsScreenState>(StatsScreenState.Loading) {
 
-    private val loggedInTrackers by lazy { trackerManager.loggedInTrackers().filter { it is MangaTracker } }
+    // E-L: loggedInTrackers().filter { it is MangaTracker } also passed the novel-only trackers
+    // (NovelUpdates/NovelList implement MangaTracker), inflating "trackers used" and the track
+    // map; loggedInMangaTrackers() is the ready-made correct API (used by the track dialog).
+    private val loggedInTrackers by lazy { trackerManager.loggedInMangaTrackers() }
 
     init {
         screenModelScope.launchIO {
@@ -129,8 +132,12 @@ class MangaStatsScreenModel(
 
     private suspend fun getMangaTrackMap(libraryManga: List<LibraryManga>): Map<Long, List<MangaTrack>> {
         val loggedInTrackerIds = loggedInTrackers.map { it.id }.toHashSet()
+        // E-L (N+1): one getTracks query per library title meant hundreds of DB round-trips on a
+        // large library; the batch interactor (already used by the library update job) returns
+        // every track map in a single query.
+        val allTracks = getTracksPerManga.subscribe().first()
         return libraryManga.associate { manga ->
-            val tracks = getTracks.await(manga.id)
+            val tracks = allTracks[manga.id].orEmpty()
                 .fastFilter { it.trackerId in loggedInTrackerIds }
 
             manga.id to tracks
@@ -154,7 +161,9 @@ class MangaStatsScreenModel(
     }
 
     private fun get10PointScore(track: MangaTrack): Double {
-        val service = trackerManager.get(track.trackerId)!!
+        // NEW-8: a track row of an unknown/removed tracker used to crash the whole stats screen
+        // through this !!; fall back to the raw score (the backup-stats path already safe-casts).
+        val service = trackerManager.get(track.trackerId) ?: return track.score
         return service.mangaService.get10PointScore(track)
     }
 }

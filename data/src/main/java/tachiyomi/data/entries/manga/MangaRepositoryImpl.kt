@@ -317,8 +317,19 @@ class MangaRepositoryImpl(
     }
 
     private suspend fun partialUpdateManga(vararg mangaUpdates: MangaUpdate) {
+        // E-M6: events were emitted unconditionally (whenever favorite != null, regardless of an
+        // actual flip - the comment claimed otherwise) and INSIDE the open transaction: the
+        // achievement handler on another dispatcher could re-read the DB before the commit (stale
+        // snapshot), and a rolled-back transaction left the events emitted. Read the previous
+        // flag inside the transaction, emit only real flips, after the commit.
+        val pendingEvents = mutableListOf<AchievementEvent>()
         handler.await(inTransaction = true) { db ->
             mangaUpdates.forEach { value ->
+                val previousFavorite = if (value.favorite != null) {
+                    db.mangasQueries.getFavoriteById(value.id).executeAsOneOrNull()
+                } else {
+                    null
+                }
                 db.mangasQueries.update(
                     source = value.source,
                     url = value.url,
@@ -351,17 +362,18 @@ class MangaRepositoryImpl(
                     db.mangasQueries.updateMemo(memo = memo, mangaId = value.id)
                 }
 
-                // Emit achievement event if favorite status changed
                 value.favorite?.let { isFavorite ->
-                    val event = if (isFavorite) {
-                        AchievementEvent.LibraryAdded(value.id, AchievementCategory.MANGA)
-                    } else {
-                        AchievementEvent.LibraryRemoved(value.id, AchievementCategory.MANGA)
+                    if (previousFavorite != null && previousFavorite != isFavorite) {
+                        pendingEvents += if (isFavorite) {
+                            AchievementEvent.LibraryAdded(value.id, AchievementCategory.MANGA)
+                        } else {
+                            AchievementEvent.LibraryRemoved(value.id, AchievementCategory.MANGA)
+                        }
                     }
-                    eventBus.tryEmit(event)
                 }
             }
         }
+        pendingEvents.forEach { eventBus.tryEmit(it) }
     }
 
     override suspend fun updateMangaMetadata(

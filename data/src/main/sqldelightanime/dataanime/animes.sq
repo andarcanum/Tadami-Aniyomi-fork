@@ -300,3 +300,10 @@ getCompletedAnimeCount:
 SELECT COUNT(*) FROM animes
 WHERE favorite = 1
 AND status = 2;
+
+-- E-M6: current favorite flag, read inside the update transaction to detect a REAL toggle
+-- before emitting LibraryAdded/LibraryRemoved achievement events.
+getFavoriteById:
+SELECT favorite
+FROM animes
+WHERE _id = :animeId;

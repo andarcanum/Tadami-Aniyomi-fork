@@ -413,8 +413,15 @@ class AnimeRepositoryImpl(
     }
 
     private suspend fun partialUpdateAnime(vararg animeUpdates: AnimeUpdate) {
+        // E-M6 (anime mirror): emit only REAL favorite flips, after the transaction commits.
+        val pendingEvents = mutableListOf<AchievementEvent>()
         handler.await(inTransaction = true) { db ->
             animeUpdates.forEach { value ->
+                val previousFavorite = if (value.favorite != null) {
+                    db.animesQueries.getFavoriteById(value.id).executeAsOneOrNull()
+                } else {
+                    null
+                }
                 db.animesQueries.update(
                     source = value.source,
                     url = value.url,
@@ -450,16 +457,17 @@ class AnimeRepositoryImpl(
                     completedAt = value.completedAt,
                 )
 
-                // Emit achievement event if favorite status changed
                 value.favorite?.let { isFavorite ->
-                    val event = if (isFavorite) {
-                        AchievementEvent.LibraryAdded(value.id, AchievementCategory.ANIME)
-                    } else {
-                        AchievementEvent.LibraryRemoved(value.id, AchievementCategory.ANIME)
+                    if (previousFavorite != null && previousFavorite != isFavorite) {
+                        pendingEvents += if (isFavorite) {
+                            AchievementEvent.LibraryAdded(value.id, AchievementCategory.ANIME)
+                        } else {
+                            AchievementEvent.LibraryRemoved(value.id, AchievementCategory.ANIME)
+                        }
                     }
-                    eventBus.tryEmit(event)
                 }
             }
         }
+        pendingEvents.forEach { eventBus.tryEmit(it) }
     }
 }

@@ -203,6 +203,13 @@ UPDATE mangas
 SET memo = :memo
 WHERE _id = :mangaId;
 
+-- E-M6: current favorite flag, read inside the update transaction to detect a REAL toggle
+-- before emitting LibraryAdded/LibraryRemoved achievement events.
+getFavoriteById:
+SELECT favorite
+FROM mangas
+WHERE _id = :mangaId;
+
 updateMetadata:
 UPDATE mangas SET
     custom_title = :customTitle,

@@ -28,20 +28,29 @@ class TrackChapter(
 
             tracks.mapNotNull { track ->
                 val service = trackerManager.get(track.trackerId)
+                // E-L: the identical condition used to be checked twice, nested (a merge artifact).
                 if (service == null || !service.isLoggedIn || chapterNumber <= track.lastChapterRead) {
-                    if (service == null || !service.isLoggedIn || chapterNumber <= track.lastChapterRead) {
-                        return@mapNotNull null
-                    }
+                    return@mapNotNull null
                 }
 
                 async {
                     runCatching {
                         try {
-                            val updatedTrack = service.mangaService.refresh(track.toDbTrack())
+                            val refreshedTrack = service.mangaService.refresh(track.toDbTrack())
                                 .toDomainTrack(idRequired = true)!!
-                                .copy(lastChapterRead = chapterNumber)
-                            service.mangaService.update(updatedTrack.toDbTrack(), true)
-                            insertTrack.await(updatedTrack)
+                            // DECISION-8: the guard above compared against the LOCAL
+                            // lastChapterRead; when the remote was ahead (another device),
+                            // copying chapterNumber over the refreshed value rolled the remote
+                            // progress back. Push the max instead.
+                            val mergedTrack = refreshedTrack.copy(
+                                lastChapterRead = maxOf(refreshedTrack.lastChapterRead, chapterNumber),
+                            )
+                            val pushedTrack = service.mangaService.update(mergedTrack.toDbTrack(), true)
+                            // E-L: persist the track RETURNED by update() - services apply the
+                            // didReadChapter side effects (COMPLETED status, start/finish dates)
+                            // on it, while the old code persisted the pre-update copy, leaving
+                            // the local row behind the remote until the next manual refresh.
+                            insertTrack.await(pushedTrack.toDomainTrack(idRequired = true) ?: mergedTrack)
                             delayedTrackingStore.removeMangaItem(track.mangaId, track.trackerId)
                         } catch (e: Exception) {
                             delayedTrackingStore.addManga(track.mangaId, track.trackerId, chapterNumber)

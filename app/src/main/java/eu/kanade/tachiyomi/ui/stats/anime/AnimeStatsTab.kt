@@ -27,10 +27,7 @@ fun Screen.animeStatsTab(): TabContent {
     val screenModel = rememberScreenModel { AnimeStatsScreenModel() }
     val state by screenModel.state.collectAsStateWithLifecycle()
 
-    if (state is StatsScreenState.Loading) {
-        LoadingScreen()
-    }
-
+    // E-L: the Loading branch used to compose TWO LoadingScreens (outside + inside TabContent).
     return TabContent(
         titleRes = AYMR.strings.label_anime,
         content = { contentPadding, _ ->

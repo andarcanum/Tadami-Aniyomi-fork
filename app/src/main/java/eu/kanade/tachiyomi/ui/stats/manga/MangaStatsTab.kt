@@ -27,10 +27,8 @@ fun Screen.mangaStatsTab(): TabContent {
     val screenModel = rememberScreenModel { MangaStatsScreenModel() }
     val state by screenModel.state.collectAsStateWithLifecycle()
 
-    if (state is StatsScreenState.Loading) {
-        LoadingScreen()
-    }
-
+    // E-L: the Loading branch used to compose TWO LoadingScreens (one outside TabContent, one
+    // inside its content) - only the inner one is kept.
     return TabContent(
         titleRes = AYMR.strings.label_manga,
         content = { contentPadding, _ ->

@@ -331,7 +331,7 @@ class MangaRestorer(
         restoreCategories(manga, categories, backupCategories)
         restoreChapters(manga, chapters)
         restoreTracking(manga, tracks)
-        restoreHistory(history)
+        restoreHistory(manga.id, history)
         restoreExcludedScanlators(manga, excludedScanlators)
         updateManga.awaitUpdateFetchInterval(manga, now, currentFetchWindow)
         return manga
@@ -371,13 +371,20 @@ class MangaRestorer(
         }
     }
 
-    private suspend fun restoreHistory(backupHistory: List<BackupHistory>) {
+    private suspend fun restoreHistory(mangaId: Long, backupHistory: List<BackupHistory>) {
+        // E-L: both lookups were scoped by the GLOBAL chapter URL only - identical chapter URLs
+        // across different manga (typical for Local or one source) merged readAt/readDuration
+        // into a foreign manga's history row. The scoped chapter query existed but was unused.
         val toUpdate = backupHistory.mapNotNull { history ->
-            val dbHistory = handler.awaitOneOrNull { db -> db.historyQueries.getHistoryByChapterUrl(history.url) }
+            val dbHistory = handler.awaitOneOrNull { db ->
+                db.historyQueries.getHistoryByChapterUrlAndMangaId(history.url, mangaId)
+            }
             val item = history.getHistoryImpl()
 
             if (dbHistory == null) {
-                val chapter = handler.awaitOneOrNull { db -> db.chaptersQueries.getChapterByUrl(history.url) }
+                val chapter = handler.awaitOneOrNull { db ->
+                    db.chaptersQueries.getChapterByUrlAndMangaId(history.url, mangaId)
+                }
                 return@mapNotNull if (chapter == null) {
                     // Chapter doesn't exist; skip
                     null

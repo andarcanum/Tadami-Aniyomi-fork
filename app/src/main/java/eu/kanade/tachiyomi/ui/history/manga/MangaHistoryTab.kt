@@ -65,7 +65,9 @@ fun Screen.mangaHistoryTab(
     val navigateUp: (() -> Unit)? = if (fromMore) {
         {
             if (navigator.lastItem == HomeScreen) {
-                scope.launch { HomeScreen.openTab(HomeScreen.Tab.AnimeLib()) }
+                // E-M5: was Tab.AnimeLib() - a copy-paste from AnimeHistoryTab; the manga
+                // history "up" must open the MANGA library (novel side is correct).
+                scope.launch { HomeScreen.openTab(HomeScreen.Tab.Library()) }
             } else {
                 navigator.pop()
             }

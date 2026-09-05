@@ -311,8 +311,15 @@ class NovelRepositoryImpl(
     }
 
     private suspend fun partialUpdateNovel(vararg novelUpdates: NovelUpdate) {
+        // E-M6 (novel mirror): emit only REAL favorite flips, after the transaction commits.
+        val pendingEvents = mutableListOf<AchievementEvent>()
         handler.await(inTransaction = true) { db ->
             novelUpdates.forEach { value ->
+                val previousFavorite = if (value.favorite != null) {
+                    db.novelsQueries.getFavoriteById(value.id).executeAsOneOrNull()
+                } else {
+                    null
+                }
                 db.novelsQueries.update(
                     source = value.source,
                     url = value.url,
@@ -341,14 +348,16 @@ class NovelRepositoryImpl(
                 )
 
                 value.favorite?.let { isFavorite ->
-                    val event = if (isFavorite) {
-                        AchievementEvent.LibraryAdded(value.id, AchievementCategory.NOVEL)
-                    } else {
-                        AchievementEvent.LibraryRemoved(value.id, AchievementCategory.NOVEL)
+                    if (previousFavorite != null && previousFavorite != isFavorite) {
+                        pendingEvents += if (isFavorite) {
+                            AchievementEvent.LibraryAdded(value.id, AchievementCategory.NOVEL)
+                        } else {
+                            AchievementEvent.LibraryRemoved(value.id, AchievementCategory.NOVEL)
+                        }
                     }
-                    eventBus.tryEmit(event)
                 }
             }
         }
+        pendingEvents.forEach { eventBus.tryEmit(it) }
     }
 }

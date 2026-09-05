@@ -48,7 +48,10 @@ fun TabbedScreen(
     onChangeAnimeSearchQuery: (String?) -> Unit = {},
     searchActionIconTint: Color? = null,
     extraSearchToActionsGap: Dp = 0.dp,
-
+    // E-M2: pages with a manga search model. The hardcoded `currentPage % 2` parity assumed a
+    // fixed [ANIME, MANGA(, NOVEL)] section order; screens with dynamic/hidden sections (History)
+    // routed manga queries into the anime model. Mirrors TabbedScreenAurora's parameter.
+    isMangaTab: (Int) -> Boolean = { it % 2 == 1 },
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -59,14 +62,16 @@ fun TabbedScreen(
                 val tab = tabs[state.currentPage]
                 val searchEnabled = tab.searchEnabled
 
-                val actualQuery = when (state.currentPage % 2) {
-                    1 -> mangaSearchQuery // History and Browse
-                    else -> animeSearchQuery
+                val actualQuery = if (isMangaTab(state.currentPage)) {
+                    mangaSearchQuery
+                } else {
+                    animeSearchQuery
                 }
 
-                val actualOnChange = when (state.currentPage % 2) {
-                    1 -> onChangeMangaSearchQuery // History and Browse
-                    else -> onChangeAnimeSearchQuery
+                val actualOnChange = if (isMangaTab(state.currentPage)) {
+                    onChangeMangaSearchQuery
+                } else {
+                    onChangeAnimeSearchQuery
                 }
 
                 SearchToolbar(
