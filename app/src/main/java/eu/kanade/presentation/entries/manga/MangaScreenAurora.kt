@@ -1590,7 +1590,9 @@ fun MangaScreenAuroraImpl(
                             AuroraEntryDropdownMenuItem(
                                 text = when (action) {
                                     AuroraMangaOverflowAction.Refresh ->
-                                        stringResource(MR.strings.action_webview_refresh)
+                                        // I-LOW: was action_webview_refresh (webview page reload
+                                        // semantics); the entry overflow refreshes the manga data.
+                                        stringResource(MR.strings.action_entry_refresh)
                                     AuroraMangaOverflowAction.AutoJump ->
                                         autoJumpToNextLabel
                                     AuroraMangaOverflowAction.GlobalSearch ->

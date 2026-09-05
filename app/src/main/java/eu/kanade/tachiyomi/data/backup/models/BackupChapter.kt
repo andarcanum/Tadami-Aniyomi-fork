@@ -1,8 +1,11 @@
 package eu.kanade.tachiyomi.data.backup.models
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.protobuf.ProtoNumber
+import mihon.core.common.extensions.EMPTY
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
 
@@ -25,6 +28,9 @@ data class BackupChapter(
     @ProtoNumber(11) var lastModifiedAt: Long = 0,
     @ProtoNumber(12) var version: Long = 0,
     @ProtoNumber(13) var dateUploadRaw: String? = null,
+    // E-L-16: chapter memo (JsonObject) carried as JSON text; null when empty. Tag 14 is free in
+    // every sibling format (Mihon chapters end at 13).
+    @ProtoNumber(14) var memoJson: String? = null,
 ) {
     fun toChapterImpl(): Chapter {
         return Chapter.create().copy(
@@ -40,6 +46,7 @@ data class BackupChapter(
             sourceOrder = this@BackupChapter.sourceOrder,
             lastModifiedAt = this@BackupChapter.lastModifiedAt,
             version = this@BackupChapter.version,
+            memo = parseBackupMemo(this@BackupChapter.memoJson),
         )
     }
 
@@ -114,7 +121,7 @@ val backupChapterMapper = {
         lastModifiedAt: Long,
         version: Long,
         _: Long,
-        _: JsonObject,
+        memo: JsonObject,
     ->
     BackupChapter(
         url = url,
@@ -129,5 +136,16 @@ val backupChapterMapper = {
         sourceOrder = source_order,
         lastModifiedAt = lastModifiedAt,
         version = version,
+        memoJson = toBackupMemoJson(memo),
     )
 }
+
+// E-L-16 helpers: the domain memo is a JsonObject; the proto carries its JSON text (null when
+// empty) so native backups survive restore round-trips without touching the sister-app formats.
+internal fun toBackupMemoJson(memo: JsonObject?): String? =
+    memo?.takeIf { it != JsonObject.EMPTY }?.toString()
+
+internal fun parseBackupMemo(json: String?): JsonObject =
+    json?.let {
+        runCatching { Json.parseToJsonElement(it).jsonObject }.getOrNull()
+    } ?: JsonObject.EMPTY

@@ -28,7 +28,7 @@ import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_HAS_U
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_COMPLETED
 import tachiyomi.domain.library.service.LibraryPreferences.Companion.ENTRY_NON_VIEWED
 import tachiyomi.domain.track.anime.interactor.GetAnimeTracks
-import tachiyomi.domain.track.manga.interactor.GetMangaTracks
+import tachiyomi.domain.track.manga.interactor.GetTracksPerManga
 import tachiyomi.source.local.entries.anime.isLocal
 import tachiyomi.source.local.entries.manga.isLocal
 import uy.kohesive.injekt.Injekt
@@ -43,7 +43,7 @@ class AchievementBackupCreator(
     private val getLibraryManga: GetLibraryManga = Injekt.get(),
     private val getLibraryAnime: GetLibraryAnime = Injekt.get(),
     private val getTotalReadDuration: GetTotalReadDuration = Injekt.get(),
-    private val getMangaTracks: GetMangaTracks = Injekt.get(),
+    private val getTracksPerManga: GetTracksPerManga = Injekt.get(),
     private val getAnimeTracks: GetAnimeTracks = Injekt.get(),
     private val mangaDownloadManager: MangaDownloadManager = Injekt.get(),
     private val animeDownloadManager: AnimeDownloadManager = Injekt.get(),
@@ -221,11 +221,15 @@ class AchievementBackupCreator(
             val distinctManga = libraryManga.fastDistinctBy { it.id }
 
             // Get manga tracks
-            val loggedInTrackers = trackerManager.loggedInTrackers().filter { it is MangaTracker }
-            val loggedInTrackerIds = loggedInTrackers.map { it.id }.toHashSet()
+            // E-L: loggedInTrackers().filter { it is MangaTracker } also passed the novel-only
+            // trackers (NovelUpdates/NovelList implement MangaTracker); loggedInMangaTrackers()
+            // is the correct ready-made API (same fix as the stats screen).
+            val loggedInTrackerIds = trackerManager.loggedInMangaTrackers().map { it.id }.toHashSet()
 
+            // E-L (N+1, same as the stats screen): one batch query instead of a per-title round-trip.
+            val allTracks = getTracksPerManga.subscribe().first()
             val mangaTrackMap = distinctManga.associate { manga ->
-                val tracks = getMangaTracks.await(manga.id)
+                val tracks = allTracks[manga.id].orEmpty()
                     .fastFilter { it.trackerId in loggedInTrackerIds }
                 manga.id to tracks
             }

@@ -49,6 +49,10 @@ data class BackupManga(
     @ProtoNumber(804) var customGenre: List<String>? = null,
     @ProtoNumber(805) var customStatus: Long? = null,
     @ProtoNumber(806) var completedAt: Long? = null,
+    // E-L-16: the fork's memo (JsonObject) was missing from the native backup - notes/tags were
+    // lost on backup->restore round-trips. Carried as JSON text in the fork-reserved 800-range
+    // (Mihon's memo lives at 112 and is only exchanged through the MihonBackup* models).
+    @ProtoNumber(807) var memoJson: String? = null,
 ) {
     fun getMangaImpl(): Manga {
         return Manga.create().copy(
@@ -78,6 +82,7 @@ data class BackupManga(
             customGenre = this@BackupManga.customGenre,
             customStatus = this@BackupManga.customStatus,
             completedAt = this@BackupManga.completedAt,
+            memo = parseBackupMemo(this@BackupManga.memoJson),
         )
     }
 }
