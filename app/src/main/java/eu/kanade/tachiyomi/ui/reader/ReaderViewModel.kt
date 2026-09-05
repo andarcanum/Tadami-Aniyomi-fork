@@ -319,7 +319,7 @@ class ReaderViewModel @JvmOverloads constructor(
 
     override fun onCleared() {
         foregroundIncognitoJob?.cancel()
-        ForegroundIncognitoState.set(false)
+        ForegroundIncognitoState.set(this, false)
         webtoonProgressSaveJob?.cancel()
         flushPendingWebtoonScrollProgress()
 
@@ -442,7 +442,7 @@ class ReaderViewModel @JvmOverloads constructor(
         foregroundIncognitoJob?.cancel()
         foregroundIncognitoJob = viewModelScope.launch {
             getIncognitoState.subscribe(sourceId).collect { active ->
-                ForegroundIncognitoState.set(active)
+                ForegroundIncognitoState.set(this@ReaderViewModel, active)
             }
         }
     }
@@ -1300,7 +1300,11 @@ class ReaderViewModel @JvmOverloads constructor(
      */
     fun setMangaReadingMode(readingMode: ReadingMode) {
         val manga = manga ?: return
-        runBlocking(Dispatchers.IO) {
+        // A-M9: was runBlocking(Dispatchers.IO) ON THE MAIN THREAD (called from the reading-mode
+        // and series-override dialogs): two DB writes + getManga + a rendezvous send blocked the
+        // UI thread (jank/ANR risk on slow IO). The event collector suspends in receive on the
+        // main dispatcher, so the send handoff works identically from an IO coroutine.
+        viewModelScope.launchIO {
             setMangaViewerFlags.awaitSetReadingMode(
                 manga.id,
                 readingMode.flagValue.toLong(),

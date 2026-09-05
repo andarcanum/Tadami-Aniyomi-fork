@@ -273,7 +273,7 @@ class MainActivity : BaseActivity() {
                     val effectiveIncognito =
                         globalIncognito || incognito || incognitoAnime || incognitoNovel || novelReaderIncognito
                     LaunchedEffect(effectiveIncognito) {
-                        ForegroundIncognitoState.set(effectiveIncognito)
+                        ForegroundIncognitoState.set(ForegroundIncognitoState.AppOwner, effectiveIncognito)
                     }
 
                     val downloadOnly by preferences.downloadedOnly().collectAsStateWithLifecycle()

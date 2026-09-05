@@ -98,7 +98,12 @@ abstract class PagerViewer(val activity: ReaderActivity) : Viewer {
                 private var dragStartedAtLastPage = false
 
                 override fun onPageSelected(position: Int) {
-                    if (!activity.isScrollingThroughPages) {
+                    // B-H2: consume the slider mark instead of leaving it set forever - before
+                    // the fix the pager stopped hiding the menu on swipes after the first
+                    // navigator-slider use (the flag had no reset anywhere).
+                    if (activity.isScrollingThroughPages) {
+                        activity.consumeScrollingThroughPages()
+                    } else {
                         activity.hideMenu()
                     }
                     onPageChange(position)

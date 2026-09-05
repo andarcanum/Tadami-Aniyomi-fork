@@ -397,7 +397,7 @@ class PlayerViewModel @JvmOverloads constructor(
         foregroundIncognitoJob?.cancel()
         foregroundIncognitoJob = viewModelScope.launch {
             getIncognitoState.subscribe(sourceId).collect { active ->
-                ForegroundIncognitoState.set(active)
+                ForegroundIncognitoState.set(this@PlayerViewModel, active)
             }
         }
     }
@@ -1417,7 +1417,7 @@ class PlayerViewModel @JvmOverloads constructor(
 
     override fun onCleared() {
         foregroundIncognitoJob?.cancel()
-        ForegroundIncognitoState.set(false)
+        ForegroundIncognitoState.set(this, false)
         if (currentEpisode.value != null) {
             saveWatchingProgress(currentEpisode.value!!)
             episodeToDownload?.let {

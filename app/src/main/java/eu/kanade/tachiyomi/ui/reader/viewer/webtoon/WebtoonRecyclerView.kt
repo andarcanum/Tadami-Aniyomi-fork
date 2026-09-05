@@ -176,9 +176,17 @@ class WebtoonRecyclerView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * A-M10: notified on every scale change (pinch frames and the double-tap zoom animator both
+     * funnel through [setScaleRate]) so the viewer can resume auto-scroll once zoomed back out -
+     * the zoom monitor pauses it and nothing ever resumed it in the webtoon branch.
+     */
+    var onZoomScaleChanged: ((scale: Float) -> Unit)? = null
+
     private fun setScaleRate(rate: Float) {
         scaleX = rate
         scaleY = rate
+        onZoomScaleChanged?.invoke(rate)
     }
 
     fun onScale(scaleFactor: Float) {

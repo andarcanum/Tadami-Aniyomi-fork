@@ -46,6 +46,13 @@ class WebtoonAutoScrollManager(
     private var currentSpeedFactor: Float = 1f
 
     /**
+     * A-M10: invoked when the manager stops ITSELF at the end of the content, so the viewer can
+     * sync state.autoScrollEnabled - the FAB/menu kept showing "playing" over a stopped scroller
+     * and the next FAB press went to "pause" instead of start.
+     */
+    var onReachedEnd: (() -> Unit)? = null
+
+    /**
      * Timestamp of the previous animation frame, used to compute frame deltas.
      */
     private var lastFrameTimeMs: Long = 0L
@@ -202,6 +209,7 @@ class WebtoonAutoScrollManager(
                 if (!recyclerView.canScrollVertically(1)) {
                     // Reached the end, stop auto-scroll
                     stop()
+                    onReachedEnd?.invoke()
                 }
             }
 

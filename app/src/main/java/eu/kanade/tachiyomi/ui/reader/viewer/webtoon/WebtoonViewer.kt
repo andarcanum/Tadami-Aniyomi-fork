@@ -151,7 +151,15 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
                     }
 
                     if ((dy > threshold || dy < -threshold) && activity.viewModel.state.value.menuVisible) {
-                        activity.hideMenu()
+                        // B-M1: navigator-slider jumps (moveToPage -> scrollToPositionWithOffset)
+                        // produce a huge dy and used to hide the menu in the middle of the slider
+                        // gesture. Consume the slider mark for this programmatic scroll burst,
+                        // mirroring the pager's onPageSelected guard.
+                        if (activity.isScrollingThroughPages) {
+                            activity.consumeScrollingThroughPages()
+                        } else {
+                            activity.hideMenu()
+                        }
                     }
 
                     if (dy < 0) {
@@ -264,6 +272,21 @@ class WebtoonViewer(val activity: ReaderActivity, val isContinuous: Boolean = tr
                     pauseAutoScroll()
                 }
             }
+        }
+
+        // A-M10: zooming back OUT resumes the auto-scroll - the zoom monitor above paused it and
+        // resumeAutoScroll() had zero call sites in the webtoon branch, so a zoom froze the
+        // auto-scroll for the rest of the chapter. Covers pinch and double-tap zoom-out (both
+        // funnel through WebtoonRecyclerView.setScaleRate). resume() is a no-op when not paused.
+        recycler.onZoomScaleChanged = { scale ->
+            if (scale <= 1f) resumeAutoScroll()
+        }
+
+        // A-M10: sync the VM state when the manager stops itself at the end of the content - the
+        // FAB/menu kept showing "playing" over a stopped scroller, and the next FAB press went to
+        // "pause" instead of start.
+        autoScrollManager.onReachedEnd = {
+            activity.viewModel.pauseAutoScroll()
         }
 
         frame.layoutParams = ViewGroup.LayoutParams(MATCH_PARENT, MATCH_PARENT)

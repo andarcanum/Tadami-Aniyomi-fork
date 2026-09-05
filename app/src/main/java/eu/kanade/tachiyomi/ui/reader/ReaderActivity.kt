@@ -196,6 +196,16 @@ class ReaderActivity : BaseActivity() {
     var isScrollingThroughPages = false
         private set
 
+    /**
+     * B-H2: the page-slider callback marks programmatic page moves so the viewers skip their
+     * scroll-induced hideMenu during the gesture. The mark is consumed by the first resulting
+     * page-change/scroll event; it used to never reset, so after the first slider use the pager
+     * stopped hiding the menu on swipes for the rest of the session.
+     */
+    fun consumeScrollingThroughPages() {
+        isScrollingThroughPages = false
+    }
+
     private var presenceStartedAt: Long = 0L
     private var presenceJob: Job? = null
 
