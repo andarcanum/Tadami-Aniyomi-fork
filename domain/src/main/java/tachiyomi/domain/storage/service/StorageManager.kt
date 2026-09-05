@@ -20,12 +20,24 @@ import java.util.UUID
 
 class StorageManager(
     private val context: Context,
-    storagePreferences: StoragePreferences,
+    private val storagePreferences: StoragePreferences,
 ) {
 
     private val scope = CoroutineScope(Dispatchers.IO)
 
     private var baseDir: UniFile? = getBaseDir(storagePreferences.baseStorageDirectory().get())
+
+    /**
+     * C-M12: baseDir was resolved once at init (and on pref change) behind an exists() check;
+     * if the storage was unmounted at that moment (or got unmounted later), EVERY directory
+     * getter returned null until a pref change - downloads threw on downloadsDir!! and the
+     * download cache kept an empty snapshot. Re-resolve lazily when the cached value is missing
+     * or no longer exists (remount heals without a pref toggle).
+     */
+    private fun baseDirectory(): UniFile? {
+        baseDir?.takeIf { it.exists() }?.let { return it }
+        return getBaseDir(storagePreferences.baseStorageDirectory().get()).also { baseDir = it }
+    }
 
     private val _changes: Channel<Unit> = Channel(Channel.UNLIMITED)
     val changes = _changes.receiveAsFlow()
@@ -194,23 +206,23 @@ class StorageManager(
     }
 
     fun getAutomaticBackupsDirectory(): UniFile? {
-        return baseDir?.createDirectory(AUTOMATIC_BACKUPS_PATH)
+        return baseDirectory()?.createDirectory(AUTOMATIC_BACKUPS_PATH)
     }
 
     fun getDownloadsDirectory(): UniFile? {
-        return baseDir?.createDirectory(DOWNLOADS_PATH)
+        return baseDirectory()?.createDirectory(DOWNLOADS_PATH)
     }
 
     fun getLocalMangaSourceDirectory(): UniFile? {
-        return baseDir?.createDirectory(LOCAL_SOURCE_PATH)
+        return baseDirectory()?.createDirectory(LOCAL_SOURCE_PATH)
     }
 
     fun getLocalAnimeSourceDirectory(): UniFile? {
-        return baseDir?.createDirectory(LOCAL_ANIMESOURCE_PATH)
+        return baseDirectory()?.createDirectory(LOCAL_ANIMESOURCE_PATH)
     }
 
     fun getLocalNovelSourceDirectory(): UniFile? {
-        return baseDir?.createDirectory(LOCAL_NOVELSOURCE_PATH)
+        return baseDirectory()?.createDirectory(LOCAL_NOVELSOURCE_PATH)
     }
 
     fun getFontsDirectory(): UniFile? {
@@ -230,7 +242,7 @@ class StorageManager(
     }
 
     fun getMPVConfigDirectory(): UniFile? {
-        return baseDir?.createDirectory(MPV_CONFIG_PATH)
+        return baseDirectory()?.createDirectory(MPV_CONFIG_PATH)
     }
 }
 

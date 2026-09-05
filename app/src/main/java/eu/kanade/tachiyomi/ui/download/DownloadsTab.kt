@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -186,6 +187,14 @@ data object DownloadsTab : Tab {
                 animeManager = Injekt.get<AnimeDownloadManager>(),
                 mangaManager = Injekt.get<MangaDownloadManager>(),
             )
+        }
+        // C-M14/NEW-2: the facade drives recursive SAF size walks of all three download trees
+        // (throttled to ~5s) for as long as it lives; when Downloads is hosted as a persistent
+        // main tab, the screen model's close-on-dispose never runs and the walks continued for
+        // the whole session after the first visit. Close the facade when this content leaves
+        // composition (close is idempotent with the screen model's own onDispose).
+        DisposableEffect(engineFacade) {
+            onDispose { engineFacade.close() }
         }
         val engineScreenModel = rememberScreenModel { DownloadEngineScreenModel(engineFacade) }
         val engineSnapshot by engineScreenModel.state.collectAsStateWithLifecycle()

@@ -99,6 +99,11 @@ class MangaDownloadCache(
         get() = File(context.cacheDir, "dl_index_cache_v3")
 
     private val rootDownloadsDirMutex = Mutex()
+
+    // C-M6: read from many threads without the mutex; the fork replaced the baseline's
+    // ConcurrentHashMap with a plain map - at minimum the root reference must be @Volatile so
+    // readers see the swapped snapshot (writers only ever assign fully built objects).
+    @Volatile
     private var rootDownloadsDir = RootDirectory(storageManager.getDownloadsDirectory())
 
     init {
@@ -113,7 +118,12 @@ class MangaDownloadCache(
                             ProtoBuf.decodeFromByteArray<RootDirectory>(it.readBytes())
                         }
                         rootDownloadsDir = diskCache
-                        lastRenew = System.currentTimeMillis()
+                        // C-M5: the trust window starts at the file's AGE, not at "now" - the old
+                        // code marked a month-old snapshot as freshly renewed, so external
+                        // renames/deletes stayed invisible for another full hour after launch.
+                        // An unavailable mtime (0) forces an immediate renewal.
+                        lastRenew = diskCacheFile.lastModified()
+                            .takeIf { it in 1..System.currentTimeMillis() } ?: 0L
                     }
                 } catch (e: Throwable) {
                     logcat(LogPriority.ERROR, e) { "Failed to initialize from disk cache" }
@@ -258,8 +268,9 @@ class MangaDownloadCache(
                 sourceDir.mangaDirs += mangaDirName to mangaDir
             }
 
-            // Save the chapter directory
-            mangaDir.chapterDirs += chapterDirName
+            // Save the chapter directory (C-M6: copy-on-write - readers iterate the set without
+            // the mutex, so it must never be mutated in place)
+            mangaDir.chapterDirs = (mangaDir.chapterDirs + chapterDirName).toMutableSet()
         }
 
         notifyChanges()
@@ -277,7 +288,7 @@ class MangaDownloadCache(
             mangaDirsFor(sourceDir, manga.title, manga.id).forEach { mangaDir ->
                 provider.getValidChapterDirNames(chapter.name, chapter.scanlator, chapter.id).forEach {
                     if (it in mangaDir.chapterDirs) {
-                        mangaDir.chapterDirs -= it
+                        mangaDir.chapterDirs = (mangaDir.chapterDirs - it).toMutableSet()
                     }
                 }
             }
@@ -299,7 +310,7 @@ class MangaDownloadCache(
                 chapters.forEach { chapter ->
                     provider.getValidChapterDirNames(chapter.name, chapter.scanlator, chapter.id).forEach {
                         if (it in mangaDir.chapterDirs) {
-                            mangaDir.chapterDirs -= it
+                            mangaDir.chapterDirs = (mangaDir.chapterDirs - it).toMutableSet()
                         }
                     }
                 }
@@ -372,10 +383,21 @@ class MangaDownloadCache(
                 return@launchIO
             }
 
+            // C-M5: a temporarily unavailable downloads directory (unmounted SD card, revoked
+            // SAF permission) used to produce an EMPTY snapshot that was swapped in AND
+            // persisted to disk - wiping the index until the next renewal. Keep the previous
+            // snapshot and retry on the failure interval instead.
+            val downloadsDirNow = storageManager.getDownloadsDirectory()
+            if (downloadsDirNow == null) {
+                logcat(LogPriority.WARN) { "DownloadCache: downloads directory unavailable, keeping previous snapshot" }
+                _isInitializing.emit(false)
+                return@launchIO
+            }
+
             val sourceMap = sources.associate { provider.getSourceDirName(it).lowercase() to it.id }
 
             rootDownloadsDirMutex.withLock {
-                val updatedRootDir = RootDirectory(storageManager.getDownloadsDirectory())
+                val updatedRootDir = RootDirectory(downloadsDirNow)
 
                 updatedRootDir.sourceDirs = updatedRootDir.dir?.listFiles().orEmpty()
                     .filter { it.isDirectory && !it.name.isNullOrBlank() }

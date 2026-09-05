@@ -15,7 +15,13 @@ class DownloadTelemetryCollector(
     private val speedTracker: DownloadSpeedTracker,
 ) : DownloadTelemetryEmitter {
 
-    private val lastBytesByKey = mutableMapOf<String, Long>()
+    // C-L: the manga backend reports bytesTotal=0, so the completion-based removal at the end
+    // of record() never ran for it and the map grew for the whole session. Bound it with an
+    // access-order LRU - evicted entries are stale downloads whose next record simply re-baselines.
+    private val lastBytesByKey = object : LinkedHashMap<String, Long>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean =
+            size > MAX_TRACKED_KEYS
+    }
     private val _version = MutableStateFlow(0L)
     val version = _version.asStateFlow()
 
@@ -57,5 +63,9 @@ class DownloadTelemetryCollector(
         if (bytesTotal > 0L && bytesDownloaded >= bytesTotal) {
             lastBytesByKey.remove(telemetryKey)
         }
+    }
+
+    private companion object {
+        const val MAX_TRACKED_KEYS = 1024
     }
 }

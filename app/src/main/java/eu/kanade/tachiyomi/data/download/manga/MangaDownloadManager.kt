@@ -136,6 +136,24 @@ class MangaDownloadManager(
             val existingDownload = getQueuedDownloadOrNull(chapterId)
             // If not in queue try to start a new download
             val toAdd = existingDownload ?: MangaDownload.fromChapterId(chapterId) ?: return@launchIO
+            if (existingDownload == null) {
+                // C-L: "download now" on an already-downloaded chapter re-fetched it and the CBZ
+                // rename silently replaced the existing archive; skip when nothing is missing.
+                val manga = toAdd.manga
+                val chapter = toAdd.chapter
+                if (
+                    isChapterDownloaded(
+                        chapter.name,
+                        chapter.scanlator,
+                        manga.title,
+                        manga.source,
+                        mangaId = manga.id,
+                        chapterId = chapter.id,
+                    )
+                ) {
+                    return@launchIO
+                }
+            }
             queueState.value.toMutableList().apply {
                 existingDownload?.let { remove(it) }
                 add(0, toAdd)

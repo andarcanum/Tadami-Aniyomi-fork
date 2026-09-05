@@ -200,6 +200,12 @@ class DownloadEngineFacade(
         collectJob?.cancel()
         storageStatsJob?.cancel()
         facadeJob.cancel()
+        // C-L: the singleton managers kept this facade's collector attached after close, so a
+        // closed facade kept receiving telemetry records (accumulating in its dead collector)
+        // until the next facade overwrote them. Detach on close.
+        animeManager.telemetryEmitter = DownloadTelemetryEmitter.NOOP
+        mangaManager.telemetryEmitter = DownloadTelemetryEmitter.NOOP
+        NovelDownloadQueueManager.telemetryEmitter = DownloadTelemetryEmitter.NOOP
     }
 }
 

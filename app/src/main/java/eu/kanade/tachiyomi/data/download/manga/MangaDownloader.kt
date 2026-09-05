@@ -334,6 +334,9 @@ class MangaDownloader(
         val source = sourceManager.get(manga.source) as? HttpSource ?: return
         val wasEmpty = queueState.value.isEmpty()
         val chaptersToQueue = chapters.asSequence()
+            // C-L: deduplicate the input batch itself - queueState is only updated after the
+            // whole list is mapped, so duplicates within one call both passed the enqueue filter.
+            .distinctBy { it.id }
             // Filter out those already downloaded.
             .filter { provider.findChapterDir(it.name, it.scanlator, manga.title, manga.id, it.id, source) == null }
             // Add chapters to queue from the start.
