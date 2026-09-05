@@ -86,7 +86,7 @@
     <string name="download_ahead_info">Only works if the current chapter/episode + the next one are already downloaded.</string>
     <string name="non_library_settings">All read/watched entries</string>
     <string name="action_sort_last_manga_update">Last manga update</string>
-    <string name="action_show_manga">Show manga</string>
+    <string name="action_show_manga">Show entry</string>
     <string name="action_display_show_continue_reading_button">Continue watching/reading button</string>
     <string name="pref_update_only_completely_read">Skip entries with unseen episode(s)/unread chapter(s)</string>
     <string name="pref_library_update_show_tab_badge">Show unseen/unread count on Updates icon</string>

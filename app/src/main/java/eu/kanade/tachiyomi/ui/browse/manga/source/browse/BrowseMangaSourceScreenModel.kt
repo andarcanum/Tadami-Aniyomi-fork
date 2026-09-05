@@ -494,7 +494,9 @@ class BrowseMangaSourceScreenModel(
                 val listing = if (anyExists) {
                     Listing.Search(query = null, filters = defaultFilters)
                 } else {
-                    Listing.Search(query = genres.firstOrNull(), filters = defaultFilters)
+                    // B4: when no genre matched a source filter, the fallback query used only
+                    // the FIRST genre, silently dropping the rest; search with all of them.
+                    Listing.Search(query = genres.joinToString(" "), filters = defaultFilters)
                 }
                 it.copy(
                     filters = defaultFilters,

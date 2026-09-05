@@ -13,14 +13,15 @@ class GetAnimeExtensionsByType(
 ) {
 
     fun subscribe(): Flow<AnimeExtensions> {
-        val showNsfwSources = preferences.showNsfwSource().get()
-
+        // X2 (anime mirror): the NSFW gate was a one-shot .get() snapshot - toggling the setting
+        // did not rebuild the lists until the screen model was recreated. Collect the changes.
         return combine(
+            preferences.showNsfwSource().changes(),
             preferences.enabledLanguages().changes(),
             extensionManager.installedExtensionsFlow,
             extensionManager.untrustedExtensionsFlow,
             extensionManager.availableExtensionsFlow,
-        ) { enabledLanguages, _installed, _untrusted, _available ->
+        ) { showNsfwSources, enabledLanguages, _installed, _untrusted, _available ->
             val (updates, installed) = _installed
                 .filter { (showNsfwSources || !it.isNsfw) }
                 .sortedWith(

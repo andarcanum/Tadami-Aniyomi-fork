@@ -1172,7 +1172,7 @@
     <string name="download_ahead_info">Работает только если нынешняя и следующая глава/серия уже скачана.</string>
     <string name="non_library_settings">Все прочитанные/просмотренные тайтлы</string>
     <string name="action_sort_last_manga_update">Последнему обновленному тайтлу</string>
-    <string name="action_show_manga">Показать мангу</string>
+    <string name="action_show_manga">Показать серию</string>
     <string name="action_display_show_continue_reading_button">Показать кнопку «продолжить смотреть/читать»</string>
     <string name="pref_update_only_completely_read">Пропускать тайтлы с не просмотренными сериями/не прочитанными главами</string>
     <string name="pref_category_delete_chapters">Удалить главы/серии</string>

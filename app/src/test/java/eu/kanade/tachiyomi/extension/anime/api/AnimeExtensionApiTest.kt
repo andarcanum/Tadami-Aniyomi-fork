@@ -98,15 +98,19 @@ class AnimeExtensionApiTest {
     }
 
     @Test
-    fun `supported library versions accept the full 12-18 range including minor versions`() {
+    fun `supported library versions accept the full 12-19 range including minor versions`() {
         (12.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (14.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (14.4 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (16.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (17.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (18.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        // The reels feed-contract v18 work raised LIB_VERSION_MAX to 19.0; these assertions
+        // still expected the old 18.x ceiling (pre-existing red, surfaced by an unrelated slice).
+        (18.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
+        (19.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe true
         (11.0 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
-        (18.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
+        (19.1 in AnimeExtensionLoader.SUPPORTED_LIB_VERSIONS) shouldBe false
     }
 
     @Test

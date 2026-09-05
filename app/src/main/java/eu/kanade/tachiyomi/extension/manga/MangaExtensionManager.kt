@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.preference.getAndSet
@@ -85,8 +86,15 @@ class MangaExtensionManager(
      */
     private val installer by lazy { MangaExtensionInstaller(context) }
 
-    private val iconMap = mutableMapOf<String, Drawable?>()
-    private val pendingInstallRepos = mutableMapOf<String, InstalledRepo>()
+    // F-M8: written from the IO status refresh, the manager's Default scope and the main-thread
+    // broadcast receiver - the plain maps/var lost updates across threads (a concurrent install
+    // or uninstall vanished from the UI until restart).
+    private val iconMap: MutableMap<String, Drawable?> =
+        java.util.Collections.synchronizedMap(mutableMapOf())
+    private val pendingInstallRepos: MutableMap<String, InstalledRepo> =
+        java.util.Collections.synchronizedMap(mutableMapOf())
+
+    @Volatile
     private var sourceIdToPackageName = emptyMap<Long, String>()
 
     private val installedExtensionsMapFlow = MutableStateFlow(emptyMap<String, MangaExtension.Installed>())
@@ -311,36 +319,40 @@ class MangaExtensionManager(
 
         val availableExtensionsByPkgName = availableExtensions
             .groupBy { it.pkgName.toInstalledMangaExtensionPkgName() }
-        val installedExtensionsMap = installedExtensionsMapFlow.value.toMutableMap()
-        var changed = false
+        // F-M8: atomic read-modify-write (MutableStateFlow.update CAS). The previous
+        // copy-mutate-assign from IO raced with the broadcast receiver's map writes on main:
+        // a concurrent install/uninstall was overwritten and vanished from the UI until restart.
+        // saveInstalledRepo inside the lambda is an idempotent pref write, so a CAS retry is safe.
+        installedExtensionsMapFlow.update { currentMap ->
+            val installedExtensionsMap = currentMap.toMutableMap()
+            var changed = false
 
-        for ((pkgName, extension) in installedExtensionsMap) {
-            val variants = availableExtensionsByPkgName[pkgName].orEmpty()
-            val availableExt = variants.newestByVersion()
+            for ((pkgName, extension) in installedExtensionsMap) {
+                val variants = availableExtensionsByPkgName[pkgName].orEmpty()
+                val availableExt = variants.newestByVersion()
 
-            if (availableExt == null && canMarkObsolete && !extension.isObsolete) {
-                installedExtensionsMap[pkgName] = extension.copy(isObsolete = true)
-                changed = true
-            } else if (availableExt != null) {
-                val extensionWithRepo = extension.withInferredRepo(variants)
-                val regularUpdate = selectMangaRegularUpdate(extensionWithRepo, variants)
-                val reinstallCandidates = selectMangaReinstallCandidates(extensionWithRepo, variants)
-
-                val updatedExtension = extensionWithRepo.copy(
-                    hasUpdate = regularUpdate != null || reinstallCandidates.isNotEmpty(),
-                    needsReinstall = regularUpdate == null && reinstallCandidates.isNotEmpty(),
-                    // The extension is available again, so it is no longer obsolete.
-                    isObsolete = false,
-                )
-                if (updatedExtension != extension) {
-                    installedExtensionsMap[pkgName] = updatedExtension
+                if (availableExt == null && canMarkObsolete && !extension.isObsolete) {
+                    installedExtensionsMap[pkgName] = extension.copy(isObsolete = true)
                     changed = true
+                } else if (availableExt != null) {
+                    val extensionWithRepo = extension.withInferredRepo(variants)
+                    val regularUpdate = selectMangaRegularUpdate(extensionWithRepo, variants)
+                    val reinstallCandidates = selectMangaReinstallCandidates(extensionWithRepo, variants)
+
+                    val updatedExtension = extensionWithRepo.copy(
+                        hasUpdate = regularUpdate != null || reinstallCandidates.isNotEmpty(),
+                        needsReinstall = regularUpdate == null && reinstallCandidates.isNotEmpty(),
+                        // The extension is available again, so it is no longer obsolete.
+                        isObsolete = false,
+                    )
+                    if (updatedExtension != extension) {
+                        installedExtensionsMap[pkgName] = updatedExtension
+                        changed = true
+                    }
+                    saveInstalledRepo(extensionWithRepo)
                 }
-                saveInstalledRepo(extensionWithRepo)
             }
-        }
-        if (changed) {
-            installedExtensionsMapFlow.value = installedExtensionsMap
+            if (changed) installedExtensionsMap else currentMap
         }
         updatePendingUpdatesCount()
     }
@@ -412,19 +424,28 @@ class MangaExtensionManager(
     fun replaceExtensionFromRepo(
         installedExtension: MangaExtension.Installed,
         replacementExtension: MangaExtension.Available,
-    ): Flow<InstallStep> = flow {
-        emit(InstallStep.Installing)
-        installer.uninstallApk(installedExtension.pkgName)
+    ): Flow<InstallStep> {
+        // X3: the replacement used to run inside a plain flow collected by the extensions screen
+        // model scope - leaving the screen between the uninstall and the install cancelled the
+        // flow and left the extension REMOVED with no replacement. It now runs on the manager's
+        // own scope and the returned flow merely mirrors progress (replay=1 so a re-attaching
+        // collector sees the latest step).
+        val progress = MutableSharedFlow<InstallStep>(replay = 1, extraBufferCapacity = 16)
+        scope.launch {
+            progress.emit(InstallStep.Installing)
+            installer.uninstallApk(installedExtension.pkgName)
 
-        repeat(REPLACE_UNINSTALL_WAIT_SECONDS) {
-            if (!context.isPackageInstalled(installedExtension.pkgName)) {
-                installExtension(replacementExtension).collect { emit(it) }
-                return@flow
+            repeat(REPLACE_UNINSTALL_WAIT_SECONDS) {
+                if (!context.isPackageInstalled(installedExtension.pkgName)) {
+                    installExtension(replacementExtension).collect { progress.emit(it) }
+                    return@launch
+                }
+                delay(1.seconds)
             }
-            delay(1.seconds)
-        }
 
-        emit(InstallStep.Error)
+            progress.emit(InstallStep.Error)
+        }
+        return progress
     }
 
     /** Reconnects downloads orphaned by a process death and installs the finished ones. */
@@ -483,7 +504,7 @@ class MangaExtensionManager(
      */
     private fun registerNewExtension(extension: MangaExtension.Installed) {
         val extensionWithRepo = extension.withPendingOrSavedRepo().withUpdateCheck()
-        installedExtensionsMapFlow.value += extensionWithRepo
+        installedExtensionsMapFlow.update { it + extensionWithRepo }
         saveInstalledRepo(extensionWithRepo)
         iconMap[extension.pkgName] = extension.icon
         rebuildSourcePackageIndex()
@@ -511,7 +532,7 @@ class MangaExtensionManager(
      */
     private fun registerUpdatedExtension(extension: MangaExtension.Installed) {
         val extensionWithRepo = extension.withPendingOrSavedRepo().withUpdateCheck()
-        installedExtensionsMapFlow.value += extensionWithRepo
+        installedExtensionsMapFlow.update { it + extensionWithRepo }
         saveInstalledRepo(extensionWithRepo)
         iconMap[extension.pkgName] = extension.icon
         rebuildSourcePackageIndex()
@@ -531,8 +552,8 @@ class MangaExtensionManager(
                     registerUpdatedExtension(result.extension)
                 }
                 is MangaLoadResult.Untrusted -> {
-                    installedExtensionsMapFlow.value -= result.extension.pkgName
-                    untrustedExtensionsMapFlow.value += result.extension
+                    installedExtensionsMapFlow.update { it - result.extension.pkgName }
+                    untrustedExtensionsMapFlow.update { it + result.extension }
                     rebuildSourcePackageIndex()
                 }
                 else -> return@launch
@@ -550,8 +571,8 @@ class MangaExtensionManager(
     private fun unregisterExtension(pkgName: String) {
         removeSavedInstalledRepo(pkgName)
         pendingInstallRepos.remove(pkgName)
-        installedExtensionsMapFlow.value -= pkgName
-        untrustedExtensionsMapFlow.value -= pkgName
+        installedExtensionsMapFlow.update { it - pkgName }
+        untrustedExtensionsMapFlow.update { it - pkgName }
         iconMap -= pkgName
         rebuildSourcePackageIndex()
     }
@@ -586,8 +607,8 @@ class MangaExtensionManager(
         }
 
         override fun onExtensionUntrusted(extension: MangaExtension.Untrusted) {
-            installedExtensionsMapFlow.value -= extension.pkgName
-            untrustedExtensionsMapFlow.value += extension
+            installedExtensionsMapFlow.update { it - extension.pkgName }
+            untrustedExtensionsMapFlow.update { it + extension }
             rebuildSourcePackageIndex()
             updatePendingUpdatesCount()
         }
