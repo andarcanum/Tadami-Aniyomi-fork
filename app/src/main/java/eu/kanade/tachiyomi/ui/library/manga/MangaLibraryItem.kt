@@ -101,11 +101,22 @@ sealed interface MangaLibraryItem {
         override val lastRead = librarySeries.lastRead
         override val totalChapters = librarySeries.totalChapters
         override val hasStarted = librarySeries.hasStarted
-        override val hasBookmarks = false
+
+        // D-M4: a series spans multiple entries; bookmark state aggregates over all volumes
+        // (was hardcoded false, so the bookmark filter never matched series).
+        override val hasBookmarks = librarySeries.entries.any { it.hasBookmarks }
         override val dateAdded = librarySeries.series.dateAdded
         override val title = librarySeries.title
         override val coverManga = librarySeries.selectedCoverManga ?: librarySeries.coverMangas.firstOrNull()
         override val libraryManga = librarySeries.entries.first()
+
+        /**
+         * D-M4: the most recent volume (entries are position-sorted). Status/source grouping and
+         * the language filter used [libraryManga] (the FIRST volume), whose status/source can be
+         * stale for the series as a whole.
+         */
+        val latestManga: LibraryManga get() = librarySeries.entries.lastOrNull() ?: libraryManga
+
         val covers = librarySeries.coverMangas.map { it.asMangaCover() }
 
         override fun matches(constraint: String): Boolean {

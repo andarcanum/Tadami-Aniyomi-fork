@@ -35,6 +35,7 @@ import tachiyomi.presentation.core.util.plus
 @Composable
 fun MangaLibraryPager(
     state: PagerState,
+    categories: List<tachiyomi.domain.category.model.Category>,
     contentPadding: PaddingValues,
     hasActiveFilters: Boolean,
     selectedItems: List<MangaLibraryItem>,
@@ -86,7 +87,10 @@ fun MangaLibraryPager(
             val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             val columns by remember(isLandscape) { getColumnsForOrientation(isLandscape) }
 
-            val categoryId = library.firstOrNull()?.category ?: -1L
+            // D-L: key the scroll restore on the page's ACTUAL category. The first item's
+            // category was wrong for pseudo-groupings (UNGROUPED/BY_STATUS/... keep the original
+            // per-item categories, colliding across pages) and every empty page shared -1.
+            val categoryId = categories.getOrNull(page)?.id ?: -1L
 
             when (displayMode) {
                 LibraryDisplayMode.List -> {

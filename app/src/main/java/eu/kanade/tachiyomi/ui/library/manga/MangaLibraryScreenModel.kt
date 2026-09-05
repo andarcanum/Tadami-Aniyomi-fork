@@ -68,6 +68,7 @@ import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.core.common.util.lang.withIOContext
+import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.GetVisibleMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.category.model.Category
@@ -140,6 +141,11 @@ class MangaLibraryScreenModel(
     var activeCategoryIndex: Int by libraryPreferences.lastUsedMangaCategory().asState(
         screenModelScope,
     )
+
+    // D-M3: all-categories interactor for membership edits (setMangaCategories). Lazy property
+    // rather than a constructor default: the constructor injection list is pinned by the test
+    // harnesses, and this dependency is only needed on the category-edit path.
+    private val getAllCategories: GetMangaCategories by lazy { Injekt.get() }
 
     private val libraryPipelineActive = MutableStateFlow(startActive)
 
@@ -334,7 +340,9 @@ class MangaLibraryScreenModel(
         fun MangaLibraryItem.sourceLang(): String {
             val sourceId = when (this) {
                 is MangaLibraryItem.Single -> libraryManga.manga.source
-                is MangaLibraryItem.Series -> librarySeries.entries.firstOrNull()?.manga?.source
+                // D-M4: the most recent volume represents the series (first volume's source can
+                // differ in mixed-source series).
+                is MangaLibraryItem.Series -> librarySeries.entries.lastOrNull()?.manga?.source
             } ?: return ""
             return languageBySourceId.getOrPut(sourceId) { sourceManager.getOrStub(sourceId).lang }
         }
@@ -628,7 +636,12 @@ class MangaLibraryScreenModel(
             LibraryGroup.BY_STATUS -> {
                 val statusCategories = LinkedHashMap<Long, Pair<Category, MutableList<MangaLibraryItem>>>()
                 items.forEach { item ->
-                    val status = item.libraryManga.manga.status
+                    // D-M4: series group by their MOST RECENT volume's status (entries are
+                    // position-sorted); the first volume's status is often stale for the series.
+                    val status = when (item) {
+                        is MangaLibraryItem.Series -> item.latestManga.manga.status
+                        is MangaLibraryItem.Single -> item.libraryManga.manga.status
+                    }
                     val statusInt = status.toInt()
                     val (statusName, statusId) = when (statusInt) {
                         SManga.ONGOING -> "Ongoing" to -21L
@@ -658,7 +671,11 @@ class MangaLibraryScreenModel(
             LibraryGroup.BY_SOURCE -> {
                 val sourceCategories = LinkedHashMap<Long, Pair<Category, MutableList<MangaLibraryItem>>>()
                 items.forEach { item ->
-                    val sourceId = item.libraryManga.manga.source
+                    // D-M4: series group by their most recent volume's source (see BY_STATUS).
+                    val sourceId = when (item) {
+                        is MangaLibraryItem.Series -> item.latestManga.manga.source
+                        is MangaLibraryItem.Single -> item.libraryManga.manga.source
+                    }
                     val sourceName = sourceManager.getOrStub(sourceId).name
                     val categoryId = -sourceId - 1000L
                     val (_, list) = sourceCategories.getOrPut(categoryId) {
@@ -681,7 +698,13 @@ class MangaLibraryScreenModel(
                 val trackMapper = MapMangaTrackStatusToLibrary(trackerManager)
                 val trackCategories = LinkedHashMap<Long, Pair<Category, MutableList<MangaLibraryItem>>>()
                 items.forEach { item ->
-                    val itemTracks = tracks[item.libraryManga.manga.id].orEmpty()
+                    // D-M4: a series is "tracked" when ANY of its volumes has tracks (was only
+                    // the first volume, sending series with later-volume tracks to "Untracked").
+                    val itemTracks = when (item) {
+                        is MangaLibraryItem.Series ->
+                            item.librarySeries.entries.flatMap { tracks[it.manga.id].orEmpty() }
+                        is MangaLibraryItem.Single -> tracks[item.libraryManga.manga.id].orEmpty()
+                    }
                     if (itemTracks.isEmpty()) {
                         val categoryId = -2L
                         val (_, list) = trackCategories.getOrPut(categoryId) {
@@ -854,18 +877,34 @@ class MangaLibraryScreenModel(
                 }
 
             (singleItems + seriesItems)
-                .groupBy { it.category }
         }
 
-        return combine(getCategories.subscribe(), libraryMangasFlow) { categories, libraryManga ->
-            val displayCategories = if (libraryManga.isNotEmpty() && !libraryManga.containsKey(0)) {
+        return combine(getCategories.subscribe(), libraryMangasFlow) { categories, libraryItems ->
+            val displayCategories = if (libraryItems.isNotEmpty() && libraryItems.none { it.category == 0L }) {
                 categories.fastFilterNot { it.isSystemCategory }
             } else {
                 categories
             }
 
+            // DECISION-3: a series is placed by its own category, but when that category is
+            // hidden the whole series used to vanish (its volumes are suppressed as singles via
+            // idsInSeries). Mirror the singles' survival rule: fall back to the first VISIBLE
+            // category any of its volumes belongs to. Only a series with no visible category at
+            // all disappears - that is the intended hiding.
+            val visibleIds = displayCategories.fastMap { it.id }.toHashSet()
+            val grouped = libraryItems.groupBy { item ->
+                if (item is MangaLibraryItem.Series && item.category !in visibleIds) {
+                    item.librarySeries.entries
+                        .map { it.category }
+                        .firstOrNull { it in visibleIds }
+                        ?: item.category
+                } else {
+                    item.category
+                }
+            }
+
             displayCategories
-                .associateWith { libraryManga[it.id].orEmpty().toPersistentList() }
+                .associateWith { grouped[it.id].orEmpty().toPersistentList() }
                 .toPersistentMap()
         }
     }
@@ -1024,7 +1063,10 @@ class MangaLibraryScreenModel(
     ) {
         screenModelScope.launchNonCancellable {
             mangaList.forEach { manga ->
-                val categoryIds = getCategories.await(manga.id)
+                // D-M3: read ALL categories, not the visible ones - getCategories here is
+                // GetVisibleMangaCategories (hidden=0), and setMangaCategories REPLACES the whole
+                // membership set, so every category edit silently dropped hidden memberships.
+                val categoryIds = getAllCategories.await(manga.id)
                     .map { it.id }
                     .subtract(removeCategories.toSet())
                     .plus(addCategories)
@@ -1061,8 +1103,11 @@ class MangaLibraryScreenModel(
         if (state.value.categories.isEmpty()) return null
 
         return withIOContext {
-            state.value
-                .getLibraryItemsByCategoryId(state.value.categories[activeCategoryIndex].id)
+            // D-M8: activeCategoryIndex is a persistent pref that can go stale when categories
+            // shrink - indexed access crashed with IOOB.
+            state.value.categories
+                .getOrNull(activeCategoryIndex)
+                ?.let { state.value.getLibraryItemsByCategoryId(it.id) }
                 ?.randomOrNull()
         }
     }
@@ -1142,8 +1187,10 @@ class MangaLibraryScreenModel(
 
     fun invertSelection(index: Int) {
         mutableState.update { state ->
+            // D-M8: guard the stale index (selectAll already uses getOrNull; this sibling did
+            // not) - invert from the toolbar crashed with IOOB after categories shrank.
+            val categoryId = state.categories.getOrNull(index)?.id ?: return@update state
             val newSelection = state.selection.mutate { list ->
-                val categoryId = state.categories[index].id
                 val items = state.getLibraryItemsByCategoryId(categoryId)
                     ?.filterIsInstance<MangaLibraryItem.Single>()
                     .orEmpty()

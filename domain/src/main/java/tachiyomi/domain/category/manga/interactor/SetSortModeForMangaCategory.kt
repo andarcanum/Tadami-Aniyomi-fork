@@ -24,7 +24,16 @@ class SetSortModeForMangaCategory(
         if (type == MangaLibrarySort.Type.Random) {
             preferences.randomMangaSortSeed().set(Random.nextInt())
         }
-        if (preferences.mangaGroupLibraryBy().get() != LibraryGroup.BY_DEFAULT) {
+        // D-L: check the EFFECTIVE grouping. With global grouping enabled the library sorts by
+        // globalGroupLibraryBy, but this gate read mangaGroupLibraryBy - sort mode landed in the
+        // per-category flags branch (or vice versa) whenever the two disagreed (mirrors the
+        // effective-grouping resolution in the library screen model).
+        val effectiveGrouping = if (preferences.globalGroupLibrary().get()) {
+            preferences.globalGroupLibraryBy().get()
+        } else {
+            preferences.mangaGroupLibraryBy().get()
+        }
+        if (effectiveGrouping != LibraryGroup.BY_DEFAULT) {
             preferences.mangaSortingMode().set(MangaLibrarySort(type, direction))
             categoryRepository.updateAllMangaCategoryFlags(flags)
             return

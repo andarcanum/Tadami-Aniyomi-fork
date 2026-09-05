@@ -1070,8 +1070,11 @@ data object AnimeLibraryTab : Tab {
                     },
                     onClickFilter = screenModel::showSettingsDialog,
                     onClickRefresh = {
+                        // D-M8 (NEW-13): getOrNull - the persistent activeCategoryIndex can go
+                        // stale when categories shrink; the manga-side toolbar is guarded, this
+                        // anime-side sibling was not. Falls back to the global update.
                         onClickRefresh(
-                            state.categories[screenModel.activeCategoryIndex],
+                            state.categories.getOrNull(screenModel.activeCategoryIndex),
                         )
                     },
                     onClickGlobalUpdate = { onClickRefresh(null) },

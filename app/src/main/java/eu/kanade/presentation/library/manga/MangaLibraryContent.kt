@@ -58,7 +58,9 @@ fun MangaLibraryContent(
             end = contentPadding.calculateEndPadding(LocalLayoutDirection.current),
         ),
     ) {
-        val coercedCurrentPage = remember { currentPage().coerceAtMost(categories.lastIndex) }
+        // NEW-19: coerceIn(0, ...) - with an empty category list coerceAtMost(lastIndex = -1)
+        // produced initialPage = -1 and rememberPagerState crashed.
+        val coercedCurrentPage = remember { currentPage().coerceIn(0, categories.lastIndex.coerceAtLeast(0)) }
         val pagerState = rememberPagerState(coercedCurrentPage) { categories.size }
 
         val scope = rememberCoroutineScope()
@@ -93,7 +95,9 @@ fun MangaLibraryContent(
         PullRefresh(
             refreshing = isRefreshing,
             onRefresh = {
-                val started = onRefresh(categories[currentPage()])
+                // D-M8: guard the stale page index - categories can shrink while the pager still
+                // holds an old current page (IOOB).
+                val started = categories.getOrNull(currentPage())?.let(onRefresh) ?: false
                 if (!started) return@PullRefresh
                 scope.launch {
                     // Fake refresh status but hide it after a second as it's a long running task
@@ -106,6 +110,7 @@ fun MangaLibraryContent(
         ) {
             MangaLibraryPager(
                 state = pagerState,
+                categories = categories,
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
                 hasActiveFilters = hasActiveFilters,
                 selectedItems = selection,

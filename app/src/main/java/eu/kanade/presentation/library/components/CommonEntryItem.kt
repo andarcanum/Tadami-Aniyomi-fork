@@ -430,6 +430,9 @@ fun EntryListItem(
     entries: Int = 0,
     containerHeight: Int = 0,
     modifier: Modifier = Modifier,
+    // D-L: list mode was the only display mode without the pinned indicator (both grids and the
+    // Aurora cards draw PinnedBadge through their topEndBadge slot).
+    topEndBadge: (@Composable BoxScope.() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -465,6 +468,11 @@ fun EntryListItem(
                     data = coverData,
                     errorPainter = errorPainter,
                 )
+            }
+            if (topEndBadge != null) {
+                Box(modifier = Modifier.align(Alignment.TopEnd)) {
+                    topEndBadge()
+                }
             }
         }
         Text(

@@ -100,6 +100,9 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     override suspend fun doWork(): Result {
         val uiPreferences: UiPreferences = Injekt.get()
         if (!uiPreferences.showMangaSection().get()) {
+            // D-L: was a completely silent Result.success() - including MANUAL refreshes whose
+            // toolbar snackbar had just promised "Updating category...".
+            logcat(LogPriority.WARN) { "Skipping manga library update: manga section is hidden" }
             return Result.success()
         }
 
@@ -168,10 +171,16 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     }
 
     private suspend fun filterByCategoryId(libraryManga: List<LibraryManga>, categoryId: Long): List<LibraryManga> {
+        // D-M2: libraryView yields one row per (manga, category) membership; the attribute-based
+        // pseudo branches below (status/source/track) kept every row, so multi-category entries
+        // were fetched multiple times per refresh (the entryIds branch already deduped).
         return when {
             categoryId == -1L -> {
-                // Ungrouped
-                libraryManga.filter { it.category == 0L }
+                // D-M1: the UI's "Ungrouped" pseudo-group flattens ALL items (applyGrouping
+                // UNGROUPED in the library screen model), while this branch used to take only
+                // Default-category rows - refreshing the visible group updated something else
+                // entirely. Match the UI semantics.
+                libraryManga
             }
             categoryId == -2L -> {
                 // Untracked
@@ -228,7 +237,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             else -> {
                 libraryManga.filter { it.category == categoryId }
             }
-        }
+        }.distinctBy { it.manga.id }
     }
 
     /**

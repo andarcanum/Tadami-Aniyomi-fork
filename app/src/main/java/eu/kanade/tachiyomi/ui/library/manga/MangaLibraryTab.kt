@@ -157,8 +157,10 @@ data object MangaLibraryTab : Tab {
                     },
                     onClickFilter = screenModel::showSettingsDialog,
                     onClickRefresh = {
+                        // D-M8: getOrNull - the persistent activeCategoryIndex can go stale when
+                        // categories shrink; fall back to the global update instead of IOOB.
                         onClickRefresh(
-                            state.categories[screenModel.activeCategoryIndex],
+                            state.categories.getOrNull(screenModel.activeCategoryIndex),
                         )
                     },
                     onClickGlobalUpdate = { onClickRefresh(null) },

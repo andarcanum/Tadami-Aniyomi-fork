@@ -13,6 +13,7 @@ import eu.kanade.presentation.library.components.DownloadsBadge
 import eu.kanade.presentation.library.components.EntryListItem
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.LanguageBadge
+import eu.kanade.presentation.library.components.PinnedBadge
 import eu.kanade.presentation.library.components.UnviewedBadge
 import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.presentation.library.components.shouldShowContinueViewingAction
@@ -105,6 +106,11 @@ internal fun MangaLibraryList(
                     )
                 },
                 onLongClick = { onLongClick(libraryItem) },
+                topEndBadge = if (libraryItem.pinned) {
+                    { PinnedBadge() }
+                } else {
+                    null
+                },
                 onClick = {
                     if (notSelectionMode && isSeries) {
                         onSeriesClicked(libraryItem.librarySeries.id)
