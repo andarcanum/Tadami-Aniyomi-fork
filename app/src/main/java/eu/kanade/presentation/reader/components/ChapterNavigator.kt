@@ -101,6 +101,16 @@ fun VerticalSlider(
     inactiveColor: Color = activeColor.copy(alpha = 0.3f),
 ) {
     val haptic = LocalHapticFeedback.current
+    // РЕШ-11 revival: `haptic` was declared and never used. Mirror the horizontal slider's tick
+    // feedback (TextHandleMove on value change); the initial composition is skipped because
+    // lastHapticValue starts equal to value.
+    var lastHapticValue by remember { mutableIntStateOf(value) }
+    LaunchedEffect(value) {
+        if (value != lastHapticValue) {
+            lastHapticValue = value
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        }
+    }
     BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()

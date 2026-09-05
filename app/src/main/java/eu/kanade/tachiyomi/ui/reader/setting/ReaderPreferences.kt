@@ -132,7 +132,10 @@ class ReaderPreferences(
 
     fun webtoonDisableZoomOut() = preferenceStore.getBoolean("webtoon_disable_zoom_out", false)
 
-    fun autoScrollEnabled() = preferenceStore.getBoolean("pref_auto_scroll_enabled", false)
+    // УД-17: removed dead autoScrollEnabled() pref ("pref_auto_scroll_enabled", zero consumers):
+    // the manga reader keeps auto-scroll state in memory only (State.autoScrollEnabled), which is
+    // the correct product behavior - resuming auto-scroll across app restarts is not wanted. The
+    // novel-side autoScrollEnabled() is an unrelated constructor lambda, not this pref.
 
     fun autoScrollSpeed() = preferenceStore.getInt("pref_auto_scroll_speed", 50)
 
@@ -152,10 +155,6 @@ class ReaderPreferences(
     fun pageActionButtonColor() = preferenceStore.getInt("reader_page_action_button_color", 0)
 
     fun pageActionLabelColor() = preferenceStore.getInt("reader_page_action_label_color", 0)
-
-    internal fun getLongPageProgressForChapter(chapterId: Long): Long? {
-        return getLongPageProgressForChapter(chapterId, chapterKey = null)
-    }
 
     internal fun getLongPageProgressForChapter(
         chapterId: Long,

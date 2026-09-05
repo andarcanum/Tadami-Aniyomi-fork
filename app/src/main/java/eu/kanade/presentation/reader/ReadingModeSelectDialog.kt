@@ -42,7 +42,11 @@ fun ReadingModeSelectDialog(
     // Highlight the mode the viewer really runs on (series flags, auto-detected webtoon or the
     // global default) — the manga stays on DEFAULT for most entries, which would otherwise leave
     // every tile unselected.
-    val readingMode = remember(storedReadingMode, defaultReadingMode) {
+    // B-L: resolvedReadingMode() also depends on the LIVE viewer (auto-detected webtoon rebuilds
+    // it); the old keys (manga/defaultReadingMode) missed those changes and left a stale
+    // highlight while the dialog was open. Key on the viewer flow too.
+    val viewer by screenModel.viewerFlow.collectAsStateWithLifecycle()
+    val readingMode = remember(storedReadingMode, defaultReadingMode, viewer) {
         screenModel.resolvedReadingMode().takeIf { it != ReadingMode.DEFAULT }
             ?: ReadingMode.fromPreference(defaultReadingMode)
     }

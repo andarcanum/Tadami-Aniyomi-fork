@@ -9,6 +9,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +39,14 @@ fun ReaderSettingsDialog(
     val pagerState = rememberPagerState { tabTitles.size }
     val scope = rememberCoroutineScope()
     val pageMaxHeight = (LocalConfiguration.current.screenHeightDp * 0.62f).dp
+
+    // РЕШ-5 revival: onShowMenus/onHideMenus were dead parameters. The intent recorded at the
+    // call site (ReaderActivity passes the real setMenuVisibility) is to hide the reader menus
+    // behind the settings sheet and restore them when it closes.
+    DisposableEffect(Unit) {
+        onHideMenus()
+        onDispose { onShowMenus() }
+    }
 
     AuroraReaderSheet(onDismissRequest = onDismissRequest) {
         AuroraTabRow(

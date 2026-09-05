@@ -24,7 +24,7 @@ class ReaderPreferencesTest {
 
         prefs.putLongPageProgressForChapter(chapterId = 42L, encodedProgress = 7_001_234_567L)
 
-        prefs.getLongPageProgressForChapter(42L) shouldBe 7_001_234_567L
+        prefs.getLongPageProgressForChapter(42L, chapterKey = null) shouldBe 7_001_234_567L
     }
 
     @Test
@@ -35,7 +35,7 @@ class ReaderPreferencesTest {
         prefs.putLongPageProgressForChapter(chapterId = 7L, encodedProgress = 200L)
         prefs.importLongPageProgressFromLegacyIfMissing(chapterId = 7L, legacyProgress = 300L)
 
-        prefs.getLongPageProgressForChapter(7L) shouldBe 200L
+        prefs.getLongPageProgressForChapter(7L, chapterKey = null) shouldBe 200L
     }
 
     @Test
@@ -46,9 +46,9 @@ class ReaderPreferencesTest {
         prefs.putLongPageProgressForChapter(chapterId = 2L, encodedProgress = 202L, maxEntries = 2)
         prefs.putLongPageProgressForChapter(chapterId = 3L, encodedProgress = 303L, maxEntries = 2)
 
-        prefs.getLongPageProgressForChapter(1L).shouldBeNull()
-        prefs.getLongPageProgressForChapter(2L) shouldBe 202L
-        prefs.getLongPageProgressForChapter(3L) shouldBe 303L
+        prefs.getLongPageProgressForChapter(1L, chapterKey = null).shouldBeNull()
+        prefs.getLongPageProgressForChapter(2L, chapterKey = null) shouldBe 202L
+        prefs.getLongPageProgressForChapter(3L, chapterKey = null) shouldBe 303L
     }
 
     @Test

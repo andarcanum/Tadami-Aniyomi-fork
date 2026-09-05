@@ -83,11 +83,14 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
             selectedIndex = themes.indexOfFirst { it.second == readerTheme },
             onSelect = { screenModel.preferences.readerTheme().set(themes[it].second) },
         )
+        val fullscreen by screenModel.preferences.fullscreen().collectAsState()
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_fullscreen),
             pref = screenModel.preferences.fullscreen(),
         )
-        if (screenModel.hasDisplayCutout && screenModel.preferences.fullscreen().get()) {
+        // B-M5: was a one-shot fullscreen().get() in the condition - the cutout row never
+        // appeared/disappeared when the toggle flipped until the dialog was reopened.
+        if (screenModel.hasDisplayCutout && fullscreen) {
             AuroraToggleRow(
                 label = stringResource(MR.strings.pref_cutout_short),
                 pref = screenModel.preferences.cutoutShort(),
@@ -168,7 +171,12 @@ internal fun ColumnScope.GeneralPage(screenModel: ReaderSettingsScreenModel) {
         listOf("reading_mode", "orientation", "crop_borders", "chapter_list", "settings")
     }
 
-    val orderListState = remember(bottomBarButtonsOrder) {
+    // B-M6: the order list is built ONCE from the initial pref value. It used to be keyed on
+    // bottomBarButtonsOrder while the drag callback wrote the pref on EVERY move - each write
+    // recreated the SnapshotStateList under the live reorder gesture (index churn and drag
+    // jitter; a stale-index removeAt could land out of bounds). The drag callback's pref write
+    // no longer feeds back into list identity.
+    val orderListState = remember {
         val list = bottomBarButtonsOrder.split(",").filter { it.isNotBlank() && it in defaultOrder }.toMutableList()
         defaultOrder.forEach { if (it !in list) list.add(it) }
         list.toMutableStateList()

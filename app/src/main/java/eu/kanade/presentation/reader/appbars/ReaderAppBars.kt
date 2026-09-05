@@ -87,7 +87,6 @@ private val panelFadeSpec = spring<Float>(
 @Composable
 fun ReaderAppBars(
     visible: Boolean,
-    fullscreen: Boolean,
 
     mangaTitle: String?,
     chapterTitle: String?,
@@ -307,11 +306,13 @@ fun ReaderAppBars(
                                     } else {
                                         Icons.Filled.KeyboardArrowDown
                                     },
-                                    contentDescription = if (isAutoScrollExpanded) {
-                                        "Collapse auto-scroll"
-                                    } else {
-                                        "Expand auto-scroll"
-                                    },
+                                    contentDescription = stringResource(
+                                        if (isAutoScrollExpanded) {
+                                            AYMR.strings.reader_auto_scroll_collapse_description
+                                        } else {
+                                            AYMR.strings.reader_auto_scroll_expand_description
+                                        },
+                                    ),
                                     tint = scheme.onSurface.copy(alpha = 0.75f),
                                 )
                             }

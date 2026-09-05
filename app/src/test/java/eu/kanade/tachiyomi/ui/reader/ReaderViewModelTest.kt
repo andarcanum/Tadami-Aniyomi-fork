@@ -26,13 +26,23 @@ class ReaderViewModelTest {
     }
 
     @Test
-    fun `read chapters restore when saved progress exists`() {
+    fun `read chapters restore only when preserve is enabled`() {
+        // РЕШ-1: the toggle was dead in every state before (last_page_read > 0 forced restore);
+        // OFF must start read chapters from the beginning even when saved progress exists.
         shouldRestoreSavedProgress(
             chapter = readerChapter(
                 read = true,
                 lastPageRead = 12L,
             ),
             preserveReadingPosition = false,
+        ) shouldBe false
+
+        shouldRestoreSavedProgress(
+            chapter = readerChapter(
+                read = true,
+                lastPageRead = 12L,
+            ),
+            preserveReadingPosition = true,
         ) shouldBe true
     }
 

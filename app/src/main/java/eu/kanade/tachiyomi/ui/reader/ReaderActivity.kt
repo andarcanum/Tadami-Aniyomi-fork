@@ -430,6 +430,19 @@ class ReaderActivity : BaseActivity() {
      */
     override fun finish() {
         viewModel.onActivityFinish()
+        // РЕШ-16: CrtShutdownAnimation was written for the meltdown easter egg but never wired
+        // (zero call sites). With the ritual armed (meltdownStage > 0), leaving the reader now
+        // collapses the screen to a CRT dot before the real finish. The final ritual resets the
+        // stage to 0 before its own finish(), so the completed-ritual exit does not replay it.
+        if (!crtShutdownPlayed && uiPreferences.meltdownStage().get() > 0) {
+            crtShutdownPlayed = true
+            playCrtShutdownThenFinish()
+            return
+        }
+        finishNow()
+    }
+
+    private fun finishNow() {
         super.finish()
         val reduceMotion = isEInkMode()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -445,6 +458,23 @@ class ReaderActivity : BaseActivity() {
                 if (reduceMotion) 0 else R.anim.shared_axis_x_pop_exit,
             )
         }
+    }
+
+    private fun playCrtShutdownThenFinish() {
+        val crtView = androidx.compose.ui.platform.ComposeView(this)
+        crtView.layoutParams = android.view.ViewGroup.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+        )
+        crtView.setContent {
+            CrtShutdownAnimation(
+                onAnimationFinished = {
+                    binding.root.removeView(crtView)
+                    finishNow()
+                },
+            )
+        }
+        binding.root.addView(crtView)
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
@@ -531,7 +561,6 @@ class ReaderActivity : BaseActivity() {
 
                 Box(modifier = Modifier.fillMaxSize()) {
                     val isHttpSource = viewModel.getSource() is HttpSource
-                    val isFullscreen by readerPreferences.fullscreen().collectAsStateWithLifecycle()
                     val flashOnPageChange by readerPreferences.flashOnPageChange().collectAsStateWithLifecycle()
 
                     val colorOverlayEnabled by readerPreferences.colorFilter().collectAsStateWithLifecycle()
@@ -629,7 +658,6 @@ class ReaderActivity : BaseActivity() {
 
                     ReaderAppBars(
                         visible = state.menuVisible,
-                        fullscreen = isFullscreen,
 
                         mangaTitle = state.manga?.title,
                         chapterTitle = state.currentChapter?.chapter?.name,
@@ -656,8 +684,12 @@ class ReaderActivity : BaseActivity() {
                             moveToPageIndex(it)
                         },
 
+                        // B-L: resolveDefault = true so the toolbar icon shows the ACTUAL mode
+                        // (matching the selection dialog's highlight); with false the toolbar
+                        // kept drawing ic_reader_default ("auto") while the dialog resolved the
+                        // real mode, and the two disagreed for series/global defaults.
                         readingMode = ReadingMode.fromPreference(
-                            viewModel.getMangaReadingMode(resolveDefault = false),
+                            viewModel.getMangaReadingMode(resolveDefault = true),
                         ),
                         onClickReadingMode = viewModel::openReadingModeSelectDialog,
                         orientation = ReaderOrientation.fromPreference(
@@ -1490,6 +1522,7 @@ class ReaderActivity : BaseActivity() {
     private var meltdownLastActivatedMs = 0L
     private val meltdownSwipeState = mutableStateOf(0)
     private var meltdownEscalationView: android.view.View? = null
+    private var crtShutdownPlayed = false
 
     fun onMeltdownTransitionActivated() {
         // Throttle: count at most once per 800 ms so WebtoonViewer scroll events

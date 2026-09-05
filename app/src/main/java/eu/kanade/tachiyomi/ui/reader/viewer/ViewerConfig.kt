@@ -72,7 +72,10 @@ abstract class ViewerConfig(
             .changes()
             .onEach {
                 isEInkMode = it.isEnabled
-                usePageTransitions = readerPreferences.pageTransitions().get() || !isEInkMode
+                // РЕШ-2 revival: was `pageTransitions || !isEInkMode` - inverted. On regular
+                // devices the toggle was dead (always true), and e-ink got pref-dependent motion
+                // although reduce-motion is meant to be forced there.
+                usePageTransitions = readerPreferences.pageTransitions().get() && !isEInkMode
             }
             .launchIn(scope)
 
@@ -80,7 +83,7 @@ abstract class ViewerConfig(
             .register({ longTapEnabled = it })
 
         readerPreferences.pageTransitions()
-            .register({ usePageTransitions = it || !isEInkMode })
+            .register({ usePageTransitions = it && !isEInkMode })
 
         readerPreferences.doubleTapAnimSpeed()
             .register({ doubleTapAnimDuration = it })

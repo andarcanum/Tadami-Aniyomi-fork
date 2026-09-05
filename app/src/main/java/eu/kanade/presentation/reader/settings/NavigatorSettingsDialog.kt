@@ -44,6 +44,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -128,14 +130,27 @@ fun NavigatorSettingsDialog(
         onDismissRequest()
     }
 
+    // РЕШ-14 (honest Cancel): the controls write prefs immediately - documented design that keeps
+    // the live preview AND the real navigator behind the dialog in sync - but Cancel was identical
+    // to OK (both just dismissed), silently keeping every change. Snapshot the nine navigator
+    // prefs on open; Cancel (button, scrim click, back, system dismiss) restores the snapshot,
+    // OK keeps the changes.
+    val prefsSnapshot = remember { NavigatorPrefsSnapshot.capture(screenModel.preferences) }
+
+    fun cancelAndRestore() {
+        appHaptics.tap()
+        prefsSnapshot.restore(screenModel.preferences)
+        onDismissRequest()
+    }
+
     Dialog(
-        onDismissRequest = onDismissRequest,
+        onDismissRequest = ::cancelAndRestore,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
             decorFitsSystemWindows = false,
         ),
     ) {
-        BackHandler(onBack = onDismissRequest)
+        BackHandler(onBack = ::cancelAndRestore)
 
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -156,7 +171,7 @@ fun NavigatorSettingsDialog(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
-                        onClick = onDismissRequest,
+                        onClick = ::cancelAndRestore,
                     ),
             )
 
@@ -267,7 +282,7 @@ fun NavigatorSettingsDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    sliderColors.take(6).forEach { (colorValue, _) ->
+                                    sliderColors.take(6).forEach { (colorValue, colorLabel) ->
                                         ColorCircle(
                                             color = if (colorValue == 0) {
                                                 colors.accent
@@ -276,6 +291,7 @@ fun NavigatorSettingsDialog(
                                             },
                                             isSelected = sliderColor == colorValue,
                                             isThemeColor = colorValue == 0,
+                                            label = stringResource(colorLabel),
                                             onClick = {
                                                 appHaptics.tap()
                                                 sliderColorPref.set(colorValue)
@@ -284,7 +300,7 @@ fun NavigatorSettingsDialog(
                                     }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    sliderColors.drop(6).forEach { (colorValue, _) ->
+                                    sliderColors.drop(6).forEach { (colorValue, colorLabel) ->
                                         ColorCircle(
                                             color = if (colorValue == 0) {
                                                 colors.accent
@@ -293,6 +309,7 @@ fun NavigatorSettingsDialog(
                                             },
                                             isSelected = sliderColor == colorValue,
                                             isThemeColor = colorValue == 0,
+                                            label = stringResource(colorLabel),
                                             onClick = {
                                                 appHaptics.tap()
                                                 sliderColorPref.set(colorValue)
@@ -368,7 +385,7 @@ fun NavigatorSettingsDialog(
                                     Color.Black.copy(alpha = 0.05f)
                                 },
                             )
-                            .clickable(onClick = ::dismiss)
+                            .clickable(onClick = ::cancelAndRestore)
                             .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -453,11 +470,12 @@ private fun AdaptiveNavigatorColorPalette(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         maxItemsInEachRow = 6,
     ) {
-        sliderColors.forEach { (colorValue, _) ->
+        sliderColors.forEach { (colorValue, colorLabel) ->
             ColorCircle(
                 color = if (colorValue == 0) colors.accent else Color(colorValue),
                 isSelected = sliderColor == colorValue,
                 isThemeColor = colorValue == 0,
+                label = stringResource(colorLabel),
                 onClick = { onColorSelected(colorValue) },
             )
         }
@@ -578,6 +596,7 @@ private fun ColorCircle(
     isThemeColor: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    label: String? = null,
 ) {
     val colors = AuroraTheme.colors
     Box(
@@ -592,6 +611,16 @@ private fun ColorCircle(
                     Modifier.border(1.dp, colors.textSecondary.copy(alpha = 0.35f), CircleShape)
                 },
             )
+            // РЕШ-14: the eleven reader_navigator_slider_color_* i18n labels existed but were
+            // dropped by the (colorValue, _) destructuring in every palette branch; they now
+            // surface as accessibility descriptions (a visible caption does not fit the circles).
+            .then(
+                if (label != null) {
+                    Modifier.semantics { contentDescription = label }
+                } else {
+                    Modifier
+                },
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -602,5 +631,47 @@ private fun ColorCircle(
                 color = colors.background,
             )
         }
+    }
+}
+
+/**
+ * РЕШ-14: snapshot of the nine navigator preferences backing the dialog's honest Cancel
+ * (controls apply immediately by design; Cancel restores, OK keeps).
+ */
+private class NavigatorPrefsSnapshot(
+    private val showNavigator: Boolean,
+    private val showPageNumbers: Boolean,
+    private val showChapterButtons: Boolean,
+    private val showTickMarks: Boolean,
+    private val sliderColor: Int,
+    private val backgroundAlpha: Int,
+    private val height: ReaderPreferences.NavigatorHeight,
+    private val bottomBarPosition: ReaderPreferences.BottomBarPosition,
+    private val cornerRadius: Int,
+) {
+    fun restore(prefs: ReaderPreferences) {
+        prefs.showNavigator().set(showNavigator)
+        prefs.navigatorShowPageNumbers().set(showPageNumbers)
+        prefs.navigatorShowChapterButtons().set(showChapterButtons)
+        prefs.navigatorShowTickMarks().set(showTickMarks)
+        prefs.navigatorSliderColor().set(sliderColor)
+        prefs.navigatorBackgroundAlpha().set(backgroundAlpha)
+        prefs.navigatorHeight().set(height)
+        prefs.bottomBarPosition().set(bottomBarPosition)
+        prefs.navigatorCornerRadius().set(cornerRadius)
+    }
+
+    companion object {
+        fun capture(prefs: ReaderPreferences) = NavigatorPrefsSnapshot(
+            showNavigator = prefs.showNavigator().get(),
+            showPageNumbers = prefs.navigatorShowPageNumbers().get(),
+            showChapterButtons = prefs.navigatorShowChapterButtons().get(),
+            showTickMarks = prefs.navigatorShowTickMarks().get(),
+            sliderColor = prefs.navigatorSliderColor().get(),
+            backgroundAlpha = prefs.navigatorBackgroundAlpha().get(),
+            height = prefs.navigatorHeight().get(),
+            bottomBarPosition = prefs.bottomBarPosition().get(),
+            cornerRadius = prefs.navigatorCornerRadius().get(),
+        )
     }
 }

@@ -284,11 +284,10 @@ class ReaderViewModel @JvmOverloads constructor(
             .map(::ReaderChapter)
     }
 
-    private val incognitoMode: Boolean by lazy { getIncognitoState.await(manga?.source) }
-
     private fun shouldPauseHistory(): Boolean {
         return getIncognitoState.shouldPauseHistory(manga?.source, manga?.favorite == true)
     }
+
     private val downloadAheadAmount = downloadPreferences.autoDownloadWhileReading().get()
     private var pendingWebtoonProgress: PendingWebtoonProgress? = null
     private var webtoonProgressSaveJob: Job? = null
@@ -1779,9 +1778,11 @@ internal fun shouldRestoreSavedProgress(
     chapter: ReaderChapter,
     preserveReadingPosition: Boolean,
 ): Boolean {
-    return !chapter.chapter.read ||
-        preserveReadingPosition ||
-        chapter.chapter.last_page_read > 0L
+    // РЕШ-1 revival: the old formula (`!read || preserve || last_page_read > 0`) made the
+    // "preserve reading position on read chapters" toggle dead in EVERY state - a chapter read
+    // in the reader always has last_page_read > 0, and at last_page_read == 0 both branches land
+    // on page 0 anyway. OFF now genuinely starts read chapters from the beginning.
+    return !chapter.chapter.read || preserveReadingPosition
 }
 
 /**

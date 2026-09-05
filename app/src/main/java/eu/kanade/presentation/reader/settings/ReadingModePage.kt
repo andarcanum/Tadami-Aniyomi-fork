@@ -250,19 +250,35 @@ private fun ColumnScope.PagerViewerSettings(screenModel: ReaderSettingsScreenMod
             label = stringResource(MR.strings.pref_navigate_pan),
             pref = screenModel.preferences.navigateToPan(),
         )
+        // РЕШ-3 rewiring: the labels were bound to the wrong prefs - "Split wide pages" wrote
+        // dualPageInvertPaged(), and the split-gated "Invert" row wrote dualPageRotateToFitInvert()
+        // (duplicating the rotate-invert row below). That left dualPageSplitPaged() - the actual
+        // split switch that gates the invert row - unreachable from the reader, and toggling
+        // "split" silently flipped side inversion. Mirrors the webtoon section and
+        // SettingsReaderScreen, including the split<->rotate mutual exclusion.
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_dual_page_split),
-            pref = screenModel.preferences.dualPageInvertPaged(),
+            checked = dualPageSplitPaged,
+            onClick = {
+                val newValue = !dualPageSplitPaged
+                screenModel.preferences.dualPageSplitPaged().set(newValue)
+                if (newValue) screenModel.preferences.dualPageRotateToFit().set(false)
+            },
         )
         if (dualPageSplitPaged) {
             AuroraToggleRow(
                 label = stringResource(MR.strings.pref_dual_page_invert),
-                pref = screenModel.preferences.dualPageRotateToFitInvert(),
+                pref = screenModel.preferences.dualPageInvertPaged(),
             )
         }
         AuroraToggleRow(
             label = stringResource(MR.strings.pref_page_rotate),
-            pref = screenModel.preferences.dualPageRotateToFit(),
+            checked = dualPageRotateToFit,
+            onClick = {
+                val newValue = !dualPageRotateToFit
+                screenModel.preferences.dualPageRotateToFit().set(newValue)
+                if (newValue) screenModel.preferences.dualPageSplitPaged().set(false)
+            },
         )
         if (dualPageRotateToFit) {
             AuroraToggleRow(
