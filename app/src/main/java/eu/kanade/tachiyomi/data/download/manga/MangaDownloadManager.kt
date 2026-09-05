@@ -77,7 +77,8 @@ class MangaDownloadManager(
     val queueState
         get() = downloader.queueState
 
-    // For use by DownloadService only
+    // For use by MangaDownloadJob only (there is no DownloadService in this fork; the stale
+    // comment masked the fact that the worker is the ONLY network-gated start path).
     fun downloaderStart() = downloader.start()
     fun downloaderStop(reason: String? = null) = downloader.stop(reason)
     fun downloaderPauseForNetwork(reason: String) = downloader.pauseForNetwork(reason)

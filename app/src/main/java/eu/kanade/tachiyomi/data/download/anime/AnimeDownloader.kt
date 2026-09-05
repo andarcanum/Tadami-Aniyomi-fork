@@ -17,10 +17,12 @@ import eu.kanade.tachiyomi.animesource.UnmeteredSource
 import eu.kanade.tachiyomi.animesource.model.Track
 import eu.kanade.tachiyomi.animesource.model.Video
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.data.download.DownloadNetworkStatus
 import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.data.download.engine.DownloadCompletionTracker
 import eu.kanade.tachiyomi.data.download.engine.DownloadSection
 import eu.kanade.tachiyomi.data.download.engine.DownloadTelemetryEmitter
+import eu.kanade.tachiyomi.data.download.toDownloadNetworkStatus
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateNotifier
 import eu.kanade.tachiyomi.data.notification.NotificationHandler
 import eu.kanade.tachiyomi.ui.player.loader.EpisodeLoader
@@ -28,6 +30,7 @@ import eu.kanade.tachiyomi.ui.player.loader.HosterLoader
 import eu.kanade.tachiyomi.ui.player.torrent.TorrentPlaybackResolver
 import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.toFFmpegString
+import eu.kanade.tachiyomi.util.system.activeNetworkState
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -141,7 +144,19 @@ class AnimeDownloader(
      *
      * @return true if the downloader is started, false otherwise.
      */
+    @Synchronized
     fun start(): Boolean {
+        // Same network gate as MangaDownloader.start() (C-H1, fork-shared pattern): the
+        // in-process startDownloads() path bypasses AnimeDownloadJob whose WIFI/CONNECTED
+        // constraints are the only network policy on the worker path, and the worker's
+        // pauseForNetwork never runs while it stays ENQUEUED. The worker calls start() again
+        // once its constraints are met, so gating here loses nothing.
+        val networkStatus = context.activeNetworkState()
+            .toDownloadNetworkStatus(preferences.downloadOnlyOverWifi().get())
+        if (networkStatus != DownloadNetworkStatus.Available) {
+            return false
+        }
+
         clearCompletedDownloads()
         if (isRunning || queueState.value.isEmpty()) {
             return false

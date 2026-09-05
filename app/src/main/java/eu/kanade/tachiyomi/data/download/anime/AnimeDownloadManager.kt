@@ -75,7 +75,7 @@ class AnimeDownloadManager(
     val queueState
         get() = downloader.queueState
 
-    // For use by DownloadService only
+    // For use by AnimeDownloadJob only (there is no DownloadService in this fork).
     fun downloaderStart() = downloader.start()
     fun downloaderStop(reason: String? = null) = downloader.stop(reason)
     fun downloaderPause() = downloader.pause()
