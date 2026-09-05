@@ -15,6 +15,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -55,8 +56,13 @@ class MigrationListScreenModel(
 
     private var migrateJob: Job? = null
     private var searchJob: Job? = null
+
+    // F-M2: both fields are written from the IO search/migration coroutines AND the main thread
+    // (cancelSearch / useMangaForMigration); plain non-synchronized containers lost updates.
+    // allItems read-modify-writes are confined to the screen model monitor (synchronized blocks /
+    // @Synchronized updateItem).
     private var allItems: List<MigratingManga> = emptyList()
-    private val cancelledSearchIds = mutableSetOf<Long>()
+    private val cancelledSearchIds: MutableSet<Long> = java.util.Collections.synchronizedSet(mutableSetOf())
 
     init {
         screenModelScope.launchIO {
@@ -153,7 +159,14 @@ class MigrationListScreenModel(
         items.forEach { item ->
             if (item.manga.id in cancelledSearchIds) {
                 updateItem(item.manga.id, hideNotFound, onlyNewChapters) { current ->
-                    current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+                    // F-M2: only a search still in flight may be reset. A manual match chosen
+                    // before the loop reached this item (Success) used to be overwritten with
+                    // NotFound here.
+                    if (current.searchResult == SearchResult.Searching) {
+                        current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+                    } else {
+                        current
+                    }
                 }
                 return@forEach
             }
@@ -172,12 +185,20 @@ class MigrationListScreenModel(
                     },
                 )
             }.onFailure { error ->
+                if (error is CancellationException) throw error
                 logcat(LogPriority.ERROR, error) { "Migration search failed for manga ${item.manga.id}" }
             }.getOrNull()
 
             if (item.manga.id in cancelledSearchIds) {
                 updateItem(item.manga.id, hideNotFound, onlyNewChapters) { current ->
-                    current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+                    // F-M2: same guard as above - a late-arriving auto-search result must not
+                    // clobber a manual match set through useMangaForMigration while this search
+                    // was in flight (cancelSearch has the identical Searching-only guard).
+                    if (current.searchResult == SearchResult.Searching) {
+                        current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+                    } else {
+                        current
+                    }
                 }
                 return@forEach
             }
@@ -198,6 +219,7 @@ class MigrationListScreenModel(
         }
     }
 
+    @Synchronized
     private fun updateItem(
         mangaId: Long,
         hideNotFound: Boolean,
@@ -412,22 +434,30 @@ class MigrationListScreenModel(
             val targetManga = getManga.await(target) ?: return@launchIO
             val source = sourceManager.get(targetManga.source) as? CatalogueSource ?: return@launchIO
             val chapterInfo = getChapterInfo(source, targetManga)
-            val updatedItems = allItems.map { item ->
-                if (item.manga.id == current) {
-                    item.copy(
-                        searchLabel = null,
-                        searchResult = SearchResult.Success(
-                            manga = targetManga,
-                            source = source.name,
-                            chapterCount = chapterInfo.chapterCount,
-                            latestChapter = chapterInfo.latestChapter,
-                        ),
-                    )
+            // F-M2: confine the allItems read-modify-write to the screen model monitor (shared
+            // with @Synchronized updateItem and removeMigratedManga) - concurrent search-loop
+            // updates used to lose the manual match.
+            val updatedItems = synchronized(this@MigrationListScreenModel) {
+                if (allItems.none { it.manga.id == current }) {
+                    null
                 } else {
-                    item
+                    allItems.map { item ->
+                        if (item.manga.id == current) {
+                            item.copy(
+                                searchLabel = null,
+                                searchResult = SearchResult.Success(
+                                    manga = targetManga,
+                                    source = source.name,
+                                    chapterCount = chapterInfo.chapterCount,
+                                    latestChapter = chapterInfo.latestChapter,
+                                ),
+                            )
+                        } else {
+                            item
+                        }
+                    }.also { allItems = it }
                 }
-            }
-            allItems = updatedItems
+            } ?: return@launchIO
             val hideNotFound = sourcePreferences.migrationHideNotFound().get()
             val onlyNewChapters = sourcePreferences.migrationOnlyNewChapters().get()
             val visibleItems = visibleMigrationItems(
@@ -483,6 +513,10 @@ class MigrationListScreenModel(
                         markUpdateErrorResolved(item.manga.id, replace)
                         migratedItems += item
                     }.onFailure { error ->
+                        // NEW-5: swallowing CancellationException made cancelMigrate a no-op for
+                        // the loop - after a cancel, every remaining item instantly "failed" with
+                        // an error log instead of stopping the batch.
+                        if (error is CancellationException) throw error
                         logcat(LogPriority.ERROR, error) { "Failed to migrate manga ${item.manga.id}" }
                     }
                     mutableState.update {
@@ -532,7 +566,9 @@ class MigrationListScreenModel(
     private fun removeMigratedManga(items: Collection<MigratingManga>) {
         if (items.isEmpty()) return
         val migratedIds = items.mapTo(mutableSetOf()) { it.manga.id }
-        allItems = allItems.filterNot { it.manga.id in migratedIds }
+        synchronized(this) {
+            allItems = allItems.filterNot { it.manga.id in migratedIds }
+        }
         mutableState.update { state ->
             val updatedItems = state.items.filterNot { it.manga.id in migratedIds }.toPersistentList()
             val finishedCount = updatedItems.count { it.searchResult != SearchResult.Searching }

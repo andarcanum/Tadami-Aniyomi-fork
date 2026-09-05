@@ -9,6 +9,7 @@ import eu.kanade.tachiyomi.data.track.EnhancedMangaTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.source.model.SChapter
+import tachiyomi.core.common.util.lang.withNonCancellableContext
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.entries.manga.interactor.NetworkToLocalManga
@@ -43,6 +44,8 @@ class MigrateMangaUseCase(
     private val trackerManager: TrackerManager = Injekt.get(),
     private val getHistory: GetMangaHistory = Injekt.get(),
     private val upsertHistory: UpsertMangaHistory = Injekt.get(),
+    private val getExcludedScanlators: GetExcludedScanlators = Injekt.get(),
+    private val setExcludedScanlators: SetExcludedScanlators = Injekt.get(),
 ) {
 
     private val enhancedServices by lazy {
@@ -103,92 +106,113 @@ class MigrateMangaUseCase(
             // Worst case, chapters won't be synced.
         }
 
-        if (migrateChapters) {
-            val prevMangaChapters = getChaptersByMangaId.await(oldManga.id)
-            val mangaChapters = getChaptersByMangaId.await(newManga.id)
+        // F-H1: everything below is local state mutation and runs NonCancellable. A cancel or
+        // dispose (progress-dialog Cancel, leaving the screen, dialog teardown) used to tear the
+        // migration between its suspend writes: downloads already deleted while the old entry was
+        // still favorited, or BOTH entries favorited when the cut landed between the two favorite
+        // writes. Now a started entry always completes consistently; the batch loop still stops
+        // between entries.
+        withNonCancellableContext {
+            if (migrateChapters) {
+                val prevMangaChapters = getChaptersByMangaId.await(oldManga.id)
+                val mangaChapters = getChaptersByMangaId.await(newManga.id)
 
-            val maxChapterRead = prevMangaChapters
-                .filter { it.read }
-                .maxOfOrNull { it.chapterNumber }
-            val prevHistoryByChapterId = getHistory.await(oldManga.id).associateBy { it.chapterId }
-            val historyUpdates = mutableListOf<MangaHistoryUpdate>()
+                val maxChapterRead = prevMangaChapters
+                    .filter { it.read }
+                    .maxOfOrNull { it.chapterNumber }
+                val prevHistoryByChapterId = getHistory.await(oldManga.id).associateBy { it.chapterId }
+                val historyUpdates = mutableListOf<MangaHistoryUpdate>()
 
-            val updatedMangaChapters = mangaChapters.map { mangaChapter ->
-                var updatedChapter = mangaChapter
-                if (updatedChapter.isRecognizedNumber) {
-                    val prevChapter = prevMangaChapters
-                        .find { it.isRecognizedNumber && it.chapterNumber == updatedChapter.chapterNumber }
+                val updatedMangaChapters = mangaChapters.map { mangaChapter ->
+                    var updatedChapter = mangaChapter
+                    if (updatedChapter.isRecognizedNumber) {
+                        val prevChapter = prevMangaChapters
+                            .find { it.isRecognizedNumber && it.chapterNumber == updatedChapter.chapterNumber }
 
-                    if (prevChapter != null) {
-                        updatedChapter = updatedChapter.copy(
-                            read = prevChapter.read,
-                            dateFetch = prevChapter.dateFetch,
-                            bookmark = prevChapter.bookmark,
-                            lastPageRead = prevChapter.lastPageRead,
-                        )
-                        prevHistoryByChapterId[prevChapter.id]?.let { prevHistory ->
-                            historyUpdates += MangaHistoryUpdate(
-                                chapterId = mangaChapter.id,
-                                readAt = prevHistory.readAt ?: return@let,
-                                sessionReadDuration = prevHistory.readDuration,
+                        if (prevChapter != null) {
+                            updatedChapter = updatedChapter.copy(
+                                read = prevChapter.read,
+                                dateFetch = prevChapter.dateFetch,
+                                bookmark = prevChapter.bookmark,
+                                lastPageRead = prevChapter.lastPageRead,
                             )
+                            prevHistoryByChapterId[prevChapter.id]?.let { prevHistory ->
+                                historyUpdates += MangaHistoryUpdate(
+                                    chapterId = mangaChapter.id,
+                                    readAt = prevHistory.readAt ?: return@let,
+                                    sessionReadDuration = prevHistory.readDuration,
+                                )
+                            }
+                        } else if (maxChapterRead != null && updatedChapter.chapterNumber <= maxChapterRead) {
+                            updatedChapter = updatedChapter.copy(read = true)
                         }
-                    } else if (maxChapterRead != null && updatedChapter.chapterNumber <= maxChapterRead) {
-                        updatedChapter = updatedChapter.copy(read = true)
                     }
+
+                    updatedChapter
                 }
 
-                updatedChapter
+                updateChapter.awaitAll(updatedMangaChapters.map { it.toChapterUpdate() })
+                historyUpdates.forEach { upsertHistory.await(it) }
+
+                // F-M4: excluded scanlators are per-entry state backing the scanlator-branch
+                // feature; migration silently dropped them, orphaning the old entry's branch
+                // filter. They travel with the chapters flag (they filter chapter visibility).
+                val excludedScanlators = getExcludedScanlators.await(oldManga.id)
+                if (excludedScanlators.isNotEmpty()) {
+                    setExcludedScanlators.await(newManga.id, excludedScanlators)
+                }
             }
 
-            updateChapter.awaitAll(updatedMangaChapters.map { it.toChapterUpdate() })
-            historyUpdates.forEach { upsertHistory.await(it) }
-        }
+            if (migrateCategories) {
+                val categoryIds = getCategories.await(oldManga.id).map { it.id }
+                setMangaCategories.await(newManga.id, categoryIds)
+            }
 
-        if (migrateCategories) {
-            val categoryIds = getCategories.await(oldManga.id).map { it.id }
-            setMangaCategories.await(newManga.id, categoryIds)
-        }
-
-        if (migrateTracking) {
-            getTracks.await(oldManga.id)
-                .mapNotNull { track ->
-                    val updatedTrack = track.copy(mangaId = newManga.id)
-                    val service = enhancedServices.firstOrNull { it.isTrackFrom(updatedTrack, oldManga, oldSource) }
-                    if (service != null) {
-                        service.migrateTrack(updatedTrack, newManga, newSource)
-                    } else {
-                        updatedTrack
+            if (migrateTracking) {
+                getTracks.await(oldManga.id)
+                    .mapNotNull { track ->
+                        val updatedTrack = track.copy(mangaId = newManga.id)
+                        val service = enhancedServices.firstOrNull { it.isTrackFrom(updatedTrack, oldManga, oldSource) }
+                        if (service != null) {
+                            service.migrateTrack(updatedTrack, newManga, newSource)
+                        } else {
+                            updatedTrack
+                        }
                     }
-                }
-                .takeIf { it.isNotEmpty() }
-                ?.let { insertTrack.awaitAll(it) }
-        }
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { insertTrack.awaitAll(it) }
+            }
 
-        if (deleteDownloaded && oldSource != null) {
-            downloadManager.deleteManga(oldManga, oldSource)
-        }
-
-        if (migrateCustomCover && oldManga.hasCustomCover(coverCache)) {
-            coverCache.setCustomCoverToCache(
-                newManga,
-                coverCache.getCustomCoverFile(oldManga.id).inputStream(),
+            // F-H1 order fix: the favorite swap happens BEFORE the destructive download delete
+            // (old order: delete -> favorite new -> unfavorite old).
+            // DECISION-4a: the fork exposes Migrate for non-library entries; favoriting the
+            // target is kept for replace-migrations and favorited sources, but copy-migrating
+            // an entry that is NOT in the library no longer silently favorites the target.
+            updateManga.await(
+                MangaUpdate(
+                    id = newManga.id,
+                    favorite = replace || oldManga.favorite,
+                    chapterFlags = if (migrateExtra) oldManga.chapterFlags else null,
+                    viewerFlags = if (migrateExtra) oldManga.viewerFlags else null,
+                    dateAdded = if (replace) oldManga.dateAdded else Instant.now().toEpochMilli(),
+                    notes = if (migrateNotes) oldManga.notes else null,
+                ),
             )
-        }
 
-        updateManga.await(
-            MangaUpdate(
-                id = newManga.id,
-                favorite = true,
-                chapterFlags = if (migrateExtra) oldManga.chapterFlags else null,
-                viewerFlags = if (migrateExtra) oldManga.viewerFlags else null,
-                dateAdded = if (replace) oldManga.dateAdded else Instant.now().toEpochMilli(),
-                notes = if (migrateNotes) oldManga.notes else null,
-            ),
-        )
+            if (replace) {
+                updateManga.awaitUpdateFavorite(oldManga.id, favorite = false)
+            }
 
-        if (replace) {
-            updateManga.awaitUpdateFavorite(oldManga.id, favorite = false)
+            if (deleteDownloaded && oldSource != null) {
+                downloadManager.deleteManga(oldManga, oldSource)
+            }
+
+            if (migrateCustomCover && oldManga.hasCustomCover(coverCache)) {
+                // F-M7(fd): close the source stream; the callee only closes its output stream.
+                coverCache.getCustomCoverFile(oldManga.id).inputStream().use { stream ->
+                    coverCache.setCustomCoverToCache(newManga, stream)
+                }
+            }
         }
     }
 }

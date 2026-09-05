@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
@@ -437,6 +438,174 @@ class MigrateMangaUseCaseTest {
         coVerify(exactly = 1) { updateManga.awaitUpdateFavorite(oldManga.id, favorite = false) }
     }
 
+    @Test
+    fun `favorite swap happens before destructive download delete`() = runTest {
+        val sourceManager = mockk<MangaSourceManager>()
+        val downloadManager = mockk<MangaDownloadManager>(relaxed = true)
+        val updateManga = mockk<UpdateManga>(relaxed = true)
+        val getChaptersByMangaId = mockk<GetChaptersByMangaId>(relaxed = true)
+        val syncChaptersWithSource = mockk<SyncChaptersWithSource>()
+        val updateChapter = mockk<UpdateChapter>(relaxed = true)
+        val getCategories = mockk<GetMangaCategories>(relaxed = true)
+        val setMangaCategories = mockk<SetMangaCategories>(relaxed = true)
+        val getTracks = mockk<GetMangaTracks>(relaxed = true)
+        val insertTrack = mockk<InsertMangaTrack>(relaxed = true)
+        val coverCache = mockk<MangaCoverCache>(relaxed = true)
+        val trackerManager = mockk<TrackerManager>()
+        val source = mockk<MangaSource>()
+        val oldManga = manga(1L, 10L)
+        val newManga = manga(2L, 20L)
+
+        every { sourceManager.get(any()) } returns source
+        every { trackerManager.trackers } returns emptyList()
+        coEvery { source.getMangaUpdate(any(), any(), any(), any()) } answers {
+            SMangaUpdate(firstArg(), listOf(sChapter(1.0f)))
+        }
+        coEvery { syncChaptersWithSource.await(any(), any(), any()) } returns emptyList()
+        coEvery { updateManga.await(any()) } returns true
+
+        val interactor = migrateUseCase(
+            sourceManager = sourceManager,
+            downloadManager = downloadManager,
+            updateManga = updateManga,
+            getChaptersByMangaId = getChaptersByMangaId,
+            syncChaptersWithSource = syncChaptersWithSource,
+            updateChapter = updateChapter,
+            getCategories = getCategories,
+            setMangaCategories = setMangaCategories,
+            getTracks = getTracks,
+            insertTrack = insertTrack,
+            coverCache = coverCache,
+            trackerManager = trackerManager,
+        )
+
+        interactor.migrateManga(
+            oldManga = oldManga,
+            newManga = newManga,
+            replace = true,
+            flags = DELETE_DOWNLOADED,
+        )
+
+        // F-H1: a cancel between the writes must never leave the old entry favorited with its
+        // downloads already deleted, nor both entries favorited.
+        coVerifyOrder {
+            updateManga.await(match { it.id == newManga.id && it.favorite == true })
+            updateManga.awaitUpdateFavorite(oldManga.id, favorite = false)
+            downloadManager.deleteManga(oldManga, source)
+        }
+    }
+
+    @Test
+    fun `copy-migrating a non-library entry does not favorite the target`() = runTest {
+        val sourceManager = mockk<MangaSourceManager>()
+        val downloadManager = mockk<MangaDownloadManager>(relaxed = true)
+        val updateManga = mockk<UpdateManga>(relaxed = true)
+        val getChaptersByMangaId = mockk<GetChaptersByMangaId>(relaxed = true)
+        val syncChaptersWithSource = mockk<SyncChaptersWithSource>()
+        val updateChapter = mockk<UpdateChapter>(relaxed = true)
+        val getCategories = mockk<GetMangaCategories>(relaxed = true)
+        val setMangaCategories = mockk<SetMangaCategories>(relaxed = true)
+        val getTracks = mockk<GetMangaTracks>(relaxed = true)
+        val insertTrack = mockk<InsertMangaTrack>(relaxed = true)
+        val coverCache = mockk<MangaCoverCache>(relaxed = true)
+        val trackerManager = mockk<TrackerManager>()
+        val source = mockk<MangaSource>()
+        val oldManga = manga(1L, 10L).copy(favorite = false)
+        val newManga = manga(2L, 20L).copy(favorite = false)
+        val updateSlot = slot<MangaUpdate>()
+
+        every { sourceManager.get(any()) } returns source
+        every { trackerManager.trackers } returns emptyList()
+        coEvery { source.getMangaUpdate(any(), any(), any(), any()) } answers {
+            SMangaUpdate(firstArg(), emptyList())
+        }
+        coEvery { syncChaptersWithSource.await(any(), any(), any()) } returns emptyList()
+        coEvery { updateManga.await(capture(updateSlot)) } returns true
+
+        val interactor = migrateUseCase(
+            sourceManager = sourceManager,
+            downloadManager = downloadManager,
+            updateManga = updateManga,
+            getChaptersByMangaId = getChaptersByMangaId,
+            syncChaptersWithSource = syncChaptersWithSource,
+            updateChapter = updateChapter,
+            getCategories = getCategories,
+            setMangaCategories = setMangaCategories,
+            getTracks = getTracks,
+            insertTrack = insertTrack,
+            coverCache = coverCache,
+            trackerManager = trackerManager,
+        )
+
+        interactor.migrateManga(
+            oldManga = oldManga,
+            newManga = newManga,
+            replace = false,
+            flags = 0,
+        )
+
+        // DECISION-4a: Migrate is exposed for non-library entries (fork feature); the target
+        // must not be silently forced into the library for a plain copy.
+        assertEquals(false, updateSlot.captured.favorite)
+    }
+
+    @Test
+    fun `excluded scanlators migrate with the chapters flag`() = runTest {
+        val sourceManager = mockk<MangaSourceManager>()
+        val downloadManager = mockk<MangaDownloadManager>(relaxed = true)
+        val updateManga = mockk<UpdateManga>(relaxed = true)
+        val getChaptersByMangaId = mockk<GetChaptersByMangaId>(relaxed = true)
+        val syncChaptersWithSource = mockk<SyncChaptersWithSource>()
+        val updateChapter = mockk<UpdateChapter>(relaxed = true)
+        val getCategories = mockk<GetMangaCategories>(relaxed = true)
+        val setMangaCategories = mockk<SetMangaCategories>(relaxed = true)
+        val getTracks = mockk<GetMangaTracks>(relaxed = true)
+        val insertTrack = mockk<InsertMangaTrack>(relaxed = true)
+        val coverCache = mockk<MangaCoverCache>(relaxed = true)
+        val trackerManager = mockk<TrackerManager>()
+        val getExcludedScanlators = mockk<GetExcludedScanlators>()
+        val setExcludedScanlators = mockk<SetExcludedScanlators>(relaxed = true)
+        val source = mockk<MangaSource>()
+        val oldManga = manga(1L, 10L)
+        val newManga = manga(2L, 20L)
+
+        every { sourceManager.get(any()) } returns source
+        every { trackerManager.trackers } returns emptyList()
+        coEvery { source.getMangaUpdate(any(), any(), any(), any()) } answers {
+            SMangaUpdate(firstArg(), listOf(sChapter(1.0f)))
+        }
+        coEvery { syncChaptersWithSource.await(any(), any(), any()) } returns emptyList()
+        coEvery { updateManga.await(any()) } returns true
+        coEvery { getExcludedScanlators.await(oldManga.id) } returns setOf("Scans A", "Scans B")
+
+        val interactor = migrateUseCase(
+            sourceManager = sourceManager,
+            downloadManager = downloadManager,
+            updateManga = updateManga,
+            getChaptersByMangaId = getChaptersByMangaId,
+            syncChaptersWithSource = syncChaptersWithSource,
+            updateChapter = updateChapter,
+            getCategories = getCategories,
+            setMangaCategories = setMangaCategories,
+            getTracks = getTracks,
+            insertTrack = insertTrack,
+            coverCache = coverCache,
+            trackerManager = trackerManager,
+            getExcludedScanlators = getExcludedScanlators,
+            setExcludedScanlators = setExcludedScanlators,
+        )
+
+        interactor.migrateManga(
+            oldManga = oldManga,
+            newManga = newManga,
+            replace = false,
+            flags = CHAPTERS,
+        )
+
+        // F-M4: the per-entry scanlator branch filter used to be silently dropped by migration.
+        coVerify(exactly = 1) { setExcludedScanlators.await(newManga.id, setOf("Scans A", "Scans B")) }
+    }
+
     private fun migrateUseCase(
         sourceManager: MangaSourceManager,
         downloadManager: MangaDownloadManager,
@@ -457,6 +626,10 @@ class MigrateMangaUseCaseTest {
             coEvery { it.await(any()) } returns emptyList()
         },
         upsertHistory: UpsertMangaHistory = mockk(relaxed = true),
+        getExcludedScanlators: GetExcludedScanlators = mockk<GetExcludedScanlators>().also {
+            coEvery { it.await(any()) } returns emptySet()
+        },
+        setExcludedScanlators: SetExcludedScanlators = mockk(relaxed = true),
     ) = MigrateMangaUseCase(
         sourceManager = sourceManager,
         downloadManager = downloadManager,
@@ -473,6 +646,8 @@ class MigrateMangaUseCaseTest {
         trackerManager = trackerManager,
         getHistory = getHistory,
         upsertHistory = upsertHistory,
+        getExcludedScanlators = getExcludedScanlators,
+        setExcludedScanlators = setExcludedScanlators,
     )
 
     private fun manga(
