@@ -20,6 +20,7 @@ import eu.kanade.presentation.library.manga.components.SeriesStackedCoverCard
 import eu.kanade.tachiyomi.ui.library.manga.MangaLibraryItem
 import tachiyomi.domain.entries.manga.model.MangaCover
 import tachiyomi.domain.library.manga.LibraryManga
+import tachiyomi.domain.series.model.SeriesCoverMode
 
 @Composable
 internal fun MangaLibraryComfortableGrid(
@@ -72,7 +73,7 @@ internal fun MangaLibraryComfortableGrid(
                     url = manga.thumbnailUrl,
                     lastModified = manga.coverLastModified,
                 ),
-                customCover = if (isSeries) {
+                customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
                     {
                         SeriesStackedCoverCard(
                             covers = libraryItem.covers,

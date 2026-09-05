@@ -105,6 +105,12 @@ class MangaSeriesRepositoryImpl(
         }
     }
 
+    override suspend fun moveSeriesFromCategoryToDefault(categoryId: Long) {
+        handler.await { db ->
+            db.manga_seriesQueries.resetCategory(categoryId)
+        }
+    }
+
     override suspend fun insertEntry(entry: MangaSeriesEntry) {
         handler.await { db ->
             db.manga_series_entriesQueries.insert(

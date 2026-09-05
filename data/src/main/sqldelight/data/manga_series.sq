@@ -44,5 +44,12 @@ WHERE _id = :id;
 delete:
 DELETE FROM manga_series WHERE _id = :id;
 
+-- Moves every series of a deleted category back to the default category (0). The
+-- category_id column has no FK, so without this the series keep a dangling id and vanish
+-- from every library page (their group is not associated with any displayed category and
+-- their volumes are suppressed as series members).
+resetCategory:
+UPDATE manga_series SET category_id = 0 WHERE category_id = :categoryId;
+
 selectLastInsertedRowId:
 SELECT last_insert_rowid();

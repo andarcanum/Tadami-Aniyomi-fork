@@ -41,6 +41,7 @@ import tachiyomi.domain.library.manga.LibraryManga
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.series.model.SeriesCoverMode
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Badge
@@ -316,7 +317,7 @@ private fun MangaLibraryAuroraList(
 
                 subtitle = subtitle,
                 seriesHeaderText = seriesHeaderText,
-                customCover = if (isSeries) {
+                customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
                     {
                         SeriesStackedCoverCard(
                             covers = libraryItem.covers,
@@ -521,7 +522,7 @@ private fun MangaLibraryAuroraCardGrid(
                     genres = manga.genre ?: emptyList(),
                     enabledAuras = enabledAuras,
                     performanceMode = performanceMode,
-                    customCover = if (isSeries) {
+                    customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
                         {
                             SeriesStackedCoverCard(
                                 covers = libraryItem.covers,
@@ -579,7 +580,7 @@ private fun MangaLibraryAuroraCardGrid(
 
                     subtitle = subtitle,
                     seriesHeaderText = seriesHeaderText,
-                    customCover = if (isSeries) {
+                    customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
                         {
                             SeriesStackedCoverCard(
                                 covers = libraryItem.covers,

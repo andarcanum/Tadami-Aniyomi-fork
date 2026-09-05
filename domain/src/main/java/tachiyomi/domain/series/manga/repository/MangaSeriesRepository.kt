@@ -16,6 +16,14 @@ interface MangaSeriesRepository {
     suspend fun insertSeries(series: MangaSeries): Long
     suspend fun updateSeries(series: MangaSeries)
     suspend fun deleteSeries(seriesId: Long)
+
+    /**
+     * Moves all series assigned to [categoryId] back to the default category (0). Called when a
+     * category is deleted: manga_series.category_id has no FK, so without this the series keep a
+     * dangling id and become invisible on every library page with no way back.
+     */
+    suspend fun moveSeriesFromCategoryToDefault(categoryId: Long)
+
     suspend fun insertEntry(entry: MangaSeriesEntry)
     suspend fun deleteEntry(mangaId: Long)
     suspend fun updateEntryPositions(entries: List<MangaSeriesEntry>)

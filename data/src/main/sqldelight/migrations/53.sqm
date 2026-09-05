@@ -1,0 +1,11 @@
+-- Repairs dangling manga_series.category_id rows (D-H1). The series category reference has no
+-- FK and DeleteMangaCategory historically never reset it, so deleting a category left its
+-- series pointing at a nonexistent id: the series group is not associated with any displayed
+-- category and its volumes are suppressed as series members, making them invisible on every
+-- library page with no UI path to recover. Orphaned series move to the default category (0),
+-- mirroring how singles survive via the mangas_categories FK CASCADE + libraryView coalesce.
+-- Going forward the interactor resets series on category deletion.
+UPDATE manga_series
+SET category_id = 0
+WHERE category_id != 0
+    AND category_id NOT IN (SELECT _id FROM categories);

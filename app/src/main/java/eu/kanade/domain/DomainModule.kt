@@ -379,7 +379,7 @@ class DomainModule : InjektModule {
         addFactory { ReorderMangaCategory(get()) }
         addFactory { UpdateMangaCategory(get()) }
         addFactory { HideMangaCategory(get()) }
-        addFactory { DeleteMangaCategory(get(), get(), get()) }
+        addFactory { DeleteMangaCategory(get(), get(), get(), get()) }
 
         addSingletonFactory<NovelCategoryRepository> { NovelCategoryRepositoryImpl(get()) }
         addFactory { GetNovelCategories(get()) }
