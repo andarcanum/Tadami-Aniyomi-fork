@@ -32,6 +32,8 @@ fun List<Chapter>.applyFilters(
                     chapter.scanlator,
                     manga.title,
                     manga.source,
+                    mangaId = manga.id,
+                    chapterId = chapter.id,
                 )
                 downloaded || isLocalManga
             }

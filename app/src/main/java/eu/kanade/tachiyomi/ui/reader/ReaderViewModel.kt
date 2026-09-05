@@ -236,6 +236,8 @@ class ReaderViewModel @JvmOverloads constructor(
                                             it.scanlator,
                                             manga.title,
                                             manga.source,
+                                            mangaId = manga.id,
+                                            chapterId = it.id,
                                         )
                                     ) ||
                                 (
@@ -246,6 +248,8 @@ class ReaderViewModel @JvmOverloads constructor(
                                             it.scanlator,
                                             manga.title,
                                             manga.source,
+                                            mangaId = manga.id,
+                                            chapterId = it.id,
                                         )
                                     ) ||
                                 (manga.bookmarkedFilterRaw == Manga.CHAPTER_SHOW_BOOKMARKED && !it.bookmark) ||
@@ -593,6 +597,8 @@ class ReaderViewModel @JvmOverloads constructor(
                 manga.title,
                 manga.source,
                 skipCache = true,
+                mangaId = manga.id,
+                chapterId = dbChapter.id,
             )
             if (isDownloaded) {
                 chapter.state = ReaderChapter.State.Wait
@@ -676,6 +682,8 @@ class ReaderViewModel @JvmOverloads constructor(
                 nextChapter.scanlator,
                 manga.title,
                 manga.source,
+                mangaId = manga.id,
+                chapterId = nextChapter.id,
             )
             if (!isNextChapterDownloaded) return@launchIO
 

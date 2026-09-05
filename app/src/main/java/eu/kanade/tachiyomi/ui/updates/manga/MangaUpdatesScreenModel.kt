@@ -110,6 +110,8 @@ class MangaUpdatesScreenModel(
                     update.scanlator,
                     update.mangaTitle,
                     update.sourceId,
+                    mangaId = update.mangaId,
+                    chapterId = update.chapterId,
                 )
                 val downloadState = when {
                     activeDownload != null -> activeDownload.status

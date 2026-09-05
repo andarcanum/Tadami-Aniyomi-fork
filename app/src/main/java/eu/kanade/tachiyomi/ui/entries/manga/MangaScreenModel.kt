@@ -479,6 +479,8 @@ class MangaScreenModel(
                                     chapter.scanlator,
                                     manga.title,
                                     manga.source,
+                                    mangaId = manga.id,
+                                    chapterId = chapter.id,
                                 )
                             },
                             getActiveDownload = { id -> downloadManager.getQueuedDownloadOrNull(id) },
@@ -1234,6 +1236,8 @@ class MangaScreenModel(
                     chapter.scanlator,
                     manga.title,
                     manga.source,
+                    mangaId = manga.id,
+                    chapterId = chapter.id,
                 )
             }
             val downloadState = when {

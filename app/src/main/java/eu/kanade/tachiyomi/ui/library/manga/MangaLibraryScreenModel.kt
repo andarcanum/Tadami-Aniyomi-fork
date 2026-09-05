@@ -991,6 +991,8 @@ class MangaLibraryScreenModel(
                                 chapter.scanlator,
                                 manga.title,
                                 manga.source,
+                                mangaId = manga.id,
+                                chapterId = chapter.id,
                             )
                     }
                     .let { if (amount != null) it.take(amount) else it }

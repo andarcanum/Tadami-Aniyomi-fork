@@ -124,6 +124,8 @@ class SyncChaptersWithSource(
                             dbChapter.scanlator,
                             manga.title,
                             manga.source,
+                            mangaId = manga.id,
+                            chapterId = dbChapter.id,
                         )
 
                     if (shouldRenameChapter) {

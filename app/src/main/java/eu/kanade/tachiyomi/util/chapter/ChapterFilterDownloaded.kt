@@ -22,6 +22,8 @@ fun List<Chapter>.filterDownloadedChapters(manga: Manga): List<Chapter> {
             manga.title,
             manga.source,
             false,
+            mangaId = manga.id,
+            chapterId = it.id,
         )
     }
 }

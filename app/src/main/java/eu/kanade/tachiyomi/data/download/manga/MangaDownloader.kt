@@ -335,7 +335,7 @@ class MangaDownloader(
         val wasEmpty = queueState.value.isEmpty()
         val chaptersToQueue = chapters.asSequence()
             // Filter out those already downloaded.
-            .filter { provider.findChapterDir(it.name, it.scanlator, manga.title, source) == null }
+            .filter { provider.findChapterDir(it.name, it.scanlator, manga.title, manga.id, it.id, source) == null }
             // Add chapters to queue from the start.
             .sortedByDescending { it.sourceOrder }
             // Filter out those already enqueued.
@@ -380,7 +380,7 @@ class MangaDownloader(
         val chapterDirname: String
         val tmpDir: UniFile
         try {
-            mangaDir = provider.getMangaDir(download.manga.title, download.source)
+            mangaDir = provider.getMangaDir(download.manga.title, download.manga.id, download.source)
 
             val availSpace = DiskUtil.getAvailableStorageSpace(context, mangaDir)
             if (availSpace != -1L && availSpace < MIN_DISK_SPACE) {
@@ -394,7 +394,11 @@ class MangaDownloader(
                 return
             }
 
-            chapterDirname = provider.getChapterDirName(download.chapter.name, download.chapter.scanlator)
+            chapterDirname = provider.getChapterDirName(
+                download.chapter.name,
+                download.chapter.scanlator,
+                download.chapter.id,
+            )
             tmpDir = mangaDir.createDirectory(chapterDirname + TMP_DIR_SUFFIX)!!
         } catch (error: Throwable) {
             if (error is CancellationException) throw error
@@ -585,7 +589,7 @@ class MangaDownloader(
             }
 
             // When the page is ready, set page path, progress (just in case) and status
-            splitTallImageIfNeeded(page, tmpDir)
+            splitTallImageIfNeeded(page, tmpDir, digitCount)
             page.uri = file.uri
             page.progress = 100
             page.status = Page.State.READY
@@ -685,11 +689,16 @@ class MangaDownloader(
         return ImageUtil.getExtensionFromMimeType(mime) { file.openInputStream() }
     }
 
-    private fun splitTallImageIfNeeded(page: Page, tmpDir: UniFile) {
+    private fun splitTallImageIfNeeded(page: Page, tmpDir: UniFile, digitCount: Int) {
         if (!downloadPreferences.splitTallImages().get()) return
 
         try {
-            val filenamePrefix = "%03d".format(Locale.ENGLISH, page.number)
+            // NEW-14: the page prefix MUST use the same digit count as saveTo ("%03d" hardcoded
+            // here vs digitCount>=4 for >999-page chapters): the prefix of page 5 ("005") did not
+            // match its own file ("0005.jpg") but DID match page 50's ("0050.jpg") - the split
+            // ran on a foreign page, produced "005__*" files and desynced isDownloadSuccessful
+            // into a permanent chapter ERROR.
+            val filenamePrefix = "%0${digitCount}d".format(Locale.ENGLISH, page.number)
             val imageFile = tmpDir.listFiles()?.firstOrNull { it.name.orEmpty().startsWith(filenamePrefix) }
                 ?: error(context.stringResource(MR.strings.download_notifier_split_page_not_found, page.number))
 
@@ -719,7 +728,7 @@ class MangaDownloader(
             return false
         }
         // Ensure that the chapter folder has all the pages
-        val downloadedImagesCount = tmpDir.listFiles().orEmpty().count {
+        val countedFiles = tmpDir.listFiles().orEmpty().filter {
             val fileName = it.name.orEmpty()
             when {
                 fileName in listOf(COMIC_INFO_FILE, NOMEDIA_FILE) -> false
@@ -729,7 +738,17 @@ class MangaDownloader(
                 else -> true
             }
         }
-        return downloadedImagesCount == downloadPageCount
+        if (countedFiles.size != downloadPageCount) {
+            return false
+        }
+        // C-M10: the count is not the content - an HTML error page served with HTTP 200 used to
+        // be saved as "001.jpg", pass the name-based count and keep the chapter "downloaded"
+        // forever. Validate the magic bytes of every counted file instead.
+        return countedFiles.all { file ->
+            runCatching {
+                file.openInputStream().use { ImageUtil.findImageType(it) != null }
+            }.getOrDefault(false)
+        }
     }
 
     /**
@@ -745,6 +764,13 @@ class MangaDownloader(
             tmpDir.listFiles()?.forEach { file ->
                 writer.write(file)
             }
+        }
+        // C-M2: raw/SAF rename silently REPLACES an existing file (POSIX semantics): a colliding
+        // dirname destroyed an already-downloaded chapter. With id-suffixed names (DECISION-6)
+        // collisions are practically gone; refuse instead of clobbering if the target exists.
+        if (mangaDir.findFile("$dirname.cbz") != null) {
+            zip.delete()
+            error("Target archive already exists: $dirname.cbz")
         }
         zip.renameToOrCopy("$dirname.cbz")
         tmpDir.delete()
