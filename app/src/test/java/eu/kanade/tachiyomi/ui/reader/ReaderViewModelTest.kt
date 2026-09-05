@@ -56,6 +56,15 @@ class ReaderViewModelTest {
     }
 
     @Test
+    fun `session read duration is clamped against clock rollbacks`() {
+        // History upserts accumulate time_read, so a negative session (system clock rolled back
+        // mid-session) used to subtract from the stored reading statistics.
+        resolveSessionReadDurationMs(readAtMs = 5_000L, startMs = 10_000L) shouldBe 0L
+        resolveSessionReadDurationMs(readAtMs = 15_000L, startMs = 10_000L) shouldBe 5_000L
+        resolveSessionReadDurationMs(readAtMs = 15_000L, startMs = null) shouldBe 0L
+    }
+
+    @Test
     fun `adjacent chapter switch flushes before restart`() {
         val events = mutableListOf<String>()
 

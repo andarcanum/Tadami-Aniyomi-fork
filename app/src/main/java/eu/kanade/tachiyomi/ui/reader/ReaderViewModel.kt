@@ -59,6 +59,7 @@ import eu.kanade.tachiyomi.util.storage.DiskUtil
 import eu.kanade.tachiyomi.util.storage.cacheImageDir
 import eu.kanade.tachiyomi.util.system.connectivityManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -383,7 +384,6 @@ class ReaderViewModel @JvmOverloads constructor(
             chapterId = chapterId,
             chapterKey = chapterKey,
             encodedProgress = encodedProgress,
-            read = currentChapter.chapter.read,
         )
 
         if (flushImmediately) {
@@ -402,6 +402,7 @@ class ReaderViewModel @JvmOverloads constructor(
         }
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     private fun flushPendingWebtoonScrollProgress() {
         val pending = pendingWebtoonProgress ?: return
         pendingWebtoonProgress = null
@@ -420,11 +421,17 @@ class ReaderViewModel @JvmOverloads constructor(
             }
         }
 
-        viewModelScope.launchIO {
+        // `read` is intentionally NOT written here: the pending snapshot captured it on the main
+        // thread while updateChapterProgressOnComplete flips read=true on an IO coroutine, and the
+        // debounced flush landed AFTER that write - reverting freshly completed chapters to unread
+        // (webtoon fling to the very bottom). The completion/page-change paths own the read flag;
+        // the flush owns only the px-precision position. Detached scope (GlobalScope launchIO):
+        // onCleared runs after viewModelScope is closed, so a child launch here never dispatched
+        // and the final progress write was silently dropped on system destroy.
+        launchIO {
             updateChapter.await(
                 ChapterUpdate(
                     id = pending.chapterId,
-                    read = pending.read,
                     lastPageRead = pending.encodedProgress,
                 ),
             )
@@ -782,14 +789,19 @@ class ReaderViewModel @JvmOverloads constructor(
         deleteChapterIfNeeded(readerChapter)
         maybeShowSeriesInterstitial(readerChapter)
 
-        // Emit ChapterRead event for achievement tracking
+        // Emit ChapterRead event for achievement tracking. Gated on the unread->read transition:
+        // re-reaching the last page of an already-read chapter re-emitted the event on every visit
+        // (achievement rules recompute from the DB, so the event is only a trigger - but the
+        // activity log below accumulates blindly).
         val mangaId = manga?.id ?: return
-        eventBus.tryEmit(
-            AchievementEvent.ChapterRead(
-                mangaId = mangaId,
-                chapterNumber = readerChapter.chapter.chapter_number.toInt(),
-            ),
-        )
+        if (chapterWasUnread) {
+            eventBus.tryEmit(
+                AchievementEvent.ChapterRead(
+                    mangaId = mangaId,
+                    chapterNumber = readerChapter.chapter.chapter_number.toInt(),
+                ),
+            )
+        }
 
         if (eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin()) {
             val manager = Injekt.get<eu.kanade.domain.easteregg.aurora.AuroraHeartManager>()
@@ -802,7 +814,10 @@ class ReaderViewModel @JvmOverloads constructor(
         if (chapterId > 0) {
             activityDataRepository.recordReading(
                 id = chapterId,
-                chaptersCount = 1,
+                // Re-visits of an already-read chapter must not inflate the daily chapter count;
+                // the re-read session duration still counts (incrementChapters keeps the level
+                // via MAX and adds 0 to chapters_read).
+                chaptersCount = if (chapterWasUnread) 1 else 0,
                 durationMs = chapterReadStartTime?.let { System.currentTimeMillis() - it } ?: 0L,
             )
         }
@@ -963,9 +978,13 @@ class ReaderViewModel @JvmOverloads constructor(
         chapterReadStartTime = Instant.now().toEpochMilli()
     }
 
+    @OptIn(DelicateCoroutinesApi::class)
     fun flushReadTimer() {
         getCurrentChapter()?.let {
-            viewModelScope.launchNonCancellable {
+            // Detached: called from the activity finish/destroy path where viewModelScope may
+            // already be closed - the child launch never dispatched and the history entry was
+            // lost (launchNonCancellable only protects an already-started coroutine).
+            launchIO {
                 updateHistory(it)
             }
         }
@@ -979,7 +998,10 @@ class ReaderViewModel @JvmOverloads constructor(
 
         val chapterId = readerChapter.chapter.id!!
         val readAt = Date()
-        val sessionReadDuration = chapterReadStartTime?.let { readAt.time - it } ?: 0
+        val sessionReadDuration = resolveSessionReadDurationMs(
+            readAtMs = readAt.time,
+            startMs = chapterReadStartTime,
+        )
 
         upsertHistory.await(MangaHistoryUpdate(chapterId, readAt, sessionReadDuration))
         chapterReadStartTime = null
@@ -1611,8 +1633,10 @@ class ReaderViewModel @JvmOverloads constructor(
      * Deletes all the pending chapters. This operation will run in a background thread and errors
      * are ignored.
      */
+    @OptIn(DelicateCoroutinesApi::class)
     private fun deletePendingChapters() {
-        viewModelScope.launchNonCancellable {
+        // Detached, see flushReadTimer: teardown-path work must survive the closed viewModelScope.
+        launchIO {
             downloadManager.deletePendingChapters()
         }
     }
@@ -1680,7 +1704,6 @@ class ReaderViewModel @JvmOverloads constructor(
         val chapterId: Long,
         val chapterKey: String?,
         val encodedProgress: Long,
-        val read: Boolean,
     )
 }
 
@@ -1719,6 +1742,17 @@ internal fun shouldRestoreSavedProgress(
     return !chapter.chapter.read ||
         preserveReadingPosition ||
         chapter.chapter.last_page_read > 0L
+}
+
+/**
+ * Reading-session duration, clamped to zero.
+ *
+ * History upserts ACCUMULATE time_read (`time_read = time_read + :time_read`), so a system clock
+ * rollback mid-session (NTP correction, manual change) used to subtract from the stored reading
+ * statistics. The novel pipeline already clamps its session durations in five places.
+ */
+internal fun resolveSessionReadDurationMs(readAtMs: Long, startMs: Long?): Long {
+    return startMs?.let { (readAtMs - it).coerceAtLeast(0L) } ?: 0L
 }
 
 internal fun prepareAdjacentChapterSwitch(
