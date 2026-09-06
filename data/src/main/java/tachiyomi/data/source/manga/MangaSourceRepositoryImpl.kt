@@ -73,17 +73,32 @@ class MangaSourceRepositoryImpl(
         query: String,
         filterList: FilterList,
     ): SourcePagingSourceType {
-        val source = sourceManager.get(sourceId) as CatalogueSource
+        // BRM-12: sourceManager.get() is NULLABLE - the extension can be uninstalled/replaced
+        // while the browse screen is open. The eager `as CatalogueSource` cast threw inside the
+        // Pager factory; Paging does NOT catch factory exceptions (only load()), so it crashed
+        // the collector instead of surfacing an error state.
+        val source = sourceManager.get(sourceId) as? CatalogueSource
+            ?: return SourceUnavailablePagingSource()
         return SourceSearchPagingSource(source, query, filterList)
     }
 
     override fun getPopularManga(sourceId: Long): SourcePagingSourceType {
-        val source = sourceManager.get(sourceId) as CatalogueSource
+        // BRM-12: sourceManager.get() is NULLABLE - the extension can be uninstalled/replaced
+        // while the browse screen is open. The eager `as CatalogueSource` cast threw inside the
+        // Pager factory; Paging does NOT catch factory exceptions (only load()), so it crashed
+        // the collector instead of surfacing an error state.
+        val source = sourceManager.get(sourceId) as? CatalogueSource
+            ?: return SourceUnavailablePagingSource()
         return SourcePopularPagingSource(source)
     }
 
     override fun getLatestManga(sourceId: Long): SourcePagingSourceType {
-        val source = sourceManager.get(sourceId) as CatalogueSource
+        // BRM-12: sourceManager.get() is NULLABLE - the extension can be uninstalled/replaced
+        // while the browse screen is open. The eager `as CatalogueSource` cast threw inside the
+        // Pager factory; Paging does NOT catch factory exceptions (only load()), so it crashed
+        // the collector instead of surfacing an error state.
+        val source = sourceManager.get(sourceId) as? CatalogueSource
+            ?: return SourceUnavailablePagingSource()
         return SourceLatestPagingSource(source)
     }
 
@@ -94,4 +109,14 @@ class MangaSourceRepositoryImpl(
         supportsLatest = false,
         isStub = false,
     )
+}
+
+/** BRM-12: fails as LoadState.Error (graceful browse error state) instead of a factory crash. */
+private class SourceUnavailablePagingSource : SourcePagingSourceType() {
+    override fun getRefreshKey(
+        state: androidx.paging.PagingState<Long, tachiyomi.domain.entries.manga.model.Manga>,
+    ): Long? = null
+
+    override suspend fun load(params: LoadParams<Long>): LoadResult<Long, tachiyomi.domain.entries.manga.model.Manga> =
+        LoadResult.Error(IllegalStateException("Source is no longer installed"))
 }

@@ -249,9 +249,9 @@ class BrowseNovelSourceScreenModel(
                 }
                 mutableState.update {
                     it.copy(
-                        listing = Listing.Search(savedSearch.query, baseFilters),
+                        listing = Listing.Search(savedSearch.sanitizedQuery(), baseFilters),
                         filters = baseFilters,
-                        toolbarQuery = savedSearch.query,
+                        toolbarQuery = savedSearch.sanitizedQuery(),
                         filterVersion = it.filterVersion + 1,
                         filtersLoaded = true,
                     )
@@ -303,13 +303,22 @@ class BrowseNovelSourceScreenModel(
                 source = sourceId,
                 sourceType = SourceType.NOVEL,
                 name = name,
-                query = state.listing.query,
+                // BRN-10b/BRM-2: never persist the Popular/Latest SENTINEL query strings (see
+                // the manga SM comment) - null keeps the filters-only semantics.
+                query = state.listing.query?.takeUnless { q ->
+                    q == GetRemoteNovel.QUERY_POPULAR || q == GetRemoteNovel.QUERY_LATEST
+                },
                 filtersJson = filtersJson,
             )
             insertSavedSearch.await(savedSearch)
             dismissDialog()
             loadSavedSearches()
         }
+    }
+
+    /** BRN-10b: legacy rows may still hold sentinel strings - map them to "no query". */
+    private fun SavedSearch.sanitizedQuery(): String? = query?.takeUnless { q ->
+        q == GetRemoteNovel.QUERY_POPULAR || q == GetRemoteNovel.QUERY_LATEST
     }
 
     fun deleteSearch(savedSearch: SavedSearch) {
@@ -331,9 +340,9 @@ class BrowseNovelSourceScreenModel(
             }
             mutableState.update {
                 it.copy(
-                    listing = Listing.Search(savedSearch.query, baseFilters),
+                    listing = Listing.Search(savedSearch.sanitizedQuery(), baseFilters),
                     filters = baseFilters,
-                    toolbarQuery = savedSearch.query,
+                    toolbarQuery = savedSearch.sanitizedQuery(),
                     filterVersion = it.filterVersion + 1,
                     filtersLoaded = true,
                     savedSearches = it.savedSearches.map { (s, _) -> s to (s.id == savedSearch.id) }.toImmutableList(),
@@ -345,8 +354,6 @@ class BrowseNovelSourceScreenModel(
     fun dismissDialog() {
         setDialog(null)
     }
-
-    private val hideInLibraryItems = sourcePreferences.hideInNovelLibraryItems().get()
 
     private val autoFavoriteLocalNovels = sourcePreferences.importEpubAddToLibrary().get()
 
@@ -386,7 +393,11 @@ class BrowseNovelSourceScreenModel(
                     }
                 }
                 .map { pagingData ->
-                    pagingData.filter { !hideInLibraryItems || !it.favorite }
+                    // BRN-7 (РЕШ-10 port): the pref was snapshotted once in the constructor -
+                    // toggling the setting did not affect the open browse screen. Read it live
+                    // per emission (manga etalon).
+                    val hideLibraryItems = sourcePreferences.hideInNovelLibraryItems().get()
+                    pagingData.filter { !hideLibraryItems || !it.favorite }
                 }
                 .cachedIn(ioCoroutineScope)
         }
@@ -402,6 +413,11 @@ class BrowseNovelSourceScreenModel(
                 state.copy(
                     filters = resetFilters,
                     filtersLoaded = true,
+                    // BRN-4: bump filterVersion - the pager flow's distinctUntilChanged does not
+                    // compare filters, so a chip switch (async resetFilters + sync setListing
+                    // with the same query) used to keep the OLD Pager running with the stale
+                    // user filters instead of re-triggering with the reset ones.
+                    filterVersion = state.filterVersion + 1,
                 )
             }
         }
@@ -568,7 +584,9 @@ class BrowseNovelSourceScreenModel(
                 val listing = if (anyExists) {
                     Listing.Search(query = null, filters = defaultFilters)
                 } else {
-                    Listing.Search(query = genres.firstOrNull(), filters = defaultFilters)
+                    // BRN-8 (B4 port): the fallback used only the FIRST genre, silently
+                    // dropping the rest; search with all of them (manga etalon :518-520).
+                    Listing.Search(query = genres.joinToString(" "), filters = defaultFilters)
                 }
                 it.copy(
                     filters = defaultFilters,

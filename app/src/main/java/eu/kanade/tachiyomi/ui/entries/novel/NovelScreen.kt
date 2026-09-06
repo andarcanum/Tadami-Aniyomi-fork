@@ -1049,12 +1049,15 @@ class NovelScreen(
         } as? BrowseNovelSourceScreen
 
         if (existing != null) {
+            // RESH-B1: pop to the existing browse screen and REPLACE it with a fresh instance
+            // carrying the genre as a constructor arg (its SM applies searchGenre once) -
+            // replaces the static queryEvent channel signal.
             navigator.popUntil { it == existing }
-            existing.searchGenre(genreName)
+            navigator.replace(BrowseNovelSourceScreen(sourceId, null, genreQuery = genreName))
             return
         }
 
-        navigator.push(BrowseNovelSourceScreen(sourceId, genreName))
+        navigator.push(BrowseNovelSourceScreen(sourceId, null, genreQuery = genreName))
     }
 
     private suspend fun performGenresSearch(
@@ -1069,14 +1072,13 @@ class NovelScreen(
         } as? BrowseNovelSourceScreen
 
         if (existing != null) {
+            // RESH-B1: see performGenreSearch - constructor args instead of the static channel.
             navigator.popUntil { it == existing }
-            existing.searchGenres(genres)
+            navigator.replace(BrowseNovelSourceScreen(sourceId, null, genresQuery = genres))
             return
         }
 
-        val newScreen = BrowseNovelSourceScreen(sourceId, null)
-        navigator.push(newScreen)
-        newScreen.searchGenres(genres)
+        navigator.push(BrowseNovelSourceScreen(sourceId, null, genresQuery = genres))
     }
 
     private fun openNovelInWebView(

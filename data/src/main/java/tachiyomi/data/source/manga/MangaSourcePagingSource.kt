@@ -98,7 +98,9 @@ abstract class SourcePagingSource(
     override fun getRefreshKey(state: PagingState<Long, Manga>): Long? {
         return state.anchorPosition?.let { anchorPosition ->
             val anchorPage = state.closestPageToPosition(anchorPosition)
-            anchorPage?.prevKey ?: anchorPage?.nextKey
+            // BRM-11: upstream formula - prevKey/nextKey are the ADJACENT pages; returning them
+            // verbatim refreshed from the wrong page (off by one in both directions).
+            anchorPage?.prevKey?.plus(1) ?: anchorPage?.nextKey?.minus(1)
         }
     }
 }

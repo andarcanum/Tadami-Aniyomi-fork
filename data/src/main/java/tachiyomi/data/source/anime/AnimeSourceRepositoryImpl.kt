@@ -55,17 +55,29 @@ class AnimeSourceRepositoryImpl(
         query: String,
         filterList: AnimeFilterList,
     ): AnimeSourcePagingSourceType {
-        val source = sourceManager.get(sourceId) as AnimeCatalogueSource
+        // BRM-12 port: get() is nullable (an anime replace literally passes through an
+        // UNINSTALLED window); the eager cast crashed the Pager factory instead of surfacing
+        // an error state.
+        val source = sourceManager.get(sourceId) as? AnimeCatalogueSource
+            ?: return AnimeSourceUnavailablePagingSource()
         return AnimeSourceSearchPagingSource(source, query, filterList)
     }
 
     override fun getPopularAnime(sourceId: Long): AnimeSourcePagingSourceType {
-        val source = sourceManager.get(sourceId) as AnimeCatalogueSource
+        // BRM-12 port: get() is nullable (an anime replace literally passes through an
+        // UNINSTALLED window); the eager cast crashed the Pager factory instead of surfacing
+        // an error state.
+        val source = sourceManager.get(sourceId) as? AnimeCatalogueSource
+            ?: return AnimeSourceUnavailablePagingSource()
         return AnimeSourcePopularPagingSource(source)
     }
 
     override fun getLatestAnime(sourceId: Long): AnimeSourcePagingSourceType {
-        val source = sourceManager.get(sourceId) as AnimeCatalogueSource
+        // BRM-12 port: get() is nullable (an anime replace literally passes through an
+        // UNINSTALLED window); the eager cast crashed the Pager factory instead of surfacing
+        // an error state.
+        val source = sourceManager.get(sourceId) as? AnimeCatalogueSource
+            ?: return AnimeSourceUnavailablePagingSource()
         return AnimeSourceLatestPagingSource(source)
     }
 }
@@ -78,3 +90,13 @@ fun mapSourceToDomainSource(source: AnimeSource): DomainSource = DomainSource(
     isStub = false,
     isFeedSource = source is AnimeFeedSource,
 )
+
+/** BRM-12 port: fails as LoadState.Error instead of crashing the Pager factory. */
+private class AnimeSourceUnavailablePagingSource : AnimeSourcePagingSourceType() {
+    override fun getRefreshKey(
+        state: androidx.paging.PagingState<Long, tachiyomi.domain.entries.anime.model.Anime>,
+    ): Long? = null
+
+    override suspend fun load(params: LoadParams<Long>): LoadResult<Long, tachiyomi.domain.entries.anime.model.Anime> =
+        LoadResult.Error(IllegalStateException("Source is no longer installed"))
+}

@@ -65,9 +65,6 @@ import eu.kanade.tachiyomi.ui.browse.search.SavedSearchFilterSerializer
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.receiveAsFlow
 import mihon.presentation.core.util.collectAsLazyPagingItems
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.source.anime.model.StubAnimeSource
@@ -87,6 +84,10 @@ data class BrowseAnimeSourceScreen(
     private val listingQuery: String?,
     private val savedSearchId: Long? = null,
     private val parentScreen: cafe.adriel.voyager.core.screen.Screen? = null,
+    // RESH-B1: genre requests travel as constructor args of a fresh instance (the GlobalSearch
+    // query pattern) instead of the removed static queryEvent channel.
+    private val genreQuery: String? = null,
+    private val genresQuery: List<String>? = null,
 ) : Screen(), AssistContentScreen {
 
     private var assistUrl: String? = null
@@ -385,34 +386,14 @@ data class BrowseAnimeSourceScreen(
             else -> {}
         }
 
+        // RESH-B1 (BRA-3/BGS-5): the static queryEvent Channel is gone (send() suspended with
+        // no composed browse screen; the pager screen's visibility semantics allowed two
+        // collectors competing for one event). Genre requests are constructor args of a fresh
+        // screen instance now, applied exactly once per screen model - like listingQuery.
         LaunchedEffect(Unit) {
-            queryEvent.receiveAsFlow()
-                .collectLatest {
-                    when (it) {
-                        is SearchType.Genre -> screenModel.searchGenre(it.txt)
-                        is SearchType.Text -> screenModel.search(it.txt)
-                        is SearchType.Genres -> screenModel.searchGenres(it.txts)
-                    }
-                }
+            genreQuery?.let { screenModel.searchGenre(it) }
+            genresQuery?.let { screenModel.searchGenres(it) }
         }
-    }
-
-    suspend fun search(query: String) = queryEvent.send(SearchType.Text(query))
-    suspend fun searchGenre(name: String) = queryEvent.send(SearchType.Genre(name))
-    suspend fun searchGenres(names: List<String>) {
-        if (names.isNotEmpty()) {
-            queryEvent.send(SearchType.Genres(names))
-        }
-    }
-
-    companion object {
-        private val queryEvent = Channel<SearchType>()
-    }
-
-    sealed interface SearchType {
-        data class Text(val txt: String) : SearchType
-        data class Genre(val txt: String) : SearchType
-        data class Genres(val txts: List<String>) : SearchType
     }
 }
 

@@ -213,6 +213,14 @@ private fun NovelListContent(
         ),
         contentPadding = contentPadding + PaddingValues(vertical = 8.dp),
     ) {
+        // BRN3-control: the List mode had NO loading indicators while prepending/appending
+        // (both grid modes have them; the manga List is the etalon).
+        if (novels.loadState.prepend is LoadState.Loading) {
+            item {
+                BrowseSourceLoadingItem()
+            }
+        }
+
         items(
             count = novels.itemCount,
             key = { index -> novelBrowseItemKey(novels[index]?.url, index) },
@@ -234,6 +242,12 @@ private fun NovelListContent(
                 onLongClick = onNovelLongClick?.let { callback -> { callback(novel) } } ?: {},
                 onClick = { onNovelClick(novel) },
             )
+        }
+
+        if (novels.loadState.refresh is LoadState.Loading || novels.loadState.append is LoadState.Loading) {
+            item {
+                BrowseSourceLoadingItem()
+            }
         }
     }
 }

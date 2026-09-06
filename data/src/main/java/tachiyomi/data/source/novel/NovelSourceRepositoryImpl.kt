@@ -77,17 +77,26 @@ class NovelSourceRepositoryImpl(
         query: String,
         filterList: NovelFilterList,
     ): SourcePagingSourceType {
-        val source = sourceManager.get(sourceId) as NovelCatalogueSource
+        // BRN-21/BRM-12 port: get() is nullable; the eager cast crashed the Pager factory
+        // instead of surfacing an error state.
+        val source = sourceManager.get(sourceId) as? NovelCatalogueSource
+            ?: return NovelSourceUnavailablePagingSource()
         return NovelSourceSearchPagingSource(source, query, filterList)
     }
 
     override fun getPopularNovels(sourceId: Long, filterList: NovelFilterList): SourcePagingSourceType {
-        val source = sourceManager.get(sourceId) as NovelCatalogueSource
+        // BRN-21/BRM-12 port: get() is nullable; the eager cast crashed the Pager factory
+        // instead of surfacing an error state.
+        val source = sourceManager.get(sourceId) as? NovelCatalogueSource
+            ?: return NovelSourceUnavailablePagingSource()
         return NovelSourcePopularPagingSource(source, filterList)
     }
 
     override fun getLatestNovels(sourceId: Long, filterList: NovelFilterList): SourcePagingSourceType {
-        val source = sourceManager.get(sourceId) as NovelCatalogueSource
+        // BRN-21/BRM-12 port: get() is nullable; the eager cast crashed the Pager factory
+        // instead of surfacing an error state.
+        val source = sourceManager.get(sourceId) as? NovelCatalogueSource
+            ?: return NovelSourceUnavailablePagingSource()
         return NovelSourceLatestPagingSource(source, filterList)
     }
 
@@ -107,4 +116,14 @@ class NovelSourceRepositoryImpl(
         /** [eu.kanade.tachiyomi.source.novel.OmniSource.OMNI_SOURCE_ID]; lives in the app module. */
         const val OMNI_NOVEL_SOURCE_ID = -42L
     }
+}
+
+/** BRN-21/BRM-12 port: fails as LoadState.Error instead of crashing the Pager factory. */
+private class NovelSourceUnavailablePagingSource : SourcePagingSourceType() {
+    override fun getRefreshKey(
+        state: androidx.paging.PagingState<Long, tachiyomi.domain.entries.novel.model.Novel>,
+    ): Long? = null
+
+    override suspend fun load(params: LoadParams<Long>): LoadResult<Long, tachiyomi.domain.entries.novel.model.Novel> =
+        LoadResult.Error(IllegalStateException("Source is no longer installed"))
 }

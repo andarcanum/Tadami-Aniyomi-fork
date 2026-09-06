@@ -515,8 +515,11 @@ class MangaScreen(
                 MangaLibraryTab.search(query)
             }
             is BrowseMangaSourceScreen -> {
+                // RESH-B1: replace with a fresh instance carrying the query (constructor arg,
+                // the novel-screen pattern) - the removed static channel's send() could suspend
+                // with no receiver and raced duplicate collectors.
                 navigator.pop()
-                previousController.search(query)
+                navigator.replace(BrowseMangaSourceScreen(previousController.sourceId, query))
             }
         }
     }
@@ -536,12 +539,15 @@ class MangaScreen(
         } as? BrowseMangaSourceScreen
 
         if (existing != null) {
+            // RESH-B1: pop to the existing browse screen and REPLACE it with a fresh instance
+            // carrying the genre as a constructor arg (its SM applies searchGenre once) -
+            // replaces the static queryEvent channel signal.
             navigator.popUntil { it == existing }
-            existing.searchGenre(genreName)
+            navigator.replace(BrowseMangaSourceScreen(sourceId, null, genreQuery = genreName))
             return
         }
 
-        navigator.push(BrowseMangaSourceScreen(sourceId, genreName))
+        navigator.push(BrowseMangaSourceScreen(sourceId, null, genreQuery = genreName))
     }
 
     private suspend fun performGenresSearch(
@@ -555,14 +561,13 @@ class MangaScreen(
             screen is BrowseMangaSourceScreen && screen.sourceId == sourceId
         } as? BrowseMangaSourceScreen
         if (existing != null) {
+            // RESH-B1: see performGenreSearch - constructor args instead of the static channel.
             navigator.popUntil { it == existing }
-            existing.searchGenres(genres)
+            navigator.replace(BrowseMangaSourceScreen(sourceId, null, genresQuery = genres))
             return
         }
 
-        val newScreen = BrowseMangaSourceScreen(sourceId, null)
-        navigator.push(newScreen)
-        newScreen.searchGenres(genres)
+        navigator.push(BrowseMangaSourceScreen(sourceId, null, genresQuery = genres))
     }
 
     /**

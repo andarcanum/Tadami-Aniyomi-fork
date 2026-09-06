@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import eu.kanade.core.util.ifNovelSourcesLoaded
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.presentation.browse.RemoveEntryDialog
 import eu.kanade.presentation.browse.novel.BrowseNovelSourceContent
@@ -59,9 +60,6 @@ import eu.kanade.tachiyomi.ui.browse.search.SavedSearchFilterSerializer
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.receiveAsFlow
 import mihon.presentation.core.util.collectAsLazyPagingItems
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import tachiyomi.core.common.util.lang.launchIO
@@ -72,6 +70,7 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.components.material.padding
 import tachiyomi.presentation.core.i18n.stringResource
+import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 data class BrowseNovelSourceScreen(
@@ -79,10 +78,22 @@ data class BrowseNovelSourceScreen(
     private val listingQuery: String?,
     private val savedSearchId: Long? = null,
     private val parentScreen: cafe.adriel.voyager.core.screen.Screen? = null,
+    // RESH-B1: genre requests travel as constructor args of a fresh instance (the GlobalSearch
+    // query pattern) instead of the removed static queryEvent channel.
+    private val genreQuery: String? = null,
+    private val genresQuery: List<String>? = null,
 ) : Screen() {
 
     @Composable
     override fun Content() {
+        // BRN-1: gate BEFORE the screen model is created (manga/anime etalon) - on a cold
+        // deep-link the novel source manager is still initializing, the SM captured a
+        // StubNovelSource and the screen was stuck on "Source not installed" permanently.
+        if (!ifNovelSourcesLoaded()) {
+            LoadingScreen()
+            return
+        }
+
         val screenModel = if (parentScreen != null) {
             parentScreen.rememberScreenModel(tag = sourceId.toString()) {
                 BrowseNovelSourceScreenModel(sourceId, listingQuery, savedSearchId)
@@ -99,15 +110,13 @@ data class BrowseNovelSourceScreen(
         val scope = rememberCoroutineScope()
         val haptic = LocalHapticFeedback.current
 
+        // RESH-B1 (BRN-10/BGS-5): the static queryEvent Channel is gone (send() suspended with
+        // no composed browse screen; the pager screen's visibility semantics allowed two
+        // collectors competing for one event). Genre requests are constructor args of a fresh
+        // screen instance now, applied exactly once per screen model - like listingQuery.
         LaunchedEffect(Unit) {
-            queryEvent.receiveAsFlow()
-                .collectLatest {
-                    when (it) {
-                        is SearchType.Genre -> screenModel.searchGenre(it.txt)
-                        is SearchType.Text -> screenModel.search(it.txt)
-                        is SearchType.Genres -> screenModel.searchGenres(it.txts)
-                    }
-                }
+            genreQuery?.let { screenModel.searchGenre(it) }
+            genresQuery?.let { screenModel.searchGenres(it) }
         }
 
         val navigateUp: () -> Unit = {
@@ -289,7 +298,9 @@ data class BrowseNovelSourceScreen(
                         onReset = screenModel::resetFilters,
                         onFilter = screenModel::applyFilters,
                         onUpdate = screenModel::setFilters,
-                        savedSearches = screenModel.state.value.savedSearches,
+                        // BRN-20: state.value inside composition bypasses snapshot observation;
+                        // use the collected state.
+                        savedSearches = state.savedSearches,
                         onSaveSearch = screenModel::openSaveSearchDialog,
                         onOpenSavedSearch = screenModel::openSavedSearch,
                         onDeleteSavedSearch = {
@@ -365,24 +376,6 @@ data class BrowseNovelSourceScreen(
                 null -> Unit
             }
         }
-    }
-
-    suspend fun search(query: String) = queryEvent.send(SearchType.Text(query))
-    suspend fun searchGenre(name: String) = queryEvent.send(SearchType.Genre(name))
-    suspend fun searchGenres(names: List<String>) {
-        if (names.isNotEmpty()) {
-            queryEvent.send(SearchType.Genres(names))
-        }
-    }
-
-    companion object {
-        private val queryEvent = Channel<SearchType>()
-    }
-
-    sealed interface SearchType {
-        data class Text(val txt: String) : SearchType
-        data class Genre(val txt: String) : SearchType
-        data class Genres(val txts: List<String>) : SearchType
     }
 }
 

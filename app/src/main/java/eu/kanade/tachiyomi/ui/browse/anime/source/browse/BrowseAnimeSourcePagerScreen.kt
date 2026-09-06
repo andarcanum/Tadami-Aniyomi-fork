@@ -6,14 +6,16 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import cafe.adriel.voyager.core.screen.Screen
+import eu.kanade.presentation.util.Screen
 import tachiyomi.presentation.core.screens.LoadingScreen
 
+// BRM-17: uniqueScreenKey per instance (see the manga pager screen) - bare Voyager Screen keys
+// collided across two pager screens in the stack.
 data class BrowseAnimeSourcePagerScreen(
     val initialSourceId: Long,
     val sourceIds: List<Long>,
     val listingQuery: String? = null,
-) : Screen {
+) : Screen() {
 
     @Composable
     override fun Content() {

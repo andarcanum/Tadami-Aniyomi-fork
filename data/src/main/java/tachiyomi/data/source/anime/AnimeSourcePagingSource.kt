@@ -94,7 +94,8 @@ abstract class AnimeSourcePagingSource(
     override fun getRefreshKey(state: PagingState<Long, Anime>): Long? {
         return state.anchorPosition?.let { anchorPosition ->
             val anchorPage = state.closestPageToPosition(anchorPosition)
-            anchorPage?.prevKey ?: anchorPage?.nextKey
+            // BRM-11: upstream formula - adjacent keys, corrected to the anchor page itself.
+            anchorPage?.prevKey?.plus(1) ?: anchorPage?.nextKey?.minus(1)
         }
     }
 }

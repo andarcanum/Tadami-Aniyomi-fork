@@ -613,8 +613,11 @@ class AnimeScreen(
                 AnimeLibraryTab.search(query)
             }
             is BrowseAnimeSourceScreen -> {
+                // RESH-B1: replace with a fresh instance carrying the query (constructor arg,
+                // the novel-screen pattern) - the removed static channel's send() could suspend
+                // with no receiver and raced duplicate collectors.
                 navigator.pop()
-                previousController.search(query)
+                navigator.replace(BrowseAnimeSourceScreen(previousController.sourceId, query))
             }
         }
     }
@@ -635,13 +638,14 @@ class AnimeScreen(
         } as? BrowseAnimeSourceScreen
 
         if (existing != null) {
+            // RESH-B1: pop to the existing browse screen and REPLACE it with a fresh instance
+            // carrying the genre as a constructor arg (its SM applies searchGenre once).
             navigator.popUntil { it == existing }
-            existing.searchGenre(genreName)
+            navigator.replace(BrowseAnimeSourceScreen(sourceId, null, genreQuery = genreName))
             return
         }
 
-        // Otherwise push fresh browse for this source (will use text query; filter activation can be improved in browse model)
-        navigator.push(BrowseAnimeSourceScreen(sourceId, genreName))
+        navigator.push(BrowseAnimeSourceScreen(sourceId, null, genreQuery = genreName))
     }
 
     private suspend fun performGenresSearch(
@@ -655,14 +659,13 @@ class AnimeScreen(
             screen is BrowseAnimeSourceScreen && screen.sourceId == sourceId
         } as? BrowseAnimeSourceScreen
         if (existing != null) {
+            // RESH-B1: see performGenreSearch - constructor args instead of the static channel.
             navigator.popUntil { it == existing }
-            existing.searchGenres(genres)
+            navigator.replace(BrowseAnimeSourceScreen(sourceId, null, genresQuery = genres))
             return
         }
 
-        val newScreen = BrowseAnimeSourceScreen(sourceId, null)
-        navigator.push(newScreen)
-        newScreen.searchGenres(genres)
+        navigator.push(BrowseAnimeSourceScreen(sourceId, null, genresQuery = genres))
     }
 
     /**

@@ -103,7 +103,8 @@ abstract class NovelSourcePagingSource(
     override fun getRefreshKey(state: PagingState<Long, Novel>): Long? {
         return state.anchorPosition?.let { anchorPosition ->
             val anchorPage = state.closestPageToPosition(anchorPosition)
-            anchorPage?.prevKey ?: anchorPage?.nextKey
+            // BRN-21b/BRM-11: upstream formula - adjacent keys, corrected to the anchor page.
+            anchorPage?.prevKey?.plus(1) ?: anchorPage?.nextKey?.minus(1)
         }
     }
 }

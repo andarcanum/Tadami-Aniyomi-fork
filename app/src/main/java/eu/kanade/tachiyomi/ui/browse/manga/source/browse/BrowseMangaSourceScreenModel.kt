@@ -101,6 +101,12 @@ class BrowseMangaSourceScreenModel(
     val source = sourceManager.getOrStub(sourceId)
     private var defaultFiltersSerialized: String? = null
 
+    // BRM-18: set once the user runs their own search; a late loadFilters completion must no
+    // longer genre-match/overwrite the live listing (it used to convert the typed toolbar query
+    // into a filter search or blank it entirely when it resolved after the user searched).
+    @Volatile
+    private var userSearched = false
+
     init {
         if (source is CatalogueSource) {
             mutableState.update {
@@ -147,7 +153,8 @@ class BrowseMangaSourceScreenModel(
             mutableState.update { state ->
                 val currentListing = state.listing
                 val updatedListing = when {
-                    currentListing is Listing.Search && currentListing.filters.isEmpty() -> {
+                    // BRM-18: never genre-match a listing the user has since searched over.
+                    currentListing is Listing.Search && currentListing.filters.isEmpty() && !userSearched -> {
                         val q = currentListing.query
                         if (!q.isNullOrBlank()) {
                             var genreFound = false
@@ -235,12 +242,19 @@ class BrowseMangaSourceScreenModel(
             // IllegalArgumentException on filter subtypes the ts serializer doesn't cover,
             // straight out of this coroutine).
             val filtersJson = serializeFilters(state.filters)
+            // BRM-2: Popular/Latest listings carry SENTINEL query strings (QUERY_POPULAR/
+            // QUERY_LATEST); saving them verbatim made openSavedSearch run a literal search for
+            // the sentinel and show the magic string in the toolbar. Save null instead - the
+            // filters (the valuable part of such a saved search) still apply.
+            val listingQuery = state.listing.query?.takeUnless { q ->
+                q == GetRemoteManga.QUERY_POPULAR || q == GetRemoteManga.QUERY_LATEST
+            }
             val savedSearch = SavedSearch(
                 id = -1,
                 source = sourceId,
                 sourceType = SourceType.MANGA,
                 name = name,
-                query = state.listing.query,
+                query = listingQuery,
                 filtersJson = filtersJson,
             )
             insertSavedSearch.await(savedSearch)
@@ -270,11 +284,16 @@ class BrowseMangaSourceScreenModel(
             }
             val baseFilters = loadSourceFilters()
             filterSerializer.deserialize(baseFilters, jsonArray)
+            // BRM-2: legacy rows may still hold the sentinel strings - treat them as "no query"
+            // so filters apply without a literal sentinel search / magic toolbar text.
+            val query = savedSearch.query?.takeUnless { q ->
+                q == GetRemoteManga.QUERY_POPULAR || q == GetRemoteManga.QUERY_LATEST
+            }
             mutableState.update {
                 it.copy(
-                    listing = Listing.Search(savedSearch.query, baseFilters),
+                    listing = Listing.Search(query, baseFilters),
                     filters = baseFilters,
-                    toolbarQuery = savedSearch.query,
+                    toolbarQuery = query,
                     savedSearches = it.savedSearches.map { (s, _) -> s to (s.id == savedSearch.id) }.toImmutableList(),
                 )
             }
@@ -392,6 +411,7 @@ class BrowseMangaSourceScreenModel(
 
     fun search(query: String? = null, filters: FilterList? = null) {
         if (source !is CatalogueSource) return
+        userSearched = true
 
         val currentState = state.value
         val input = currentState.listing as? Listing.Search
