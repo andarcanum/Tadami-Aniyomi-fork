@@ -49,6 +49,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTtsHighlightMode
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekTranslationService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiModelEntry
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptResolver
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiTranslationService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GoogleTranslationParams
@@ -237,6 +239,14 @@ class NovelReaderScreenModel(
         val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
         val json = Injekt.get<Json>()
         OpenRouterModelsService(
+            client = networkHelper.client,
+            json = json,
+        )
+    },
+    private val geminiModelsService: GeminiModelsService = run {
+        val networkHelper = Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>()
+        val json = Injekt.get<Json>()
+        GeminiModelsService(
             client = networkHelper.client,
             json = json,
         )
@@ -645,6 +655,8 @@ class NovelReaderScreenModel(
         val successState = mutableState.value as? State.Success ?: return
         mutableState.value = successState.copy(
             aiProviders = State.ReaderAiProvidersState(
+                geminiModelEntries = state.geminiModelEntries,
+                isGeminiModelsLoading = state.isGeminiModelsLoading,
                 openRouterModelIds = state.openRouterModelIds,
                 isOpenRouterModelsLoading = state.isOpenRouterModelsLoading,
                 isTestingOpenRouterConnection = state.isTestingOpenRouterConnection,
@@ -975,6 +987,7 @@ class NovelReaderScreenModel(
         host = this,
         application = application,
         novelReaderPreferences = novelReaderPreferences,
+        geminiModelsService = geminiModelsService,
         openRouterModelsService = openRouterModelsService,
         deepSeekModelsService = deepSeekModelsService,
         mistralModelsService = mistralModelsService,
@@ -1133,7 +1146,7 @@ class NovelReaderScreenModel(
         maybeAutoStartGeminiTranslation(initialSettings)
         maybeAutoStartGoogleTranslation()
         when (initialSettings.translationProvider) {
-            NovelTranslationProvider.GEMINI -> Unit
+            NovelTranslationProvider.GEMINI -> refreshGeminiModels()
             NovelTranslationProvider.GEMINI_PRIVATE -> Unit
             NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
@@ -1623,6 +1636,8 @@ class NovelReaderScreenModel(
                 pitch = settings.ttsPitch,
             ),
             aiProviders = State.ReaderAiProvidersState(
+                geminiModelEntries = aiProvidersState.geminiModelEntries,
+                isGeminiModelsLoading = aiProvidersState.isGeminiModelsLoading,
                 openRouterModelIds = aiProvidersState.openRouterModelIds,
                 isOpenRouterModelsLoading = aiProvidersState.isOpenRouterModelsLoading,
                 isTestingOpenRouterConnection = aiProvidersState.isTestingOpenRouterConnection,
@@ -2107,7 +2122,7 @@ class NovelReaderScreenModel(
     ).also {
         aiProviderController.resetAllApiTestStates()
         when (value) {
-            NovelTranslationProvider.GEMINI -> Unit
+            NovelTranslationProvider.GEMINI -> refreshGeminiModels()
             NovelTranslationProvider.GEMINI_PRIVATE -> Unit
             NovelTranslationProvider.OPENROUTER -> refreshOpenRouterModels()
             NovelTranslationProvider.DEEPSEEK -> refreshDeepSeekModels()
@@ -2150,6 +2165,8 @@ class NovelReaderScreenModel(
     fun setOllamaCloudApiKey(value: String) = aiProviderController.setOllamaCloudApiKey(value)
 
     fun setOllamaCloudModel(value: String) = aiProviderController.setOllamaCloudModel(value)
+
+    fun refreshGeminiModels() = aiProviderController.refreshGeminiModels()
 
     fun refreshOpenRouterModels() = aiProviderController.refreshOpenRouterModels()
 
@@ -2619,6 +2636,8 @@ class NovelReaderScreenModel(
             val translationPhase: TranslationPhase get() = googleTranslation.translationPhase
             val isGoogleRateLimited: Boolean get() = googleTranslation.isRateLimited
 
+            val geminiModelEntries: List<GeminiModelEntry> get() = aiProviders.geminiModelEntries
+            val isGeminiModelsLoading: Boolean get() = aiProviders.isGeminiModelsLoading
             val openRouterModelIds: List<String> get() = aiProviders.openRouterModelIds
             val isOpenRouterModelsLoading: Boolean get() = aiProviders.isOpenRouterModelsLoading
             val isTestingOpenRouterConnection: Boolean get() = aiProviders.isTestingOpenRouterConnection
@@ -2714,6 +2733,8 @@ class NovelReaderScreenModel(
         )
 
         data class ReaderAiProvidersState(
+            val geminiModelEntries: List<GeminiModelEntry> = emptyList(),
+            val isGeminiModelsLoading: Boolean = false,
             val openRouterModelIds: List<String> = emptyList(),
             val isOpenRouterModelsLoading: Boolean = false,
             val isTestingOpenRouterConnection: Boolean = false,

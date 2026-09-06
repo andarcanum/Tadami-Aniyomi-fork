@@ -103,6 +103,7 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.GeminiPromptMode
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationStylePreset
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiModelEntry
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPrivateBridge
 import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiPromptModifiers
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NovelTranslationStylePresets
@@ -130,6 +131,17 @@ internal data class TranslationSwitchRequest(
     val to: TranslationKind,
 )
 
+/**
+ * Static baseline of the Gemini model picker: always selectable (first launch, blank API key,
+ * offline, models API error) and merged with the dynamically fetched list, which extends it.
+ * Labels of these ids win over fetched displayNames to keep the current look.
+ */
+private val GEMINI_FALLBACK_MODEL_ENTRIES = listOf(
+    "gemini-3-flash-preview" to "Gemini 3 Flash",
+    "gemini-3-pro-preview" to "Gemini 3 Pro",
+    "gemini-3.1-flash-lite-preview" to "Gemini 3.1 Flash Lite",
+)
+
 @Composable
 internal fun GeminiTranslationDialog(
     readerSettings: NovelReaderSettings,
@@ -147,6 +159,7 @@ internal fun GeminiTranslationDialog(
     onClearLogs: () -> Unit,
     onSetGeminiApiKey: (String) -> Unit,
     onSetGeminiModel: (String) -> Unit,
+    onRefreshGeminiModels: () -> Unit,
     onSetGeminiBatchSize: (Int) -> Unit,
     onSetGeminiConcurrency: (Int) -> Unit,
     onSetGeminiRelaxedMode: (Boolean) -> Unit,
@@ -192,6 +205,8 @@ internal fun GeminiTranslationDialog(
     onSetOllamaCloudModel: (String) -> Unit,
     onRefreshOllamaCloudModels: () -> Unit,
     onTestOllamaCloudConnection: () -> Unit,
+    geminiModels: List<GeminiModelEntry>,
+    isGeminiModelsLoading: Boolean,
     openRouterModels: List<String>,
     isOpenRouterModelsLoading: Boolean,
     isTestingOpenRouterConnection: Boolean,
@@ -219,14 +234,11 @@ internal fun GeminiTranslationDialog(
     ollamaCloudApiTestMessage: String?,
     onDismiss: () -> Unit,
 ) {
-    val modelEntries = remember {
-        listOf(
-            "gemini-3-flash-preview" to "Gemini 3 Flash",
-            "gemini-3-pro-preview" to "Gemini 3 Pro",
-            "gemini-3.1-flash-lite-preview" to "Gemini 3.1 Flash Lite",
-        )
+    val geminiAllModelEntries = remember(geminiModels) {
+        val merged = LinkedHashMap(GEMINI_FALLBACK_MODEL_ENTRIES.toMap())
+        geminiModels.forEach { entry -> merged.putIfAbsent(entry.id, entry.displayName) }
+        merged
     }
-    val modelMap = remember(modelEntries) { modelEntries.toMap() }
     val speedPresets = remember {
         listOf(
             "100-1" to (100 to 1),
@@ -292,6 +304,13 @@ internal fun GeminiTranslationDialog(
                 else -> readerSettings.geminiModel
             },
         )
+    }
+    val geminiPickerModelEntries = remember(geminiAllModelEntries, tempModel) {
+        if (tempModel.isNotBlank() && tempModel !in geminiAllModelEntries) {
+            geminiAllModelEntries + (tempModel to tempModel)
+        } else {
+            geminiAllModelEntries
+        }
     }
     var tempBatch by remember(readerSettings.geminiBatchSize) {
         mutableStateOf(readerSettings.geminiBatchSize.toString())
@@ -643,6 +662,12 @@ internal fun GeminiTranslationDialog(
     LaunchedEffect(isPrivateProviderInstalled, readerSettings.geminiPrivateUnlocked) {
         isPrivateProviderUnlocked = isPrivateProviderInstalled &&
             (readerSettings.geminiPrivateUnlocked || GeminiPrivateBridge.isUnlocked())
+    }
+
+    LaunchedEffect(isGeminiSelected, geminiModels.size) {
+        if (isGeminiSelected && geminiModels.isEmpty()) {
+            onRefreshGeminiModels()
+        }
     }
 
     LaunchedEffect(isOpenRouterSelected, openRouterModels.size) {
@@ -1109,7 +1134,8 @@ internal fun GeminiTranslationDialog(
                                                             onSetTranslationProvider(option.first)
                                                             logPair(providerLabel, option.second)
                                                             when (option.first) {
-                                                                NovelTranslationProvider.GEMINI, NovelTranslationProvider.GEMINI_PRIVATE -> Unit
+                                                                NovelTranslationProvider.GEMINI -> onRefreshGeminiModels()
+                                                                NovelTranslationProvider.GEMINI_PRIVATE -> Unit
                                                                 NovelTranslationProvider.OPENROUTER -> onRefreshOpenRouterModels()
                                                                 NovelTranslationProvider.DEEPSEEK -> onRefreshDeepSeekModels()
                                                                 NovelTranslationProvider.MISTRAL -> onRefreshMistralModels()
@@ -1238,15 +1264,46 @@ internal fun GeminiTranslationDialog(
                                                 title = stringResource(
                                                     AYMR.strings.novel_reader_ai_translator_current_model,
                                                 ),
-                                                subtitle = modelMap[tempModel] ?: tempModel,
+                                                subtitle = geminiPickerModelEntries[tempModel] ?: tempModel,
                                                 icon = null,
-                                                entries = modelMap,
+                                                entries = geminiPickerModelEntries,
                                                 onValueChange = { selected ->
                                                     tempModel = selected
                                                     onSetGeminiModel(selected)
-                                                    logPair(geminiModelLabel, modelMap[selected] ?: selected)
+                                                    logPair(
+                                                        geminiModelLabel,
+                                                        geminiPickerModelEntries[selected] ?: selected,
+                                                    )
                                                 },
                                             )
+                                            if (isGeminiSelected) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                ) {
+                                                    OutlinedButton(onClick = onRefreshGeminiModels) {
+                                                        Icon(
+                                                            Icons.Filled.Refresh,
+                                                            null,
+                                                            modifier = Modifier.size(16.dp),
+                                                        )
+                                                        Spacer(Modifier.size(4.dp))
+                                                        Text(
+                                                            if (isGeminiModelsLoading) {
+                                                                stringResource(
+                                                                    AYMR.strings.novel_reader_ai_translator_loading_models,
+                                                                )
+                                                            } else {
+                                                                stringResource(
+                                                                    AYMR.strings.novel_reader_ai_translator_refresh_list,
+                                                                )
+                                                            },
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
                                         NovelTranslationProvider.OPENROUTER -> {
                                             if (openRouterAllModelEntries.isNotEmpty()) {

@@ -61,6 +61,7 @@ internal fun NovelReaderDialogHost(
     val onClearGeminiLogs = actions.onClearGeminiLogs
     val onSetGeminiApiKey = actions.onSetGeminiApiKey
     val onSetGeminiModel = actions.onSetGeminiModel
+    val onRefreshGeminiModels = actions.onRefreshGeminiModels
     val onSetGeminiBatchSize = actions.onSetGeminiBatchSize
     val onSetGeminiConcurrency = actions.onSetGeminiConcurrency
     val onSetGeminiRelaxedMode = actions.onSetGeminiRelaxedMode
@@ -186,6 +187,7 @@ internal fun NovelReaderDialogHost(
             onClearLogs = onClearGeminiLogs,
             onSetGeminiApiKey = onSetGeminiApiKey,
             onSetGeminiModel = onSetGeminiModel,
+            onRefreshGeminiModels = onRefreshGeminiModels,
             onSetGeminiBatchSize = onSetGeminiBatchSize,
             onSetGeminiConcurrency = onSetGeminiConcurrency,
             onSetGeminiRelaxedMode = onSetGeminiRelaxedMode,
@@ -231,6 +233,8 @@ internal fun NovelReaderDialogHost(
             onSetOllamaCloudModel = onSetOllamaCloudModel,
             onRefreshOllamaCloudModels = onRefreshOllamaCloudModels,
             onTestOllamaCloudConnection = onTestOllamaCloudConnection,
+            geminiModels = state.geminiModelEntries,
+            isGeminiModelsLoading = state.isGeminiModelsLoading,
             openRouterModels = state.openRouterModelIds,
             isOpenRouterModelsLoading = state.isOpenRouterModelsLoading,
             isTestingOpenRouterConnection = state.isTestingOpenRouterConnection,
@@ -357,6 +361,7 @@ internal data class NovelReaderDialogActions(
     val onClearGeminiLogs: () -> Unit,
     val onSetGeminiApiKey: (String) -> Unit,
     val onSetGeminiModel: (String) -> Unit,
+    val onRefreshGeminiModels: () -> Unit,
     val onSetGeminiBatchSize: (Int) -> Unit,
     val onSetGeminiConcurrency: (Int) -> Unit,
     val onSetGeminiRelaxedMode: (Boolean) -> Unit,

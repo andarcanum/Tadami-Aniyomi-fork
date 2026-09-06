@@ -101,9 +101,9 @@ class GeminiTranslationService(
             params.topK
         }
         val requestMaxOutputTokens = if (usePrivateBridge) {
-            GeminiPrivateBridge.requestMaxOutputTokensOverride(16384)
+            GeminiPrivateBridge.requestMaxOutputTokensOverride(GEMINI_TRANSLATION_MAX_OUTPUT_TOKENS)
         } else {
-            16384
+            GEMINI_TRANSLATION_MAX_OUTPUT_TOKENS
         }
         val requestFrequencyPenalty = if (usePrivateBridge) {
             GeminiPrivateBridge.requestFrequencyPenaltyOverride(0f)
@@ -115,10 +115,16 @@ class GeminiTranslationService(
         } else {
             0f
         }
-        val requestThinkingLevel = if (usePrivateBridge) {
+        val requestThinkingLevel: String? = if (usePrivateBridge) {
             GeminiPrivateBridge.requestThinkingLevelOverride(params.reasoningEffort)
         } else {
-            params.reasoningEffort
+            // Dynamic model list: an unknown model resolves to null and the request omits
+            // thinkingConfig instead of sending a thinking level the model may reject.
+            normalizeTranslationReasoningEffort(
+                provider = params.provider,
+                model = params.model.normalizeGeminiModelId(),
+                value = params.reasoningEffort,
+            )
         }
         if (usePrivatePythonLikeMode) {
             onLog?.invoke("🧪 GeminiNSFW python-like mode enabled (plain chapter payload, parse full response)")
@@ -166,13 +172,15 @@ class GeminiTranslationService(
                         put("frequencyPenalty", requestFrequencyPenalty)
                         put("presencePenalty", requestPresencePenalty)
                     }
-                    put(
-                        "thinkingConfig",
-                        buildJsonObject {
-                            // Match lnreader behavior: send only thinkingLevel.
-                            put("thinkingLevel", requestThinkingLevel)
-                        },
-                    )
+                    if (usePrivateBridge || !requestThinkingLevel.isNullOrBlank()) {
+                        put(
+                            "thinkingConfig",
+                            buildJsonObject {
+                                // Match lnreader behavior: send only thinkingLevel.
+                                put("thinkingLevel", requestThinkingLevel)
+                            },
+                        )
+                    }
                 },
             )
             put(

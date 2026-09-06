@@ -231,6 +231,7 @@ internal fun NovelReaderContentHost(
     val onClearGeminiLogs = actions.onClearGeminiLogs
     val onSetGeminiApiKey = actions.onSetGeminiApiKey
     val onSetGeminiModel = actions.onSetGeminiModel
+    val onRefreshGeminiModels = actions.onRefreshGeminiModels
     val onSetGeminiBatchSize = actions.onSetGeminiBatchSize
     val onSetGeminiConcurrency = actions.onSetGeminiConcurrency
     val onSetGeminiRelaxedMode = actions.onSetGeminiRelaxedMode
@@ -4290,6 +4291,7 @@ internal fun NovelReaderContentHost(
                     onClearGeminiLogs = onClearGeminiLogs,
                     onSetGeminiApiKey = onSetGeminiApiKey,
                     onSetGeminiModel = onSetGeminiModel,
+                    onRefreshGeminiModels = onRefreshGeminiModels,
                     onSetGeminiBatchSize = onSetGeminiBatchSize,
                     onSetGeminiConcurrency = onSetGeminiConcurrency,
                     onSetGeminiRelaxedMode = onSetGeminiRelaxedMode,

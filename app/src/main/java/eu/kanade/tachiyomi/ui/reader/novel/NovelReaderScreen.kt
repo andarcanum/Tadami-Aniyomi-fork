@@ -336,6 +336,7 @@ class NovelReaderScreen(
                             onClearGeminiLogs = screenModel::clearGeminiLogs,
                             onSetGeminiApiKey = screenModel::setGeminiApiKey,
                             onSetGeminiModel = screenModel::setGeminiModel,
+                            onRefreshGeminiModels = screenModel::refreshGeminiModels,
                             onSetGeminiBatchSize = screenModel::setGeminiBatchSize,
                             onSetGeminiConcurrency = screenModel::setGeminiConcurrency,
                             onSetGeminiRelaxedMode = screenModel::setGeminiRelaxedMode,

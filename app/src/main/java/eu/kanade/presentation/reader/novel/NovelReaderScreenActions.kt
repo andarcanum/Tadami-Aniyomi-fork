@@ -42,6 +42,7 @@ data class NovelReaderScreenActions(
     val onClearGeminiLogs: () -> Unit = {},
     val onSetGeminiApiKey: (String) -> Unit = {},
     val onSetGeminiModel: (String) -> Unit = {},
+    val onRefreshGeminiModels: () -> Unit = {},
     val onSetGeminiBatchSize: (Int) -> Unit = {},
     val onSetGeminiConcurrency: (Int) -> Unit = {},
     val onSetGeminiRelaxedMode: (Boolean) -> Unit = {},

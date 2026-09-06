@@ -6,6 +6,8 @@ import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderSettings
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelTranslationProvider
 import eu.kanade.tachiyomi.ui.reader.novel.translation.DeepSeekModelsService
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiModelEntry
+import eu.kanade.tachiyomi.ui.reader.novel.translation.GeminiModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.MistralModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.NvidiaModelsService
 import eu.kanade.tachiyomi.ui.reader.novel.translation.OllamaCloudModelsService
@@ -47,6 +49,8 @@ internal interface NovelAiProviderHost {
  * reader state by the screen model.
  */
 data class NovelAiProviderState(
+    val geminiModelEntries: List<GeminiModelEntry> = emptyList(),
+    val isGeminiModelsLoading: Boolean = false,
     val openRouterModelIds: List<String> = emptyList(),
     val isOpenRouterModelsLoading: Boolean = false,
     val isTestingOpenRouterConnection: Boolean = false,
@@ -75,7 +79,8 @@ data class NovelAiProviderState(
 )
 
 /**
- * AI translation providers subsystem (OpenRouter / DeepSeek / Mistral / NVIDIA / Ollama Cloud):
+ * AI translation providers subsystem (Gemini model list, OpenRouter / DeepSeek / Mistral / NVIDIA /
+ * Ollama Cloud):
  * model-list refresh, connection tests and the provider settings that feed the shared
  * translation pipeline. Gemini and Google whole-chapter translation stay in the screen model.
  */
@@ -83,6 +88,7 @@ internal class NovelAiProviderController(
     private val host: NovelAiProviderHost,
     private val application: Application = Injekt.get(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
+    private val geminiModelsService: GeminiModelsService = Injekt.get(),
     private val openRouterModelsService: OpenRouterModelsService = Injekt.get(),
     private val deepSeekModelsService: DeepSeekModelsService = Injekt.get(),
     private val mistralModelsService: MistralModelsService = Injekt.get(),
@@ -206,6 +212,7 @@ internal class NovelAiProviderController(
     fun resetTransientState() {
         updateState {
             it.copy(
+                isGeminiModelsLoading = false,
                 isOpenRouterModelsLoading = false,
                 isTestingOpenRouterConnection = false,
                 isDeepSeekModelsLoading = false,
@@ -269,6 +276,25 @@ internal class NovelAiProviderController(
     // ---------------------------------------------------------------------------------------------
     // Model refresh + connection tests
     // ---------------------------------------------------------------------------------------------
+
+    fun refreshGeminiModels() {
+        val settings = host.providerReaderSettings() ?: return
+        if (settings.translationProvider != NovelTranslationProvider.GEMINI) return
+        if (settings.geminiApiKey.isBlank()) return
+        updateState { it.copy(isGeminiModelsLoading = true) }
+        host.providerUpdateContent(settings)
+        host.providerScope.launch(Dispatchers.IO) {
+            val fetched = runCatching {
+                geminiModelsService.fetchModels(apiKey = settings.geminiApiKey)
+            }.getOrElse { error ->
+                host.providerAddLog("? Gemini models load failed: ${formatAiTranslationThrowableForLog(error)}")
+                emptyList()
+            }
+            updateState { it.copy(geminiModelEntries = fetched, isGeminiModelsLoading = false) }
+            val currentSettings = host.providerReaderSettings() ?: settings
+            host.providerUpdateContent(currentSettings)
+        }
+    }
 
     fun refreshOpenRouterModels() {
         val settings = host.providerReaderSettings() ?: return
