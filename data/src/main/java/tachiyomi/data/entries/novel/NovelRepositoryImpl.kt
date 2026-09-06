@@ -69,6 +69,14 @@ class NovelRepositoryImpl(
         return handler.subscribeToList { db -> db.novelsQueries.getFavoriteBySourceId(sourceId, NovelMapper::mapNovel) }
     }
 
+    override suspend fun getDuplicateLibraryNovel(id: Long, title: String): List<Novel> {
+        // BRN-11: the SQL already existed (novels.sq getDuplicateLibraryNovel) - wired up
+        // (manga etalon MangaRepositoryImpl:72-76).
+        return handler.awaitList { db ->
+            db.novelsQueries.getDuplicateLibraryNovel(title, id, NovelMapper::mapNovel)
+        }
+    }
+
     override suspend fun insertNovel(novel: Novel): Long? {
         return handler.awaitOneOrNullExecutable(inTransaction = true) { db ->
             db.novelsQueries.insert(

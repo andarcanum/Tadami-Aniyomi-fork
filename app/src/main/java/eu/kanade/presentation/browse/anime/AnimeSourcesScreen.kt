@@ -56,6 +56,7 @@ import eu.kanade.tachiyomi.ui.browse.anime.source.AnimeSourcesScreenModel
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreenModel.Listing
 import eu.kanade.tachiyomi.ui.home.LocalHomeHazeState
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import eu.kanade.tachiyomi.util.system.PINNED_KEY
 import tachiyomi.domain.source.anime.model.AnimeSource
 import tachiyomi.domain.source.anime.model.Pin
 import tachiyomi.i18n.MR
@@ -246,7 +247,9 @@ fun AnimeSourcesScreen(
                     },
                     key = {
                         when (it) {
-                            is AnimeSourceUiModel.Header -> it.hashCode()
+                            // BRM-13: stable per language - Header.hashCode() changed with
+                            // isCollapsed and destroyed the item on every toggle (manga etalon).
+                            is AnimeSourceUiModel.Header -> "header-${it.language}"
                             is AnimeSourceUiModel.Item -> "source-${it.source.key()}"
                         }
                     },
@@ -257,6 +260,8 @@ fun AnimeSourcesScreen(
                                 modifier = Modifier.animateItem(),
                                 language = model.language,
                                 isCollapsed = model.isCollapsed,
+                                // BRM-14: the PINNED group never collapses (SM ignores it).
+                                collapsible = model.language != PINNED_KEY,
                                 onToggle = { onToggleLanguage?.invoke(model.language) },
                             )
                         }
@@ -280,12 +285,13 @@ private fun AnimeSourceHeader(
     isCollapsed: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    collapsible: Boolean = true,
 ) {
     val context = LocalContext.current
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
+            .then(if (collapsible) Modifier.clickable(onClick = onToggle) else Modifier)
             .padding(
                 horizontal = MaterialTheme.padding.medium,
                 vertical = MaterialTheme.padding.small,
@@ -297,11 +303,13 @@ private fun AnimeSourceHeader(
             text = LocaleHelper.getSourceDisplayName(language, context),
             style = MaterialTheme.typography.header,
         )
-        Icon(
-            imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (collapsible) {
+            Icon(
+                imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

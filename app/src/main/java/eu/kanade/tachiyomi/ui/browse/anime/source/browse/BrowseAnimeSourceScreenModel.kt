@@ -48,8 +48,8 @@ import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.category.anime.interactor.SetAnimeCategories
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.entries.anime.interactor.GetAnime
+import tachiyomi.domain.entries.anime.interactor.GetAnimeFavorites
 import tachiyomi.domain.entries.anime.interactor.GetDuplicateLibraryAnime
-import tachiyomi.domain.entries.anime.interactor.GetLibraryAnime
 import tachiyomi.domain.entries.anime.interactor.NetworkToLocalAnime
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.toAnimeUpdate
@@ -92,7 +92,7 @@ class BrowseAnimeSourceScreenModel(
     private val getSavedSearchBySourceId: GetSavedSearchBySourceId = Injekt.get(),
     private val insertSavedSearch: InsertSavedSearch = Injekt.get(),
     private val deleteSavedSearchById: DeleteSavedSearchById = Injekt.get(),
-    private val getLibraryAnime: GetLibraryAnime = Injekt.get(),
+    private val getAnimeFavorites: GetAnimeFavorites = Injekt.get(),
 ) : StateScreenModel<BrowseAnimeSourceScreenModel.State>(State(Listing.valueOf(listingQuery))) {
 
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
@@ -279,13 +279,10 @@ class BrowseAnimeSourceScreenModel(
         setDialog(null)
     }
 
-    val favoriteAnimeUrls = getLibraryAnime.subscribe()
-        .map { libraryAnimeList ->
-            libraryAnimeList
-                .filter { it.anime.source == sourceId }
-                .map { it.anime.url }
-                .toSet()
-        }
+    // BRM-8: was subscribing to the WHOLE library and filtering in memory (manga etalon) -
+    // source-scoped interactor instead.
+    val favoriteAnimeUrls = getAnimeFavorites.subscribe(sourceId)
+        .map { favorites -> favorites.map { it.url }.toSet() }
         .stateIn(screenModelScope, SharingStarted.Lazily, emptySet())
 
     /**

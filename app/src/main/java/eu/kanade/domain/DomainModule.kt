@@ -242,6 +242,7 @@ import tachiyomi.domain.entries.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.entries.manga.interactor.ResetMangaViewerFlags
 import tachiyomi.domain.entries.manga.interactor.SetMangaChapterFlags
 import tachiyomi.domain.entries.manga.repository.MangaRepository
+import tachiyomi.domain.entries.novel.interactor.GetDuplicateLibraryNovel
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId
@@ -537,6 +538,7 @@ class DomainModule : InjektModule {
         addFactory { GetNovel(get()) }
         addFactory { GetNovelByUrlAndSourceId(get()) }
         addFactory { GetNovelFavorites(get()) }
+        addFactory { GetDuplicateLibraryNovel(get()) }
         addFactory { GetLibraryNovel(get()) }
         addFactory { GetNovelWithChapters(get(), get()) }
         addSingletonFactory { GetNovelChapters(get()) }

@@ -22,6 +22,7 @@ import eu.kanade.tachiyomi.novelsource.model.NovelFilter
 import eu.kanade.tachiyomi.novelsource.model.NovelFilterList
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.ui.browse.search.SavedSearchFilterSerializer
+import eu.kanade.tachiyomi.util.removeCovers
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -43,6 +44,7 @@ import tachiyomi.domain.achievement.model.AchievementEvent
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.SetNovelCategories
+import tachiyomi.domain.entries.novel.interactor.GetDuplicateLibraryNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId
 import tachiyomi.domain.entries.novel.interactor.GetNovelFavorites
@@ -655,11 +657,16 @@ class BrowseNovelSourceScreenModel(
             val updateNovelInteractor = resolveUpdateNovel() ?: return@launch
 
             val toggled = !novel.favorite
+            // BRN-12: removing from the library left the covers in the cache forever
+            // (manga/anime browse SMs call removeCovers - orphaned custom covers piled up
+            // on disk with every unfavorite).
+            val updated = if (!toggled) novel.removeCovers() else novel
             val added = updateNovelInteractor.await(
                 NovelUpdate(
                     id = novel.id,
                     favorite = toggled,
                     dateAdded = if (toggled) Instant.now().toEpochMilli() else 0L,
+                    coverLastModified = updated.coverLastModified.takeIf { it != novel.coverLastModified },
                 ),
             )
 
@@ -709,12 +716,21 @@ class BrowseNovelSourceScreenModel(
     }
 
     suspend fun getDuplicateLibraryNovel(novel: Novel): Novel? {
+        // BRN-11: targeted DB query (manga/anime etalon GetDuplicateLibraryManga) - the
+        // full-favorites in-memory scan was O(library) on every long-press.
+        resolveGetDuplicateLibraryNovel()?.let { interactor ->
+            return interactor.await(novel).firstOrNull()
+        }
         val favoritesInteractor = resolveGetNovelFavorites() ?: return null
         return favoritesInteractor.await()
             .firstOrNull { duplicate ->
                 duplicate.id != novel.id &&
                     duplicate.title.equals(novel.title, ignoreCase = true)
             }
+    }
+
+    private fun resolveGetDuplicateLibraryNovel(): GetDuplicateLibraryNovel? {
+        return runCatching { Injekt.get<GetDuplicateLibraryNovel>() }.getOrNull()
     }
 
     private suspend fun getCategories(

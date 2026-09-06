@@ -251,19 +251,25 @@ data class BrowseNovelSourceScreen(
                 onNovelClick = { novel ->
                     if (Injekt.get<SourcePreferences>().titleCarouselEnabled().get()) {
                         val snapshot = (0 until pagingNovels.itemCount).mapNotNull { index -> pagingNovels[index]?.id }
-                        val index = snapshot.indexOf(novel.id).coerceAtLeast(0)
-                        navigator.push(
-                            TitleCarouselScreen(
-                                type = TitleCarouselType.Novel,
-                                sourceId = screenModel.source.id,
-                                initialTitleIds = snapshot,
-                                initialIndex = index,
-                                listingQuery = state.listing.query,
-                                filtersJson = state.filters
-                                    .takeIf { it.isNotEmpty() }
-                                    ?.let { SavedSearchFilterSerializer.serialize(it) },
-                            ),
-                        )
+                        val index = snapshot.indexOf(novel.id)
+                        // BFEED-17: -1 used to be coerced to 0 - the carousel opened on an
+                        // UNRELATED first title; fall back to the plain entry screen.
+                        if (index < 0) {
+                            navigator.push(NovelScreen(novel.id, true))
+                        } else {
+                            navigator.push(
+                                TitleCarouselScreen(
+                                    type = TitleCarouselType.Novel,
+                                    sourceId = screenModel.source.id,
+                                    initialTitleIds = snapshot,
+                                    initialIndex = index,
+                                    listingQuery = state.listing.query,
+                                    filtersJson = state.filters
+                                        .takeIf { it.isNotEmpty() }
+                                        ?.let { SavedSearchFilterSerializer.serialize(it) },
+                                ),
+                            )
+                        }
                     } else {
                         navigator.push(NovelScreen(novel.id, true))
                     }

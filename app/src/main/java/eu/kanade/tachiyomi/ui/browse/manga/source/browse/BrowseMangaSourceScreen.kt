@@ -274,19 +274,26 @@ data class BrowseMangaSourceScreen(
                 onMangaClick = { manga ->
                     if (Injekt.get<SourcePreferences>().titleCarouselEnabled().get()) {
                         val snapshot = (0 until pagingManga.itemCount).mapNotNull { index -> pagingManga[index]?.id }
-                        val index = snapshot.indexOf(manga.id).coerceAtLeast(0)
-                        navigator.push(
-                            TitleCarouselScreen(
-                                type = TitleCarouselType.Manga,
-                                sourceId = screenModel.source.id,
-                                initialTitleIds = snapshot,
-                                initialIndex = index,
-                                listingQuery = state.listing.query,
-                                filtersJson = state.filters
-                                    .takeIf { it.isNotEmpty() }
-                                    ?.let { screenModel.serializeFilters(it) },
-                            ),
-                        )
+                        val index = snapshot.indexOf(manga.id)
+                        // BFEED-17: -1 used to be coerced to 0 - when the clicked title was not
+                        // in the loaded snapshot the carousel opened on an UNRELATED first
+                        // title; fall back to the plain entry screen instead.
+                        if (index < 0) {
+                            navigator.push(MangaScreen(manga.id, true))
+                        } else {
+                            navigator.push(
+                                TitleCarouselScreen(
+                                    type = TitleCarouselType.Manga,
+                                    sourceId = screenModel.source.id,
+                                    initialTitleIds = snapshot,
+                                    initialIndex = index,
+                                    listingQuery = state.listing.query,
+                                    filtersJson = state.filters
+                                        .takeIf { it.isNotEmpty() }
+                                        ?.let { screenModel.serializeFilters(it) },
+                                ),
+                            )
+                        }
                     } else {
                         navigator.push(MangaScreen(manga.id, true))
                     }

@@ -19,6 +19,7 @@ import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -28,6 +29,7 @@ import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.source.novel.model.Pin
 import tachiyomi.domain.source.novel.model.Source
+import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.TreeMap
@@ -37,15 +39,23 @@ class NovelSourcesScreenModel(
     private val getEnabledSources: GetEnabledNovelSources = Injekt.get(),
     private val toggleSource: ToggleNovelSource = Injekt.get(),
     private val togglePin: ToggleNovelSourcePin = Injekt.get(),
+    // BRN-15: nullable + runCatching so DI-less unit tests can construct the SM (the gate is
+    // then skipped - test flows emit real sources immediately).
+    private val sourceManager: NovelSourceManager? = runCatching { Injekt.get<NovelSourceManager>() }.getOrNull(),
 ) : StateScreenModel<NovelSourcesScreenModel.State>(State()) {
 
     private val _events = Channel<Event>(Int.MAX_VALUE)
     val events = _events.receiveAsFlow()
 
+    // BRN-14: written on IO (collectLatest), read on main - @Volatile (see the manga SM).
+    @Volatile
     private var rawSources: List<Source> = emptyList()
 
     init {
         screenModelScope.launchIO {
+            // BRN-15: wait for manager initialization - the early EMPTY emission flipped
+            // isLoading=false and cold start flashed "no sources" (manga etalon).
+            sourceManager?.isInitialized?.first { it }
             getEnabledSources.subscribe()
                 .catch {
                     logcat(LogPriority.ERROR, it)
@@ -65,49 +75,53 @@ class NovelSourcesScreenModel(
     }
 
     private fun updateState() {
-        val query = state.value.searchQuery
-        val collapsed = state.value.collapsedLanguages
-        val verticalLayout = state.value.verticalPinnedLayout
+        // BRN-14: compute INSIDE mutableState.update from one rawSources snapshot (the
+        // cross-thread read/compute/write was last-writer-wins on stale inputs - manga etalon).
+        val snapshot = rawSources
+        mutableState.update { current ->
+            val query = current.searchQuery
+            val collapsed = current.collapsedLanguages
+            val verticalLayout = current.verticalPinnedLayout
 
-        val (pinned, others) = when {
-            query.isBlank() && !verticalLayout -> rawSources.partition { Pin.Actual in it.pin }
-            else -> Pair(emptyList(), rawSources)
-        }
-
-        val filtered = others.filter {
-            query.isBlank() || it.name.contains(query, ignoreCase = true) || it.lang.contains(query, ignoreCase = true)
-        }
-
-        val map = TreeMap<String, MutableList<Source>> { d1, d2 ->
-            when {
-                d1 == PINNED_KEY && d2 != PINNED_KEY -> -1
-                d2 == PINNED_KEY && d1 != PINNED_KEY -> 1
-                d1 == LAST_USED_KEY && d2 != LAST_USED_KEY -> -1
-                d2 == LAST_USED_KEY && d1 != LAST_USED_KEY -> 1
-                d1 == "" && d2 != "" -> 1
-                d2 == "" && d1 != "" -> -1
-                else -> d1.compareTo(d2)
+            val (pinned, others) = when {
+                query.isBlank() && !verticalLayout -> snapshot.partition { Pin.Actual in it.pin }
+                else -> Pair(emptyList(), snapshot)
             }
-        }
-        val byLang = filtered.groupByTo(map) {
-            when {
-                verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
-                it.isUsedLast -> LAST_USED_KEY
-                else -> it.lang
-            }
-        }
 
-        val uiItems = byLang.flatMap { (lang, sources) ->
-            if (lang in collapsed && query.isBlank() && lang != PINNED_KEY) {
-                listOf(NovelSourceUiModel.Header(lang, isCollapsed = true))
-            } else {
-                listOf(NovelSourceUiModel.Header(lang, isCollapsed = false)) +
-                    sources.map { NovelSourceUiModel.Item(it) }
+            val filtered = others.filter {
+                query.isBlank() || it.name.contains(query, ignoreCase = true) ||
+                    it.lang.contains(query, ignoreCase = true)
             }
-        }
 
-        mutableState.update {
-            it.copy(
+            val map = TreeMap<String, MutableList<Source>> { d1, d2 ->
+                when {
+                    d1 == PINNED_KEY && d2 != PINNED_KEY -> -1
+                    d2 == PINNED_KEY && d1 != PINNED_KEY -> 1
+                    d1 == LAST_USED_KEY && d2 != LAST_USED_KEY -> -1
+                    d2 == LAST_USED_KEY && d1 != LAST_USED_KEY -> 1
+                    d1 == "" && d2 != "" -> 1
+                    d2 == "" && d1 != "" -> -1
+                    else -> d1.compareTo(d2)
+                }
+            }
+            val byLang = filtered.groupByTo(map) {
+                when {
+                    verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
+                    it.isUsedLast -> LAST_USED_KEY
+                    else -> it.lang
+                }
+            }
+
+            val uiItems = byLang.flatMap { (lang, langSources) ->
+                if (lang in collapsed && query.isBlank() && lang != PINNED_KEY) {
+                    listOf(NovelSourceUiModel.Header(lang, isCollapsed = true))
+                } else {
+                    listOf(NovelSourceUiModel.Header(lang, isCollapsed = false)) +
+                        langSources.map { NovelSourceUiModel.Item(it) }
+                }
+            }
+
+            current.copy(
                 isLoading = false,
                 items = uiItems.toImmutableList(),
                 pinnedItems = pinned.toImmutableList(),

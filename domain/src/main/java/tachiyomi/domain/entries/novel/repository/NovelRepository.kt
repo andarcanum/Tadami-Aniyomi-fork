@@ -17,6 +17,13 @@ interface NovelRepository {
 
     suspend fun getNovelFavorites(): List<Novel>
 
+    /**
+     * BRN-11: targeted duplicate lookup (manga/anime etalon) instead of scanning favorites.
+     * Default keeps the numerous test fakes compiling; the single production implementation
+     * (NovelRepositoryImpl) overrides it with the novels.sq query.
+     */
+    suspend fun getDuplicateLibraryNovel(id: Long, title: String): List<Novel> = emptyList()
+
     suspend fun getReadNovelNotInLibrary(): List<Novel>
 
     suspend fun getLibraryNovel(): List<LibraryNovel>

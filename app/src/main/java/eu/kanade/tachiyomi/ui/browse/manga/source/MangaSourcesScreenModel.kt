@@ -22,6 +22,7 @@ import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -31,6 +32,7 @@ import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.source.manga.model.Pin
 import tachiyomi.domain.source.manga.model.Source
+import tachiyomi.domain.source.manga.service.MangaSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.TreeMap
@@ -41,6 +43,7 @@ class MangaSourcesScreenModel(
     private val getEnabledSources: GetEnabledMangaSources = Injekt.get(),
     private val toggleSource: ToggleMangaSource = Injekt.get(),
     private val toggleSourcePin: ToggleMangaSourcePin = Injekt.get(),
+    private val sourceManager: MangaSourceManager? = runCatching { Injekt.get<MangaSourceManager>() }.getOrNull(),
     // SY -->
     private val toggleExcludeFromMangaDataSaver: ToggleExcludeFromMangaDataSaver = Injekt.get(),
     // SY <--
@@ -49,11 +52,18 @@ class MangaSourcesScreenModel(
     private val _events = Channel<Event>(Int.MAX_VALUE)
     val events = _events.receiveAsFlow()
 
-    // Keep track of raw sources to re-filter when query/collapsed state changes
+    // Keep track of raw sources to re-filter when query/collapsed state changes.
+    // BRA-9/BRM-10: written on IO (collectLatest), read on main (search/toggle/prefs) -
+    // @Volatile for cross-thread visibility.
+    @Volatile
     private var rawSources: List<Source> = emptyList()
 
     init {
         screenModelScope.launchIO {
+            // BRN-15: wait for the source manager to initialize before treating the first
+            // emission as authoritative - the early EMPTY emission flipped isLoading=false and
+            // a cold start flashed "no sources" instead of Loading.
+            sourceManager?.isInitialized?.first { it }
             getEnabledSources.subscribe()
                 .catch {
                     logcat(LogPriority.ERROR, it)
@@ -84,53 +94,59 @@ class MangaSourcesScreenModel(
     }
 
     private fun updateState() {
-        val query = state.value.searchQuery
-        val collapsed = state.value.collapsedLanguages
-        val verticalLayout = state.value.verticalPinnedLayout
+        // BRA-9/BRM-10: compute INSIDE mutableState.update from one rawSources snapshot. The
+        // old read-state/compute/write-state sequence raced across threads (IO collectLatest vs
+        // main search/toggle/prefs triggers): last-writer-wins on stale inputs could freeze the
+        // rendered list until the next event.
+        val sources = rawSources
+        mutableState.update { current ->
+            val query = current.searchQuery
+            val collapsed = current.collapsedLanguages
+            val verticalLayout = current.verticalPinnedLayout
 
-        // 1. Separate Pinned (only if no search query AND not vertical layout)
-        val (pinned, others) = when {
-            query.isBlank() && !verticalLayout -> rawSources.partition { Pin.Actual in it.pin }
-            else -> Pair(emptyList(), rawSources)
-        }
-
-        // 2. Filter by query
-        val filtered = others.filter {
-            query.isBlank() || it.name.contains(query, ignoreCase = true) || it.lang.contains(query, ignoreCase = true)
-        }
-
-        // 3. Group by Lang
-        val map = TreeMap<String, MutableList<Source>> { d1, d2 ->
-            when {
-                d1 == PINNED_KEY && d2 != PINNED_KEY -> -1
-                d2 == PINNED_KEY && d1 != PINNED_KEY -> 1
-                d1 == LAST_USED_KEY && d2 != LAST_USED_KEY -> -1
-                d2 == LAST_USED_KEY && d1 != LAST_USED_KEY -> 1
-                d1 == "" && d2 != "" -> 1
-                d2 == "" && d1 != "" -> -1
-                else -> d1.compareTo(d2)
+            // 1. Separate Pinned (only if no search query AND not vertical layout)
+            val (pinned, others) = when {
+                query.isBlank() && !verticalLayout -> sources.partition { Pin.Actual in it.pin }
+                else -> Pair(emptyList(), sources)
             }
-        }
-        val byLang = filtered.groupByTo(map) {
-            when {
-                verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
-                it.isUsedLast -> LAST_USED_KEY
-                else -> it.lang
-            }
-        }
 
-        // 4. Flatten to UI Models, respecting collapsed state
-        val uiItems = byLang.flatMap { (lang, sources) ->
-            if (lang in collapsed && query.isBlank() && lang != PINNED_KEY) {
-                listOf(MangaSourceUiModel.Header(lang, isCollapsed = true))
-            } else {
-                listOf(MangaSourceUiModel.Header(lang, isCollapsed = false)) +
-                    sources.map { MangaSourceUiModel.Item(it) }
+            // 2. Filter by query
+            val filtered = others.filter {
+                query.isBlank() || it.name.contains(query, ignoreCase = true) ||
+                    it.lang.contains(query, ignoreCase = true)
             }
-        }
 
-        mutableState.update {
-            it.copy(
+            // 3. Group by Lang
+            val map = TreeMap<String, MutableList<Source>> { d1, d2 ->
+                when {
+                    d1 == PINNED_KEY && d2 != PINNED_KEY -> -1
+                    d2 == PINNED_KEY && d1 != PINNED_KEY -> 1
+                    d1 == LAST_USED_KEY && d2 != LAST_USED_KEY -> -1
+                    d2 == LAST_USED_KEY && d1 != LAST_USED_KEY -> 1
+                    d1 == "" && d2 != "" -> 1
+                    d2 == "" && d1 != "" -> -1
+                    else -> d1.compareTo(d2)
+                }
+            }
+            val byLang = filtered.groupByTo(map) {
+                when {
+                    verticalLayout && query.isBlank() && Pin.Actual in it.pin -> PINNED_KEY
+                    it.isUsedLast -> LAST_USED_KEY
+                    else -> it.lang
+                }
+            }
+
+            // 4. Flatten to UI Models, respecting collapsed state
+            val uiItems = byLang.flatMap { (lang, langSources) ->
+                if (lang in collapsed && query.isBlank() && lang != PINNED_KEY) {
+                    listOf(MangaSourceUiModel.Header(lang, isCollapsed = true))
+                } else {
+                    listOf(MangaSourceUiModel.Header(lang, isCollapsed = false)) +
+                        langSources.map { MangaSourceUiModel.Item(it) }
+                }
+            }
+
+            current.copy(
                 isLoading = false,
                 items = uiItems.toImmutableList(),
                 pinnedItems = pinned.toImmutableList(),

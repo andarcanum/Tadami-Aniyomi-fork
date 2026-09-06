@@ -59,6 +59,7 @@ import eu.kanade.tachiyomi.ui.browse.novel.source.NovelSourcesScreenModel
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourceScreenModel.Listing
 import eu.kanade.tachiyomi.ui.home.LocalHomeHazeState
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import eu.kanade.tachiyomi.util.system.PINNED_KEY
 import tachiyomi.domain.source.novel.model.Pin
 import tachiyomi.domain.source.novel.model.Source
 import tachiyomi.i18n.MR
@@ -246,7 +247,8 @@ fun NovelSourcesScreen(
                     },
                     key = {
                         when (it) {
-                            is NovelSourceUiModel.Header -> it.hashCode()
+                            // BRN5-control/BRM-13: stable per language (manga etalon).
+                            is NovelSourceUiModel.Header -> "header-${it.language}"
                             is NovelSourceUiModel.Item -> "source-${it.source.key()}"
                         }
                     },
@@ -257,6 +259,8 @@ fun NovelSourcesScreen(
                                 modifier = Modifier.animateItem(),
                                 language = model.language,
                                 isCollapsed = model.isCollapsed,
+                                // BRM-14: the PINNED group never collapses (SM ignores it).
+                                collapsible = model.language != PINNED_KEY,
                                 onToggle = { onToggleLanguage?.invoke(model.language) },
                             )
                         }
@@ -280,12 +284,13 @@ private fun SourceHeader(
     isCollapsed: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    collapsible: Boolean = true,
 ) {
     val context = LocalContext.current
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
+            .then(if (collapsible) Modifier.clickable(onClick = onToggle) else Modifier)
             .padding(
                 horizontal = MaterialTheme.padding.medium,
                 vertical = MaterialTheme.padding.small,
@@ -297,11 +302,13 @@ private fun SourceHeader(
             text = LocaleHelper.getSourceDisplayName(language, context),
             style = MaterialTheme.typography.header,
         )
-        Icon(
-            imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (collapsible) {
+            Icon(
+                imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

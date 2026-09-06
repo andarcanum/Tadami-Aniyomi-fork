@@ -18,6 +18,7 @@ import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.components.TabContent
 import eu.kanade.tachiyomi.ui.browse.novel.source.browse.BrowseNovelSourcePagerScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
+import eu.kanade.tachiyomi.util.system.LAST_USED_KEY
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -66,7 +67,15 @@ fun Screen.novelSourcesTab(): TabContent {
                                 }
                             }
                         }
-                        groups.values.firstOrNull { it.contains(source.id) } ?: listOf(source.id)
+                        // BRM-15: a last-used source lives in the cross-language LAST_USED
+                        // group - prefer the source's own LANGUAGE group for pager neighbors
+                        // (manga etalon).
+                        val foundEntry = groups.entries.firstOrNull { it.value.contains(source.id) }
+                        when {
+                            foundEntry == null -> listOf(source.id)
+                            foundEntry.key == LAST_USED_KEY -> groups[source.lang] ?: listOf(source.id)
+                            else -> foundEntry.value
+                        }
                     }
                     navigator.push(BrowseNovelSourcePagerScreen(source.id, sourceIds, listing.query))
                 },

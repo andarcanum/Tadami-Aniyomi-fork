@@ -266,19 +266,25 @@ data class BrowseAnimeSourceScreen(
                 onAnimeClick = { anime ->
                     if (Injekt.get<SourcePreferences>().titleCarouselEnabled().get()) {
                         val snapshot = (0 until pagingAnime.itemCount).mapNotNull { index -> pagingAnime[index]?.id }
-                        val index = snapshot.indexOf(anime.id).coerceAtLeast(0)
-                        navigator.push(
-                            TitleCarouselScreen(
-                                type = TitleCarouselType.Anime,
-                                sourceId = screenModel.source.id,
-                                initialTitleIds = snapshot,
-                                initialIndex = index,
-                                listingQuery = state.listing.query,
-                                filtersJson = state.filters
-                                    .takeIf { it.isNotEmpty() }
-                                    ?.let { SavedSearchFilterSerializer.serialize(it) },
-                            ),
-                        )
+                        val index = snapshot.indexOf(anime.id)
+                        // BFEED-17: -1 used to be coerced to 0 - the carousel opened on an
+                        // UNRELATED first title; fall back to the plain entry screen.
+                        if (index < 0) {
+                            navigator.push(AnimeScreen(anime.id, true))
+                        } else {
+                            navigator.push(
+                                TitleCarouselScreen(
+                                    type = TitleCarouselType.Anime,
+                                    sourceId = screenModel.source.id,
+                                    initialTitleIds = snapshot,
+                                    initialIndex = index,
+                                    listingQuery = state.listing.query,
+                                    filtersJson = state.filters
+                                        .takeIf { it.isNotEmpty() }
+                                        ?.let { SavedSearchFilterSerializer.serialize(it) },
+                                ),
+                            )
+                        }
                     } else {
                         navigator.push(AnimeScreen(anime.id, true))
                     }

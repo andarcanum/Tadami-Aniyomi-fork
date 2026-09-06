@@ -3,7 +3,7 @@ package eu.kanade.tachiyomi.ui.browse.novel.migration
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.entries.novel.model.hasCustomCover
 import eu.kanade.tachiyomi.data.cache.NovelCoverCache
-import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
@@ -51,7 +51,11 @@ object NovelMigrationFlags {
         done.set(true)
     }
 
-    private val downloadManager = NovelDownloadManager()
+    // BMG-10: was `NovelDownloadManager()` whose getDownloadCount walks the SAF storage tree
+    // on the CALLER thread - and getFlags runs inside composition (dialog/list `remember`):
+    // main-thread disk IO per opened migration dialog. The in-memory download cache is the
+    // manga/anime etalon (MangaMigrationFlags:38).
+    private val downloadCache: NovelDownloadCache by injectLazy()
     private val coverCache: NovelCoverCache by injectLazy()
 
     fun hasChapters(value: Int): Boolean {
@@ -100,7 +104,7 @@ object NovelMigrationFlags {
             )
         }
 
-        if (novel != null && downloadManager.getDownloadCount(novel) > 0) {
+        if (novel != null && downloadCache.getDownloadCount(novel) > 0) {
             flags += NovelMigrationFlag.create(
                 DELETE_DOWNLOADED,
                 defaultSelectedBitMap,

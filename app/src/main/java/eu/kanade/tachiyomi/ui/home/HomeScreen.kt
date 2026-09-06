@@ -592,10 +592,20 @@ object HomeScreen : Screen() {
                                 is Tab.History -> HistoriesTab
                                 is Tab.Browse -> {
                                     if (it.toExtensions) {
-                                        if (!it.anime) {
-                                            BrowseTab.showExtension()
-                                        } else {
-                                            BrowseTab.showAnimeExtension()
+                                        // BFEED-24: manga/anime-only routing - when the
+                                        // requested section is disabled the consumer dropped
+                                        // the event and the shortcut silently did nothing;
+                                        // novels had no route at all. Fall back across the
+                                        // visible sections.
+                                        val showManga = uiPreferences.showMangaSection().get()
+                                        val showAnime = uiPreferences.showAnimeSection().get()
+                                        val showNovel = uiPreferences.showNovelSection().get()
+                                        when {
+                                            !it.anime && showManga -> BrowseTab.showExtension()
+                                            it.anime && showAnime -> BrowseTab.showAnimeExtension()
+                                            showManga -> BrowseTab.showExtension()
+                                            showAnime -> BrowseTab.showAnimeExtension()
+                                            showNovel -> BrowseTab.showNovelExtension()
                                         }
                                     }
                                     BrowseTab

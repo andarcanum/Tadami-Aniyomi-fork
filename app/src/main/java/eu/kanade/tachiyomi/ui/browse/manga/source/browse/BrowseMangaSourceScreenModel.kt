@@ -48,8 +48,8 @@ import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.entries.manga.interactor.GetDuplicateLibraryManga
-import tachiyomi.domain.entries.manga.interactor.GetLibraryManga
 import tachiyomi.domain.entries.manga.interactor.GetManga
+import tachiyomi.domain.entries.manga.interactor.GetMangaFavorites
 import tachiyomi.domain.entries.manga.interactor.NetworkToLocalManga
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.entries.manga.model.toMangaUpdate
@@ -93,7 +93,7 @@ class BrowseMangaSourceScreenModel(
     private val insertSavedSearch: InsertSavedSearch = Injekt.get(),
     private val deleteSavedSearchById: DeleteSavedSearchById = Injekt.get(),
     private val filterSerializer: FilterSerializer = Injekt.get(),
-    private val getLibraryManga: GetLibraryManga = Injekt.get(),
+    private val getMangaFavorites: GetMangaFavorites = Injekt.get(),
 ) : StateScreenModel<BrowseMangaSourceScreenModel.State>(State(Listing.valueOf(listingQuery))) {
 
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
@@ -304,13 +304,11 @@ class BrowseMangaSourceScreenModel(
         setDialog(null)
     }
 
-    val favoriteMangaUrls = getLibraryManga.subscribe()
-        .map { libraryMangaList ->
-            libraryMangaList
-                .filter { it.manga.source == sourceId }
-                .map { it.manga.url }
-                .toSet()
-        }
+    // BRM-8: was subscribing to the WHOLE library and filtering in memory - every library
+    // change anywhere (any source, read/unread, tracking) re-emitted into the open browse
+    // screen. Source-scoped interactor instead (novel etalon :360-365).
+    val favoriteMangaUrls = getMangaFavorites.subscribe(sourceId)
+        .map { favorites -> favorites.map { it.url }.toSet() }
         .stateIn(screenModelScope, SharingStarted.Lazily, emptySet())
 
     /**

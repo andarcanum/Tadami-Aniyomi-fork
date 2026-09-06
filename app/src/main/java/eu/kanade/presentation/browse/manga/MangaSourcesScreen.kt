@@ -56,6 +56,7 @@ import eu.kanade.tachiyomi.ui.browse.manga.source.MangaSourcesScreenModel
 import eu.kanade.tachiyomi.ui.browse.manga.source.browse.BrowseMangaSourceScreenModel.Listing
 import eu.kanade.tachiyomi.ui.home.LocalHomeHazeState
 import eu.kanade.tachiyomi.util.system.LocaleHelper
+import eu.kanade.tachiyomi.util.system.PINNED_KEY
 import tachiyomi.domain.source.manga.model.Pin
 import tachiyomi.domain.source.manga.model.Source
 import tachiyomi.i18n.MR
@@ -247,7 +248,10 @@ fun MangaSourcesScreen(
                     },
                     key = {
                         when (it) {
-                            is MangaSourceUiModel.Header -> it.hashCode()
+                            // BRM-13: Header.hashCode() changed with isCollapsed - every toggle
+                            // produced a NEW key, destroying and recreating the header item
+                            // (breaking animateItem and forcing churn). Stable per language.
+                            is MangaSourceUiModel.Header -> "header-${it.language}"
                             is MangaSourceUiModel.Item -> "source-${it.source.key()}"
                         }
                     },
@@ -258,6 +262,9 @@ fun MangaSourcesScreen(
                                 modifier = Modifier.animateItem(),
                                 language = model.language,
                                 isCollapsed = model.isCollapsed,
+                                // BRM-14: the PINNED group never collapses (the SM ignores its
+                                // collapsed state) - the arrow and click were misleading dead UI.
+                                collapsible = model.language != PINNED_KEY,
                                 onToggle = { onToggleLanguage?.invoke(model.language) },
                             )
                         }
@@ -281,12 +288,13 @@ private fun SourceHeader(
     isCollapsed: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    collapsible: Boolean = true,
 ) {
     val context = LocalContext.current
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
+            .then(if (collapsible) Modifier.clickable(onClick = onToggle) else Modifier)
             .padding(
                 horizontal = MaterialTheme.padding.medium,
                 vertical = MaterialTheme.padding.small,
@@ -298,11 +306,13 @@ private fun SourceHeader(
             text = LocaleHelper.getSourceDisplayName(language, context),
             style = MaterialTheme.typography.header,
         )
-        Icon(
-            imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        if (collapsible) {
+            Icon(
+                imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
