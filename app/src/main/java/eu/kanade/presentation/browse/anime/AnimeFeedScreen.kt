@@ -91,7 +91,9 @@ fun AnimeFeedScreen(
                     contentPadding = contentPadding,
                 ) {
                     state.items?.forEach { item ->
-                        item(key = item.source.id) {
+                        // BFEED-3: keyed by feed.id - source.id duplicated keys crashed the
+                        // LazyColumn when a source had two feed rows (manga etalon).
+                        item(key = item.feed.id) {
                             FeedSourceSection(
                                 item = item,
                                 getAnimeState = getAnimeState,

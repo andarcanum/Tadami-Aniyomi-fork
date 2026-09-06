@@ -19,7 +19,8 @@ class MigrateAnimeSearchScreenModel(
     init {
         extensionFilter = initialExtensionFilter
         screenModelScope.launch {
-            val anime = getAnime.await(animeId)!!
+            // BMG-9: `!!` crashed when the entry was deleted between navigation and await.
+            val anime = getAnime.await(animeId) ?: return@launch
             mutableState.update {
                 it.copy(
                     fromSourceId = anime.source,

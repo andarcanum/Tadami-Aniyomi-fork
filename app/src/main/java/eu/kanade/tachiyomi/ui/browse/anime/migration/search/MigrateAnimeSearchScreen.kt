@@ -44,9 +44,13 @@ class MigrateAnimeSearchScreen(private val animeId: Long) : Screen() {
             onChangeLanguageFilter = screenModel::setLanguageFilter,
             onToggleResults = screenModel::toggleFilterResults,
             onClickSource = {
-                navigator.push(
-                    AnimeSourceSearchScreen(dialogState.anime!!, it.id, state.searchQuery),
-                )
+                // BMG-9: dialogState.anime loads asynchronously - `!!` crashed on a click
+                // before init completed (or after the entry was deleted).
+                dialogState.anime?.let { oldAnime ->
+                    navigator.push(
+                        AnimeSourceSearchScreen(oldAnime, it.id, state.searchQuery),
+                    )
+                }
             },
             onClickItem = {
                 val migrationListScreen = navigator.items
@@ -66,25 +70,29 @@ class MigrateAnimeSearchScreen(private val animeId: Long) : Screen() {
 
         when (val dialog = dialogState.dialog) {
             is AnimeMigrateSearchScreenDialogScreenModel.Dialog.Migrate -> {
-                MigrateAnimeDialog(
-                    oldAnime = dialogState.anime!!,
-                    newAnime = dialog.anime,
-                    screenModel = rememberScreenModel { MigrateAnimeDialogScreenModel() },
-                    onDismissRequest = { dialogScreenModel.setDialog(null) },
-                    onClickTitle = {
-                        navigator.push(AnimeScreen(dialog.anime.id, true))
-                    },
-                    onClickSeasons = { navigator.push(MigrateSeasonSelectScreen(dialogState.anime!!, dialog.anime)) },
-                    onPopScreen = {
-                        if (navigator.lastItem is AnimeScreen) {
-                            val lastItem = navigator.lastItem
-                            navigator.popUntil { navigator.items.contains(lastItem) }
-                            navigator.push(AnimeScreen(dialog.anime.id))
-                        } else {
-                            navigator.replace(AnimeScreen(dialog.anime.id))
-                        }
-                    },
-                )
+                // BMG-9: the dialog can be set before the async init loaded dialogState.anime.
+                val oldAnime = dialogState.anime
+                if (oldAnime != null) {
+                    MigrateAnimeDialog(
+                        oldAnime = oldAnime,
+                        newAnime = dialog.anime,
+                        screenModel = rememberScreenModel { MigrateAnimeDialogScreenModel() },
+                        onDismissRequest = { dialogScreenModel.setDialog(null) },
+                        onClickTitle = {
+                            navigator.push(AnimeScreen(dialog.anime.id, true))
+                        },
+                        onClickSeasons = { navigator.push(MigrateSeasonSelectScreen(oldAnime, dialog.anime)) },
+                        onPopScreen = {
+                            if (navigator.lastItem is AnimeScreen) {
+                                val lastItem = navigator.lastItem
+                                navigator.popUntil { navigator.items.contains(lastItem) }
+                                navigator.push(AnimeScreen(dialog.anime.id))
+                            } else {
+                                navigator.replace(AnimeScreen(dialog.anime.id))
+                            }
+                        },
+                    )
+                }
             }
             else -> {}
         }

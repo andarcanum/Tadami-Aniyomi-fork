@@ -150,6 +150,9 @@ class BrowseNovelSourceScreenModel(
 ) : StateScreenModel<BrowseNovelSourceScreenModel.State>(State(Listing.valueOf(listingQuery))) {
 
     var displayMode by sourcePreferences.sourceDisplayMode().asState(screenModelScope)
+
+    // BRN-2: written from IO (loadSourceFilters), read on main (search heuristic).
+    @Volatile
     private var defaultFiltersSerialized: String? = null
 
     val source = sourceManager.getOrStub(sourceId)
@@ -443,10 +446,20 @@ class BrowseNovelSourceScreenModel(
         val q = query ?: input.query
         if (!q.isNullOrBlank()) {
             val f = filters ?: input.filters
+            // BRN-2: getFilterList() used to run SYNCHRONOUSLY on the caller thread here (toolbar
+            // IME / queryEvent paths = main) while every other call site treats it as IO-bound
+            // (loadSourceFilters) - a plugin doing IO there meant NetworkOnMainThreadException/
+            // ANR. It only feeds the achievement heuristic: warm the baseline on IO instead and
+            // fall back to "filters non-empty" until it is ready.
             if (defaultFiltersSerialized == null) {
-                defaultFiltersSerialized = serializeFilters(source.getFilterList())
+                screenModelScope.launchIO { loadSourceFilters() }
             }
-            val hasActiveFilters = serializeFilters(f)?.let { it != defaultFiltersSerialized } ?: f.isNotEmpty()
+            val baseline = defaultFiltersSerialized
+            val hasActiveFilters = if (baseline != null) {
+                serializeFilters(f)?.let { it != baseline } ?: f.isNotEmpty()
+            } else {
+                f.isNotEmpty()
+            }
             if (hasActiveFilters) {
                 achievementHandler.trackFeatureUsed(AchievementEvent.Feature.ADVANCED_SEARCH)
             } else {

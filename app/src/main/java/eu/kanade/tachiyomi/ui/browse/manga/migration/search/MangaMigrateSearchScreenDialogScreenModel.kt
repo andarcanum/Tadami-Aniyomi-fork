@@ -17,7 +17,9 @@ class MangaMigrateSearchScreenDialogScreenModel(
 
     init {
         screenModelScope.launch {
-            val manga = getManga.await(mangaId)!!
+            // BMG-9: the entry can be deleted between navigation and this read - `!!` crashed
+            // the process (screenModelScope has no exception handler); stay in Loading instead.
+            val manga = getManga.await(mangaId) ?: return@launch
 
             mutableState.update {
                 it.copy(manga = manga)

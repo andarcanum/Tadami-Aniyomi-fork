@@ -17,7 +17,8 @@ class NovelMigrateSearchScreenDialogScreenModel(
 
     init {
         screenModelScope.launch {
-            val novel = getNovel.await(novelId)!!
+            // BMG-9: `!!` crashed when the entry was deleted between navigation and await.
+            val novel = getNovel.await(novelId) ?: return@launch
 
             mutableState.update {
                 it.copy(novel = novel)

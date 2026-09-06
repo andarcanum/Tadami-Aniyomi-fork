@@ -11,6 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -18,6 +19,21 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
+/**
+ * Serializes saved-search filter states for the anime/novel sources (manga uses the vendored
+ * xyz.nulldev ts FilterSerializer).
+ *
+ * PARENT-3/BRA-2/BFEED-7/BRN-5: deserialization used to be strictly positional with unchecked
+ * `json[STATE]!!` primitives - after an extension update reshaped its filter list (routine), the
+ * states were applied to the WRONG filters and a type/shape mismatch threw straight out of the
+ * screen model coroutines (process crash on opening the saved search). Now: the top-level parse
+ * is guarded, each filter is restored only when its serialized TYPE and NAME still match (a
+ * renamed filter is intentionally skipped - restoring it blindly is what corrupted searches),
+ * every filter is individually exception-guarded (parity with the manga ts serializer, which
+ * swallows per element), and Group children are aligned by the RAW child index so JsonNull
+ * placeholders for non-filter children no longer shift the following children (BRA-13, the ts
+ * GroupSerializer is the etalon).
+ */
 internal object SavedSearchFilterSerializer {
     fun serialize(filters: AnimeFilterList): String {
         return serializeAnimeFilters(filters.list).toString()
@@ -28,11 +44,23 @@ internal object SavedSearchFilterSerializer {
     }
 
     fun deserialize(filtersJson: String, filters: AnimeFilterList) {
-        deserializeAnimeFilters(Json.parseToJsonElement(filtersJson).jsonArray, filters.list)
+        val array = parseOrNull(filtersJson) ?: return
+        deserializeAnimeFilters(array, filters.list)
     }
 
     fun deserialize(filtersJson: String, filters: NovelFilterList) {
-        deserializeNovelFilters(Json.parseToJsonElement(filtersJson).jsonArray, filters.list)
+        val array = parseOrNull(filtersJson) ?: return
+        deserializeNovelFilters(array, filters.list)
+    }
+
+    private fun parseOrNull(filtersJson: String): JsonArray? {
+        return try {
+            Json.parseToJsonElement(filtersJson).jsonArray
+        } catch (e: Exception) {
+            // Corrupted/foreign JSON: degrade to "no saved filters" instead of crashing the
+            // screen model coroutine that called us (BRM-7).
+            null
+        }
     }
 
     private fun serializeAnimeFilters(filters: List<AnimeFilter<*>>): JsonArray {
@@ -71,32 +99,40 @@ internal object SavedSearchFilterSerializer {
         }
     }
 
-    private fun deserializeAnimeFilters(jsonArray: JsonArray, filters: List<AnimeFilter<*>>) {
+    private fun deserializeAnimeFilters(jsonArray: JsonArray, filters: List<*>) {
         filters.forEachIndexed { index, filter ->
+            // Group children can contain non-filter entries (serialized as JsonNull
+            // placeholders); aligning by the RAW index keeps the following children in sync.
+            if (filter !is AnimeFilter<*>) return@forEachIndexed
             if (index >= jsonArray.size) return@forEachIndexed
             val jsonElement = jsonArray[index]
             if (jsonElement is JsonNull) return@forEachIndexed
-            deserializeAnimeFilter(jsonElement.jsonObject, filter)
+            try {
+                deserializeAnimeFilter(jsonElement.jsonObject, filter)
+            } catch (e: Exception) {
+                // Extension filter drift: skip this filter instead of crashing (manga ts
+                // serializer etalon, FilterSerializer:67-73).
+            }
         }
     }
 
     private fun deserializeAnimeFilter(json: JsonObject, filter: AnimeFilter<*>) {
+        if (!matchesSerialized(json, filter.typeName(), filter.name)) return
+        val stateElement = json[Keys.STATE] ?: return
         when (filter) {
-            is AnimeFilter.Select<*> -> filter.state = json[Keys.STATE]!!.jsonPrimitive.int
-            is AnimeFilter.Text -> filter.state = json[Keys.STATE]!!.jsonPrimitive.content
-            is AnimeFilter.CheckBox -> filter.state = json[Keys.STATE]!!.jsonPrimitive.boolean
-            is AnimeFilter.TriState -> filter.state = json[Keys.STATE]!!.jsonPrimitive.int
+            is AnimeFilter.Select<*> -> filter.state = stateElement.jsonPrimitive.int
+            is AnimeFilter.Text -> filter.state = stateElement.jsonPrimitive.content
+            is AnimeFilter.CheckBox -> filter.state = stateElement.jsonPrimitive.boolean
+            is AnimeFilter.TriState -> filter.state = stateElement.jsonPrimitive.int
             is AnimeFilter.Group<*> -> {
-                val childFilters = filter.state.filterIsInstance<AnimeFilter<*>>()
-                val childJson = json[Keys.STATE]?.jsonArray ?: return
-                deserializeAnimeFilters(childJson, childFilters)
+                val childJson = (stateElement as? JsonArray) ?: return
+                deserializeAnimeFilters(childJson, filter.state)
             }
             is AnimeFilter.Sort -> {
-                filter.state = (json[Keys.STATE] as? JsonObject)?.let {
-                    AnimeFilter.Sort.Selection(
-                        it[Keys.INDEX]!!.jsonPrimitive.int,
-                        it[Keys.ASCENDING]!!.jsonPrimitive.boolean,
-                    )
+                filter.state = (stateElement as? JsonObject)?.let {
+                    val selectionIndex = it[Keys.INDEX]?.jsonPrimitive?.int ?: return@let null
+                    val ascending = it[Keys.ASCENDING]?.jsonPrimitive?.boolean ?: return@let null
+                    AnimeFilter.Sort.Selection(selectionIndex, ascending)
                 }
             }
             else -> Unit
@@ -114,13 +150,14 @@ internal object SavedSearchFilterSerializer {
             put(Keys.TYPE, filter.typeName())
             put(Keys.NAME, filter.name)
             when (filter) {
+                // Picker/XCheckBox had their own branches here - dead code: Picker extends
+                // Select and XCheckBox extends TriState, so the parent branches always matched
+                // first (identical Int state); removed (control NEW-2).
                 is NovelFilter.Select<*> -> put(Keys.STATE, filter.state)
-                is NovelFilter.Picker<*> -> put(Keys.STATE, filter.state)
                 is NovelFilter.Text -> put(Keys.STATE, filter.state)
                 is NovelFilter.CheckBox -> put(Keys.STATE, filter.state)
                 is NovelFilter.Switch -> put(Keys.STATE, filter.state)
                 is NovelFilter.TriState -> put(Keys.STATE, filter.state)
-                is NovelFilter.XCheckBox -> put(Keys.STATE, filter.state)
                 is NovelFilter.Group<*> -> putJsonArray(Keys.STATE) {
                     filter.state.forEach {
                         add(if (it is NovelFilter<*>) serializeNovelFilter(it) else JsonNull)
@@ -142,39 +179,47 @@ internal object SavedSearchFilterSerializer {
         }
     }
 
-    private fun deserializeNovelFilters(jsonArray: JsonArray, filters: List<NovelFilter<*>>) {
+    private fun deserializeNovelFilters(jsonArray: JsonArray, filters: List<*>) {
         filters.forEachIndexed { index, filter ->
+            if (filter !is NovelFilter<*>) return@forEachIndexed
             if (index >= jsonArray.size) return@forEachIndexed
             val jsonElement = jsonArray[index]
             if (jsonElement is JsonNull) return@forEachIndexed
-            deserializeNovelFilter(jsonElement.jsonObject, filter)
+            try {
+                deserializeNovelFilter(jsonElement.jsonObject, filter)
+            } catch (e: Exception) {
+                // See deserializeAnimeFilters.
+            }
         }
     }
 
     private fun deserializeNovelFilter(json: JsonObject, filter: NovelFilter<*>) {
+        if (!matchesSerialized(json, filter.typeName(), filter.name)) return
+        val stateElement = json[Keys.STATE] ?: return
         when (filter) {
-            is NovelFilter.Select<*> -> filter.state = json[Keys.STATE]!!.jsonPrimitive.int
-            is NovelFilter.Picker<*> -> filter.state = json[Keys.STATE]!!.jsonPrimitive.int
-            is NovelFilter.Text -> filter.state = json[Keys.STATE]!!.jsonPrimitive.content
-            is NovelFilter.CheckBox -> filter.state = json[Keys.STATE]!!.jsonPrimitive.boolean
-            is NovelFilter.Switch -> filter.state = json[Keys.STATE]!!.jsonPrimitive.boolean
-            is NovelFilter.TriState -> filter.state = json[Keys.STATE]!!.jsonPrimitive.int
-            is NovelFilter.XCheckBox -> filter.state = json[Keys.STATE]!!.jsonPrimitive.int
+            is NovelFilter.Select<*> -> filter.state = stateElement.jsonPrimitive.int
+            is NovelFilter.Text -> filter.state = stateElement.jsonPrimitive.content
+            is NovelFilter.CheckBox -> filter.state = stateElement.jsonPrimitive.boolean
+            is NovelFilter.Switch -> filter.state = stateElement.jsonPrimitive.boolean
+            is NovelFilter.TriState -> filter.state = stateElement.jsonPrimitive.int
             is NovelFilter.Group<*> -> {
-                val childFilters = filter.state.filterIsInstance<NovelFilter<*>>()
-                val childJson = json[Keys.STATE]?.jsonArray ?: return
-                deserializeNovelFilters(childJson, childFilters)
+                val childJson = (stateElement as? JsonArray) ?: return
+                deserializeNovelFilters(childJson, filter.state)
             }
             is NovelFilter.Sort -> {
-                filter.state = (json[Keys.STATE] as? JsonObject)?.let {
-                    NovelFilter.Sort.Selection(
-                        it[Keys.INDEX]!!.jsonPrimitive.int,
-                        it[Keys.ASCENDING]!!.jsonPrimitive.boolean,
-                    )
+                filter.state = (stateElement as? JsonObject)?.let {
+                    val selectionIndex = it[Keys.INDEX]?.jsonPrimitive?.int ?: return@let null
+                    val ascending = it[Keys.ASCENDING]?.jsonPrimitive?.boolean ?: return@let null
+                    NovelFilter.Sort.Selection(selectionIndex, ascending)
                 }
             }
             else -> Unit
         }
+    }
+
+    private fun matchesSerialized(json: JsonObject, typeName: String, name: String): Boolean {
+        return json[Keys.TYPE]?.jsonPrimitive?.contentOrNull == typeName &&
+            json[Keys.NAME]?.jsonPrimitive?.contentOrNull == name
     }
 
     private fun AnimeFilter<*>.typeName(): String = when (this) {

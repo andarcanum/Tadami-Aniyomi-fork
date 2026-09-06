@@ -19,7 +19,8 @@ class MigrateMangaSearchScreenModel(
     init {
         extensionFilter = initialExtensionFilter
         screenModelScope.launch {
-            val manga = getManga.await(mangaId)!!
+            // BMG-9: `!!` crashed when the entry was deleted between navigation and await.
+            val manga = getManga.await(mangaId) ?: return@launch
             mutableState.update {
                 it.copy(
                     fromSourceId = manga.source,

@@ -21,9 +21,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.update
+import logcat.LogPriority
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.items.novelchapter.model.NovelChapter
@@ -31,6 +33,7 @@ import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.coroutines.cancellation.CancellationException
 
 class NovelMigrationListScreenModel(
     novelIds: Collection<Long>,
@@ -157,23 +160,33 @@ class NovelMigrationListScreenModel(
                 return@forEach
             }
 
-            val result = searchSource(
-                novel = item.novel,
-                sources = sources,
-                strategy = strategy,
-                useDeepSearch = useDeepSearch,
-                useAutoMetadata = useAutoMetadata,
-                onProgress = { label ->
-                    currentItems = currentItems.map { current ->
-                        if (current.novel.id == item.novel.id) {
-                            current.copy(searchLabel = label)
-                        } else {
-                            current
+            // BMG-1 (CRITICAL): a source exception (IOException/403/rate-limit/parse) used to
+            // rethrow out of launchIO into screenModelScope, which has NO CoroutineExceptionHandler
+            // (Voyager SupervisorJob) - the whole app crashed on the first failing source during
+            // migration search. Manga/anime mirrors wrap this in runCatching; CancellationException
+            // must keep propagating (NEW-5).
+            val result = runCatching {
+                searchSource(
+                    novel = item.novel,
+                    sources = sources,
+                    strategy = strategy,
+                    useDeepSearch = useDeepSearch,
+                    useAutoMetadata = useAutoMetadata,
+                    onProgress = { label ->
+                        currentItems = currentItems.map { current ->
+                            if (current.novel.id == item.novel.id) {
+                                current.copy(searchLabel = label)
+                            } else {
+                                current
+                            }
                         }
-                    }
-                    publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
-                },
-            )
+                        publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
+                    },
+                )
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                logcat(LogPriority.ERROR, error) { "Novel migration search failed for novel ${item.novel.id}" }
+            }.getOrNull()
             if (item.novel.id in cancelledSearchIds) {
                 currentItems = currentItems.map { current ->
                     if (current.novel.id == item.novel.id) {
@@ -410,9 +423,16 @@ class NovelMigrationListScreenModel(
             val item = items.find { it.novel.id == novelId } ?: return@launchIO
             val target = (item.searchResult as? SearchResult.Success)?.novel ?: return@launchIO
             val flags = getMigrationFlags(item.novel)
-            migrateNovel.migrateNovel(item.novel, target, replace, flags)
-            markUpdateErrorResolved(item.novel.id, replace)
-            removeNovel(item)
+            // BMG-1: a use-case failure (getChapterList is unguarded inside MigrateNovelUseCase)
+            // crashed the process via the handler-less screenModelScope.
+            runCatching {
+                migrateNovel.migrateNovel(item.novel, target, replace, flags)
+                markUpdateErrorResolved(item.novel.id, replace)
+                removeNovel(item)
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
+                logcat(LogPriority.ERROR, error) { "Novel migrateNow failed for novel ${item.novel.id}" }
+            }
         }
     }
 
@@ -479,9 +499,16 @@ class NovelMigrationListScreenModel(
                 items.forEachIndexed { index, item ->
                     val target = (item.searchResult as? SearchResult.Success)?.novel ?: return@forEachIndexed
                     val flags = getMigrationFlags(item.novel)
-                    migrateNovel.migrateNovel(item.novel, target, replace, flags)
-                    markUpdateErrorResolved(item.novel.id, replace)
-                    migratedItems += item
+                    // BMG-1: the first failure aborted the whole batch AND crashed the process;
+                    // manga/anime log per item and continue (manga etalon :519-529).
+                    runCatching {
+                        migrateNovel.migrateNovel(item.novel, target, replace, flags)
+                        markUpdateErrorResolved(item.novel.id, replace)
+                        migratedItems += item
+                    }.onFailure { error ->
+                        if (error is CancellationException) throw error
+                        logcat(LogPriority.ERROR, error) { "Failed to migrate novel ${item.novel.id}" }
+                    }
                     mutableState.update {
                         it.copy(migrationProgress = ((index + 1).toFloat() / items.size).coerceAtMost(1f))
                     }

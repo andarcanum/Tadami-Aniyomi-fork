@@ -91,7 +91,10 @@ fun MangaFeedScreen(
                     contentPadding = contentPadding,
                 ) {
                     state.items?.forEach { item ->
-                        item(key = item.source.id) {
+                        // BFEED-3: keyed by source.id - two feed rows of one source (legacy v40
+                        // schema had no unique constraint; double-tap Add could insert a dup)
+                        // crashed the LazyColumn with a duplicate key on EVERY tab open.
+                        item(key = item.feed.id) {
                             FeedSourceSection(
                                 item = item,
                                 getMangaState = getMangaState,

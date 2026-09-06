@@ -123,7 +123,11 @@ class BrowseMangaSourceScreenModel(
                 val baseFilters = loadSourceFilters()
                 val filtersJson = savedSearch.filtersJson
                 if (filtersJson != null) {
-                    filterSerializer.deserialize(baseFilters, Json.parseToJsonElement(filtersJson).jsonArray)
+                    // BRM-7: a corrupted/foreign filtersJson used to crash this coroutine (and
+                    // the process - screenModelScope has no exception handler) through the
+                    // unguarded parse; degrade to the default filters instead.
+                    runCatching { Json.parseToJsonElement(filtersJson).jsonArray }
+                        .onSuccess { filterSerializer.deserialize(baseFilters, it) }
                 }
                 mutableState.update {
                     it.copy(
@@ -227,7 +231,10 @@ class BrowseMangaSourceScreenModel(
     fun saveSearch(name: String) {
         screenModelScope.launch {
             val state = mutableState.value
-            val filtersJson = kotlinx.serialization.json.Json.encodeToString(filterSerializer.serialize(state.filters))
+            // BRM-6: use the runCatching-wrapped serializeFilters (the raw call threw
+            // IllegalArgumentException on filter subtypes the ts serializer doesn't cover,
+            // straight out of this coroutine).
+            val filtersJson = serializeFilters(state.filters)
             val savedSearch = SavedSearch(
                 id = -1,
                 source = sourceId,
@@ -254,8 +261,10 @@ class BrowseMangaSourceScreenModel(
         if (source !is CatalogueSource) return
         screenModelScope.launch {
             val filtersJsonStr = savedSearch.filtersJson
+            // BRM-7: guarded parse - corrupted JSON degrades to "no saved filters".
             val jsonArray = if (filtersJsonStr != null) {
-                Json.parseToJsonElement(filtersJsonStr).jsonArray
+                runCatching { Json.parseToJsonElement(filtersJsonStr).jsonArray }
+                    .getOrDefault(buildJsonArray { })
             } else {
                 buildJsonArray { }
             }

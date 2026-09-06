@@ -43,9 +43,13 @@ class MigrateMangaSearchScreen(private val mangaId: Long) : Screen() {
             onChangeLanguageFilter = screenModel::setLanguageFilter,
             onToggleResults = screenModel::toggleFilterResults,
             onClickSource = {
-                navigator.push(
-                    MangaSourceSearchScreen(dialogState.manga!!, it.id, state.searchQuery),
-                )
+                // BMG-9: dialogState.manga loads asynchronously - `!!` crashed on a click
+                // before init completed (or after the entry was deleted).
+                dialogState.manga?.let { oldManga ->
+                    navigator.push(
+                        MangaSourceSearchScreen(oldManga, it.id, state.searchQuery),
+                    )
+                }
             },
             onClickItem = {
                 val migrationListScreen = navigator.items
@@ -66,24 +70,28 @@ class MigrateMangaSearchScreen(private val mangaId: Long) : Screen() {
 
         when (val dialog = dialogState.dialog) {
             is MangaMigrateSearchScreenDialogScreenModel.Dialog.Migrate -> {
-                MigrateMangaDialog(
-                    oldManga = dialogState.manga!!,
-                    newManga = dialog.manga,
-                    screenModel = rememberScreenModel { MigrateMangaDialogScreenModel() },
-                    onDismissRequest = { dialogScreenModel.setDialog(null) },
-                    onClickTitle = {
-                        navigator.push(MangaScreen(dialog.manga.id, true))
-                    },
-                    onPopScreen = {
-                        if (navigator.lastItem is MangaScreen) {
-                            val lastItem = navigator.lastItem
-                            navigator.popUntil { navigator.items.contains(lastItem) }
-                            navigator.push(MangaScreen(dialog.manga.id))
-                        } else {
-                            navigator.replace(MangaScreen(dialog.manga.id))
-                        }
-                    },
-                )
+                // BMG-9: the dialog can be set before the async init loaded dialogState.manga.
+                val oldManga = dialogState.manga
+                if (oldManga != null) {
+                    MigrateMangaDialog(
+                        oldManga = oldManga,
+                        newManga = dialog.manga,
+                        screenModel = rememberScreenModel { MigrateMangaDialogScreenModel() },
+                        onDismissRequest = { dialogScreenModel.setDialog(null) },
+                        onClickTitle = {
+                            navigator.push(MangaScreen(dialog.manga.id, true))
+                        },
+                        onPopScreen = {
+                            if (navigator.lastItem is MangaScreen) {
+                                val lastItem = navigator.lastItem
+                                navigator.popUntil { navigator.items.contains(lastItem) }
+                                navigator.push(MangaScreen(dialog.manga.id))
+                            } else {
+                                navigator.replace(MangaScreen(dialog.manga.id))
+                            }
+                        },
+                    )
+                }
             }
             else -> {}
         }

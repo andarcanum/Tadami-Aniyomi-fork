@@ -63,24 +63,28 @@ class MigrateNovelSearchScreen(private val novelId: Long) : Screen() {
 
         when (val dialog = dialogState.dialog) {
             is NovelMigrateSearchScreenDialogScreenModel.Dialog.Migrate -> {
-                MigrateNovelDialog(
-                    oldNovel = dialogState.novel!!,
-                    newNovel = dialog.novel,
-                    screenModel = rememberScreenModel { MigrateNovelDialogScreenModel() },
-                    onDismissRequest = { dialogScreenModel.setDialog(null) },
-                    onClickTitle = {
-                        navigator.push(NovelScreen(dialog.novel.id, true))
-                    },
-                    onPopScreen = {
-                        if (navigator.lastItem is NovelScreen) {
-                            val lastItem = navigator.lastItem
-                            navigator.popUntil { navigator.items.contains(lastItem) }
+                // BMG-9: the dialog can be set before the async init loaded dialogState.novel.
+                val oldNovel = dialogState.novel
+                if (oldNovel != null) {
+                    MigrateNovelDialog(
+                        oldNovel = oldNovel,
+                        newNovel = dialog.novel,
+                        screenModel = rememberScreenModel { MigrateNovelDialogScreenModel() },
+                        onDismissRequest = { dialogScreenModel.setDialog(null) },
+                        onClickTitle = {
                             navigator.push(NovelScreen(dialog.novel.id, true))
-                        } else {
-                            navigator.replace(NovelScreen(dialog.novel.id, true))
-                        }
-                    },
-                )
+                        },
+                        onPopScreen = {
+                            if (navigator.lastItem is NovelScreen) {
+                                val lastItem = navigator.lastItem
+                                navigator.popUntil { navigator.items.contains(lastItem) }
+                                navigator.push(NovelScreen(dialog.novel.id, true))
+                            } else {
+                                navigator.replace(NovelScreen(dialog.novel.id, true))
+                            }
+                        },
+                    )
+                }
             }
 
             else -> {}

@@ -117,6 +117,7 @@ import eu.kanade.tachiyomi.ui.deeplink.manga.DeepLinkMangaScreen
 import eu.kanade.tachiyomi.ui.deeplink.novel.DeepLinkNovelScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
+import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.more.NewUpdateScreen
 import eu.kanade.tachiyomi.ui.more.OnboardingScreen
@@ -469,6 +470,9 @@ class MainActivity : BaseActivity() {
                                 .filter { !it }
                                 .onEach {
                                     val currentScreen = navigator.lastItem
+                                    // PARENT-1: the novel mirrors were missing - novel source
+                                    // screens were not popped when incognito turned off even
+                                    // though incognitoNovel is tracked right here (:358-367).
                                     if ((
                                             currentScreen is BrowseMangaSourceScreen ||
                                                 (currentScreen is MangaScreen && currentScreen.fromSource)
@@ -476,6 +480,10 @@ class MainActivity : BaseActivity() {
                                         (
                                             currentScreen is BrowseAnimeSourceScreen ||
                                                 (currentScreen is AnimeScreen && currentScreen.fromSource)
+                                            ) ||
+                                        (
+                                            currentScreen is BrowseNovelSourceScreen ||
+                                                (currentScreen is NovelScreen && currentScreen.fromSource)
                                             )
                                     ) {
                                         navigator.popUntilRoot()

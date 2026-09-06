@@ -200,9 +200,12 @@ private fun FilterItem(filter: NovelFilter<*>, onUpdate: () -> Unit) {
                                 ?.takeIf { index == filter.state?.index },
                         ) {
                             val ascending = if (index == filter.state?.index) {
-                                !filter.state!!.ascending
+                                !(filter.state?.ascending ?: true)
                             } else {
-                                filter.state!!.ascending
+                                // BRN-17: `filter.state!!` NPE-crashed the first click when the
+                                // source declared Sort without an initial Selection (API default
+                                // null); first click now sorts ascending (upstream null-safe).
+                                filter.state?.ascending ?: true
                             }
                             filter.state = NovelFilter.Sort.Selection(
                                 index = index,
