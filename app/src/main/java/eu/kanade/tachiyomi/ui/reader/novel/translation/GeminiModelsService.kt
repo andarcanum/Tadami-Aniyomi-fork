@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 import okhttp3.OkHttpClient
 import tachiyomi.core.common.util.lang.withIOContext
+import java.io.IOException
 
 /** Output budget the Gemini translation request always asks for (see GeminiTranslationService). */
 internal const val GEMINI_TRANSLATION_MAX_OUTPUT_TOKENS = 16384
@@ -28,21 +29,24 @@ class GeminiModelsService(
     private val json: Json,
 ) {
 
-    suspend fun fetchModels(apiKey: String): List<GeminiModelEntry> {
+    suspend fun fetchModels(
+        apiKey: String,
+        baseUrl: String = GEMINI_MODELS_BASE_URL,
+    ): List<GeminiModelEntry> {
         if (apiKey.isBlank()) return emptyList()
 
         val responseText = withIOContext {
             val response = client.newCall(
                 GET(
-                    url = "https://generativelanguage.googleapis.com/v1beta/models" +
+                    url = "$baseUrl/v1beta/models" +
                         "?key=$apiKey&pageSize=$GEMINI_MODELS_PAGE_SIZE",
                 ),
             ).await()
             response.use {
-                if (!it.isSuccessful) return@withIOContext null
+                if (!it.isSuccessful) throw IOException("HTTP ${it.code}")
                 it.body.string()
             }
-        } ?: return emptyList()
+        }
 
         val payload = runCatching { json.parseToJsonElement(responseText) as? JsonObject }
             .getOrNull()
@@ -50,6 +54,7 @@ class GeminiModelsService(
     }
 }
 
+private const val GEMINI_MODELS_BASE_URL = "https://generativelanguage.googleapis.com"
 private const val GEMINI_MODELS_PAGE_SIZE = 1000
 
 /** Specialized Gemini variants that accept generateContent but cannot translate text chapters. */

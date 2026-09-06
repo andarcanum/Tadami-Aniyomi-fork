@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel.translation
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -9,6 +10,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.IOException
 
 class OpenRouterModelsServiceTest {
 
@@ -52,5 +54,21 @@ class OpenRouterModelsServiceTest {
             "google/gemma-3-27b-it:free",
         )
         server.takeRequest().path shouldBe "/api/v1/models"
+    }
+
+    @Test
+    fun `fetchModels throws on http non-success so callers can log invalid keys`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(403))
+        val service = OpenRouterModelsService(
+            client = OkHttpClient(),
+            json = Json { ignoreUnknownKeys = true },
+        )
+
+        shouldThrow<IOException> {
+            service.fetchModels(
+                baseUrl = server.url("/").toString().trimEnd('/'),
+                apiKey = "test-key",
+            )
+        }.message shouldBe "HTTP 403"
     }
 }

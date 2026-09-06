@@ -1,10 +1,16 @@
 package eu.kanade.tachiyomi.ui.reader.novel.translation
 
+import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.Test
+import java.io.IOException
 
 class GeminiModelsServiceTest {
 
@@ -114,5 +120,24 @@ class GeminiModelsServiceTest {
         extractGeminiModelEntries(null).shouldBeEmpty()
         extractGeminiModelEntries(payload("not-json")).shouldBeEmpty()
         extractGeminiModelEntries(payload("""{"models": "oops"}""")).shouldBeEmpty()
+    }
+
+    @Test
+    fun `fetchModels throws on http non-success so callers can log invalid keys`() = runBlocking<Unit> {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(MockResponse().setResponseCode(403))
+            val service = GeminiModelsService(
+                client = OkHttpClient(),
+                json = Json { ignoreUnknownKeys = true },
+            )
+
+            shouldThrow<IOException> {
+                service.fetchModels(apiKey = "test-key", baseUrl = server.url("/").toString().trimEnd('/'))
+            }.message shouldBe "HTTP 403"
+        } finally {
+            server.shutdown()
+        }
     }
 }

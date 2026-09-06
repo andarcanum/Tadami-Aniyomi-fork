@@ -88,12 +88,12 @@ internal class NovelAiProviderController(
     private val host: NovelAiProviderHost,
     private val application: Application = Injekt.get(),
     private val novelReaderPreferences: NovelReaderPreferences = Injekt.get(),
-    private val geminiModelsService: GeminiModelsService = Injekt.get(),
-    private val openRouterModelsService: OpenRouterModelsService = Injekt.get(),
-    private val deepSeekModelsService: DeepSeekModelsService = Injekt.get(),
-    private val mistralModelsService: MistralModelsService = Injekt.get(),
-    private val nvidiaModelsService: NvidiaModelsService = Injekt.get(),
-    private val ollamaCloudModelsService: OllamaCloudModelsService = Injekt.get(),
+    private val geminiModelsService: GeminiModelsService,
+    private val openRouterModelsService: OpenRouterModelsService,
+    private val deepSeekModelsService: DeepSeekModelsService,
+    private val mistralModelsService: MistralModelsService,
+    private val nvidiaModelsService: NvidiaModelsService,
+    private val ollamaCloudModelsService: OllamaCloudModelsService,
 ) {
 
     private var state: NovelAiProviderState = NovelAiProviderState()

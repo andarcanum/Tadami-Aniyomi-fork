@@ -8,6 +8,7 @@ import okhttp3.Headers
 import okhttp3.Headers.Companion.headersOf
 import okhttp3.OkHttpClient
 import tachiyomi.core.common.util.lang.withIOContext
+import java.io.IOException
 
 class OllamaCloudModelsService(
     private val client: OkHttpClient,
@@ -26,10 +27,10 @@ class OllamaCloudModelsService(
             )
             val response = client.newCall(request).await()
             response.use {
-                if (!it.isSuccessful) return@withIOContext null
+                if (!it.isSuccessful) throw IOException("HTTP ${it.code}")
                 it.body.string()
             }
-        } ?: return emptyList()
+        }
 
         val payload = runCatching { json.parseToJsonElement(responseText) as? JsonObject }
             .getOrNull()

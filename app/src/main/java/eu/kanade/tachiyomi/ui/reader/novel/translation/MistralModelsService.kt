@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import okhttp3.Headers.Companion.headersOf
 import okhttp3.OkHttpClient
 import tachiyomi.core.common.util.lang.withIOContext
+import java.io.IOException
 
 class MistralModelsService(
     private val client: OkHttpClient,
@@ -29,10 +30,10 @@ class MistralModelsService(
                 ),
             ).await()
             response.use {
-                if (!it.isSuccessful) return@withIOContext null
+                if (!it.isSuccessful) throw IOException("HTTP ${it.code}")
                 it.body.string()
             }
-        } ?: return emptyList()
+        }
 
         val payload = runCatching { json.parseToJsonElement(responseText) as? JsonObject }
             .getOrNull()

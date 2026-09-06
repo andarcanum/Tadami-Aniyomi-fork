@@ -12,7 +12,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.IOException
 
-class AirforceModelsServiceTest {
+class OllamaCloudModelsServiceTest {
 
     private val server = MockWebServer()
 
@@ -27,30 +27,9 @@ class AirforceModelsServiceTest {
     }
 
     @Test
-    fun `loads model ids from v1 models`() = runBlocking<Unit> {
-        server.enqueue(
-            MockResponse().setBody(
-                """{"data":[{"id":"openai/gpt-4.1-mini"},{"id":"anthropic/claude-3.5-sonnet"}]}""",
-            ),
-        )
-        val service = AirforceModelsService(
-            client = OkHttpClient(),
-            json = Json { ignoreUnknownKeys = true },
-        )
-
-        val models = service.fetchModels(
-            baseUrl = server.url("/").toString().trimEnd('/'),
-            apiKey = "test-key",
-        )
-
-        models shouldBe listOf("anthropic/claude-3.5-sonnet", "openai/gpt-4.1-mini")
-        server.takeRequest().path shouldBe "/v1/models"
-    }
-
-    @Test
     fun `fetchModels throws on http non-success so callers can log invalid keys`() = runBlocking<Unit> {
         server.enqueue(MockResponse().setResponseCode(403))
-        val service = AirforceModelsService(
+        val service = OllamaCloudModelsService(
             client = OkHttpClient(),
             json = Json { ignoreUnknownKeys = true },
         )

@@ -664,37 +664,37 @@ internal fun GeminiTranslationDialog(
             (readerSettings.geminiPrivateUnlocked || GeminiPrivateBridge.isUnlocked())
     }
 
-    LaunchedEffect(isGeminiSelected, geminiModels.size) {
+    LaunchedEffect(isGeminiSelected, geminiModels.size, readerSettings.translationProvider) {
         if (isGeminiSelected && geminiModels.isEmpty()) {
             onRefreshGeminiModels()
         }
     }
 
-    LaunchedEffect(isOpenRouterSelected, openRouterModels.size) {
+    LaunchedEffect(isOpenRouterSelected, openRouterModels.size, readerSettings.translationProvider) {
         if (isOpenRouterSelected && openRouterModels.isEmpty()) {
             onRefreshOpenRouterModels()
         }
     }
 
-    LaunchedEffect(isDeepSeekSelected, deepSeekModels.size) {
+    LaunchedEffect(isDeepSeekSelected, deepSeekModels.size, readerSettings.translationProvider) {
         if (isDeepSeekSelected && deepSeekModels.isEmpty()) {
             onRefreshDeepSeekModels()
         }
     }
 
-    LaunchedEffect(isMistralSelected, mistralModels.size) {
+    LaunchedEffect(isMistralSelected, mistralModels.size, readerSettings.translationProvider) {
         if (isMistralSelected && mistralModels.isEmpty()) {
             onRefreshMistralModels()
         }
     }
 
-    LaunchedEffect(isNvidiaSelected, nvidiaModels.size) {
+    LaunchedEffect(isNvidiaSelected, nvidiaModels.size, readerSettings.translationProvider) {
         if (isNvidiaSelected && nvidiaModels.isEmpty()) {
             onRefreshNvidiaModels()
         }
     }
 
-    LaunchedEffect(isOllamaCloudSelected, ollamaCloudModels.size) {
+    LaunchedEffect(isOllamaCloudSelected, ollamaCloudModels.size, readerSettings.translationProvider) {
         if (isOllamaCloudSelected && ollamaCloudModels.isEmpty()) {
             onRefreshOllamaCloudModels()
         }
