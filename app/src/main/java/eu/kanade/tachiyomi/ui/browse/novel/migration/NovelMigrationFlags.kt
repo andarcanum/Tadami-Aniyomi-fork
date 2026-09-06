@@ -4,6 +4,7 @@ import dev.icerock.moko.resources.StringResource
 import eu.kanade.domain.entries.novel.model.hasCustomCover
 import eu.kanade.tachiyomi.data.cache.NovelCoverCache
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
 import uy.kohesive.injekt.injectLazy
@@ -33,6 +34,22 @@ object NovelMigrationFlags {
     private const val EXTRA = 0b10000
     private const val NOTES = 0b100000
     private const val CUSTOM_COVER = 0b1000000
+
+    private const val COLLISION_RESET_KEY = "migrate_flags_novel_collision_reset"
+
+    /**
+     * BMG-2/РЕШ-B8: the config sheet historically toggled bit 0b100 (TRACKING) under the
+     * "delete downloaded" label, so existing `migrate_flags_novel` values carry polluted
+     * tracking bits the user never chose intentionally. One-time reset to the all-on default
+     * when the fixed sheet first runs; tracked by a dedicated flag so intentional choices made
+     * after the fix are never touched again.
+     */
+    fun ensureBitCollisionReset(preferenceStore: PreferenceStore) {
+        val done = preferenceStore.getBoolean(COLLISION_RESET_KEY, false)
+        if (done.get()) return
+        preferenceStore.getInt("migrate_flags_novel", Int.MAX_VALUE).set(Int.MAX_VALUE)
+        done.set(true)
+    }
 
     private val downloadManager = NovelDownloadManager()
     private val coverCache: NovelCoverCache by injectLazy()

@@ -339,7 +339,11 @@ data class BrowseMangaSourceScreen(
                 MigrateMangaDialog(
                     oldManga = dialog.oldManga,
                     newManga = dialog.newManga,
-                    screenModel = MigrateMangaDialogScreenModel(),
+                    // BRM-1: was constructed INLINE - every recomposition of this when-scope
+                    // (any browse state emission, rotation) recreated the SM mid-migration:
+                    // isMigrating reset to false, a second tap started a PARALLEL migration of
+                    // the same pair while the old coroutine kept running.
+                    screenModel = rememberScreenModel { MigrateMangaDialogScreenModel() },
                     onDismissRequest = onDismissRequest,
                     onClickTitle = { navigator.push(MangaScreen(dialog.oldManga.id)) },
                     onPopScreen = {

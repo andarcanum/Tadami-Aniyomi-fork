@@ -34,11 +34,12 @@ import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.coroutines.cancellation.CancellationException
 
 class AnimeMigrationListScreenModel(
     animeIds: Collection<Long>,
     private val sourceIds: Collection<Long>,
-    private val extraSearchQuery: String?,
+    private var extraSearchQuery: String?,
     val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val getAnime: GetAnime = Injekt.get(),
@@ -54,10 +55,19 @@ class AnimeMigrationListScreenModel(
         preferenceStore.getInt("migrate_flags_anime", Int.MAX_VALUE)
     }
 
+    // BMG-8/BMG-11: written on main and nulled/read on IO - @Volatile (see the manga SM).
+    @Volatile
     private var migrateJob: Job? = null
+
+    @Volatile
     private var searchJob: Job? = null
+
+    // BMG-5 (F-M2 port): mutated from the IO search loop AND from main (cancelSearch /
+    // useAnimeForMigration) - confined behind the updateItem monitor (manga etalon :60-65).
+    @Volatile
     private var allItems: List<MigratingAnime> = emptyList()
-    private val cancelledSearchIds = mutableSetOf<Long>()
+    private val cancelledSearchIds: MutableSet<Long> =
+        java.util.Collections.synchronizedSet(mutableSetOf())
 
     init {
         screenModelScope.launchIO {
@@ -136,7 +146,8 @@ class AnimeMigrationListScreenModel(
             try {
                 runSearches(searchItems)
             } finally {
-                searchJob = null
+                // BMG-8: only clear our own job reference (see the manga SM comment).
+                if (searchJob === currentCoroutineContext()[Job]) searchJob = null
             }
         }
     }
@@ -152,7 +163,14 @@ class AnimeMigrationListScreenModel(
         items.forEach { item ->
             if (item.anime.id in cancelledSearchIds) {
                 updateItem(item.anime.id, hideNotFound, onlyNewEpisodes) { current ->
-                    current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+                    // BMG-5 (F-M2 port): only a still-running search may be reset - an
+                    // unconditional NotFound here used to clobber a manual match chosen through
+                    // useAnimeForMigration before the loop reached this item.
+                    if (current.searchResult == SearchResult.Searching) {
+                        current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+                    } else {
+                        current
+                    }
                 }
                 return@forEach
             }
@@ -171,12 +189,21 @@ class AnimeMigrationListScreenModel(
                     },
                 )
             }.onFailure { error ->
+                // BMG-6 (NEW-5 port): rethrow cancellation - swallowing it here turned a
+                // cancelSearch into a burst of bogus NotFound writes.
+                if (error is CancellationException) throw error
                 logcat(LogPriority.ERROR, error) { "Anime migration search failed for anime ${item.anime.id}" }
             }.getOrNull()
 
             if (item.anime.id in cancelledSearchIds) {
                 updateItem(item.anime.id, hideNotFound, onlyNewEpisodes) { current ->
-                    current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+                    // BMG-5 (F-M2 port): same guard - a late auto result must not clobber a
+                    // manual match (manga etalon :200-212).
+                    if (current.searchResult == SearchResult.Searching) {
+                        current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
+                    } else {
+                        current
+                    }
                 }
                 return@forEach
             }
@@ -197,6 +224,7 @@ class AnimeMigrationListScreenModel(
         }
     }
 
+    @Synchronized
     private fun updateItem(
         animeId: Long,
         hideNotFound: Boolean,
@@ -385,7 +413,13 @@ class AnimeMigrationListScreenModel(
         mutableState.update { it.copy(dialog = null) }
     }
 
-    fun onMigrationOptionsUpdated() {
+    fun onMigrationOptionsUpdated(extraQuery: String? = null) {
+        // BMG-7 (M10 port, manga etalon :418-429): the Options sheet hands the cleaned extra
+        // search query here; null (untouched/cleared - the sheet cannot distinguish) keeps the
+        // current query, a non-blank input overrides it.
+        if (extraQuery != null) {
+            extraSearchQuery = extraQuery
+        }
         dismissDialog()
         startSearches(resetResults = true)
     }
@@ -412,37 +446,21 @@ class AnimeMigrationListScreenModel(
             val targetAnime = getAnime.await(target) ?: return@launchIO
             val source = sourceManager.get(targetAnime.source) as? AnimeCatalogueSource ?: return@launchIO
             val episodeInfo = getEpisodeInfo(source, targetAnime)
-            val updatedItems = allItems.map { item ->
-                if (item.anime.id == current) {
-                    item.copy(
-                        searchLabel = null,
-                        searchResult = SearchResult.Success(
-                            anime = targetAnime,
-                            source = source.name,
-                            episodeCount = episodeInfo.episodeCount,
-                            latestEpisode = episodeInfo.latestEpisode,
-                        ),
-                    )
-                } else {
-                    item
-                }
-            }
-            allItems = updatedItems
-            val hideNotFound = sourcePreferences.migrationHideNotFound().get()
-            val onlyNewEpisodes = sourcePreferences.migrationOnlyNewChapters().get()
-            val visibleItems = visibleAnimeMigrationItems(
-                items = updatedItems,
-                hideNotFound = hideNotFound,
-                onlyNewEpisodes = onlyNewEpisodes,
-            ).toImmutableList()
-            val finishedCount = visibleItems.count { it.searchResult != SearchResult.Searching }
-            val migrationComplete = isAnimeMigrationSearchComplete(visibleItems)
-
-            mutableState.update { state ->
-                state.copy(
-                    items = visibleItems,
-                    finishedCount = finishedCount,
-                    migrationComplete = migrationComplete,
+            // BMG-5 (F-M2 port): through the synchronized updateItem - the manual write used to
+            // race the IO search loop on the plain allItems var (manga etalon :448-468).
+            updateItem(
+                current,
+                sourcePreferences.migrationHideNotFound().get(),
+                sourcePreferences.migrationOnlyNewChapters().get(),
+            ) { item ->
+                item.copy(
+                    searchLabel = null,
+                    searchResult = SearchResult.Success(
+                        anime = targetAnime,
+                        source = source.name,
+                        episodeCount = episodeInfo.episodeCount,
+                        latestEpisode = episodeInfo.latestEpisode,
+                    ),
                 )
             }
         }
@@ -469,6 +487,9 @@ class AnimeMigrationListScreenModel(
     }
 
     private fun migrateAnimes(replace: Boolean) {
+        // BMG-11: guard against a double-tap starting two parallel batches (see the manga SM).
+        if (state.value.isMigrating) return
+        migrateJob?.cancel()
         migrateJob = screenModelScope.launchIO {
             val items = state.value.items
             val migratedItems = mutableListOf<MigratingAnime>()
@@ -483,6 +504,10 @@ class AnimeMigrationListScreenModel(
                         markUpdateErrorResolved(item.anime.id, replace)
                         migratedItems += item
                     }.onFailure { error ->
+                        // BMG-6 (NEW-5 port): swallowing CancellationException made cancelMigrate
+                        // a no-op for the loop - every remaining item instantly "failed" and the
+                        // progress bar spun to 100%.
+                        if (error is CancellationException) throw error
                         logcat(LogPriority.ERROR, error) { "Failed to migrate anime ${item.anime.id}" }
                     }
                     mutableState.update {
@@ -523,10 +548,12 @@ class AnimeMigrationListScreenModel(
         )
     }
 
+    @Synchronized
     private fun removeAnime(item: MigratingAnime) {
         removeMigratedAnime(listOf(item))
     }
 
+    @Synchronized
     private fun removeMigratedAnime(items: Collection<MigratingAnime>) {
         if (items.isEmpty()) return
         val migratedIds = items.mapTo(mutableSetOf()) { it.anime.id }

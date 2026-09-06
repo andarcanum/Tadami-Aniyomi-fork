@@ -316,7 +316,9 @@ data class BrowseNovelSourceScreen(
                     MigrateNovelDialog(
                         oldNovel = dialog.oldNovel,
                         newNovel = dialog.newNovel,
-                        screenModel = MigrateNovelDialogScreenModel(),
+                        // BRN-9: was constructed INLINE - recreated on every recomposition of
+                        // this when-scope, resetting isMigrating mid-migration (see the manga site).
+                        screenModel = rememberScreenModel { MigrateNovelDialogScreenModel() },
                         onDismissRequest = onDismissRequest,
                         onClickTitle = { navigator.push(NovelScreen(dialog.oldNovel.id)) },
                         onPopScreen = {

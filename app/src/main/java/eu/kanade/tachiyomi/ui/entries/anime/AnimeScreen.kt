@@ -343,7 +343,9 @@ class AnimeScreen(
                 MigrateAnimeDialog(
                     oldAnime = dialog.oldAnime,
                     newAnime = dialog.newAnime,
-                    screenModel = MigrateAnimeDialogScreenModel(),
+                    // BRA-4/BRM-1: inline construction was recreated on every successState
+                    // emission (the migration itself writes this row) - see the manga site.
+                    screenModel = rememberScreenModel { MigrateAnimeDialogScreenModel() },
                     onDismissRequest = onDismissRequest,
                     onClickTitle = { navigator.push(AnimeScreen(dialog.oldAnime.id)) },
                     onClickSeasons = { navigator.push(MigrateSeasonSelectScreen(dialog.oldAnime, dialog.newAnime)) },

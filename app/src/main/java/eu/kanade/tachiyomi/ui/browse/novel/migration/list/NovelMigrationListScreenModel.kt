@@ -54,10 +54,20 @@ class NovelMigrationListScreenModel(
         preferenceStore.getInt("migrate_flags_novel", Int.MAX_VALUE)
     }
 
+    // BMG-8/BMG-11: written on main and nulled/read on IO - @Volatile (see the manga SM).
+    @Volatile
     private var migrateJob: Job? = null
+
+    @Volatile
     private var searchJob: Job? = null
+
+    // BMG-5 (F-M2 port): mutated from the IO search loop AND from main (cancelSearch /
+    // useNovelForMigration) - the manga etalon confines them behind the updateItem monitor with
+    // a synchronized set and @Volatile; the plain versions lost updates across threads.
+    @Volatile
     private var allItems: List<MigratingNovel> = emptyList()
-    private val cancelledSearchIds = mutableSetOf<Long>()
+    private val cancelledSearchIds: MutableSet<Long> =
+        java.util.Collections.synchronizedSet(mutableSetOf())
 
     init {
         screenModelScope.launchIO {
@@ -133,7 +143,8 @@ class NovelMigrationListScreenModel(
             try {
                 runSearches(searchItems)
             } finally {
-                searchJob = null
+                // BMG-8: only clear our own job reference (see the manga SM comment).
+                if (searchJob === currentCoroutineContext()[Job]) searchJob = null
             }
         }
     }
@@ -146,17 +157,21 @@ class NovelMigrationListScreenModel(
         val hideNotFound = sourcePreferences.migrationHideNotFound().get()
         val onlyNewChapters = sourcePreferences.migrationOnlyNewChapters().get()
 
-        var currentItems = items
+        // BMG-5 (F-M2 port): the loop used to carry a LOCAL snapshot (currentItems) and every
+        // progress publish assigned allItems from that snapshot - any concurrent manual match or
+        // cancel was ROLLED BACK by the next onProgress tick. All mutations now go through the
+        // synchronized updateItem, like the manga etalon.
         items.forEach { item ->
             if (item.novel.id in cancelledSearchIds) {
-                currentItems = currentItems.map { current ->
-                    if (current.novel.id == item.novel.id) {
+                updateItem(item.novel.id, hideNotFound, onlyNewChapters) { current ->
+                    // F-M2: only a still-running search may be reset - a manual match chosen
+                    // before the loop reached this item must not be overwritten with NotFound.
+                    if (current.searchResult == SearchResult.Searching) {
                         current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
                     } else {
                         current
                     }
                 }
-                publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
                 return@forEach
             }
 
@@ -173,14 +188,9 @@ class NovelMigrationListScreenModel(
                     useDeepSearch = useDeepSearch,
                     useAutoMetadata = useAutoMetadata,
                     onProgress = { label ->
-                        currentItems = currentItems.map { current ->
-                            if (current.novel.id == item.novel.id) {
-                                current.copy(searchLabel = label)
-                            } else {
-                                current
-                            }
+                        updateItem(item.novel.id, hideNotFound, onlyNewChapters) { current ->
+                            current.copy(searchLabel = label)
                         }
-                        publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
                     },
                 )
             }.onFailure { error ->
@@ -188,38 +198,48 @@ class NovelMigrationListScreenModel(
                 logcat(LogPriority.ERROR, error) { "Novel migration search failed for novel ${item.novel.id}" }
             }.getOrNull()
             if (item.novel.id in cancelledSearchIds) {
-                currentItems = currentItems.map { current ->
-                    if (current.novel.id == item.novel.id) {
+                updateItem(item.novel.id, hideNotFound, onlyNewChapters) { current ->
+                    // F-M2: same guard - a late auto result must not clobber a manual match.
+                    if (current.searchResult == SearchResult.Searching) {
                         current.copy(searchResult = SearchResult.NotFound, searchLabel = null)
                     } else {
                         current
                     }
                 }
-                publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
                 return@forEach
             }
 
-            val updatedItem = when (result) {
-                null -> item.copy(searchResult = SearchResult.NotFound, searchLabel = null)
-                else -> item.copy(
-                    searchLabel = null,
-                    searchResult = SearchResult.Success(
-                        novel = result.novel,
-                        source = result.source.name,
-                        chapterCount = result.chapterInfo.chapterCount,
-                        latestChapter = result.chapterInfo.latestChapter,
-                    ),
+            val updatedResult = when (result) {
+                null -> SearchResult.NotFound
+                else -> SearchResult.Success(
+                    novel = result.novel,
+                    source = result.source.name,
+                    chapterCount = result.chapterInfo.chapterCount,
+                    latestChapter = result.chapterInfo.latestChapter,
                 )
             }
 
-            currentItems = currentItems.map { current ->
-                if (current.novel.id == item.novel.id) updatedItem else current
+            updateItem(item.novel.id, hideNotFound, onlyNewChapters) { current ->
+                current.copy(searchResult = updatedResult, searchLabel = null)
             }
-
-            publishSearchItems(currentItems, hideNotFound, onlyNewChapters)
         }
     }
 
+    @Synchronized
+    private fun updateItem(
+        novelId: Long,
+        hideNotFound: Boolean,
+        onlyNewChapters: Boolean,
+        transform: (MigratingNovel) -> MigratingNovel,
+    ) {
+        publishSearchItems(
+            allItems.map { if (it.novel.id == novelId) transform(it) else it },
+            hideNotFound,
+            onlyNewChapters,
+        )
+    }
+
+    @Synchronized
     private fun publishSearchItems(
         items: List<MigratingNovel>,
         hideNotFound: Boolean,
@@ -443,43 +463,41 @@ class NovelMigrationListScreenModel(
             val targetNovel = getNovel.await(target) ?: return@launchIO
             val source = sourceManager.get(targetNovel.source) as? NovelCatalogueSource ?: return@launchIO
             val chapterInfo = getChapterInfo(source, targetNovel)
-            val updatedItems = allItems.map { item ->
-                if (item.novel.id == current) {
-                    item.copy(
-                        searchLabel = null,
-                        searchResult = SearchResult.Success(
-                            novel = targetNovel,
-                            source = source.name,
-                            chapterCount = chapterInfo.chapterCount,
-                            latestChapter = chapterInfo.latestChapter,
-                        ),
-                    )
-                } else {
-                    item
-                }
+            // BMG-5: through the synchronized updateItem - the plain allItems.map+publish raced
+            // with the IO search loop.
+            updateItem(
+                current,
+                sourcePreferences.migrationHideNotFound().get(),
+                sourcePreferences.migrationOnlyNewChapters().get(),
+            ) { item ->
+                item.copy(
+                    searchLabel = null,
+                    searchResult = SearchResult.Success(
+                        novel = targetNovel,
+                        source = source.name,
+                        chapterCount = chapterInfo.chapterCount,
+                        latestChapter = chapterInfo.latestChapter,
+                    ),
+                )
             }
-            publishSearchItems(
-                items = updatedItems,
-                hideNotFound = sourcePreferences.migrationHideNotFound().get(),
-                onlyNewChapters = sourcePreferences.migrationOnlyNewChapters().get(),
-            )
         }
     }
 
     fun cancelSearch(novelId: Long) {
         cancelledSearchIds += novelId
-        val updatedItems = allItems.map { item ->
-            if (item.novel.id == novelId && item.searchResult == SearchResult.Searching) {
+        // BMG-5/F-M2: synchronized + Searching-only guard (manga etalon) - cancelling must not
+        // overwrite a manual match that arrived first.
+        updateItem(
+            novelId,
+            sourcePreferences.migrationHideNotFound().get(),
+            sourcePreferences.migrationOnlyNewChapters().get(),
+        ) { item ->
+            if (item.searchResult == SearchResult.Searching) {
                 item.copy(searchResult = SearchResult.NotFound, searchLabel = null)
             } else {
                 item
             }
         }
-        publishSearchItems(
-            items = updatedItems,
-            hideNotFound = sourcePreferences.migrationHideNotFound().get(),
-            onlyNewChapters = sourcePreferences.migrationOnlyNewChapters().get(),
-        )
     }
 
     fun removeNovel(novelId: Long) {
@@ -490,6 +508,9 @@ class NovelMigrationListScreenModel(
     }
 
     private fun migrateNovels(replace: Boolean) {
+        // BMG-11: guard against a double-tap starting two parallel batches (see the manga SM).
+        if (state.value.isMigrating) return
+        migrateJob?.cancel()
         migrateJob = screenModelScope.launchIO {
             val items = state.value.items
             val migratedItems = mutableListOf<MigratingNovel>()
@@ -547,10 +568,12 @@ class NovelMigrationListScreenModel(
         )
     }
 
+    @Synchronized
     private fun removeNovel(item: MigratingNovel) {
         removeMigratedNovel(listOf(item))
     }
 
+    @Synchronized
     private fun removeMigratedNovel(items: Collection<MigratingNovel>) {
         if (items.isEmpty()) return
         val migratedIds = items.mapTo(mutableSetOf()) { it.novel.id }

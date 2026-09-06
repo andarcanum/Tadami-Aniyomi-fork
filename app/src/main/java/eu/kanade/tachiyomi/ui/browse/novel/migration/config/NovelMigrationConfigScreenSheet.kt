@@ -41,10 +41,13 @@ import tachiyomi.presentation.core.theme.active
 import tachiyomi.presentation.core.theme.header
 import tachiyomi.presentation.core.util.collectAsState
 
-// Same bit values as NovelMigrationFlags
+// Same bit values as NovelMigrationFlags (BMG-2: DELETE_DOWNLOADED used to be 0b100 here -
+// which is the TRACKING bit in NovelMigrationFlags; the real DELETE_DOWNLOADED is 0b01000. The
+// "delete downloaded" chip silently toggled tracking migration while the unmanageable real bit
+// stayed set from the Int.MAX_VALUE default, so batch migrations ALWAYS deleted downloads).
 private const val CHAPTERS = 0b001
 private const val CATEGORIES = 0b010
-private const val DELETE_DOWNLOADED = 0b100
+private const val DELETE_DOWNLOADED = 0b1000
 
 @Composable
 fun NovelMigrationConfigScreenSheet(

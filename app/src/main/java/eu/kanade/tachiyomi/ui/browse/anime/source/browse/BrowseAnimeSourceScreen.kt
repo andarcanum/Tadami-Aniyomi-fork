@@ -338,7 +338,9 @@ data class BrowseAnimeSourceScreen(
                 MigrateAnimeDialog(
                     oldAnime = dialog.oldAnime,
                     newAnime = dialog.newAnime,
-                    screenModel = MigrateAnimeDialogScreenModel(),
+                    // BRA-4/BRM-1: was constructed INLINE - recreated on every recomposition of
+                    // this when-scope, resetting isMigrating mid-migration (see the manga site).
+                    screenModel = rememberScreenModel { MigrateAnimeDialogScreenModel() },
                     onDismissRequest = onDismissRequest,
                     onClickTitle = { navigator.push(AnimeScreen(dialog.oldAnime.id)) },
                     onClickSeasons = { navigator.push(MigrateSeasonSelectScreen(dialog.oldAnime, dialog.newAnime)) },

@@ -8,6 +8,7 @@ import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.novelsource.model.SNovelChapter
 import eu.kanade.tachiyomi.ui.browse.novel.migration.NovelMigrationFlags
+import tachiyomi.core.common.util.lang.withNonCancellableContext
 import tachiyomi.domain.category.novel.repository.NovelCategoryRepository
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.domain.entries.novel.model.Novel
@@ -89,97 +90,104 @@ class MigrateNovelUseCase(
             // Worst case, chapters won't be synced.
         }
 
-        if (migrateChapters) {
-            val prevNovelChapters = novelChapterRepository.getChapterByNovelId(oldNovel.id)
-            val novelChapters = novelChapterRepository.getChapterByNovelId(newNovel.id)
+        // BMG-3 (F-H1 port): everything below is local state mutation and runs NonCancellable -
+        // a dispose/cancel mid-migration could otherwise abort BETWEEN writes (downloads deleted
+        // but the new entry not favorited, both entries left in the library). The network phase
+        // (getChapterList) stays cancellable and runs before this. Manga etalon (M6).
+        withNonCancellableContext {
+            if (migrateChapters) {
+                val prevNovelChapters = novelChapterRepository.getChapterByNovelId(oldNovel.id)
+                val novelChapters = novelChapterRepository.getChapterByNovelId(newNovel.id)
 
-            val maxChapterRead = prevNovelChapters
-                .filter { it.read }
-                .maxOfOrNull { it.chapterNumber }
-            val prevHistoryByChapterId = novelHistoryRepository.getHistoryByNovelId(oldNovel.id).associateBy {
-                it.chapterId
-            }
-            val historyUpdates = mutableListOf<NovelHistoryUpdate>()
+                val maxChapterRead = prevNovelChapters
+                    .filter { it.read }
+                    .maxOfOrNull { it.chapterNumber }
+                val prevHistoryByChapterId = novelHistoryRepository.getHistoryByNovelId(oldNovel.id).associateBy {
+                    it.chapterId
+                }
+                val historyUpdates = mutableListOf<NovelHistoryUpdate>()
 
-            val updatedNovelChapters = novelChapters.map { novelChapter ->
-                var updatedChapter = novelChapter
-                if (updatedChapter.isRecognizedNumber) {
-                    val prevChapter = prevNovelChapters
-                        .find { it.isRecognizedNumber && it.chapterNumber == updatedChapter.chapterNumber }
+                val updatedNovelChapters = novelChapters.map { novelChapter ->
+                    var updatedChapter = novelChapter
+                    if (updatedChapter.isRecognizedNumber) {
+                        val prevChapter = prevNovelChapters
+                            .find { it.isRecognizedNumber && it.chapterNumber == updatedChapter.chapterNumber }
 
-                    if (prevChapter != null) {
-                        updatedChapter = updatedChapter.copy(
-                            read = prevChapter.read,
-                            dateFetch = prevChapter.dateFetch,
-                            bookmark = prevChapter.bookmark,
-                            lastPageRead = prevChapter.lastPageRead,
-                        )
-                        prevHistoryByChapterId[prevChapter.id]?.let { prevHistory ->
-                            historyUpdates += NovelHistoryUpdate(
-                                chapterId = novelChapter.id,
-                                readAt = prevHistory.readAt ?: return@let,
-                                sessionReadDuration = prevHistory.readDuration,
+                        if (prevChapter != null) {
+                            updatedChapter = updatedChapter.copy(
+                                read = prevChapter.read,
+                                dateFetch = prevChapter.dateFetch,
+                                bookmark = prevChapter.bookmark,
+                                lastPageRead = prevChapter.lastPageRead,
                             )
+                            prevHistoryByChapterId[prevChapter.id]?.let { prevHistory ->
+                                historyUpdates += NovelHistoryUpdate(
+                                    chapterId = novelChapter.id,
+                                    readAt = prevHistory.readAt ?: return@let,
+                                    sessionReadDuration = prevHistory.readDuration,
+                                )
+                            }
+                        } else if (maxChapterRead != null && updatedChapter.chapterNumber <= maxChapterRead) {
+                            updatedChapter = updatedChapter.copy(read = true)
                         }
-                    } else if (maxChapterRead != null && updatedChapter.chapterNumber <= maxChapterRead) {
-                        updatedChapter = updatedChapter.copy(read = true)
                     }
+
+                    updatedChapter
                 }
 
-                updatedChapter
+                val chapterUpdates = updatedNovelChapters.map { it.toNovelChapterUpdate() }
+                novelChapterRepository.updateAllChapters(chapterUpdates)
+                historyUpdates.forEach { novelHistoryRepository.upsertNovelHistory(it) }
             }
 
-            val chapterUpdates = updatedNovelChapters.map { it.toNovelChapterUpdate() }
-            novelChapterRepository.updateAllChapters(chapterUpdates)
-            historyUpdates.forEach { novelHistoryRepository.upsertNovelHistory(it) }
-        }
-
-        if (migrateCategories) {
-            val categoryIds = categoryRepository.getCategoriesByNovelId(oldNovel.id).map { it.id }
-            categoryRepository.setNovelCategories(newNovel.id, categoryIds)
-        }
-
-        if (migrateTracking) {
-            val tracks = getNovelTracks.await(oldNovel.id)
-                .map { it.copy(novelId = newNovel.id) }
-            if (tracks.isNotEmpty()) {
-                insertNovelTrack.awaitAll(tracks)
+            if (migrateCategories) {
+                val categoryIds = categoryRepository.getCategoriesByNovelId(oldNovel.id).map { it.id }
+                categoryRepository.setNovelCategories(newNovel.id, categoryIds)
             }
-        }
 
-        if (deleteDownloaded && oldSource != null) {
-            downloadManager.deleteNovel(oldNovel)
-        }
+            if (migrateTracking) {
+                val tracks = getNovelTracks.await(oldNovel.id)
+                    .map { it.copy(novelId = newNovel.id) }
+                if (tracks.isNotEmpty()) {
+                    insertNovelTrack.awaitAll(tracks)
+                }
+            }
 
-        // Manga/anime migrations copy the custom cover; the novel one silently dropped it, so a
-        // migrated title lost its user-set cover art.
-        if (migrateCustomCover && oldNovel.hasCustomCover(coverCache)) {
-            coverCache.setCustomCoverToCache(
-                newNovel,
-                coverCache.getCustomCoverFile(oldNovel.id).inputStream(),
-            )
-        }
-
-        // Add/favorite new entry first to guarantee no data loss if subsequent operations fail
-        updateNovel.await(
-            NovelUpdate(
-                id = newNovel.id,
-                favorite = true,
-                chapterFlags = if (migrateExtra) oldNovel.chapterFlags else null,
-                viewerFlags = if (migrateExtra) oldNovel.viewerFlags else null,
-                dateAdded = if (replace) oldNovel.dateAdded else Instant.now().toEpochMilli(),
-                notes = if (migrateNotes) oldNovel.notes else null,
-            ),
-        )
-
-        if (replace) {
+            // Add/favorite the new entry and unfavorite the old one FIRST (M6 order fix): the
+            // library membership swap completes before the destructive cleanup below.
             updateNovel.await(
                 NovelUpdate(
-                    id = oldNovel.id,
-                    favorite = false,
-                    dateAdded = 0L,
+                    id = newNovel.id,
+                    favorite = true,
+                    chapterFlags = if (migrateExtra) oldNovel.chapterFlags else null,
+                    viewerFlags = if (migrateExtra) oldNovel.viewerFlags else null,
+                    dateAdded = if (replace) oldNovel.dateAdded else Instant.now().toEpochMilli(),
+                    notes = if (migrateNotes) oldNovel.notes else null,
                 ),
             )
+
+            if (replace) {
+                updateNovel.await(
+                    NovelUpdate(
+                        id = oldNovel.id,
+                        favorite = false,
+                        dateAdded = 0L,
+                    ),
+                )
+            }
+
+            if (deleteDownloaded && oldSource != null) {
+                downloadManager.deleteNovel(oldNovel)
+            }
+
+            // Manga/anime migrations copy the custom cover; the novel one silently dropped it, so a
+            // migrated title lost its user-set cover art.
+            if (migrateCustomCover && oldNovel.hasCustomCover(coverCache)) {
+                // BMG-17: the stream used to leak (manga wraps it in .use since M6).
+                coverCache.getCustomCoverFile(oldNovel.id).inputStream().use {
+                    coverCache.setCustomCoverToCache(newNovel, it)
+                }
+            }
         }
     }
 }

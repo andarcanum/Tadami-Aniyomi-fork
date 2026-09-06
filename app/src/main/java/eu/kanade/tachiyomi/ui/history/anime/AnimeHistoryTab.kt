@@ -139,7 +139,9 @@ fun Screen.animeHistoryTab(
                     MigrateAnimeDialog(
                         oldAnime = dialog.oldAnime,
                         newAnime = dialog.newAnime,
-                        screenModel = MigrateAnimeDialogScreenModel(),
+                        // BRA-4/BRM-1: inline construction - the migration upserts history, which
+                        // re-emits the list and recreated the SM mid-migration.
+                        screenModel = rememberScreenModel { MigrateAnimeDialogScreenModel() },
                         onDismissRequest = onDismissRequest,
                         onClickTitle = { navigator.push(AnimeScreen(dialog.oldAnime.id)) },
                         onClickSeasons = {

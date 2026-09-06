@@ -312,7 +312,10 @@ class MangaScreen(
                 MigrateMangaDialog(
                     oldManga = dialog.oldManga,
                     newManga = dialog.newManga,
-                    screenModel = MigrateMangaDialogScreenModel(),
+                    // BRM-1: inline construction was recreated on every successState emission -
+                    // and the migration itself writes this entry's DB row, making the recreation
+                    // (isMigrating reset -> second tap -> parallel migration) near-deterministic.
+                    screenModel = rememberScreenModel { MigrateMangaDialogScreenModel() },
                     onDismissRequest = onDismissRequest,
                     onClickTitle = { navigator.push(MangaScreen(dialog.oldManga.id)) },
                     onPopScreen = { navigator.replace(MangaScreen(dialog.newManga.id)) },

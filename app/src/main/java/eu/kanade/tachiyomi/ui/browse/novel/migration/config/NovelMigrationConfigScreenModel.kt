@@ -15,9 +15,13 @@ import uy.kohesive.injekt.api.get
 class NovelMigrationConfigScreenModel(
     val sourcePreferences: SourcePreferences = Injekt.get(),
     private val sourceManager: NovelSourceManager = Injekt.get(),
+    private val preferenceStore: tachiyomi.core.common.preference.PreferenceStore = Injekt.get(),
 ) : StateScreenModel<NovelMigrationConfigScreenModel.State>(State()) {
 
     init {
+        // BMG-2/РЕШ-B8: one-time reset of the migrate_flags_novel bits polluted by the old
+        // sheet (its "delete downloaded" chip toggled TRACKING).
+        eu.kanade.tachiyomi.ui.browse.novel.migration.NovelMigrationFlags.ensureBitCollisionReset(preferenceStore)
         screenModelScope.launchIO {
             val includedSources = sourcePreferences.migrationSourcesNovel().get()
                 .mapNotNull { it.toLongOrNull() }

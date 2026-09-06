@@ -106,8 +106,10 @@ class AnimeMigrationListScreen(
                 AnimeMigrationConfigScreenSheet(
                     preferences = screenModel.sourcePreferences,
                     onDismissRequest = screenModel::dismissDialog,
-                    onStartMigration = {
-                        screenModel.onMigrationOptionsUpdated()
+                    onStartMigration = { extraQuery ->
+                        // BMG-7 (M10 port): the sheet's cleaned extra query used to be dropped
+                        // here - Continue restarted the searches with the ORIGINAL query.
+                        screenModel.onMigrationOptionsUpdated(extraQuery)
                     },
                 )
             }

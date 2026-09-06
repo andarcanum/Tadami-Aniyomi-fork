@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.track.EnhancedAnimeTracker
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.ui.browse.anime.migration.AnimeMigrationFlags
+import tachiyomi.core.common.util.lang.withNonCancellableContext
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.category.anime.interactor.SetAnimeCategories
 import tachiyomi.domain.entries.anime.interactor.NetworkToLocalAnime
@@ -103,109 +104,118 @@ class MigrateAnimeUseCase(
             // Worst case, episodes won't be synced
         }
 
-        // Update episodes seen, bookmark and dateFetch
-        if (migrateEpisodes) {
-            val prevAnimeEpisodes = getEpisodesByAnimeId.await(oldAnime.id)
-            val animeEpisodes = getEpisodesByAnimeId.await(newAnime.id)
+        // BMG-3 (F-H1 port): everything below is local state mutation and runs NonCancellable -
+        // a dispose/cancel mid-migration (the dialog's composition scope used to own it) could
+        // otherwise abort BETWEEN writes: downloads deleted but the new entry not favorited, or
+        // both entries left in the library. The network phase (getEpisodeList) stays cancellable
+        // and runs before this. Manga etalon: MigrateMangaUseCase (M6).
+        withNonCancellableContext {
+            // Update episodes seen, bookmark and dateFetch
+            if (migrateEpisodes) {
+                val prevAnimeEpisodes = getEpisodesByAnimeId.await(oldAnime.id)
+                val animeEpisodes = getEpisodesByAnimeId.await(newAnime.id)
 
-            val maxEpisodeSeen = prevAnimeEpisodes
-                .filter { it.seen }
-                .maxOfOrNull { it.episodeNumber }
-            val prevHistoryByEpisodeId = getHistory.await(oldAnime.id).associateBy { it.episodeId }
-            val historyUpdates = mutableListOf<AnimeHistoryUpdate>()
+                val maxEpisodeSeen = prevAnimeEpisodes
+                    .filter { it.seen }
+                    .maxOfOrNull { it.episodeNumber }
+                val prevHistoryByEpisodeId = getHistory.await(oldAnime.id).associateBy { it.episodeId }
+                val historyUpdates = mutableListOf<AnimeHistoryUpdate>()
 
-            val updatedAnimeEpisodes = animeEpisodes.map { animeEpisode ->
-                var updatedEpisode = animeEpisode
-                if (updatedEpisode.isRecognizedNumber) {
-                    val prevEpisode = prevAnimeEpisodes
-                        .find { it.isRecognizedNumber && it.episodeNumber == updatedEpisode.episodeNumber }
+                val updatedAnimeEpisodes = animeEpisodes.map { animeEpisode ->
+                    var updatedEpisode = animeEpisode
+                    if (updatedEpisode.isRecognizedNumber) {
+                        val prevEpisode = prevAnimeEpisodes
+                            .find { it.isRecognizedNumber && it.episodeNumber == updatedEpisode.episodeNumber }
 
-                    if (prevEpisode != null) {
-                        updatedEpisode = updatedEpisode.copy(
-                            seen = prevEpisode.seen,
-                            dateFetch = prevEpisode.dateFetch,
-                            bookmark = prevEpisode.bookmark,
-                            fillermark = prevEpisode.fillermark,
-                            lastSecondSeen = prevEpisode.lastSecondSeen,
-                            totalSeconds = prevEpisode.totalSeconds,
-                        )
-                        prevHistoryByEpisodeId[prevEpisode.id]?.let { prevHistory ->
-                            historyUpdates += AnimeHistoryUpdate(
-                                episodeId = animeEpisode.id,
-                                seenAt = prevHistory.seenAt ?: return@let,
+                        if (prevEpisode != null) {
+                            updatedEpisode = updatedEpisode.copy(
+                                seen = prevEpisode.seen,
+                                dateFetch = prevEpisode.dateFetch,
+                                bookmark = prevEpisode.bookmark,
+                                fillermark = prevEpisode.fillermark,
+                                lastSecondSeen = prevEpisode.lastSecondSeen,
+                                totalSeconds = prevEpisode.totalSeconds,
                             )
+                            prevHistoryByEpisodeId[prevEpisode.id]?.let { prevHistory ->
+                                historyUpdates += AnimeHistoryUpdate(
+                                    episodeId = animeEpisode.id,
+                                    seenAt = prevHistory.seenAt ?: return@let,
+                                )
+                            }
+                        } else if (maxEpisodeSeen != null && updatedEpisode.episodeNumber <= maxEpisodeSeen) {
+                            updatedEpisode = updatedEpisode.copy(seen = true)
                         }
-                    } else if (maxEpisodeSeen != null && updatedEpisode.episodeNumber <= maxEpisodeSeen) {
-                        updatedEpisode = updatedEpisode.copy(seen = true)
                     }
+
+                    updatedEpisode
                 }
 
-                updatedEpisode
+                val episodeUpdates = updatedAnimeEpisodes.map { it.toEpisodeUpdate() }
+                updateEpisode.awaitAll(episodeUpdates)
+                historyUpdates.forEach { upsertHistory.await(it) }
             }
 
-            val episodeUpdates = updatedAnimeEpisodes.map { it.toEpisodeUpdate() }
-            updateEpisode.awaitAll(episodeUpdates)
-            historyUpdates.forEach { upsertHistory.await(it) }
-        }
-
-        // Update categories
-        if (migrateCategories) {
-            val categoryIds = getCategories.await(oldAnime.id).map { it.id }
-            setAnimeCategories.await(newAnime.id, categoryIds)
-        }
-
-        // Update track
-        getTracks.await(oldAnime.id).mapNotNull { track ->
-            val updatedTrack = track.copy(animeId = newAnime.id)
-
-            val service = enhancedServices
-                .firstOrNull { it.isTrackFrom(updatedTrack, oldAnime, oldSource) }
-
-            if (service != null) {
-                service.migrateTrack(updatedTrack, newAnime, newSource)
-            } else {
-                updatedTrack
+            // Update categories
+            if (migrateCategories) {
+                val categoryIds = getCategories.await(oldAnime.id).map { it.id }
+                setAnimeCategories.await(newAnime.id, categoryIds)
             }
-        }
-            .takeIf { it.isNotEmpty() }
-            ?.let { insertTrack.awaitAll(it) }
 
-        // Delete downloaded
-        if (deleteDownloaded) {
-            if (oldSource != null) {
-                downloadManager.deleteAnime(oldAnime, oldSource)
+            // Update track
+            getTracks.await(oldAnime.id).mapNotNull { track ->
+                val updatedTrack = track.copy(animeId = newAnime.id)
+
+                val service = enhancedServices
+                    .firstOrNull { it.isTrackFrom(updatedTrack, oldAnime, oldSource) }
+
+                if (service != null) {
+                    service.migrateTrack(updatedTrack, newAnime, newSource)
+                } else {
+                    updatedTrack
+                }
             }
-        }
+                .takeIf { it.isNotEmpty() }
+                ?.let { insertTrack.awaitAll(it) }
 
-        // Update custom cover (recheck if custom cover exists)
-        if (migrateCustomCover && oldAnime.hasCustomCover(coverCache)) {
-            coverCache.setCustomCoverToCache(
-                newAnime,
-                coverCache.getCustomCoverFile(oldAnime.id).inputStream(),
+            // Add/favorite the new entry and unfavorite the old one FIRST (M6 order fix): the
+            // library membership swap completes before any destructive cleanup, so no cancel or
+            // failure window can leave the entry out of the library with its downloads deleted.
+            updateAnime.await(
+                AnimeUpdate(
+                    id = newAnime.id,
+                    favorite = true,
+                    episodeFlags = oldAnime.episodeFlags,
+                    viewerFlags = oldAnime.viewerFlags,
+                    dateAdded = if (replace) oldAnime.dateAdded else Instant.now().toEpochMilli(),
+                ),
             )
-        }
 
-        // Update custom background (recheck if custom background exists)
-        if (migrateCustomBackground && oldAnime.hasCustomBackground(backgroundCache)) {
-            backgroundCache.setCustomBackgroundToCache(
-                newAnime,
-                backgroundCache.getCustomBackgroundFile(oldAnime.id).inputStream(),
-            )
-        }
+            if (replace) {
+                updateAnime.awaitUpdateFavorite(oldAnime.id, favorite = false)
+            }
 
-        // Add/favorite new entry first to guarantee no data loss if subsequent operations fail
-        updateAnime.await(
-            AnimeUpdate(
-                id = newAnime.id,
-                favorite = true,
-                episodeFlags = oldAnime.episodeFlags,
-                viewerFlags = oldAnime.viewerFlags,
-                dateAdded = if (replace) oldAnime.dateAdded else Instant.now().toEpochMilli(),
-            ),
-        )
+            // Delete downloaded
+            if (deleteDownloaded) {
+                if (oldSource != null) {
+                    downloadManager.deleteAnime(oldAnime, oldSource)
+                }
+            }
 
-        if (replace) {
-            updateAnime.awaitUpdateFavorite(oldAnime.id, favorite = false)
+            // Update custom cover (recheck if custom cover exists)
+            if (migrateCustomCover && oldAnime.hasCustomCover(coverCache)) {
+                // BMG-17: the stream used to leak (manga wraps it in .use since M6).
+                coverCache.getCustomCoverFile(oldAnime.id).inputStream().use {
+                    coverCache.setCustomCoverToCache(newAnime, it)
+                }
+            }
+
+            // Update custom background (recheck if custom background exists)
+            if (migrateCustomBackground && oldAnime.hasCustomBackground(backgroundCache)) {
+                // BMG-17: the stream used to leak.
+                backgroundCache.getCustomBackgroundFile(oldAnime.id).inputStream().use {
+                    backgroundCache.setCustomBackgroundToCache(newAnime, it)
+                }
+            }
         }
     }
 }

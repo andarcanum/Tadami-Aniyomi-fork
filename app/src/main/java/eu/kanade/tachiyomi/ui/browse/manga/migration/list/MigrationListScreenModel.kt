@@ -54,7 +54,12 @@ class MigrationListScreenModel(
         preferenceStore.getInt("migrate_flags", Int.MAX_VALUE)
     }
 
+    // BMG-8/BMG-11: written on main (restart/batch entry) and nulled/read on IO - @Volatile for
+    // cross-thread visibility.
+    @Volatile
     private var migrateJob: Job? = null
+
+    @Volatile
     private var searchJob: Job? = null
 
     // F-M2: both fields are written from the IO search/migration coroutines AND the main thread
@@ -143,7 +148,10 @@ class MigrationListScreenModel(
             try {
                 runSearches(searchItems)
             } finally {
-                searchJob = null
+                // BMG-8: the OLD job's finally ran on IO AFTER a restart had already assigned
+                // the new job reference, nulling it - the next restart could not cancel the
+                // running cycle and parallel search loops stacked up. Only clear our own job.
+                if (searchJob === currentCoroutineContext()[Job]) searchJob = null
             }
         }
     }
@@ -507,6 +515,11 @@ class MigrationListScreenModel(
     }
 
     private fun migrateMangas(replace: Boolean) {
+        // BMG-11: a double tap on the confirm dialog started TWO parallel batches - the dialog
+        // was dismissed inside the IO coroutine and migrateJob was overwritten without cancelling
+        // the previous one (cancelMigrate then only stopped the second).
+        if (state.value.isMigrating) return
+        migrateJob?.cancel()
         migrateJob = screenModelScope.launchIO {
             val items = state.value.items
             val migratedItems = mutableListOf<MigratingManga>()

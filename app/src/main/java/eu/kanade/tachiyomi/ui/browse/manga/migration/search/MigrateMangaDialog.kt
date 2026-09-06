@@ -27,10 +27,12 @@ import eu.kanade.domain.entries.manga.interactor.MigrateMangaUseCase
 import eu.kanade.tachiyomi.ui.browse.manga.migration.MangaMigrationFlags
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.update
+import logcat.LogPriority
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.lang.withUIContext
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
@@ -151,6 +153,8 @@ internal class MigrateMangaDialogScreenModel(
      * F-H1: runs the migration in the screen model scope so a disposed dialog composition no
      * longer cancels the use case between its writes; [onMigrated] is invoked on the main thread
      * afterwards (the caller guards it against a disposed composition).
+     * BMG-16: onMigrated now fires ONLY on success - a failed migration used to be swallowed and
+     * the caller navigated to the new entry as if everything worked.
      */
     fun migrateFromDialog(
         oldManga: Manga,
@@ -160,8 +164,10 @@ internal class MigrateMangaDialogScreenModel(
         onMigrated: () -> Unit,
     ) {
         screenModelScope.launchIO {
-            migrateManga(oldManga, newManga, replace, flags)
-            withUIContext { onMigrated() }
+            val succeeded = migrateManga(oldManga, newManga, replace, flags)
+            if (succeeded) {
+                withUIContext { onMigrated() }
+            }
         }
     }
 
@@ -170,7 +176,7 @@ internal class MigrateMangaDialogScreenModel(
         newManga: Manga,
         replace: Boolean,
         flags: Int,
-    ) {
+    ): Boolean {
         // F-M1: `flags` is the bitmap narrowed to THIS entry's applicable checkboxes (getFlags
         // hides notes/custom cover/delete-downloaded when the entry lacks them). Persisting it
         // verbatim silently cleared those bits in the stored defaults, so the next dialog lost
@@ -186,20 +192,23 @@ internal class MigrateMangaDialogScreenModel(
         migrateFlags.set(mergeMigrationFlags(storedFlags, applicableMask, flags))
         mutableState.update { it.copy(isMigrating = true) }
 
-        try {
+        return try {
             migrateMangaUseCase.migrateManga(
                 oldManga = oldManga,
                 newManga = newManga,
                 replace = replace,
                 flags = flags,
             )
+            true
         } catch (error: Throwable) {
             // NEW-6: rethrow cancellation - swallowing it kept isMigrating spinning when the
             // dialog's host was disposed mid-migration.
             if (error is CancellationException) throw error
-            // Explicitly stop if an error occurred; the dialog normally gets popped at the end
-            // anyway.
+            // BMG-16: log the failure (it used to vanish without a trace) and keep the dialog
+            // open so the user sees that nothing happened.
+            logcat(LogPriority.ERROR, error) { "Failed to migrate manga ${oldManga.id} -> ${newManga.id}" }
             mutableState.update { it.copy(isMigrating = false) }
+            false
         }
     }
 
