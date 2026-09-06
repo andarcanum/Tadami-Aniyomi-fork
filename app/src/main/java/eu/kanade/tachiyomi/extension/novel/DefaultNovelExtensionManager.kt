@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.util.system.isPackageInstalled
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.core.common.util.system.logcat
@@ -270,21 +272,25 @@ class DefaultNovelExtensionManager(
     override suspend fun replacePluginFromRepo(
         installed: NovelPlugin.Installed,
         replacement: NovelPlugin.Available,
-    ): NovelPlugin.Installed {
+    ): NovelPlugin.Installed = withContext(NonCancellable) {
+        // BEXT-2: ran in the caller's (screen model) cancellable scope - leaving the extensions
+        // screen between the uninstall and the install left the plugin REMOVED with no
+        // replacement. The manga/anime sides moved the work to the manager scope; a suspend API
+        // cannot detach from its caller, so it is made NonCancellable instead (X3 parity).
         uninstallPlugin(installed)
 
         if (installed.isKotlinExtension && context != null) {
             val pkgName = installed.pkgName ?: installed.id
             repeat(REPLACE_UNINSTALL_WAIT_SECONDS) {
                 if (!context.isPackageInstalled(pkgName)) {
-                    return installPlugin(replacement)
+                    return@withContext installPlugin(replacement)
                 }
                 delay(1.seconds)
             }
             error("Timed out waiting for Kotlin novel extension $pkgName to uninstall")
         }
 
-        return installPlugin(replacement)
+        installPlugin(replacement)
     }
 
     override suspend fun trustPlugin(plugin: NovelPlugin.Untrusted) {

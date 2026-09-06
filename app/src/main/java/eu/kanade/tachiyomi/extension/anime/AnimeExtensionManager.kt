@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.launch
 import logcat.LogPriority
 import tachiyomi.core.common.preference.getAndSet
@@ -44,6 +45,7 @@ import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Locale
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -410,19 +412,40 @@ class AnimeExtensionManager(
     fun replaceExtensionFromRepo(
         installedExtension: AnimeExtension.Installed,
         replacementExtension: AnimeExtension.Available,
-    ): Flow<InstallStep> = flow {
-        emit(InstallStep.Installing)
-        installer.uninstallApk(installedExtension.pkgName)
+    ): Flow<InstallStep> {
+        // BEXT-2: was a cold flow executed in the COLLECTOR's context (screen model scope) -
+        // leaving the extensions screen between the uninstall and the install cancelled the flow
+        // and left the extension REMOVED with no replacement. Ported from the manga manager (X3):
+        // the work runs on the manager's own scope; the returned flow mirrors progress with
+        // replay=1 and BEXT-1 completion semantics (transformWhile at the terminal step) so
+        // collectToInstallUpdate-style collectors return.
+        val progress = MutableSharedFlow<InstallStep>(replay = 1, extraBufferCapacity = 16)
+        scope.launch {
+            // SupervisorJob with no exception handler - contain failures as the terminal Error.
+            try {
+                progress.emit(InstallStep.Installing)
+                installer.uninstallApk(installedExtension.pkgName)
 
-        repeat(REPLACE_UNINSTALL_WAIT_SECONDS) {
-            if (!context.isPackageInstalled(installedExtension.pkgName)) {
-                installExtension(replacementExtension).collect { emit(it) }
-                return@flow
+                repeat(REPLACE_UNINSTALL_WAIT_SECONDS) {
+                    if (!context.isPackageInstalled(installedExtension.pkgName)) {
+                        installExtension(replacementExtension).collect { progress.emit(it) }
+                        return@launch
+                    }
+                    delay(1.seconds)
+                }
+
+                progress.emit(InstallStep.Error)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                logcat(LogPriority.ERROR, e) { "Failed to replace extension ${installedExtension.pkgName}" }
+                progress.emit(InstallStep.Error)
             }
-            delay(1.seconds)
         }
-
-        emit(InstallStep.Error)
+        return progress.transformWhile { step ->
+            emit(step)
+            !step.isCompleted()
+        }
     }
 
     /** Reconnects downloads orphaned by a process death and installs the finished ones. */

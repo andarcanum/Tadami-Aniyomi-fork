@@ -294,12 +294,14 @@ private fun ExtensionContent(
     }
     if (trustState != null) {
         ExtensionTrustDialog(
+            // BEXT-11: capture the state - `trustState!!` NPE'd on a double tap (the first
+            // callback nulled the field before recomposition removed the dialog). Novel etalon: ?.let.
             onClickConfirm = {
-                onTrustExtension(trustState!!)
+                trustState?.let(onTrustExtension)
                 trustState = null
             },
             onClickDismiss = {
-                onUninstallExtension(trustState!!)
+                trustState?.let(onUninstallExtension)
                 trustState = null
             },
             onDismissRequest = {

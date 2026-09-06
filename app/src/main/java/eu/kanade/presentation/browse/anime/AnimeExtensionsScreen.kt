@@ -296,12 +296,13 @@ private fun AnimeExtensionContent(
     }
     if (trustState != null) {
         ExtensionTrustDialog(
+            // BEXT-11: capture the state - `trustState!!` NPE'd on a double tap (manga etalon).
             onClickConfirm = {
-                onTrustExtension(trustState!!)
+                trustState?.let(onTrustExtension)
                 trustState = null
             },
             onClickDismiss = {
-                onUninstallExtension(trustState!!)
+                trustState?.let(onUninstallExtension)
                 trustState = null
             },
             onDismissRequest = {

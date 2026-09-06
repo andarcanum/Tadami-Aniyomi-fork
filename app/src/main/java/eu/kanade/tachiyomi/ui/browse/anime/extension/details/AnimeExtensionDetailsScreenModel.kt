@@ -49,7 +49,8 @@ class AnimeExtensionDetailsScreenModel(
     private val preferences: SourcePreferences = Injekt.get(),
 ) : StateScreenModel<AnimeExtensionDetailsScreenModel.State>(State()) {
 
-    private val _events: Channel<AnimeExtensionDetailsEvent> = Channel()
+    // BEXT-5: BUFFERED - see the manga details SM comment (collector behind the Loading gate).
+    private val _events: Channel<AnimeExtensionDetailsEvent> = Channel(Channel.BUFFERED)
     val events: Flow<AnimeExtensionDetailsEvent> = _events.receiveAsFlow()
 
     init {

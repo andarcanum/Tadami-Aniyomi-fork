@@ -257,17 +257,22 @@ class MangaExtensionsScreenModel(
     }
 
     /** Set while the update-all queue waits for a reinstall decision on this extension. */
+    // BEXT-3: @Volatile + the slot published BEFORE the dialog state (novel etalon :360-379):
+    // a tap landing between the state update and the slot assignment used to complete() into
+    // null - the decision was lost, the dialog never dismissed and the update-all queue stalled
+    // until another tap; the plain var also had no cross-thread visibility guarantee.
+    @Volatile
     private var queuedReinstallResolution: CompletableDeferred<MangaExtension.Available?>? = null
 
     private suspend fun resolveQueuedReinstall(extension: MangaExtension.Installed) {
+        val resolution = CompletableDeferred<MangaExtension.Available?>()
+        queuedReinstallResolution = resolution
         mutableState.update {
             it.copy(
                 queuedReinstallExtension = extension,
                 queuedReinstallCandidates = getReinstallCandidates(extension),
             )
         }
-        val resolution = CompletableDeferred<MangaExtension.Available?>()
-        queuedReinstallResolution = resolution
         val chosen = resolution.await()
         mutableState.update {
             it.copy(queuedReinstallExtension = null, queuedReinstallCandidates = emptyList())
@@ -361,11 +366,20 @@ class MangaExtensionsScreenModel(
         extensionManager.updateExtension(extension).collectToInstallUpdate(extension)
     }
 
-    private suspend fun Flow<InstallStep>.collectToInstallUpdate(extension: MangaExtension) =
+    private suspend fun Flow<InstallStep>.collectToInstallUpdate(extension: MangaExtension) {
+        // BEXT-4: hold a terminal Error until the next action for this extension overwrites or
+        // removes the entry (novel side holds Errors explicitly). Previously the Error was added
+        // and removed within the same coroutine tick - the conflated StateFlow never rendered it,
+        // failed updates were silent and the row's Retry affordance was unreachable.
+        var sawError = false
         this
-            .onEach { installStep -> addDownloadState(extension, installStep) }
-            .onCompletion { removeDownloadState(extension) }
+            .onEach { installStep ->
+                if (installStep == InstallStep.Error) sawError = true
+                addDownloadState(extension, installStep)
+            }
+            .onCompletion { if (!sawError) removeDownloadState(extension) }
             .collect()
+    }
 
     private fun showRepoPicker(
         pkgName: String,

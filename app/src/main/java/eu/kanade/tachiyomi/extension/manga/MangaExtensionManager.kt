@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import logcat.LogPriority
@@ -45,6 +46,7 @@ import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.Locale
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.seconds
 
 internal fun String.toInstalledMangaExtensionPkgName(): String {
@@ -432,22 +434,42 @@ class MangaExtensionManager(
         // flow and left the extension REMOVED with no replacement. It now runs on the manager's
         // own scope and the returned flow merely mirrors progress (replay=1 so a re-attaching
         // collector sees the latest step).
+        //
+        // BEXT-1: the mirrored flow MUST complete for collectors. A bare SharedFlow never
+        // completes, so `collectToInstallUpdate`'s plain collect() hung forever: the "update
+        // all" queue silently stalled after the first queued reinstall (resolveQueuedReinstall
+        // never returned) and the details screen kept installStep != Idle, permanently blocking
+        // its Update/Reinstall guards. transformWhile completes the downstream at the terminal
+        // step (Installed/Error - the installer emits one before completing, see
+        // MangaExtensionInstaller downloadAndInstall), mirroring that same pattern.
         val progress = MutableSharedFlow<InstallStep>(replay = 1, extraBufferCapacity = 16)
         scope.launch {
-            progress.emit(InstallStep.Installing)
-            installer.uninstallApk(installedExtension.pkgName)
+            // The manager scope is a SupervisorJob with no exception handler - an uncaught throw
+            // here would crash the process; contain failures as the terminal Error step.
+            try {
+                progress.emit(InstallStep.Installing)
+                installer.uninstallApk(installedExtension.pkgName)
 
-            repeat(REPLACE_UNINSTALL_WAIT_SECONDS) {
-                if (!context.isPackageInstalled(installedExtension.pkgName)) {
-                    installExtension(replacementExtension).collect { progress.emit(it) }
-                    return@launch
+                repeat(REPLACE_UNINSTALL_WAIT_SECONDS) {
+                    if (!context.isPackageInstalled(installedExtension.pkgName)) {
+                        installExtension(replacementExtension).collect { progress.emit(it) }
+                        return@launch
+                    }
+                    delay(1.seconds)
                 }
-                delay(1.seconds)
-            }
 
-            progress.emit(InstallStep.Error)
+                progress.emit(InstallStep.Error)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                logcat(LogPriority.ERROR, e) { "Failed to replace extension ${installedExtension.pkgName}" }
+                progress.emit(InstallStep.Error)
+            }
         }
-        return progress
+        return progress.transformWhile { step ->
+            emit(step)
+            !step.isCompleted()
+        }
     }
 
     /** Reconnects downloads orphaned by a process death and installs the finished ones. */

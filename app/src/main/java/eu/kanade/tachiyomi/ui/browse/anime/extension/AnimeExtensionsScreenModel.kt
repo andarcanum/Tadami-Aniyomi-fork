@@ -257,17 +257,21 @@ class AnimeExtensionsScreenModel(
     }
 
     /** Set while the update-all queue waits for a reinstall decision on this extension. */
+    // BEXT-3: @Volatile + slot published BEFORE the dialog state (novel etalon :360-379) -
+    // a tap landing between the state update and the slot assignment used to complete() into
+    // null: decision lost, dialog never dismissed, update-all queue stalled.
+    @Volatile
     private var queuedReinstallResolution: CompletableDeferred<AnimeExtension.Available?>? = null
 
     private suspend fun resolveQueuedReinstall(extension: AnimeExtension.Installed) {
+        val resolution = CompletableDeferred<AnimeExtension.Available?>()
+        queuedReinstallResolution = resolution
         mutableState.update {
             it.copy(
                 queuedReinstallExtension = extension,
                 queuedReinstallCandidates = getReinstallCandidates(extension),
             )
         }
-        val resolution = CompletableDeferred<AnimeExtension.Available?>()
-        queuedReinstallResolution = resolution
         val chosen = resolution.await()
         mutableState.update {
             it.copy(queuedReinstallExtension = null, queuedReinstallCandidates = emptyList())
@@ -361,11 +365,19 @@ class AnimeExtensionsScreenModel(
         extensionManager.updateExtension(extension).collectToInstallUpdate(extension)
     }
 
-    private suspend fun Flow<InstallStep>.collectToInstallUpdate(extension: AnimeExtension) =
+    private suspend fun Flow<InstallStep>.collectToInstallUpdate(extension: AnimeExtension) {
+        // BEXT-4: hold a terminal Error until the next action for this extension overwrites or
+        // removes the entry - see the manga SM comment (conflated StateFlow never rendered the
+        // transient Error; failed updates were silent, Retry unreachable).
+        var sawError = false
         this
-            .onEach { installStep -> addDownloadState(extension, installStep) }
-            .onCompletion { removeDownloadState(extension) }
+            .onEach { installStep ->
+                if (installStep == InstallStep.Error) sawError = true
+                addDownloadState(extension, installStep)
+            }
+            .onCompletion { if (!sawError) removeDownloadState(extension) }
             .collect()
+    }
 
     private fun showRepoPicker(
         pkgName: String,

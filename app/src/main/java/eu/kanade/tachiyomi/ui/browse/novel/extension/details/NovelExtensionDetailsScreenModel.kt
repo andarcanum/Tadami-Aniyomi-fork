@@ -55,7 +55,8 @@ class NovelExtensionDetailsScreenModel(
     private val preferences: SourcePreferences = Injekt.get(),
 ) : ScreenModel {
 
-    private val _events: Channel<NovelExtensionDetailsEvent> = Channel()
+    // BEXT-5: BUFFERED - see the manga details SM comment (collector behind the Loading gate).
+    private val _events: Channel<NovelExtensionDetailsEvent> = Channel(Channel.BUFFERED)
     val events: Flow<NovelExtensionDetailsEvent> = _events.receiveAsFlow()
 
     /** Steps of an update/reinstall started from this screen (parity with the manga details). */

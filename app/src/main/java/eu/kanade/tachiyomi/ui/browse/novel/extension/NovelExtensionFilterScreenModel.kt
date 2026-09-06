@@ -31,7 +31,8 @@ class NovelExtensionFilterScreenModel(
     private val toggleLanguage: ToggleLanguage = Injekt.get(),
 ) : ScreenModel {
 
-    private val _events: Channel<NovelExtensionFilterEvent> = Channel()
+    // BEXT-13: BUFFERED - see the manga filter SM comment (send inside catch{} behind the gate).
+    private val _events: Channel<NovelExtensionFilterEvent> = Channel(Channel.BUFFERED)
     val events: Flow<NovelExtensionFilterEvent> = _events.receiveAsFlow()
 
     val state: StateFlow<NovelExtensionFilterState> = combine(

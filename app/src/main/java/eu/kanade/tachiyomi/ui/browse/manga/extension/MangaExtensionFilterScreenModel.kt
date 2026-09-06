@@ -31,7 +31,9 @@ class MangaExtensionFilterScreenModel(
     private val toggleLanguage: ToggleLanguage = Injekt.get(),
 ) : ScreenModel {
 
-    private val _events: Channel<MangaExtensionFilterEvent> = Channel()
+    // BEXT-13: BUFFERED - send(FailedFetchingLanguages) ran inside catch{} while the screen's
+    // collector sits behind the Loading gate; a rendezvous send hung and stalled stateIn.
+    private val _events: Channel<MangaExtensionFilterEvent> = Channel(Channel.BUFFERED)
     val events: Flow<MangaExtensionFilterEvent> = _events.receiveAsFlow()
 
     val state: StateFlow<MangaExtensionFilterState> = combine(
