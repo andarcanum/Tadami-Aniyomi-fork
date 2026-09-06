@@ -188,7 +188,9 @@ class AnimeExtensionManager(
         return iconMap[pkgName] ?: iconMap.getOrPut(pkgName) {
             AnimeExtensionLoader.getAnimeExtensionPackageInfoFromPkgName(context, pkgName)
                 ?.applicationInfo
-                ?.loadIcon(context.packageManager)
+                // OEM theme frameworks (vivo's VivoTheme) can NPE inside loadIcon; the icon is
+                // decorative, so fall back to none instead of crashing the caller.
+                ?.let { appInfo -> runCatching { appInfo.loadIcon(context.packageManager) }.getOrNull() }
         }
     }
 

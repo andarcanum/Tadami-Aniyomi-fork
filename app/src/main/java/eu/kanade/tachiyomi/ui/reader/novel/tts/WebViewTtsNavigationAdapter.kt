@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reader.novel.tts
 
+import eu.kanade.presentation.reader.novel.NovelTtsHighlightCss
 import eu.kanade.presentation.reader.novel.buildWebReaderTtsSyncJavascript
 
 interface WebViewTtsNavigator {
@@ -9,6 +10,8 @@ interface WebViewTtsNavigator {
 class WebViewTtsNavigationAdapter(
     private val navigator: WebViewTtsNavigator,
     private val totalBlocks: Int,
+    /** Theme-derived highlight colors, resolved per call so a theme/background change applies live. */
+    private val highlightCss: () -> NovelTtsHighlightCss = { NovelTtsHighlightCss.DEFAULT },
 ) : NovelTtsNavigationAdapter {
     override suspend fun syncToSegment(segment: NovelTtsSegment) {
         val progressPercent = resolveProgressPercent(segment.sourceBlockIndex)
@@ -16,6 +19,7 @@ class WebViewTtsNavigationAdapter(
             buildWebReaderTtsSyncJavascript(
                 snippet = segment.text,
                 progressPercent = progressPercent,
+                highlightCss = highlightCss(),
             ),
         )
     }
@@ -38,6 +42,7 @@ class WebViewTtsNavigationAdapter(
             buildWebReaderTtsSyncJavascript(
                 snippet = "",
                 progressPercent = progressPercent,
+                highlightCss = highlightCss(),
             ),
         )
     }

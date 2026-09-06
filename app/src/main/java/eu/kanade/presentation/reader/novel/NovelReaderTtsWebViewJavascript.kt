@@ -3,6 +3,7 @@ package eu.kanade.presentation.reader.novel
 internal fun buildWebReaderTtsSyncJavascript(
     snippet: String,
     progressPercent: Int,
+    highlightCss: NovelTtsHighlightCss = NovelTtsHighlightCss.DEFAULT,
 ): String {
     val safeSnippet = snippet.trim().take(180).escapeForJavascriptStringLiteral()
     return """
@@ -42,9 +43,9 @@ internal fun buildWebReaderTtsSyncJavascript(
                 const target = resolveHighlightTarget(element);
                 if (!target) return;
                 target.setAttribute(highlightAttribute, 'true');
-                target.style.backgroundColor = 'rgba(255, 224, 130, 0.30)';
+                target.style.backgroundColor = '${highlightCss.paragraphBackgroundRgba}';
                 target.style.borderRadius = '0.45em';
-                target.style.boxShadow = '0 0 0 0.12em rgba(255, 224, 130, 0.18)';
+                target.style.boxShadow = 'inset 3px 0 0 ${highlightCss.barInsetRgba}';
                 target.style.transition = 'background-color 120ms ease';
             };
 

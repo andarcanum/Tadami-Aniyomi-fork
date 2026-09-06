@@ -501,7 +501,9 @@ internal object MangaExtensionLoader {
             isNsfw = isNsfw,
             sources = sources,
             pkgFactory = appInfo.metaData.getString(METADATA_SOURCE_FACTORY),
-            icon = appInfo.loadIcon(pkgManager),
+            // OEM theme frameworks (vivo's VivoTheme) can NPE inside loadIcon when it runs on a
+            // background thread; the icon is decorative, so a failure must not kill the load.
+            icon = runCatching { appInfo.loadIcon(pkgManager) }.getOrNull(),
             isShared = extensionInfo.isShared,
         )
         return MangaLoadResult.Success(extension)

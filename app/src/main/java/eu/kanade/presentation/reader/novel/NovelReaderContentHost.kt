@@ -395,7 +395,7 @@ internal fun NovelReaderContentHost(
     val mountedRendererSwitchToken = remember { longArrayOf(state.seamlessSwitchToken) }
     val seamlessRendererSwap = mountedReaderRenderer[0] != null &&
         state.seamlessSwitchToken != mountedRendererSwitchToken[0]
-    var showWebView by remember(
+    var requestedShowWebView by remember(
         state.chapter.id,
         state.readerSettings.preferWebViewRenderer,
         state.contentBlocks.size,
@@ -417,8 +417,6 @@ internal fun NovelReaderContentHost(
             },
         )
     }
-    mountedReaderRenderer[0] = showWebView
-    mountedRendererSwitchToken[0] = state.seamlessSwitchToken
     val nextSelectedTextSelectionSessionId = remember(state.chapter.id) {
         {
             selectedTextSelectionSessionId += 1
@@ -436,8 +434,8 @@ internal fun NovelReaderContentHost(
     ) {
         // Never flip the mounted renderer as part of a seamless chapter swap (see comment above).
         if (seamlessRendererSwap) return@LaunchedEffect
-        showWebView = syncShowWebViewWithReaderSettings(
-            currentShowWebView = showWebView,
+        requestedShowWebView = syncShowWebViewWithReaderSettings(
+            currentShowWebView = requestedShowWebView,
             preferWebViewRenderer = state.readerSettings.preferWebViewRenderer,
             richNativeRendererExperimentalEnabled = state.readerSettings.richNativeRendererExperimental,
             pageReaderEnabled = state.readerSettings.pageReader,
@@ -499,6 +497,17 @@ internal fun NovelReaderContentHost(
     }
     var requestedTtsChapterSyncTarget by remember(state.chapter.id) { mutableStateOf<Long?>(null) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    // The chapter WebView must not leave the composition in the same frame the renderer decision
+    // flips: removing the focused WebView re-focuses the window root, and that cascade re-enters
+    // Compose layout inside applyChanges ("Cannot start a writer when another writer is pending").
+    // The unmount lags one focus-safe frame; the mount direction stays immediate.
+    val showWebView = rememberFocusSafeInteropUnmount(
+        unmountRequested = !requestedShowWebView,
+        prepareUnmount = { webViewInstance?.prepareForFocusSafeUnmount() },
+        cancelPrepare = { webViewInstance?.cancelFocusSafeUnmount() },
+    ).not()
+    mountedReaderRenderer[0] = showWebView
+    mountedRendererSwitchToken[0] = state.seamlessSwitchToken
 
     // Paint saved highlights into whichever WebView is mounted: re-applied when the WebView
     // becomes ready, when the highlight list changes, and after each document load from
@@ -1409,6 +1418,15 @@ internal fun NovelReaderContentHost(
         )
     }
     val useNativeBookScroll = isBookMode && !bookRendererDecision.renderer.usesWebView
+    // Theme-derived TTS highlight palette (approved V4 auto-contrast): the accent adapts to the
+    // luminance of the reader background, so the spoken paragraph stays visible on every
+    // paper/parchment/dark surface. One source for the native span color, the chapter WebView
+    // script and the book engine CSS override.
+    val ttsHighlightPalette = resolveNovelTtsHighlightPalette(
+        accent = MaterialTheme.colorScheme.primary,
+        backgroundColor = textBackground,
+    )
+    val latestTtsHighlightPalette by rememberUpdatedState(ttsHighlightPalette)
     val webViewTtsNavigationAdapter = remember(state.chapter.id, scrollContentBlocks.size) {
         WebViewTtsNavigationAdapter(
             navigator = object : WebViewTtsNavigator {
@@ -1427,6 +1445,7 @@ internal fun NovelReaderContentHost(
                 }
             },
             totalBlocks = scrollContentBlocks.size.coerceAtLeast(1),
+            highlightCss = { latestTtsHighlightPalette.toChapterWebViewCss() },
         )
     }
     // Book TTS state is owned by NovelBookContentHost and published through the handle.
@@ -1765,27 +1784,24 @@ internal fun NovelReaderContentHost(
         state.ttsUiState.activeWordRange,
         state.ttsUiState.activeHighlightMode,
         bookTtsBlockAnchor,
+        isBookMode,
+        richScrollBlocks,
     ) {
-        val activeUtterance = state.ttsUiState.activeSession?.utterance
-        val activePageAnchor = if (usePageReader) {
-            activeUtterance?.id?.let(activePageReaderTtsAnchors::get)
-        } else {
-            null
-        }
-        NovelReaderTtsHighlightState(
-            sourceBlockIndex = state.ttsUiState.activeSourceBlockIndex,
-            utteranceText = state.ttsUiState.activeUtteranceText,
-            wordRange = state.ttsUiState.activeWordRange,
-            pageIndex = activePageAnchor?.pageCandidates
-                ?.firstOrNull { it == pageReaderProgressPageIndex }
-                ?: activePageAnchor?.pageIndex,
-            blockTextStart = activePageAnchor?.blockTextStart ?: activeUtterance?.blockTextStart,
-            blockTextEndExclusive = activePageAnchor?.blockTextEndExclusive ?: activeUtterance?.blockTextEndExclusive,
-            mode = state.ttsUiState.activeHighlightMode,
-            blockAnchor = bookTtsBlockAnchor,
+        buildNovelReaderTtsHighlightState(
+            activeUtterance = state.ttsUiState.activeSession?.utterance,
+            activeSourceBlockIndex = state.ttsUiState.activeSourceBlockIndex,
+            activeUtteranceText = state.ttsUiState.activeUtteranceText,
+            activeWordRange = state.ttsUiState.activeWordRange,
+            activeHighlightMode = state.ttsUiState.activeHighlightMode,
+            isBookMode = isBookMode,
+            usePageReader = usePageReader,
+            pageReaderProgressPageIndex = pageReaderProgressPageIndex,
+            activePageReaderTtsAnchors = activePageReaderTtsAnchors,
+            bookTtsBlockAnchor = bookTtsBlockAnchor,
+            richScrollBlocks = richScrollBlocks,
         )
     }
-    val ttsHighlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+    val ttsHighlightColor = ttsHighlightPalette.paragraphBackground
     val readingProgressPercent by remember(
         showWebView,
         webProgressPercent,
@@ -2544,8 +2560,9 @@ internal fun NovelReaderContentHost(
                         forceBoldText = state.readerSettings.forceBoldText,
                         forceItalicText = state.readerSettings.forceItalicText,
                     )
-                    val bookReaderCss = remember(bookReaderBaseCss) {
-                        withNovelBookReaderContentOverrides(bookReaderBaseCss)
+                    val bookReaderCss = remember(bookReaderBaseCss, ttsHighlightPalette) {
+                        withNovelBookReaderContentOverrides(bookReaderBaseCss) +
+                            "\n" + ttsHighlightPalette.bookEngineOverrideCss()
                     }
 
                     if (isBookMode) {

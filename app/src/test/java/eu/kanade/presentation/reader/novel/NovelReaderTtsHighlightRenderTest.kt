@@ -169,12 +169,16 @@ class NovelReaderTtsHighlightRenderTest {
         )
 
         assertEquals(blockText, rendered.text)
-        val wordSpan = rendered.spanStyles.single { it.item.background == Color.Yellow }
+        // The word chip is the only span carrying an explicit text color; the paragraph backdrop
+        // keeps the full highlight alpha while the chip moves over it (V4 palette).
+        val wordSpan = rendered.spanStyles.single { it.item.color != Color.Unspecified }
         assertEquals(18, wordSpan.start)
         assertEquals(23, wordSpan.end)
-        val backdropSpan = rendered.spanStyles.single { it.item.background != Color.Yellow }
+        assertEquals(Color.Yellow, wordSpan.item.background)
+        val backdropSpan = rendered.spanStyles.single { it.item.color == Color.Unspecified }
         assertEquals(12, backdropSpan.start)
         assertEquals(24, backdropSpan.end)
+        assertEquals(Color.Yellow, backdropSpan.item.background)
     }
 
     @Test
@@ -198,7 +202,7 @@ class NovelReaderTtsHighlightRenderTest {
             highlightColor = Color.Yellow,
         )
 
-        val wordSpan = rendered.spanStyles.single { it.item.background == Color.Yellow }
+        val wordSpan = rendered.spanStyles.single { it.item.color != Color.Unspecified }
         assertEquals(6, wordSpan.start)
         assertEquals(10, wordSpan.end)
     }
@@ -233,7 +237,7 @@ class NovelReaderTtsHighlightRenderTest {
             highlightColor = Color.Yellow,
         )
 
-        val wordSpan = rendered.spanStyles.single { it.item.background == Color.Yellow }
+        val wordSpan = rendered.spanStyles.single { it.item.color != Color.Unspecified }
         assertEquals(0, wordSpan.start)
         assertEquals(5, wordSpan.end)
     }

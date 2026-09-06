@@ -123,7 +123,16 @@ internal fun NovelBookContentHost(
     bookRendererDecision: NovelBookRendererDecision,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val useNativeBookScroll = bookRendererDecision.renderer.usesWebView.not()
+    // The WebView book engine must not leave the composition in the same frame the renderer
+    // decision flips: removing the focused WebView re-focuses the window root, and that cascade
+    // re-enters Compose layout inside applyChanges ("Cannot start a writer when another writer is
+    // pending"). The unmount lags one focus-safe frame; the mount direction stays immediate.
+    val requestedNativeBookScroll = bookRendererDecision.renderer.usesWebView.not()
+    val useNativeBookScroll = rememberFocusSafeInteropUnmount(
+        unmountRequested = requestedNativeBookScroll,
+        prepareUnmount = { handle.surface?.prepareForFocusSafeUnmount() },
+        cancelPrepare = { handle.surface?.cancelFocusSafeUnmount() },
+    )
     val nativeSections = remember(state.novel.id) {
         mutableStateOf<NovelBookNativeSections>(emptyList())
     }

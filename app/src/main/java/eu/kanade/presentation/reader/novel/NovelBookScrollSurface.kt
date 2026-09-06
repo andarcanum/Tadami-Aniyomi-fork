@@ -54,6 +54,18 @@ internal interface NovelBookScrollSurface {
      * or is disabled. Surfaces without such a loop have nothing to stop.
      */
     fun stopAutoScroll() = Unit
+
+    /**
+     * Strips Android focus from the surface's view before the renderer switch unmounts it.
+     *
+     * Removing a focused AndroidView re-focuses the window root, and that cascade re-enters Compose
+     * layout inside `applyChanges` (see [rememberFocusSafeInteropUnmount]). Surfaces without a
+     * focusable view have nothing to strip.
+     */
+    fun prepareForFocusSafeUnmount() = Unit
+
+    /** Restores focusability after a cancelled [prepareForFocusSafeUnmount]. */
+    fun cancelFocusSafeUnmount() = Unit
 }
 
 /** What the book engine answered to one auto-scroll sync. */
@@ -218,6 +230,10 @@ internal class ViewNovelBookScrollSurface(
         }
         webView.post { webView.evaluateJavascript(script) { result -> onResult(result) } }
     }
+
+    override fun prepareForFocusSafeUnmount() = view.prepareForFocusSafeUnmount()
+
+    override fun cancelFocusSafeUnmount() = view.cancelFocusSafeUnmount()
 }
 
 /**
