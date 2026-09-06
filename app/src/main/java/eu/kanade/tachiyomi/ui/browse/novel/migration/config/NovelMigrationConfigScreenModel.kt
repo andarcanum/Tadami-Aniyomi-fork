@@ -57,20 +57,12 @@ class NovelMigrationConfigScreenModel(
     }
 
     fun toggleSelection(config: SelectionConfig) {
-        val pinnedSources = sourcePreferences.pinnedNovelSources().get()
-            .mapNotNull { it.toLongOrNull() }
-            .toSet()
-        val disabledSources = sourcePreferences.disabledNovelSources().get()
-            .mapNotNull { it.toLongOrNull() }
-            .toSet()
-
+        // РЕШ-B5: SelectionConfig.Pinned/.Enabled had zero callers (manga etalon).
         updateSources { sources ->
             sources.map { source ->
                 val selected = when (config) {
                     SelectionConfig.All -> true
                     SelectionConfig.None -> false
-                    SelectionConfig.Pinned -> source.id in pinnedSources
-                    SelectionConfig.Enabled -> source.id !in disabledSources
                 }
                 source.copy(isSelected = selected)
             }
@@ -124,8 +116,6 @@ class NovelMigrationConfigScreenModel(
     enum class SelectionConfig {
         All,
         None,
-        Pinned,
-        Enabled,
     }
 
     data class MigrationSource(

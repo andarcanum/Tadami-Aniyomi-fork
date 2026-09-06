@@ -677,6 +677,6 @@ class BrowseMangaSourceScreenModel(
         val savedSearches: ImmutableList<Pair<SavedSearch, Boolean>> = persistentListOf(),
     ) {
         val isUserQuery get() = listing is Listing.Search && !listing.query.isNullOrEmpty()
-        val filterable get() = savedSearches.isNotEmpty()
+        // РЕШ-B5: `filterable` removed - zero production readers.
     }
 }

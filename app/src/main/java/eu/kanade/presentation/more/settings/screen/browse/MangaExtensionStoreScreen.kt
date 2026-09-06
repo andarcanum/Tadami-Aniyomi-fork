@@ -47,7 +47,6 @@ class MangaExtensionStoreScreen(
         ExtensionStoreScreen(
             state = successState,
             onClickCreate = { screenModel.showDialog(RepoDialog.Create) },
-            onAddRepo = { screenModel.createRepo(it) },
             onOpenWebsite = { context.openInBrowser(it.website) },
             onClickDelete = { screenModel.showDialog(RepoDialog.Delete(it)) },
             onClickRename = { screenModel.showDialog(RepoDialog.Rename(it)) },

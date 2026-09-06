@@ -27,13 +27,11 @@ import tachiyomi.presentation.core.util.plus
 fun ExtensionStoreScreen(
     state: RepoScreenState.Success,
     onClickCreate: () -> Unit,
-    onAddRepo: (String) -> Unit,
     onOpenWebsite: (ExtensionRepo) -> Unit,
     onClickDelete: (String) -> Unit,
     onClickRename: (ExtensionRepo) -> Unit,
     onClickRefresh: () -> Unit,
     navigateUp: () -> Unit,
-    officialRepos: Map<String, String> = emptyMap(),
 ) {
     val lazyListState = rememberLazyListState()
     val uiStyle = rememberResolvedSettingsUiStyle()
@@ -65,8 +63,6 @@ fun ExtensionStoreScreen(
             onOpenWebsite = onOpenWebsite,
             onClickDelete = onClickDelete,
             onClickRename = onClickRename,
-            onAddRepo = onAddRepo,
-            officialRepos = officialRepos,
         )
     }
 }

@@ -117,8 +117,7 @@ class MangaExtensionDetailsScreenModel(
             .filterIsInstance<HttpSource>()
             .flatMap { listOf(it.baseUrl, it.getHomeUrl()) }
             .filter { it.isNotEmpty() }
-            .distinct()
-            .distinct()
+            .distinct() // BEXT-10: was .distinct().distinct()
 
         val cleared = urls.sumOf {
             try {

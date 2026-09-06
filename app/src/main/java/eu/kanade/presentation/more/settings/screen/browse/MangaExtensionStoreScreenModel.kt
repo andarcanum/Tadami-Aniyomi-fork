@@ -188,7 +188,7 @@ sealed class RepoScreenState {
     @Immutable
     data class Success(
         val repos: ImmutableSet<ExtensionRepo>,
-        val oldRepos: ImmutableSet<String>? = null,
+        // BEXT-10: oldRepos was never written nor read (legacy migration leftover).
         val dialog: RepoDialog? = null,
     ) : RepoScreenState() {
 

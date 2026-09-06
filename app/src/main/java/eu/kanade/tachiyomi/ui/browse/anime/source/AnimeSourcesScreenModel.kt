@@ -3,7 +3,6 @@ package eu.kanade.tachiyomi.ui.browse.anime.source
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import eu.kanade.domain.base.BasePreferences
 import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
 import eu.kanade.domain.source.anime.interactor.ToggleAnimeSource
 import eu.kanade.domain.source.anime.interactor.ToggleAnimeSourcePin
@@ -38,7 +37,7 @@ import uy.kohesive.injekt.api.get
 import java.util.TreeMap
 
 class AnimeSourcesScreenModel(
-    private val preferences: BasePreferences = Injekt.get(),
+    // РЕШ-B5: the BasePreferences parameter was never read (dead DI dependency).
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val uiPreferences: UiPreferences = Injekt.get(),
     private val getEnabledAnimeSources: GetEnabledAnimeSources = Injekt.get(),

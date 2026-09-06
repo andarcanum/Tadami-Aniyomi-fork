@@ -9,7 +9,8 @@ typealias SearchAction<T> = suspend (String) -> List<T>
 
 abstract class BaseSmartSearchEngine<T>(
     private val extraSearchParams: String? = null,
-    private val eligibleThreshold: Double = MIN_ELIGIBLE_THRESHOLD,
+    // РЕШ-B5: the eligibleThreshold constructor parameter was never overridden by any
+    // subclass - the constant is used directly.
 ) {
     protected abstract fun getTitle(result: T): String
 
@@ -51,7 +52,7 @@ abstract class BaseSmartSearchEngine<T>(
                             }
                             SearchEntry(it, distance)
                         }
-                        .filter { it.distance >= eligibleThreshold }
+                        .filter { it.distance >= MIN_ELIGIBLE_THRESHOLD }
                 }
             }.flatMap { it.await() }
         }

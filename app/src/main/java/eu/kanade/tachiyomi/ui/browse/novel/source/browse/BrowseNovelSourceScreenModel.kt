@@ -357,7 +357,7 @@ class BrowseNovelSourceScreenModel(
         setDialog(null)
     }
 
-    private val autoFavoriteLocalNovels = sourcePreferences.importEpubAddToLibrary().get()
+    // BRN-16/РЕШ-B5: the autoFavoriteLocalNovels field was read once and never used (removed).
 
     val favoriteNovelUrls = resolveGetNovelFavorites()?.subscribe(sourceId)
         ?.map { list -> list.map { it.url }.toSet() }
@@ -870,7 +870,7 @@ class BrowseNovelSourceScreenModel(
         val isSourceConfigurable: Boolean = false,
     ) {
         val isUserQuery get() = listing is Listing.Search && !listing.query.isNullOrEmpty()
-        val filterable get() = savedSearches.isNotEmpty()
+        // РЕШ-B5: `filterable` removed - zero production readers.
     }
 
     private data class PagingRequest(

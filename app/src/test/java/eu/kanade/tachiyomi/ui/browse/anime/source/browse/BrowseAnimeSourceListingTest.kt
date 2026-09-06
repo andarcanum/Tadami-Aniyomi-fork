@@ -5,10 +5,7 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.ui.browse.search.SavedSearchFilterSerializer
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.types.shouldBeInstanceOf
-import kotlinx.collections.immutable.persistentListOf
 import org.junit.jupiter.api.Test
-import tachiyomi.domain.source.model.SavedSearch
-import tachiyomi.domain.source.model.SourceType
 
 class BrowseAnimeSourceListingTest {
 
@@ -18,33 +15,8 @@ class BrowseAnimeSourceListingTest {
             .shouldBeInstanceOf<BrowseAnimeSourceScreenModel.Listing.Popular>()
     }
 
-    @Test
-    fun `BrowseAnimeSourceScreenModel SavedSearch filterable is false when there are no saved searches`() {
-        val state = BrowseAnimeSourceScreenModel.State(
-            listing = BrowseAnimeSourceScreenModel.Listing.Popular,
-        )
-
-        state.filterable shouldBe false
-    }
-
-    @Test
-    fun `BrowseAnimeSourceScreenModel SavedSearch filterable is true when saved searches exist`() {
-        val state = BrowseAnimeSourceScreenModel.State(
-            listing = BrowseAnimeSourceScreenModel.Listing.Popular,
-            savedSearches = persistentListOf(
-                SavedSearch(
-                    id = 1L,
-                    source = 42L,
-                    sourceType = SourceType.ANIME,
-                    name = "saved",
-                    query = "q",
-                    filtersJson = null,
-                ) to false,
-            ),
-        )
-
-        state.filterable shouldBe true
-    }
+    // РЕШ-B5: the two `State.filterable` tests were removed along with the field - it had
+    // zero production readers (dead derived state).
 
     @Test
     fun `anime saved search filters roundtrip`() {

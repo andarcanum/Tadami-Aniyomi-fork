@@ -86,9 +86,8 @@ class SourcePreferences(
         legacyDefaultValue = false,
     )
 
-    fun migrationHideUnmatched() = migrationHideNotFound()
-
-    fun migrationHideWithoutUpdates() = migrationOnlyNewChapters()
+    // РЕШ-B5: dead aliases migrationHideUnmatched()/migrationHideWithoutUpdates() removed -
+    // zero callers, they only obscured which preference a screen actually reads.
 
     fun migrationDeepSearchMode() = migrationSearchKeywords()
 

@@ -21,8 +21,6 @@ import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.flow.collectLatest
 import tachiyomi.presentation.core.screens.LoadingScreen
 
-private val OFFICIAL_ANIME_REPOS = emptyMap<String, String>()
-
 class AnimeExtensionStoreScreen(
     private val url: String? = null,
 ) : Screen() {
@@ -49,13 +47,11 @@ class AnimeExtensionStoreScreen(
         ExtensionStoreScreen(
             state = successState,
             onClickCreate = { screenModel.showDialog(RepoDialog.Create) },
-            onAddRepo = { screenModel.createRepo(it) },
             onOpenWebsite = { context.openInBrowser(it.website) },
             onClickDelete = { screenModel.showDialog(RepoDialog.Delete(it)) },
             onClickRename = { screenModel.showDialog(RepoDialog.Rename(it)) },
             onClickRefresh = { screenModel.refreshRepos() },
             navigateUp = navigator::pop,
-            officialRepos = OFFICIAL_ANIME_REPOS,
         )
 
         when (val dialog = successState.dialog) {

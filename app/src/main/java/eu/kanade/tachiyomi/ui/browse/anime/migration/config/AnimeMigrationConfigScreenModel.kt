@@ -53,20 +53,12 @@ class AnimeMigrationConfigScreenModel(
     }
 
     fun toggleSelection(config: SelectionConfig) {
-        val pinnedSources = sourcePreferences.pinnedAnimeSources().get()
-            .mapNotNull { it.toLongOrNull() }
-            .toSet()
-        val disabledSources = sourcePreferences.disabledAnimeSources().get()
-            .mapNotNull { it.toLongOrNull() }
-            .toSet()
-
+        // РЕШ-B5: SelectionConfig.Pinned/.Enabled had zero callers (manga etalon).
         updateSources { sources ->
             sources.map { source ->
                 val selected = when (config) {
                     SelectionConfig.All -> true
                     SelectionConfig.None -> false
-                    SelectionConfig.Pinned -> source.id in pinnedSources
-                    SelectionConfig.Enabled -> source.id !in disabledSources
                 }
                 source.copy(isSelected = selected)
             }
@@ -120,8 +112,6 @@ class AnimeMigrationConfigScreenModel(
     enum class SelectionConfig {
         All,
         None,
-        Pinned,
-        Enabled,
     }
 
     data class MigrationSource(

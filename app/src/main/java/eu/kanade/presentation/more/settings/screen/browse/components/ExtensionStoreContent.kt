@@ -3,9 +3,7 @@ package eu.kanade.presentation.more.settings.screen.browse.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -19,7 +17,6 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.tachiyomi.util.system.copyToClipboard
 import eu.kanade.tachiyomi.util.system.openInBrowser
 import kotlinx.collections.immutable.ImmutableSet
-import kotlinx.collections.immutable.toImmutableSet
 import mihon.domain.extensionrepo.model.ExtensionRepo
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.padding
@@ -45,55 +41,20 @@ fun ExtensionStoreContent(
     onOpenWebsite: (ExtensionRepo) -> Unit,
     onClickDelete: (String) -> Unit,
     onClickRename: (ExtensionRepo) -> Unit,
-    onAddRepo: (String) -> Unit,
-    officialRepos: Map<String, String>,
     modifier: Modifier = Modifier,
 ) {
-    val officialReposState = officialRepos.entries.map { (url, name) ->
-        val baseUrl = url.removeSuffix("/index.min.json")
-        OfficialRepoUi(
-            name = name,
-            indexUrl = url,
-            baseUrl = baseUrl,
-            isEnabled = repos.any { it.baseUrl == baseUrl },
-        )
-    }
-    val officialBaseUrls = officialReposState.map { it.baseUrl }.toSet()
-    val customRepos = repos.filter { it.baseUrl !in officialBaseUrls }.toImmutableSet()
-
+    // BEXT-10/РЕШ-B5: the "official stores" section was dead - the only officialRepos value
+    // ever passed was an EMPTY map (OFFICIAL_ANIME_REPOS = emptyMap(); manga/novel used the
+    // default), so OfficialRepoUi/OfficialRepoListItem and the label_official_stores header
+    // were unreachable. The onAddRepo parameter existed solely for the official toggles.
     LazyColumn(
         state = lazyListState,
         contentPadding = paddingValues,
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.padding.small),
         modifier = modifier,
     ) {
-        if (officialReposState.isNotEmpty()) {
+        if (repos.isNotEmpty()) {
             item {
-                Text(
-                    text = stringResource(MR.strings.label_official_stores),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp),
-                )
-            }
-
-            officialReposState.forEach { repo ->
-                item {
-                    OfficialRepoListItem(
-                        name = repo.name,
-                        url = repo.indexUrl,
-                        isEnabled = repo.isEnabled,
-                        onToggle = { if (it) onAddRepo(repo.indexUrl) else onClickDelete(repo.baseUrl) },
-                    )
-                }
-            }
-        }
-
-        if (customRepos.isNotEmpty()) {
-            item {
-                if (officialReposState.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
                 Text(
                     text = stringResource(MR.strings.label_custom_stores),
                     style = MaterialTheme.typography.labelLarge,
@@ -102,7 +63,7 @@ fun ExtensionStoreContent(
                 )
             }
 
-            customRepos.forEach {
+            repos.forEach {
                 item {
                     ExtensionRepoListItem(
                         modifier = Modifier.animateItem(),
@@ -113,47 +74,6 @@ fun ExtensionStoreContent(
                     )
                 }
             }
-        }
-    }
-}
-
-private data class OfficialRepoUi(
-    val name: String,
-    val indexUrl: String,
-    val baseUrl: String,
-    val isEnabled: Boolean,
-)
-
-@Composable
-private fun OfficialRepoListItem(
-    name: String,
-    url: String,
-    isEnabled: Boolean,
-    onToggle: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    ElevatedCard(
-        modifier = modifier,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MaterialTheme.padding.medium),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(imageVector = Icons.AutoMirrored.Outlined.Label, contentDescription = null)
-                Text(
-                    text = name,
-                    modifier = Modifier.padding(start = MaterialTheme.padding.medium),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-            Switch(
-                checked = isEnabled,
-                onCheckedChange = onToggle,
-            )
         }
     }
 }

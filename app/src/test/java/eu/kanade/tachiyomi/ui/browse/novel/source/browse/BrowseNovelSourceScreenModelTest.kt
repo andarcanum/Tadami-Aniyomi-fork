@@ -739,33 +739,8 @@ class BrowseNovelSourceScreenModelTest {
         result shouldNotBe null
     }
 
-    @Test
-    fun `SavedSearch filterable is false when there are no saved searches`() {
-        val state = BrowseNovelSourceScreenModel.State(
-            listing = BrowseNovelSourceScreenModel.Listing.Popular,
-        )
-
-        state.filterable shouldBe false
-    }
-
-    @Test
-    fun `SavedSearch filterable is true when saved searches exist`() {
-        val state = BrowseNovelSourceScreenModel.State(
-            listing = BrowseNovelSourceScreenModel.Listing.Popular,
-            savedSearches = persistentListOf(
-                SavedSearch(
-                    id = 1L,
-                    source = 42L,
-                    sourceType = SourceType.NOVEL,
-                    name = "saved",
-                    query = "q",
-                    filtersJson = null,
-                ) to false,
-            ),
-        )
-
-        state.filterable shouldBe true
-    }
+    // РЕШ-B5: the two `State.filterable` tests were removed along with the field - it had
+    // zero production readers (dead derived state).
 
     @Test
     fun `novel saved search filters roundtrip`() {

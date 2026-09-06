@@ -46,6 +46,10 @@ fun GlobalAnimeSearchAuroraContent(
     val colors = AuroraTheme.colors
     val context = LocalContext.current
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
+    // BGS-9: flatten once per items change (was recomputed on EVERY recomposition) and key the
+    // grid items below - unkeyed positional items are a latent trap for the deferred РЕШ-13
+    // wiring (list changes would reuse cover slots across different anime).
+    val allAnime = remember(items) { items.flatten() }
 
     AuroraBackground {
         LazyVerticalGrid(
@@ -68,9 +72,7 @@ fun GlobalAnimeSearchAuroraContent(
                 }
             }
 
-            val allAnime = items.flatten()
-
-            items(allAnime) { anime ->
+            items(allAnime, key = { it.id }) { anime ->
                 val coverRequest = remember(anime.thumbnailUrl, anime.coverLastModified) {
                     buildAuroraCoverImageRequest(context, anime.thumbnailUrl)
                 }

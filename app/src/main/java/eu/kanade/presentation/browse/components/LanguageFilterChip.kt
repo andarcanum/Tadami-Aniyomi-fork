@@ -1,7 +1,6 @@
 package eu.kanade.presentation.browse.components
 
 import android.graphics.drawable.ColorDrawable
-import android.os.Build
 import android.view.WindowManager
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
