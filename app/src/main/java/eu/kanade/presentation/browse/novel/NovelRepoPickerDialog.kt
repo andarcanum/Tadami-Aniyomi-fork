@@ -14,8 +14,8 @@ fun NovelRepoPickerDialog(
     onDismiss: () -> Unit,
 ) {
     RepoPickerDialog(
-        titleRes = AYMR.strings.novel_repo_picker_title,
-        newestContentDescriptionRes = AYMR.strings.novel_repo_picker_newest,
+        titleRes = AYMR.strings.repo_picker_title,
+        newestContentDescriptionRes = AYMR.strings.repo_picker_newest,
         itemName = pluginName,
         options = options,
         onSelectOption = onSelectPlugin,

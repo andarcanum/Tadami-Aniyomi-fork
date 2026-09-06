@@ -1559,8 +1559,8 @@
     <string name="label_manga_extensions">Manga Extensions</string>
     <string name="label_anime_extensions">Anime Extensions</string>
     <string name="label_novel_extensions">Novel Extensions</string>
-    <string name="novel_repo_picker_title">Choose installation source</string>
-    <string name="novel_repo_picker_newest">Newest</string>
+    <string name="repo_picker_title">Choose installation source</string>
+    <string name="repo_picker_newest">Newest</string>
     <string name="label_migration_manga">Migrate Manga</string>
     <string name="label_migration_anime">Migrate Anime</string>
     <string name="migration_latest_episode">Latest episode: %1$s</string>
@@ -2646,7 +2646,9 @@
     <string name="feed">Feed</string>
     <string name="feed_add">Add source to feed</string>
     <string name="feed_manage">Manage feed</string>
-    <string name="feed_empty">Feed sources not configured. Tap + to add a source that supports Latest.</string>
+    <!-- BFEED-11: the old text pointed at a non-existent "+" button and claimed only Latest
+         sources work (Popular and saved searches are supported too). -->
+    <string name="feed_empty">Feed is empty. Add sources to see their latest updates here.</string>
     <string name="feed_delete_source_title">Remove source from feed?</string>
     <string name="feed_delete_source_message">This source will be removed from your feed.</string>
     <string name="pref_feed_hide_tab">Hide feed tab</string>

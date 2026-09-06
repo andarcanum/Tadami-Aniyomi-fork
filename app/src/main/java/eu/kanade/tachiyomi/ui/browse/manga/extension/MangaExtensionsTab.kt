@@ -159,8 +159,8 @@ fun mangaExtensionsTab(
 
             if (state.repoPickerOptions.isNotEmpty()) {
                 RepoPickerDialog(
-                    titleRes = AYMR.strings.novel_repo_picker_title,
-                    newestContentDescriptionRes = AYMR.strings.novel_repo_picker_newest,
+                    titleRes = AYMR.strings.repo_picker_title,
+                    newestContentDescriptionRes = AYMR.strings.repo_picker_newest,
                     itemName = state.repoPickerOptions.first().name,
                     options = state.repoPickerOptions,
                     onSelectOption = extensionsScreenModel::installFromRepo,

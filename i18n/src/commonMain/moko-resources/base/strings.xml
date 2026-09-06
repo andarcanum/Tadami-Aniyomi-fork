@@ -1178,6 +1178,7 @@
     <string name="migration_exit_body_migrating">Current migration will be cancelled and this screen will close.</string>
     <string name="migration_progress_title">Migrating entries</string>
     <string name="migration_progress_body">Progress: %1$d%%</string>
+    <string name="migration_checking_sources_count">Checking %1$d sources</string>
     <string name="migrate">Migrate</string>
     <!-- Make a copy (noun) when migrating. Don't use for copying to clipboard. -->
     <string name="copy">Copy</string>

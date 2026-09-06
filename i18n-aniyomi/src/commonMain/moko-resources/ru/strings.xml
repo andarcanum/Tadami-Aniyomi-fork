@@ -1121,11 +1121,15 @@
     <string name="notification_episodes_multiple">Эпизоды %1$s</string>
     <string name="episode_settings">Настройка эпизода</string>
     <string name="pref_backup_flags">Варианты резервного копирования</string>
-    <string name="label_manga_extensions">Установить расширение</string>
-    <string name="label_anime_extensions">Установить расширение</string>
-    <string name="label_novel_extensions">Установить расширение</string>
-    <string name="novel_repo_picker_title">Выберите источник установки</string>
-    <string name="novel_repo_picker_newest">Новейшая</string>
+    <!-- BEXT-8: все три вкладки расширений подписаны одинаково «Установить расширение» -
+         вкладки manga/anime/novel были неразличимы. -->
+    <string name="label_manga_extensions">Расширения манги</string>
+    <string name="label_anime_extensions">Расширения аниме</string>
+    <string name="label_novel_extensions">Расширения новелл</string>
+    <!-- BMG-12б: analog of MR migration_latest_chapter for the anime migration list. -->
+    <string name="migration_latest_episode">Последний эпизод: %1$s</string>
+    <string name="repo_picker_title">Выберите источник установки</string>
+    <string name="repo_picker_newest">Новейшая</string>
     <string name="label_migration_manga">Перенос</string>
     <string name="label_migration_anime">Перенос</string>
     <string name="settings">Настройки</string>
@@ -2410,7 +2414,7 @@
     <string name="feed">Лента</string>
     <string name="feed_add">Добавить источник в ленту</string>
     <string name="feed_manage">Управление лентой</string>
-    <string name="feed_empty">Источники ленты не настроены. Нажмите +, чтобы добавить источник с поддержкой Latest.</string>
+    <string name="feed_empty">Лента пуста. Добавьте источники, чтобы видеть их свежие обновления.</string>
     <string name="feed_delete_source_title">Удалить источник из ленты?</string>
     <string name="feed_delete_source_message">Источник будет удалён из ленты.</string>
     <string name="pref_feed_hide_tab">Скрыть вкладку ленты</string>

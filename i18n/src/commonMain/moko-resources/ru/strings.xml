@@ -317,6 +317,27 @@
     <string name="migration_deep_search_mode">Глубокий режим поиска</string>
     <string name="migration_prioritize_by_chapters">Приоритет по главам</string>
     <string name="migration_advanced_options_warning">Расширенные параметры могут снизить качество поиска.</string>
+    <!-- BMG-12а: 16 ключей экрана миграции существовали только в base - ru-пользователи видели
+         английский на всех экранах migration. Плюс ext_update_available_banner (BEXT-8) и
+         migration_checking_sources_count (BMG-12в, заменяет хардкод "N sources" в SM). -->
+    <string name="migration_latest_chapter">Последняя глава: %1$s</string>
+    <string name="migration_unknown_latest_chapter">Неизвестно</string>
+    <string name="migration_no_match_found">Совпадений не найдено</string>
+    <string name="migration_checking_source">Проверка %1$s</string>
+    <string name="migration_search_manually">Найти вручную</string>
+    <string name="migration_skip_entry">Пропустить</string>
+    <string name="migration_migrate_now">Перенести сейчас</string>
+    <string name="migration_copy_now">Скопировать сейчас</string>
+    <string name="migration_confirm_migrate_title">Перенести записи?</string>
+    <string name="migration_confirm_copy_title">Скопировать записи?</string>
+    <string name="migration_confirm_body">Готово %1$d из %2$d записей. Будет пропущено: %3$d.</string>
+    <string name="migration_exit_title">Выйти из переноса?</string>
+    <string name="migration_exit_body">Результаты поиска на этом экране будут потеряны.</string>
+    <string name="migration_exit_body_migrating">Текущий перенос будет отменён, экран закроется.</string>
+    <string name="migration_progress_title">Перенос записей</string>
+    <string name="migration_progress_body">Прогресс: %1$d%%</string>
+    <string name="migration_checking_sources_count">Проверяется источников: %1$d</string>
+    <string name="ext_update_available_banner">В магазине доступна более новая версия этого расширения.</string>
     <string name="migrate">Перенести</string>
     <string name="copy">Копировать</string>
     <string name="ext_trust">Надёжное</string>

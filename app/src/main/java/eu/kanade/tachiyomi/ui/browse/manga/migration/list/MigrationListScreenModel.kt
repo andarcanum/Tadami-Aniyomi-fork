@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.browse.manga.migration.list
 
+import android.content.Context
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
@@ -23,6 +24,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.update
 import logcat.LogPriority
+import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.core.common.util.lang.launchIO
@@ -32,6 +34,7 @@ import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.chapter.interactor.GetChaptersByMangaId
 import tachiyomi.domain.items.chapter.model.Chapter
 import tachiyomi.domain.source.manga.service.MangaSourceManager
+import tachiyomi.i18n.MR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -45,6 +48,8 @@ class MigrationListScreenModel(
     private val getChaptersByMangaId: GetChaptersByMangaId = Injekt.get(),
     private val migrateManga: MigrateMangaUseCase = MigrateMangaUseCase(),
     private val preferenceStore: PreferenceStore = Injekt.get(),
+    // BMG-12в: the search progress label was a hardcoded English "N sources".
+    private val context: Context = Injekt.get(),
 ) : StateScreenModel<MigrationListScreenModel.State>(State()) {
 
     val items
@@ -319,7 +324,7 @@ class MigrationListScreenModel(
         useDeepSearch: Boolean,
         onProgress: (String?) -> Unit,
     ): MigrationSearchCandidate? = kotlinx.coroutines.supervisorScope {
-        onProgress("${sources.size} sources")
+        onProgress(context.stringResource(MR.strings.migration_checking_sources_count, sources.size))
         val candidates = sources.mapIndexed { index, source ->
             async {
                 currentCoroutineContext().ensureActive()

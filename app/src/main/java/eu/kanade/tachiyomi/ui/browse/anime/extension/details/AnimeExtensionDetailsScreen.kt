@@ -61,7 +61,7 @@ data class AnimeExtensionDetailsScreen(
         if (showReinstallPicker) {
             RepoPickerDialog(
                 titleRes = MR.strings.ext_repo_update_dialog_title,
-                newestContentDescriptionRes = AYMR.strings.novel_repo_picker_newest,
+                newestContentDescriptionRes = AYMR.strings.repo_picker_newest,
                 itemName = state.extension?.name.orEmpty(),
                 options = screenModel.getReinstallCandidates(),
                 onSelectOption = {
