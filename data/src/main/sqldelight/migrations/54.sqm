@@ -1,0 +1,19 @@
+-- BFEED-3 layer 3: legacy duplicate rows in the global feed (the v40 schema never had a
+-- uniqueness guard, double-tap Add inserted twice, and MoveLatestToFeedMigration did not
+-- check existing rows). Duplicates corrupted reorder semantics and used to crash-loop the
+-- feed tab when rows were keyed per source. Deduplicate keeping the first inserted row per
+-- logical feed, then enforce uniqueness. saved_search is nullable and SQLite does not
+-- enforce UNIQUE across NULLs, so the index uses a COALESCE expression; the index is PARTIAL
+-- (global = 1) because per-source (global = 0) rows are keyed by their own screen.
+DELETE FROM feed_saved_search
+WHERE global = 1
+  AND _id NOT IN (
+    SELECT MIN(_id)
+    FROM feed_saved_search
+    WHERE global = 1
+    GROUP BY source, media_type, listing_type, COALESCE(saved_search, -1)
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS feed_saved_search_global_unique
+ON feed_saved_search (source, media_type, listing_type, COALESCE(saved_search, -1))
+WHERE global = 1;

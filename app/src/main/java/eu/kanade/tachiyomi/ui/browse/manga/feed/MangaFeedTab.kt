@@ -71,14 +71,18 @@ fun Screen.mangaFeedTab(): TabContent {
                     state = state,
                     contentPadding = contentPadding,
                     onClickSource = { source, item ->
-                        when (item.feed.listingType) {
-                            FeedListingType.SAVED_SEARCH -> {
+                        // BFEED-8: route by the ACTUAL content - legacy rows carry a saved
+                        // search without the SAVED_SEARCH listing type (loadFeed honors the id
+                        // first), so listingType-only routing opened Popular/Latest for a row
+                        // that showed saved-search results.
+                        when {
+                            item.feed.savedSearch != null -> {
                                 navigator.push(BrowseMangaSourceScreen(source.id, null, item.feed.savedSearch))
                             }
-                            FeedListingType.POPULAR -> {
+                            item.feed.listingType == FeedListingType.POPULAR -> {
                                 navigator.push(BrowseMangaSourceScreen(source.id, GetRemoteManga.QUERY_POPULAR))
                             }
-                            FeedListingType.LATEST -> {
+                            else -> {
                                 navigator.push(BrowseMangaSourceScreen(source.id, GetRemoteManga.QUERY_LATEST))
                             }
                         }
@@ -125,6 +129,11 @@ fun Screen.mangaFeedTab(): TabContent {
                 screenModel.events.collectLatest { event ->
                     when (event) {
                         FeedEvent.FailedFetchingSources -> {
+                            launch { snackbarHostState.showSnackbar(internalErrString) }
+                        }
+                        // BFEED-12: a failed reorder used to vanish silently (the order just
+                        // snapped back on the next emission).
+                        FeedEvent.ReorderFailed -> {
                             launch { snackbarHostState.showSnackbar(internalErrString) }
                         }
                     }

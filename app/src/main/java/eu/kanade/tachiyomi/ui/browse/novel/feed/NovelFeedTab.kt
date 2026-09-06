@@ -71,14 +71,16 @@ fun Screen.novelFeedTab(): TabContent {
                     state = state,
                     contentPadding = contentPadding,
                     onClickSource = { source, item ->
-                        when (item.feed.listingType) {
-                            FeedListingType.SAVED_SEARCH -> {
+                        // BFEED-8: route by the ACTUAL content (legacy rows carry a saved
+                        // search without the SAVED_SEARCH listing type) - manga etalon.
+                        when {
+                            item.feed.savedSearch != null -> {
                                 navigator.push(BrowseNovelSourceScreen(source.id, null, item.feed.savedSearch))
                             }
-                            FeedListingType.POPULAR -> {
+                            item.feed.listingType == FeedListingType.POPULAR -> {
                                 navigator.push(BrowseNovelSourceScreen(source.id, GetRemoteNovel.QUERY_POPULAR))
                             }
-                            FeedListingType.LATEST -> {
+                            else -> {
                                 navigator.push(BrowseNovelSourceScreen(source.id, GetRemoteNovel.QUERY_LATEST))
                             }
                         }
@@ -125,6 +127,10 @@ fun Screen.novelFeedTab(): TabContent {
                 screenModel.events.collectLatest { event ->
                     when (event) {
                         FeedEvent.FailedFetchingSources -> {
+                            launch { snackbarHostState.showSnackbar(internalErrString) }
+                        }
+                        // BFEED-12: a failed reorder used to vanish silently.
+                        FeedEvent.ReorderFailed -> {
                             launch { snackbarHostState.showSnackbar(internalErrString) }
                         }
                     }

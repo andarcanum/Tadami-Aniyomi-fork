@@ -153,6 +153,15 @@ private fun FeedSourceSection(
                     modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium),
                 )
             }
+            // BFEED-5: a failed load is no longer indistinguishable from "no results" -
+            // show the source error (pull-to-refresh retries).
+            item.loadError != null -> {
+                Text(
+                    text = item.loadError,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium),
+                )
+            }
             item.results.isEmpty() -> {
                 Text(
                     text = stringResource(MR.strings.no_results_found),
@@ -164,7 +173,9 @@ private fun FeedSourceSection(
                     contentPadding = PaddingValues(MaterialTheme.padding.small),
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
                 ) {
-                    items(item.results) { manga ->
+                    // BFEED-6: unkeyed items reused composition slots across refreshes -
+                    // produceState(getMangaState) kept observing the PREVIOUS manga's flow.
+                    items(item.results, key = { it.id }) { manga ->
                         val title by getMangaState(manga)
                         Box(modifier = Modifier.width(96.dp)) {
                             EntryComfortableGridItem(

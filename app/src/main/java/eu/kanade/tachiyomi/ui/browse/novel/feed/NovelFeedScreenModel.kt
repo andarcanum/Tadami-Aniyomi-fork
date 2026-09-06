@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.domain.entries.novel.model.Novel
@@ -27,6 +27,7 @@ import tachiyomi.domain.source.model.SourceType
 import tachiyomi.domain.source.novel.service.NovelSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.coroutines.cancellation.CancellationException
 
 typealias NovelFeedScreenState = FeedScreenState<NovelFeedItemUI>
 
@@ -36,6 +37,7 @@ data class NovelFeedItemUI(
     val title: String,
     val subtitle: String,
     override val results: List<Novel>?,
+    override val loadError: String? = null,
 ) : BaseFeedScreenModel.FeedItemUi
 
 class NovelFeedScreenModel(
@@ -86,55 +88,68 @@ class NovelFeedScreenModel(
         }
     }
 
-    override fun loadFeed(items: List<NovelFeedItemUI>) {
+    // BFEED-2: suspend + runs inside the base SM's cancellable load job (manga etalon).
+    override suspend fun loadFeed(items: List<NovelFeedItemUI>) = withContext(ioCoroutineScope.coroutineContext) {
         val hideInLibrary = sourcePreferences.hideInLibraryFeedItems().get()
-        ioCoroutineScope.launch {
-            val results = items.map { itemUI ->
-                async {
-                    try {
-                        val savedSearchId = itemUI.feed.savedSearch
-                        val novels = if (savedSearchId != null) {
-                            // Legacy feeds stored a saved search without an explicit listing type.
-                            val ss = getSavedSearchById.await(savedSearchId)
-                            if (ss != null) {
-                                val filtersJson = ss.filtersJson
-                                val baseFilters = itemUI.source.getFilterList()
-                                if (filtersJson != null) {
-                                    SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
-                                }
-                                itemUI.source.getSearchNovels(1, ss.query ?: "", baseFilters).novels
-                            } else {
-                                itemUI.source.getLatestUpdates(1).novels
+        val results = items.map { itemUI ->
+            async {
+                // BFEED-5: rethrow cancellation; failures surface as loadError (manga etalon).
+                val loaded = try {
+                    val savedSearchId = itemUI.feed.savedSearch
+                    val novels = if (savedSearchId != null) {
+                        // Legacy feeds stored a saved search without an explicit listing type.
+                        val ss = getSavedSearchById.await(savedSearchId)
+                        if (ss != null) {
+                            val filtersJson = ss.filtersJson
+                            val baseFilters = itemUI.source.getFilterList()
+                            if (filtersJson != null) {
+                                SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
                             }
+                            itemUI.source.getSearchNovels(1, ss.query ?: "", baseFilters).novels
                         } else {
-                            when (itemUI.feed.listingType) {
-                                FeedListingType.LATEST -> {
-                                    if (itemUI.source.supportsLatest) {
-                                        itemUI.source.getLatestUpdates(1).novels
-                                    } else {
-                                        itemUI.source.getPopularNovels(1).novels
-                                    }
-                                }
-                                FeedListingType.POPULAR -> itemUI.source.getPopularNovels(1).novels
-                                FeedListingType.SAVED_SEARCH -> itemUI.source.getLatestUpdates(1).novels
-                            }
+                            itemUI.source.getLatestUpdates(1).novels
                         }
-                        val converted = novels.map { snovel ->
-                            networkToLocalNovel.await(snovel.toDomainNovel(itemUI.source.id))
-                        }.filter { !hideInLibrary || !it.favorite }
-                        itemUI to converted
-                    } catch (_: Exception) {
-                        itemUI to emptyList<Novel>()
+                    } else {
+                        when (itemUI.feed.listingType) {
+                            FeedListingType.LATEST -> {
+                                if (itemUI.source.supportsLatest) {
+                                    itemUI.source.getLatestUpdates(1).novels
+                                } else {
+                                    itemUI.source.getPopularNovels(1).novels
+                                }
+                            }
+                            FeedListingType.POPULAR -> itemUI.source.getPopularNovels(1).novels
+                            FeedListingType.SAVED_SEARCH -> itemUI.source.getLatestUpdates(1).novels
+                        }
                     }
+                    val converted = novels.map { snovel ->
+                        networkToLocalNovel.await(snovel.toDomainNovel(itemUI.source.id))
+                    }.filter { !hideInLibrary || !it.favorite }
+                    Result.success(converted)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure<List<Novel>>(e)
                 }
-            }.awaitAll()
-            mutableState.update { state ->
-                val updatedItems = state.items?.map { item ->
-                    val pair = results.find { it.first.source.id == item.source.id }
-                    if (pair != null) item.copy(results = pair.second) else item
-                }
-                state.copy(items = updatedItems)
+                itemUI to loaded
             }
+        }.awaitAll()
+        mutableState.update { state ->
+            val updatedItems = state.items?.map { item ->
+                // BFEED-4: match by feed.id (source.id cross-wired two rows of one source).
+                val pair = results.find { it.first.feed.id == item.feed.id }
+                if (pair != null) {
+                    pair.second.fold(
+                        onSuccess = { item.copy(results = it, loadError = null) },
+                        onFailure = {
+                            item.copy(results = emptyList(), loadError = it.message ?: it.javaClass.simpleName)
+                        },
+                    )
+                } else {
+                    item
+                }
+            }
+            state.copy(items = updatedItems)
         }
     }
 

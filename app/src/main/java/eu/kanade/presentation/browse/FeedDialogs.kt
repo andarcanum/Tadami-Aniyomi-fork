@@ -189,8 +189,12 @@ fun FeedDeleteSourceDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(AYMR.strings.feed_delete_source_title)) },
-        text = { Text(stringResource(AYMR.strings.feed_delete_source_message)) },
+        // BFEED-28: the dialog never used its `source` parameter - the user confirmed the
+        // deletion without seeing WHICH row (two rows of one source look identical). Title
+        // carries the source name (the AddSearch dialog does the same at :145), the generic
+        // question becomes the message.
+        title = { Text(source.name) },
+        text = { Text(stringResource(AYMR.strings.feed_delete_source_title)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text(stringResource(MR.strings.action_delete))

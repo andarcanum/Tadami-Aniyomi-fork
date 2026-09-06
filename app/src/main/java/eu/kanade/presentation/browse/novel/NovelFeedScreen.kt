@@ -152,6 +152,14 @@ private fun FeedSourceSection(
                     modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium),
                 )
             }
+            // BFEED-5: show the source error instead of a misleading "no results".
+            item.loadError != null -> {
+                Text(
+                    text = item.loadError,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = MaterialTheme.padding.medium),
+                )
+            }
             item.results.isEmpty() -> {
                 Text(
                     text = stringResource(MR.strings.no_results_found),
@@ -163,7 +171,8 @@ private fun FeedSourceSection(
                     contentPadding = PaddingValues(MaterialTheme.padding.small),
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.padding.extraSmall),
                 ) {
-                    items(item.results) { novel ->
+                    // BFEED-6: key the row items (see the manga screen).
+                    items(item.results, key = { it.id }) { novel ->
                         val title by getNovelState(novel)
                         Box(modifier = Modifier.width(96.dp)) {
                             EntryComfortableGridItem(

@@ -18,7 +18,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.entries.anime.interactor.GetAnime
 import tachiyomi.domain.entries.anime.interactor.NetworkToLocalAnime
@@ -31,6 +31,7 @@ import tachiyomi.domain.source.model.SourceType
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import kotlin.coroutines.cancellation.CancellationException
 
 typealias AnimeFeedScreenState = FeedScreenState<AnimeFeedItemUI>
 
@@ -41,6 +42,7 @@ data class AnimeFeedItemUI(
     val title: String,
     val subtitle: String,
     override val results: List<Anime>?,
+    override val loadError: String? = null,
 ) : BaseFeedScreenModel.FeedItemUi
 
 class AnimeFeedScreenModel(
@@ -107,47 +109,68 @@ class AnimeFeedScreenModel(
         }
     }
 
-    override fun loadFeed(items: List<AnimeFeedItemUI>) {
+    // BFEED-2: suspend + runs inside the base SM's cancellable load job (manga etalon).
+    override suspend fun loadFeed(items: List<AnimeFeedItemUI>) = withContext(ioCoroutineScope.coroutineContext) {
         val hideInLibrary = sourcePreferences.hideInLibraryFeedItems().get()
-        ioCoroutineScope.launch {
-            val results = items.map { itemUI ->
-                async {
-                    try {
-                        val animes = when (itemUI.feed.listingType) {
-                            FeedListingType.SAVED_SEARCH -> {
-                                val feed = itemUI.feed
-                                val ss = itemUI.savedSearch
-                                    ?: feed.savedSearch?.let { getSavedSearchById.await(it) }
-                                if (ss != null) {
-                                    val filtersJson = ss.filtersJson
-                                    val baseFilters = itemUI.source.getFilterList()
-                                    if (filtersJson != null) {
-                                        SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
-                                    }
-                                    itemUI.source.getSearchAnime(1, ss.query ?: "", baseFilters).animes
-                                } else {
-                                    itemUI.source.getLatestUpdates(1).animes
+        val results = items.map { itemUI ->
+            async {
+                // BFEED-5: rethrow cancellation; failures surface as loadError (manga etalon).
+                val loaded = try {
+                    val animes = when (itemUI.feed.listingType) {
+                        FeedListingType.SAVED_SEARCH -> {
+                            val feed = itemUI.feed
+                            val ss = itemUI.savedSearch
+                                ?: feed.savedSearch?.let { getSavedSearchById.await(it) }
+                            if (ss != null) {
+                                val filtersJson = ss.filtersJson
+                                val baseFilters = itemUI.source.getFilterList()
+                                if (filtersJson != null) {
+                                    SavedSearchFilterSerializer.deserialize(filtersJson, baseFilters)
                                 }
+                                itemUI.source.getSearchAnime(1, ss.query ?: "", baseFilters).animes
+                            } else {
+                                itemUI.source.getLatestUpdates(1).animes
                             }
-                            FeedListingType.LATEST -> itemUI.source.getLatestUpdates(1).animes
-                            FeedListingType.POPULAR -> itemUI.source.getPopularAnime(1).animes
                         }
-                        val converted = animes.map { sanime ->
-                            networkToLocalAnime.await(sanime.toDomainAnime(itemUI.source.id))
-                        }.filter { !hideInLibrary || !it.favorite }
-                        itemUI to converted
-                    } catch (_: Exception) {
-                        itemUI to emptyList<Anime>()
+                        FeedListingType.LATEST -> {
+                            // BFEED-9: sources without latest support returned an error/empty
+                            // list; fall back to popular (manga etalon :117-123).
+                            if (itemUI.source.supportsLatest) {
+                                itemUI.source.getLatestUpdates(1).animes
+                            } else {
+                                itemUI.source.getPopularAnime(1).animes
+                            }
+                        }
+                        FeedListingType.POPULAR -> itemUI.source.getPopularAnime(1).animes
                     }
+                    val converted = animes.map { sanime ->
+                        networkToLocalAnime.await(sanime.toDomainAnime(itemUI.source.id))
+                    }.filter { !hideInLibrary || !it.favorite }
+                    Result.success(converted)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Result.failure<List<Anime>>(e)
                 }
-            }.awaitAll()
-            mutableState.update { state ->
-                val updatedItems = state.items?.map { item ->
-                    val pair = results.find { it.first.source.id == item.source.id }
-                    if (pair != null) item.copy(results = pair.second) else item
-                }
-                state.copy(items = updatedItems)
+                itemUI to loaded
             }
+        }.awaitAll()
+        mutableState.update { state ->
+            val updatedItems = state.items?.map { item ->
+                // BFEED-4: match by feed.id (source.id cross-wired two rows of one source).
+                val pair = results.find { it.first.feed.id == item.feed.id }
+                if (pair != null) {
+                    pair.second.fold(
+                        onSuccess = { item.copy(results = it, loadError = null) },
+                        onFailure = {
+                            item.copy(results = emptyList(), loadError = it.message ?: it.javaClass.simpleName)
+                        },
+                    )
+                } else {
+                    item
+                }
+            }
+            state.copy(items = updatedItems)
         }
     }
 

@@ -10,6 +10,13 @@ CREATE TABLE feed_saved_search (
     feed_order INTEGER NOT NULL DEFAULT 0
 );
 
+-- BFEED-3 layer 3 (fresh installs; existing databases get it via 54.sqm): one global feed row
+-- per (source, media_type, listing_type, saved_search). COALESCE because SQLite does not
+-- enforce UNIQUE across NULLs.
+CREATE UNIQUE INDEX feed_saved_search_global_unique
+ON feed_saved_search (source, media_type, listing_type, COALESCE(saved_search, -1))
+WHERE global = 1;
+
 selectAllGlobal:
 SELECT * FROM feed_saved_search WHERE global = 1 AND media_type = :sourceType ORDER BY feed_order;
 
