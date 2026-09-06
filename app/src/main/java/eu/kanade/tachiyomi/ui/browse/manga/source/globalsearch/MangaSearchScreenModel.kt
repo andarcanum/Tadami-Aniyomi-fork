@@ -17,8 +17,8 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.collections.immutable.toPersistentMap
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.collectLatest
@@ -36,7 +36,6 @@ import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.source.manga.service.MangaSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.util.concurrent.Executors
 
 abstract class MangaSearchScreenModel(
     initialState: State = State(),
@@ -49,8 +48,14 @@ abstract class MangaSearchScreenModel(
     private val achievementHandler: AchievementHandler = Injekt.get(),
 ) : StateScreenModel<MangaSearchScreenModel.State>(initialState) {
 
-    private val coroutineDispatcher = Executors.newFixedThreadPool(5).asCoroutineDispatcher()
     private var searchJob: Job? = null
+
+    companion object {
+        // BGS-3: per-instance Executors.newFixedThreadPool(5) leaked 5 non-daemon threads per
+        // screen visit (never closed; inherited by all Global*/Migrate* subclasses) - shared
+        // limited IO view instead (see the anime SM comment).
+        private val searchDispatcher = Dispatchers.IO.limitedParallelism(5)
+    }
 
     private val enabledLanguages = sourcePreferences.enabledLanguages().get()
     private val disabledSources = sourcePreferences.disabledMangaSources().get()
@@ -186,7 +191,7 @@ abstract class MangaSearchScreenModel(
                         return@async
                     }
                     try {
-                        val page = withContext(coroutineDispatcher) {
+                        val page = withContext(searchDispatcher) {
                             source.getSearchManga(1, query, source.getFilterList())
                         }
 
@@ -219,10 +224,17 @@ abstract class MangaSearchScreenModel(
     }
 
     private fun updateItem(source: CatalogueSource, result: MangaSearchItemResult) {
-        val newItems = state.value.items.mutate {
-            it[source] = result
+        // BGS-2: compute from the fresh state INSIDE mutableState.update - the mutate() outside
+        // made CAS retries re-apply a stale map, losing concurrent completions (rows stuck on
+        // Loading forever).
+        mutableState.update { current ->
+            val newItems = current.items.mutate { it[source] = result }
+            current.copy(
+                items = newItems
+                    .toSortedMap(sortComparator(newItems))
+                    .toPersistentMap(),
+            )
         }
-        updateItems(newItems)
     }
 
     @Immutable

@@ -18,7 +18,9 @@ import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.NovelSearchScreen
 import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.NovelSourceFilter
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import tachiyomi.domain.entries.novel.model.Novel
+import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.screens.EmptyScreen
 
 @Composable
 fun GlobalNovelSearchScreen(
@@ -75,6 +77,11 @@ internal fun GlobalSearchContent(
     onLongClickItem: (Novel) -> Unit,
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+    if (items.isEmpty()) {
+        // BGS-7: a fully filtered-out result set rendered a blank screen (manga etalon).
+        EmptyScreen(stringRes = MR.strings.no_results_found)
+        return
+    }
     LazyColumn(
         modifier = Modifier.auroraCenteredMaxWidth(
             auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,

@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.deeplink.anime
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -11,7 +12,6 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.util.Screen
-import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.player.PlayerActivity
 import tachiyomi.i18n.MR
@@ -46,7 +46,12 @@ class DeepLinkAnimeScreen(
                     LoadingScreen(Modifier.padding(contentPadding))
                 }
                 is DeepLinkAnimeScreenModel.State.NoResults -> {
-                    navigator.replace(GlobalAnimeSearchScreen(query))
+                    // BGS-4/CONTROL-6: pop to the GlobalAnimeSearchScreen MainActivity pushed
+                    // right before this screen - replace() created a duplicate stack and the
+                    // back press re-ran the whole fan-out search (see the manga site).
+                    LaunchedEffect(Unit) {
+                        navigator.pop()
+                    }
                 }
                 is DeepLinkAnimeScreenModel.State.Result -> {
                     val resultState = state as DeepLinkAnimeScreenModel.State.Result

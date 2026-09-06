@@ -142,7 +142,11 @@ fun LanguageFilterChip(
                     )
                 }
                 Button(
-                    onClick = { onChangeLanguageFilter(availableLanguages) },
+                    // BFEED-27: "Select all" used to write an EXPLICIT set of all currently
+                    // available languages - sources in languages discovered later (new
+                    // extensions) stayed filtered out forever. An EMPTY set IS the "all
+                    // languages" semantics in the search screen models, so select-all = clear.
+                    onClick = { onChangeLanguageFilter(emptySet()) },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 ) {
                     Text(text = stringResource(MR.strings.action_select_all))

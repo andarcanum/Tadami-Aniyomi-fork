@@ -17,8 +17,8 @@ import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.collections.immutable.toPersistentMap
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.collectLatest
@@ -36,7 +36,6 @@ import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
-import java.util.concurrent.Executors
 
 abstract class AnimeSearchScreenModel(
     initialState: State = State(),
@@ -49,8 +48,18 @@ abstract class AnimeSearchScreenModel(
     private val achievementHandler: AchievementHandler = Injekt.get(),
 ) : StateScreenModel<AnimeSearchScreenModel.State>(initialState) {
 
-    private val coroutineDispatcher = Executors.newFixedThreadPool(5).asCoroutineDispatcher()
     private var searchJob: Job? = null
+
+    companion object {
+        // BGS-3/BRA-7: each SM instance used to allocate its own
+        // Executors.newFixedThreadPool(5).asCoroutineDispatcher() and NEVER closed it (no
+        // close(), no onDispose - scope cancellation does not close executors): 5 non-daemon
+        // threads leaked per global-search/migrate-search screen visit, inherited by all
+        // Global*/Migrate* subclasses. A shared limited view of the IO pool keeps the
+        // "at most 5 parallel searches" semantics without owning threads (codebase precedent:
+        // App.kt, NovelChapterImagePrefetcher, DiscordPresenceManager).
+        private val searchDispatcher = Dispatchers.IO.limitedParallelism(5)
+    }
 
     private val enabledLanguages = sourcePreferences.enabledLanguages().get()
     private val disabledSources = sourcePreferences.disabledAnimeSources().get()
@@ -179,6 +188,10 @@ abstract class AnimeSearchScreenModel(
             )
         }
 
+        // BGS-1/BRA-6: cancel the previous cycle (manga/novel etalon) - without it a still-
+        // running old job passed the Loading guard after the reset and wrote STALE-query
+        // results into the new search's map.
+        searchJob?.cancel()
         searchJob = ioCoroutineScope.launch {
             sources.map { source ->
                 async {
@@ -186,7 +199,7 @@ abstract class AnimeSearchScreenModel(
                         return@async
                     }
                     try {
-                        val page = withContext(coroutineDispatcher) {
+                        val page = withContext(searchDispatcher) {
                             source.getSearchAnime(1, query, source.getFilterList())
                         }
 
@@ -219,10 +232,18 @@ abstract class AnimeSearchScreenModel(
     }
 
     private fun updateItem(source: AnimeCatalogueSource, result: AnimeSearchItemResult) {
-        val newItems = state.value.items.mutate {
-            it[source] = result
+        // BGS-2/BRA-8: the mutate() used to be computed OUTSIDE mutableState.update - a CAS
+        // retry re-ran the lambda with the already-computed STALE newItems, so concurrent async
+        // completions lost updates and rows stayed Loading forever. Compute from the fresh
+        // state inside the update block.
+        mutableState.update { current ->
+            val newItems = current.items.mutate { it[source] = result }
+            current.copy(
+                items = newItems
+                    .toSortedMap(sortComparator(newItems))
+                    .toPersistentMap(),
+            )
         }
-        updateItems(newItems)
     }
 
     @Immutable

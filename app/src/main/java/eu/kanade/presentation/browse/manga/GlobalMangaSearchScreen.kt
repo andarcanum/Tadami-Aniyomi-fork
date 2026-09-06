@@ -18,7 +18,9 @@ import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.MangaSearchScreen
 import eu.kanade.tachiyomi.ui.browse.manga.source.globalsearch.MangaSourceFilter
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import tachiyomi.domain.entries.manga.model.Manga
+import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.screens.EmptyScreen
 
 @Composable
 fun GlobalMangaSearchScreen(
@@ -76,6 +78,12 @@ internal fun GlobalSearchContent(
     fromSourceId: Long? = null,
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+    if (items.isEmpty()) {
+        // BGS-7: a fully filtered-out result set (only-with-results toggle or a language filter
+        // excluding every source) rendered a blank screen with just the toolbar.
+        EmptyScreen(stringRes = MR.strings.no_results_found)
+        return
+    }
     LazyColumn(
         modifier = Modifier.auroraCenteredMaxWidth(
             auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,

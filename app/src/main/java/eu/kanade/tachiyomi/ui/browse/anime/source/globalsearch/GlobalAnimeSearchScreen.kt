@@ -24,7 +24,10 @@ import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
-data class GlobalAnimeSearchScreen(
+// BGS-13: was a data class (manga/novel analogues are plain) - structural equality made two
+// distinct instances with the same query interchangeable for popUntil/contains-style stack
+// operations.
+class GlobalAnimeSearchScreen(
     val searchQuery: String = "",
     private val extensionFilter: String? = null,
 ) : Screen() {

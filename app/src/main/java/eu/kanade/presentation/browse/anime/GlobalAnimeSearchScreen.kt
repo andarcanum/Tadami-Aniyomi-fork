@@ -18,7 +18,9 @@ import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.AnimeSearchScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.AnimeSourceFilter
 import eu.kanade.tachiyomi.util.system.LocaleHelper
 import tachiyomi.domain.entries.anime.model.Anime
+import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
+import tachiyomi.presentation.core.screens.EmptyScreen
 
 @Composable
 fun GlobalAnimeSearchScreen(
@@ -76,6 +78,11 @@ internal fun GlobalSearchContent(
     fromSourceId: Long? = null,
 ) {
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
+    if (items.isEmpty()) {
+        // BGS-7: a fully filtered-out result set rendered a blank screen (manga etalon).
+        EmptyScreen(stringRes = MR.strings.no_results_found)
+        return
+    }
     LazyColumn(
         modifier = Modifier.auroraCenteredMaxWidth(
             auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp,

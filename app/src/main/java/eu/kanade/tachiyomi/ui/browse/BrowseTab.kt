@@ -87,6 +87,10 @@ data object BrowseTab : Tab {
             BrowseSection.Novel -> GlobalNovelSearchScreen()
             BrowseSection.Anime -> GlobalAnimeSearchScreen()
         }
+        // BGS-12: re-tapping Browse while the matching global search is already on top used to
+        // push another copy (identical screens stacked, each running a full fan-out search on
+        // reveal).
+        if (navigator.lastItem?.let { it::class == screen::class } == true) return
         navigator.push(screen)
     }
 

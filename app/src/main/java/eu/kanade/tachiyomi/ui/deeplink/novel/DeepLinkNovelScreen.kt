@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.ui.deeplink.novel
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -10,7 +11,6 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.components.AppBar
 import eu.kanade.presentation.util.Screen
-import eu.kanade.tachiyomi.ui.browse.novel.source.globalsearch.GlobalNovelSearchScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import tachiyomi.i18n.MR
@@ -45,7 +45,12 @@ class DeepLinkNovelScreen(
                 }
 
                 is DeepLinkNovelScreenModel.State.NoResults -> {
-                    navigator.replace(GlobalNovelSearchScreen(query))
+                    // BGS-4/CONTROL-6: pop to the GlobalNovelSearchScreen MainActivity pushed
+                    // right before this screen - replace() created a duplicate stack and the
+                    // back press re-ran the whole fan-out search (see the manga site).
+                    LaunchedEffect(Unit) {
+                        navigator.pop()
+                    }
                 }
 
                 is DeepLinkNovelScreenModel.State.Result -> {
