@@ -172,7 +172,7 @@ class LibraryUpdateErrorScreenModel(
         }
     }
 
-    fun retryVisibleErrors(): Boolean {
+    suspend fun retryVisibleErrors(): Boolean {
         val visibleItems = state.value.visibleItems
         if (visibleItems.isEmpty()) return true
 

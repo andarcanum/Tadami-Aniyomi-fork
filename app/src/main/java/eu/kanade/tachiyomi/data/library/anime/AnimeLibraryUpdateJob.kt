@@ -648,22 +648,25 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         ) {
             eu.kanade.tachiyomi.data.library.LibraryAutoUpdateSchedulerJob.setupTask(context, prefInterval)
         }
-        fun startNow(
+
+        // I15: the enqueue guard runs a blocking WorkManager query - never on the caller's
+        // thread (pull-to-refresh handlers live on MAIN).
+        suspend fun startNow(
             context: Context,
             category: Category? = null,
-        ): Boolean {
+        ): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             val inputData = category
                 ?.let { workDataOf(KEY_CATEGORY to it.id) }
                 ?: workDataOf()
-            return enqueueManualUpdate(context, inputData)
+            enqueueManualUpdate(context, inputData)
         }
 
-        fun startNow(
+        suspend fun startNow(
             context: Context,
             entryIds: LongArray,
-        ): Boolean {
-            if (entryIds.isEmpty()) return false
-            return enqueueManualUpdate(context, workDataOf(KEY_ENTRY_IDS to entryIds))
+        ): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            if (entryIds.isEmpty()) return@withContext false
+            enqueueManualUpdate(context, workDataOf(KEY_ENTRY_IDS to entryIds))
         }
 
         private fun enqueueManualUpdate(

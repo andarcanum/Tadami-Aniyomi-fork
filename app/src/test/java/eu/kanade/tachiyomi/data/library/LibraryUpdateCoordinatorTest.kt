@@ -16,6 +16,7 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -58,12 +59,14 @@ class LibraryUpdateCoordinatorTest {
         every { workManager.isRunningOrEnqueued("AnimeLibraryUpdate") } returns true
 
         // When
-        val result = LibraryUpdateCoordinator.startAll(
-            context = context,
-            updateAnime = true,
-            updateManga = true,
-            updateNovel = true,
-        )
+        val result = runBlocking {
+            LibraryUpdateCoordinator.startAll(
+                context = context,
+                updateAnime = true,
+                updateManga = true,
+                updateNovel = true,
+            )
+        }
 
         // Then: manga & novel start independently; only anime's own guard skips it.
         result shouldBe true
@@ -92,12 +95,14 @@ class LibraryUpdateCoordinatorTest {
     fun `startAll enqueues each media independently without a work chain`() {
         every { workManager.isRunning(any<String>()) } returns false
 
-        val result = LibraryUpdateCoordinator.startAll(
-            context = context,
-            updateAnime = true,
-            updateManga = true,
-            updateNovel = false,
-        )
+        val result = runBlocking {
+            LibraryUpdateCoordinator.startAll(
+                context = context,
+                updateAnime = true,
+                updateManga = true,
+                updateNovel = false,
+            )
+        }
 
         result shouldBe true
         // The sequential chain API must not be used at all anymore.
@@ -130,12 +135,14 @@ class LibraryUpdateCoordinatorTest {
         every { workManager.isRunning(any<String>()) } returns true
         every { workManager.isRunningOrEnqueued(any<String>()) } returns true
 
-        val result = LibraryUpdateCoordinator.startAll(
-            context = context,
-            updateAnime = true,
-            updateManga = true,
-            updateNovel = true,
-        )
+        val result = runBlocking {
+            LibraryUpdateCoordinator.startAll(
+                context = context,
+                updateAnime = true,
+                updateManga = true,
+                updateNovel = true,
+            )
+        }
 
         result shouldBe false
         verify(exactly = 0) {
@@ -145,12 +152,14 @@ class LibraryUpdateCoordinatorTest {
 
     @Test
     fun `startAll returns false when no media enabled`() {
-        val result = LibraryUpdateCoordinator.startAll(
-            context = context,
-            updateAnime = false,
-            updateManga = false,
-            updateNovel = false,
-        )
+        val result = runBlocking {
+            LibraryUpdateCoordinator.startAll(
+                context = context,
+                updateAnime = false,
+                updateManga = false,
+                updateNovel = false,
+            )
+        }
 
         result shouldBe false
         verify(exactly = 0) {

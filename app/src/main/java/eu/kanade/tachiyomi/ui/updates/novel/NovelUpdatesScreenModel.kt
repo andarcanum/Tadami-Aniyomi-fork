@@ -125,8 +125,12 @@ class NovelUpdatesScreenModel(
         }
     }
 
-    fun updateLibrary(): Boolean {
-        return NovelLibraryUpdateJob.startNow(Injekt.get<Application>())
+    // I15: startNow is suspend (blocking WM guard) - keep the public API fire-and-forget and
+    // hop to IO inside instead of pushing suspend onto every toolbar caller.
+    fun updateLibrary() {
+        screenModelScope.launchIO {
+            NovelLibraryUpdateJob.startNow(Injekt.get<Application>())
+        }
     }
 
     @Immutable

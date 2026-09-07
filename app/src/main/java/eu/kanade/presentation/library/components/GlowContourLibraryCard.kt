@@ -776,150 +776,153 @@ private fun GlowContourLibraryCard(
         }
     }
 
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(4.dp)
-            .drawWithCache {
-                val zones = cachedGlowContourZonedPaths(size)
-                val auraGlowAlpha = if (performanceMode) 0.14f else 0.28f
-                val auraGlowStrokeWidth = if (performanceMode) 2.5.dp.toPx() else 4.dp.toPx()
-                // H6: strokes are cache-stable - constructing them inside onDrawWithContent
-                // allocated per frame (the void-red aura invalidates the draw every frame).
-                val auraGlowStroke = Stroke(width = auraGlowStrokeWidth)
-                val coreStroke = Stroke(width = 1.5.dp.toPx())
-                val selectedStroke = Stroke(width = 2.2.dp.toPx())
-                val shellBoundsLeft = zones.shellPath.getBounds().left
-                val selectedStrokeBrush = Brush.horizontalGradient(
-                    colors = listOf(
-                        colors.accent.copy(alpha = 0.92f),
-                        colors.progressCyan.copy(alpha = 0.88f),
-                    ),
+    // H7-full: the only reason this card needed BoxWithConstraints (a SubcomposeLayout pass per
+    // card) was maxWidth for the overlay spec; in grid mode the resolver takes the tier from
+    // gridColumns and never consults cardWidthDp - so there we use a plain Box and skip the
+    // subcomposition entirely.
+    val surfaceModifier = modifier
+        .fillMaxWidth()
+        .padding(4.dp)
+        .drawWithCache {
+            val zones = cachedGlowContourZonedPaths(size)
+            val auraGlowAlpha = if (performanceMode) 0.14f else 0.28f
+            val auraGlowStrokeWidth = if (performanceMode) 2.5.dp.toPx() else 4.dp.toPx()
+            // H6: strokes are cache-stable - constructing them inside onDrawWithContent
+            // allocated per frame (the void-red aura invalidates the draw every frame).
+            val auraGlowStroke = Stroke(width = auraGlowStrokeWidth)
+            val coreStroke = Stroke(width = 1.5.dp.toPx())
+            val selectedStroke = Stroke(width = 2.2.dp.toPx())
+            val shellBoundsLeft = zones.shellPath.getBounds().left
+            val selectedStrokeBrush = Brush.horizontalGradient(
+                colors = listOf(
+                    colors.accent.copy(alpha = 0.92f),
+                    colors.progressCyan.copy(alpha = 0.88f),
+                ),
+                startX = shellBoundsLeft,
+                endX = size.width,
+            )
+            // H5: was built inside onDrawWithContent (per frame, including a getBounds
+            // call) while its selected-stroke sibling was already hoisted here.
+            val auraStrokeBrush = auraColors?.let { auraPalette ->
+                Brush.horizontalGradient(
+                    colors = auraPalette,
                     startX = shellBoundsLeft,
                     endX = size.width,
                 )
-                // H5: was built inside onDrawWithContent (per frame, including a getBounds
-                // call) while its selected-stroke sibling was already hoisted here.
-                val auraStrokeBrush = auraColors?.let { auraPalette ->
-                    Brush.horizontalGradient(
-                        colors = auraPalette,
-                        startX = shellBoundsLeft,
-                        endX = size.width,
-                    )
-                }
+            }
 
-                onDrawWithContent {
-                    drawContent()
+            onDrawWithContent {
+                drawContent()
 
-                    if (auraStrokeBrush != null) {
-                        val (isBurst, intensity, flicker) = burstState.value
-                        // H6: timeState was read (and a Random allocated) twice per frame.
-                        val burstFrame = (timeState.value * 100f).toInt()
-                        val flickerAlpha = if (isVoidRedAura) {
-                            auraGlowAlpha * flicker
-                        } else {
-                            auraGlowAlpha
-                        }
+                if (auraStrokeBrush != null) {
+                    val (isBurst, intensity, flicker) = burstState.value
+                    // H6: timeState was read (and a Random allocated) twice per frame.
+                    val burstFrame = (timeState.value * 100f).toInt()
+                    val flickerAlpha = if (isVoidRedAura) {
+                        auraGlowAlpha * flicker
+                    } else {
+                        auraGlowAlpha
+                    }
 
-                        if (isVoidRedAura && isBurst) {
-                            val rng = kotlin.random.Random(burstFrame.toLong())
-                            val dxRed = (-2f - rng.nextFloat() * 2f).dp.toPx() * intensity
-                            val dxCrimson = (2f + rng.nextFloat() * 2f).dp.toPx() * intensity
-                            val dy = (rng.nextFloat() * 1.5f - 0.75f).dp.toPx() * intensity
+                    if (isVoidRedAura && isBurst) {
+                        val rng = kotlin.random.Random(burstFrame.toLong())
+                        val dxRed = (-2f - rng.nextFloat() * 2f).dp.toPx() * intensity
+                        val dxCrimson = (2f + rng.nextFloat() * 2f).dp.toPx() * intensity
+                        val dy = (rng.nextFloat() * 1.5f - 0.75f).dp.toPx() * intensity
 
-                            // Left chromatic aberration copy (Red)
-                            drawContext.canvas.save()
-                            drawContext.canvas.translate(dxRed, dy)
-                            drawPath(
-                                path = zones.shellPath,
-                                brush = VOID_RED_CHROMATIC_RED_BRUSH,
-                                alpha = flickerAlpha * 0.5f,
-                                style = auraGlowStroke,
-                            )
-                            drawPath(
-                                path = zones.shellPath,
-                                brush = VOID_RED_CHROMATIC_RED_BRUSH,
-                                alpha = 0.45f,
-                                style = coreStroke,
-                            )
-                            drawContext.canvas.restore()
-
-                            // Right chromatic aberration copy (Crimson)
-                            drawContext.canvas.save()
-                            drawContext.canvas.translate(dxCrimson, -dy)
-                            drawPath(
-                                path = zones.shellPath,
-                                brush = VOID_RED_CHROMATIC_CRIMSON_BRUSH,
-                                alpha = flickerAlpha * 0.5f,
-                                style = auraGlowStroke,
-                            )
-                            drawPath(
-                                path = zones.shellPath,
-                                brush = VOID_RED_CHROMATIC_CRIMSON_BRUSH,
-                                alpha = 0.45f,
-                                style = coreStroke,
-                            )
-                            drawContext.canvas.restore()
-                        }
-
-                        // Main outline copy (always drawn, but with horizontal offset during burst)
-                        if (isVoidRedAura && isBurst) {
-                            val rng = kotlin.random.Random(burstFrame.toLong() + 555L)
-                            val dx = (rng.nextFloat() * 1.5f - 0.75f).dp.toPx() * intensity
-                            val dy = (rng.nextFloat() * 1f - 0.5f).dp.toPx() * intensity
-                            drawContext.canvas.save()
-                            drawContext.canvas.translate(dx, dy)
-                        }
-
-                        // Diffused glow pass
+                        // Left chromatic aberration copy (Red)
+                        drawContext.canvas.save()
+                        drawContext.canvas.translate(dxRed, dy)
                         drawPath(
                             path = zones.shellPath,
-                            brush = auraStrokeBrush,
-                            alpha = flickerAlpha,
+                            brush = VOID_RED_CHROMATIC_RED_BRUSH,
+                            alpha = flickerAlpha * 0.5f,
                             style = auraGlowStroke,
                         )
-                        // Core outline pass
                         drawPath(
                             path = zones.shellPath,
-                            brush = auraStrokeBrush,
-                            alpha = 0.85f,
+                            brush = VOID_RED_CHROMATIC_RED_BRUSH,
+                            alpha = 0.45f,
                             style = coreStroke,
                         )
+                        drawContext.canvas.restore()
 
-                        if (isVoidRedAura && isBurst) {
-                            drawContext.canvas.restore()
-                        }
-                    }
-
-                    if (isSelected) {
+                        // Right chromatic aberration copy (Crimson)
+                        drawContext.canvas.save()
+                        drawContext.canvas.translate(dxCrimson, -dy)
                         drawPath(
                             path = zones.shellPath,
-                            brush = selectedStrokeBrush,
-                            alpha = 0.95f,
-                            style = selectedStroke,
+                            brush = VOID_RED_CHROMATIC_CRIMSON_BRUSH,
+                            alpha = flickerAlpha * 0.5f,
+                            style = auraGlowStroke,
                         )
+                        drawPath(
+                            path = zones.shellPath,
+                            brush = VOID_RED_CHROMATIC_CRIMSON_BRUSH,
+                            alpha = 0.45f,
+                            style = coreStroke,
+                        )
+                        drawContext.canvas.restore()
+                    }
+
+                    // Main outline copy (always drawn, but with horizontal offset during burst)
+                    if (isVoidRedAura && isBurst) {
+                        val rng = kotlin.random.Random(burstFrame.toLong() + 555L)
+                        val dx = (rng.nextFloat() * 1.5f - 0.75f).dp.toPx() * intensity
+                        val dy = (rng.nextFloat() * 1f - 0.5f).dp.toPx() * intensity
+                        drawContext.canvas.save()
+                        drawContext.canvas.translate(dx, dy)
+                    }
+
+                    // Diffused glow pass
+                    drawPath(
+                        path = zones.shellPath,
+                        brush = auraStrokeBrush,
+                        alpha = flickerAlpha,
+                        style = auraGlowStroke,
+                    )
+                    // Core outline pass
+                    drawPath(
+                        path = zones.shellPath,
+                        brush = auraStrokeBrush,
+                        alpha = 0.85f,
+                        style = coreStroke,
+                    )
+
+                    if (isVoidRedAura && isBurst) {
+                        drawContext.canvas.restore()
                     }
                 }
-            }
-            .clip(GlowContourCardShape)
-            .then(
-                if (posterSurfaceSpec.clipBackgroundToShape) {
-                    Modifier.background(
-                        colors.surface.copy(alpha = posterSurfaceSpec.backgroundAlpha),
+
+                if (isSelected) {
+                    drawPath(
+                        path = zones.shellPath,
+                        brush = selectedStrokeBrush,
+                        alpha = 0.95f,
+                        style = selectedStroke,
                     )
-                } else {
-                    Modifier
-                },
-            ),
-    ) {
-        // H7 (partial): memoize the overlay spec - it was reallocated on every subcomposition
-        // of the BoxWithConstraints below. When gridColumns decides the tier (all three Aurora
-        // call sites pass it), cardWidthDp is not even consulted by the resolver.
-        val cardMaxWidth = maxWidth
+                }
+            }
+        }
+        .clip(GlowContourCardShape)
+        .then(
+            if (posterSurfaceSpec.clipBackgroundToShape) {
+                Modifier.background(
+                    colors.surface.copy(alpha = posterSurfaceSpec.backgroundAlpha),
+                )
+            } else {
+                Modifier
+            },
+        )
+    val cardBody: @Composable androidx.compose.foundation.layout.BoxScope.(
+        androidx.compose.ui.unit.Dp?,
+    ) -> Unit = { maxWidthOrNull ->
+        // H7 (partial→full): memoized overlay spec; cardWidthDp only matters in list mode.
+        val cardMaxWidth = maxWidthOrNull
         val overlaySpec = remember(gridColumns, cardMaxWidth) {
             resolveAuroraCardOverlaySpec(
                 gridColumns = gridColumns,
-                cardWidthDp = cardMaxWidth.value,
+                cardWidthDp = cardMaxWidth?.value ?: -1f,
             )
         }
 
@@ -1324,6 +1327,11 @@ private fun GlowContourLibraryCard(
                 }
             }
         }
+    }
+    if (gridColumns != null) {
+        Box(modifier = surfaceModifier) { cardBody(null) }
+    } else {
+        BoxWithConstraints(modifier = surfaceModifier) { cardBody(maxWidth) }
     }
 }
 

@@ -423,6 +423,17 @@ data object AnimeLibraryTab : Tab {
         val mangaDisplayModePref = remember(useSeparateDisplayModePerMedia) {
             mangaScreenModel.getDisplayMode(useSeparateDisplayModePerMedia)
         }
+        // H15: the novel section resolves its display mode inside NovelLibraryAuroraContent;
+        // the tab needs the same value to key the retained scroll states.
+        val novelDisplayModePref = remember(useSeparateDisplayModePerMedia) {
+            if (useSeparateDisplayModePerMedia) {
+                screenModel.libraryPreferences.novelDisplayMode()
+            } else {
+                screenModel.libraryPreferences.displayMode()
+            }
+        }
+        val novelDisplayMode by novelDisplayModePref.changes()
+            .collectAsStateWithLifecycle(initialValue = novelDisplayModePref.get())
         val mangaDisplayMode by mangaDisplayModePref
         val animeColumnsPortraitPref = remember {
             screenModel.getColumnsPreferenceForCurrentOrientation(false)
@@ -562,18 +573,19 @@ data object AnimeLibraryTab : Tab {
             }
         }
 
-        val onClickRefresh: (Category?) -> Boolean = { category ->
+        // I15: startNow is suspend - the enqueue guard queries WorkManager (blocking IPC).
+        val onClickRefresh: suspend (Category?) -> Boolean = { category ->
             val started = AnimeLibraryUpdateJob.startNow(context, category)
             showLibraryUpdateFeedback(started, updatingAnimeMessage)
             started
         }
 
-        val onClickRefreshManga: (Category?) -> Boolean = { category ->
+        val onClickRefreshManga: suspend (Category?) -> Boolean = { category ->
             val started = MangaLibraryUpdateJob.startNow(context, category)
             showLibraryUpdateFeedback(started, updatingMangaMessage)
             started
         }
-        val onClickRefreshNovel: () -> Boolean = {
+        val onClickRefreshNovel: suspend () -> Boolean = {
             val started = NovelLibraryUpdateJob.startNow(context)
             showLibraryUpdateFeedback(started, updatingNovelMessage)
             started
@@ -869,6 +881,28 @@ data object AnimeLibraryTab : Tab {
                     userScrollEnabled = swipeSwitchesCategories && novelState.categories.size > 1,
                 ) { page ->
                     val items = novelState.getLibraryItemsByPage(page)
+                    // H15: retained scroll states (see the anime section page).
+                    val scrollCategoryId = novelState.categories.getOrNull(page)?.id ?: -1L
+                    val scrollKey = Triple(Section.Novel, scrollCategoryId, novelDisplayMode)
+                    val restoredScroll = auroraScrollPositions[scrollKey]
+                    val retainedListState = remember(scrollKey) {
+                        LazyListState(restoredScroll?.first ?: 0, restoredScroll?.second ?: 0)
+                    }
+                    val retainedGridState = remember(scrollKey) {
+                        LazyGridState(restoredScroll?.first ?: 0, restoredScroll?.second ?: 0)
+                    }
+                    DisposableEffect(scrollKey) {
+                        onDispose {
+                            val (index, offset) = if (novelDisplayMode == LibraryDisplayMode.List) {
+                                retainedListState.firstVisibleItemIndex to
+                                    retainedListState.firstVisibleItemScrollOffset
+                            } else {
+                                retainedGridState.firstVisibleItemIndex to
+                                    retainedGridState.firstVisibleItemScrollOffset
+                            }
+                            auroraScrollPositions[scrollKey] = index to offset
+                        }
+                    }
                     NovelLibraryAuroraContent(
                         items = items,
                         selection = novelState.selection,
@@ -891,8 +925,8 @@ data object AnimeLibraryTab : Tab {
                         contentPadding = contentPadding,
                         hasActiveFilters = novelState.hasActiveFilters,
                         onFilterClicked = activeNovelScreenModel::showSettingsDialog,
-                        onRefresh = { onClickRefreshNovel() },
-                        onGlobalUpdate = { onClickRefreshNovel() },
+                        onRefresh = { scope.launch { onClickRefreshNovel() } },
+                        onGlobalUpdate = { scope.launch { onClickRefreshNovel() } },
                         onOpenRandomEntry = {
                             scope.launch {
                                 val randomItem = novelState.items.randomOrNull()
@@ -944,6 +978,8 @@ data object AnimeLibraryTab : Tab {
                         },
                         showInlineHeader = false,
                         libraryPreferences = activeNovelScreenModel.libraryPreferences,
+                        listState = retainedListState,
+                        gridState = retainedGridState,
                     )
                 }
             },
@@ -1134,19 +1170,24 @@ data object AnimeLibraryTab : Tab {
             }
         }
         val onAuroraRefreshCurrent: () -> Unit = {
-            when (auroraCurrentSection) {
-                Section.Anime -> onClickRefresh(state.categories.getOrNull(animeCategoryIndex))
-                Section.Manga -> onClickRefreshManga(mangaState.categories.getOrNull(mangaCategoryIndex))
-                Section.Novel -> onClickRefreshNovel()
-                null -> Unit
+            // I15: refresh lambdas are suspend (blocking WM guard) - launch them off MAIN.
+            scope.launch {
+                when (auroraCurrentSection) {
+                    Section.Anime -> onClickRefresh(state.categories.getOrNull(animeCategoryIndex))
+                    Section.Manga -> onClickRefreshManga(mangaState.categories.getOrNull(mangaCategoryIndex))
+                    Section.Novel -> onClickRefreshNovel()
+                    null -> Unit
+                }
             }
         }
         val onAuroraRefreshGlobal: () -> Unit = {
-            when (auroraCurrentSection) {
-                Section.Anime -> onClickRefresh(null)
-                Section.Manga -> onClickRefreshManga(null)
-                Section.Novel -> onClickRefreshNovel()
-                null -> Unit
+            scope.launch {
+                when (auroraCurrentSection) {
+                    Section.Anime -> onClickRefresh(null)
+                    Section.Manga -> onClickRefreshManga(null)
+                    Section.Novel -> onClickRefreshNovel()
+                    null -> Unit
+                }
             }
         }
         val onAuroraOpenRandom: () -> Unit = {
@@ -1225,11 +1266,13 @@ data object AnimeLibraryTab : Tab {
                         // D-M8 (NEW-13): getOrNull - the persistent activeCategoryIndex can go
                         // stale when categories shrink; the manga-side toolbar is guarded, this
                         // anime-side sibling was not. Falls back to the global update.
-                        onClickRefresh(
-                            state.categories.getOrNull(screenModel.activeCategoryIndex),
-                        )
+                        scope.launch {
+                            onClickRefresh(
+                                state.categories.getOrNull(screenModel.activeCategoryIndex),
+                            )
+                        }
                     },
-                    onClickGlobalUpdate = { onClickRefresh(null) },
+                    onClickGlobalUpdate = { scope.launch { onClickRefresh(null) } },
                     onClickOpenRandomEntry = {
                         scope.launch {
                             val randomItem = screenModel.getRandomAnimelibItemForCurrentCategory()

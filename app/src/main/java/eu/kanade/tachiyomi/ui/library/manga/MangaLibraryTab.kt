@@ -140,7 +140,7 @@ data object MangaLibraryTab : Tab {
         // D7: single-flight guard for the continue action - a double tap used to launch two readers.
         var continueActionInFlight by remember { mutableStateOf(false) }
 
-        val onClickRefresh: (Category?) -> Boolean = { category ->
+        val onClickRefresh: suspend (Category?) -> Boolean = { category ->
             val started = MangaLibraryUpdateJob.startNow(context, category)
             scope.launch {
                 val msgRes = if (started) MR.strings.updating_category else MR.strings.update_already_running
@@ -188,11 +188,13 @@ data object MangaLibraryTab : Tab {
                     onClickRefresh = {
                         // D-M8: getOrNull - the persistent activeCategoryIndex can go stale when
                         // categories shrink; fall back to the global update instead of IOOB.
-                        onClickRefresh(
-                            state.categories.getOrNull(screenModel.activeCategoryIndex),
-                        )
+                        scope.launch {
+                            onClickRefresh(
+                                state.categories.getOrNull(screenModel.activeCategoryIndex),
+                            )
+                        }
                     },
-                    onClickGlobalUpdate = { onClickRefresh(null) },
+                    onClickGlobalUpdate = { scope.launch { onClickRefresh(null) } },
                     onClickOpenRandomEntry = {
                         scope.launch {
                             val randomItem = screenModel.getRandomLibraryItemForCurrentCategory()

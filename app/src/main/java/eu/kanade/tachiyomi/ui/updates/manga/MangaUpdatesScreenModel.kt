@@ -128,12 +128,13 @@ class MangaUpdatesScreenModel(
             .toPersistentList()
     }
 
-    fun updateLibrary(): Boolean {
-        val started = MangaLibraryUpdateJob.startNow(Injekt.get<Application>())
-        screenModelScope.launch {
+    // I15: startNow is suspend (blocking WM guard) - keep the public API fire-and-forget and
+    // hop to IO inside instead of pushing suspend onto every toolbar caller.
+    fun updateLibrary() {
+        screenModelScope.launchIO {
+            val started = MangaLibraryUpdateJob.startNow(Injekt.get<Application>())
             _events.send(Event.LibraryUpdateTriggered(started))
         }
-        return started
     }
 
     /**

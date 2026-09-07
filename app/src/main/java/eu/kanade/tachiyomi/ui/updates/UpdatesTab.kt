@@ -265,11 +265,14 @@ data object UpdatesTab : Tab {
                                     onNovelClicked = { navigator.push(NovelScreen(it)) },
                                     onChapterClicked = { navigator.push(NovelReaderScreen(it)) },
                                     onRefresh = {
-                                        val started = NovelLibraryUpdateJob.startNow(context)
-                                        showUpdateToast(
-                                            started = started,
-                                            startedMessage = updatingNovelMessage,
-                                        )
+                                        // I15: startNow is suspend (blocking WM guard) - off MAIN.
+                                        scope.launch {
+                                            val started = NovelLibraryUpdateJob.startNow(context)
+                                            showUpdateToast(
+                                                started = started,
+                                                startedMessage = updatingNovelMessage,
+                                            )
+                                        }
                                     },
                                     contentPadding = PaddingValues(
                                         bottom = contentPadding.calculateBottomPadding(),
@@ -284,7 +287,7 @@ data object UpdatesTab : Tab {
             val initialPage = tabIds.indexOf(selectedTab).coerceAtLeast(0)
             val state = rememberPagerState(initialPage) { tabs.size }
 
-            fun refreshCurrentTab() {
+            suspend fun refreshCurrentTab() {
                 refreshingTabId = selectedTab
                 when (selectedTab) {
                     TAB_ANIME -> animeScreenModel.updateLibrary()
@@ -315,7 +318,7 @@ data object UpdatesTab : Tab {
                 }
             }
 
-            fun refreshAllTabs() {
+            suspend fun refreshAllTabs() {
                 refreshingTabId = null
                 val started = LibraryUpdateCoordinator.startAll(
                     context = context,
@@ -413,8 +416,8 @@ data object UpdatesTab : Tab {
                                 }
                             }
                         },
-                        onRefreshCurrent = ::refreshCurrentTab,
-                        onRefreshAll = ::refreshAllTabs,
+                        onRefreshCurrent = { scope.launch { refreshCurrentTab() } },
+                        onRefreshAll = { scope.launch { refreshAllTabs() } },
                         onOpenUpcoming = onOpenUpcoming,
                         onOpenPacingSettings = {
                             navigator.push(LibraryUpdatePacingScreen)

@@ -44,7 +44,7 @@ fun MangaLibraryContent(
     onToggleSelection: (MangaLibraryItem) -> Unit,
     onToggleRangeSelection: (MangaLibraryItem) -> Unit,
     onTogglePinned: (MangaLibraryItem) -> Unit,
-    onRefresh: (Category?) -> Boolean,
+    onRefresh: suspend (Category?) -> Boolean,
     onGlobalSearchClicked: () -> Unit,
     getNumberOfMangaForCategory: (Category) -> Int?,
     getDisplayMode: (Int) -> PreferenceMutableState<LibraryDisplayMode>,
@@ -112,11 +112,13 @@ fun MangaLibraryContent(
         PullRefresh(
             refreshing = isRefreshing,
             onRefresh = {
-                // D-M8: guard the stale page index - categories can shrink while the pager still
-                // holds an old current page (IOOB).
-                val started = categories.getOrNull(currentPage())?.let(onRefresh) ?: false
-                if (!started) return@PullRefresh
+                // I15: onRefresh is suspend (the update guard queries WorkManager, blocking) -
+                // run it off MAIN inside the scope.
                 scope.launch {
+                    // D-M8: guard the stale page index - categories can shrink while the pager still
+                    // holds an old current page (IOOB).
+                    val started = categories.getOrNull(currentPage())?.let { onRefresh(it) } ?: false
+                    if (!started) return@launch
                     // Fake refresh status but hide it after a second as it's a long running task
                     isRefreshing = true
                     delay(1.seconds)

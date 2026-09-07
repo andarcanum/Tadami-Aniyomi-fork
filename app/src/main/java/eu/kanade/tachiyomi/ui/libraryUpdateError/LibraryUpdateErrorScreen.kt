@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.libraryUpdateError
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -17,6 +18,7 @@ import eu.kanade.tachiyomi.ui.entries.anime.AnimeScreen
 import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.util.system.toast
+import kotlinx.coroutines.launch
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
 
@@ -28,6 +30,7 @@ class LibraryUpdateErrorScreen : Screen() {
         val context = LocalContext.current
         val screenModel = rememberScreenModel { LibraryUpdateErrorScreenModel() }
         val state by screenModel.state.collectAsState()
+        val scope = rememberCoroutineScope()
 
         LibraryUpdateErrorScreen(
             state = state,
@@ -35,8 +38,11 @@ class LibraryUpdateErrorScreen : Screen() {
             onRetryVisibleErrors = {
                 // I17: a retry blocked by an already running/enqueued manual job of this media
                 // used to be silently dropped - surface the reason instead.
-                if (!screenModel.retryVisibleErrors()) {
-                    context.toast(context.stringResource(MR.strings.update_already_running))
+                // I15: retryVisibleErrors queries WorkManager (blocking) - off MAIN.
+                scope.launch {
+                    if (!screenModel.retryVisibleErrors()) {
+                        context.toast(context.stringResource(MR.strings.update_already_running))
+                    }
                 }
             },
             onClick = { item ->

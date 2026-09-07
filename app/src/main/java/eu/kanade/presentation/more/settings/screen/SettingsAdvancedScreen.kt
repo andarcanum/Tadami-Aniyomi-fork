@@ -475,9 +475,12 @@ object SettingsAdvancedScreen : SearchableSettings {
                 Preference.PreferenceItem.TextPreference(
                     title = stringResource(MR.strings.pref_refresh_library_covers),
                     onClick = {
-                        AnimeLibraryUpdateJob.startNow(context)
-                        MangaLibraryUpdateJob.startNow(context)
-                        NovelLibraryUpdateJob.startNow(context)
+                        // I15: library startNow is suspend (blocking WM guard) - off MAIN.
+                        scope.launch {
+                            AnimeLibraryUpdateJob.startNow(context)
+                            MangaLibraryUpdateJob.startNow(context)
+                            NovelLibraryUpdateJob.startNow(context)
+                        }
                         AnimeMetadataUpdateJob.startNow(context)
                         MangaMetadataUpdateJob.startNow(context)
                     },

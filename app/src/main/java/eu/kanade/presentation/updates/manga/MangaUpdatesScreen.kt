@@ -38,7 +38,7 @@ fun MangaUpdateScreen(
     onClickCover: (MangaUpdatesItem) -> Unit,
     onSelectAll: (Boolean) -> Unit,
     onInvertSelection: () -> Unit,
-    onUpdateLibrary: () -> Boolean,
+    onUpdateLibrary: () -> Unit,
     onDownloadChapter: (List<MangaUpdatesItem>, ChapterDownloadAction) -> Unit,
     onMultiBookmarkClicked: (List<MangaUpdatesItem>, bookmark: Boolean) -> Unit,
     onMultiMarkAsReadClicked: (List<MangaUpdatesItem>, read: Boolean) -> Unit,
@@ -73,8 +73,9 @@ fun MangaUpdateScreen(
                 PullRefresh(
                     refreshing = isRefreshing,
                     onRefresh = {
-                        val started = onUpdateLibrary()
-                        if (!started) return@PullRefresh
+                        // I15: fire-and-forget - the SM hops to IO internally and reports
+                        // "already running" via its LibraryUpdateTriggered event/toast.
+                        onUpdateLibrary()
                         scope.launch {
                             // Fake refresh status but hide it after a second as it's a long running task
                             isRefreshing = true

@@ -18,7 +18,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -130,6 +134,9 @@ fun NovelLibraryAuroraContent(
     onContinueReadingClicked: ((NovelLibraryItem) -> Unit)? = null,
     showInlineHeader: Boolean = true,
     libraryPreferences: LibraryPreferences,
+    // H15: caller-retained scroll states (the Aurora pager disposes pages beyond ±1).
+    listState: LazyListState = rememberLazyListState(),
+    gridState: LazyGridState = rememberLazyGridState(),
 ) {
     val configuration = LocalConfiguration.current
     val useSeparateDisplayModePerMedia by libraryPreferences
@@ -240,6 +247,7 @@ fun NovelLibraryAuroraContent(
     ) {
         if (displaySpec.isList) {
             FastScrollLazyColumn(
+                state = listState,
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = contentPadding + PaddingValues(
                     horizontal = auroraAdaptiveSpec.contentHorizontalPaddingDp.dp,
@@ -329,6 +337,7 @@ fun NovelLibraryAuroraContent(
             }
         } else {
             LazyLibraryGrid(
+                state = gridState,
                 modifier = Modifier
                     .fillMaxSize()
                     .auroraCenteredMaxWidth(auroraAdaptiveSpec.listMaxWidthDp),

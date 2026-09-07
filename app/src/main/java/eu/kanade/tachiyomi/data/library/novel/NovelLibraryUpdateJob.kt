@@ -642,17 +642,21 @@ class NovelLibraryUpdateJob(
             eu.kanade.tachiyomi.data.library.LibraryAutoUpdateSchedulerJob.setupTask(context, prefInterval)
         }
 
-        fun startNow(context: Context, categoryId: Long? = null): Boolean {
-            val inputData = categoryId
-                ?.let { workDataOf(KEY_CATEGORY to it) }
-                ?: workDataOf()
-            return enqueueManualUpdate(context, inputData)
-        }
+        // I15: the enqueue guard runs a blocking WorkManager query - never on the caller's
+        // thread (pull-to-refresh handlers live on MAIN).
+        suspend fun startNow(context: Context, categoryId: Long? = null): Boolean =
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val inputData = categoryId
+                    ?.let { workDataOf(KEY_CATEGORY to it) }
+                    ?: workDataOf()
+                enqueueManualUpdate(context, inputData)
+            }
 
-        fun startNow(context: Context, entryIds: LongArray): Boolean {
-            if (entryIds.isEmpty()) return false
-            return enqueueManualUpdate(context, workDataOf(KEY_ENTRY_IDS to entryIds))
-        }
+        suspend fun startNow(context: Context, entryIds: LongArray): Boolean =
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                if (entryIds.isEmpty()) return@withContext false
+                enqueueManualUpdate(context, workDataOf(KEY_ENTRY_IDS to entryIds))
+            }
 
         private fun enqueueManualUpdate(context: Context, inputData: Data): Boolean {
             val wm = context.workManager

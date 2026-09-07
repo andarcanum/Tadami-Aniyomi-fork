@@ -15,7 +15,7 @@ object LibraryUpdateCoordinator {
      * media that is already running or enqueued, so this returns true when at least one
      * media actually started.
      */
-    fun startAll(
+    suspend fun startAll(
         context: Context,
         updateAnime: Boolean,
         updateManga: Boolean,
