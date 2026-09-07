@@ -14,12 +14,15 @@ import eu.kanade.tachiyomi.util.lang.toLocalDate
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import logcat.LogPriority
@@ -46,6 +49,11 @@ class NovelUpdatesScreenModel(
     val lastUpdated by libraryPreferences.lastUpdatedTimestamp().asState(screenModelScope)
     private val limit = ZonedDateTime.now().minusMonths(3).toInstant()
     private val selectedChapterIds = MutableStateFlow<Set<Long>>(emptySet())
+
+    // Mini-fix: parity with manga/anime updates SMs - the toolbar/swipe refresh used to be
+    // silent when the update job was already running.
+    private val _events: Channel<Event> = Channel(Int.MAX_VALUE)
+    val events: Flow<Event> = _events.receiveAsFlow()
 
     val state: StateFlow<State> = combine(
         getUpdates.subscribe(limit)
@@ -129,8 +137,13 @@ class NovelUpdatesScreenModel(
     // hop to IO inside instead of pushing suspend onto every toolbar caller.
     fun updateLibrary() {
         screenModelScope.launchIO {
-            NovelLibraryUpdateJob.startNow(Injekt.get<Application>())
+            val started = NovelLibraryUpdateJob.startNow(Injekt.get<Application>())
+            _events.send(Event.LibraryUpdateTriggered(started))
         }
+    }
+
+    sealed interface Event {
+        data class LibraryUpdateTriggered(val started: Boolean) : Event
     }
 
     @Immutable

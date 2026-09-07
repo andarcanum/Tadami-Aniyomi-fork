@@ -6,6 +6,7 @@ import androidx.compose.material.icons.outlined.FlipToBack
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SelectAll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,7 +20,9 @@ import eu.kanade.presentation.updates.novel.NovelUpdatesScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
+import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.i18n.MR
@@ -34,6 +37,22 @@ fun Screen.novelUpdatesTab(
     val screenModel = rememberScreenModel { NovelUpdatesScreenModel() }
     val state by screenModel.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+
+    // Mini-fix: surface "update started / already running" like the manga/anime updates tabs.
+    LaunchedEffect(Unit) {
+        screenModel.events.collectLatest { event ->
+            when (event) {
+                is NovelUpdatesScreenModel.Event.LibraryUpdateTriggered -> {
+                    val msg = if (event.started) {
+                        MR.strings.updating_library
+                    } else {
+                        MR.strings.update_already_running
+                    }
+                    context.toast(context.stringResource(msg))
+                }
+            }
+        }
+    }
 
     val navigateUp: (() -> Unit)? = if (fromMore) {
         {
