@@ -64,6 +64,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -277,6 +278,13 @@ data object AnimeLibraryTab : Tab {
     private val auroraScrollPositions =
         mutableMapOf<Triple<Section, Long, LibraryDisplayMode>, Pair<Int, Int>>()
 
+    // H19-S2: holders for cross-section UI state that used to live in the Content scope as
+    // mutableStateOf - every write (continue tap, novel picker dialog open) invalidated the
+    // whole screen. Plain/snapshot state in object holders scopes the invalidation to the
+    // actual readers.
+    private val continueActionGuard = ContinueActionGuard()
+    private val novelPickerDialogState = NovelPickerDialogState()
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
@@ -396,8 +404,9 @@ data object AnimeLibraryTab : Tab {
         LaunchedEffect(isAurora, auroraCurrentSection, showMangaSection, showNovelSection, novelScreenModel) {
             screenModel.setLibraryPipelineActive(true)
             if (!isAurora) {
-                mangaScreenModel.setLibraryPipelineActive(true)
-                novelScreenModel?.setLibraryPipelineActive(true)
+                // H19-S4: classic renders anime only - the manga/novel pipelines fed nothing
+                // here yet recomputed their full libraries on every DB/pref change while the
+                // user sat on the classic screen.
                 return@LaunchedEffect
             }
 
@@ -451,9 +460,6 @@ data object AnimeLibraryTab : Tab {
         val mangaColumns by if (isLandscape) mangaColumnsLandscapePref else mangaColumnsPortraitPref
 
         val snackbarHostState = remember { SnackbarHostState() }
-        // D7: single-flight guard shared by the continue actions - a double tap used to launch
-        // two players/readers (or push two novel reader screens).
-        var continueActionInFlight by remember { mutableStateOf(false) }
         // H15: scroll positions are retained in the object-level auroraScrollPositions map -
         // they survive both page-slot disposal and navigator pushes.
         val epubImportLauncher = rememberLauncherForActivityResult(
@@ -501,29 +507,27 @@ data object AnimeLibraryTab : Tab {
                 }
             },
         )
-        var showNovelBatchDownloadDialog by remember { mutableStateOf(false) }
-        var showNovelBatchChapterPickerDialog by remember { mutableStateOf(false) }
-        var novelBatchPickerChapters by remember { mutableStateOf<List<DomainNovelChapter>>(emptyList()) }
-        var showNovelTranslatedDownloadDialog by remember { mutableStateOf(false) }
-        var showNovelTranslatedChapterPickerDialog by remember { mutableStateOf(false) }
-        var novelTranslatedPickerFormat by remember { mutableStateOf(NovelTranslatedDownloadFormat.TXT) }
-        var novelTranslatedPickerChapters by remember { mutableStateOf<List<DomainNovelChapter>>(emptyList()) }
         val updatingAnimeMessage = context.stringResource(AYMR.strings.aurora_updating_anime)
         val updatingMangaMessage = context.stringResource(AYMR.strings.aurora_updating_manga)
         val updatingNovelMessage = context.stringResource(MR.strings.updating_library)
         val updateAlreadyRunningMessage = context.stringResource(MR.strings.update_already_running)
         val hideThresholdPx = with(LocalDensity.current) { 56.dp.toPx() }
         var immersiveChromeState by remember { mutableStateOf(LibraryImmersiveChromeState()) }
-        val forceChromeVisible = state.searchQuery != null ||
-            mangaState.searchQuery != null ||
-            novelState.searchQuery != null ||
-            state.selectionMode ||
-            mangaState.selectionMode ||
-            novelState.selectionMode ||
-            showNovelBatchDownloadDialog ||
-            showNovelBatchChapterPickerDialog ||
-            showNovelTranslatedDownloadDialog ||
-            showNovelTranslatedChapterPickerDialog
+        // H19-S1: the widest cross-section coupling - reading this in the Content scope
+        // subscribed the whole screen to every section's searchQuery/selection. derivedStateOf
+        // narrows the subscription to the chrome remember/LE below.
+        val forceChromeVisible by derivedStateOf {
+            state.searchQuery != null ||
+                mangaState.searchQuery != null ||
+                novelState.searchQuery != null ||
+                state.selectionMode ||
+                mangaState.selectionMode ||
+                novelState.selectionMode ||
+                novelPickerDialogState.showBatchDownload ||
+                novelPickerDialogState.showBatchChapterPicker ||
+                novelPickerDialogState.showTranslatedDownload ||
+                novelPickerDialogState.showTranslatedChapterPicker
+        }
 
         val immersiveScrollConnection = remember(immersiveModeEnabled, forceChromeVisible, hideThresholdPx) {
             object : NestedScrollConnection {
@@ -716,14 +720,14 @@ data object AnimeLibraryTab : Tab {
                         },
                         onTogglePinned = { screenModel.togglePinned(it.libraryAnime) },
                         onContinueWatchingClicked = { item: LibraryAnime ->
-                            if (!continueActionInFlight) {
-                                continueActionInFlight = true
+                            if (!continueActionGuard.inFlight) {
+                                continueActionGuard.inFlight = true
                                 scope.launchIO {
                                     try {
                                         val episode = screenModel.getNextUnseenEpisode(item.anime)
                                         if (episode != null) openEpisode(episode)
                                     } finally {
-                                        continueActionInFlight = false
+                                        continueActionGuard.inFlight = false
                                     }
                                 }
                             }
@@ -812,8 +816,8 @@ data object AnimeLibraryTab : Tab {
                         },
                         onTogglePinned = mangaScreenModel::togglePinned,
                         onContinueReadingClicked = { item: LibraryManga ->
-                            if (!continueActionInFlight) {
-                                continueActionInFlight = true
+                            if (!continueActionGuard.inFlight) {
+                                continueActionGuard.inFlight = true
                                 scope.launchIO {
                                     try {
                                         val chapter = mangaScreenModel.getNextUnreadChapter(item.manga)
@@ -827,7 +831,7 @@ data object AnimeLibraryTab : Tab {
                                             )
                                         }
                                     } finally {
-                                        continueActionInFlight = false
+                                        continueActionGuard.inFlight = false
                                     }
                                 }
                             }
@@ -947,8 +951,8 @@ data object AnimeLibraryTab : Tab {
                             navigator.push(GlobalNovelSearchScreen(novelState.searchQuery ?: ""))
                         },
                         onContinueReadingClicked = { item: eu.kanade.presentation.library.novel.NovelLibraryItem ->
-                            if (!continueActionInFlight) {
-                                continueActionInFlight = true
+                            if (!continueActionGuard.inFlight) {
+                                continueActionGuard.inFlight = true
                                 scope.launch {
                                     try {
                                         val chapter = withContext(Dispatchers.IO) {
@@ -962,7 +966,7 @@ data object AnimeLibraryTab : Tab {
                                             )
                                         }
                                     } finally {
-                                        continueActionInFlight = false
+                                        continueActionGuard.inFlight = false
                                     }
                                 }
                             }
@@ -1016,17 +1020,24 @@ data object AnimeLibraryTab : Tab {
         // Treat a section as empty only after its first library emission has arrived;
         // otherwise a faster-loading current section briefly renders the global empty
         // screen while the other sections are still loading.
-        val isAnimeLibraryEmpty = state.searchQuery.isNullOrEmpty() &&
-            !state.hasActiveFilters &&
-            !state.isLoading &&
-            state.isLibraryEmpty
-        val isMangaLibraryEmpty = mangaState.searchQuery.isNullOrEmpty() &&
-            !mangaState.hasActiveFilters &&
-            !mangaState.isLoading &&
-            mangaState.isLibraryEmpty
-        val isNovelLibraryEmpty =
+        // H19-S1: derivedStateOf - these summaries read other sections' states; without the
+        // wrapper every manga/novel emission invalidated the whole Content scope.
+        val isAnimeLibraryEmpty by derivedStateOf {
+            state.searchQuery.isNullOrEmpty() &&
+                !state.hasActiveFilters &&
+                !state.isLoading &&
+                state.isLibraryEmpty
+        }
+        val isMangaLibraryEmpty by derivedStateOf {
+            mangaState.searchQuery.isNullOrEmpty() &&
+                !mangaState.hasActiveFilters &&
+                !mangaState.isLoading &&
+                mangaState.isLibraryEmpty
+        }
+        val isNovelLibraryEmpty by derivedStateOf {
             novelState.searchQuery.isNullOrEmpty() &&
                 (!showNovelSection || (novelState.hasLoaded && novelState.isLibraryEmpty))
+        }
         val isSectionEmpty: (Section) -> Boolean = { section ->
             when (section) {
                 Section.Anime -> isAnimeLibraryEmpty
@@ -1034,12 +1045,14 @@ data object AnimeLibraryTab : Tab {
                 Section.Novel -> isNovelLibraryEmpty
             }
         }
-        val isLibraryEmpty = if (isAurora) {
-            sectionTabs.all { (section, _) -> isSectionEmpty(section) }
-        } else {
-            isAnimeLibraryEmpty
+        val isLibraryEmpty by derivedStateOf {
+            if (isAurora) {
+                sectionTabs.all { (section, _) -> isSectionEmpty(section) }
+            } else {
+                isAnimeLibraryEmpty
+            }
         }
-        val isNovelLoading = novelState.isLoading
+        val isNovelLoading by derivedStateOf { novelState.isLoading }
         val isSectionLoading: (Section) -> Boolean = { section ->
             when (section) {
                 Section.Anime -> state.isLoading
@@ -1047,17 +1060,21 @@ data object AnimeLibraryTab : Tab {
                 Section.Novel -> isNovelLoading
             }
         }
-        val isLoading = if (isAurora) {
-            auroraCurrentSection?.let(isSectionLoading)
-                ?: sectionTabs.all { (section, _) -> isSectionLoading(section) }
-        } else {
-            state.isLoading
+        val isLoading by derivedStateOf {
+            if (isAurora) {
+                auroraCurrentSection?.let(isSectionLoading)
+                    ?: sectionTabs.all { (section, _) -> isSectionLoading(section) }
+            } else {
+                state.isLoading
+            }
         }
-        val auroraSearchQuery = when (auroraCurrentSection) {
-            Section.Anime -> state.searchQuery
-            Section.Manga -> mangaState.searchQuery
-            Section.Novel -> novelState.searchQuery
-            null -> null
+        val auroraSearchQuery by derivedStateOf {
+            when (auroraCurrentSection) {
+                Section.Anime -> state.searchQuery
+                Section.Manga -> mangaState.searchQuery
+                Section.Novel -> novelState.searchQuery
+                null -> null
+            }
         }
         val onAuroraSearchQueryChange: (String?) -> Unit = { query ->
             when (auroraCurrentSection) {
@@ -1067,47 +1084,53 @@ data object AnimeLibraryTab : Tab {
                 null -> Unit
             }
         }
-        val auroraCategories = when (auroraCurrentSection) {
-            Section.Anime -> state.categories
-            Section.Manga -> mangaState.categories
-            Section.Novel -> novelState.categories
-            null -> emptyList()
+        val auroraCategories by derivedStateOf {
+            when (auroraCurrentSection) {
+                Section.Anime -> state.categories
+                Section.Manga -> mangaState.categories
+                Section.Novel -> novelState.categories
+                null -> emptyList()
+            }
         }
-        val auroraCategoryIndex = when (auroraCurrentSection) {
-            Section.Anime -> coerceAuroraLibraryCategoryIndex(
-                requestedIndex = screenModel.activeCategoryIndex,
-                categoryCount = state.categories.size,
-            )
-            Section.Manga -> coerceAuroraLibraryCategoryIndex(
-                requestedIndex = mangaScreenModel.activeCategoryIndex,
-                categoryCount = mangaState.categories.size,
-            )
-            Section.Novel -> coerceAuroraLibraryCategoryIndex(
-                requestedIndex = novelScreenModel?.activeCategoryIndex ?: 0,
-                categoryCount = novelState.categories.size,
-            )
-            null -> 0
+        val auroraCategoryIndex by derivedStateOf {
+            when (auroraCurrentSection) {
+                Section.Anime -> coerceAuroraLibraryCategoryIndex(
+                    requestedIndex = screenModel.activeCategoryIndex,
+                    categoryCount = state.categories.size,
+                )
+                Section.Manga -> coerceAuroraLibraryCategoryIndex(
+                    requestedIndex = mangaScreenModel.activeCategoryIndex,
+                    categoryCount = mangaState.categories.size,
+                )
+                Section.Novel -> coerceAuroraLibraryCategoryIndex(
+                    requestedIndex = novelScreenModel?.activeCategoryIndex ?: 0,
+                    categoryCount = novelState.categories.size,
+                )
+                null -> 0
+            }
         }
-        val showAuroraCategoryTabs = when (auroraCurrentSection) {
-            Section.Anime -> shouldShowAuroraLibraryCategoryTabsRow(
-                section = Section.Anime,
-                categoryCount = state.categories.size,
-                showCategoryTabs = state.showCategoryTabs,
-                searchQuery = state.searchQuery,
-            )
-            Section.Manga -> shouldShowAuroraLibraryCategoryTabsRow(
-                section = Section.Manga,
-                categoryCount = mangaState.categories.size,
-                showCategoryTabs = mangaState.showCategoryTabs,
-                searchQuery = mangaState.searchQuery,
-            )
-            Section.Novel -> shouldShowAuroraLibraryCategoryTabsRow(
-                section = Section.Novel,
-                categoryCount = novelState.categories.size,
-                showCategoryTabs = showCategoryTabs,
-                searchQuery = novelState.searchQuery,
-            )
-            null -> false
+        val showAuroraCategoryTabs by derivedStateOf {
+            when (auroraCurrentSection) {
+                Section.Anime -> shouldShowAuroraLibraryCategoryTabsRow(
+                    section = Section.Anime,
+                    categoryCount = state.categories.size,
+                    showCategoryTabs = state.showCategoryTabs,
+                    searchQuery = state.searchQuery,
+                )
+                Section.Manga -> shouldShowAuroraLibraryCategoryTabsRow(
+                    section = Section.Manga,
+                    categoryCount = mangaState.categories.size,
+                    showCategoryTabs = mangaState.showCategoryTabs,
+                    searchQuery = mangaState.searchQuery,
+                )
+                Section.Novel -> shouldShowAuroraLibraryCategoryTabsRow(
+                    section = Section.Novel,
+                    categoryCount = novelState.categories.size,
+                    showCategoryTabs = showCategoryTabs,
+                    searchQuery = novelState.searchQuery,
+                )
+                null -> false
+            }
         }
         val onAuroraCategorySelected: (Int) -> Unit = { index ->
             when (auroraCurrentSection) {
@@ -1362,14 +1385,14 @@ data object AnimeLibraryTab : Tab {
                             onMarkAsViewedClicked = { novelScreenModel?.markReadSelection(true) },
                             onMarkAsUnviewedClicked = { novelScreenModel?.markReadSelection(false) },
                             onDownloadClicked = null,
-                            onOpenDownloadDialog = { showNovelBatchDownloadDialog = true },
+                            onOpenDownloadDialog = { novelPickerDialogState.showBatchDownload = true },
                             onMigrateClicked = {
                                 val selectionIds = novelState.selection.map { it.id }
                                 novelScreenModel?.clearSelection()
                                 navigator.push(NovelMigrationConfigScreen(selectionIds))
                             }.takeIf { novelState.selection.isNotEmpty() },
                             onTranslatedDownloadClicked = {
-                                showNovelTranslatedDownloadDialog = true
+                                novelPickerDialogState.showTranslatedDownload = true
                             }.takeIf { isNovelTranslatorEnabled },
                             onSeriesClicked = { novelScreenModel?.openAddToSeries() },
                             onDeleteClicked = { novelScreenModel?.openDeleteNovelsDialog() },
@@ -1504,14 +1527,14 @@ data object AnimeLibraryTab : Tab {
                             onAnimeClicked = { navigator.push(AnimeScreen(it)) },
                             onContinueWatchingClicked = { it: LibraryAnime ->
                                 // D7: single-flight guard - a double tap used to launch two players.
-                                if (!continueActionInFlight) {
-                                    continueActionInFlight = true
+                                if (!continueActionGuard.inFlight) {
+                                    continueActionGuard.inFlight = true
                                     scope.launchIO {
                                         try {
                                             val episode = screenModel.getNextUnseenEpisode(it.anime)
                                             if (episode != null) openEpisode(episode)
                                         } finally {
-                                            continueActionInFlight = false
+                                            continueActionGuard.inFlight = false
                                         }
                                     }
                                 }
@@ -1696,152 +1719,31 @@ data object AnimeLibraryTab : Tab {
             }
         }
 
-        if (showNovelBatchDownloadDialog && novelScreenModel != null) {
-            val activeNovelScreenModel = novelScreenModel
-            NovelBatchDownloadDialog(
-                onDismissRequest = { showNovelBatchDownloadDialog = false },
-                onSelectChapters = {
-                    scope.launch {
-                        val candidates = activeNovelScreenModel.getSingleSelectionDownloadCandidates(
-                            onlyNotDownloaded = true,
-                        )
-                        if (candidates.isEmpty()) {
-                            snackbarHostState.showSnackbar(
-                                message = context.stringResource(AYMR.strings.novel_download_no_available),
-                                duration = SnackbarDuration.Short,
-                            )
-                            return@launch
-                        }
-                        novelBatchPickerChapters = candidates
-                        showNovelBatchDownloadDialog = false
-                        showNovelBatchChapterPickerDialog = true
-                    }
-                },
-                onActionSelected = { action, amount ->
-                    scope.launch {
-                        val added = activeNovelScreenModel.runDownloadActionSelection(action, amount)
-                        val message = if (added > 0) {
-                            context.stringResource(AYMR.strings.novel_download_queue_started_count, added)
-                        } else {
-                            context.stringResource(AYMR.strings.novel_download_no_available)
-                        }
-                        snackbarHostState.showSnackbar(
-                            message = message,
-                            duration = SnackbarDuration.Short,
-                        )
-                    }
-                    showNovelBatchDownloadDialog = false
-                },
+        // H19-S2: the four novel picker dialog trees moved into their own composable - their
+        // flag reads/writes no longer subscribe (or invalidate) the whole Content scope.
+        if (novelScreenModel != null) {
+            NovelPickerDialogs(
+                novelScreenModel = novelScreenModel,
+                dialogs = novelPickerDialogState,
+                snackbarHostState = snackbarHostState,
             )
         }
 
-        if (showNovelBatchChapterPickerDialog && novelScreenModel != null) {
-            val activeNovelScreenModel = novelScreenModel
-            NovelDownloadChapterPickerDialog(
-                title = context.stringResource(AYMR.strings.novel_download_select_chapters_title),
-                chapters = novelBatchPickerChapters,
-                onDismissRequest = { showNovelBatchChapterPickerDialog = false },
-                onConfirm = { chapterIds ->
-                    scope.launch {
-                        val added = activeNovelScreenModel.runDownloadForSingleSelectionChapterIds(chapterIds)
-                        val message = if (added > 0) {
-                            context.stringResource(AYMR.strings.novel_download_queue_started_count, added)
-                        } else {
-                            context.stringResource(AYMR.strings.novel_download_no_available)
-                        }
-                        snackbarHostState.showSnackbar(
-                            message = message,
-                            duration = SnackbarDuration.Short,
-                        )
-                    }
-                    showNovelBatchChapterPickerDialog = false
-                },
-            )
-        }
-
-        if (showNovelTranslatedDownloadDialog && novelScreenModel != null) {
-            val activeNovelScreenModel = novelScreenModel
-            NovelTranslatedDownloadDialog(
-                onDismissRequest = { showNovelTranslatedDownloadDialog = false },
-                onSelectChapters = { format ->
-                    scope.launch {
-                        novelTranslatedPickerFormat = format
-                        val candidates = activeNovelScreenModel.getSingleSelectionTranslatedCandidates(
-                            format = format,
-                            onlyNotDownloaded = true,
-                        )
-                        if (candidates.isEmpty()) {
-                            snackbarHostState.showSnackbar(
-                                message = context.stringResource(AYMR.strings.novel_translated_download_no_available),
-                                duration = SnackbarDuration.Short,
-                            )
-                            return@launch
-                        }
-                        novelTranslatedPickerChapters = candidates
-                        showNovelTranslatedDownloadDialog = false
-                        showNovelTranslatedChapterPickerDialog = true
-                    }
-                },
-                onActionSelected = { action, amount, format ->
-                    scope.launch {
-                        val added = activeNovelScreenModel.runTranslatedDownloadActionSelection(
-                            action = action,
-                            amount = amount,
-                            format = format,
-                        )
-                        val message = if (added > 0) {
-                            context.stringResource(AYMR.strings.novel_download_queue_started_count, added)
-                        } else {
-                            context.stringResource(AYMR.strings.novel_translated_download_no_available)
-                        }
-                        snackbarHostState.showSnackbar(
-                            message = message,
-                            duration = SnackbarDuration.Short,
-                        )
-                    }
-                    showNovelTranslatedDownloadDialog = false
-                },
-            )
-        }
-
-        if (showNovelTranslatedChapterPickerDialog && novelScreenModel != null) {
-            val activeNovelScreenModel = novelScreenModel
-            NovelDownloadChapterPickerDialog(
-                title = context.stringResource(AYMR.strings.novel_translated_download_select_title),
-                chapters = novelTranslatedPickerChapters,
-                onDismissRequest = { showNovelTranslatedChapterPickerDialog = false },
-                onConfirm = { chapterIds ->
-                    scope.launch {
-                        val added = activeNovelScreenModel.runTranslatedDownloadForSingleSelectionChapterIds(
-                            chapterIds = chapterIds,
-                            format = novelTranslatedPickerFormat,
-                        )
-                        val message = if (added > 0) {
-                            context.stringResource(AYMR.strings.novel_download_queue_started_count, added)
-                        } else {
-                            context.stringResource(AYMR.strings.novel_translated_download_no_available)
-                        }
-                        snackbarHostState.showSnackbar(
-                            message = message,
-                            duration = SnackbarDuration.Short,
-                        )
-                    }
-                    showNovelTranslatedChapterPickerDialog = false
-                },
-            )
-        }
-
-        val hasAnimeSearchQuery = state.searchQuery != null
-        val hasMangaSearchQuery = mangaState.searchQuery != null
-        val hasNovelSearchQuery = novelState.searchQuery != null
+        // H19-S1: cross-section reads wrapped - the BackHandler below is the only consumer and
+        // it now subscribes through the derived values instead of the Content scope.
+        val hasAnimeSearchQuery by derivedStateOf { state.searchQuery != null }
+        val hasMangaSearchQuery by derivedStateOf { mangaState.searchQuery != null }
+        val hasNovelSearchQuery by derivedStateOf { novelState.searchQuery != null }
         val currentSection = if (isAurora) auroraCurrentSection else Section.Anime
-        val currentSelectionMode = resolveAuroraLibrarySelectionMode(
-            isAurora = isAurora,
-            section = currentSection,
-            animeSelectionMode = state.selectionMode,
-            mangaSelectionMode = mangaState.selectionMode,
-            novelSelectionMode = novelState.selectionMode,
-        )
+        val currentSelectionMode by derivedStateOf {
+            resolveAuroraLibrarySelectionMode(
+                isAurora = isAurora,
+                section = currentSection,
+                animeSelectionMode = state.selectionMode,
+                mangaSelectionMode = mangaState.selectionMode,
+                novelSelectionMode = novelState.selectionMode,
+            )
+        }
 
         // Q8/D6: leaving a section clears its selection - a hidden multi-select used to survive
         // section switches: the bottom nav reappeared and back exited the library while bulk
@@ -1898,7 +1800,17 @@ data object AnimeLibraryTab : Tab {
             }
         }
 
-        LaunchedEffect(currentSelectionMode, state.dialog, mangaState.dialog, currentSection, isAurora) {
+        // H19-S1: keyed on the CURRENT section's dialog only - anime/manga dialogs used to
+        // re-run this effect (re-posting showBottomNav) while another section was visible.
+        val currentSectionDialog: Any? by derivedStateOf {
+            when (currentSection) {
+                Section.Anime -> state.dialog
+                Section.Manga -> mangaState.dialog
+                Section.Novel -> novelState?.dialog
+                null -> null
+            }
+        }
+        LaunchedEffect(currentSelectionMode, currentSectionDialog, currentSection, isAurora) {
             HomeScreen.showBottomNav(!currentSelectionMode)
         }
 
@@ -2001,6 +1913,166 @@ data object AnimeLibraryTab : Tab {
     // For opening settings sheet in LibraryController (onReselect)
     private suspend fun requestOpenSettingsSheet() {
         routeIntent.value = LibraryRouteIntent(openSettings = true)
+    }
+}
+
+// H19-S2: holder for the D7 single-flight continue guard - shared by all three section
+// lambdas and the classic branch; plain field, no composition subscription.
+private class ContinueActionGuard {
+    var inFlight = false
+}
+
+// H19-S2: snapshot-state holder for the novel batch/translated picker dialogs - writes from
+// section lambdas and reads inside NovelPickerDialogs stay scoped to their own readers
+// instead of invalidating the whole library Content scope.
+private class NovelPickerDialogState {
+    var showBatchDownload by mutableStateOf(false)
+    var showBatchChapterPicker by mutableStateOf(false)
+    var batchPickerChapters by mutableStateOf<List<DomainNovelChapter>>(emptyList())
+    var showTranslatedDownload by mutableStateOf(false)
+    var showTranslatedChapterPicker by mutableStateOf(false)
+    var translatedPickerFormat by mutableStateOf(NovelTranslatedDownloadFormat.TXT)
+    var translatedPickerChapters by mutableStateOf<List<DomainNovelChapter>>(emptyList())
+}
+
+@Composable
+private fun NovelPickerDialogs(
+    novelScreenModel: NovelLibraryScreenModel,
+    dialogs: NovelPickerDialogState,
+    snackbarHostState: SnackbarHostState,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    if (dialogs.showBatchDownload) {
+        NovelBatchDownloadDialog(
+            onDismissRequest = { dialogs.showBatchDownload = false },
+            onSelectChapters = {
+                scope.launch {
+                    val candidates = novelScreenModel.getSingleSelectionDownloadCandidates(
+                        onlyNotDownloaded = true,
+                    )
+                    if (candidates.isEmpty()) {
+                        snackbarHostState.showSnackbar(
+                            message = context.stringResource(AYMR.strings.novel_download_no_available),
+                            duration = SnackbarDuration.Short,
+                        )
+                        return@launch
+                    }
+                    dialogs.batchPickerChapters = candidates
+                    dialogs.showBatchDownload = false
+                    dialogs.showBatchChapterPicker = true
+                }
+            },
+            onActionSelected = { action, amount ->
+                scope.launch {
+                    val added = novelScreenModel.runDownloadActionSelection(action, amount)
+                    val message = if (added > 0) {
+                        context.stringResource(AYMR.strings.novel_download_queue_started_count, added)
+                    } else {
+                        context.stringResource(AYMR.strings.novel_download_no_available)
+                    }
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+                dialogs.showBatchDownload = false
+            },
+        )
+    }
+
+    if (dialogs.showBatchChapterPicker) {
+        NovelDownloadChapterPickerDialog(
+            title = context.stringResource(AYMR.strings.novel_download_select_chapters_title),
+            chapters = dialogs.batchPickerChapters,
+            onDismissRequest = { dialogs.showBatchChapterPicker = false },
+            onConfirm = { chapterIds ->
+                scope.launch {
+                    val added = novelScreenModel.runDownloadForSingleSelectionChapterIds(chapterIds)
+                    val message = if (added > 0) {
+                        context.stringResource(AYMR.strings.novel_download_queue_started_count, added)
+                    } else {
+                        context.stringResource(AYMR.strings.novel_download_no_available)
+                    }
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+                dialogs.showBatchChapterPicker = false
+            },
+        )
+    }
+
+    if (dialogs.showTranslatedDownload) {
+        NovelTranslatedDownloadDialog(
+            onDismissRequest = { dialogs.showTranslatedDownload = false },
+            onSelectChapters = { format ->
+                scope.launch {
+                    dialogs.translatedPickerFormat = format
+                    val candidates = novelScreenModel.getSingleSelectionTranslatedCandidates(
+                        format = format,
+                        onlyNotDownloaded = true,
+                    )
+                    if (candidates.isEmpty()) {
+                        snackbarHostState.showSnackbar(
+                            message = context.stringResource(AYMR.strings.novel_translated_download_no_available),
+                            duration = SnackbarDuration.Short,
+                        )
+                        return@launch
+                    }
+                    dialogs.translatedPickerChapters = candidates
+                    dialogs.showTranslatedDownload = false
+                    dialogs.showTranslatedChapterPicker = true
+                }
+            },
+            onActionSelected = { action, amount, format ->
+                scope.launch {
+                    val added = novelScreenModel.runTranslatedDownloadActionSelection(
+                        action = action,
+                        amount = amount,
+                        format = format,
+                    )
+                    val message = if (added > 0) {
+                        context.stringResource(AYMR.strings.novel_download_queue_started_count, added)
+                    } else {
+                        context.stringResource(AYMR.strings.novel_translated_download_no_available)
+                    }
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+                dialogs.showTranslatedDownload = false
+            },
+        )
+    }
+
+    if (dialogs.showTranslatedChapterPicker) {
+        NovelDownloadChapterPickerDialog(
+            title = context.stringResource(AYMR.strings.novel_translated_download_select_title),
+            chapters = dialogs.translatedPickerChapters,
+            onDismissRequest = { dialogs.showTranslatedChapterPicker = false },
+            onConfirm = { chapterIds ->
+                scope.launch {
+                    val added = novelScreenModel.runTranslatedDownloadForSingleSelectionChapterIds(
+                        chapterIds = chapterIds,
+                        format = dialogs.translatedPickerFormat,
+                    )
+                    val message = if (added > 0) {
+                        context.stringResource(AYMR.strings.novel_download_queue_started_count, added)
+                    } else {
+                        context.stringResource(AYMR.strings.novel_translated_download_no_available)
+                    }
+                    snackbarHostState.showSnackbar(
+                        message = message,
+                        duration = SnackbarDuration.Short,
+                    )
+                }
+                dialogs.showTranslatedChapterPicker = false
+            },
+        )
     }
 }
 
