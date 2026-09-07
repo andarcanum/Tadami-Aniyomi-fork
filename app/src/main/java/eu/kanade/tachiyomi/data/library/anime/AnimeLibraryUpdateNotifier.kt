@@ -273,6 +273,7 @@ class AnimeLibraryUpdateNotifier(
                 context.notify(
                     updates.map { (anime, episodes) ->
                         NotificationManagerCompat.NotificationWithIdAndTag(
+                            Notifications.TAG_NEW_EPISODES,
                             anime.id.hashCode(),
                             createNewEpisodesNotification(anime, episodes),
                         )

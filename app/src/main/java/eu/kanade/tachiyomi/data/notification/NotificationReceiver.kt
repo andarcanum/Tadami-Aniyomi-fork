@@ -10,7 +10,9 @@ import eu.kanade.tachiyomi.core.common.Constants
 import eu.kanade.tachiyomi.data.backup.restore.BackupRestoreJob
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
-import eu.kanade.tachiyomi.data.library.LibraryUpdateCoordinator
+import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
+import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
+import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
 import eu.kanade.tachiyomi.data.updater.AppUpdateDownloadJob
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.player.PlayerActivity
@@ -95,6 +97,7 @@ class NotificationReceiver : BroadcastReceiver() {
             // Cancel library update and dismiss notification
             ACTION_CANCEL_LIBRARY_UPDATE -> cancelLibraryUpdate(context)
             ACTION_CANCEL_ANIMELIB_UPDATE -> cancelAnimelibUpdate(context)
+            ACTION_CANCEL_NOVEL_LIBRARY_UPDATE -> cancelNovelLibraryUpdate(context)
             // Start downloading app update
             ACTION_START_APP_UPDATE -> startDownloadAppUpdate(context, intent)
             // Cancel downloading app update
@@ -267,7 +270,9 @@ class NotificationReceiver : BroadcastReceiver() {
      * @param context context of application
      */
     private fun cancelLibraryUpdate(context: Context) {
-        LibraryUpdateCoordinator.stop(context)
+        // Per-media cancel: this action (manga progress notification) used to stop all three
+        // sections through LibraryUpdateCoordinator.stop.
+        MangaLibraryUpdateJob.stop(context)
     }
 
     /**
@@ -276,7 +281,16 @@ class NotificationReceiver : BroadcastReceiver() {
      * @param context context of application
      */
     private fun cancelAnimelibUpdate(context: Context) {
-        LibraryUpdateCoordinator.stop(context)
+        AnimeLibraryUpdateJob.stop(context)
+    }
+
+    /**
+     * Method called when user wants to stop a novel library update
+     *
+     * @param context context of application
+     */
+    private fun cancelNovelLibraryUpdate(context: Context) {
+        NovelLibraryUpdateJob.stop(context)
     }
 
     private fun startDownloadAppUpdate(context: Context, intent: Intent) {
@@ -385,6 +399,7 @@ class NotificationReceiver : BroadcastReceiver() {
 
         private const val ACTION_CANCEL_LIBRARY_UPDATE = "$ID.$NAME.CANCEL_LIBRARY_UPDATE"
         private const val ACTION_CANCEL_ANIMELIB_UPDATE = "$ID.$NAME.CANCEL_ANIMELIB_UPDATE"
+        private const val ACTION_CANCEL_NOVEL_LIBRARY_UPDATE = "$ID.$NAME.CANCEL_NOVEL_LIBRARY_UPDATE"
 
         private const val ACTION_START_APP_UPDATE = "$ID.$NAME.ACTION_START_APP_UPDATE"
         private const val ACTION_CANCEL_APP_UPDATE_DOWNLOAD = "$ID.$NAME.CANCEL_APP_UPDATE_DOWNLOAD"
@@ -853,6 +868,24 @@ class NotificationReceiver : BroadcastReceiver() {
         internal fun cancelAnimelibUpdatePendingBroadcast(context: Context): PendingIntent {
             val intent = Intent(context, NotificationReceiver::class.java).apply {
                 action = ACTION_CANCEL_ANIMELIB_UPDATE
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                0,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+        }
+
+        /**
+         * Returns [PendingIntent] that starts a service which stops the novel library update
+         *
+         * @param context context of application
+         * @return [PendingIntent]
+         */
+        internal fun cancelNovelLibraryUpdatePendingBroadcast(context: Context): PendingIntent {
+            val intent = Intent(context, NotificationReceiver::class.java).apply {
+                action = ACTION_CANCEL_NOVEL_LIBRARY_UPDATE
             }
             return PendingIntent.getBroadcast(
                 context,

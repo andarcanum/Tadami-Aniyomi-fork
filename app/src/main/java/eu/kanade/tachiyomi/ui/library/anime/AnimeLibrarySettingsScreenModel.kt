@@ -6,6 +6,8 @@ import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.TriState
 import tachiyomi.core.common.preference.getAndSet
@@ -53,13 +55,20 @@ class AnimeLibrarySettingsScreenModel(
         setAnimeDisplayMode.await(mode)
     }
 
+    // D4: serialize setSort - the interactor writes the sort preference BEFORE suspending on
+    // the category-flags DB update, so concurrent launches (fast taps on sort options) could
+    // finish out of order and leave the preference and the library order permanently desynced.
+    private val sortMutex = Mutex()
+
     fun setSort(
         category: Category?,
         mode: AnimeLibrarySort.Type,
         direction: AnimeLibrarySort.Direction,
     ) {
         screenModelScope.launchIO {
-            setSortModeForCategory.await(category, mode, direction)
+            sortMutex.withLock {
+                setSortModeForCategory.await(category, mode, direction)
+            }
         }
     }
 }

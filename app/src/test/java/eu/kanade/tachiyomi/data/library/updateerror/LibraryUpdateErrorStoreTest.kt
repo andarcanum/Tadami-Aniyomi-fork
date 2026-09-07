@@ -69,12 +69,15 @@ class LibraryUpdateErrorStoreTest {
         )
         persistWrites = 0
 
-        // Resolving an existing record must remove it and persist once.
+        // Resolving an existing record must remove it from memory immediately and persist once.
+        // I12: the disk write is debounced onto the store's IO scope now, so the counter
+        // assertion waits out the debounce window (in-memory state stays synchronous).
         LibraryUpdateErrorStore.markResolved(LibraryUpdateErrorMedia.Novel, NOVEL_ID)
-        persistWrites shouldBe 1
         LibraryUpdateErrorStore.errors.value.any {
             it.media == LibraryUpdateErrorMedia.Novel && it.entryId == NOVEL_ID
         } shouldBe false
+        Thread.sleep(PERSIST_DEBOUNCE_WAIT_MILLIS)
+        persistWrites shouldBe 1
 
         // The hot library-update path: resolving an entry that has no stored error
         // (already resolved above, or simply succeeded) must be a pure no-op.
@@ -92,5 +95,9 @@ class LibraryUpdateErrorStoreTest {
         const val NOVEL_ID = 910_001L
         const val ANIME_ID = 910_002L
         const val MANGA_ID = 910_003L
+
+        // Comfortably above the store's 500 ms persist debounce + IO scheduling under
+        // Robolectric.
+        const val PERSIST_DEBOUNCE_WAIT_MILLIS = 1_200L
     }
 }

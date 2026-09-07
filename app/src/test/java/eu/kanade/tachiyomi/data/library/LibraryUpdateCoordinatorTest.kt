@@ -52,8 +52,10 @@ class LibraryUpdateCoordinatorTest {
     @Test
     fun `startAll starts every enabled media even when another media is already running`() {
         // Given: anime is busy with its own run.
-        every { workManager.isRunning("AnimeLibraryUpdate") } returns true
-        every { workManager.isRunningOrEnqueued("AnimeLibraryUpdate-manual") } returns true
+        // I6: the manual-enqueue guard is a single ENQUEUED-aware TAG query now (the TAG is
+        // carried by both manual and auto workers), replacing isRunning(TAG) +
+        // isRunningOrEnqueued(WORK_NAME_MANUAL).
+        every { workManager.isRunningOrEnqueued("AnimeLibraryUpdate") } returns true
 
         // When
         val result = LibraryUpdateCoordinator.startAll(

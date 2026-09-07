@@ -117,21 +117,24 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         }
 
         if (tags.contains(WORK_NAME_AUTO)) {
-            if (context.workManager.isRunning(WORK_NAME_MANUAL)) {
+            // I6: check ENQUEUED too - a manual run that was enqueued but not yet RUNNING used
+            // to slip through this guard, and both workers executed full duplicate passes.
+            if (context.workManager.isRunningOrEnqueued(WORK_NAME_MANUAL)) {
                 return Result.retry()
             }
 
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-                val preferences = Injekt.get<LibraryPreferences>()
-                val restrictions = preferences.autoUpdateDeviceRestrictions().get()
-                if (shouldRetryLegacyAutoUpdateRun(
-                        restrictions = restrictions,
-                        isConnectedToWifi = context.isConnectedToWifi(),
-                        isCharging = context.isCharging(),
-                    )
-                ) {
-                    return Result.retry()
-                }
+            // I8: the runtime re-check used to run only below API 28 - but auto triggers are
+            // enqueued without WorkManager constraints, so a retried/deferred trigger could run
+            // the full update on metered data despite "Wi-Fi only" on ANY API level.
+            val preferences = Injekt.get<LibraryPreferences>()
+            val restrictions = preferences.autoUpdateDeviceRestrictions().get()
+            if (shouldRetryLegacyAutoUpdateRun(
+                    restrictions = restrictions,
+                    isConnectedToWifi = context.isConnectedToWifi(),
+                    isCharging = context.isCharging(),
+                )
+            ) {
+                return Result.retry()
             }
         }
 
@@ -175,8 +178,11 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
     private suspend fun filterByCategoryId(libraryAnime: List<LibraryAnime>, categoryId: Long): List<LibraryAnime> {
         return when {
             categoryId == -1L -> {
-                // Ungrouped
-                libraryAnime.filter { it.category == 0L }
+                // D-M1 (anime port of the manga fix): the UI's "Ungrouped" pseudo-group flattens
+                // ALL items (applyGrouping UNGROUPED in the library screen model), while this
+                // branch used to take only category-0 rows - refreshing the visible group
+                // updated something else entirely. Match the UI semantics.
+                libraryAnime
             }
             categoryId == -2L -> {
                 // Untracked
@@ -233,7 +239,10 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             else -> {
                 libraryAnime.filter { it.category == categoryId }
             }
-        }
+            // D-M2 (anime port of the manga fix): animelibView yields one row per (anime, category)
+            // membership; the attribute-based pseudo branches kept every row, so multi-category
+            // entries were fetched multiple times per refresh.
+        }.distinctBy { it.anime.id }
     }
 
     /**
@@ -394,6 +403,9 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         val newUpdates = CopyOnWriteArrayList<Pair<Anime, Array<Episode>>>()
         val failedUpdates = CopyOnWriteArrayList<LibraryUpdateFailure>()
         val hasDownloads = AtomicBoolean(false)
+        // I9: atomic accumulator - the per-entry preference getAndSet was a non-synchronized
+        // read-modify-write racing across the Semaphore(5) coroutines (lost badge increments).
+        val newEpisodeCountTotal = AtomicInteger(0)
         val fetchWindow = animeFetchInterval.getWindow(ZonedDateTime.now())
 
         coroutineScope {
@@ -434,8 +446,7 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                                                 hasDownloads.set(true)
                                             }
 
-                                            libraryPreferences.newAnimeUpdatesCount()
-                                                .getAndSet { it + newEpisodes.size }
+                                            newEpisodeCountTotal.addAndGet(newEpisodes.size)
 
                                             // Convert to the anime that contains new episodes
                                             newUpdates.add(anime to newEpisodes.toTypedArray())
@@ -495,6 +506,9 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         notifier.cancelProgressNotification()
 
         if (newUpdates.isNotEmpty()) {
+            // I9: single preference write after the run (see newEpisodeCountTotal).
+            libraryPreferences.newAnimeUpdatesCount()
+                .getAndSet { it + newEpisodeCountTotal.get() }
             notifier.showUpdateNotifications(newUpdates)
             if (hasDownloads.get()) {
                 downloadManager.startDownloads()
@@ -657,7 +671,10 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             inputData: Data,
         ): Boolean {
             val wm = context.workManager
-            if (wm.isRunning(TAG) || wm.isRunningOrEnqueued(WORK_NAME_MANUAL)) {
+            // I6: ENQUEUED-aware single TAG query - an enqueued-but-not-yet-running auto
+            // trigger used to slip through the isRunning(TAG) check, letting a manual refresh
+            // start a duplicate full pass (TAG is carried by both manual and auto workers).
+            if (wm.isRunningOrEnqueued(TAG)) {
                 // Already running either as a scheduled or manual job
                 return false
             }
@@ -674,8 +691,17 @@ class AnimeLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
 
         fun stop(context: Context) {
             val wm = context.workManager
+            // I5: cancel ENQUEUED/BLOCKED work too - a RUNNING-only query left an enqueued auto
+            // trigger (or a retry parked in backoff, or a constrained trigger waiting for Wi-Fi
+            // in BLOCKED) alive, resurrecting the update right after Cancel.
             val workQuery = WorkQuery.Builder.fromTags(listOf(TAG))
-                .addStates(listOf(WorkInfo.State.RUNNING))
+                .addStates(
+                    listOf(
+                        WorkInfo.State.RUNNING,
+                        WorkInfo.State.ENQUEUED,
+                        WorkInfo.State.BLOCKED,
+                    ),
+                )
                 .build()
             val future = wm.getWorkInfos(workQuery)
             future.addListener(

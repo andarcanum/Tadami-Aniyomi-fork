@@ -252,8 +252,13 @@ object NovelDownloadQueueManager {
     var completionTracker: DownloadCompletionTracker = DownloadCompletionTracker()
 
     private val queueScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val downloadManager = NovelDownloadManager()
-    private val translatedDownloadManager = NovelTranslatedDownloadManager()
+
+    // F9: prefer the DI singletons so the SAF scan caches are shared app-wide; fall back to a
+    // local instance if touched before the Injekt bootstrap (same pattern as `notifier` below).
+    private val downloadManager = runCatching { Injekt.get<NovelDownloadManager>() }
+        .getOrElse { NovelDownloadManager() }
+    private val translatedDownloadManager = runCatching { Injekt.get<NovelTranslatedDownloadManager>() }
+        .getOrElse { NovelTranslatedDownloadManager() }
     private val downloadPreferences: DownloadPreferences by lazy { Injekt.get() }
     private val achievementHandler: AchievementHandler by lazy { Injekt.get() }
     private val _state = MutableStateFlow(NovelDownloadQueueState())

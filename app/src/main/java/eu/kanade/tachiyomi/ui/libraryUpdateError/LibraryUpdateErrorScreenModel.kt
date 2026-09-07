@@ -19,6 +19,7 @@ import tachiyomi.domain.entries.manga.interactor.GetManga
 import tachiyomi.domain.entries.novel.interactor.GetNovel
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.concurrent.ConcurrentHashMap
 
 class LibraryUpdateErrorScreenModel(
     private val getManga: GetManga = Injekt.get(),
@@ -29,7 +30,11 @@ class LibraryUpdateErrorScreenModel(
 ) {
 
     private val selectedErrorIds: HashSet<Long> = HashSet()
-    private val retryingErrors = mutableMapOf<LibraryUpdateErrorKey, Long>()
+
+    // D9: concurrent map - the main-thread writers (retry/delete/clear) and the IO collector's
+    // reconcile (keys.removeAll) used to mutate a plain HashMap concurrently (CME inside an
+    // uncaught launchIO child = crash, or silently corrupted retry state).
+    private val retryingErrors: MutableMap<LibraryUpdateErrorKey, Long> = ConcurrentHashMap()
 
     init {
         screenModelScope.launchIO {
@@ -167,9 +172,9 @@ class LibraryUpdateErrorScreenModel(
         }
     }
 
-    fun retryVisibleErrors() {
+    fun retryVisibleErrors(): Boolean {
         val visibleItems = state.value.visibleItems
-        if (visibleItems.isEmpty()) return
+        if (visibleItems.isEmpty()) return true
 
         val context = Injekt.get<Application>()
         val entryIds = visibleItems
@@ -182,7 +187,9 @@ class LibraryUpdateErrorScreenModel(
             LibraryUpdateErrorMedia.Anime -> AnimeLibraryUpdateJob.startNow(context, entryIds)
             LibraryUpdateErrorMedia.Novel -> NovelLibraryUpdateJob.startNow(context, entryIds)
         }
-        if (!started) return
+        // I17: report the blocked retry to the caller - it used to be silently dropped
+        // whenever a manual job of this media was already running/enqueued.
+        if (!started) return false
 
         visibleItems.forEach { item ->
             retryingErrors[item.record.key] = item.record.id
@@ -198,6 +205,7 @@ class LibraryUpdateErrorScreenModel(
                 },
             )
         }
+        return true
     }
 
     fun deleteSelected() {

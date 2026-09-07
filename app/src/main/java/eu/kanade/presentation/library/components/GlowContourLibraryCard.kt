@@ -1,5 +1,6 @@
 package eu.kanade.presentation.library.components
 
+import android.util.LruCache
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -131,6 +132,29 @@ internal fun resolveGlowContourZoneLayerSpec(): GlowContourZoneLayerSpec {
 }
 
 private val DEFAULT_GLOW_CONTOUR_ZONE_LAYER_SPEC = resolveGlowContourZoneLayerSpec()
+
+// H8: the no-arg constant factories below used to allocate a fresh spec object per card
+// recomposition (and per draw-cache rebuild); same pattern as the zone-layer spec above.
+private val DEFAULT_GLOW_CONTOUR_DIVIDER_RENDER_SPEC = resolveGlowContourDividerRenderSpec()
+private val DEFAULT_GLOW_CONTOUR_TEXT_BLOCK_RENDER_SPEC = resolveGlowContourTextBlockRenderSpec()
+private val DEFAULT_GLOW_CONTOUR_PROGRESS_LINE_RENDER_SPEC = resolveGlowContourProgressLineRenderSpec()
+private val GLOW_CONTOUR_PROGRESS_PILL_SHAPE = RoundedCornerShape(percent = 50)
+
+// H3: zone geometry depends only on the card size; the 4 drawWithCache blocks rebuilt all 5
+// paths (12 SVG parses + 16 Skia boolean ops) on every cache invalidation, and two of them
+// only need posterPath. All grid cards share one size, so a tiny LruCache collapses the work
+// to a single build per distinct size. Paths are only ever read (drawPath/clipPath/getBounds),
+// so sharing instances across blocks is safe. LruCache is internally synchronized.
+private val glowContourZonedPathsCache = LruCache<Size, GlowContourZonedPaths>(4)
+
+private fun cachedGlowContourZonedPaths(size: Size): GlowContourZonedPaths {
+    return glowContourZonedPathsCache.get(size)
+        ?: createGlowContourZonedPaths(size).also { glowContourZonedPathsCache.put(size, it) }
+}
+
+// H6: constant draw-phase brushes hoisted out of onDrawWithContent (per-frame allocation).
+private val VOID_RED_CHROMATIC_RED_BRUSH = SolidColor(Color(0xFFFF003C))
+private val VOID_RED_CHROMATIC_CRIMSON_BRUSH = SolidColor(Color(0xFF8B0000))
 
 private object GlowContourCardShape : Shape {
     override fun createOutline(
@@ -517,12 +541,12 @@ internal fun GlowContourLibraryGridItem(
     isSelected: Boolean = false,
     gridColumns: Int? = null,
     customCover: @Composable (() -> Unit)? = null,
-    genres: List<String> = emptyList(),
     enabledAuras: Set<String> = emptySet(),
     performanceMode: Boolean = false,
 ) {
     val colors = AuroraTheme.colors
-    val blendSpec = resolveGlowContourUnifiedBlendSpec(colors.isDark)
+    // H8: remember keyed on the theme - the spec was reallocated on every card recomposition.
+    val blendSpec = remember(colors.isDark) { resolveGlowContourUnifiedBlendSpec(colors.isDark) }
     val itemModifier = modifier.combinedClickable(
         onClick = onClick,
         onLongClick = onLongClick,
@@ -550,7 +574,6 @@ internal fun GlowContourLibraryGridItem(
             onClickContinueViewing = onClickContinueViewing,
             gridColumns = gridColumns,
             customCover = customCover,
-            genres = genres,
             enabledAuras = enabledAuras,
             performanceMode = performanceMode,
         )
@@ -584,7 +607,7 @@ private fun GlowContourLibraryTextBlock(
 ) {
     val colors = AuroraTheme.colors
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
-    val renderSpec = resolveGlowContourTextBlockRenderSpec()
+    val renderSpec = DEFAULT_GLOW_CONTOUR_TEXT_BLOCK_RENDER_SPEC
     val drawTextSurfaceModifier = if (renderSpec.useSurfaceBlend && isUnifiedContainerMode) {
         Modifier.drawWithCache {
             val textSurfaceBrush = Brush.verticalGradient(
@@ -686,7 +709,6 @@ private fun GlowContourLibraryCard(
     gridColumns: Int?,
     modifier: Modifier = Modifier,
     customCover: @Composable (() -> Unit)? = null,
-    genres: List<String> = emptyList(),
     enabledAuras: Set<String> = emptySet(),
     performanceMode: Boolean = false,
 ) {
@@ -695,12 +717,14 @@ private fun GlowContourLibraryCard(
     val appHaptics = LocalAppHaptics.current
     var showMenu by remember { mutableStateOf(false) }
     val placeholderPainter = rememberAuroraCoverPlaceholderPainter()
-    val posterSurfaceSpec = resolveGlowContourPosterSurfaceSpec(colors.isDark)
+    // H8: remember keyed on the theme/params - these specs were reallocated on every card
+    // recomposition (the no-arg constant factories are hoisted to top-level vals).
+    val posterSurfaceSpec = remember(colors.isDark) { resolveGlowContourPosterSurfaceSpec(colors.isDark) }
     val footerContent = resolveGlowContourFooterContent(
         progressPercent = progressPercent,
         onClickContinueViewing = onClickContinueViewing,
     )
-    val progressState = resolveGlowContourProgressRenderState(progressPercent)
+    val progressState = remember(progressPercent) { resolveGlowContourProgressRenderState(progressPercent) }
     val coverTitleFontFamily = LocalCoverTitleFontFamily.current
 
     // enabledAuras is hoisted to the Aurora content level (one collection per screen instead of per card)
@@ -708,9 +732,11 @@ private fun GlowContourLibraryCard(
         resolveActiveAuraPalette(enabledAuras)?.gradientColors
     }
     val isVoidRedAura = remember(enabledAuras) { enabledAuras.contains("aura_void_broadcast_red") }
-    val voidRedTransition = rememberInfiniteTransition(label = "void_red_aura")
+    // H4: the transition used to be created unconditionally per card even with the void-red
+    // aura off - one wasted frame tick, one wasted card recomposition and ~6 allocations per
+    // item bind. Conditional composable calls are legal; burstState re-keys on isVoidRedAura.
     val timeState: androidx.compose.runtime.State<Float> = if (isVoidRedAura) {
-        voidRedTransition.animateFloat(
+        rememberInfiniteTransition(label = "void_red_aura").animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(
@@ -755,28 +781,40 @@ private fun GlowContourLibraryCard(
             .fillMaxWidth()
             .padding(4.dp)
             .drawWithCache {
-                val zones = createGlowContourZonedPaths(size)
+                val zones = cachedGlowContourZonedPaths(size)
                 val auraGlowAlpha = if (performanceMode) 0.14f else 0.28f
                 val auraGlowStrokeWidth = if (performanceMode) 2.5.dp.toPx() else 4.dp.toPx()
+                // H6: strokes are cache-stable - constructing them inside onDrawWithContent
+                // allocated per frame (the void-red aura invalidates the draw every frame).
+                val auraGlowStroke = Stroke(width = auraGlowStrokeWidth)
+                val coreStroke = Stroke(width = 1.5.dp.toPx())
+                val selectedStroke = Stroke(width = 2.2.dp.toPx())
+                val shellBoundsLeft = zones.shellPath.getBounds().left
                 val selectedStrokeBrush = Brush.horizontalGradient(
                     colors = listOf(
                         colors.accent.copy(alpha = 0.92f),
                         colors.progressCyan.copy(alpha = 0.88f),
                     ),
-                    startX = zones.shellPath.getBounds().left,
+                    startX = shellBoundsLeft,
                     endX = size.width,
                 )
+                // H5: was built inside onDrawWithContent (per frame, including a getBounds
+                // call) while its selected-stroke sibling was already hoisted here.
+                val auraStrokeBrush = auraColors?.let { auraPalette ->
+                    Brush.horizontalGradient(
+                        colors = auraPalette,
+                        startX = shellBoundsLeft,
+                        endX = size.width,
+                    )
+                }
 
                 onDrawWithContent {
                     drawContent()
 
-                    auraColors?.let { colors ->
-                        val auraStrokeBrush = Brush.horizontalGradient(
-                            colors = colors,
-                            startX = zones.shellPath.getBounds().left,
-                            endX = size.width,
-                        )
+                    if (auraStrokeBrush != null) {
                         val (isBurst, intensity, flicker) = burstState.value
+                        // H6: timeState was read (and a Random allocated) twice per frame.
+                        val burstFrame = (timeState.value * 100f).toInt()
                         val flickerAlpha = if (isVoidRedAura) {
                             auraGlowAlpha * flicker
                         } else {
@@ -784,8 +822,7 @@ private fun GlowContourLibraryCard(
                         }
 
                         if (isVoidRedAura && isBurst) {
-                            val frame = (timeState.value * 100f).toInt()
-                            val rng = kotlin.random.Random(frame.toLong())
+                            val rng = kotlin.random.Random(burstFrame.toLong())
                             val dxRed = (-2f - rng.nextFloat() * 2f).dp.toPx() * intensity
                             val dxCrimson = (2f + rng.nextFloat() * 2f).dp.toPx() * intensity
                             val dy = (rng.nextFloat() * 1.5f - 0.75f).dp.toPx() * intensity
@@ -795,15 +832,15 @@ private fun GlowContourLibraryCard(
                             drawContext.canvas.translate(dxRed, dy)
                             drawPath(
                                 path = zones.shellPath,
-                                brush = SolidColor(Color(0xFFFF003C)),
+                                brush = VOID_RED_CHROMATIC_RED_BRUSH,
                                 alpha = flickerAlpha * 0.5f,
-                                style = Stroke(width = auraGlowStrokeWidth),
+                                style = auraGlowStroke,
                             )
                             drawPath(
                                 path = zones.shellPath,
-                                brush = SolidColor(Color(0xFFFF003C)),
+                                brush = VOID_RED_CHROMATIC_RED_BRUSH,
                                 alpha = 0.45f,
-                                style = Stroke(width = 1.5.dp.toPx()),
+                                style = coreStroke,
                             )
                             drawContext.canvas.restore()
 
@@ -812,23 +849,22 @@ private fun GlowContourLibraryCard(
                             drawContext.canvas.translate(dxCrimson, -dy)
                             drawPath(
                                 path = zones.shellPath,
-                                brush = SolidColor(Color(0xFF8B0000)),
+                                brush = VOID_RED_CHROMATIC_CRIMSON_BRUSH,
                                 alpha = flickerAlpha * 0.5f,
-                                style = Stroke(width = auraGlowStrokeWidth),
+                                style = auraGlowStroke,
                             )
                             drawPath(
                                 path = zones.shellPath,
-                                brush = SolidColor(Color(0xFF8B0000)),
+                                brush = VOID_RED_CHROMATIC_CRIMSON_BRUSH,
                                 alpha = 0.45f,
-                                style = Stroke(width = 1.5.dp.toPx()),
+                                style = coreStroke,
                             )
                             drawContext.canvas.restore()
                         }
 
                         // Main outline copy (always drawn, but with horizontal offset during burst)
                         if (isVoidRedAura && isBurst) {
-                            val frame = (timeState.value * 100f).toInt()
-                            val rng = kotlin.random.Random(frame.toLong() + 555L)
+                            val rng = kotlin.random.Random(burstFrame.toLong() + 555L)
                             val dx = (rng.nextFloat() * 1.5f - 0.75f).dp.toPx() * intensity
                             val dy = (rng.nextFloat() * 1f - 0.5f).dp.toPx() * intensity
                             drawContext.canvas.save()
@@ -840,14 +876,14 @@ private fun GlowContourLibraryCard(
                             path = zones.shellPath,
                             brush = auraStrokeBrush,
                             alpha = flickerAlpha,
-                            style = Stroke(width = auraGlowStrokeWidth),
+                            style = auraGlowStroke,
                         )
                         // Core outline pass
                         drawPath(
                             path = zones.shellPath,
                             brush = auraStrokeBrush,
                             alpha = 0.85f,
-                            style = Stroke(width = 1.5.dp.toPx()),
+                            style = coreStroke,
                         )
 
                         if (isVoidRedAura && isBurst) {
@@ -860,7 +896,7 @@ private fun GlowContourLibraryCard(
                             path = zones.shellPath,
                             brush = selectedStrokeBrush,
                             alpha = 0.95f,
-                            style = Stroke(width = 2.2.dp.toPx()),
+                            style = selectedStroke,
                         )
                     }
                 }
@@ -876,16 +912,22 @@ private fun GlowContourLibraryCard(
                 },
             ),
     ) {
-        val overlaySpec = resolveAuroraCardOverlaySpec(
-            gridColumns = gridColumns,
-            cardWidthDp = maxWidth.value,
-        )
+        // H7 (partial): memoize the overlay spec - it was reallocated on every subcomposition
+        // of the BoxWithConstraints below. When gridColumns decides the tier (all three Aurora
+        // call sites pass it), cardWidthDp is not even consulted by the resolver.
+        val cardMaxWidth = maxWidth
+        val overlaySpec = remember(gridColumns, cardMaxWidth) {
+            resolveAuroraCardOverlaySpec(
+                gridColumns = gridColumns,
+                cardWidthDp = cardMaxWidth.value,
+            )
+        }
 
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .drawWithCache {
-                    val posterClipPath = createGlowContourZonedPaths(size).posterPath
+                    val posterClipPath = cachedGlowContourZonedPaths(size).posterPath
                     onDrawWithContent {
                         clipPath(posterClipPath) {
                             this@onDrawWithContent.drawContent()
@@ -917,7 +959,7 @@ private fun GlowContourLibraryCard(
                 modifier = Modifier
                     .matchParentSize()
                     .drawWithCache {
-                        val zones = createGlowContourZonedPaths(size)
+                        val zones = cachedGlowContourZonedPaths(size)
                         val posterClipPath = zones.posterPath
                         onDrawWithContent {
                             clipPath(posterClipPath) {
@@ -972,10 +1014,10 @@ private fun GlowContourLibraryCard(
             modifier = Modifier
                 .matchParentSize()
                 .drawWithCache {
-                    val zones = createGlowContourZonedPaths(size)
+                    val zones = cachedGlowContourZonedPaths(size)
                     val accentBounds = zones.accentPath.getBounds()
                     val progressBounds = zones.progressPath.getBounds()
-                    val dividerSpec = resolveGlowContourDividerRenderSpec()
+                    val dividerSpec = DEFAULT_GLOW_CONTOUR_DIVIDER_RENDER_SPEC
                     val hasActionPocket = footerContent == GlowContourFooterContent.ContinueAction
                     val bottomMaskSpec = resolveGlowContourBottomMaskRenderSpec(
                         isDark = colors.isDark,
@@ -1099,8 +1141,8 @@ private fun GlowContourLibraryCard(
         )
 
         if (progressState.showTrack) {
-            val progressSpec = resolveGlowContourProgressLineRenderSpec()
-            val progressShape = RoundedCornerShape(percent = 50)
+            val progressSpec = DEFAULT_GLOW_CONTOUR_PROGRESS_LINE_RENDER_SPEC
+            val progressShape = GLOW_CONTOUR_PROGRESS_PILL_SHAPE
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -1151,7 +1193,7 @@ private fun GlowContourLibraryCard(
             }
         }
 
-        val buttonSpec = resolveGlowContourActionButtonRenderSpec(colors.isDark)
+        val buttonSpec = remember(colors.isDark) { resolveGlowContourActionButtonRenderSpec(colors.isDark) }
         if (footerContent == GlowContourFooterContent.ContinueAction) {
             Box(
                 modifier = Modifier

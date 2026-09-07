@@ -18,12 +18,21 @@ import androidx.core.graphics.drawable.toBitmap
  *
  * @return the bitmap associated with the resource
  */
+// H14: process-level cache by (id, densityDpi) - remember(id) is per composition slot, so
+// every lazy-grid card decoded the SAME drawable into a fresh bitmap on each item bind (the
+// library cover placeholder ran this per visible card, again on every scroll recycle).
+// Composition-thread (main) access only.
+private val resourceBitmapPainterCache = HashMap<Pair<Int, Int>, BitmapPainter>()
+
 @Composable
 fun rememberResourceBitmapPainter(@DrawableRes id: Int): BitmapPainter {
     val context = LocalContext.current
-    return remember(id) {
-        val drawable = ContextCompat.getDrawable(context, id)
-            ?: throw Resources.NotFoundException()
-        BitmapPainter(drawable.toBitmap().asImageBitmap())
+    val densityDpi = context.resources.configuration.densityDpi
+    return remember(id, densityDpi) {
+        resourceBitmapPainterCache.getOrPut(id to densityDpi) {
+            val drawable = ContextCompat.getDrawable(context, id)
+                ?: throw Resources.NotFoundException()
+            BitmapPainter(drawable.toBitmap().asImageBitmap())
+        }
     }
 }

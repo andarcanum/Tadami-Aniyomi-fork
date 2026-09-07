@@ -7,6 +7,7 @@ import android.net.Uri
 import androidx.core.app.NotificationCompat
 import com.tadami.aurora.R
 import eu.kanade.tachiyomi.core.common.Constants
+import eu.kanade.tachiyomi.core.security.SecurityPreferences
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailure
 import eu.kanade.tachiyomi.data.library.LibraryUpdateFailureNotificationFormatter
 import eu.kanade.tachiyomi.data.library.ProgressPostThrottle
@@ -21,6 +22,8 @@ import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.math.RoundingMode
 import java.text.NumberFormat
 import tachiyomi.i18n.R as I18nR
@@ -33,6 +36,10 @@ class NovelLibraryUpdateNotifier(
     val progressNotificationId: Int = Notifications.ID_NOVEL_LIBRARY_UPDATE_PROGRESS,
 ) {
 
+    // I11, resolved lazily: constructing the notifier must not require the DI graph (unit
+    // tests construct it just to assert per-media notification ids).
+    private val securityPreferences: SecurityPreferences by lazy { Injekt.get() }
+
     private val percentFormatter = NumberFormat.getPercentInstance().apply {
         roundingMode = RoundingMode.DOWN
         maximumFractionDigits = 0
@@ -44,7 +51,7 @@ class NovelLibraryUpdateNotifier(
     )
 
     private val cancelIntent by lazy {
-        NotificationReceiver.cancelLibraryUpdatePendingBroadcast(context)
+        NotificationReceiver.cancelNovelLibraryUpdatePendingBroadcast(context)
     }
 
     val progressNotificationBuilder by lazy {
@@ -80,11 +87,18 @@ class NovelLibraryUpdateNotifier(
                 ),
             )
             .setContentText("$current/$total | +$updated | !$failed")
-            .setStyle(
+        // I11: respect hideNotificationContent - entry titles used to print on the lock screen
+        // regardless of the setting (anime/manga gate their BigText). setStyle(null) clears the
+        // cached builder's style when the setting flips on mid-run.
+        if (securityPreferences.hideNotificationContent().get()) {
+            progressNotificationBuilder.setStyle(null)
+        } else {
+            progressNotificationBuilder.setStyle(
                 NotificationCompat.BigTextStyle().bigText(
                     novels.joinToString("\n") { it.title.chop(40) },
                 ),
             )
+        }
 
         context.notify(
             progressNotificationId,
@@ -123,13 +137,16 @@ class NovelLibraryUpdateNotifier(
                 ),
             )
             setSmallIcon(R.drawable.ic_ani)
-            setStyle(
-                NotificationCompat.BigTextStyle().bigText(
-                    updated.joinToString("\n") { (novel, count) ->
-                        "${novel.title.chop(45)} (+$count)"
-                    },
-                ),
-            )
+            // I11: gate titles on hideNotificationContent (mirrors the anime/manga summaries).
+            if (!securityPreferences.hideNotificationContent().get()) {
+                setStyle(
+                    NotificationCompat.BigTextStyle().bigText(
+                        updated.joinToString("\n") { (novel, count) ->
+                            "${novel.title.chop(45)} (+$count)"
+                        },
+                    ),
+                )
+            }
             setGroup(Notifications.GROUP_NEW_NOVEL_CHAPTERS)
             setGroupSummary(true)
             setContentIntent(getNotificationIntent())
@@ -143,7 +160,9 @@ class NovelLibraryUpdateNotifier(
         val notificationText = LibraryUpdateFailureNotificationFormatter.build(
             context = context,
             failures = errors,
-            hideContent = false,
+            // I11: was hardcoded false - failure titles leaked to the lock screen with
+            // "hide sensitive content" enabled (anime/manga pass the preference).
+            hideContent = securityPreferences.hideNotificationContent().get(),
         )
 
         context.notify(

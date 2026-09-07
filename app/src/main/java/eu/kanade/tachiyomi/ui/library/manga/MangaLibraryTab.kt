@@ -12,10 +12,13 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -23,7 +26,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.util.fastAll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -34,6 +36,7 @@ import eu.kanade.domain.ui.model.NavStyle
 import eu.kanade.presentation.category.components.ChangeCategoryDialog
 import eu.kanade.presentation.entries.components.LibraryBottomActionMenu
 import eu.kanade.presentation.library.DeleteLibraryEntryDialog
+import eu.kanade.presentation.library.DeleteLibraryEntryType
 import eu.kanade.presentation.library.components.LibraryToolbar
 import eu.kanade.presentation.library.manga.MangaLibraryContent
 import eu.kanade.presentation.library.manga.MangaLibrarySettingsDialog
@@ -93,6 +96,13 @@ data object MangaLibraryTab : Tab {
         requestOpenSettingsSheet()
     }
 
+    // J1: tab-held screen models (see AnimeLibraryTab for the full rationale) - they survive
+    // navigator pushes; the pipelines are gated by the composition-lifetime effect in Content.
+    private val sharedScreenModel: MangaLibraryScreenModel by lazy { MangaLibraryScreenModel() }
+    private val sharedSettingsScreenModel: MangaLibrarySettingsScreenModel by lazy {
+        MangaLibrarySettingsScreenModel()
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
@@ -101,15 +111,34 @@ data object MangaLibraryTab : Tab {
         val scope = rememberCoroutineScope()
         val haptic = LocalHapticFeedback.current
 
-        val screenModel = rememberScreenModel { MangaLibraryScreenModel() }
-        val settingsScreenModel = rememberScreenModel { MangaLibrarySettingsScreenModel() }
+        val screenModel = sharedScreenModel
+        val settingsScreenModel = sharedSettingsScreenModel
         val state by screenModel.state.collectAsStateWithLifecycle()
+        // I21: run the pipeline only while this tab's content is composed (see AnimeLibraryTab).
+        DisposableEffect(Unit) {
+            sharedScreenModel.setLibraryPipelineActive(true)
+            onDispose { sharedScreenModel.setLibraryPipelineActive(false) }
+        }
         val useSeparateDisplayModePerMedia by settingsScreenModel
             .libraryPreferences
             .separateDisplayModePerMedia()
             .collectAsStateWithLifecycle()
+        // G1: create the preference-backed states once per tab - the pager's per-page-
+        // recomposition creation leaked a permanent preference collector per recomposition
+        // (see AnimeLibraryTab for the same fix).
+        val displayModePref = remember(useSeparateDisplayModePerMedia) {
+            screenModel.getDisplayMode(useSeparateDisplayModePerMedia)
+        }
+        val columnsPortraitPref = remember {
+            screenModel.getColumnsPreferenceForCurrentOrientation(false)
+        }
+        val columnsLandscapePref = remember {
+            screenModel.getColumnsPreferenceForCurrentOrientation(true)
+        }
 
         val snackbarHostState = remember { SnackbarHostState() }
+        // D7: single-flight guard for the continue action - a double tap used to launch two readers.
+        var continueActionInFlight by remember { mutableStateOf(false) }
 
         val onClickRefresh: (Category?) -> Boolean = { category ->
             val started = MangaLibraryUpdateJob.startNow(context, category)
@@ -190,9 +219,7 @@ data object MangaLibraryTab : Tab {
                 LibraryBottomActionMenu(
                     visible = state.selectionMode,
                     onChangeCategoryClicked = screenModel::openChangeCategoryDialog,
-                    onTogglePinnedClicked = { pinned ->
-                        state.selection.forEach { screenModel.setPinned(it, pinned) }
-                    },
+                    onTogglePinnedClicked = screenModel::setPinnedSelection,
                     isPinned = state.selection.fastAll { it.pinned },
                     onMarkAsViewedClicked = { screenModel.markReadSelection(true) },
                     onMarkAsUnviewedClicked = { screenModel.markReadSelection(false) },
@@ -261,20 +288,27 @@ data object MangaLibraryTab : Tab {
                         onMangaClicked = { navigator.push(MangaScreen(it)) },
                         onSeriesClicked = { navigator.push(MangaSeriesScreen(it)) },
                         onContinueReadingClicked = { it: LibraryManga ->
-                            scope.launchIO {
-                                val chapter = screenModel.getNextUnreadChapter(it.manga)
-                                if (chapter != null) {
-                                    context.startActivity(
-                                        ReaderActivity.newIntent(
-                                            context,
-                                            chapter.mangaId,
-                                            chapter.id,
-                                        ),
-                                    )
-                                } else {
-                                    snackbarHostState.showSnackbar(
-                                        context.stringResource(MR.strings.no_next_chapter),
-                                    )
+                            if (!continueActionInFlight) {
+                                continueActionInFlight = true
+                                scope.launchIO {
+                                    try {
+                                        val chapter = screenModel.getNextUnreadChapter(it.manga)
+                                        if (chapter != null) {
+                                            context.startActivity(
+                                                ReaderActivity.newIntent(
+                                                    context,
+                                                    chapter.mangaId,
+                                                    chapter.id,
+                                                ),
+                                            )
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                context.stringResource(MR.strings.no_next_chapter),
+                                            )
+                                        }
+                                    } finally {
+                                        continueActionInFlight = false
+                                    }
                                 }
                             }
                             Unit
@@ -292,13 +326,9 @@ data object MangaLibraryTab : Tab {
                             )
                         },
                         getNumberOfMangaForCategory = { state.getMangaCountForCategory(it) },
-                        getDisplayMode = {
-                            screenModel.getDisplayMode(useSeparateDisplayModePerMedia)
-                        },
-                        getColumnsForOrientation = {
-                            screenModel.getColumnsPreferenceForCurrentOrientation(
-                                it,
-                            )
+                        getDisplayMode = { displayModePref },
+                        getColumnsForOrientation = { landscape ->
+                            if (landscape) columnsLandscapePref else columnsPortraitPref
                         },
                     ) { state.getLibraryItemsByPage(it) }
                 }
@@ -343,7 +373,7 @@ data object MangaLibraryTab : Tab {
                         screenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
                         screenModel.clearSelection()
                     },
-                    isManga = true,
+                    entryType = DeleteLibraryEntryType.Manga,
                 )
             }
             MangaLibraryScreenModel.Dialog.CreateSeries -> {
@@ -387,7 +417,9 @@ data object MangaLibraryTab : Tab {
     }
 
     // For invoking search from other screen
-    private val queryEvent = Channel<String>()
+    // C2: buffered - the rendezvous channel suspended forever when the tab was not composed
+    // (senders on a dying composition scope lost the query silently).
+    private val queryEvent = Channel<String>(Channel.BUFFERED)
     suspend fun search(query: String) = queryEvent.send(query)
 
     // For opening settings sheet in LibraryController

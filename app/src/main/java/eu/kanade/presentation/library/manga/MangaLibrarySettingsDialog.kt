@@ -335,7 +335,10 @@ private fun ColumnScope.DisplayPage(
     }
 
     val configuration = LocalConfiguration.current
-    val columnPreference = remember {
+    // H17: keyed on orientation - the activity handles configChanges in-place (no recreation),
+    // so an unkeyed remember kept the slider bound to the pre-rotation orientation's preference
+    // while the grid itself re-bound via remember(isLandscape) (novel dialog is the reference).
+    val columnPreference = remember(configuration.orientation) {
         if (configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             screenModel.libraryPreferences.mangaLandscapeColumns()
         } else {

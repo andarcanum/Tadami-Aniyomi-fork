@@ -32,6 +32,7 @@ import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.ui.entries.novel.NovelDownloadAction
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreenModel
 import eu.kanade.tachiyomi.ui.library.LibrarySearchQuery
+import eu.kanade.tachiyomi.ui.library.leadingDebounce
 import eu.kanade.tachiyomi.ui.library.resolveLibraryRangeSelectionAdditions
 import eu.kanade.tachiyomi.ui.library.sortPinnedSeriesFirst
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
@@ -46,14 +47,15 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.collections.immutable.toPersistentMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
@@ -63,14 +65,17 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mihon.core.archive.epubReader
 import tachiyomi.core.common.preference.CheckboxState
 import tachiyomi.core.common.preference.TriState
+import tachiyomi.core.common.preference.getAndSet
 import tachiyomi.core.common.util.lang.compareToWithCollator
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.category.novel.interactor.GetVisibleNovelCategories
@@ -126,8 +131,14 @@ class NovelLibraryScreenModel(
     val libraryPreferences: LibraryPreferences = Injekt.get(),
     val sourceManager: NovelSourceManager = Injekt.get(),
     val downloadCache: NovelDownloadCache = Injekt.get(),
-    private val novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
-    private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
+    // F9: shared singletons - fresh per-ScreenModel instances defeated the managers' own SAF
+    // scan caches (a negative-scan cache miss paid a full downloads-tree walk per novel).
+    // runCatching fallback keeps the test harnesses (no DI registration) working.
+    private val novelDownloadManager: NovelDownloadManager =
+        runCatching { Injekt.get<NovelDownloadManager>() }.getOrElse { NovelDownloadManager() },
+    private val novelTranslatedDownloadManager: NovelTranslatedDownloadManager =
+        runCatching { Injekt.get<NovelTranslatedDownloadManager>() }
+            .getOrElse { NovelTranslatedDownloadManager() },
     private val downloadedIdsFlow: StateFlow<Set<Long>> = downloadCache.downloadedIds,
     private val searchDebounceMillis: Long = SEARCH_DEBOUNCE_MILLIS,
     private val trackerManager: TrackerManager = Injekt.get(),
@@ -157,6 +168,23 @@ class NovelLibraryScreenModel(
 ) {
     var activeCategoryIndex: Int by libraryPreferences.lastUsedNovelCategory().asState(screenModelScope)
 
+    // F1: shared instances - the raw factories were subscribed multiple times inside the same
+    // pipeline (filter flow 4x, badge flow 2x, sort flow 2x), so one preference toggle re-ran
+    // the full library recompute several times.
+    private val sharedFilterPreferencesFlow: Flow<FilterPreferences> =
+        getFilterPreferencesFlow()
+            .distinctUntilChanged()
+            .shareIn(screenModelScope, SharingStarted.Eagerly, replay = 1)
+
+    private val sharedSortPreferencesFlow: Flow<SortPreferences> =
+        getSortPreferencesFlow()
+            .shareIn(screenModelScope, SharingStarted.Eagerly, replay = 1)
+
+    private val sharedBadgePreferencesFlow: Flow<BadgePreferences> =
+        getBadgePreferencesFlow()
+            .distinctUntilChanged()
+            .shareIn(screenModelScope, SharingStarted.Eagerly, replay = 1)
+
     private val libraryPipelineActive = MutableStateFlow(startActive)
 
     fun setLibraryPipelineActive(active: Boolean) {
@@ -168,16 +196,16 @@ class NovelLibraryScreenModel(
             libraryPipelineActive
                 .flatMapLatest { active ->
                     if (!active) {
-                        emptyFlow<Pair<NovelLibraryMap, List<String>>>()
+                        emptyFlow<Triple<NovelLibraryMap, List<String>, Int>>()
                     } else {
                         val baseLibraryFlow = combine(
                             getLibraryFlow(),
-                            getFilterPreferencesFlow(),
-                            getSortPreferencesFlow(),
+                            sharedFilterPreferencesFlow,
+                            sharedSortPreferencesFlow,
                             getTracksPerNovel.subscribe(),
                             state.map { it.groupType }.distinctUntilChanged(),
                             getDownloadedIdsFlow(),
-                            getBadgePreferencesFlow(),
+                            sharedBadgePreferencesFlow,
                         ) { flowsArray ->
                             @Suppress("UNCHECKED_CAST")
                             val library = flowsArray[0] as NovelLibraryMap
@@ -214,14 +242,20 @@ class NovelLibraryScreenModel(
                             val sourceCategories = library.keys.toList()
 
                             val languageCache = HashMap<Long, String>()
-                            val libraryLanguages = library.values.flatten()
-                                .mapNotNull { item ->
+                            // F4: collect the language set in place - the whole-library
+                            // flatten+mapNotNull ran on every emission and allocated an
+                            // item-sized list just to derive a tiny set.
+                            val languageSet = HashSet<String>()
+                            library.values.forEach { items ->
+                                items.forEach { item ->
                                     val sourceId = (item as? NovelLibraryItem.Single)?.libraryNovel?.novel?.source
                                         ?: (item as? NovelLibraryItem.Series)?.coverNovel?.source
-                                    sourceId?.let { languageCache.getOrPut(it) { sourceManager.getOrStub(it).lang } }
+                                    sourceId?.let {
+                                        languageSet += languageCache.getOrPut(it) { sourceManager.getOrStub(it).lang }
+                                    }
                                 }
-                                .distinct()
-                                .sorted()
+                            }
+                            val libraryLanguages = languageSet.sorted()
 
                             NovelBaseLibraryResult(
                                 groupType = groupType,
@@ -237,8 +271,14 @@ class NovelLibraryScreenModel(
                                         filterIntervalCustom = filterPrefs.filterIntervalCustom,
                                         languages = filterPrefs.languages,
                                     )
-                                    .applySort(sortPrefs.sortMode, sortPrefs.randomSortSeed)
+                                    // E1: grouping BEFORE sorting - applySort sorts each map key's
+                                    // list, and the pseudo-categories produced by applyGrouping
+                                    // carry the effective global sort in their flags. The old
+                                    // order sorted only within real categories, so grouped views
+                                    // showed a concatenation of per-category runs and the sort
+                                    // selection was silently ignored.
                                     .applyGrouping(groupType, tracks)
+                                    .applySort(sortPrefs.sortMode, sortPrefs.randomSortSeed)
                                     .withFilteredEmptyPlaceholder(sourceCategories, hasActiveFilters)
                                     .withBadgeMetadata(downloadedIds, badgePrefs),
                                 libraryLanguages = libraryLanguages,
@@ -247,45 +287,58 @@ class NovelLibraryScreenModel(
 
                         combine(
                             baseLibraryFlow,
-                            state.map { it.searchQuery }.distinctUntilChanged().debounce(searchDebounceMillis),
+                            state.map { it.searchQuery }.distinctUntilChanged().leadingDebounce(searchDebounceMillis),
                         ) { baseLibrary, searchQuery ->
                             val librarySearchQuery = searchQuery?.let(::LibrarySearchQuery)
-                            val filteredMap = baseLibrary.library
-                                .mapValues { (_, value) ->
-                                    if (librarySearchQuery != null) {
+                            // F4: with no active query the per-category lists are unchanged -
+                            // rebuilding the whole PersistentMap per emission was pure churn.
+                            val searchedMap = if (librarySearchQuery == null) {
+                                baseLibrary.library
+                            } else {
+                                baseLibrary.library
+                                    .mapValues { (_, value) ->
                                         value.filter {
                                             it.matches(librarySearchQuery, sourceManager)
                                         }.toPersistentList()
-                                    } else {
-                                        value
+                                    }
+                                    .toPersistentMap()
+                            }
+                            val filteredMap = if (
+                                baseLibrary.groupType == LibraryGroup.BY_DEFAULT ||
+                                searchQuery != null ||
+                                baseLibrary.hasActiveFilters
+                            ) {
+                                // Keep categories visible when searching so empty-result pages can
+                                // still show the global search action.
+                                searchedMap
+                            } else {
+                                searchedMap.filterValues { it.isNotEmpty() }.toPersistentMap()
+                            }
+                            // F2: deduped entry count computed here (background dispatcher), once
+                            // per emission - the per-State lazy recomputed flatten+distinctBy
+                            // over the WHOLE library on MAIN for every selection/keystroke copy.
+                            val libraryCount = filteredMap.values
+                                .flatten()
+                                .distinctBy {
+                                    when (it) {
+                                        is NovelLibraryItem.Single -> it.libraryNovel.novel.id
+                                        is NovelLibraryItem.Series -> it.librarySeries.id
                                     }
                                 }
-                                .toPersistentMap()
-                                .let { map ->
-                                    if (
-                                        baseLibrary.groupType == LibraryGroup.BY_DEFAULT ||
-                                        searchQuery != null ||
-                                        baseLibrary.hasActiveFilters
-                                    ) {
-                                        // Keep categories visible when searching so empty-result pages can
-                                        // still show the global search action.
-                                        map
-                                    } else {
-                                        map.filterValues { it.isNotEmpty() }.toPersistentMap()
-                                    }
-                                }
-                            filteredMap to baseLibrary.libraryLanguages
+                                .size
+                            Triple(filteredMap, baseLibrary.libraryLanguages, libraryCount)
                         }
                     }
                 }
                 .flowOn(libraryDispatcher)
-                .collectLatest { (libraryMap, libraryLanguages) ->
+                .collectLatest { (libraryMap, libraryLanguages, libraryCount) ->
                     mutableState.update { state ->
                         state.copy(
                             isLoading = false,
                             hasLoaded = true,
                             library = libraryMap,
                             libraryLanguages = libraryLanguages,
+                            libraryCount = libraryCount,
                         )
                     }
                 }
@@ -307,7 +360,7 @@ class NovelLibraryScreenModel(
             }
             .launchIn(screenModelScope)
 
-        getFilterPreferencesFlow()
+        sharedFilterPreferencesFlow
             .onEach { filterPrefs ->
                 mutableState.update { state ->
                     state.copy(
@@ -324,7 +377,7 @@ class NovelLibraryScreenModel(
             }
             .launchIn(screenModelScope)
 
-        getSortPreferencesFlow()
+        sharedSortPreferencesFlow
             .onEach { sortPrefs ->
                 mutableState.update { state ->
                     state.copy(
@@ -335,7 +388,7 @@ class NovelLibraryScreenModel(
             }
             .launchIn(screenModelScope)
 
-        getFilterPreferencesFlow()
+        sharedFilterPreferencesFlow
             .map { filterPrefs ->
                 filterPrefs.hasActiveFilters()
             }
@@ -355,6 +408,11 @@ class NovelLibraryScreenModel(
                 if (isGlobal) globalType else mediaType
             }
             .onEach { groupType ->
+                // B1: the pref flows emit their current value at collection start. Resetting
+                // activeCategoryIndex on that initial emission zeroed the persisted "last used
+                // category" on every screen model creation (category restore was dead). React
+                // only to an actual group type change.
+                if (state.value.groupType == groupType) return@onEach
                 mutableState.update { it.copy(groupType = groupType) }
                 activeCategoryIndex = 0
             }
@@ -458,8 +516,36 @@ class NovelLibraryScreenModel(
         screenModelScope.launchIO {
             val categories = getCategories()
             if (categories.isEmpty()) return@launchIO
-            val common = getCommonCategories(novels)
-            val mix = getMixCategories(novels)
+            // F7: fetch each novel's categories ONCE and derive common+mix from it - the two
+            // former helpers each re-ran getNovelCategories.await per novel (2N sequential
+            // queries before the dialog opened).
+            val perNovelCategories = novels.map { getNovelCategories.await(it.id).toSet() }
+            val commonSource = perNovelCategories.reduce { left, right -> left.intersect(right) }
+            val mixSource = perNovelCategories.flatten().distinct().subtract(commonSource)
+            val common = commonSource
+                .map {
+                    Category(
+                        id = it.id,
+                        name = it.name,
+                        order = it.order,
+                        flags = it.flags,
+                        hidden = it.hidden,
+                        hiddenFromHomeHub = false,
+                    )
+                }
+                .filterNot(Category::isSystemCategory)
+            val mix = mixSource
+                .map {
+                    Category(
+                        id = it.id,
+                        name = it.name,
+                        order = it.order,
+                        flags = it.flags,
+                        hidden = it.hidden,
+                        hiddenFromHomeHub = false,
+                    )
+                }
+                .filterNot(Category::isSystemCategory)
             val preselected = categories
                 .map { category ->
                     when (category) {
@@ -487,7 +573,9 @@ class NovelLibraryScreenModel(
         removeCategories: List<Long>,
     ) {
         if (novels.isEmpty()) return
-        screenModelScope.launchIO {
+        // D2: non-cancellable - navigation mid-loop used to leave half the selection with
+        // stale category membership.
+        screenModelScope.launchNonCancellable {
             novels.forEach { novel ->
                 val categoryIds = getNovelCategories.await(novel.id)
                     .map { it.id }
@@ -502,22 +590,26 @@ class NovelLibraryScreenModel(
     fun markReadSelection(read: Boolean) {
         val selected = state.value.selection.selectedNovels()
         if (selected.isEmpty()) return
-        screenModelScope.launchIO {
-            selected.forEach { novel ->
-                val chapters = chapterRepository.getChapterByNovelId(
+        // D2: non-cancellable - cancellation mid-loop left novels k..N unread with the
+        // selection already cleared and no feedback.
+        screenModelScope.launchNonCancellable {
+            // F7: ONE batched chapter update for the whole selection - the per-novel
+            // get + updateAll pair was 2N transactions (the fetch stays per-novel until a
+            // batched query exists).
+            val updates = selected.flatMap { novel ->
+                chapterRepository.getChapterByNovelId(
                     novelId = novel.id,
                     applyScanlatorFilter = true,
-                )
-                if (chapters.isEmpty()) return@forEach
-                chapterRepository.updateAllChapters(
-                    chapters.map {
-                        NovelChapterUpdate(
-                            id = it.id,
-                            read = read,
-                            lastPageRead = if (read) 0L else it.lastPageRead,
-                        )
-                    },
-                )
+                ).map {
+                    NovelChapterUpdate(
+                        id = it.id,
+                        read = read,
+                        lastPageRead = if (read) 0L else it.lastPageRead,
+                    )
+                }
+            }
+            if (updates.isNotEmpty()) {
+                chapterRepository.updateAllChapters(updates)
             }
         }
         clearSelection()
@@ -528,7 +620,9 @@ class NovelLibraryScreenModel(
         deleteFromLibrary: Boolean,
         deleteChapters: Boolean,
     ) {
-        screenModelScope.launchIO {
+        // D2: non-cancellable - cancellation between the unfavorite batch and the download
+        // cleanup used to orphan downloaded files on disk.
+        screenModelScope.launchNonCancellable {
             val toDelete = novels.distinctBy { it.id }
             if (deleteFromLibrary) {
                 updateNovel.awaitAll(
@@ -558,11 +652,9 @@ class NovelLibraryScreenModel(
         selected.forEach { novel ->
             val chapters = getSortedNovelChapters(novel)
             if (chapters.isEmpty()) return@forEach
-            val downloadedChapterIds = chapters
-                .filter { chapter ->
-                    novelDownloadManager.isChapterDownloaded(novel, chapter.id)
-                }
-                .mapTo(mutableSetOf()) { it.id }
+            // F8: one batched directory listing per novel instead of up to 3 SAF findFile
+            // calls PER CHAPTER (+ a full-tree scan fallback on misses).
+            val downloadedChapterIds = novelDownloadManager.getDownloadedChapterIds(novel)
             val toQueue = NovelScreenModel.selectChaptersForDownload(
                 action = action,
                 novel = novel,
@@ -590,15 +682,13 @@ class NovelLibraryScreenModel(
             val chaptersWithCache = getSortedNovelChapters(novel)
                 .filter { chapter -> novelTranslatedDownloadManager.hasTranslationCache(chapter.id) }
             if (chaptersWithCache.isEmpty()) return@forEach
-            val downloadedTranslatedIds = chaptersWithCache
-                .filter { chapter ->
-                    novelTranslatedDownloadManager.isTranslatedChapterDownloaded(
-                        novel = novel,
-                        chapter = chapter,
-                        format = format,
-                    )
-                }
-                .mapTo(mutableSetOf()) { it.id }
+            // F8: batched per-(novel, format) listing with cache instead of exists() checks
+            // per filename variant per chapter.
+            val downloadedTranslatedIds = novelTranslatedDownloadManager.getTranslatedChapterIds(
+                novel = novel,
+                chapters = chaptersWithCache,
+                format = format,
+            )
             val toQueue = NovelScreenModel.selectTranslatedChaptersForDownload(
                 action = action,
                 novel = novel,
@@ -622,9 +712,9 @@ class NovelLibraryScreenModel(
                 ?: return emptyList()
         val chapters = getSortedNovelChapters(novel)
         if (!onlyNotDownloaded) return chapters
-        return chapters.filterNot { chapter ->
-            novelDownloadManager.isChapterDownloaded(novel, chapter.id)
-        }
+        // F8: batched listing (see runDownloadActionSelection).
+        val downloadedChapterIds = novelDownloadManager.getDownloadedChapterIds(novel)
+        return chapters.filterNot { it.id in downloadedChapterIds }
     }
 
     suspend fun runDownloadForSingleSelectionChapterIds(chapterIds: Set<Long>): Int {
@@ -648,13 +738,13 @@ class NovelLibraryScreenModel(
         val chaptersWithCache = getSortedNovelChapters(novel)
             .filter { chapter -> novelTranslatedDownloadManager.hasTranslationCache(chapter.id) }
         if (!onlyNotDownloaded) return chaptersWithCache
-        return chaptersWithCache.filterNot { chapter ->
-            novelTranslatedDownloadManager.isTranslatedChapterDownloaded(
-                novel = novel,
-                chapter = chapter,
-                format = format,
-            )
-        }
+        // F8: batched listing (see runTranslatedDownloadActionSelection).
+        val downloadedTranslatedIds = novelTranslatedDownloadManager.getTranslatedChapterIds(
+            novel = novel,
+            chapters = chaptersWithCache,
+            format = format,
+        )
+        return chaptersWithCache.filterNot { it.id in downloadedTranslatedIds }
     }
 
     suspend fun runTranslatedDownloadForSingleSelectionChapterIds(
@@ -688,7 +778,10 @@ class NovelLibraryScreenModel(
     }
 
     fun toggleDownloadedFilter() {
-        setDownloadedFilter(state.value.downloadedFilter.next())
+        // D5: compute the next value from a synchronous pref read - state.value is an async
+        // mirror, so a fast double tap read the stale value and lost one toggle
+        // (toggleLanguage below is the race-free pattern).
+        libraryPreferences.filterDownloadedNovel().getAndSet { it.next() }
     }
 
     fun setDownloadedFilter(filter: TriState) {
@@ -696,7 +789,7 @@ class NovelLibraryScreenModel(
     }
 
     fun toggleUnreadFilter() {
-        setUnreadFilter(state.value.unreadFilter.next())
+        libraryPreferences.filterUnreadNovel().getAndSet { it.next() } // D5
     }
 
     fun setUnreadFilter(filter: TriState) {
@@ -719,7 +812,7 @@ class NovelLibraryScreenModel(
     }
 
     fun toggleStartedFilter() {
-        setStartedFilter(state.value.startedFilter.next())
+        libraryPreferences.filterStartedNovel().getAndSet { it.next() } // D5
     }
 
     fun setStartedFilter(filter: TriState) {
@@ -727,7 +820,7 @@ class NovelLibraryScreenModel(
     }
 
     fun toggleBookmarkedFilter() {
-        setBookmarkedFilter(state.value.bookmarkedFilter.next())
+        libraryPreferences.filterBookmarkedNovel().getAndSet { it.next() } // D5
     }
 
     fun setBookmarkedFilter(filter: TriState) {
@@ -735,7 +828,7 @@ class NovelLibraryScreenModel(
     }
 
     fun toggleCompletedFilter() {
-        setCompletedFilter(state.value.completedFilter.next())
+        libraryPreferences.filterCompletedNovel().getAndSet { it.next() } // D5
     }
 
     fun setCompletedFilter(filter: TriState) {
@@ -743,7 +836,7 @@ class NovelLibraryScreenModel(
     }
 
     fun toggleIntervalCustomFilter() {
-        setIntervalCustomFilter(state.value.filterIntervalCustom.next())
+        libraryPreferences.filterIntervalCustom().getAndSet { it.next() } // D5
     }
 
     fun setIntervalCustomFilter(filter: TriState) {
@@ -793,45 +886,6 @@ class NovelLibraryScreenModel(
             novelId = novel.id,
             applyScanlatorFilter = true,
         ).sortedWith(Comparator(getNovelChapterSort(novel)))
-    }
-
-    private suspend fun getCommonCategories(novels: List<Novel>): Collection<Category> {
-        if (novels.isEmpty()) return emptyList()
-        return novels
-            .map { getNovelCategories.await(it.id).toSet() }
-            .reduce { left, right -> left.intersect(right) }
-            .map {
-                Category(
-                    id = it.id,
-                    name = it.name,
-                    order = it.order,
-                    flags = it.flags,
-                    hidden = it.hidden,
-                    hiddenFromHomeHub = false,
-                )
-            }
-            .filterNot(Category::isSystemCategory)
-    }
-
-    private suspend fun getMixCategories(novels: List<Novel>): Collection<Category> {
-        if (novels.isEmpty()) return emptyList()
-        val novelCategories = novels.map { getNovelCategories.await(it.id).toSet() }
-        val common = novelCategories.reduce { left, right -> left.intersect(right) }
-        return novelCategories
-            .flatten()
-            .distinct()
-            .subtract(common)
-            .map {
-                Category(
-                    id = it.id,
-                    name = it.name,
-                    order = it.order,
-                    flags = it.flags,
-                    hidden = it.hidden,
-                    hiddenFromHomeHub = false,
-                )
-            }
-            .filterNot(Category::isSystemCategory)
     }
 
     private fun applyFilter(
@@ -1134,8 +1188,13 @@ class NovelLibraryScreenModel(
         val libraryNovelsFlow = combine(
             getLibraryNovel.subscribe(),
             getLibraryNovelSeries.subscribe(),
-            getNovelIdsInAnySeries.subscribe(),
-        ) { novels, series, idsInSeries ->
+        ) { novels, series ->
+            // F6: membership ids derived from the already-loaded series entries - the extra
+            // getNovelIdsInAnySeries subscription re-queried the same novel_series_entries
+            // table on every DB change.
+            val idsInSeries = series.flatMapTo(HashSet()) { librarySeries ->
+                librarySeries.entries.map { it.novel.id }
+            }
             val singleItems = novels.filterNot {
                 it.novel.id in idsInSeries
             }.map { NovelLibraryItem.Single(it) }
@@ -1283,6 +1342,7 @@ class NovelLibraryScreenModel(
         val filterIntervalCustom: TriState = TriState.DISABLED,
         val languageFilter: Set<String> = emptySet(),
         val libraryLanguages: List<String> = emptyList(),
+        val libraryCount: Int = 0,
         val downloadedNovelIds: Set<Long> = emptySet(),
         val sort: NovelLibrarySort = NovelLibrarySort.default,
         val randomSortSeed: Int = 0,
@@ -1299,18 +1359,11 @@ class NovelLibraryScreenModel(
         val effectiveDownloadedFilter: TriState
             get() = if (downloadedOnly) TriState.ENABLED_IS else downloadedFilter
 
-        private val libraryCount by lazy {
-            items
-                .distinctBy {
-                    when (it) {
-                        is NovelLibraryItem.Single -> it.libraryNovel.novel.id
-                        is NovelLibraryItem.Series -> it.librarySeries.id
-                    }
-                }
-                .size
-        }
-
-        val isLibraryEmpty by lazy { libraryCount == 0 }
+        // F2: libraryCount is a pipeline-computed field now (see the second combine) - the
+        // per-State lazy recomputed flatten+distinctBy over the whole library on MAIN for
+        // every selection/keystroke state copy that read isLibraryEmpty or the toolbar count.
+        val isLibraryEmpty: Boolean
+            get() = libraryCount == 0
 
         val selectionMode = selection.isNotEmpty()
 
@@ -1413,8 +1466,8 @@ class NovelLibraryScreenModel(
      */
     private fun getDownloadedIdsFlow(): Flow<Set<Long>> {
         return combine(
-            getFilterPreferencesFlow(),
-            getBadgePreferencesFlow(),
+            sharedFilterPreferencesFlow,
+            sharedBadgePreferencesFlow,
         ) { filterPrefs, badgePrefs ->
             filterPrefs.downloadedOnly ||
                 filterPrefs.downloadedFilter != TriState.DISABLED ||
@@ -1495,15 +1548,34 @@ class NovelLibraryScreenModel(
                 )
             }
 
-            val targetFile = localDir.findFile(sanitizedName)
-                ?: localDir.createFile(sanitizedName)
-                ?: throw IOException("Cannot create file: $sanitizedName")
+            // D8: copy to a temp name and rename on success - a failed/interrupted copy used to
+            // leave a truncated book under the FINAL filename, which the LocalNovelSource
+            // directory pipeline then picked up as a corrupt entry. The temp extension is not a
+            // supported book format, so a leftover temp file is never picked up.
+            val tempName = "$sanitizedName.importing"
+            localDir.findFile(tempName)?.delete()
+            val tempFile = localDir.createFile(tempName)
+                ?: throw IOException("Cannot create temp file: $tempName")
+            try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    tempFile.openOutputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                } ?: throw IOException("Cannot open selected file")
 
-            context.contentResolver.openInputStream(uri)?.use { input ->
-                targetFile.openOutputStream().use { output ->
-                    input.copyTo(output)
+                // SAF rename fails onto an existing name; an older book with the same filename
+                // is being replaced by this import (matches the previous overwrite behavior).
+                localDir.findFile(sanitizedName)?.delete()
+                if (!tempFile.renameTo(sanitizedName)) {
+                    throw IOException("Cannot finalize import: $sanitizedName")
                 }
-            } ?: throw IOException("Cannot open selected file")
+            } catch (e: Throwable) {
+                tempFile.delete()
+                throw e
+            }
+
+            val targetFile = localDir.findFile(sanitizedName)
+                ?: throw IOException("Imported file disappeared: $sanitizedName")
 
             val meta = readLocalBookMetadata(context, targetFile, LocalNovelBookImport.extensionOf(sanitizedName))
             val finalTitle = meta.title?.takeIf { it.isNotBlank() }
@@ -1560,7 +1632,11 @@ class NovelLibraryScreenModel(
     suspend fun importLocalBooks(uris: List<Uri>): Pair<Int, Int> {
         var succeeded = 0
         uris.forEach { uri ->
-            runCatching { importLocalBook(uri) }.onSuccess { succeeded++ }
+            // D8: rethrow CancellationException - swallowing it kept the loop spinning after a
+            // cancel (each next withContext rethrew and was caught again), reporting 0 succeeded.
+            runCatching { importLocalBook(uri) }
+                .onFailure { error -> if (error is CancellationException) throw error }
+                .onSuccess { succeeded++ }
         }
         return succeeded to uris.size
     }
@@ -1622,12 +1698,22 @@ class NovelLibraryScreenModel(
             } else {
                 if (!LocalNovelBookImport.isSupportedImportFileName(entryName)) continue
                 val safeName = LocalNovelBookImport.sanitizeFileName(entryName)
-                val target = targetDir.findFile(safeName)?.takeIf { it.isFile }
-                    ?: targetDir.createFile(safeName) ?: continue
-                context.contentResolver.openInputStream(entry.uri)?.use { input ->
-                    target.openOutputStream().use { output -> input.copyTo(output) }
-                } ?: continue
-                copied++
+                // D8: copy via a temp name and rename on success - a failed copy used to leave a
+                // truncated chapter under the final filename inside the imported folder.
+                val tempName = "$safeName.importing"
+                targetDir.findFile(tempName)?.delete()
+                val temp = targetDir.createFile(tempName) ?: continue
+                val finalized = runCatching {
+                    context.contentResolver.openInputStream(entry.uri)?.use { input ->
+                        temp.openOutputStream().use { output -> input.copyTo(output) }
+                    } ?: throw IOException("Cannot open ${entry.name}")
+                    targetDir.findFile(safeName)?.takeIf { it.isFile }?.delete()
+                    temp.renameTo(safeName)
+                }.getOrElse {
+                    temp.delete()
+                    false
+                }
+                if (finalized) copied++
             }
         }
         return copied
@@ -1732,12 +1818,14 @@ class NovelLibraryScreenModel(
         val selection = state.value.selection
         if (selection.isEmpty()) return
 
-        screenModelScope.launchIO {
-            val novelIds = selection.filterIsInstance<NovelLibraryItem.Single>().map { it.libraryNovel.novel.id }
-            if (novelIds.isNotEmpty()) {
-                createNovelSeries.await(name, 0L, novelIds)
-            }
-            clearSelection()
+        // D3: capture the ids and clear the selection synchronously - clearing only after the
+        // DB inserts left a window where a re-opened dialog passed the guard again and created
+        // a duplicate series. D2: non-cancellable so navigation cannot cut the writes in half.
+        val novelIds = selection.filterIsInstance<NovelLibraryItem.Single>().map { it.libraryNovel.novel.id }
+        clearSelection()
+        if (novelIds.isEmpty()) return
+        screenModelScope.launchNonCancellable {
+            createNovelSeries.await(name, 0L, novelIds)
         }
     }
 
@@ -1745,12 +1833,12 @@ class NovelLibraryScreenModel(
         val selection = state.value.selection
         if (selection.isEmpty()) return
 
-        screenModelScope.launchIO {
-            val novelIds = selection.filterIsInstance<NovelLibraryItem.Single>().map { it.libraryNovel.novel.id }
-            if (novelIds.isNotEmpty()) {
-                addNovelsToSeries.await(series.id, novelIds)
-            }
-            clearSelection()
+        // D3/D2: see createSeries.
+        val novelIds = selection.filterIsInstance<NovelLibraryItem.Single>().map { it.libraryNovel.novel.id }
+        clearSelection()
+        if (novelIds.isEmpty()) return
+        screenModelScope.launchNonCancellable {
+            addNovelsToSeries.await(series.id, novelIds)
         }
     }
 
@@ -1759,20 +1847,37 @@ class NovelLibraryScreenModel(
     }
 
     fun setPinned(item: NovelLibraryItem, pinned: Boolean) {
-        screenModelScope.launchIO {
-            when (item) {
-                is NovelLibraryItem.Single -> updateNovel.await(
-                    NovelUpdate(
-                        id = item.libraryNovel.id,
-                        pinned = pinned,
-                    ),
-                )
-                is NovelLibraryItem.Series -> updateNovelSeries.await(
-                    item.librarySeries.series.copy(
-                        pinned = pinned,
-                    ),
-                )
-            }
+        // D1: non-cancellable - a tab switch mid-write used to silently drop the pin.
+        screenModelScope.launchNonCancellable {
+            setPinnedInternal(item, pinned)
+        }
+    }
+
+    /**
+     * D1: one non-cancellable batch for the bottom-menu pin action - the previous per-item
+     * cancellable launches could be cut in half by a tab switch (partial pin application).
+     */
+    fun setPinnedSelection(pinned: Boolean) {
+        val items = state.value.selection.toList()
+        if (items.isEmpty()) return
+        screenModelScope.launchNonCancellable {
+            items.forEach { setPinnedInternal(it, pinned) }
+        }
+    }
+
+    private suspend fun setPinnedInternal(item: NovelLibraryItem, pinned: Boolean) {
+        when (item) {
+            is NovelLibraryItem.Single -> updateNovel.await(
+                NovelUpdate(
+                    id = item.libraryNovel.id,
+                    pinned = pinned,
+                ),
+            )
+            is NovelLibraryItem.Series -> updateNovelSeries.await(
+                item.librarySeries.series.copy(
+                    pinned = pinned,
+                ),
+            )
         }
     }
 

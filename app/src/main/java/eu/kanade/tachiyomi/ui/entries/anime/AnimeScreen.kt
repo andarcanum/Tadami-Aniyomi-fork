@@ -62,7 +62,6 @@ import eu.kanade.tachiyomi.ui.entries.anime.track.AnimeTrackInfoDialogHomeScreen
 import eu.kanade.tachiyomi.ui.entries.suggestions.toDirectEntryScreenOrNull
 import eu.kanade.tachiyomi.ui.entries.suggestions.toGlobalSearchScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
-import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryTab
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.setting.SettingsScreen
 import eu.kanade.tachiyomi.ui.webview.WebViewScreen
@@ -609,8 +608,12 @@ class AnimeScreen(
 
         when (val previousController = navigator.items[navigator.size - 2]) {
             is HomeScreen -> {
+                // C1: route through HomeScreen - it lands on the library tab and hands the query
+                // to the anime section. The old direct AnimeLibraryTab.search sent into a
+                // rendezvous channel with no receiver whenever the library tab was not composed
+                // (the RESH-B1 failure mode), dropping the query silently.
                 navigator.pop()
-                AnimeLibraryTab.search(query)
+                HomeScreen.searchLibrary(HomeScreen.LibrarySearchMedia.Anime, query)
             }
             is BrowseAnimeSourceScreen -> {
                 // RESH-B1: replace with a fresh instance carrying the query (constructor arg,

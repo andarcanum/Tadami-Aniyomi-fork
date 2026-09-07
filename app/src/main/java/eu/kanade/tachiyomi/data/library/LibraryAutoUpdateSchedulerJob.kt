@@ -12,6 +12,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
+import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.tachiyomi.data.library.anime.AnimeLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.manga.MangaLibraryUpdateJob
 import eu.kanade.tachiyomi.data.library.novel.NovelLibraryUpdateJob
@@ -69,8 +70,20 @@ class LibraryAutoUpdateSchedulerJob(
     override suspend fun doWork(): Result {
         val wm = context.workManager
         val preferences = Injekt.get<LibraryPreferences>()
+        val uiPreferences = Injekt.get<UiPreferences>()
         val now = System.currentTimeMillis()
-        val bufferMs = 5 * 60 * 1000L // 5 minutes buffer
+        // I16: buffer must be >= the 15-minute periodic flex - with the old 5-minute buffer a
+        // tick firing at the start of the flex window measured a gap of interval-15min <
+        // interval-5min and the media was skipped for a whole extra cycle.
+        val bufferMs = 15 * 60 * 1000L
+
+        // I8: auto triggers used to be enqueued WITHOUT constraints (only the periodic
+        // scheduler had them), so a retried trigger could run on metered data despite
+        // "Wi-Fi only".
+        val triggerConstraints = buildConstraints(
+            preferences.autoUpdateDeviceRestrictions().get(),
+            preferences.autoUpdateWifiAndChargingOnly().get(),
+        )
 
         val generalInterval = preferences.autoUpdateInterval().get()
         val animePref = preferences.animeUpdateInterval().get()
@@ -83,7 +96,9 @@ class LibraryAutoUpdateSchedulerJob(
 
         var scheduledAny = false
 
-        if (animeInterval > 0) {
+        // I22: skip hidden sections entirely instead of enqueuing triggers whose workers then
+        // no-op on the show*Section check.
+        if (animeInterval > 0 && uiPreferences.showAnimeSection().get()) {
             val lastUpdate = preferences.lastAnimeUpdateTimestamp().get()
             val intervalMs = animeInterval * 3600000L
             if (lastUpdate == 0L || (now - lastUpdate) >= intervalMs - bufferMs) {
@@ -93,6 +108,7 @@ class LibraryAutoUpdateSchedulerJob(
                     OneTimeWorkRequestBuilder<AnimeLibraryUpdateJob>()
                         .addTag(ANIME_TAG)
                         .addTag(ANIME_AUTO_TAG)
+                        .setConstraints(triggerConstraints)
                         .build(),
                 )
                 preferences.lastAnimeUpdateTimestamp().set(now)
@@ -100,7 +116,7 @@ class LibraryAutoUpdateSchedulerJob(
             }
         }
 
-        if (mangaInterval > 0) {
+        if (mangaInterval > 0 && uiPreferences.showMangaSection().get()) {
             val lastUpdate = preferences.lastMangaUpdateTimestamp().get()
             val intervalMs = mangaInterval * 3600000L
             if (lastUpdate == 0L || (now - lastUpdate) >= intervalMs - bufferMs) {
@@ -110,6 +126,7 @@ class LibraryAutoUpdateSchedulerJob(
                     OneTimeWorkRequestBuilder<MangaLibraryUpdateJob>()
                         .addTag(MANGA_TAG)
                         .addTag(MANGA_AUTO_TAG)
+                        .setConstraints(triggerConstraints)
                         .build(),
                 )
                 preferences.lastMangaUpdateTimestamp().set(now)
@@ -117,7 +134,7 @@ class LibraryAutoUpdateSchedulerJob(
             }
         }
 
-        if (novelInterval > 0) {
+        if (novelInterval > 0 && uiPreferences.showNovelSection().get()) {
             val lastUpdate = preferences.lastNovelUpdateTimestamp().get()
             val intervalMs = novelInterval * 3600000L
             if (lastUpdate == 0L || (now - lastUpdate) >= intervalMs - bufferMs) {
@@ -127,6 +144,7 @@ class LibraryAutoUpdateSchedulerJob(
                     OneTimeWorkRequestBuilder<NovelLibraryUpdateJob>()
                         .addTag(NOVEL_TAG)
                         .addTag(NOVEL_AUTO_TAG)
+                        .setConstraints(triggerConstraints)
                         .build(),
                 )
                 preferences.lastNovelUpdateTimestamp().set(now)

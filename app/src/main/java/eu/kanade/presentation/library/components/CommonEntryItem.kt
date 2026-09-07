@@ -442,7 +442,10 @@ fun EntryListItem(
                     0 -> 76.dp
                     else -> {
                         val density = LocalDensity.current
-                        with(density) { (containerHeight / entries).toDp() } - (3 / entries).dp
+                        // H11 (Q6): float division - the Int/Int division silently zeroed the
+                        // row-height correction for any entries >= 4 (season grids), while the
+                        // fixed vertical = 3.dp padding below kept adding to the row pitch.
+                        with(density) { (containerHeight / entries).toDp() } - (3f / entries).dp
                     }
                 },
             )

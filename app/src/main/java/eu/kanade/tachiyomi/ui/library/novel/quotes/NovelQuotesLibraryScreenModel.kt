@@ -3,12 +3,17 @@ package eu.kanade.tachiyomi.ui.library.novel.quotes
 import androidx.compose.runtime.Immutable
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.presentation.components.SEARCH_DEBOUNCE_MILLIS
+import eu.kanade.tachiyomi.ui.library.leadingDebounce
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
+import tachiyomi.core.common.preference.getAndSet
+import tachiyomi.core.common.util.lang.launchNonCancellable
 import tachiyomi.domain.book.novel.interactor.DeleteNovelHighlight
 import tachiyomi.domain.book.novel.interactor.UpdateNovelHighlight
 import tachiyomi.domain.book.novel.model.NovelHighlightWithChapter
@@ -39,7 +44,10 @@ class NovelQuotesLibraryScreenModel(
     val state: StateFlow<NovelQuotesLibraryState> = combine(
         repository.subscribeAll(),
         preferences.novelQuotesSortMode().changes(),
-        query,
+        // Quotes-F5: the raw query used to hit this combine synchronously per keystroke and
+        // the whole-list visible() pass ran on the main thread; debounce (with a leading
+        // emission so the first render is not delayed) and move the work off-main via flowOn.
+        query.leadingDebounce(SEARCH_DEBOUNCE_MILLIS),
         bookFilter,
     ) { quotes, sortRaw, q, filter ->
         NovelQuotesLibraryState(
@@ -48,11 +56,13 @@ class NovelQuotesLibraryScreenModel(
             bookFilter = filter,
             sortMode = NovelQuotesSortMode.from(sortRaw),
         )
-    }.stateIn(
-        scope = screenModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = NovelQuotesLibraryState(),
-    )
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = screenModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = NovelQuotesLibraryState(),
+        )
 
     fun search(query: String) {
         this.query.value = query
@@ -63,16 +73,22 @@ class NovelQuotesLibraryScreenModel(
     }
 
     fun toggleSort() {
-        val next = if (state.value.sortMode == NovelQuotesSortMode.DATE) {
-            NovelQuotesSortMode.TITLE
-        } else {
-            NovelQuotesSortMode.DATE
+        // D5: compute the next mode from a synchronous pref read - state.value is an async
+        // mirror, so a fast double tap read the stale mode and lost one toggle.
+        preferences.novelQuotesSortMode().getAndSet { raw ->
+            val next = if (NovelQuotesSortMode.from(raw) == NovelQuotesSortMode.DATE) {
+                NovelQuotesSortMode.TITLE
+            } else {
+                NovelQuotesSortMode.DATE
+            }
+            next.storageKey
         }
-        preferences.novelQuotesSortMode().set(next.storageKey)
     }
 
     fun updateQuote(highlightId: Long, note: String, colorArgb: Long) {
-        screenModelScope.launch {
+        // Quotes-F11: non-cancellable - back-navigation right after confirming used to drop
+        // the DB write silently.
+        screenModelScope.launchNonCancellable {
             updateNovelHighlight.await(
                 highlightId = highlightId,
                 note = note,
@@ -83,7 +99,7 @@ class NovelQuotesLibraryScreenModel(
     }
 
     fun deleteQuote(highlightId: Long) {
-        screenModelScope.launch {
+        screenModelScope.launchNonCancellable {
             deleteNovelHighlight.await(highlightId)
         }
     }

@@ -127,7 +127,6 @@ import eu.kanade.tachiyomi.ui.entries.manga.track.MangaTrackInfoDialogHomeScreen
 import eu.kanade.tachiyomi.ui.entries.suggestions.toDirectEntryScreenOrNull
 import eu.kanade.tachiyomi.ui.entries.suggestions.toGlobalSearchScreen
 import eu.kanade.tachiyomi.ui.home.HomeScreen
-import eu.kanade.tachiyomi.ui.library.novel.NovelLibraryTab
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
 import eu.kanade.tachiyomi.ui.setting.SettingsScreen
@@ -1024,8 +1023,11 @@ class NovelScreen(
 
         when (val previousController = navigator.items[navigator.size - 2]) {
             is HomeScreen -> {
+                // C3: route through HomeScreen - the old NovelLibraryTab.search sent into a
+                // rendezvous channel of a tab that is never composed (dead shadow implementation),
+                // so the query was always silently lost.
                 navigator.pop()
-                NovelLibraryTab.search(query)
+                HomeScreen.searchLibrary(HomeScreen.LibrarySearchMedia.Novel, query)
             }
             is BrowseNovelSourceScreen -> {
                 navigator.pop()

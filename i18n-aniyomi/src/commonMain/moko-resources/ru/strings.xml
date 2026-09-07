@@ -1068,6 +1068,7 @@
     <string name="novel_plugin_cache_cleared">Кэш плагинов ранобэ очищен</string>
     <string name="anime_from_library">Аниме из библиотеки</string>
     <string name="downloaded_episodes">Загруженные эпизоды</string>
+    <string name="novel_from_library">Ранобэ из библиотеки</string>
     <string name="local_manga_source">Локальный источник манги</string>
     <string name="local_anime_source">Локальный источник аниме</string>
     <string name="local_novel_source">Локальный источник новелл</string>

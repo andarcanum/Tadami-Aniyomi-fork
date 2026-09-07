@@ -39,10 +39,10 @@ internal fun LibraryTabs(
             categories.forEachIndexed { index, category ->
                 Tab(
                     selected = currentPageIndex == index,
-                    onClick = {
-                        appHaptics.tap()
-                        onTabItemClick(index)
-                    },
+                    // H10 (Q7): combinedClickable below is the single action detector - the
+                    // duplicate Tab.onClick double-fired the haptic + animateScrollToPage per
+                    // tap (or, depending on the pointer pass, starved the category long-press).
+                    onClick = {},
                     modifier = Modifier.combinedClickable(
                         onClick = {
                             appHaptics.tap()

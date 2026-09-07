@@ -256,6 +256,7 @@ class MangaLibraryUpdateNotifier(
                 context.notify(
                     updates.map { (manga, chapters) ->
                         NotificationManagerCompat.NotificationWithIdAndTag(
+                            Notifications.TAG_NEW_CHAPTERS,
                             manga.id.hashCode(),
                             createNewChaptersNotification(manga, chapters),
                         )

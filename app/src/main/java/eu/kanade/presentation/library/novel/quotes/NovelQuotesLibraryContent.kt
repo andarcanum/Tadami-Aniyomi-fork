@@ -101,7 +101,9 @@ fun NovelQuotesLibraryContent(
     val isDark = colors.isDark
     var searchVisible by remember { mutableStateOf(state.query.isNotEmpty()) }
 
-    val visibleItems = remember(state.quotes) { NovelQuotesListOps.visible(state.quotes) }
+    // Quotes-F5: the screen model already applies NovelQuotesListOps.visible in its combine -
+    // re-applying it here was a redundant O(N) main-thread pass per emission.
+    val visibleItems = state.quotes
     val filteredItems = remember(visibleItems, state.query, state.bookFilter) {
         NovelQuotesListOps.filter(visibleItems, state.query, state.bookFilter)
     }

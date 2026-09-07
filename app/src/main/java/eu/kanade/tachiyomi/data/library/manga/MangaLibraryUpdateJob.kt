@@ -113,22 +113,24 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         }
 
         if (tags.contains(WORK_NAME_AUTO)) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-                val preferences = Injekt.get<LibraryPreferences>()
-                val restrictions = preferences.autoUpdateDeviceRestrictions().get()
-                if (
-                    shouldRetryLegacyAutoUpdateRun(
-                        restrictions = restrictions,
-                        isConnectedToWifi = context.isConnectedToWifi(),
-                        isCharging = context.isCharging(),
-                    )
-                ) {
-                    return Result.retry()
-                }
+            // I8: the runtime re-check used to run only below API 28 - but auto triggers are
+            // enqueued without WorkManager constraints, so a retried/deferred trigger could run
+            // the full update on metered data despite "Wi-Fi only" on ANY API level.
+            val preferences = Injekt.get<LibraryPreferences>()
+            val restrictions = preferences.autoUpdateDeviceRestrictions().get()
+            if (
+                shouldRetryLegacyAutoUpdateRun(
+                    restrictions = restrictions,
+                    isConnectedToWifi = context.isConnectedToWifi(),
+                    isCharging = context.isCharging(),
+                )
+            ) {
+                return Result.retry()
             }
 
-            // Find a running manual worker. If exists, try again later
-            if (context.workManager.isRunning(WORK_NAME_MANUAL)) {
+            // Find a running/enqueued manual worker. If exists, try again later (I6: ENQUEUED
+            // too - a not-yet-running manual used to slip through and both ran duplicate passes).
+            if (context.workManager.isRunningOrEnqueued(WORK_NAME_MANUAL)) {
                 return Result.retry()
             }
         }
@@ -381,6 +383,9 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         val newUpdates = CopyOnWriteArrayList<Pair<Manga, Array<Chapter>>>()
         val failedUpdates = CopyOnWriteArrayList<LibraryUpdateFailure>()
         val hasDownloads = AtomicBoolean(false)
+        // I9: atomic accumulator - the per-entry preference getAndSet was a non-synchronized
+        // read-modify-write racing across the Semaphore(5) coroutines (lost badge increments).
+        val newChapterCountTotal = AtomicInteger(0)
         val fetchWindow = mangaFetchInterval.getWindow(ZonedDateTime.now())
 
         coroutineScope {
@@ -419,8 +424,7 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
                                                 downloadChapters(manga, chaptersToDownload)
                                                 hasDownloads.set(true)
                                             }
-                                            libraryPreferences.newMangaUpdatesCount()
-                                                .getAndSet { it + newChapters.size }
+                                            newChapterCountTotal.addAndGet(newChapters.size)
 
                                             // Convert to the manga that contains new chapters
                                             newUpdates.add(manga to newChapters.toTypedArray())
@@ -480,6 +484,9 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
         notifier.cancelProgressNotification()
 
         if (newUpdates.isNotEmpty()) {
+            // I9: single preference write after the run (see newChapterCountTotal).
+            libraryPreferences.newMangaUpdatesCount()
+                .getAndSet { it + newChapterCountTotal.get() }
             notifier.showUpdateNotifications(newUpdates)
             if (hasDownloads.get()) {
                 downloadManager.startDownloads()
@@ -644,7 +651,10 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
             inputData: Data,
         ): Boolean {
             val wm = context.workManager
-            if (wm.isRunning(TAG) || wm.isRunningOrEnqueued(WORK_NAME_MANUAL)) {
+            // I6: ENQUEUED-aware single TAG query - an enqueued-but-not-yet-running auto
+            // trigger used to slip through the isRunning(TAG) check, letting a manual refresh
+            // start a duplicate full pass (TAG is carried by both manual and auto workers).
+            if (wm.isRunningOrEnqueued(TAG)) {
                 // Already running either as a scheduled or manual job
                 return false
             }
@@ -661,8 +671,17 @@ class MangaLibraryUpdateJob(private val context: Context, workerParams: WorkerPa
 
         fun stop(context: Context) {
             val wm = context.workManager
+            // I5: cancel ENQUEUED/BLOCKED work too - a RUNNING-only query left an enqueued auto
+            // trigger (or a retry parked in backoff, or a constrained trigger waiting for Wi-Fi
+            // in BLOCKED) alive, resurrecting the update right after Cancel.
             val workQuery = WorkQuery.Builder.fromTags(listOf(TAG))
-                .addStates(listOf(WorkInfo.State.RUNNING))
+                .addStates(
+                    listOf(
+                        WorkInfo.State.RUNNING,
+                        WorkInfo.State.ENQUEUED,
+                        WorkInfo.State.BLOCKED,
+                    ),
+                )
                 .build()
             val future = wm.getWorkInfos(workQuery)
             future.addListener(

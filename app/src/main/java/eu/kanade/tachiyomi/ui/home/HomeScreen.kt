@@ -133,6 +133,7 @@ import eu.kanade.tachiyomi.ui.more.MoreTab
 import eu.kanade.tachiyomi.ui.updates.UpdatesTab
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
 import eu.kanade.tachiyomi.util.system.powerManager
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
@@ -169,9 +170,15 @@ val LocalHomeOverlayHost =
     staticCompositionLocalOf<MutableState<(@Composable () -> Unit)?>?> { null }
 
 object HomeScreen : Screen() {
-    private val librarySearchEvent = Channel<String>()
-    private val openTabEvent = Channel<Tab>()
-    private val showBottomNavEvent = Channel<Boolean>()
+    // C1/C8: buffered - rendezvous sends suspended forever when HomeScreen was not composed
+    // (or, for showBottomNav, when the bottom bar slot does not exist on navigation-rail
+    // layouts), leaking suspended coroutines and dropping events.
+    private val librarySearchEvent = Channel<LibrarySearchRequest>(Channel.BUFFERED)
+    private val openTabEvent = Channel<Tab>(Channel.BUFFERED)
+    private val showBottomNavEvent = Channel<Boolean>(
+        capacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
 
     private const val TAB_FADE_DURATION = 200
     private const val TAB_MODERN_ENTER_DURATION = 300
@@ -566,19 +573,24 @@ object HomeScreen : Screen() {
                         AnimeLibraryTab.showNovelSection()
                     }
                     launch {
-                        librarySearchEvent.receiveAsFlow().collectLatest {
-                            goToStartScreen()
+                        librarySearchEvent.receiveAsFlow().collectLatest { request ->
+                            // C1/C2/C3: land on the library tab that hosts the requested media in
+                            // this theme, then hand the query to the matching section. The old
+                            // routing sent to tab channels that might have no receiver (query
+                            // silently lost) or always targeted the anime model.
+                            val aurora = uiPreferences.appTheme().get().isAuroraStyle
+                            val targetTab = when (request.media) {
+                                LibrarySearchMedia.Manga -> resolveLibraryTabForOpenTab(aurora)
+                                LibrarySearchMedia.Anime, LibrarySearchMedia.Novel -> AnimeLibraryTab
+                            }
+                            tabNavigator.current = targetTab
                             when {
-                                defaultTab == AnimeLibraryTab && startScreen == StartScreen.NOVEL -> {
-                                    AnimeLibraryTab.searchNovel(it)
+                                targetTab == AnimeLibraryTab -> when (request.media) {
+                                    LibrarySearchMedia.Anime -> AnimeLibraryTab.search(request.query)
+                                    LibrarySearchMedia.Manga -> AnimeLibraryTab.searchManga(request.query)
+                                    LibrarySearchMedia.Novel -> AnimeLibraryTab.searchNovel(request.query)
                                 }
-                                defaultTab == AnimeLibraryTab -> {
-                                    // Search the section the user is actually in (manga/anime/novel),
-                                    // not unconditionally anime.
-                                    AnimeLibraryTab.searchActive(it)
-                                }
-                                defaultTab == MangaLibraryTab -> MangaLibraryTab.search(it)
-                                else -> Unit
+                                else -> MangaLibraryTab.search(request.query)
                             }
                         }
                     }
@@ -1214,8 +1226,17 @@ object HomeScreen : Screen() {
         }
     }
 
-    suspend fun search(query: String) {
-        librarySearchEvent.send(query)
+    enum class LibrarySearchMedia { Anime, Manga, Novel }
+
+    data class LibrarySearchRequest(val media: LibrarySearchMedia, val query: String)
+
+    /**
+     * Routes a "search in library" request from the entry screens: lands on the library tab
+     * hosting the requested media for the active theme and applies the query to the matching
+     * section (C1/C2/C3).
+     */
+    suspend fun searchLibrary(media: LibrarySearchMedia, query: String) {
+        librarySearchEvent.send(LibrarySearchRequest(media, query))
     }
 
     suspend fun openTab(tab: Tab) {

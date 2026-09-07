@@ -16,20 +16,34 @@ import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.LabeledCheckbox
 import tachiyomi.presentation.core.i18n.stringResource
 
+/** Media type of the entries being removed; drives the checkbox copy (H1). */
+enum class DeleteLibraryEntryType { Manga, Anime, Novel }
+
 @Composable
 fun DeleteLibraryEntryDialog(
     containsLocalEntry: Boolean,
     onDismissRequest: () -> Unit,
     onConfirm: (Boolean, Boolean) -> Unit,
-    isManga: Boolean,
+    entryType: DeleteLibraryEntryType,
 ) {
     var list by remember {
         mutableStateOf(
             buildList<CheckboxState.State<StringResource>> {
-                val checkbox1 = if (isManga) AYMR.strings.manga_from_library else AYMR.strings.anime_from_library
+                // H1: the binary isManga flag made the novel dialog show manga/anime copy.
+                val checkbox1 = when (entryType) {
+                    DeleteLibraryEntryType.Manga -> AYMR.strings.manga_from_library
+                    DeleteLibraryEntryType.Anime -> AYMR.strings.anime_from_library
+                    DeleteLibraryEntryType.Novel -> AYMR.strings.novel_from_library
+                }
                 add(CheckboxState.State.None(checkbox1))
                 if (!containsLocalEntry) {
-                    val checkbox2 = if (isManga) MR.strings.downloaded_chapters else AYMR.strings.downloaded_episodes
+                    val checkbox2 = when (entryType) {
+                        DeleteLibraryEntryType.Manga -> MR.strings.downloaded_chapters
+                        DeleteLibraryEntryType.Anime -> AYMR.strings.downloaded_episodes
+                        // Novel chapters are chapters; reuse the existing string instead of
+                        // adding a duplicate "downloaded_novels" resource.
+                        DeleteLibraryEntryType.Novel -> MR.strings.downloaded_chapters
+                    }
                     add(CheckboxState.State.None(checkbox2))
                 }
             },

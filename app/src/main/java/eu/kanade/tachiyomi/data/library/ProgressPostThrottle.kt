@@ -1,5 +1,8 @@
 package eu.kanade.tachiyomi.data.library
 
+import android.os.SystemClock
+import java.util.concurrent.atomic.AtomicLong
+
 /**
  * Rate-limits progress notification posts. Library update jobs post progress before and
  * after every entry; on large libraries that means thousands of Binder IPC calls per run.
@@ -8,17 +11,25 @@ package eu.kanade.tachiyomi.data.library
  */
 internal class ProgressPostThrottle(
     private val minIntervalMillis: Long,
-    private val clock: () -> Long = System::currentTimeMillis,
+    // I18: monotonic clock - a backwards wall-clock jump used to suppress all progress posts
+    // for the duration of the skew.
+    private val clock: () -> Long = { SystemClock.elapsedRealtime() },
 ) {
-    private var lastPostedAtMillis = NEVER_POSTED
+    // I18: atomic CAS - the plain var was mutated from up to 5 concurrent job coroutines
+    // (a JMM race with duplicate/suppressed posts and no visibility guarantee).
+    private val lastPostedAtMillis = AtomicLong(NEVER_POSTED)
 
     fun shouldPostNow(): Boolean {
         val now = clock()
-        if (lastPostedAtMillis != NEVER_POSTED && now - lastPostedAtMillis < minIntervalMillis) {
-            return false
+        while (true) {
+            val last = lastPostedAtMillis.get()
+            if (last != NEVER_POSTED && now - last < minIntervalMillis) {
+                return false
+            }
+            if (lastPostedAtMillis.compareAndSet(last, now)) {
+                return true
+            }
         }
-        lastPostedAtMillis = now
-        return true
     }
 
     companion object {

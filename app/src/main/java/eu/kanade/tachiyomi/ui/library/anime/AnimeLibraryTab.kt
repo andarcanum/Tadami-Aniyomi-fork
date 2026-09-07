@@ -34,6 +34,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -69,6 +71,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -102,7 +105,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastAll
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.currentOrThrow
@@ -128,6 +130,7 @@ import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenuItem
 import eu.kanade.presentation.entries.components.LibraryBottomActionMenu
 import eu.kanade.presentation.library.DeleteLibraryEntryDialog
+import eu.kanade.presentation.library.DeleteLibraryEntryType
 import eu.kanade.presentation.library.anime.AnimeLibraryAuroraContent
 import eu.kanade.presentation.library.anime.AnimeLibraryContent
 import eu.kanade.presentation.library.anime.AnimeLibrarySettingsDialog
@@ -177,10 +180,8 @@ import eu.kanade.tachiyomi.ui.series.novel.NovelSeriesScreen
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import tachiyomi.core.common.i18n.stringResource
@@ -191,6 +192,7 @@ import tachiyomi.domain.entries.manga.model.Manga
 import tachiyomi.domain.items.episode.model.Episode
 import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.library.manga.LibraryManga
+import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.material.Scaffold
@@ -203,6 +205,7 @@ import tachiyomi.presentation.core.util.collectAsStateWithLifecycle
 import tachiyomi.presentation.core.util.showSoftKeyboard
 import tachiyomi.source.local.entries.anime.isLocal
 import tachiyomi.source.local.entries.manga.isLocal
+import tachiyomi.source.local.entries.novel.isLocal
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
@@ -248,6 +251,32 @@ data object AnimeLibraryTab : Tab {
         requestOpenSettingsSheet()
     }
 
+    // J1: tab-held screen models. The composition-scoped rememberScreenModel died on EVERY
+    // navigator push (Voyager disposes the home tab tree when another screen covers it), so
+    // returning from an entry screen re-created all section models: a full-screen spinner,
+    // three DB pipelines re-run (+300 ms preload), and silent loss of search and selection.
+    // Tab objects live for the whole process; the models now survive pushes, and their
+    // pipelines are gated by the composition-lifetime DisposableEffect in Content (I21).
+    private val sharedAnimeScreenModel: AnimeLibraryScreenModel by lazy { AnimeLibraryScreenModel() }
+    private val sharedMangaScreenModel: MangaLibraryScreenModel by lazy {
+        MangaLibraryScreenModel(startActive = false)
+    }
+    private val sharedAnimeSettingsScreenModel: AnimeLibrarySettingsScreenModel by lazy {
+        AnimeLibrarySettingsScreenModel()
+    }
+    private val sharedMangaSettingsScreenModel: MangaLibrarySettingsScreenModel by lazy {
+        MangaLibrarySettingsScreenModel()
+    }
+    private val sharedNovelScreenModel: NovelLibraryScreenModel by lazy {
+        NovelLibraryScreenModel(startActive = false)
+    }
+
+    // H15: scroll-position retention for the Aurora pagers - section pages beyond ±1 (and
+    // category pages beyond ±1 inside them) are disposed; the map survives that AND navigator
+    // pushes (composition-level retention died with the content on every push).
+    private val auroraScrollPositions =
+        mutableMapOf<Triple<Section, Long, LibraryDisplayMode>, Pair<Int, Int>>()
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
@@ -256,10 +285,10 @@ data object AnimeLibraryTab : Tab {
         val scope = rememberCoroutineScope()
         val haptic = LocalHapticFeedback.current
 
-        val screenModel = rememberScreenModel { AnimeLibraryScreenModel() }
-        val mangaScreenModel = rememberScreenModel { MangaLibraryScreenModel(startActive = false) }
-        val settingsScreenModel = rememberScreenModel { AnimeLibrarySettingsScreenModel() }
-        val mangaSettingsScreenModel = rememberScreenModel { MangaLibrarySettingsScreenModel() }
+        val screenModel = sharedAnimeScreenModel
+        val mangaScreenModel = sharedMangaScreenModel
+        val settingsScreenModel = sharedAnimeSettingsScreenModel
+        val mangaSettingsScreenModel = sharedMangaSettingsScreenModel
         val state by screenModel.state.collectAsStateWithLifecycle()
         val mangaState by mangaScreenModel.state.collectAsStateWithLifecycle()
         val novelReaderPreferences = remember { Injekt.get<NovelReaderPreferences>() }
@@ -310,16 +339,26 @@ data object AnimeLibraryTab : Tab {
         val auroraPageCount = availableSections.size.coerceAtLeast(1)
         // Restore the section the user actually worked in (survives process death); fall back
         // to the first enabled one when the stored value is missing or now hidden.
-        if (!lastAuroraSectionRestored) {
-            val stored = userProfilePreferences.libraryLastSection().get()
-            Section.entries.firstOrNull { it.name.equals(stored, ignoreCase = true) }
-                ?.let { lastAuroraSection = it }
-            if (lastAuroraSection !in availableSections) {
-                lastAuroraSection = availableSections.firstOrNull() ?: lastAuroraSection
+        // C9: resolve the restored section WITHOUT writing the tab-level globals during
+        // composition - a discarded speculative composition used to consume the one-shot
+        // restore flag; the globals are updated in the effect below instead.
+        val restoredSection = remember {
+            if (!lastAuroraSectionRestored) {
+                val stored = userProfilePreferences.libraryLastSection().get()
+                Section.entries.firstOrNull { it.name.equals(stored, ignoreCase = true) }
+                    ?: lastAuroraSection
+            } else {
+                lastAuroraSection
             }
+        }
+        val initialSection = restoredSection.takeIf { it in availableSections }
+            ?: availableSections.firstOrNull()
+            ?: restoredSection
+        LaunchedEffect(Unit) {
+            lastAuroraSection = initialSection
             lastAuroraSectionRestored = true
         }
-        val initialAuroraPage = availableSections.indexOf(lastAuroraSection)
+        val initialAuroraPage = availableSections.indexOf(initialSection)
             .takeIf { it >= 0 }
             ?.coerceIn(0, auroraPageCount - 1)
             ?: 0
@@ -327,20 +366,35 @@ data object AnimeLibraryTab : Tab {
         val sectionAtPage: (Int) -> Section? = { index ->
             resolveAuroraLibrarySection(availableSections, index)
         }
+        // H18-refined: the section UI (pills, category row, search routing) follows currentPage
+        // - settledPage only updates once the pager settles, so the header visibly lagged the
+        // posters during the switch animation. Settled page stays the source for the two
+        // conservative actions: persisting lastAuroraSection and clearing the leaving
+        // section's selection (an aborted swipe must not double-write or drop selections).
         val auroraCurrentSection = if (isAurora) {
             sectionAtPage(auroraPagerState.currentPage.coerceAtMost(auroraPageCount - 1))
         } else {
             null
         }
-        val novelScreenModel = if (showNovelSection) {
-            rememberScreenModel { NovelLibraryScreenModel(startActive = false) }
-        } else {
-            null
-        }
+        val novelScreenModel = if (showNovelSection) sharedNovelScreenModel else null
         val novelState = novelScreenModel?.state?.collectAsStateWithLifecycle()?.value ?: NovelLibraryScreenModel.State(
             isLoading = false,
         )
+        // I21: with the J1 tab-held models the pipelines outlive composition - STOP everything
+        // when the library leaves composition. Before, activation was one-way (there was not a
+        // single setLibraryPipelineActive(false) call site repo-wide) and every visited library
+        // recomputed its full O(N log N) pipeline on every DB/pref change for the rest of the
+        // process. The holders are referenced directly (not the composition-local nullable
+        // vals) so toggling section visibility can not leave a pipeline running after dispose.
+        DisposableEffect(Unit) {
+            onDispose {
+                sharedAnimeScreenModel.setLibraryPipelineActive(false)
+                sharedMangaScreenModel.setLibraryPipelineActive(false)
+                sharedNovelScreenModel.setLibraryPipelineActive(false)
+            }
+        }
         LaunchedEffect(isAurora, auroraCurrentSection, showMangaSection, showNovelSection, novelScreenModel) {
+            screenModel.setLibraryPipelineActive(true)
             if (!isAurora) {
                 mangaScreenModel.setLibraryPipelineActive(true)
                 novelScreenModel?.setLibraryPipelineActive(true)
@@ -358,20 +412,39 @@ data object AnimeLibraryTab : Tab {
             if (showMangaSection) mangaScreenModel.setLibraryPipelineActive(true)
             if (showNovelSection) novelScreenModel?.setLibraryPipelineActive(true)
         }
-        val animeDisplayMode by remember(useSeparateDisplayModePerMedia) {
+        // G1: PreferenceMutableState registers a permanent preference collector in the screen
+        // model scope per creation, and the classic-content lambdas below used to create a
+        // fresh one on EVERY pager page recomposition (unbounded coroutine/listener leak).
+        // Create them once per tab and hand out the cached instances.
+        val animeDisplayModePref = remember(useSeparateDisplayModePerMedia) {
             screenModel.getDisplayMode(useSeparateDisplayModePerMedia)
         }
-        val mangaDisplayMode by remember(useSeparateDisplayModePerMedia) {
+        val animeDisplayMode by animeDisplayModePref
+        val mangaDisplayModePref = remember(useSeparateDisplayModePerMedia) {
             mangaScreenModel.getDisplayMode(useSeparateDisplayModePerMedia)
         }
-        val animeColumns by remember(isLandscape) {
-            screenModel.getColumnsPreferenceForCurrentOrientation(isLandscape)
+        val mangaDisplayMode by mangaDisplayModePref
+        val animeColumnsPortraitPref = remember {
+            screenModel.getColumnsPreferenceForCurrentOrientation(false)
         }
-        val mangaColumns by remember(isLandscape) {
-            mangaScreenModel.getColumnsPreferenceForCurrentOrientation(isLandscape)
+        val animeColumnsLandscapePref = remember {
+            screenModel.getColumnsPreferenceForCurrentOrientation(true)
         }
+        val animeColumns by if (isLandscape) animeColumnsLandscapePref else animeColumnsPortraitPref
+        val mangaColumnsPortraitPref = remember {
+            mangaScreenModel.getColumnsPreferenceForCurrentOrientation(false)
+        }
+        val mangaColumnsLandscapePref = remember {
+            mangaScreenModel.getColumnsPreferenceForCurrentOrientation(true)
+        }
+        val mangaColumns by if (isLandscape) mangaColumnsLandscapePref else mangaColumnsPortraitPref
 
         val snackbarHostState = remember { SnackbarHostState() }
+        // D7: single-flight guard shared by the continue actions - a double tap used to launch
+        // two players/readers (or push two novel reader screens).
+        var continueActionInFlight by remember { mutableStateOf(false) }
+        // H15: scroll positions are retained in the object-level auroraScrollPositions map -
+        // they survive both page-slot disposal and navigator pushes.
         val epubImportLauncher = rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenMultipleDocuments(),
             onResult = { uris ->
@@ -424,7 +497,6 @@ data object AnimeLibraryTab : Tab {
         var showNovelTranslatedChapterPickerDialog by remember { mutableStateOf(false) }
         var novelTranslatedPickerFormat by remember { mutableStateOf(NovelTranslatedDownloadFormat.TXT) }
         var novelTranslatedPickerChapters by remember { mutableStateOf<List<DomainNovelChapter>>(emptyList()) }
-        var pendingNovelSearchQuery by remember { mutableStateOf<String?>(null) }
         val updatingAnimeMessage = context.stringResource(AYMR.strings.aurora_updating_anime)
         val updatingMangaMessage = context.stringResource(AYMR.strings.aurora_updating_manga)
         val updatingNovelMessage = context.stringResource(MR.strings.updating_library)
@@ -573,7 +645,9 @@ data object AnimeLibraryTab : Tab {
                 LaunchedEffect(pagerState) {
                     snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
                         .collect { (page, scrolling) ->
-                            if (!scrolling) {
+                            // B3: skip transient empty-category settles (pageCount = 0 right after
+                            // returning from a pushed screen) and redundant rewrites of the same page.
+                            if (!scrolling && pagerState.pageCount > 0 && page != screenModel.activeCategoryIndex) {
                                 screenModel.activeCategoryIndex = page
                             }
                         }
@@ -591,6 +665,29 @@ data object AnimeLibraryTab : Tab {
                     userScrollEnabled = swipeSwitchesCategories && state.categories.size > 1,
                 ) { page ->
                     val items = state.getAnimelibItemsByPage(page)
+                    // H15: retained per-(section, category, display mode) scroll states - the
+                    // page slot dies outside the ±1 window and took the scroll position with it.
+                    val scrollCategoryId = state.categories.getOrNull(page)?.id ?: -1L
+                    val scrollKey = Triple(Section.Anime, scrollCategoryId, animeDisplayMode)
+                    val restoredScroll = auroraScrollPositions[scrollKey]
+                    val retainedListState = remember(scrollKey) {
+                        LazyListState(restoredScroll?.first ?: 0, restoredScroll?.second ?: 0)
+                    }
+                    val retainedGridState = remember(scrollKey) {
+                        LazyGridState(restoredScroll?.first ?: 0, restoredScroll?.second ?: 0)
+                    }
+                    DisposableEffect(scrollKey) {
+                        onDispose {
+                            val (index, offset) = if (animeDisplayMode == LibraryDisplayMode.List) {
+                                retainedListState.firstVisibleItemIndex to
+                                    retainedListState.firstVisibleItemScrollOffset
+                            } else {
+                                retainedGridState.firstVisibleItemIndex to
+                                    retainedGridState.firstVisibleItemScrollOffset
+                            }
+                            auroraScrollPositions[scrollKey] = index to offset
+                        }
+                    }
                     AnimeLibraryAuroraContent(
                         items = items,
                         selection = state.selection,
@@ -607,9 +704,16 @@ data object AnimeLibraryTab : Tab {
                         },
                         onTogglePinned = { screenModel.togglePinned(it.libraryAnime) },
                         onContinueWatchingClicked = { item: LibraryAnime ->
-                            scope.launchIO {
-                                val episode = screenModel.getNextUnseenEpisode(item.anime)
-                                if (episode != null) openEpisode(episode)
+                            if (!continueActionInFlight) {
+                                continueActionInFlight = true
+                                scope.launchIO {
+                                    try {
+                                        val episode = screenModel.getNextUnseenEpisode(item.anime)
+                                        if (episode != null) openEpisode(episode)
+                                    } finally {
+                                        continueActionInFlight = false
+                                    }
+                                }
                             }
                             Unit
                         }.takeIf { showContinueViewingButton },
@@ -618,6 +722,8 @@ data object AnimeLibraryTab : Tab {
                         },
                         contentPadding = contentPadding,
                         libraryPreferences = screenModel.libraryPreferences,
+                        listState = retainedListState,
+                        gridState = retainedGridState,
                     )
                 }
             },
@@ -634,7 +740,11 @@ data object AnimeLibraryTab : Tab {
                 LaunchedEffect(pagerState) {
                     snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
                         .collect { (page, scrolling) ->
-                            if (!scrolling) {
+                            // B3: skip transient empty-category settles (pageCount = 0 right after
+                            // returning from a pushed screen) and redundant rewrites of the same page.
+                            if (!scrolling && pagerState.pageCount > 0 &&
+                                page != mangaScreenModel.activeCategoryIndex
+                            ) {
                                 mangaScreenModel.activeCategoryIndex = page
                             }
                         }
@@ -651,6 +761,28 @@ data object AnimeLibraryTab : Tab {
                     userScrollEnabled = swipeSwitchesCategories && mangaState.categories.size > 1,
                 ) { page ->
                     val items = mangaState.getLibraryItemsByPage(page)
+                    // H15: retained scroll states (see the anime section page).
+                    val scrollCategoryId = mangaState.categories.getOrNull(page)?.id ?: -1L
+                    val scrollKey = Triple(Section.Manga, scrollCategoryId, mangaDisplayMode)
+                    val restoredScroll = auroraScrollPositions[scrollKey]
+                    val retainedListState = remember(scrollKey) {
+                        LazyListState(restoredScroll?.first ?: 0, restoredScroll?.second ?: 0)
+                    }
+                    val retainedGridState = remember(scrollKey) {
+                        LazyGridState(restoredScroll?.first ?: 0, restoredScroll?.second ?: 0)
+                    }
+                    DisposableEffect(scrollKey) {
+                        onDispose {
+                            val (index, offset) = if (mangaDisplayMode == LibraryDisplayMode.List) {
+                                retainedListState.firstVisibleItemIndex to
+                                    retainedListState.firstVisibleItemScrollOffset
+                            } else {
+                                retainedGridState.firstVisibleItemIndex to
+                                    retainedGridState.firstVisibleItemScrollOffset
+                            }
+                            auroraScrollPositions[scrollKey] = index to offset
+                        }
+                    }
                     MangaLibraryAuroraContent(
                         items = items,
                         selection = mangaState.selection,
@@ -668,16 +800,23 @@ data object AnimeLibraryTab : Tab {
                         },
                         onTogglePinned = mangaScreenModel::togglePinned,
                         onContinueReadingClicked = { item: LibraryManga ->
-                            scope.launchIO {
-                                val chapter = mangaScreenModel.getNextUnreadChapter(item.manga)
-                                if (chapter != null) {
-                                    context.startActivity(
-                                        ReaderActivity.newIntent(context, chapter.mangaId, chapter.id),
-                                    )
-                                } else {
-                                    snackbarHostState.showSnackbar(
-                                        context.stringResource(MR.strings.no_next_chapter),
-                                    )
+                            if (!continueActionInFlight) {
+                                continueActionInFlight = true
+                                scope.launchIO {
+                                    try {
+                                        val chapter = mangaScreenModel.getNextUnreadChapter(item.manga)
+                                        if (chapter != null) {
+                                            context.startActivity(
+                                                ReaderActivity.newIntent(context, chapter.mangaId, chapter.id),
+                                            )
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                context.stringResource(MR.strings.no_next_chapter),
+                                            )
+                                        }
+                                    } finally {
+                                        continueActionInFlight = false
+                                    }
                                 }
                             }
                             Unit
@@ -687,6 +826,8 @@ data object AnimeLibraryTab : Tab {
                         },
                         contentPadding = contentPadding,
                         libraryPreferences = mangaScreenModel.libraryPreferences,
+                        listState = retainedListState,
+                        gridState = retainedGridState,
                     )
                 }
             },
@@ -706,7 +847,12 @@ data object AnimeLibraryTab : Tab {
                 LaunchedEffect(pagerState) {
                     snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
                         .collect { (page, scrolling) ->
-                            if (!scrolling) {
+                            // B3: skip transient empty-category settles (pageCount = 0 right after
+                            // returning from a pushed screen) and redundant rewrites of the same page.
+                            if (!scrolling &&
+                                pagerState.pageCount > 0 &&
+                                page != activeNovelScreenModel.activeCategoryIndex
+                            ) {
                                 activeNovelScreenModel.activeCategoryIndex = page
                             }
                         }
@@ -767,16 +913,23 @@ data object AnimeLibraryTab : Tab {
                             navigator.push(GlobalNovelSearchScreen(novelState.searchQuery ?: ""))
                         },
                         onContinueReadingClicked = { item: eu.kanade.presentation.library.novel.NovelLibraryItem ->
-                            scope.launch {
-                                val chapter = withContext(Dispatchers.IO) {
-                                    activeNovelScreenModel.getNextUnreadChapter(item)
-                                }
-                                if (chapter != null) {
-                                    navigator.push(NovelReaderScreen(chapter.id))
-                                } else {
-                                    snackbarHostState.showSnackbar(
-                                        context.stringResource(MR.strings.no_next_chapter),
-                                    )
+                            if (!continueActionInFlight) {
+                                continueActionInFlight = true
+                                scope.launch {
+                                    try {
+                                        val chapter = withContext(Dispatchers.IO) {
+                                            activeNovelScreenModel.getNextUnreadChapter(item)
+                                        }
+                                        if (chapter != null) {
+                                            navigator.push(NovelReaderScreen(chapter.id))
+                                        } else {
+                                            snackbarHostState.showSnackbar(
+                                                context.stringResource(MR.strings.no_next_chapter),
+                                            )
+                                        }
+                                    } finally {
+                                        continueActionInFlight = false
+                                    }
                                 }
                             }
                             Unit
@@ -813,9 +966,11 @@ data object AnimeLibraryTab : Tab {
             }
         }
 
-        LaunchedEffect(auroraPagerState.currentPage, auroraPageCount, isAurora) {
+        // H18: persist on SETTLED page - an aborted swipe used to write the section pref twice
+        // (flip at 50% + spring-back).
+        LaunchedEffect(auroraPagerState.settledPage, auroraPageCount, isAurora) {
             if (isAurora) {
-                sectionAtPage(auroraPagerState.currentPage.coerceAtMost(auroraPageCount - 1))?.let {
+                sectionAtPage(auroraPagerState.settledPage.coerceAtMost(auroraPageCount - 1))?.let {
                     lastAuroraSection = it
                     userProfilePreferences.libraryLastSection().set(it.name.lowercase(Locale.ROOT))
                 }
@@ -872,10 +1027,7 @@ data object AnimeLibraryTab : Tab {
             when (auroraCurrentSection) {
                 Section.Anime -> screenModel.search(query)
                 Section.Manga -> mangaScreenModel.search(query)
-                Section.Novel -> {
-                    pendingNovelSearchQuery = query
-                    novelScreenModel?.search(query)
-                }
+                Section.Novel -> novelScreenModel?.search(query)
                 null -> Unit
             }
         }
@@ -1101,9 +1253,7 @@ data object AnimeLibraryTab : Tab {
                         LibraryBottomActionMenu(
                             visible = state.selectionMode,
                             onChangeCategoryClicked = screenModel::openChangeCategoryDialog,
-                            onTogglePinnedClicked = { pinned ->
-                                state.selection.forEach { screenModel.setPinned(it, pinned) }
-                            },
+                            onTogglePinnedClicked = screenModel::setPinnedSelection,
                             isPinned = state.selection.fastAll { it.pinned },
                             onMarkAsViewedClicked = { screenModel.markSeenSelection(true) },
                             onMarkAsUnviewedClicked = { screenModel.markSeenSelection(false) },
@@ -1124,9 +1274,7 @@ data object AnimeLibraryTab : Tab {
                         LibraryBottomActionMenu(
                             visible = mangaState.selectionMode,
                             onChangeCategoryClicked = mangaScreenModel::openChangeCategoryDialog,
-                            onTogglePinnedClicked = { pinned ->
-                                mangaState.selection.forEach { mangaScreenModel.setPinned(it, pinned) }
-                            },
+                            onTogglePinnedClicked = mangaScreenModel::setPinnedSelection,
                             isPinned = mangaState.selection.fastAll { it.pinned },
                             onMarkAsViewedClicked = { mangaScreenModel.markReadSelection(true) },
                             onMarkAsUnviewedClicked = { mangaScreenModel.markReadSelection(false) },
@@ -1165,9 +1313,7 @@ data object AnimeLibraryTab : Tab {
                             visible = novelState.selectionMode,
                             onChangeCategoryClicked = { novelScreenModel?.openChangeCategoryDialog() },
                             onTogglePinnedClicked = { pinned ->
-                                novelScreenModel?.let { screenModel ->
-                                    novelState.selection.forEach { screenModel.setPinned(it, pinned) }
-                                }
+                                novelScreenModel?.setPinnedSelection(pinned)
                             },
                             isPinned = novelState.selection.fastAll { it.pinned },
                             onMarkAsViewedClicked = { novelScreenModel?.markReadSelection(true) },
@@ -1235,6 +1381,8 @@ data object AnimeLibraryTab : Tab {
                                 AuroraLibraryPinnedHeader(
                                     title = stringResource(AYMR.strings.label_titles),
                                     tabs = auroraTabs,
+                                    // H18-refined: currentPage keeps the pill highlight in sync
+                                    // with the sliding posters (settledPage lagged them).
                                     selectedSectionIndex = auroraPagerState.currentPage.coerceIn(
                                         0,
                                         (auroraTabs.size - 1).coerceAtLeast(0),
@@ -1312,9 +1460,17 @@ data object AnimeLibraryTab : Tab {
                             onCategoryLongSelected = screenModel::selectAll,
                             onAnimeClicked = { navigator.push(AnimeScreen(it)) },
                             onContinueWatchingClicked = { it: LibraryAnime ->
-                                scope.launchIO {
-                                    val episode = screenModel.getNextUnseenEpisode(it.anime)
-                                    if (episode != null) openEpisode(episode)
+                                // D7: single-flight guard - a double tap used to launch two players.
+                                if (!continueActionInFlight) {
+                                    continueActionInFlight = true
+                                    scope.launchIO {
+                                        try {
+                                            val episode = screenModel.getNextUnseenEpisode(it.anime)
+                                            if (episode != null) openEpisode(episode)
+                                        } finally {
+                                            continueActionInFlight = false
+                                        }
+                                    }
                                 }
                                 Unit
                             }.takeIf { state.showAnimeContinueButton },
@@ -1331,13 +1487,9 @@ data object AnimeLibraryTab : Tab {
                                 )
                             },
                             getNumberOfAnimeForCategory = { state.getAnimeCountForCategory(it) },
-                            getDisplayMode = {
-                                screenModel.getDisplayMode(useSeparateDisplayModePerMedia)
-                            },
-                            getColumnsForOrientation = {
-                                screenModel.getColumnsPreferenceForCurrentOrientation(
-                                    it,
-                                )
+                            getDisplayMode = { animeDisplayModePref },
+                            getColumnsForOrientation = { landscape ->
+                                if (landscape) animeColumnsLandscapePref else animeColumnsPortraitPref
                             },
                         ) { state.getAnimelibItemsByPage(it) }
                     }
@@ -1382,7 +1534,7 @@ data object AnimeLibraryTab : Tab {
                         screenModel.removeAnimes(dialog.anime, deleteAnime, deleteEpisode)
                         screenModel.clearSelection()
                     },
-                    isManga = false,
+                    entryType = DeleteLibraryEntryType.Anime,
                 )
             }
             null -> {}
@@ -1426,7 +1578,7 @@ data object AnimeLibraryTab : Tab {
                         mangaScreenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
                         mangaScreenModel.clearSelection()
                     },
-                    isManga = true,
+                    entryType = DeleteLibraryEntryType.Manga,
                 )
             }
             MangaLibraryScreenModel.Dialog.CreateSeries -> {
@@ -1471,13 +1623,16 @@ data object AnimeLibraryTab : Tab {
                 }
                 is NovelLibraryScreenModel.Dialog.DeleteNovels -> {
                     DeleteLibraryEntryDialog(
-                        containsLocalEntry = false,
+                        // H1: was hardcoded false - imported local EPUB/FB2 novels always offered
+                        // the "delete downloaded" checkbox the other two sections suppress for
+                        // local entries; the copy was manga-flavored (isManga = true).
+                        containsLocalEntry = dialog.novels.any { it.isLocal() },
                         onDismissRequest = activeNovelScreenModel::closeDialog,
                         onConfirm = { deleteFromLibrary, deleteChapters ->
                             activeNovelScreenModel.removeNovels(dialog.novels, deleteFromLibrary, deleteChapters)
                             activeNovelScreenModel.clearSelection()
                         },
-                        isManga = true,
+                        entryType = DeleteLibraryEntryType.Novel,
                     )
                 }
                 NovelLibraryScreenModel.Dialog.CreateSeries -> {
@@ -1645,14 +1800,41 @@ data object AnimeLibraryTab : Tab {
             novelSelectionMode = novelState.selectionMode,
         )
 
-        BackHandler(
-            enabled = currentSelectionMode ||
-                hasAnimeSearchQuery ||
-                (
-                    isAurora &&
-                        (hasMangaSearchQuery || hasNovelSearchQuery)
-                    ),
-        ) {
+        // Q8/D6: leaving a section clears its selection - a hidden multi-select used to survive
+        // section switches: the bottom nav reappeared and back exited the library while bulk
+        // actions were still armed in the other section. Keyed on the SETTLED page so an
+        // aborted swipe clears nothing.
+        val settledSection = if (isAurora) {
+            sectionAtPage(auroraPagerState.settledPage.coerceAtMost(auroraPageCount - 1))
+        } else {
+            null
+        }
+        var previousSettledSection by remember { mutableStateOf(settledSection) }
+        LaunchedEffect(settledSection) {
+            val previous = previousSettledSection
+            previousSettledSection = settledSection
+            if (previous == null || previous == settledSection) return@LaunchedEffect
+            when (previous) {
+                Section.Anime -> if (screenModel.state.value.selectionMode) screenModel.clearSelection()
+                Section.Manga -> if (mangaScreenModel.state.value.selectionMode) mangaScreenModel.clearSelection()
+                Section.Novel -> {
+                    val novelModel = novelScreenModel
+                    if (novelModel != null && novelModel.state.value.selectionMode) novelModel.clearSelection()
+                }
+                null -> Unit
+            }
+        }
+
+        // Q10: back acts on the CURRENT section only. The old fallback branches cleared other
+        // sections' invisible searches, eating a back press with no visible effect; the C1
+        // route-intent makes cross-section invisible queries unreachable anyway.
+        val currentSectionHasSearch = when (currentSection) {
+            Section.Anime -> hasAnimeSearchQuery
+            Section.Manga -> hasMangaSearchQuery
+            Section.Novel -> hasNovelSearchQuery
+            null -> false
+        }
+        BackHandler(enabled = currentSelectionMode || currentSectionHasSearch) {
             when {
                 currentSelectionMode -> {
                     when (currentSection) {
@@ -1662,17 +1844,14 @@ data object AnimeLibraryTab : Tab {
                         null -> Unit
                     }
                 }
-                isAurora -> {
-                    when {
-                        currentSection == Section.Novel && hasNovelSearchQuery -> novelScreenModel?.search(null)
-                        currentSection == Section.Manga && hasMangaSearchQuery -> mangaScreenModel.search(null)
-                        currentSection == Section.Anime && hasAnimeSearchQuery -> screenModel.search(null)
-                        hasNovelSearchQuery -> novelScreenModel?.search(null)
-                        hasMangaSearchQuery -> mangaScreenModel.search(null)
-                        hasAnimeSearchQuery -> screenModel.search(null)
+                else -> {
+                    when (currentSection) {
+                        Section.Anime -> screenModel.search(null)
+                        Section.Manga -> mangaScreenModel.search(null)
+                        Section.Novel -> novelScreenModel?.search(null)
+                        null -> Unit
                     }
                 }
-                hasAnimeSearchQuery -> screenModel.search(null)
             }
         }
 
@@ -1686,76 +1865,100 @@ data object AnimeLibraryTab : Tab {
             }
         }
 
+        // C7: read the routing inputs through rememberUpdatedState - the LaunchedEffect(Unit)
+        // closure would otherwise capture first-composition values (stale section indices).
+        val currentIsAurora by rememberUpdatedState(isAurora)
+        val currentSectionTabs by rememberUpdatedState(sectionTabs)
+        val currentAuroraPageCount by rememberUpdatedState(auroraPageCount)
         LaunchedEffect(Unit) {
-            launch { queryEvent.receiveAsFlow().collect(screenModel::search) }
-            launch { mangaQueryEvent.receiveAsFlow().collect { mangaScreenModel.search(it) } }
-            launch {
-                novelQueryEvent.receiveAsFlow().collect { query ->
-                    pendingNovelSearchQuery = query
-                    novelScreenModel?.search(query)
-                }
-            }
-            launch { requestSettingsSheetEvent.receiveAsFlow().collectLatest { screenModel.showSettingsDialog() } }
-            launch {
-                requestSectionEvent.receiveAsFlow().collectLatest { section ->
-                    if (!isAurora) return@collectLatest
-                    val targetPage = when (section) {
-                        Section.Anime -> sectionTabs.indexOfFirst { it.first == Section.Anime }
-                        Section.Manga -> sectionTabs.indexOfFirst { it.first == Section.Manga }
-                        Section.Novel -> novelTabIndex
-                    }
-                    if (targetPage in 0 until auroraPageCount && auroraPagerState.currentPage != targetPage) {
+            routeIntent.collect { intent ->
+                intent ?: return@collect
+                // Consume-once: a later composition (after push/pop recreation) must not
+                // re-apply an intent that was already handled.
+                if (!routeIntent.compareAndSet(intent, null)) return@collect
+
+                val targetSection = intent.section
+                if (targetSection != null && currentIsAurora) {
+                    val targetPage = currentSectionTabs.indexOfFirst { it.first == targetSection }
+                    if (targetPage in 0 until currentAuroraPageCount &&
+                        auroraPagerState.currentPage != targetPage
+                    ) {
                         auroraPagerState.scrollToPage(targetPage)
                     }
                 }
+
+                val query = intent.query
+                if (query != null) {
+                    when (targetSection) {
+                        Section.Anime -> screenModel.search(query)
+                        Section.Manga -> mangaScreenModel.search(query)
+                        Section.Novel -> novelScreenModel?.search(query)
+                        null -> Unit
+                    }
+                }
+
+                if (intent.openSettings) {
+                    // C4: reselect used to always open the ANIME settings sheet even while a
+                    // Manga/Novel section was visible; resolve the section actually on screen.
+                    val visibleSection = if (currentIsAurora) {
+                        resolveAuroraLibrarySection(
+                            currentSectionTabs.map { it.first },
+                            auroraPagerState.settledPage,
+                        )
+                    } else {
+                        Section.Anime
+                    }
+                    when (visibleSection) {
+                        Section.Anime -> screenModel.showSettingsDialog()
+                        Section.Manga -> mangaScreenModel.showSettingsDialog()
+                        Section.Novel -> novelScreenModel?.showSettingsDialog()
+                        null -> screenModel.showSettingsDialog()
+                    }
+                }
             }
         }
-        LaunchedEffect(novelScreenModel, pendingNovelSearchQuery) {
-            val query = pendingNovelSearchQuery ?: return@LaunchedEffect
-            val activeNovelScreenModel = novelScreenModel ?: return@LaunchedEffect
-            activeNovelScreenModel.search(query)
-            pendingNovelSearchQuery = null
-        }
     }
-
-    // For invoking search from other screen
-    private val queryEvent = Channel<String>()
-    suspend fun search(query: String) = queryEvent.send(query)
-
-    private val mangaQueryEvent = Channel<String>()
 
     /**
-     * Searches the section the user is actually in (per the persisted Aurora section) instead
-     * of always landing on anime — mirrors [searchNovel]'s section routing.
+     * One-shot routing intent (C1/C5/C6): section switch + search query + settings request,
+     * applied atomically by the collector in [Content]. Replaces the rendezvous/buffered channel
+     * zoo whose sends were silently lost when the tab was not composed (rendezvous with no
+     * receiver), raced each other (section and query traveled separate channels), or applied
+     * twice (pendingNovelSearchQuery + direct search). The StateFlow keeps at most one pending
+     * intent (last wins); the collector consumes it exactly once.
      */
-    suspend fun searchActive(query: String) {
-        when (lastAuroraSection) {
-            Section.Anime -> {
-                requestSection(Section.Anime)
-                queryEvent.send(query)
-            }
-            Section.Manga -> {
-                requestSection(Section.Manga)
-                mangaQueryEvent.send(query)
-            }
-            Section.Novel -> searchNovel(query)
-        }
+    private data class LibraryRouteIntent(
+        val section: Section? = null,
+        val query: String? = null,
+        val openSettings: Boolean = false,
+    )
+
+    private val routeIntent = MutableStateFlow<LibraryRouteIntent?>(null)
+
+    // For invoking search from other screens
+    suspend fun search(query: String) {
+        routeIntent.value = LibraryRouteIntent(section = Section.Anime, query = query)
     }
 
-    private val novelQueryEvent = Channel<String>(capacity = Channel.BUFFERED)
+    suspend fun searchManga(query: String) {
+        routeIntent.value = LibraryRouteIntent(section = Section.Manga, query = query)
+    }
+
     suspend fun searchNovel(query: String) {
-        requestSection(Section.Novel)
-        novelQueryEvent.send(query)
+        routeIntent.value = LibraryRouteIntent(section = Section.Novel, query = query)
     }
 
-    private val requestSectionEvent = Channel<Section>(capacity = Channel.BUFFERED)
-    suspend fun requestSection(section: Section) = requestSectionEvent.send(section)
+    suspend fun requestSection(section: Section) {
+        routeIntent.value = LibraryRouteIntent(section = section)
+    }
+
     suspend fun showNovelSection() = requestSection(Section.Novel)
     suspend fun showMangaSection() = requestSection(Section.Manga)
 
-    // For opening settings sheet in LibraryController
-    private val requestSettingsSheetEvent = Channel<Unit>()
-    private suspend fun requestOpenSettingsSheet() = requestSettingsSheetEvent.send(Unit)
+    // For opening settings sheet in LibraryController (onReselect)
+    private suspend fun requestOpenSettingsSheet() {
+        routeIntent.value = LibraryRouteIntent(openSettings = true)
+    }
 }
 
 @Composable
@@ -2439,10 +2642,18 @@ internal fun formatAuroraLibraryCategoryBadgeCount(
         return "$AURORA_LIBRARY_CATEGORY_BADGE_LIMIT+"
     }
     if (!groupDigits) return count.toString()
-    return NumberFormat.getIntegerInstance(locale).format(count)
+    return auroraBadgeNumberFormat(locale).format(count)
 }
 
 private const val AURORA_LIBRARY_CATEGORY_BADGE_LIMIT = 99
+
+// H16: NumberFormat.getIntegerInstance is an expensive java.text factory; the badge formatter
+// ran it per category tab on every header recomposition. Main-thread (composition) access only.
+private val auroraBadgeNumberFormatsByLocale = HashMap<Locale, NumberFormat>()
+
+private fun auroraBadgeNumberFormat(locale: Locale): NumberFormat {
+    return auroraBadgeNumberFormatsByLocale.getOrPut(locale) { NumberFormat.getIntegerInstance(locale) }
+}
 
 /**
  * Decides whether the Aurora library should propagate a category index back to the section's

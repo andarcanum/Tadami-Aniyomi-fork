@@ -66,6 +66,23 @@ fun MangaLibraryContent(
         val scope = rememberCoroutineScope()
         var isRefreshing by remember(pagerState.currentPage) { mutableStateOf(false) }
 
+        // B2 (port of the Aurora tab sync): keep the pager in agreement with the persisted model
+        // index. Without model->pager sync a grouping-change reset (index = 0) never moved the
+        // pager, so the toolbar title, the sort/filter sheet and pull-to-refresh targeted a
+        // different category than the one shown; the clamp write-back retires a stale persisted
+        // index after categories shrink. Both are skipped while the category list is transiently
+        // empty so the index is not reset for good.
+        val coercedModelPage = currentPage().coerceIn(0, categories.lastIndex.coerceAtLeast(0))
+        LaunchedEffect(coercedModelPage, categories.size) {
+            if (categories.isEmpty()) return@LaunchedEffect
+            if (coercedModelPage != currentPage()) {
+                onChangeCurrentPage(coercedModelPage)
+            }
+            if (coercedModelPage != pagerState.currentPage) {
+                pagerState.animateScrollToPage(coercedModelPage)
+            }
+        }
+
         if (showPageTabs && categories.size > 1) {
             LaunchedEffect(categories) {
                 if (categories.size <= pagerState.currentPage) {
@@ -132,7 +149,9 @@ fun MangaLibraryContent(
         LaunchedEffect(pagerState) {
             snapshotFlow { pagerState.currentPage to pagerState.isScrollInProgress }
                 .collect { (page, scrolling) ->
-                    if (!scrolling) {
+                    // B3: skip transient empty-category settles (pageCount = 0 right after
+                    // returning from a pushed screen) and redundant rewrites of the same page.
+                    if (!scrolling && pagerState.pageCount > 0 && page != currentPage()) {
                         onChangeCurrentPage(page)
                     }
                 }

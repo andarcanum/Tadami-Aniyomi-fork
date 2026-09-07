@@ -41,7 +41,11 @@ internal fun UnviewedBadge(count: Long) {
     // rendered unconditionally in every display mode (only the novel side gated its own badge
     // state). Gate at the shared choke point; idempotent with the novel-side pre-gating.
     val libraryPreferences = remember { Injekt.get<LibraryPreferences>() }
-    val showUnreadBadge by libraryPreferences.unreadBadge().collectAsStateWithLifecycle()
+    // H2: remember the Preference INSTANCE - unreadBadge() returns a fresh identity-only object
+    // on every call, so collectAsState's remember(this) missed on every recomposition and
+    // rebuilt the flow chain, the coroutine and the SharedPreferences listener PER VISIBLE ITEM.
+    val unreadBadgePref = remember(libraryPreferences) { libraryPreferences.unreadBadge() }
+    val showUnreadBadge by unreadBadgePref.collectAsStateWithLifecycle()
     if (showUnreadBadge && count > 0) {
         Badge(text = "$count")
     }
@@ -60,7 +64,9 @@ internal fun LanguageBadge(
         )
     } else if (sourceLanguage.isNotEmpty()) {
         Badge(
-            text = sourceLanguage.uppercase(),
+            // H12: locale-sensitive uppercase() mangled ISO codes under a Turkish locale
+            // ("id"/"is"/"it" -> "İD"/"İS"/"İT").
+            text = sourceLanguage.uppercase(java.util.Locale.ROOT),
             color = MaterialTheme.colorScheme.tertiary,
             textColor = MaterialTheme.colorScheme.onTertiary,
         )

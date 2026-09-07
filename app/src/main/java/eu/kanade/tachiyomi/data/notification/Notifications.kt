@@ -70,6 +70,12 @@ object Notifications {
     const val GROUP_NEW_NOVEL_CHAPTERS = "eu.kanade.tachiyomi.NEW_NOVEL_CHAPTERS"
     const val GROUP_NEW_EPISODES = "eu.kanade.tachiyomi.NEW_EPISODES"
 
+    // Per-entry new-update notification tags: anime and manga table ids both start at 1, so
+    // untagged per-entry ids (id.hashCode()) collided across media running in parallel and the
+    // second post silently replaced the first.
+    const val TAG_NEW_EPISODES = "eu.kanade.tachiyomi.TAG_NEW_EPISODES"
+    const val TAG_NEW_CHAPTERS = "eu.kanade.tachiyomi.TAG_NEW_CHAPTERS"
+
     /**
      * Notification channel and ids used by the backup/restore system.
      */
@@ -136,7 +142,9 @@ object Notifications {
         "downloader_complete_channel",
         "backup_restore_complete_channel",
         "library_channel",
-        "library_progress_channel",
+        // I20: "library_progress_channel" (== CHANNEL_LIBRARY_PROGRESS) was listed here by
+        // mistake - createChannels deleted the ACTIVE progress channel on every cold start
+        // (wiping posted progress notifications) and then recreated it.
         "updates_ext_channel",
         "downloader_cache_renewal",
         "crash_logs_channel",

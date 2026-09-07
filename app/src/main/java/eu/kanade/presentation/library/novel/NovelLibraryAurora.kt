@@ -546,7 +546,8 @@ private fun NovelLibraryAuroraCard(
         readCount = item.readCount,
         totalCount = item.totalChapters,
     )
-    val textSpec = resolveGlowContourLibraryTextSpec(glowDisplayMode)
+    // H8: was allocated per item; the anime side resolves it once at grid level.
+    val textSpec = remember(glowDisplayMode) { resolveGlowContourLibraryTextSpec(glowDisplayMode) }
     val cornerIndicatorState = resolveGlowContourCornerIndicatorState(
         hasContinueAction = onClickContinueReading != null,
         remainingCount = item.unreadCount,
@@ -577,7 +578,6 @@ private fun NovelLibraryAuroraCard(
             cardAspectRatio = 0.76f,
             cornerIndicatorState = cornerIndicatorState,
             textSpec = textSpec,
-            genres = item.coverNovel?.genre ?: emptyList(),
             enabledAuras = enabledAuras,
             performanceMode = performanceMode,
             badge = if (badgeState.hasBadge()) {
@@ -706,7 +706,8 @@ private fun NovelAuroraBadgeGroup(
         }
         badgeState.language?.let {
             Badge(
-                text = it.uppercase(),
+                // H12: locale-sensitive uppercase() mangled ISO language codes.
+                text = it.uppercase(java.util.Locale.ROOT),
                 color = badgeContainerColor,
                 textColor = badgeTextColor,
                 shape = RoundedCornerShape(4.dp),
@@ -806,7 +807,8 @@ private fun NovelLibraryAuroraCoverOnlyCard(
                     }
                     badgeState.language?.let {
                         Badge(
-                            text = it.uppercase(),
+                            // H12: locale-sensitive uppercase() mangled ISO language codes.
+                            text = it.uppercase(java.util.Locale.ROOT),
                             color = colors.accent,
                             textColor = colors.textOnAccent,
                             shape = RoundedCornerShape(4.dp),

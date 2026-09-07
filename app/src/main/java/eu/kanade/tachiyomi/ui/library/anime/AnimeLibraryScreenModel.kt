@@ -29,6 +29,7 @@ import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadCache
 import eu.kanade.tachiyomi.data.download.anime.AnimeDownloadManager
 import eu.kanade.tachiyomi.data.track.TrackerManager
 import eu.kanade.tachiyomi.ui.library.LibrarySearchQuery
+import eu.kanade.tachiyomi.ui.library.leadingDebounce
 import eu.kanade.tachiyomi.ui.library.resolveLibraryRangeSelectionAdditions
 import eu.kanade.tachiyomi.ui.library.sortPinnedFirst
 import eu.kanade.tachiyomi.util.episode.getNextUnseen
@@ -48,17 +49,20 @@ import kotlinx.collections.immutable.toPersistentMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import tachiyomi.core.common.preference.CheckboxState
@@ -114,6 +118,7 @@ class AnimeLibraryScreenModel(
     private val downloadManager: AnimeDownloadManager = Injekt.get(),
     private val downloadCache: AnimeDownloadCache = Injekt.get(),
     private val trackerManager: TrackerManager = Injekt.get(),
+    private val startActive: Boolean = true,
     private val libraryDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : StateScreenModel<AnimeLibraryScreenModel.State>(
     State(
@@ -129,87 +134,132 @@ class AnimeLibraryScreenModel(
         screenModelScope,
     )
 
+    // F1: one shared instance - the raw factory was subscribed 4+ times inside the same
+    // pipeline, and each copy emitted independently into the top-level combine, so a single
+    // preference toggle re-ran the full O(N log N) library recompute up to 4 times.
+    private val sharedItemPreferencesFlow: Flow<ItemPreferences> =
+        getAnimelibItemPreferencesFlow()
+            .distinctUntilChanged()
+            .shareIn(screenModelScope, SharingStarted.Eagerly, replay = 1)
+
+    private val libraryPipelineActive = MutableStateFlow(startActive)
+
+    /** I21: visibility gate - the tab stops the pipeline when it leaves composition. */
+    fun setLibraryPipelineActive(active: Boolean) {
+        libraryPipelineActive.value = active
+    }
+
     init {
         screenModelScope.launch {
-            val baseLibraryFlow = combine(
-                getLibraryFlow(),
-                getTracksPerAnime.subscribe(),
-                getTrackingFilterFlow(),
-                state.map { it.groupType }.distinctUntilChanged(),
-                getDownloadFilterInvalidationFlow(),
-                getAnimelibItemPreferencesFlow(),
-            ) { flowsArray ->
-                @Suppress("UNCHECKED_CAST")
-                val library = flowsArray[0] as AnimeLibraryMap
+            // I21: visibility-gated pipeline (manga/novel mirror this structure) - with the
+            // tab-held models (J1) the screen model outlives composition, so the full library
+            // recompute must stop when the library tab is not composed.
+            libraryPipelineActive
+                .flatMapLatest { active ->
+                    if (!active) {
+                        emptyFlow<Triple<AnimeLibraryMap, List<String>, Int>>()
+                    } else {
+                        val baseLibraryFlow = combine(
+                            getLibraryFlow(),
+                            getTracksPerAnime.subscribe(),
+                            getTrackingFilterFlow(),
+                            state.map { it.groupType }.distinctUntilChanged(),
+                            getDownloadFilterInvalidationFlow(),
+                            sharedItemPreferencesFlow,
+                        ) { flowsArray ->
+                            @Suppress("UNCHECKED_CAST")
+                            val library = flowsArray[0] as AnimeLibraryMap
 
-                @Suppress("UNCHECKED_CAST")
-                val tracks = flowsArray[1] as Map<Long, List<AnimeTrack>>
+                            @Suppress("UNCHECKED_CAST")
+                            val tracks = flowsArray[1] as Map<Long, List<AnimeTrack>>
 
-                @Suppress("UNCHECKED_CAST")
-                val trackingFilter = flowsArray[2] as Map<Long, TriState>
-                val groupType = flowsArray[3] as Int
-                val itemPreferences = flowsArray[5] as ItemPreferences
-                val hasActiveFilters = itemPreferences.hasActiveFilters(trackingFilter)
-                val sourceCategories = library.keys.toList()
+                            @Suppress("UNCHECKED_CAST")
+                            val trackingFilter = flowsArray[2] as Map<Long, TriState>
+                            val groupType = flowsArray[3] as Int
+                            val itemPreferences = flowsArray[5] as ItemPreferences
+                            val hasActiveFilters = itemPreferences.hasActiveFilters(trackingFilter)
+                            val sourceCategories = library.keys.toList()
 
-                val languageCache = HashMap<Long, String>()
-                val libraryLanguages = library.values.flatten()
-                    .map { item ->
-                        languageCache.getOrPut(item.libraryAnime.anime.source) {
-                            sourceManager.getOrStub(item.libraryAnime.anime.source).lang
+                            val languageCache = HashMap<Long, String>()
+                            // F4: collect the language set in place - the whole-library flatten+map ran on
+                            // every emission and allocated an item-sized list just to derive a tiny set.
+                            val languageSet = HashSet<String>()
+                            library.values.forEach { items ->
+                                items.forEach { item ->
+                                    val source = item.libraryAnime.anime.source
+                                    languageSet += languageCache.getOrPut(source) {
+                                        sourceManager.getOrStub(source).lang
+                                    }
+                                }
+                            }
+                            val libraryLanguages = languageSet.sorted()
+
+                            AnimeBaseLibraryResult(
+                                groupType = groupType,
+                                hasActiveFilters = hasActiveFilters,
+                                libraryLanguages = libraryLanguages,
+                                library = library
+                                    .applyFilters(itemPreferences, tracks, trackingFilter)
+                                    // E1: grouping BEFORE sorting - applySort sorts each map key's list, and
+                                    // the pseudo-categories produced by applyGrouping carry the effective
+                                    // global sort in their flags (SetSortModeForAnimeCategory persists it
+                                    // when grouping is active). The old order sorted only within real
+                                    // categories, so grouped views showed a concatenation of per-category
+                                    // runs and the sort selection was silently ignored.
+                                    .applyGrouping(groupType, tracks)
+                                    .applySort(tracks, trackingFilter.keys)
+                                    .withFilteredEmptyPlaceholder(sourceCategories, hasActiveFilters),
+                            )
+                        }
+
+                        combine(
+                            baseLibraryFlow,
+                            state.map { it.searchQuery }.distinctUntilChanged()
+                                .leadingDebounce(SEARCH_DEBOUNCE_MILLIS),
+                        ) { baseLibrary, searchQuery ->
+                            val librarySearchQuery = searchQuery?.let(::LibrarySearchQuery)
+                            // F4: with no active query the per-category lists are unchanged - rebuilding
+                            // the whole PersistentMap on every emission was pure allocation churn.
+                            val searchedMap = if (librarySearchQuery == null) {
+                                baseLibrary.library
+                            } else {
+                                baseLibrary.library
+                                    .mapValues { (_, value) ->
+                                        value.filter { it.matches(librarySearchQuery, sourceManager) }
+                                            .toPersistentList()
+                                    }
+                                    .toPersistentMap()
+                            }
+                            val filteredMap = if (
+                                baseLibrary.groupType == LibraryGroup.BY_DEFAULT ||
+                                searchQuery != null ||
+                                baseLibrary.hasActiveFilters
+                            ) {
+                                // Keep categories visible when searching so empty-result pages can
+                                // still show the global search action.
+                                searchedMap
+                            } else {
+                                searchedMap.filterValues { it.isNotEmpty() }.toPersistentMap()
+                            }
+                            // F2: deduped entry count computed here (background dispatcher), once per
+                            // emission - the per-State lazy recomputed flatten+distinctBy over the WHOLE
+                            // library on MAIN for every selection/keystroke state copy.
+                            val libraryCount = filteredMap.values
+                                .flatten()
+                                .fastDistinctBy { it.libraryAnime.anime.id }
+                                .size
+                            Triple(filteredMap, baseLibrary.libraryLanguages, libraryCount)
                         }
                     }
-                    .distinct()
-                    .sorted()
-
-                AnimeBaseLibraryResult(
-                    groupType = groupType,
-                    hasActiveFilters = hasActiveFilters,
-                    libraryLanguages = libraryLanguages,
-                    library = library
-                        .applyFilters(itemPreferences, tracks, trackingFilter)
-                        .applySort(tracks, trackingFilter.keys)
-                        .applyGrouping(groupType, tracks)
-                        .withFilteredEmptyPlaceholder(sourceCategories, hasActiveFilters),
-                )
-            }
-
-            combine(
-                baseLibraryFlow,
-                state.map { it.searchQuery }.distinctUntilChanged().debounce(SEARCH_DEBOUNCE_MILLIS),
-            ) { baseLibrary, searchQuery ->
-                val librarySearchQuery = searchQuery?.let(::LibrarySearchQuery)
-                val filteredMap = baseLibrary.library
-                    .mapValues { (_, value) ->
-                        if (librarySearchQuery != null) {
-                            value.filter { it.matches(librarySearchQuery, sourceManager) }.toPersistentList()
-                        } else {
-                            value
-                        }
-                    }
-                    .toPersistentMap()
-                    .let { map ->
-                        if (
-                            baseLibrary.groupType == LibraryGroup.BY_DEFAULT ||
-                            searchQuery != null ||
-                            baseLibrary.hasActiveFilters
-                        ) {
-                            // Keep categories visible when searching so empty-result pages can
-                            // still show the global search action.
-                            map
-                        } else {
-                            map.filterValues { it.isNotEmpty() }.toPersistentMap()
-                        }
-                    }
-                filteredMap to baseLibrary.libraryLanguages
-            }
+                }
                 .flowOn(libraryDispatcher)
-                .collectLatest { (libraryMap, libraryLanguages) ->
+                .collectLatest { (libraryMap, libraryLanguages, libraryCount) ->
                     mutableState.update { state ->
                         state.copy(
                             isLoading = false,
                             library = libraryMap,
                             libraryLanguages = libraryLanguages,
+                            libraryCount = libraryCount,
                         )
                     }
                 }
@@ -232,7 +282,7 @@ class AnimeLibraryScreenModel(
             .launchIn(screenModelScope)
 
         combine(
-            getAnimelibItemPreferencesFlow(),
+            sharedItemPreferencesFlow,
             getTrackingFilterFlow(),
         ) { prefs, trackFilter ->
             prefs.hasActiveFilters(trackFilter)
@@ -245,7 +295,7 @@ class AnimeLibraryScreenModel(
             }
             .launchIn(screenModelScope)
 
-        getAnimelibItemPreferencesFlow()
+        sharedItemPreferencesFlow
             .onEach { prefs ->
                 mutableState.update { state ->
                     state.copy(languageFilter = prefs.filterLanguages)
@@ -261,6 +311,11 @@ class AnimeLibraryScreenModel(
                 if (isGlobal) globalType else mediaType
             }
             .onEach { groupType ->
+                // B1: the pref flows emit their current value at collection start. Resetting
+                // activeCategoryIndex on that initial emission zeroed the persisted "last used
+                // category" on every screen model creation (category restore was dead). React
+                // only to an actual group type change.
+                if (state.value.groupType == groupType) return@onEach
                 mutableState.update { it.copy(groupType = groupType) }
                 activeCategoryIndex = 0
             }
@@ -268,9 +323,13 @@ class AnimeLibraryScreenModel(
     }
 
     private fun getDownloadFilterInvalidationFlow(): Flow<Unit> {
-        return getAnimelibItemPreferencesFlow()
-            .flatMapLatest { prefs ->
-                if (prefs.globalFilterDownloaded || prefs.filterDownloaded != TriState.DISABLED) {
+        return sharedItemPreferencesFlow
+            // F1: gate on the CONDITION, not the whole prefs object - any unrelated preference
+            // change used to restart this flow and re-emit into the pipeline.
+            .map { it.globalFilterDownloaded || it.filterDownloaded != TriState.DISABLED }
+            .distinctUntilChanged()
+            .flatMapLatest { enabled ->
+                if (enabled) {
                     downloadCache.changes.conflate()
                 } else {
                     flowOf(Unit)
@@ -279,9 +338,11 @@ class AnimeLibraryScreenModel(
     }
 
     private fun getDownloadBadgeInvalidationFlow(): Flow<Unit> {
-        return getAnimelibItemPreferencesFlow()
-            .flatMapLatest { prefs ->
-                if (prefs.downloadBadge) {
+        return sharedItemPreferencesFlow
+            .map { it.downloadBadge } // F1: see getDownloadFilterInvalidationFlow
+            .distinctUntilChanged()
+            .flatMapLatest { enabled ->
+                if (enabled) {
                     downloadCache.changes.conflate()
                 } else {
                     flowOf(Unit)
@@ -697,7 +758,7 @@ class AnimeLibraryScreenModel(
     private fun getLibraryFlow(): Flow<AnimeLibraryMap> {
         val animelibAnimesFlow = combine(
             getLibraryAnime.subscribe(),
-            getAnimelibItemPreferencesFlow(),
+            sharedItemPreferencesFlow,
             getDownloadBadgeInvalidationFlow(),
         ) { animelibAnimeList, prefs, _ ->
             animelibAnimeList
@@ -881,13 +942,26 @@ class AnimeLibraryScreenModel(
     }
 
     fun setPinned(anime: LibraryAnime, pinned: Boolean) {
-        screenModelScope.launchIO {
+        // D1: non-cancellable - a tab switch mid-write used to silently drop the pin.
+        screenModelScope.launchNonCancellable {
             updateAnime.await(
                 AnimeUpdate(
                     id = anime.id,
                     pinned = pinned,
                 ),
             )
+        }
+    }
+
+    /**
+     * D1: one non-cancellable batch for the bottom-menu pin action - the previous per-item
+     * cancellable launches could be cut in half by a tab switch (partial pin application).
+     */
+    fun setPinnedSelection(pinned: Boolean) {
+        val updates = state.value.selection.map { AnimeUpdate(id = it.id, pinned = pinned) }
+        if (updates.isEmpty()) return
+        screenModelScope.launchNonCancellable {
+            updateAnime.awaitAll(updates)
         }
     }
 
@@ -916,34 +990,39 @@ class AnimeLibraryScreenModel(
         }
     }
 
+    // G1: cache the preference-backed states per model - every asState() call registers a
+    // permanent collector in screenModelScope, and callers (pager pages, dialogs) used to
+    // create fresh instances per recomposition (unbounded leak).
+    private val separateDisplayModeState by lazy {
+        libraryPreferences.animeDisplayMode().asState(screenModelScope)
+    }
+    private val sharedDisplayModeState by lazy {
+        libraryPreferences.displayMode().asState(screenModelScope)
+    }
+    private val portraitColumnsState by lazy {
+        libraryPreferences.animePortraitColumns().asState(screenModelScope)
+    }
+    private val landscapeColumnsState by lazy {
+        libraryPreferences.animeLandscapeColumns().asState(screenModelScope)
+    }
+
     fun getDisplayMode(useSeparateDisplayModePerMedia: Boolean): PreferenceMutableState<LibraryDisplayMode> {
-        return (
-            if (useSeparateDisplayModePerMedia) {
-                libraryPreferences.animeDisplayMode()
-            } else {
-                libraryPreferences.displayMode()
-            }
-            ).asState(screenModelScope)
+        return if (useSeparateDisplayModePerMedia) separateDisplayModeState else sharedDisplayModeState
     }
 
     fun getColumnsPreferenceForCurrentOrientation(isLandscape: Boolean): PreferenceMutableState<Int> {
-        return (
-            if (isLandscape) {
-                libraryPreferences.animeLandscapeColumns()
-            } else {
-                libraryPreferences.animePortraitColumns()
-            }
-            ).asState(
-            screenModelScope,
-        )
+        return if (isLandscape) landscapeColumnsState else portraitColumnsState
     }
 
     suspend fun getRandomAnimelibItemForCurrentCategory(): AnimeLibraryItem? {
-        if (state.value.categories.isEmpty()) return null
-
         return withIOContext {
-            state.value
-                .getAnimelibItemsByCategoryId(state.value.categories[activeCategoryIndex].id)
+            // D-M8 (anime port): activeCategoryIndex is a persistent pref that can go stale when
+            // categories shrink - indexed access crashed with IOOB. The single snapshot also
+            // removes the TOCTOU of re-reading state.value across the suspension.
+            val snapshot = state.value
+            snapshot.categories
+                .getOrNull(activeCategoryIndex)
+                ?.let { snapshot.getAnimelibItemsByCategoryId(it.id) }
                 ?.randomOrNull()
         }
     }
@@ -976,9 +1055,14 @@ class AnimeLibraryScreenModel(
     fun toggleRangeSelection(anime: LibraryAnime) {
         mutableState.update { state ->
             val newSelection = state.selection.mutate { list ->
-                val visibleGroups = state.library.values.map { items ->
-                    items.fastMap { it.libraryAnime }
-                }
+                // F5: only the group that actually contains the target can contribute - copying
+                // EVERY visible group per long-press-drag event was an O(library) allocation
+                // on the main thread.
+                val targetGroup = state.library.values
+                    .firstOrNull { items -> items.fastAny { it.libraryAnime.id == anime.id } }
+                val visibleGroups = targetGroup
+                    ?.let { items -> listOf(items.fastMap { it.libraryAnime }) }
+                    .orEmpty()
                 val newSelections = resolveLibraryRangeSelectionAdditions(
                     selectedItems = list,
                     targetItem = anime,
@@ -1008,8 +1092,10 @@ class AnimeLibraryScreenModel(
 
     fun invertSelection(index: Int) {
         mutableState.update { state ->
+            // D-M8 (anime port): guard the stale index (selectAll already uses getOrNull; this
+            // sibling did not) - invert from the toolbar crashed with IOOB after categories shrank.
+            val categoryId = state.categories.getOrNull(index)?.id ?: return@update state
             val newSelection = state.selection.mutate { list ->
-                val categoryId = state.categories[index].id
                 val items = state.getAnimelibItemsByCategoryId(categoryId)?.fastMap { it.libraryAnime }.orEmpty()
                 val selectedIds = state.selectedIds
                 val (toRemove, toAdd) = items.fastPartition { it.id in selectedIds }
@@ -1117,6 +1203,7 @@ class AnimeLibraryScreenModel(
         val hasActiveFilters: Boolean = false,
         val languageFilter: Set<String> = emptySet(),
         val libraryLanguages: List<String> = emptyList(),
+        val libraryCount: Int = 0,
         val showCategoryTabs: Boolean = false,
         val showAnimeCount: Boolean = false,
         val showAnimeContinueButton: Boolean = false,
@@ -1131,13 +1218,11 @@ class AnimeLibraryScreenModel(
         val rawItems: List<AnimeLibraryItem>
             get() = items
 
-        private val libraryCount by lazy {
-            items
-                .fastDistinctBy { it.libraryAnime.anime.id }
-                .size
-        }
-
-        val isLibraryEmpty by lazy { libraryCount == 0 }
+        // F2: libraryCount is a pipeline-computed field now (see the second combine) - the
+        // per-State lazy recomputed flatten+distinctBy over the whole library on MAIN for
+        // every selection/keystroke state copy that read isLibraryEmpty or the toolbar count.
+        val isLibraryEmpty: Boolean
+            get() = libraryCount == 0
 
         val selectionMode = selection.isNotEmpty()
 

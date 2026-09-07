@@ -1,9 +1,15 @@
 package eu.kanade.tachiyomi.data.library.updateerror
 
 import android.app.Application
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import uy.kohesive.injekt.Injekt
@@ -41,7 +47,12 @@ object LibraryUpdateErrorStore {
     private const val KEY_ERRORS = "errors"
     private const val KEY_LAST_TAB = "last_tab"
 
+    // I12: coalescing window for disk persistence (see schedulePersist).
+    private const val PERSIST_DEBOUNCE_MILLIS = 500L
+
     private val ids = AtomicLong(0L)
+
+    private val storeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun getLastSelectedTab(): LibraryUpdateErrorMedia {
         val name = prefs().getString(KEY_LAST_TAB, null) ?: return LibraryUpdateErrorMedia.Novel
@@ -51,8 +62,35 @@ object LibraryUpdateErrorStore {
     fun setLastSelectedTab(media: LibraryUpdateErrorMedia) {
         prefs().edit().putString(KEY_LAST_TAB, media.name).apply()
     }
-    private val _errors = MutableStateFlow(loadPersistedErrors())
+
+    // I13: the persisted blob (disk read + JSON parse of up to 1500 records) used to load
+    // synchronously during object init on whichever thread touched the store first - that is
+    // MAIN via the error screen model's constructor. Load once on IO instead; until it lands
+    // the flow serves an empty list (the screen renders its loading state anyway).
+    private val _errors = MutableStateFlow<List<LibraryUpdateErrorRecord>>(emptyList())
     val errors: StateFlow<List<LibraryUpdateErrorRecord>> = _errors.asStateFlow()
+
+    init {
+        storeScope.launch {
+            val persisted = loadPersistedErrors()
+            if (persisted.isEmpty()) return@launch
+            val persistedMaxId = persisted.maxOf { it.id }
+            mutate { current ->
+                if (current.isEmpty()) {
+                    ids.updateAndGet { maxOf(it, persistedMaxId) }
+                    persisted
+                } else {
+                    // Live writers already assigned ids from a fresh counter before the load
+                    // landed; re-key the persisted records (ids are internal) to avoid id
+                    // collisions, and let live records win on (media, entryId).
+                    val liveKeys = current.mapTo(HashSet()) { it.media to it.entryId }
+                    persisted
+                        .filterNot { (it.media to it.entryId) in liveKeys }
+                        .map { it.copy(id = ids.incrementAndGet()) } + current
+                }
+            }
+        }
+    }
 
     fun upsert(
         media: LibraryUpdateErrorMedia,
@@ -83,7 +121,9 @@ object LibraryUpdateErrorStore {
                 runType = runType,
                 occurredAt = Instant.now().toEpochMilli(),
             )
-            (withoutPrevious + next).trimAndSort()
+            // I12: no trimAndSort here - mutate() already sorts (this was the second of two
+            // full sorts per upsert).
+            withoutPrevious + next
         }
     }
 
@@ -118,7 +158,21 @@ object LibraryUpdateErrorStore {
         // JSON rewrite when the list did not actually change.
         if (next == _errors.value) return
         _errors.value = next
-        persist(next)
+        schedulePersist(next)
+    }
+
+    // I12: coalesced persistence - every real mutation used to re-serialize the WHOLE list
+    // (up to 1500 records) to JSON synchronously on the caller's thread (including MAIN for
+    // UI deletes); a dead source with hundreds of failures meant hundreds of full rewrites.
+    // In-memory state updates immediately; the disk write is debounced onto the IO scope.
+    private var persistJob: Job? = null
+
+    private fun schedulePersist(records: List<LibraryUpdateErrorRecord>) {
+        persistJob?.cancel()
+        persistJob = storeScope.launch {
+            delay(PERSIST_DEBOUNCE_MILLIS)
+            persist(records)
+        }
     }
 
     private fun List<LibraryUpdateErrorRecord>.trimAndSort(): List<LibraryUpdateErrorRecord> {
@@ -153,7 +207,6 @@ object LibraryUpdateErrorStore {
                     }
                 }
             }.trimAndSort()
-            ids.set(records.maxOfOrNull { it.id } ?: 0L)
             records
         }.getOrDefault(emptyList())
     }

@@ -596,9 +596,22 @@ class App : Application(), DefaultLifecycleObserver, SingletonImageLoader.Factor
             val libraryPreferences = Injekt.get<tachiyomi.domain.library.service.LibraryPreferences>()
             val autoUpdateInterval = libraryPreferences.autoUpdateInterval().get()
             if (autoUpdateInterval == -1) {
-                MangaLibraryUpdateJob.startNow(this)
-                AnimeLibraryUpdateJob.startNow(this)
-                NovelLibraryUpdateJob.startNow(this)
+                // I7 (Q9): per-media "Never" (0) and per-media intervals override the global
+                // "At app start" - the scheduler honored them, this foreground path started
+                // all three sections unconditionally.
+                fun runsAtAppStart(mediaPref: Int): Boolean {
+                    val effective = if (mediaPref == -2) autoUpdateInterval else mediaPref
+                    return effective == -1
+                }
+                if (runsAtAppStart(libraryPreferences.mangaUpdateInterval().get())) {
+                    MangaLibraryUpdateJob.startNow(this)
+                }
+                if (runsAtAppStart(libraryPreferences.animeUpdateInterval().get())) {
+                    AnimeLibraryUpdateJob.startNow(this)
+                }
+                if (runsAtAppStart(libraryPreferences.novelUpdateInterval().get())) {
+                    NovelLibraryUpdateJob.startNow(this)
+                }
             }
         }
     }

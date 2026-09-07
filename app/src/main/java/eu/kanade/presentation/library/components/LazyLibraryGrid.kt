@@ -14,6 +14,11 @@ import androidx.compose.ui.unit.dp
 import tachiyomi.presentation.core.components.FastScrollLazyVerticalGrid
 import tachiyomi.presentation.core.util.plus
 
+// H13: constant modifier inputs were re-allocated on every grid recomposition.
+private val LIBRARY_GRID_CONTENT_EXTRA_PADDING = PaddingValues(8.dp)
+private val LIBRARY_GRID_VERTICAL_ARRANGEMENT = Arrangement.spacedBy(CommonEntryItemDefaults.GridVerticalSpacer)
+private val LIBRARY_GRID_HORIZONTAL_ARRANGEMENT = Arrangement.spacedBy(CommonEntryItemDefaults.GridHorizontalSpacer)
+
 @Composable
 internal fun LazyLibraryGrid(
     modifier: Modifier = Modifier,
@@ -34,9 +39,9 @@ internal fun LazyLibraryGrid(
         columns = gridCells,
         state = state,
         modifier = modifier,
-        contentPadding = contentPadding + PaddingValues(8.dp),
-        verticalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridVerticalSpacer),
-        horizontalArrangement = Arrangement.spacedBy(CommonEntryItemDefaults.GridHorizontalSpacer),
+        contentPadding = contentPadding + LIBRARY_GRID_CONTENT_EXTRA_PADDING,
+        verticalArrangement = LIBRARY_GRID_VERTICAL_ARRANGEMENT,
+        horizontalArrangement = LIBRARY_GRID_HORIZONTAL_ARRANGEMENT,
         content = content,
     )
 }
@@ -48,7 +53,9 @@ fun LazyGridScope.globalSearchItem(
     if (!searchQuery.isNullOrEmpty()) {
         item(
             span = { GridItemSpan(maxLineSpan) },
-            contentType = { "library_global_search_item" },
+            // H13: contentType is a value (Any?), not a lambda - the function object only
+            // worked because a non-capturing lambda compiles to a singleton.
+            contentType = "library_global_search_item",
         ) {
             GlobalSearchItem(
                 searchQuery = searchQuery,

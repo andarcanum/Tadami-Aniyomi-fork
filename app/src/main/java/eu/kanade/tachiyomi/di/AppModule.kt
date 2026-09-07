@@ -43,6 +43,8 @@ import eu.kanade.tachiyomi.data.download.manga.MangaDownloadCache
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadManager
 import eu.kanade.tachiyomi.data.download.manga.MangaDownloadProvider
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCache
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.data.saver.ImageSaver
 import eu.kanade.tachiyomi.data.sync.service.GoogleDriveService
 import eu.kanade.tachiyomi.data.track.TrackerManager
@@ -773,6 +775,10 @@ class AppModule(val app: Application) : InjektModule {
         addSingletonFactory { AnimeDownloadManager(app) }
         addSingletonFactory { AnimeDownloadCache(app) }
         addSingletonFactory { NovelDownloadCache() }
+        // F9: shared singletons - per-screen NovelDownloadManager instances defeated the SAF
+        // scan caches (the same pattern was already fixed once elsewhere, see BMG-10).
+        addSingletonFactory { NovelDownloadManager() }
+        addSingletonFactory { NovelTranslatedDownloadManager() }
 
         addSingletonFactory { TrackerManager(app) }
         addSingletonFactory { DelayedAnimeTrackingStore(app) }

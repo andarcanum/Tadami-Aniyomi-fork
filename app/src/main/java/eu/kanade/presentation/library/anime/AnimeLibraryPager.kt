@@ -26,6 +26,7 @@ import eu.kanade.core.preference.PreferenceMutableState
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.idsToHashSet
 import eu.kanade.tachiyomi.ui.library.anime.AnimeLibraryItem
+import tachiyomi.domain.category.model.Category
 import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.i18n.MR
@@ -35,6 +36,7 @@ import tachiyomi.presentation.core.util.plus
 @Composable
 fun AnimeLibraryPager(
     state: PagerState,
+    categories: List<Category>,
     contentPadding: PaddingValues,
     hasActiveFilters: Boolean,
     selectedAnime: List<LibraryAnime>,
@@ -85,7 +87,10 @@ fun AnimeLibraryPager(
             val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             val columns by remember(isLandscape) { getColumnsForOrientation(isLandscape) }
 
-            val categoryId = library.firstOrNull()?.libraryAnime?.category ?: -1L
+            // D-L (anime port): key the scroll restore on the page's ACTUAL category. The first
+            // item's category was wrong for pseudo-groupings (UNGROUPED/BY_STATUS/... keep the
+            // original per-item categories, colliding across pages) and every empty page shared -1.
+            val categoryId = categories.getOrNull(page)?.id ?: -1L
 
             when (displayMode) {
                 LibraryDisplayMode.List -> {

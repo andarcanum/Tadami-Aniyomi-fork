@@ -1466,6 +1466,7 @@
     <string name="novel_plugin_cache_cleared">Novel plugin cache cleared</string>
     <string name="anime_from_library">Anime from library</string>
     <string name="downloaded_episodes">Downloaded episodes</string>
+    <string name="novel_from_library">Novel from library</string>
     <string name="local_manga_source">Local manga source</string>
     <string name="local_anime_source">Local anime source</string>
     <string name="local_novel_source">Local novel source</string>
