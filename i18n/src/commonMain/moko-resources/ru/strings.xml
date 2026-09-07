@@ -1718,6 +1718,16 @@
     <string name="reels_login_button">Войти</string>
     <string name="reels_custom_feeds">Мои ленты</string>
     <string name="reels_custom_feeds_empty">Пока нет своих лент</string>
+    <string name="reels_web_login_title">Вход на странице сайта</string>
+    <string name="reels_web_login_done">Готово</string>
+    <string name="reels_web_login_not_yet">Сессия пока не обнаружена — завершите вход и нажмите «Готово»</string>
+    <string name="reels_niches">Ниши</string>
+    <string name="reels_niches_empty">Пока нет ниш</string>
+    <string name="reels_search_tab_niches">Ниши</string>
+    <string name="reels_search_tab_creators">Креаторы</string>
+    <string name="reels_search_tab_tags">Теги</string>
+    <string name="reels_content_prefs">Настройки контента</string>
+    <string name="reels_content_prefs_empty">Нет доступных настроек контента</string>
     <string name="reels_custom_feed_new">Новая лента</string>
     <string name="reels_custom_feed_edit">Изменить ленту</string>
     <string name="reels_custom_feed_delete">Удалить ленту</string>

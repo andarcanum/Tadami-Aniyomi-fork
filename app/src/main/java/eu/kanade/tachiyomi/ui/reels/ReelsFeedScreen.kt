@@ -63,7 +63,9 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
+import eu.kanade.tachiyomi.animesource.model.SearchSuggestionKind
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.SourceFilterAnimeDialog
+import eu.kanade.tachiyomi.ui.reels.components.ReelsContentPreferencesSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsCustomFeedsSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsEmptySearchState
 import eu.kanade.tachiyomi.ui.reels.components.ReelsErrorState
@@ -72,6 +74,7 @@ import eu.kanade.tachiyomi.ui.reels.components.ReelsNextPageLoader
 import eu.kanade.tachiyomi.ui.reels.components.ReelsSourcePickerSheet
 import eu.kanade.tachiyomi.ui.reels.components.ReelsTopBar
 import eu.kanade.tachiyomi.ui.reels.components.ReelsVideoPage
+import eu.kanade.tachiyomi.ui.reels.components.ReelsWebLoginDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -94,6 +97,10 @@ data class ReelsFeedScreen(
     // creator/following/offline playlists.
     val customFeedId: String? = null,
     val customFeedName: String? = null,
+    // Contract v20: one category's feed (nicheId != null). Mutually exclusive with the modes
+    // above and offline playlists.
+    val nicheId: String? = null,
+    val nicheName: String? = null,
 ) : Screen {
     // Voyager disposes screens (and their ScreenModels) by screen.key. The default key is only
     // the class name, so a popped offline playlist would share the live feed's key and never be
@@ -103,7 +110,7 @@ data class ReelsFeedScreen(
     // ride the same rule: their keys must include creator/followingFeed.
     override val key: String
         get() = "ReelsFeedScreen:$sourceId:$initialPage:${initialFavorites.hashCode()}" +
-            ":$creator:$followingFeed:$customFeedId"
+            ":$creator:$followingFeed:$customFeedId:$nicheId"
 
     @Composable
     override fun Content() {
@@ -133,6 +140,8 @@ data class ReelsFeedScreen(
                 followingFeed = followingFeed,
                 customFeedId = customFeedId,
                 customFeedName = customFeedName,
+                nicheId = nicheId,
+                nicheName = nicheName,
             )
         }
         val state by screenModel.state.collectAsStateWithLifecycle()
@@ -422,7 +431,8 @@ data class ReelsFeedScreen(
                 visible = !landscapeFullscreen &&
                     (
                         chromeVisible || state.isSearchBarOpen || state.isFilterDialogOpen ||
-                            state.isSourcePickerOpen || state.isLoginDialogOpen || state.isCustomFeedsOpen
+                            state.isSourcePickerOpen || state.isLoginDialogOpen || state.isCustomFeedsOpen ||
+                            state.isWebLoginDialogOpen
                         ),
                 modifier = Modifier.align(Alignment.TopCenter),
             ) {
@@ -435,6 +445,8 @@ data class ReelsFeedScreen(
                             "@${state.creator.orEmpty()}"
                         state.mode == ReelsFeedScreenModel.FeedMode.CUSTOM ->
                             state.customFeedName.orEmpty()
+                        state.mode == ReelsFeedScreenModel.FeedMode.NICHE ->
+                            state.nicheName.orEmpty()
                         else -> state.sourceName
                     },
                     sourceIcon = state.sourceIcons[state.currentSourceId],
@@ -453,6 +465,27 @@ data class ReelsFeedScreen(
                     // Source-supplied chips for the search bar (contract v19 addendum);
                     // empty => the TopBar's static popular list.
                     searchHints = state.searchHints,
+                    // Categorized search tabs (contract v20) with preview rows.
+                    searchSuggestions = state.searchSuggestions,
+                    onSuggestionClick = { suggestion ->
+                        when (suggestion.kind) {
+                            SearchSuggestionKind.NICHE -> navigator.push(
+                                ReelsFeedScreen(
+                                    sourceId = state.currentSourceId,
+                                    nicheId = suggestion.id,
+                                    nicheName = suggestion.label,
+                                ),
+                            )
+                            SearchSuggestionKind.CREATOR -> navigator.push(
+                                ReelsFeedScreen(
+                                    sourceId = state.currentSourceId,
+                                    creator = suggestion.id,
+                                ),
+                            )
+                            SearchSuggestionKind.TAG -> screenModel.search(suggestion.label)
+                        }
+                    },
+                    onSuggestionsRequest = screenModel::requestSearchSuggestions,
                     // Favorites stays a direct circle; personal content groups into the account hub.
                     // Source switching lives on the title badge only — one affordance per action.
                     // Account hub (V1): login state, custom feeds, Following, login/logout.
@@ -462,18 +495,34 @@ data class ReelsFeedScreen(
                     loggedInAccount = state.loggedInAccount,
                     showCustomFeedsAccountRow = state.isCustomFeedCapable,
                     showFollowsAccountRow = state.isCreatorCapable,
+                    showNichesAccountRow = state.isBrowseCapable &&
+                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL,
+                    showContentPrefsAccountRow = state.isContentPreferencesCapable,
                     showSourcePicker = !state.isOffline &&
                         state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL &&
                         state.availableSources.size > 1,
-                    showFollowToggle = state.mode == ReelsFeedScreenModel.FeedMode.CREATOR &&
-                        state.isCreatorCapable,
-                    isFollowingCreator = state.creator?.let { it in state.followingCreators } == true,
-                    onToggleFollow = { handleFollowToggle(state.creator) },
+                    showFollowToggle =
+                    (state.mode == ReelsFeedScreenModel.FeedMode.CREATOR && state.isCreatorCapable) ||
+                        (state.mode == ReelsFeedScreenModel.FeedMode.NICHE && state.isCategorySubscribable),
+                    isFollowingCreator = if (state.mode == ReelsFeedScreenModel.FeedMode.NICHE) {
+                        state.isCategoryFollowed
+                    } else {
+                        state.creator?.let { it in state.followingCreators } == true
+                    },
+                    onToggleFollow = {
+                        if (state.mode == ReelsFeedScreenModel.FeedMode.NICHE) {
+                            screenModel.toggleCategoryFollow()
+                        } else {
+                            handleFollowToggle(state.creator)
+                        }
+                    },
                     onBackClick = { navigator.pop() },
                     onOpenSourcePicker = { screenModel.toggleSourcePicker(true) },
-                    onLoginRequest = { screenModel.toggleLoginDialog(true) },
+                    onLoginRequest = { screenModel.openLoginFlow() },
                     onLogout = screenModel::logout,
                     onOpenCustomFeeds = { screenModel.toggleCustomFeeds(true) },
+                    onOpenNiches = { navigator.push(ReelsNichesScreen(sourceId = state.currentSourceId)) },
+                    onOpenContentPrefs = { screenModel.toggleContentPreferences(true) },
                     onToggleAutoAdvance = screenModel::toggleAutoAdvance,
                     onToggleCropMode = screenModel::toggleCropMode,
                     onToggleQuality = screenModel::toggleQuality,
@@ -521,6 +570,40 @@ data class ReelsFeedScreen(
                     onLogin = screenModel::login,
                     onLogout = screenModel::logout,
                     onDismiss = { screenModel.toggleLoginDialog(false) },
+                )
+            }
+
+            // Hosted web login WebView (contract v20)
+            if (state.isWebLoginDialogOpen) {
+                screenModel.webLoginUrl()?.let { url ->
+                    ReelsWebLoginDialog(
+                        startUrl = url,
+                        freshStartUrl = { screenModel.ownAuthorizeUrl() },
+                        showHint = state.webLoginHint,
+                        isOwnRedirect = screenModel::isOwnWebLoginRedirect,
+                        stage2Attempt = state.webLoginStage2Attempt,
+                        onSession = { cookies, localStorage ->
+                            screenModel.tryImportWebSession(cookies, localStorage)
+                        },
+                        onDoneSession = { cookies, localStorage ->
+                            screenModel.tryImportWebSessionStage2(cookies, localStorage)
+                        },
+                        onOwnRedirect = { redirectUrl, cookies ->
+                            screenModel.tryImportWebRedirect(redirectUrl, cookies)
+                        },
+                        onDismiss = { screenModel.toggleWebLoginDialog(false) },
+                    )
+                }
+            }
+
+            // Content preferences editor (contract v20)
+            if (state.isContentPreferencesOpen) {
+                ReelsContentPreferencesSheet(
+                    preferences = state.contentPreferences,
+                    isLoading = state.isContentPreferencesLoading,
+                    error = state.contentPreferencesError,
+                    onSave = screenModel::saveContentPreferences,
+                    onDismiss = { screenModel.toggleContentPreferences(false) },
                 )
             }
 

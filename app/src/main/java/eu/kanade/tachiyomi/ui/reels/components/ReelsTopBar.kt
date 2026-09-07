@@ -16,10 +16,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,14 +45,18 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.HighQuality
 import androidx.compose.material.icons.outlined.Subscriptions
+import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +68,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -71,22 +80,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.animesource.model.SearchSuggestion
+import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
-
-private val POPULAR_REELS_TAGS = listOf(
-    "cosplay",
-    "anime",
-    "dance",
-    "3d",
-    "gaming",
-    "music",
-    "art",
-    "kpop",
-    "fitness",
-    "funny",
-)
 
 @Composable
 fun ReelsTopBar(
@@ -105,6 +106,9 @@ fun ReelsTopBar(
     // Real tag list from the source (contract v19 addendum); the static popular list below is
     // the fallback while the source offers no hints.
     searchHints: List<String> = emptyList(),
+    // Categorized search hits (contract v20): rendered as tabs under the chips while a
+    // query is active; null hides the whole block.
+    searchSuggestions: SearchSuggestions? = null,
     showFilter: Boolean = true,
     // Favorites keeps a first-class circle (frequent, one-tap local action) — a hub with a
     // single entry would be pure indirection. Account & personal content (custom feeds,
@@ -119,9 +123,15 @@ fun ReelsTopBar(
     loggedInAccount: String? = null,
     showCustomFeedsAccountRow: Boolean = false,
     showFollowsAccountRow: Boolean = false,
+    // Category browser entry (contract v20): public, not login-gated.
+    showNichesAccountRow: Boolean = false,
+    // Content-preferences entry (contract v20): enabled only while logged in.
+    showContentPrefsAccountRow: Boolean = false,
     onLoginRequest: () -> Unit = {},
     onLogout: () -> Unit = {},
     onOpenCustomFeeds: () -> Unit = {},
+    onOpenNiches: () -> Unit = {},
+    onOpenContentPrefs: () -> Unit = {},
     // Creator chrome (contract v18): Follow/Following action on the creator page. The
     // follows-screen entry moved into the library hub.
     showFollowToggle: Boolean = false,
@@ -140,10 +150,22 @@ fun ReelsTopBar(
     onOpenFilterDialog: () -> Unit,
     onSearch: (String) -> Unit,
     onClearSearch: () -> Unit,
+    onSuggestionClick: (SearchSuggestion) -> Unit = {},
+    onSuggestionsRequest: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
     var textInput by remember(searchQuery) { mutableStateOf(searchQuery) }
+
+    // Live categorized suggestions while typing (site parity), debounced.
+    LaunchedEffect(textInput) {
+        if (textInput.isBlank()) {
+            onSuggestionsRequest("")
+        } else {
+            kotlinx.coroutines.delay(400)
+            onSuggestionsRequest(textInput)
+        }
+    }
     var openHub by remember { mutableStateOf(HubMenu.NONE) }
 
     Column(
@@ -400,9 +422,13 @@ fun ReelsTopBar(
                                 loggedInAccount = loggedInAccount,
                                 showCustomFeedsRow = showCustomFeedsAccountRow,
                                 showFollowsRow = showFollowsAccountRow,
+                                showNichesRow = showNichesAccountRow,
+                                showContentPrefsRow = showContentPrefsAccountRow,
                                 onLoginRequest = onLoginRequest,
                                 onLogout = onLogout,
                                 onOpenCustomFeeds = onOpenCustomFeeds,
+                                onOpenNiches = onOpenNiches,
+                                onOpenContentPrefs = onOpenContentPrefs,
                                 onOpenFollows = onOpenFollows,
                                 onDismiss = { openHub = HubMenu.NONE },
                             )
@@ -594,8 +620,9 @@ fun ReelsTopBar(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    // Source-provided chips when available; the static list is the fallback.
-                    (searchHints.ifEmpty { POPULAR_REELS_TAGS }).forEach { tag ->
+                    // Source-provided chips only: the static fallback list was removed (the source's own
+                    // hints are authoritative; no chips are shown when it supplies none).
+                    searchHints.forEach { tag ->
                         val isSelected = searchQuery.equals(tag, ignoreCase = true)
                         Box(
                             modifier = Modifier
@@ -626,6 +653,121 @@ fun ReelsTopBar(
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
+                    }
+                }
+
+                // Categorized search tabs (contract v20): niches/creators/tags with previews — live
+                // while typing (site parity), not only after submit.
+                if (searchSuggestions != null && textInput.isNotBlank()) {
+                    SearchSuggestionTabs(
+                        suggestions = searchSuggestions,
+                        onSuggestionClick = onSuggestionClick,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Categorized search hits (contract v20): site-like tabs (Niches/Creators/Tags) with preview
+ * rows; empty sections are hidden. Taps route through [onSuggestionClick].
+ */
+@Composable
+private fun SearchSuggestionTabs(
+    suggestions: SearchSuggestions,
+    onSuggestionClick: (SearchSuggestion) -> Unit,
+) {
+    val tabs = listOf(
+        Pair(MR.strings.reels_search_tab_niches, suggestions.niches),
+        Pair(MR.strings.reels_search_tab_creators, suggestions.creators),
+        Pair(MR.strings.reels_search_tab_tags, suggestions.tags),
+    ).filter { it.second.isNotEmpty() }
+    if (tabs.isEmpty()) return
+    var active by remember(tabs.size) { mutableStateOf(0) }
+    val activeIndex = active.coerceIn(0, tabs.size - 1)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        tabs.forEachIndexed { index, tab ->
+            Box(
+                modifier = Modifier
+                    .background(
+                        if (index == activeIndex) {
+                            AuroraTheme.colors.accent.copy(alpha = 0.3f)
+                        } else {
+                            Color.White.copy(alpha = 0.1f)
+                        },
+                        RoundedCornerShape(8.dp),
+                    )
+                    .clickable { active = index }
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    text = "${stringResource(tab.first)} (${tab.second.size})",
+                    color = if (index == activeIndex) AuroraTheme.colors.accent else Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 220.dp),
+    ) {
+        items(tabs[activeIndex].second, key = { it.kind.name + ":" + it.id }) { suggestion ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onSuggestionClick(suggestion) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (suggestion.imageUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(suggestion.imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color.White.copy(alpha = 0.08f)),
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.Tag,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .size(40.dp)
+                            .padding(8.dp),
+                    )
+                }
+                Column {
+                    Text(
+                        text = suggestion.label,
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val subtitle = suggestion.subtitle
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            color = Color.White.copy(alpha = 0.6f),
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                        )
                     }
                 }
             }
@@ -816,9 +958,13 @@ private fun ReelsAccountMenu(
     loggedInAccount: String?,
     showCustomFeedsRow: Boolean,
     showFollowsRow: Boolean,
+    showNichesRow: Boolean,
+    showContentPrefsRow: Boolean,
     onLoginRequest: () -> Unit,
     onLogout: () -> Unit,
     onOpenCustomFeeds: () -> Unit,
+    onOpenNiches: () -> Unit,
+    onOpenContentPrefs: () -> Unit,
     onOpenFollows: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -865,6 +1011,27 @@ private fun ReelsAccountMenu(
                 ) {
                     onOpenFollows()
                     onDismiss()
+                }
+            }
+            if (showNichesRow) {
+                HubMenuRow(
+                    icon = { HubMenuIcon(Icons.Outlined.GridView) },
+                    label = stringResource(MR.strings.reels_niches),
+                ) {
+                    onOpenNiches()
+                    onDismiss()
+                }
+            }
+            if (showContentPrefsRow) {
+                HubMenuRow(
+                    icon = { HubMenuIcon(Icons.Outlined.Tune) },
+                    label = stringResource(MR.strings.reels_content_prefs),
+                    enabled = isLoggedIn,
+                ) {
+                    if (isLoggedIn) {
+                        onOpenContentPrefs()
+                        onDismiss()
+                    }
                 }
             }
             Box(

@@ -7,17 +7,24 @@ import androidx.core.graphics.drawable.toBitmap
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.animesource.AnimeCategorizedSearchSource
+import eu.kanade.tachiyomi.animesource.AnimeCategorySubscriptionSource
+import eu.kanade.tachiyomi.animesource.AnimeContentPreferencesSource
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedWebLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeReelsFeedbackSource
 import eu.kanade.tachiyomi.animesource.AnimeSearchHintsSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
 import eu.kanade.tachiyomi.animesource.model.AnimeFilter
 import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
+import eu.kanade.tachiyomi.animesource.model.ContentPreferenceOption
 import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
 import eu.kanade.tachiyomi.animesource.model.FeedPage
+import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import kotlinx.collections.immutable.ImmutableList
@@ -79,6 +86,10 @@ class ReelsFeedScreenModel(
     // combined with offline playlists or the creator modes above).
     private val customFeedId: String? = null,
     private val customFeedName: String? = null,
+    // Contract v20 niche mode: serves one category feed via AnimeFeedBrowseSource (never
+    // combined with offline playlists or the modes above).
+    private val nicheId: String? = null,
+    private val nicheName: String? = null,
     private val sourceManager: AnimeSourceManager = Injekt.get(),
     private val sourcePreferences: SourcePreferences = Injekt.get(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -100,6 +111,7 @@ class ReelsFeedScreenModel(
     State(
         currentSourceId = initialSourceId,
         customFeedName = customFeedName,
+        nicheName = nicheName,
         isAutoAdvance = sourcePreferences.autoAdvanceReels().get(),
         isCropMode = sourcePreferences.reelsCropMode().get(),
         // Undecided session: always start muted (with the unmute hint); afterwards the
@@ -127,12 +139,13 @@ class ReelsFeedScreenModel(
     }
 
     /** Which feed [loadFeed] generates. Fixed for the model's lifetime (per screen key). */
-    enum class FeedMode { GLOBAL, CREATOR, FOLLOWING, CUSTOM }
+    enum class FeedMode { GLOBAL, CREATOR, FOLLOWING, CUSTOM, NICHE }
 
     private val mode: FeedMode = when {
         followingFeed -> FeedMode.FOLLOWING
         creator != null -> FeedMode.CREATOR
         customFeedId != null -> FeedMode.CUSTOM
+        nicheId != null -> FeedMode.NICHE
         else -> FeedMode.GLOBAL
     }
 
@@ -252,10 +265,15 @@ class ReelsFeedScreenModel(
             val creatorCapable = rawSource is AnimeCreatorFeedSource
             val loginCapable = rawSource is AnimeFeedLoginSource
             val customFeedCapable = rawSource is AnimeCustomFeedSource
+            val webLoginCapable = rawSource is AnimeFeedWebLoginSource
+            val browseCapable = rawSource is AnimeFeedBrowseSource
+            val contentPrefsCapable = rawSource is AnimeContentPreferencesSource
+            val categorySubCapable = rawSource is AnimeCategorySubscriptionSource
             // Non-global modes need their matching capability (e.g. the plugin was downgraded
             // between sessions): refuse instead of silently serving the wrong feed.
             val missingCapability = when (mode) {
                 FeedMode.CUSTOM -> !customFeedCapable
+                FeedMode.NICHE -> !browseCapable
                 FeedMode.GLOBAL -> false
                 else -> !creatorCapable
             }
@@ -263,10 +281,10 @@ class ReelsFeedScreenModel(
                 source = null
                 mutableState.update {
                     it.copy(
-                        error = if (mode == FeedMode.CUSTOM) {
-                            "Source does not support custom feeds"
-                        } else {
-                            "Source does not support creator feeds"
+                        error = when (mode) {
+                            FeedMode.CUSTOM -> "Source does not support custom feeds"
+                            FeedMode.NICHE -> "Source does not support category feeds"
+                            else -> "Source does not support creator feeds"
                         },
                         isLoading = false,
                         isSourcePickerOpen = false,
@@ -313,6 +331,8 @@ class ReelsFeedScreenModel(
                     // loadSearchHints below refills it when the capability exists.
                     searchHints = persistentListOf(),
                     searchQuery = savedQuery,
+                    // Categorized-search tabs (v20) belong to the previous source's query.
+                    searchSuggestions = null,
                     filters = initialFilters,
                     // Player request headers come from the (ABI-stable) AnimeHttpSource.headers —
                     // adding fields to ShortVideoItem would break linkage for extensions compiled
@@ -338,8 +358,24 @@ class ReelsFeedScreenModel(
                         ?.loggedInAccount(),
                     isLoggingIn = false,
                     loginError = null,
+                    // Web login (v20): per source, reset on switch.
+                    isWebLoginCapable = webLoginCapable,
+                    isWebLoginDialogOpen = false,
+                    webLoginHint = false,
+                    webLoginStage2Attempt = 0,
                     // Custom feeds (v19): per source, reset on switch.
                     isCustomFeedCapable = customFeedCapable,
+                    // Category browse (v20): per source, reset on switch.
+                    isBrowseCapable = browseCapable,
+                    // Category subscriptions (v20): per source, reset on switch.
+                    isCategorySubscribable = categorySubCapable,
+                    isCategoryFollowed = false,
+                    // Content preferences (v20): per source, reset on switch.
+                    isContentPreferencesCapable = contentPrefsCapable,
+                    contentPreferences = null,
+                    isContentPreferencesOpen = false,
+                    isContentPreferencesLoading = false,
+                    contentPreferencesError = null,
                     customFeeds = persistentListOf(),
                     isCustomFeedsOpen = false,
                     isCustomFeedsLoading = false,
@@ -351,6 +387,7 @@ class ReelsFeedScreenModel(
             loadPersistedFavorites(newSourceId)
             loadPersistedFollows(newSourceId)
             loadSearchHints()
+            if (mode == FeedMode.NICHE) loadSubscribedCategoryState()
             loadFeed(reset = true)
         } else {
             mutableState.update {
@@ -411,6 +448,11 @@ class ReelsFeedScreenModel(
                         .getCreatorFeed(creator.orEmpty(), page, cursor)
                     mode == FeedMode.CUSTOM -> (src as AnimeCustomFeedSource)
                         .getCustomFeed(customFeedId.orEmpty(), page, cursor)
+                    mode == FeedMode.NICHE -> (src as? AnimeFeedBrowseSource)
+                        ?.getCategoryFeed(nicheId.orEmpty(), page, cursor)
+                        // Capability vanished between the switchSource guard and this load:
+                        // serve an empty terminal page instead of crashing the pager.
+                        ?: FeedPage(videos = emptyList(), hasNextPage = false)
                     query.isNotBlank() -> src.getSearchFeed(page, cursor, query, filters)
                     else -> src.getFeed(page, cursor, filters)
                 }
@@ -733,7 +775,33 @@ class ReelsFeedScreenModel(
         }
         persistUnlessIncognito { sourcePreferences.lastReelsQuery(state.value.currentSourceId).set(trimmed) }
         mutableState.update { it.copy(searchQuery = trimmed, isSearchBarOpen = false) }
+        requestSearchSuggestions(trimmed)
         loadFeed(reset = true)
+    }
+
+    /**
+     * Categorized search hits (contract v20) for the search-panel tabs — requested live while
+     * the user types (site parity) and on submit. A throwing/absent capability leaves the tabs
+     * hidden (null) and never touches the flat stream. A response that races a newer query is
+     * dropped via [suggestionsQuery].
+     */
+    private var suggestionsQuery: String = ""
+
+    fun requestSearchSuggestions(query: String) {
+        val src = source as? AnimeCategorizedSearchSource
+        if (src == null || query.isBlank()) {
+            suggestionsQuery = ""
+            mutableState.update { it.copy(searchSuggestions = null) }
+            return
+        }
+        suggestionsQuery = query
+        screenModelScope.launch(ioDispatcher) {
+            val suggestions = runCatching { src.getCategorizedSearch(query) }.getOrNull()
+            mutableState.update { current ->
+                if (suggestionsQuery != query) return@update current
+                current.copy(searchSuggestions = suggestions)
+            }
+        }
     }
 
     fun clearSearch() {
@@ -748,6 +816,7 @@ class ReelsFeedScreenModel(
                 current.copy(
                     searchQuery = "",
                     isSearchBarOpen = false,
+                    searchSuggestions = null,
                     items = baseItems,
                     seenIds = baseSeenIds,
                     isLoading = false,
@@ -761,7 +830,7 @@ class ReelsFeedScreenModel(
                 )
             }
         } else {
-            mutableState.update { it.copy(searchQuery = "", isSearchBarOpen = false) }
+            mutableState.update { it.copy(searchQuery = "", isSearchBarOpen = false, searchSuggestions = null) }
             loadFeed(reset = true)
         }
     }
@@ -833,6 +902,164 @@ class ReelsFeedScreenModel(
 
     fun toggleLoginDialog(open: Boolean) {
         mutableState.update { it.copy(isLoginDialogOpen = open, loginError = if (open) null else it.loginError) }
+    }
+
+    /** Opens/closes the hosted-web-login WebView dialog (contract v20). */
+    fun toggleWebLoginDialog(open: Boolean) {
+        mutableState.update {
+            it.copy(
+                isWebLoginDialogOpen = open,
+                webLoginHint = if (open) false else it.webLoginHint,
+                webLoginStage2Attempt = if (open) 0 else it.webLoginStage2Attempt,
+            )
+        }
+    }
+
+    /** Login entry routing (contract v20): hosted web flow first, password dialog otherwise. */
+    fun openLoginFlow() {
+        if (state.value.isWebLoginCapable) toggleWebLoginDialog(true) else toggleLoginDialog(true)
+    }
+
+    /** Entry URL for the hosted web login of the current source; null when not capable. */
+    fun webLoginUrl(): String? = (source as? AnimeFeedWebLoginSource)?.webLoginUrl()
+
+    /** Stage-2 PKCE authorize URL (fresh verifier); null when not capable. */
+    fun ownAuthorizeUrl(): String? = (source as? AnimeFeedWebLoginSource)?.ownAuthorizeUrl()
+
+    /**
+     * WebView session import (contract v20). A false answer keeps the dialog open (the host
+     * retries on the next page-finished/Done press) and surfaces [State.webLoginHint]; true
+     * closes the dialog, snapshots the account label and reloads the feed exactly like a
+     * password-login success. Transport failures of the import count as "not yet".
+     */
+    fun tryImportWebSession(cookies: Map<String, String>, localStorage: Map<String, String>) {
+        val webSource = source as? AnimeFeedWebLoginSource ?: return
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val imported = runCatching { webSource.importWebSession(cookies, localStorage) }.getOrDefault(false)
+            if (imported) applyWebLoginSuccess() else mutableState.update { it.copy(webLoginHint = true) }
+        }
+    }
+
+    /** True when [url] is a redirect of the source's own in-flight authorize flow (stage 2). */
+    fun isOwnWebLoginRedirect(url: String): Boolean =
+        (source as? AnimeFeedWebLoginSource)?.isOwnLoginRedirect(url) == true
+
+    /** Stage-2 code exchange (contract v20): same success/failure semantics as the SPA import. */
+    fun tryImportWebRedirect(url: String, cookies: Map<String, String>) {
+        val webSource = source as? AnimeFeedWebLoginSource ?: return
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val imported = runCatching { webSource.importWebRedirect(url, cookies) }.getOrDefault(false)
+            if (imported) applyWebLoginSuccess() else mutableState.update { it.copy(webLoginHint = true) }
+        }
+    }
+
+    /**
+     * Done-button path: try the SPA-session lift first; when the SPA keeps its tokens in
+     * memory (nothing to lift — the RedGIFs case), bump the stage-2 counter so the dialog
+     * loads the source's own PKCE authorize URL in the same WebView.
+     */
+    fun tryImportWebSessionStage2(cookies: Map<String, String>, localStorage: Map<String, String>) {
+        val webSource = source as? AnimeFeedWebLoginSource ?: return
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val imported = runCatching { webSource.importWebSession(cookies, localStorage) }.getOrDefault(false)
+            if (imported) {
+                applyWebLoginSuccess()
+            } else {
+                mutableState.update { current ->
+                    current.copy(webLoginHint = true, webLoginStage2Attempt = current.webLoginStage2Attempt + 1)
+                }
+            }
+        }
+    }
+
+    /** Shared post-web-login path: close the dialog, snapshot the account, reload the feed. */
+    private fun applyWebLoginSuccess() {
+        val loginSource = source as? AnimeFeedLoginSource
+        mutableState.update { current ->
+            current.copy(
+                isWebLoginDialogOpen = false,
+                webLoginHint = false,
+                loggedInAccount = loginSource?.takeIf { it.isLoggedIn() }?.loggedInAccount(),
+            )
+        }
+        loadFeed(reset = true)
+    }
+
+    // ---------------------------------------------------------------------------
+    // Category subscriptions (contract v20)
+    // ---------------------------------------------------------------------------
+
+    /** Loads the followed-category membership for the current NICHE feed. */
+    private fun loadSubscribedCategoryState() {
+        val src = source as? AnimeCategorySubscriptionSource ?: return
+        screenModelScope.launch(ioDispatcher) {
+            val ids = runCatching { src.getSubscribedCategoryIds() }.getOrDefault(emptyList())
+            val target = nicheId
+            mutableState.update { current ->
+                if (current.mode != FeedMode.NICHE || target == null) return@update current
+                current.copy(isCategoryFollowed = target in ids)
+            }
+        }
+    }
+
+    /** Follows/unfollows the current niche (account-gated); the state flips only on success. */
+    fun toggleCategoryFollow() {
+        val src = source as? AnimeCategorySubscriptionSource ?: return
+        val target = nicheId ?: return
+        if (!state.value.isCategorySubscribable) return
+        val desired = !state.value.isCategoryFollowed
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val ok = runCatching { src.setCategorySubscription(target, desired) }.getOrDefault(false)
+            if (ok) mutableState.update { it.copy(isCategoryFollowed = desired) }
+        }
+    }
+
+    // ---------------------------------------------------------------------------
+    // Content preferences (contract v20)
+    // ---------------------------------------------------------------------------
+
+    /** Opens/closes the content-preferences sheet; opening (re)loads the account toggles. */
+    fun toggleContentPreferences(open: Boolean) {
+        mutableState.update {
+            it.copy(
+                isContentPreferencesOpen = open,
+                contentPreferencesError = if (open) null else it.contentPreferencesError,
+            )
+        }
+        if (open) loadContentPreferences()
+    }
+
+    private fun loadContentPreferences() {
+        val src = source as? AnimeContentPreferencesSource ?: return
+        val sourceId = state.value.currentSourceId
+        mutableState.update { it.copy(isContentPreferencesLoading = true, contentPreferencesError = null) }
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val result = runCatching { src.getContentPreferences() }
+            mutableState.update { current ->
+                // The read may race a source switch: drop it if the source changed.
+                if (current.currentSourceId != sourceId) {
+                    return@update current.copy(isContentPreferencesLoading = false)
+                }
+                current.copy(
+                    isContentPreferencesLoading = false,
+                    contentPreferences = result.getOrNull()?.toImmutableList(),
+                    contentPreferencesError = result.exceptionOrNull()?.localizedMessage,
+                )
+            }
+        }
+    }
+
+    /** Persists the enabled-toggle set; reloads the sheet list on success. */
+    fun saveContentPreferences(enabledIds: List<String>) {
+        val src = source as? AnimeContentPreferencesSource ?: return
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val ok = runCatching { src.setContentPreferences(enabledIds) }.getOrDefault(false)
+            if (ok) {
+                loadContentPreferences()
+            } else {
+                mutableState.update { it.copy(contentPreferencesError = "Save failed") }
+            }
+        }
     }
 
     /** Opens/closes the custom-feeds picker; opening also (re)loads the feed list. */
@@ -1130,6 +1357,8 @@ class ReelsFeedScreenModel(
         val creator: String? = null,
         // Custom-feed name for [FeedMode.CUSTOM] (its title); null in every other mode.
         val customFeedName: String? = null,
+        // Category name for [FeedMode.NICHE] (its title); null in every other mode.
+        val nicheName: String? = null,
         // The current source implements AnimeCreatorFeedSource: gates the author chip,
         // the follow action and the follows-screen entry.
         val isCreatorCapable: Boolean = false,
@@ -1145,6 +1374,20 @@ class ReelsFeedScreenModel(
         val loginError: String? = null,
         // Custom feeds (v19): the current source implements AnimeCustomFeedSource.
         val isCustomFeedCapable: Boolean = false,
+        // Category browse (v20): the current source implements AnimeFeedBrowseSource;
+        // gates the account-hub Niches row.
+        val isBrowseCapable: Boolean = false,
+        // Category subscriptions (v20): the current source implements
+        // AnimeCategorySubscriptionSource; gates the follow toggle on NICHE feeds.
+        val isCategorySubscribable: Boolean = false,
+        val isCategoryFollowed: Boolean = false,
+        // Content preferences (v20): the current source implements
+        // AnimeContentPreferencesSource; gates the account-hub preferences row.
+        val isContentPreferencesCapable: Boolean = false,
+        val contentPreferences: ImmutableList<ContentPreferenceOption>? = null,
+        val isContentPreferencesOpen: Boolean = false,
+        val isContentPreferencesLoading: Boolean = false,
+        val contentPreferencesError: String? = null,
         // Loaded list for the picker sheet.
         val customFeeds: ImmutableList<CustomFeedRef> = persistentListOf(),
         val isCustomFeedsOpen: Boolean = false,
@@ -1184,6 +1427,9 @@ class ReelsFeedScreenModel(
         // the remembered position when a cleared search restores the base feed.
         val targetPageIndex: Int = 0,
         val searchQuery: String = "",
+        // Categorized search hits (contract v20) for the search-panel tabs; null when the
+        // source lacks the capability or no query is active.
+        val searchSuggestions: SearchSuggestions? = null,
         // Headers for the player's HTTP data source, captured from the current source.
         val sourceHeaders: ImmutableMap<String, String> = persistentHashMapOf(),
         val filters: AnimeFilterList = AnimeFilterList(),
@@ -1191,6 +1437,15 @@ class ReelsFeedScreenModel(
         val isSearchBarOpen: Boolean = false,
         val isSourcePickerOpen: Boolean = false,
         val isLoginDialogOpen: Boolean = false,
+        // Web login (contract v20): the current source implements AnimeFeedWebLoginSource;
+        // the account hub routes login to the WebView dialog instead of the password dialog.
+        val isWebLoginCapable: Boolean = false,
+        val isWebLoginDialogOpen: Boolean = false,
+        // Transient hint inside the WebView dialog: the last import attempt found no session.
+        val webLoginHint: Boolean = false,
+        // Stage-2 counter (contract v20): bumped by the Done button when the SPA import found
+        // no session; the dialog then loads the source's own PKCE authorize URL.
+        val webLoginStage2Attempt: Int = 0,
         val error: String? = null,
         // Transient append failure while the feed is non-empty; surfaced as a snackbar.
         val pageError: String? = null,

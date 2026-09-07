@@ -1917,6 +1917,16 @@
     <string name="reels_login_button">Log in</string>
     <string name="reels_custom_feeds">Custom feeds</string>
     <string name="reels_custom_feeds_empty">No custom feeds yet</string>
+    <string name="reels_web_login_title">Sign in on the site page</string>
+    <string name="reels_web_login_done">Done</string>
+    <string name="reels_web_login_not_yet">Session not detected yet — finish signing in, then press Done</string>
+    <string name="reels_niches">Niches</string>
+    <string name="reels_niches_empty">No niches</string>
+    <string name="reels_search_tab_niches">Niches</string>
+    <string name="reels_search_tab_creators">Creators</string>
+    <string name="reels_search_tab_tags">Tags</string>
+    <string name="reels_content_prefs">Content preferences</string>
+    <string name="reels_content_prefs_empty">No content preferences</string>
     <string name="reels_custom_feed_new">New feed</string>
     <string name="reels_custom_feed_edit">Edit feed</string>
     <string name="reels_custom_feed_delete">Delete feed</string>
