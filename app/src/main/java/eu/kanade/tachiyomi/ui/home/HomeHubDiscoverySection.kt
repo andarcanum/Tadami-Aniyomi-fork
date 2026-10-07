@@ -126,6 +126,8 @@ import eu.kanade.presentation.theme.aurora.adaptive.rememberAuroraAdaptiveSpec
 import eu.kanade.presentation.theme.resolveAuroraSurfaceColor
 import eu.kanade.presentation.util.rememberSupportsBlurBehind
 import eu.kanade.tachiyomi.data.discovery.DiscoveryRowItem
+import eu.kanade.tachiyomi.data.discovery.balancePluginDiversity
+import eu.kanade.tachiyomi.data.discovery.extractSeriesKey
 import eu.kanade.tachiyomi.data.discovery.filterFranchiseClustering
 import eu.kanade.tachiyomi.data.discovery.filterFranchiseClusteringGeneric
 import eu.kanade.tachiyomi.data.discovery.interleaveMix
@@ -180,11 +182,17 @@ internal fun composeTeaserItems(
     val clustered = filterFranchiseClustering(fullMix, maxPerSeries = if (capped >= 15) 2 else 1)
     val safeOffset = if (clustered.isNotEmpty()) offset % clustered.size else 0
     val rotated = if (safeOffset <= 0) {
-        clustered.take(capped)
+        clustered
     } else {
-        (clustered.drop(safeOffset) + clustered.take(safeOffset)).take(capped)
+        clustered.drop(safeOffset) + clustered.take(safeOffset)
     }
-    return rotated.mapNotNull { row ->
+    val finalSelection = balancePluginDiversity(
+        items = rotated,
+        limit = capped,
+        sourceKeyExtractor = { it.provider.ifBlank { it.sourceId?.toString().orEmpty() } },
+        minOtherCount = 3,
+    )
+    return finalSelection.mapNotNull { row ->
         items.firstOrNull { it.cleanTitle == row.cleanTitle }?.toHomeHubDiscoveryItem()
     }
 }
@@ -280,6 +288,99 @@ internal fun selectFreshTeaserItems(
     } else {
         clustered
     }
+}
+
+/**
+ * Точечное обновление тизера ленты при скрытии или отметке «Просмотрено»:
+ * оставляет все валидные карточки на их прежних позициях, заменяя только выпавшую(ие)
+ * карточку свежими кандидатами из пула (без перезагрузки всей ленты).
+ */
+internal fun patchTeaserItems(
+    currentItems: List<HomeHubDiscoveryItem>,
+    pool: List<DiscoverySuggestion>,
+    validCleanTitles: Set<String>,
+    targetCount: Int,
+    shownTitles: Set<String> = emptySet(),
+    shownCutoffMap: Map<String, Long> = emptyMap(),
+): List<HomeHubDiscoveryItem> {
+    val capped = targetCount.coerceIn(3, 20)
+    if (pool.isEmpty()) return emptyList()
+    if (currentItems.isEmpty()) {
+        return selectFreshTeaserItems(
+            pool = pool,
+            shownTitles = shownTitles,
+            count = capped,
+            shownCutoffMap = shownCutoffMap,
+        )
+    }
+
+    val usedCleanTitles = currentItems.filter { it.cleanTitle in validCleanTitles }
+        .mapTo(HashSet()) { it.cleanTitle }
+
+    // Кандидаты на замену из доступного валидного пула
+    val validCandidates = pool.filter { it.cleanTitle in validCleanTitles && it.cleanTitle !in usedCleanTitles }
+    val freshCandidates = ArrayDeque(validCandidates.filterNot { it.cleanTitle in shownTitles })
+    val backfillCandidates = ArrayDeque(
+        validCandidates.filter { it.cleanTitle in shownTitles }
+            .sortedBy { shownCutoffMap[it.cleanTitle] ?: 0L },
+    )
+
+    val currentSeriesKeys = mutableMapOf<String, Int>()
+    for (item in currentItems) {
+        if (item.cleanTitle in validCleanTitles) {
+            val key = extractSeriesKey(item.title, item.cleanTitle)
+            currentSeriesKeys[key] = (currentSeriesKeys[key] ?: 0) + 1
+        }
+    }
+    val maxPerSeries = if (capped >= 15) 2 else 1
+
+    fun nextReplacement(): DiscoverySuggestion? {
+        val candidate = freshCandidates.firstOrNull {
+            val key = extractSeriesKey(it.title, it.cleanTitle)
+            (currentSeriesKeys[key] ?: 0) < maxPerSeries
+        }?.also {
+            freshCandidates.remove(it)
+        } ?: backfillCandidates.firstOrNull {
+            val key = extractSeriesKey(it.title, it.cleanTitle)
+            (currentSeriesKeys[key] ?: 0) < maxPerSeries
+        }?.also {
+            backfillCandidates.remove(it)
+        } ?: if (freshCandidates.isNotEmpty()) {
+            freshCandidates.removeFirst()
+        } else if (backfillCandidates.isNotEmpty()) {
+            backfillCandidates.removeFirst()
+        } else {
+            null
+        }
+
+        if (candidate != null) {
+            val key = extractSeriesKey(candidate.title, candidate.cleanTitle)
+            currentSeriesKeys[key] = (currentSeriesKeys[key] ?: 0) + 1
+        }
+        return candidate
+    }
+
+    val result = mutableListOf<HomeHubDiscoveryItem>()
+    for (item in currentItems) {
+        if (result.size >= capped) break
+        if (item.cleanTitle in validCleanTitles) {
+            result.add(item)
+        } else {
+            val replacement = nextReplacement()
+            if (replacement != null) {
+                result.add(replacement.toHomeHubDiscoveryItem())
+                usedCleanTitles.add(replacement.cleanTitle)
+            }
+        }
+    }
+
+    while (result.size < capped) {
+        val replacement = nextReplacement() ?: break
+        result.add(replacement.toHomeHubDiscoveryItem())
+        usedCleanTitles.add(replacement.cleanTitle)
+    }
+
+    return result
 }
 
 /** Секция видна всегда при включённом discovery: при пустой ленте рендерит карточку-вход на полный экран. */
@@ -1173,6 +1274,8 @@ internal fun DiscoveryHeroCollage(
     onMoreClick: () -> Unit,
     onItemClick: (HomeHubDiscoveryItem) -> Unit,
     onLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
+    isRefreshing: Boolean = false,
+    onRefreshClick: (() -> Unit)? = null,
 ) {
     if (items.isEmpty()) return
     val colors = AuroraTheme.colors
@@ -1362,6 +1465,7 @@ internal fun DiscoveryHeroCollage(
                         discoveryPreferences.collageLastRotationTime().set(System.currentTimeMillis())
                         userInteractionToken++
                         updateOffset(offset + 1)
+                        onRefreshClick?.invoke()
                     },
                 ),
             contentAlignment = Alignment.Center,
@@ -1581,8 +1685,9 @@ internal fun stageItemIndex(center: Int, slot: Int, size: Int): Int {
 
 /**
  * Ре-анкор центра при смене СОСТАВА ленты (items): центр переносится на новый
- * индекс тайтла, который был в фокусе; тайтл исчез из подборки (скрыт, заменён
- * рефрешем) — сцена сбрасывается к началу. Без смены состава позиция сохраняется.
+ * индекс тайтла, который был в фокусе; если тайтл исчез из подборки (скрыт, отмечен
+ * как просмотренный), сцена остаётся на текущем слоте (по модулю размера),
+ * показывая карточку-замену вместо скачка к началу. Без смены состава позиция сохраняется.
  * Чистая функция — тестируется без Compose.
  */
 internal fun resolveStageReanchorCenter(
@@ -1599,17 +1704,106 @@ internal fun resolveStageReanchorCenter(
 
 /**
  * Порядок hero-карусели Stage: непоказанные за 48h-окно вперёд, показанные —
- * в хвост. Обе группы шафлятся по одному seed — реролл живой в обеих группах,
- * детерминизм сохранён. Уникальность здесь — приоритет порядка, не отсечение:
+ * в хвост. Если переданы [currentVisibleTitles] (при ручном реролле/обновлении),
+ * тайтлы, не видимые прямо сейчас на экране, выносятся в начало групп.
+ * Обе группы шафлятся по одному seed — реролл живой в обеих группах, детерминизм сохранён.
+ * Уникальность здесь — приоритет порядка, не отсечение:
  * бесконечная карусель доходит до хвоста только когда свежее кончилось.
  */
-internal fun stageHeroOrder(items: List<HomeHubDiscoveryItem>, seed: Int): List<HomeHubDiscoveryItem> {
+internal fun stageHeroOrder(
+    items: List<HomeHubDiscoveryItem>,
+    seed: Int,
+    currentVisibleTitles: Set<String> = emptySet(),
+): List<HomeHubDiscoveryItem> {
     if (items.size <= 1) return items
     val random = kotlin.random.Random(seed)
     val fresh = items.filter { (it.shownAt ?: 0L) <= 0L }
     val shown = items.filter { (it.shownAt ?: 0L) > 0L }
-    if (fresh.isEmpty() || shown.isEmpty()) return items.shuffled(random)
-    return fresh.shuffled(random) + shown.shuffled(random)
+
+    fun prioritizeNotVisible(pool: List<HomeHubDiscoveryItem>): List<HomeHubDiscoveryItem> {
+        if (currentVisibleTitles.isEmpty()) return pool.shuffled(random)
+        val notVisible = pool.filterNot { it.cleanTitle in currentVisibleTitles }.shuffled(random)
+        val visible = pool.filter { it.cleanTitle in currentVisibleTitles }.shuffled(random)
+        return notVisible + visible
+    }
+
+    if (fresh.isEmpty() || shown.isEmpty()) return prioritizeNotVisible(items)
+    return prioritizeNotVisible(fresh) + prioritizeNotVisible(shown)
+}
+
+/**
+ * Вычисляет целевой центр карусели Stage при реролле, чтобы видимые слоты (-2..2)
+ * имели минимальное (при пуле >= 10 — строго нулевое) пересечение с [currentVisibleTitles].
+ */
+internal fun stageRerollTargetCenter(
+    currentCenter: Int,
+    currentVisibleTitles: Set<String>,
+    newOrdered: List<HomeHubDiscoveryItem>,
+): Int {
+    val size = newOrdered.size
+    if (size <= 0) return currentCenter
+    if (size <= 5 || currentVisibleTitles.isEmpty()) {
+        return currentCenter + 1
+    }
+
+    var bestCenter = currentCenter + 5
+    var minOverlap = Int.MAX_VALUE
+
+    for (step in 1 until size) {
+        val candidateCenter = currentCenter + step
+        val visibleAtCandidate = (-2..2).map { slot ->
+            newOrdered[stageItemIndex(candidateCenter, slot, size)].cleanTitle
+        }.toSet()
+
+        val overlap = visibleAtCandidate.intersect(currentVisibleTitles).size
+        if (overlap < minOverlap) {
+            minOverlap = overlap
+            bestCenter = candidateCenter
+            if (minOverlap == 0) {
+                break
+            }
+        }
+    }
+    return bestCenter
+}
+
+/**
+ * Точечное обновление порядка карусели Stage при удалении/скрытии/отметке тайтла:
+ * сохраняет относительный порядок и позиции всех оставшихся валидных карточек,
+ * заменяя выпавшую карточку новым кандидатом из [newPool] на том же месте.
+ */
+internal fun patchStageOrder(
+    currentOrdered: List<HomeHubDiscoveryItem>,
+    newPool: List<HomeHubDiscoveryItem>,
+): List<HomeHubDiscoveryItem> {
+    if (currentOrdered.isEmpty()) return newPool
+    if (newPool.isEmpty()) return emptyList()
+
+    val validCleanTitles = newPool.mapTo(HashSet()) { it.cleanTitle }
+    val currentCleanTitles = currentOrdered.mapTo(HashSet()) { it.cleanTitle }
+    val replacementCandidates = ArrayDeque(newPool.filterNot { it.cleanTitle in currentCleanTitles })
+
+    val result = mutableListOf<HomeHubDiscoveryItem>()
+    for (item in currentOrdered) {
+        if (item.cleanTitle in validCleanTitles) {
+            val updated = newPool.firstOrNull { it.cleanTitle == item.cleanTitle } ?: item
+            result.add(updated)
+        } else {
+            if (replacementCandidates.isNotEmpty()) {
+                result.add(replacementCandidates.removeFirst())
+            }
+        }
+    }
+
+    val usedTitles = result.mapTo(HashSet()) { it.cleanTitle }
+    for (candidate in replacementCandidates) {
+        if (candidate.cleanTitle !in usedTitles) {
+            result.add(candidate)
+            usedTitles.add(candidate.cleanTitle)
+        }
+    }
+
+    return result
 }
 
 /**
@@ -1696,6 +1890,8 @@ internal fun DiscoveryHeroStage(
     onMoreClick: () -> Unit,
     onItemClick: (HomeHubDiscoveryItem) -> Unit,
     onLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
+    isRefreshing: Boolean = false,
+    onRefreshClick: (() -> Unit)? = null,
 ) {
     if (items.isEmpty()) return
     val colors = AuroraTheme.colors
@@ -1715,7 +1911,26 @@ internal fun DiscoveryHeroStage(
 
     // 48h-уникальность hero: непоказанное вперёд (см. stageHeroOrder), реролл — seeded
     // shuffle внутри групп. Фокус и авто-ротация ходят по свежему в первую очередь.
-    val ordered = remember(items, offset) { stageHeroOrder(items, offset) }
+    val orderedState = remember { mutableStateOf(stageHeroOrder(items, offset)) }
+    val lastOffset = remember { mutableIntStateOf(offset) }
+    val lastItems = remember { mutableStateOf(items) }
+
+    if (offset != lastOffset.intValue) {
+        lastOffset.intValue = offset
+        lastItems.value = items
+    } else if (items !== lastItems.value) {
+        if (orderedState.value.isEmpty()) {
+            orderedState.value = stageHeroOrder(items, offset)
+        } else {
+            val currentTitles = orderedState.value.map { it.cleanTitle }.toSet()
+            val newTitles = items.map { it.cleanTitle }.toSet()
+            if (currentTitles != newTitles) {
+                orderedState.value = patchStageOrder(orderedState.value, items)
+            }
+        }
+        lastItems.value = items
+    }
+    val ordered = orderedState.value
     val systemAnimationsEnabled = ValueAnimator.areAnimatorsEnabled()
     val motionSpec = remember(speed, colors.isEInk, systemAnimationsEnabled) {
         resolveStageMotionSpec(speed = speed, isEInk = colors.isEInk, animationsEnabled = systemAnimationsEnabled)
@@ -2007,10 +2222,23 @@ internal fun DiscoveryHeroStage(
                     indication = ripple(bounded = false, radius = 17.dp),
                     onClick = {
                         appHaptics.tap()
+                        val currentVisible = (-2..2).map { slot ->
+                            ordered[stageItemIndex(center, slot, ordered.size)].cleanTitle
+                        }.toSet()
                         offset += 1
+                        val nextOrdered = stageHeroOrder(items, offset, currentVisible)
+                        val targetCenter = stageRerollTargetCenter(center, currentVisible, nextOrdered)
+                        center = targetCenter
+                        orderedState.value = nextOrdered
+                        lastOffset.intValue = offset
+                        lastItems.value = items
+                        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                            centerAnim.snapTo(center.toFloat())
+                        }
                         discoveryPreferences.stageOffset().set(offset)
                         discoveryPreferences.stageLastRotationTime().set(System.currentTimeMillis())
                         userInteractionToken++
+                        onRefreshClick?.invoke()
                     },
                 ),
             contentAlignment = Alignment.Center,

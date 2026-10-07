@@ -114,7 +114,8 @@ internal fun applySourceAffinity(
     boostCap: Double = 0.6,
 ): Double {
     val boost = 1.0 + boostCap * kotlin.math.tanh(affinity / affinityScale)
-    return libraryWeight * boost.coerceIn(0.4, 2.0)
+    val effectiveBase = libraryWeight.coerceAtLeast(1)
+    return effectiveBase * boost.coerceIn(0.4, 2.0)
 }
 
 /** Выученный профиль: жанры с весами, аффинити источников, счётчик сигналов. */

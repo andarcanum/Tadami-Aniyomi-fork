@@ -737,6 +737,8 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
+                                isRefreshing = state.isDiscoveryRefreshing,
+                                onRefreshClick = onDiscoveryRefreshClick,
                             )
                             heroPresentation == HomeHeroMode.Collage -> DiscoveryHeroCollage(
                                 items = heroFeedItems,
@@ -744,6 +746,8 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
+                                isRefreshing = state.isDiscoveryRefreshing,
+                                onRefreshClick = onDiscoveryRefreshClick,
                             )
                             heroPresentation == HomeHeroMode.Hybrid && hero != null -> Column {
                                 HeroSection(

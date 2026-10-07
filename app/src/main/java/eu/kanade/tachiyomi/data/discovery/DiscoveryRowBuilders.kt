@@ -277,7 +277,7 @@ class DiscoveryTasteRowBuilder(
         if (combined.isEmpty() && anyFailed) {
             throw IOException("taste sources failed without results")
         }
-        return combined.take(50)
+        return filterGenreClustering(combined, maxPerGenre = 6).take(50)
     }
 }
 
