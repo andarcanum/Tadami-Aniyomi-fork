@@ -380,8 +380,7 @@ data class BrowseAnimeSourceScreen(
         // collectors competing for one event). Genre requests are constructor args of a fresh
         // screen instance now, applied exactly once per screen model - like listingQuery.
         LaunchedEffect(Unit) {
-            genreQuery?.let { screenModel.searchGenre(it) }
-            genresQuery?.let { screenModel.searchGenres(it) }
+            screenModel.initGenreSearch(genreQuery, genresQuery)
         }
     }
 }

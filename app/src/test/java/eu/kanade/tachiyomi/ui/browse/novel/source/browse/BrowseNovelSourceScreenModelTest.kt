@@ -360,6 +360,59 @@ class BrowseNovelSourceScreenModelTest {
     }
 
     @Test
+    fun `initGenreSearch executes only once and does not re-run on subsequent calls`() {
+        runBlocking {
+            val source = FakeNovelCatalogueSourceWithFilters(
+                id = 1L,
+                name = "Novel",
+                lang = "en",
+                filters = NovelFilterList(
+                    object : NovelFilter.Select<String>(
+                        name = "Sort",
+                        values = arrayOf("Popular", "Latest"),
+                        state = 0,
+                    ) {},
+                ),
+            )
+            val sourceManager = FakeNovelSourceManager(source)
+            val prefs = SourcePreferences(FakePreferenceStore())
+            val networkToLocal = NetworkToLocalNovel(FakeNovelRepository(insertId = 1L))
+            val getRemoteNovel = GetRemoteNovel(repository = FakeNovelSourceRepository())
+
+            val screenModel = track(
+                BrowseNovelSourceScreenModel(
+                    sourceId = 1L,
+                    listingQuery = GetRemoteNovel.QUERY_POPULAR,
+                    sourceManager = sourceManager,
+                    getRemoteNovel = getRemoteNovel,
+                    sourcePreferences = prefs,
+                    getNovelByUrlAndSourceId = GetNovelByUrlAndSourceId(FakeNovelRepository()),
+                    networkToLocalNovel = networkToLocal,
+                ),
+            )
+
+            repeat(20) {
+                if (screenModel.state.value.filters.isNotEmpty()) return@repeat
+                delay(10)
+            }
+
+            val initialVersion = screenModel.state.value.filterVersion
+            screenModel.initGenreSearch("Latest", null)
+            repeat(20) {
+                if (screenModel.state.value.filterVersion != initialVersion) return@repeat
+                delay(10)
+            }
+            screenModel.state.value.filterVersion shouldBe initialVersion + 1
+
+            // Second call simulating screen re-composition on return from NovelScreen
+            screenModel.initGenreSearch("Latest", null)
+            delay(50)
+            // filterVersion must NOT bump again
+            screenModel.state.value.filterVersion shouldBe initialVersion + 1
+        }
+    }
+
+    @Test
     fun `applyFilters switches latest listing to blank search without exposing internal query`() {
         val source = FakeNovelCatalogueSource(id = 1L, name = "Novel", lang = "en")
         val sourceManager = FakeNovelSourceManager(source)
