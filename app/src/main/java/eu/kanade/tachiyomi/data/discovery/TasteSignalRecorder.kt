@@ -17,9 +17,9 @@ import uy.kohesive.injekt.api.get
  */
 object TasteSignalRecorder {
 
-    /** Жанры тайтла из reason-CSV (TASTE) — пусто для прочих рядов. */
-    fun snapshotGenres(item: DiscoverySuggestion): List<String> =
-        if (item.rowType == DiscoveryRowType.TASTE) {
+    /** Жанры тайтла из reason-CSV (TASTE), с фоллбэком на cached meta для прочих рядов. */
+    fun snapshotGenres(item: DiscoverySuggestion): List<String> {
+        val fromReason = if (item.rowType == DiscoveryRowType.TASTE) {
             item.reason
                 ?.splitToSequence(",")
                 ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
@@ -28,6 +28,16 @@ object TasteSignalRecorder {
         } else {
             emptyList()
         }
+        if (fromReason.isNotEmpty()) return fromReason
+        val titleMeta = CompositeTrendingSource.getCachedMeta(item.title, item.mediaType)
+        if (titleMeta != null && titleMeta.genres.isNotEmpty()) return titleMeta.genres
+        val seed = item.seedTitle
+        if (!seed.isNullOrBlank()) {
+            val seedMeta = CompositeTrendingSource.getCachedMeta(seed, item.mediaType)
+            if (seedMeta != null && seedMeta.genres.isNotEmpty()) return seedMeta.genres
+        }
+        return emptyList()
+    }
 
     suspend fun record(
         repository: DiscoveryRepository,

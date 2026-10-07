@@ -219,6 +219,14 @@ class TasteLearningEngineTest {
         (negative >= 4.0) shouldBe true
     }
 
+    @Test
+    fun `affinity boost works when libraryWeight is zero`() {
+        val zeroLibZeroAffinity = applySourceAffinity(libraryWeight = 0, affinity = 0.0)
+        val zeroLibPositive = applySourceAffinity(libraryWeight = 0, affinity = 2.0)
+        (zeroLibPositive > zeroLibZeroAffinity) shouldBe true
+        (zeroLibZeroAffinity >= 1.0) shouldBe true
+    }
+
     private companion object {
         const val DAY_MS_TEST = 24L * 60 * 60 * 1000
     }

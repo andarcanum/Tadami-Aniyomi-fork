@@ -160,5 +160,10 @@ class CompositeTrendingSource(
     companion object {
         private val globalMetaCache = DiscoveryLruCache<String, DiscoveryMeta>(100)
         private val cyrillicRegex = Regex("[а-яА-ЯёЁ]")
+
+        fun getCachedMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
+            val cacheKey = "${mediaType.key}:${normalizeDiscoveryTitle(title)}"
+            return globalMetaCache.get(cacheKey)
+        }
     }
 }

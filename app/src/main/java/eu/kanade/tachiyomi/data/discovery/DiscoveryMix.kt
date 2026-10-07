@@ -456,3 +456,92 @@ internal fun filterFranchiseClustering(
     cleanTitleExtractor = { it.cleanTitle },
     maxPerSeries = maxPerSeries,
 )
+
+/**
+ * Ограничивает кластеризацию одного доминирующего жанра в выдаче ряда «Твой вкус»:
+ * предотвращает монополизацию выдачи одним жанром, перемещая избыточные тайтлы
+ * того же первичного жанра сверх [maxPerGenre] в хвост списка.
+ */
+internal fun filterGenreClustering(
+    items: List<DiscoveryRowItem>,
+    maxPerGenre: Int = 6,
+): List<DiscoveryRowItem> {
+    if (items.size <= 1) return items
+    val result = mutableListOf<DiscoveryRowItem>()
+    val overflow = mutableListOf<DiscoveryRowItem>()
+    val genreCounts = mutableMapOf<String, Int>()
+    for (item in items) {
+        val primaryGenre = item.reason?.substringBefore(",")?.trim()?.lowercase().orEmpty()
+        val count = genreCounts.getOrDefault(primaryGenre, 0)
+        if (primaryGenre.isEmpty() || count < maxPerGenre) {
+            result.add(item)
+            if (primaryGenre.isNotEmpty()) genreCounts[primaryGenre] = count + 1
+        } else {
+            overflow.add(item)
+        }
+    }
+    return result + overflow
+}
+
+/**
+ * Балансировка разнообразия плагинов/источников:
+ * Плагины с более сильными сигналами могут выдавать больше тайтлов,
+ * но если доступны другие плагины/источники, минимум [minOtherCount] (дефолт 3)
+ * тайтлов строго сохраняются за другими плагинами/источниками для разнообразия.
+ */
+internal fun <T> balancePluginDiversity(
+    items: List<T>,
+    limit: Int,
+    sourceKeyExtractor: (T) -> String,
+    minOtherCount: Int = 3,
+): List<T> {
+    if (items.size <= 1 || limit <= 0) return items.take(limit)
+
+    val sourceCounts = mutableMapOf<String, Int>()
+    items.forEach { item ->
+        val key = sourceKeyExtractor(item)
+        if (key.isNotEmpty()) {
+            sourceCounts[key] = (sourceCounts[key] ?: 0) + 1
+        }
+    }
+
+    val dominantSource = sourceCounts.maxByOrNull { it.value }?.key ?: return items.take(limit)
+    val otherCandidates = items.filter { sourceKeyExtractor(it) != dominantSource }
+    if (otherCandidates.isEmpty()) return items.take(limit)
+
+    val targetOtherCount = minOf(minOtherCount, otherCandidates.size).coerceAtMost(maxOf(0, limit - 1))
+    val maxDominant = limit - targetOtherCount
+
+    val result = mutableListOf<T>()
+    var dominantCount = 0
+    val others = ArrayDeque(otherCandidates)
+    val seen = mutableSetOf<T>()
+
+    for (item in items) {
+        if (result.size >= limit) break
+        val key = sourceKeyExtractor(item)
+        if (key == dominantSource) {
+            if (dominantCount < maxDominant) {
+                result.add(item)
+                seen.add(item)
+                dominantCount++
+            }
+        } else {
+            result.add(item)
+            seen.add(item)
+        }
+    }
+
+    val currentOtherCount = result.count { sourceKeyExtractor(it) != dominantSource }
+    if (currentOtherCount < targetOtherCount) {
+        while (result.size < limit && others.isNotEmpty()) {
+            val other = others.removeFirst()
+            if (other !in seen) {
+                result.add(other)
+                seen.add(other)
+            }
+        }
+    }
+
+    return result.take(limit)
+}

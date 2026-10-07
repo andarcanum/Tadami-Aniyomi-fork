@@ -217,13 +217,17 @@ internal class MangaHomeHubScreenModel(
         notifyIfLimited: Boolean = false,
     ) {
         if (!discoveryPreferences.discoveryEnabled().get()) {
-            mutableState.update { it.copy(discovery = emptyList(), discoveryEnabled = false) }
+            mutableState.update {
+                it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList())
+            }
             return
         }
         val count = discoveryPreferences.teaserCount().get().coerceIn(3, 20)
         val pool = cachedDiscoveryPool
         if (pool.isEmpty()) {
-            mutableState.update { it.copy(discovery = emptyList(), discoveryEnabled = true) }
+            mutableState.update {
+                it.copy(discovery = emptyList(), discoveryEnabled = true, discoveryPool = emptyList())
+            }
             return
         }
 
@@ -233,6 +237,40 @@ internal class MangaHomeHubScreenModel(
             if (currentValid.size == count) {
                 return
             }
+            val shownMap = runCatching {
+                discoveryRepository.getShownTitlesWithTimestamp(
+                    tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
+                )
+            }.getOrDefault(emptyMap())
+            val patched = patchTeaserItems(
+                currentItems = state.value.discovery,
+                pool = pool,
+                validCleanTitles = validCleanTitles,
+                targetCount = count,
+                shownTitles = shownMap.keys,
+                shownCutoffMap = shownMap,
+            )
+            val existingValidSet = currentValid.mapTo(HashSet()) { it.cleanTitle }
+            val newTitles = patched.map { it.cleanTitle }.filterNot { it in existingValidSet }
+            if (newTitles.isNotEmpty()) {
+                runCatching {
+                    discoveryRepository.markShown(
+                        mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA,
+                        cleanTitles = newTitles,
+                    )
+                }
+            }
+            val updatedPool = pool.filter { it.cleanTitle in validCleanTitles }.map { p ->
+                p.toHomeHubDiscoveryItem(shownMap[p.cleanTitle])
+            }
+            mutableState.update {
+                it.copy(
+                    discovery = patched,
+                    discoveryEnabled = true,
+                    discoveryPool = updatedPool,
+                )
+            }
+            return
         }
 
         if (advanceOffset) {
@@ -273,7 +311,16 @@ internal class MangaHomeHubScreenModel(
             }
         }
 
-        mutableState.update { it.copy(discovery = teaser, discoveryEnabled = true) }
+        val updatedPool = pool.map { p ->
+            p.toHomeHubDiscoveryItem(shownMap[p.cleanTitle])
+        }
+        mutableState.update {
+            it.copy(
+                discovery = teaser,
+                discoveryEnabled = true,
+                discoveryPool = updatedPool,
+            )
+        }
     }
 
     override fun onScreenReentry() {
