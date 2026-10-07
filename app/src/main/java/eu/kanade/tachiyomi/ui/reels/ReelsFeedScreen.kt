@@ -791,6 +791,24 @@ data class ReelsFeedScreen(
                                 } else {
                                     null
                                 },
+                                onCreatorClick = if (state.isCreatorCapable && !state.isOffline) {
+                                    { creator ->
+                                        if (!(
+                                                state.mode == ReelsFeedScreenModel.FeedMode.CREATOR &&
+                                                    creator == state.creator
+                                                )
+                                        ) {
+                                            navigator.push(
+                                                ReelsFeedScreen(
+                                                    sourceId = state.currentSourceId,
+                                                    creator = creator,
+                                                ),
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
                                 onVideoCompleted = {
                                     // B2 sleep timer: "after this video" pauses the feed
                                     // (sticky) instead of auto-advancing to the next reel.

@@ -102,6 +102,7 @@ fun ReelsVideoPage(
     isFollowingCreator: Boolean = false,
     onToggleFollowCreator: () -> Unit = {},
     onAuthorClick: (() -> Unit)? = null,
+    onCreatorClick: ((String) -> Unit)? = null,
     onTogglePlayPause: () -> Unit,
     onToggleLike: () -> Unit,
     onToggleMute: () -> Unit,
@@ -488,6 +489,7 @@ fun ReelsVideoPage(
                 item = item,
                 onTagClick = onTagClick,
                 onAuthorClick = onAuthorClick,
+                onCreatorClick = onCreatorClick,
                 modifier = Modifier.padding(start = 16.dp, end = 76.dp, bottom = 24.dp),
             )
         }

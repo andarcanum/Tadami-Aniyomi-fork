@@ -26,8 +26,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.kanade.presentation.theme.AuroraTheme
@@ -35,6 +40,8 @@ import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.i18n.stringResource
 import java.util.Locale
+
+private val MENTION_REGEX = Regex("""@([A-Za-z0-9_]{1,50})""")
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -44,6 +51,7 @@ fun ReelsBottomMeta(
     // Non-null (capability- and author-gated by the caller) makes the author chip open the
     // creator's page (contract v18).
     onAuthorClick: (() -> Unit)? = null,
+    onCreatorClick: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -121,14 +129,53 @@ fun ReelsBottomMeta(
 
         // Title / Description
         if (!item.title.isNullOrBlank() && item.title != item.author) {
-            Text(
-                text = item.title.orEmpty(),
-                color = Color.White.copy(alpha = 0.85f),
-                fontSize = 13.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            val titleText = item.title.orEmpty()
+            if (onCreatorClick != null && MENTION_REGEX.containsMatchIn(titleText)) {
+                val annotatedTitle = buildAnnotatedString {
+                    var lastIndex = 0
+                    MENTION_REGEX.findAll(titleText).forEach { match ->
+                        if (match.range.first > lastIndex) {
+                            append(titleText.substring(lastIndex, match.range.first))
+                        }
+                        val creator = match.groupValues[1]
+                        withLink(
+                            LinkAnnotation.Clickable(
+                                tag = creator,
+                                styles = TextLinkStyles(
+                                    style = SpanStyle(
+                                        color = AuroraTheme.colors.accent,
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                ),
+                                linkInteractionListener = { onCreatorClick(creator) },
+                            ),
+                        ) {
+                            append(match.value)
+                        }
+                        lastIndex = match.range.last + 1
+                    }
+                    if (lastIndex < titleText.length) {
+                        append(titleText.substring(lastIndex))
+                    }
+                }
+                Text(
+                    text = annotatedTitle,
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 13.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                Text(
+                    text = titleText,
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 13.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
 
         // Metrics row (views / likes)
