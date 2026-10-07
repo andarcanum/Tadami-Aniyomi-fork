@@ -42,8 +42,10 @@ import tachiyomi.domain.library.manga.model.MangaLibrarySort
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.series.manga.interactor.AddMangasToSeries
 import tachiyomi.domain.series.manga.interactor.CreateMangaSeries
+import tachiyomi.domain.series.manga.interactor.DeleteMangaSeries
 import tachiyomi.domain.series.manga.interactor.GetLibraryMangaSeries
 import tachiyomi.domain.series.manga.interactor.GetMangaIdsInAnySeries
+import tachiyomi.domain.series.manga.interactor.RemoveMangaFromSeries
 import tachiyomi.domain.series.manga.interactor.UpdateMangaSeries
 import tachiyomi.domain.series.manga.model.LibraryMangaSeries
 import tachiyomi.domain.series.manga.model.MangaSeries
@@ -72,6 +74,8 @@ class MangaLibraryScreenModelSeriesTest {
     private lateinit var createMangaSeries: CreateMangaSeries
     private lateinit var addMangasToSeries: AddMangasToSeries
     private lateinit var updateMangaSeries: UpdateMangaSeries
+    private lateinit var deleteMangaSeries: DeleteMangaSeries
+    private lateinit var removeMangaFromSeries: RemoveMangaFromSeries
     private lateinit var mangaFlow: MutableStateFlow<List<LibraryManga>>
     private lateinit var seriesFlow: MutableStateFlow<List<LibraryMangaSeries>>
     private lateinit var seriesIdsFlow: MutableStateFlow<Set<Long>>
@@ -109,6 +113,8 @@ class MangaLibraryScreenModelSeriesTest {
         createMangaSeries = mockk(relaxed = true)
         addMangasToSeries = mockk(relaxed = true)
         updateMangaSeries = mockk(relaxed = true)
+        deleteMangaSeries = mockk(relaxed = true)
+        removeMangaFromSeries = mockk(relaxed = true)
         categoriesFlow = MutableStateFlow(listOf(category()))
         tracksFlow = MutableStateFlow(emptyMap())
         downloadCacheChanges = MutableSharedFlow<Unit>(replay = 1).also { it.tryEmit(Unit) }
@@ -162,6 +168,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -210,6 +218,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -264,6 +274,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -314,6 +326,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -362,6 +376,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -407,6 +423,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -456,6 +474,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -504,6 +524,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -561,6 +583,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -636,6 +660,8 @@ class MangaLibraryScreenModelSeriesTest {
             createMangaSeries = createMangaSeries,
             addMangasToSeries = addMangasToSeries,
             updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
@@ -653,6 +679,57 @@ class MangaLibraryScreenModelSeriesTest {
         screenModel.state.value.library.values.single()
             .filterIsInstance<MangaLibraryItem.Series>()
             .map { it.librarySeries.id } shouldContainExactly listOf(8L, 7L)
+    }
+
+    @Test
+    fun `removeMangas with deleteFromLibrary detaches entries and deletes series`() = runTest(testDispatcher) {
+        val manga1 = libraryManga(id = 1L, title = "Manga 1")
+        val manga2 = libraryManga(id = 2L, title = "Manga 2")
+        val series = librarySeries(id = 7L, title = "Series", manga = manga1)
+        mangaFlow.value = listOf(manga1, manga2)
+        seriesFlow.value = listOf(series)
+        seriesIdsFlow.value = setOf(manga1.id)
+
+        val screenModel = MangaLibraryScreenModel(
+            getLibraryManga = getLibraryManga,
+            getLibraryMangaSeries = getLibraryMangaSeries,
+            getMangaIdsInAnySeries = getMangaIdsInAnySeries,
+            getCategories = getCategories,
+            getTracksPerManga = getTracksPerManga,
+            getNextChapters = mockk(relaxed = true),
+            getChaptersByMangaId = mockk(relaxed = true),
+            setReadStatus = mockk(relaxed = true),
+            updateManga = mockk(relaxed = true),
+            setMangaCategories = mockk(relaxed = true),
+            createMangaSeries = createMangaSeries,
+            addMangasToSeries = addMangasToSeries,
+            updateMangaSeries = updateMangaSeries,
+            deleteMangaSeries = deleteMangaSeries,
+            removeMangaFromSeries = removeMangaFromSeries,
+            preferences = basePreferences,
+            libraryPreferences = libraryPreferences,
+            coverCache = mockk(relaxed = true),
+            sourceManager = sourceManager,
+            downloadManager = downloadManager,
+            downloadCache = downloadCache,
+            trackerManager = trackerManager,
+            libraryDispatcher = testDispatcher,
+        )
+        activeScreenModels += screenModel
+
+        advanceTimeBy(SEARCH_DEBOUNCE_MILLIS + 1)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.removeMangas(
+            mangaList = listOf(manga1.manga),
+            deleteFromLibrary = true,
+            deleteChapters = false,
+            seriesIds = listOf(7L),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        io.mockk.coVerify { removeMangaFromSeries.await(1L) }
+        io.mockk.coVerify { deleteMangaSeries.await(7L) }
     }
 
     private fun libraryManga(

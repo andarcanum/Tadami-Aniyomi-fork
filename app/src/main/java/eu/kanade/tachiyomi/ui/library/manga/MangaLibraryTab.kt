@@ -369,7 +369,7 @@ data object MangaLibraryTab : Tab {
                     containsLocalEntry = dialog.manga.any(Manga::isLocal),
                     onDismissRequest = onDismissRequest,
                     onConfirm = { deleteManga, deleteChapter ->
-                        screenModel.removeMangas(dialog.manga, deleteManga, deleteChapter)
+                        screenModel.removeMangas(dialog.manga, deleteManga, deleteChapter, dialog.seriesIds)
                         screenModel.clearSelection()
                     },
                     entryType = DeleteLibraryEntryType.Manga,

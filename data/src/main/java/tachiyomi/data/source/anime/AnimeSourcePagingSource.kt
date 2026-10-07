@@ -102,8 +102,8 @@ abstract class AnimeSourcePagingSource(
 
 private fun SAnime.toDomainAnime(sourceId: Long): Anime {
     return Anime.create().copy(
-        url = url,
-        title = title,
+        url = url.trim(),
+        title = title.trim(),
         artist = artist,
         author = author,
         description = description,

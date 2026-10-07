@@ -213,6 +213,8 @@ class MangaLibraryScreenModelLanguageFilterTest {
             createMangaSeries = mockk(relaxed = true),
             addMangasToSeries = mockk(relaxed = true),
             updateMangaSeries = mockk(relaxed = true),
+            deleteMangaSeries = mockk(relaxed = true),
+            removeMangaFromSeries = mockk(relaxed = true),
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),
