@@ -223,6 +223,23 @@ class AnimeLibraryScreenModelIndexGuardTest {
         group.map { it.libraryAnime.anime.title } shouldContainExactly listOf("Alpha", "Zeta")
     }
 
+    @Test
+    fun `showSettingsDialog sets SettingsSheet dialog even when categories are empty`() = runTest(testDispatcher) {
+        categoriesFlow.value = emptyList()
+        animeFlow.value = emptyList()
+
+        val screenModel = trackedAnimeLibraryScreenModel()
+        advanceTimeBy(SEARCH_DEBOUNCE_MILLIS + 1)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.activeCategoryIndex = 99
+        screenModel.showSettingsDialog()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.dialog shouldBe AnimeLibraryScreenModel.Dialog.SettingsSheet
+        screenModel.state.value.categories shouldBe emptyList()
+    }
+
     private fun trackedAnimeLibraryScreenModel(): AnimeLibraryScreenModel {
         return AnimeLibraryScreenModel(
             getLibraryAnime = getLibraryAnime,

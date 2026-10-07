@@ -230,7 +230,7 @@ data object AnimeLibraryTab : Tab {
 
     private val userProfilePreferences: UserProfilePreferences by injectLazy()
 
-    private const val AURORA_LIBRARY_IDLE_PRELOAD_DELAY_MS = 300L
+    private const val AURORA_LIBRARY_IDLE_PRELOAD_DELAY_MS = 2000L
 
     @OptIn(ExperimentalAnimationGraphicsApi::class)
     override val options: TabOptions
@@ -1565,12 +1565,9 @@ data object AnimeLibraryTab : Tab {
 
         val onDismissRequest = screenModel::closeDialog
         when (val dialog = state.dialog) {
-            is AnimeLibraryScreenModel.Dialog.SettingsSheet -> run {
+            is AnimeLibraryScreenModel.Dialog.SettingsSheet -> {
                 val category = state.categories.getOrNull(screenModel.activeCategoryIndex)
-                if (category == null) {
-                    onDismissRequest()
-                    return@run
-                }
+                    ?: state.categories.firstOrNull()
                 AnimeLibrarySettingsDialog(
                     onDismissRequest = onDismissRequest,
                     screenModel = settingsScreenModel,
@@ -1608,12 +1605,9 @@ data object AnimeLibraryTab : Tab {
 
         val onDismissMangaRequest = mangaScreenModel::closeDialog
         when (val dialog = mangaState.dialog) {
-            is MangaLibraryScreenModel.Dialog.SettingsSheet -> run {
+            is MangaLibraryScreenModel.Dialog.SettingsSheet -> {
                 val category = mangaState.categories.getOrNull(mangaScreenModel.activeCategoryIndex)
-                if (category == null) {
-                    onDismissMangaRequest()
-                    return@run
-                }
+                    ?: mangaState.categories.firstOrNull()
                 MangaLibrarySettingsDialog(
                     onDismissRequest = onDismissMangaRequest,
                     screenModel = mangaSettingsScreenModel,
