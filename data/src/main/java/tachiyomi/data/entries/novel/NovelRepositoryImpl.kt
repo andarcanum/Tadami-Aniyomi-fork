@@ -78,7 +78,13 @@ class NovelRepositoryImpl(
     }
 
     override suspend fun insertNovel(novel: Novel): Long? {
-        return handler.awaitOneOrNullExecutable(inTransaction = true) { db ->
+        return handler.await(inTransaction = true) { db ->
+            val existing = db.novelsQueries
+                .getNovelByUrlAndSource(novel.url, novel.source, NovelMapper::mapNovel)
+                .executeAsOneOrNull()
+            if (existing != null) {
+                return@await existing.id
+            }
             db.novelsQueries.insert(
                 source = novel.source,
                 url = novel.url,
@@ -103,7 +109,7 @@ class NovelRepositoryImpl(
                 version = novel.version,
                 completedAt = novel.completedAt,
             )
-            db.novelsQueries.selectLastInsertedRowId()
+            db.novelsQueries.selectLastInsertedRowId().executeAsOneOrNull()
         }
     }
 

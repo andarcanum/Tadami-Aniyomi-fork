@@ -35,7 +35,7 @@ fun DeleteLibraryEntryDialog(
                     DeleteLibraryEntryType.Anime -> AYMR.strings.anime_from_library
                     DeleteLibraryEntryType.Novel -> AYMR.strings.novel_from_library
                 }
-                add(CheckboxState.State.None(checkbox1))
+                add(CheckboxState.State.Checked(checkbox1))
                 if (!containsLocalEntry) {
                     val checkbox2 = when (entryType) {
                         DeleteLibraryEntryType.Manga -> MR.strings.downloaded_chapters

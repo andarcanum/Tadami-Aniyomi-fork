@@ -93,8 +93,10 @@ import tachiyomi.domain.library.model.LibraryTrackStatus
 import tachiyomi.domain.library.service.LibraryPreferences
 import tachiyomi.domain.series.manga.interactor.AddMangasToSeries
 import tachiyomi.domain.series.manga.interactor.CreateMangaSeries
+import tachiyomi.domain.series.manga.interactor.DeleteMangaSeries
 import tachiyomi.domain.series.manga.interactor.GetLibraryMangaSeries
 import tachiyomi.domain.series.manga.interactor.GetMangaIdsInAnySeries
+import tachiyomi.domain.series.manga.interactor.RemoveMangaFromSeries
 import tachiyomi.domain.series.manga.interactor.UpdateMangaSeries
 import tachiyomi.domain.series.manga.model.MangaSeries
 import tachiyomi.domain.source.manga.service.MangaSourceManager
@@ -124,6 +126,8 @@ class MangaLibraryScreenModel(
     private val createMangaSeries: CreateMangaSeries = Injekt.get(),
     private val addMangasToSeries: AddMangasToSeries = Injekt.get(),
     private val updateMangaSeries: UpdateMangaSeries = Injekt.get(),
+    private val deleteMangaSeries: DeleteMangaSeries = Injekt.get(),
+    private val removeMangaFromSeries: RemoveMangaFromSeries = Injekt.get(),
     private val preferences: BasePreferences = Injekt.get(),
     val libraryPreferences: LibraryPreferences = Injekt.get(),
     private val coverCache: MangaCoverCache = Injekt.get(),
@@ -1096,7 +1100,12 @@ class MangaLibraryScreenModel(
      * @param deleteFromLibrary whether to delete manga from library.
      * @param deleteChapters whether to delete downloaded chapters.
      */
-    fun removeMangas(mangaList: List<Manga>, deleteFromLibrary: Boolean, deleteChapters: Boolean) {
+    fun removeMangas(
+        mangaList: List<Manga>,
+        deleteFromLibrary: Boolean,
+        deleteChapters: Boolean,
+        seriesIds: List<Long> = emptyList(),
+    ) {
         screenModelScope.launchNonCancellable {
             val mangaToDelete = mangaList.distinctBy { it.id }
 
@@ -1109,6 +1118,12 @@ class MangaLibraryScreenModel(
                     )
                 }
                 updateManga.awaitAll(toDelete)
+                mangaToDelete.forEach {
+                    removeMangaFromSeries.await(it.id)
+                }
+                seriesIds.forEach {
+                    deleteMangaSeries.await(it)
+                }
             }
 
             if (deleteChapters) {
@@ -1336,7 +1351,10 @@ class MangaLibraryScreenModel(
         val mangaList = state.value.selection
             .selectedMangaEntries()
             .map { it.manga }
-        mutableState.update { it.copy(dialog = Dialog.DeleteManga(mangaList)) }
+        val seriesIds = state.value.selection
+            .filterIsInstance<MangaLibraryItem.Series>()
+            .map { it.librarySeries.series.id }
+        mutableState.update { it.copy(dialog = Dialog.DeleteManga(mangaList, seriesIds)) }
     }
 
     fun createSeries(name: String) {
@@ -1434,7 +1452,7 @@ class MangaLibraryScreenModel(
             val manga: List<Manga>,
             val initialSelection: ImmutableList<CheckboxState<Category>>,
         ) : Dialog
-        data class DeleteManga(val manga: List<Manga>) : Dialog
+        data class DeleteManga(val manga: List<Manga>, val seriesIds: List<Long> = emptyList()) : Dialog
         data object CreateSeries : Dialog
         data class AddToSeries(val series: List<MangaSeries>) : Dialog
     }

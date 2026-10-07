@@ -264,7 +264,13 @@ class MangaRepositoryImpl(
     }
 
     override suspend fun insertManga(manga: Manga): Long? {
-        return handler.awaitOneOrNullExecutable(inTransaction = true) { db ->
+        return handler.await(inTransaction = true) { db ->
+            val existing = db.mangasQueries
+                .getMangaByUrlAndSource(manga.url, manga.source, MangaMapper::mapManga)
+                .executeAsOneOrNull()
+            if (existing != null) {
+                return@await existing.id
+            }
             db.mangasQueries.insert(
                 source = manga.source,
                 url = manga.url,
@@ -292,7 +298,7 @@ class MangaRepositoryImpl(
                 memo = manga.memo,
                 completedAt = manga.completedAt,
             )
-            db.mangasQueries.selectLastInsertedRowId()
+            db.mangasQueries.selectLastInsertedRowId().executeAsOneOrNull()
         }
     }
 

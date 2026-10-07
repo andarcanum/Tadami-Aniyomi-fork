@@ -297,7 +297,13 @@ class AnimeRepositoryImpl(
     }
 
     override suspend fun insertAnime(anime: Anime): Long? {
-        return handler.awaitOneOrNullExecutable(inTransaction = true) { db ->
+        return handler.await(inTransaction = true) { db ->
+            val existing = db.animesQueries
+                .getAnimeByUrlAndSource(anime.url, anime.source, AnimeMapper::mapAnime)
+                .executeAsOneOrNull()
+            if (existing != null) {
+                return@await existing.id
+            }
             db.animesQueries.insert(
                 source = anime.source,
                 url = anime.url,
@@ -330,7 +336,7 @@ class AnimeRepositoryImpl(
                 seasonNumber = anime.seasonNumber,
                 seasonSourceOrder = anime.seasonSourceOrder,
             )
-            db.animesQueries.selectLastInsertedRowId()
+            db.animesQueries.selectLastInsertedRowId().executeAsOneOrNull()
         }
     }
 
