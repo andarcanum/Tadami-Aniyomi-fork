@@ -29,6 +29,7 @@ fun MangaStatsCard(
     detailsSnapshot: MangaDetailsSnapshot,
     modifier: Modifier = Modifier,
     showAuthor: Boolean = true,
+    onSourceClick: (() -> Unit)? = null,
 ) {
     GlassmorphismCard(
         modifier = modifier,
@@ -119,6 +120,7 @@ fun MangaStatsCard(
                     label = stringResource(AYMR.strings.aurora_source),
                     value = detailsSnapshot.sourceTitle ?: stringResource(MR.strings.not_applicable),
                     modifier = Modifier.weight(1f),
+                    onClick = onSourceClick,
                 )
                 QuietMetadataRow(
                     icon = Icons.Rounded.Translate,

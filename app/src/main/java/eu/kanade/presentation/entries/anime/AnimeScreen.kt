@@ -173,6 +173,7 @@ fun AnimeScreen(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
 
     onFilterButtonClicked: () -> Unit,
     onRefresh: () -> Unit,
@@ -267,6 +268,7 @@ fun AnimeScreen(
             onGenreClick = onGenreClick,
             onGenreLongClick = onGenreLongClick,
             onGenresSearch = onGenresSearch,
+            onSourceClick = onSourceClick,
             onFilterButtonClicked = onFilterButtonClicked,
             onToggleSort = onToggleSort,
             onToggleUnseenFilter = onToggleUnseenFilter,

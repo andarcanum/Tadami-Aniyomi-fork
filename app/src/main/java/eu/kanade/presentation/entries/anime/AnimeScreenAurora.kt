@@ -232,6 +232,7 @@ fun AnimeScreenAuroraImpl(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
 ) {
     val anime = state.anime
     var selectedGenres by remember { mutableStateOf(emptySet<String>()) }
@@ -853,6 +854,7 @@ fun AnimeScreenAuroraImpl(
                                         anime = anime,
                                         snapshot = animeDetailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -970,6 +972,7 @@ fun AnimeScreenAuroraImpl(
                                         anime = anime,
                                         snapshot = animeDetailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -1342,6 +1345,7 @@ fun AnimeScreenAuroraImpl(
                                         anime = anime,
                                         snapshot = animeDetailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -1488,6 +1492,7 @@ fun AnimeScreenAuroraImpl(
                                         anime = anime,
                                         snapshot = animeDetailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),

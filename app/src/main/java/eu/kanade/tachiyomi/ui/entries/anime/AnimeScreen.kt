@@ -55,6 +55,7 @@ import eu.kanade.tachiyomi.ui.browse.anime.migration.anime.season.MigrateSeasonS
 import eu.kanade.tachiyomi.ui.browse.anime.migration.search.MigrateAnimeDialog
 import eu.kanade.tachiyomi.ui.browse.anime.migration.search.MigrateAnimeDialogScreenModel
 import eu.kanade.tachiyomi.ui.browse.anime.migration.search.MigrateAnimeSearchScreen
+import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourcePagerScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.browse.BrowseAnimeSourceScreen
 import eu.kanade.tachiyomi.ui.browse.anime.source.globalsearch.GlobalAnimeSearchScreen
 import eu.kanade.tachiyomi.ui.category.CategoriesTab
@@ -78,6 +79,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.entries.anime.model.Anime
 import tachiyomi.domain.entries.anime.model.AnimeUpdate
 import tachiyomi.domain.items.episode.model.Episode
+import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
@@ -192,6 +194,9 @@ class AnimeScreen(
             onGenreLongClick = null, // handled internally in AuroraImpl as state toggle
             onGenresSearch = { genres ->
                 scope.launch { performGenresSearch(navigator, genres, screenModel.source!!) }
+            },
+            onSourceClick = {
+                openSource(navigator, successState.source, context)
             },
             onFilterButtonClicked = screenModel::showSettingsDialog,
             onToggleSort = { screenModel.setSorting(successState.anime.sorting) },
@@ -669,6 +674,27 @@ class AnimeScreen(
         }
 
         navigator.push(BrowseAnimeSourceScreen(sourceId, null, genresQuery = genres))
+    }
+
+    private fun openSource(
+        navigator: Navigator,
+        source: AnimeSource,
+        context: Context,
+    ) {
+        if (source is StubAnimeSource) {
+            context.toast(context.stringResource(MR.strings.source_not_installed, source.name))
+            return
+        }
+        val sourceId = source.id
+        val existing = navigator.items.firstOrNull { screen ->
+            (screen is BrowseAnimeSourceScreen && screen.sourceId == sourceId) ||
+                (screen is BrowseAnimeSourcePagerScreen && screen.initialSourceId == sourceId)
+        }
+        if (existing != null) {
+            navigator.popUntil { it == existing }
+            return
+        }
+        navigator.push(BrowseAnimeSourceScreen(sourceId, null))
     }
 
     /**
