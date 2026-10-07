@@ -444,6 +444,16 @@ class BrowseMangaSourceScreenModel(
         }
     }
 
+    private var initialGenreSearchPerformed = false
+
+    fun initGenreSearch(genre: String?, genres: List<String>?) {
+        if (initialGenreSearchPerformed) return
+        if (genre == null && genres.isNullOrEmpty()) return
+        initialGenreSearchPerformed = true
+        genre?.let { searchGenre(it) }
+        genres?.let { searchGenres(it) }
+    }
+
     fun searchGenre(genreName: String) {
         if (source !is CatalogueSource) return
 

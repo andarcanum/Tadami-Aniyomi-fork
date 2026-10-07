@@ -292,7 +292,7 @@ class MainActivity : BaseActivity() {
                     val statusBarBackgroundColor = when {
                         indexing || indexingAnime -> IndexingBannerBackgroundColor
                         downloadOnly -> DownloadedOnlyBannerBackgroundColor
-                        effectiveIncognito -> IncognitoModeBannerBackgroundColor
+                        globalIncognito -> IncognitoModeBannerBackgroundColor
                         else -> MaterialTheme.colorScheme.surface
                     }
                     LaunchedEffect(isSystemInDarkTheme, statusBarBackgroundColor, navigator.lastItem, isAurora) {
@@ -391,7 +391,7 @@ class MainActivity : BaseActivity() {
                         topBar = {
                             AppStateBanners(
                                 downloadedOnlyMode = downloadOnly,
-                                incognitoMode = effectiveIncognito,
+                                incognitoMode = globalIncognito,
                                 indexing = indexing || indexingAnime,
                                 modifier = Modifier.windowInsetsPadding(scaffoldInsets),
                             )
