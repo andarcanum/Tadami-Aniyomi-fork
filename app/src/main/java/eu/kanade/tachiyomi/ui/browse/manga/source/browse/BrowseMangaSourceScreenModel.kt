@@ -319,7 +319,12 @@ class BrowseMangaSourceScreenModel(
     val mangaPagerFlowFlow = state.map { it.listing }
         .distinctUntilChanged()
         .map { listing ->
-            Pager(PagingConfig(pageSize = 25)) {
+            Pager(
+                PagingConfig(
+                    pageSize = 25,
+                    initialLoadSize = 25,
+                ),
+            ) {
                 getRemoteManga.subscribe(sourceId, listing.query ?: "", listing.filters)
             }.flow
                 .cachedIn(ioCoroutineScope)
