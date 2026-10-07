@@ -227,6 +227,7 @@ fun NovelScreenAuroraImpl(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
 ) {
     val novel = state.novel
     var selectedGenres by remember { mutableStateOf(emptySet<String>()) }
@@ -637,6 +638,7 @@ fun NovelScreenAuroraImpl(
                                         nextUpdate = nextUpdate,
                                         sourceName = state.source.name,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -754,6 +756,7 @@ fun NovelScreenAuroraImpl(
                                         nextUpdate = nextUpdate,
                                         sourceName = state.source.name,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -1576,6 +1579,7 @@ fun NovelScreenAuroraImpl(
                                     nextUpdate = nextUpdate,
                                     sourceName = state.source.name,
                                     showAuthor = false,
+                                    onSourceClick = onSourceClick,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .titleScreenStagger(titleStaggerState, 2),
@@ -1711,6 +1715,7 @@ fun NovelScreenAuroraImpl(
                                     nextUpdate = nextUpdate,
                                     sourceName = state.source.name,
                                     showAuthor = false,
+                                    onSourceClick = onSourceClick,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .titleScreenStagger(titleStaggerState, 2),

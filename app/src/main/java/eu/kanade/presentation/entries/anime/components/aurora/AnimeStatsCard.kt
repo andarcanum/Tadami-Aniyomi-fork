@@ -28,6 +28,7 @@ fun AnimeStatsCard(
     snapshot: AnimeDetailsSnapshot,
     modifier: Modifier = Modifier,
     showAuthor: Boolean = true,
+    onSourceClick: (() -> Unit)? = null,
 ) {
     GlassmorphismCard(
         modifier = modifier,
@@ -117,6 +118,7 @@ fun AnimeStatsCard(
                     label = stringResource(AYMR.strings.aurora_source),
                     value = snapshot.sourceText,
                     modifier = Modifier.weight(1f),
+                    onClick = onSourceClick,
                 )
                 QuietMetricTile(
                     label = stringResource(AYMR.strings.aurora_status),

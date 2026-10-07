@@ -204,6 +204,7 @@ fun MangaScreenAuroraImpl(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
 ) {
     val manga = state.manga
     var selectedGenres by remember { mutableStateOf(emptySet<String>()) }
@@ -634,6 +635,7 @@ fun MangaScreenAuroraImpl(
                                         manga = manga,
                                         detailsSnapshot = detailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -751,6 +753,7 @@ fun MangaScreenAuroraImpl(
                                         manga = manga,
                                         detailsSnapshot = detailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -1041,6 +1044,7 @@ fun MangaScreenAuroraImpl(
                                         manga = manga,
                                         detailsSnapshot = detailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),
@@ -1179,6 +1183,7 @@ fun MangaScreenAuroraImpl(
                                         manga = manga,
                                         detailsSnapshot = detailsSnapshot,
                                         showAuthor = false,
+                                        onSourceClick = onSourceClick,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .titleScreenStagger(titleStaggerState, 2),

@@ -140,6 +140,7 @@ fun NovelScreen(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
     onPosterLongClicked: (() -> Unit)? = null,
     onToggleAllChaptersRead: () -> Unit,
     onShare: (() -> Unit)?,
@@ -232,6 +233,7 @@ fun NovelScreen(
             onGenreClick = onGenreClick,
             onGenreLongClick = onGenreLongClick,
             onGenresSearch = onGenresSearch,
+            onSourceClick = onSourceClick,
             onPosterLongClicked = onPosterLongClicked,
             onShare = onShare,
             onWebView = onWebView,
@@ -743,6 +745,13 @@ fun NovelScreen(
                                         text = state.source.name,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = if (onSourceClick != null) {
+                                            Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .clickable(onClick = onSourceClick)
+                                        } else {
+                                            Modifier
+                                        },
                                     )
                                     Text(
                                         text = pluralStringResource(

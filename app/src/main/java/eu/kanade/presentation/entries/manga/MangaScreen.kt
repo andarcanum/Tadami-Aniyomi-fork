@@ -127,6 +127,7 @@ fun MangaScreen(
     onGenreClick: ((String) -> Unit)? = null,
     onGenreLongClick: ((String) -> Unit)? = null,
     onGenresSearch: ((List<String>) -> Unit)? = null,
+    onSourceClick: (() -> Unit)? = null,
 
     onFilterButtonClicked: () -> Unit,
     showScanlatorSelector: Boolean,
@@ -206,6 +207,7 @@ fun MangaScreen(
             onGenreClick = onGenreClick,
             onGenreLongClick = onGenreLongClick,
             onGenresSearch = onGenresSearch,
+            onSourceClick = onSourceClick,
             onFilterButtonClicked = onFilterButtonClicked,
             onToggleSort = onToggleSort,
             onToggleUnreadFilter = onToggleUnreadFilter,

@@ -36,6 +36,7 @@ fun NovelStatsCard(
     sourceName: String,
     modifier: Modifier = Modifier,
     showAuthor: Boolean = true,
+    onSourceClick: (() -> Unit)? = null,
 ) {
     val nextUpdateDays = rememberNovelNextUpdateDays(nextUpdate)
     val nextUpdateDayLabel = nextUpdateDays
@@ -127,6 +128,7 @@ fun NovelStatsCard(
                     label = stringResource(AYMR.strings.aurora_source),
                     value = sourceName,
                     modifier = Modifier.weight(1f),
+                    onClick = onSourceClick,
                 )
                 QuietMetricTile(
                     label = stringResource(AYMR.strings.aurora_status),
