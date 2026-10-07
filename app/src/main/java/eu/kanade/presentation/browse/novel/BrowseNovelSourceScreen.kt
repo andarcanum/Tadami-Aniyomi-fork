@@ -90,6 +90,7 @@ import tachiyomi.presentation.core.components.Badge
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
+import tachiyomi.presentation.core.screens.LoadingScreen
 import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.presentation.core.util.plus
 import uy.kohesive.injekt.Injekt
@@ -180,9 +181,12 @@ fun BrowseNovelSourceContent(
         return
     }
 
-    // Промежуточное skeleton-состояние убрано по решению пользователя:
-    // при загрузке источник сразу переходит к контенту без пустых плиток.
+    // Центрированный индикатор загрузки вместо пустых плиток (скелетона):
+    // даёт мгновенный визуальный отклик при сетевом запросе каталога.
     if (novels.itemCount == 0 && novels.loadState.refresh is LoadState.Loading) {
+        LoadingScreen(
+            modifier = Modifier.padding(effectiveContentPadding),
+        )
         return
     }
 

@@ -1,4 +1,4 @@
-﻿package eu.kanade.presentation.browse.anime
+package eu.kanade.presentation.browse.anime
 
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.background
@@ -71,6 +71,7 @@ import tachiyomi.i18n.MR
 import tachiyomi.presentation.core.components.material.Scaffold
 import tachiyomi.presentation.core.i18n.stringResource
 import tachiyomi.presentation.core.screens.EmptyScreen
+import tachiyomi.presentation.core.screens.LoadingScreen
 import tachiyomi.presentation.core.util.LocalAppHaptics
 import tachiyomi.source.local.entries.anime.LocalAnimeSource
 
@@ -129,9 +130,12 @@ fun BrowseAnimeSourceContent(
         return
     }
 
-    // Промежуточное skeleton-состояние убрано по решению пользователя:
-    // при загрузке источник сразу переходит к контенту без пустых плиток.
+    // Центрированный индикатор загрузки вместо пустых плиток (скелетона):
+    // даёт мгновенный визуальный отклик при сетевом запросе каталога.
     if (animeList.itemCount == 0 && animeList.loadState.refresh is LoadState.Loading) {
+        LoadingScreen(
+            modifier = Modifier.padding(contentPadding),
+        )
         return
     }
 

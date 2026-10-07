@@ -380,7 +380,12 @@ class BrowseNovelSourceScreenModel(
                 old.filterVersion == new.filterVersion
         }
         .map { request ->
-            Pager(PagingConfig(pageSize = 25)) {
+            Pager(
+                PagingConfig(
+                    pageSize = 25,
+                    initialLoadSize = 25,
+                ),
+            ) {
                 getRemoteNovel.subscribe(sourceId, request.query, request.filters)
             }.flow
                 .cachedIn(ioCoroutineScope)
