@@ -24,6 +24,7 @@ import eu.kanade.domain.track.service.TrackPreferences
 import eu.kanade.tachiyomi.data.book.novel.LocalNovelBookArtifactBuilder
 import eu.kanade.tachiyomi.data.book.novel.NovelBookBuilder
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadCacheEvent
+import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueState
 import eu.kanade.tachiyomi.data.download.novel.NovelTranslatedDownloadManager
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCoordinator
@@ -41,6 +42,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -457,6 +459,12 @@ class NovelScreenModelTest {
                     json = Json { encodeDefaults = true },
                 ),
                 downloadCache = null,
+                downloadPreferences = mockk<DownloadPreferences> {
+                    every { removeAfterMarkedAsRead() } returns mockk { every { get() } returns false }
+                    every { removeBookmarkedChapters() } returns mockk { every { get() } returns false }
+                    every { removeExcludeNovelCategories() } returns mockk { every { get() } returns emptySet() }
+                    every { removeAfterReadSlots() } returns mockk { every { get() } returns -1 }
+                },
                 // Without this the model falls back to Injekt, where another test class may have
                 // left a relaxed NovelDownloadCache mock whose changes flow completes immediately -
                 // the collector then throws in the background and lands in the next runTest.
@@ -1717,6 +1725,73 @@ class NovelScreenModelTest {
         }
     }
 
+    @Test
+    fun `deleteDownloadedChapters ALL removes downloads via deleteNovel when everything is downloaded`() {
+        runBlocking {
+            val novel = novelForResumeTests(2030L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+                novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = false),
+            )
+            val manager = mockk<NovelDownloadManager>(relaxed = true)
+            every { manager.getDownloadedChapterIds(any<Novel>(), any<List<NovelChapter>>()) } returns setOf(1L, 2L)
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                novelDownloadManager = manager,
+            )
+            try {
+                awaitResumeScreenModel(screenModel)
+                delay(700) // let syncDownloadedState land the mocked listing
+
+                screenModel.deleteDownloadedChapters(NovelDownloadDeletionMode.ALL)
+                delay(200)
+
+                verify(exactly = 1) { manager.deleteNovel(any()) }
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.downloadedChapterIds shouldBe emptySet()
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
+    @Test
+    fun `markChaptersRead with removeAfterMarkedAsRead deletes read downloads silently`() {
+        runBlocking {
+            val novel = novelForResumeTests(2031L)
+            val chapters = listOf(
+                novelChapter(id = 1L, novelId = novel.id, chapterNumber = 1.0, read = false),
+                novelChapter(id = 2L, novelId = novel.id, chapterNumber = 2.0, read = false),
+            )
+            val manager = mockk<NovelDownloadManager>(relaxed = true)
+            every { manager.getDownloadedChapterIds(any<Novel>(), any<List<NovelChapter>>()) } returns setOf(1L, 2L)
+            val prefs = mockk<DownloadPreferences>()
+            every { prefs.removeAfterMarkedAsRead() } returns mockk { every { get() } returns true }
+            every { prefs.removeBookmarkedChapters() } returns mockk { every { get() } returns false }
+            every { prefs.removeExcludeNovelCategories() } returns mockk { every { get() } returns emptySet() }
+            val screenModel = createResumeScreenModel(
+                novel = novel,
+                chapters = chapters,
+                novelDownloadManager = manager,
+                downloadPreferences = prefs,
+            )
+            try {
+                awaitResumeScreenModel(screenModel)
+                delay(700)
+                screenModel.toggleSelection(1L)
+                screenModel.markChaptersRead(true)
+                delay(200)
+
+                verify(exactly = 1) { manager.deleteChapters(any<Novel>(), any<Collection<Long>>()) }
+                val state = screenModel.state.value as NovelScreenModel.State.Success
+                state.downloadedChapterIds shouldBe setOf(2L)
+            } finally {
+                screenModel.onDispose()
+            }
+        }
+    }
+
     private class FakeLifecycleOwner : LifecycleOwner {
         private class NoopStartedLifecycle : Lifecycle() {
             override val currentState: State
@@ -1737,6 +1812,13 @@ class NovelScreenModelTest {
         novelHistoryRepository: NovelHistoryRepository = FakeNovelHistoryRepository(),
         downloadCacheChanges: Flow<NovelDownloadCacheEvent> = MutableSharedFlow(replay = 1, extraBufferCapacity = 1),
         downloadQueueState: Flow<NovelDownloadQueueState> = MutableStateFlow(NovelDownloadQueueState()),
+        novelDownloadManager: NovelDownloadManager = NovelDownloadManager(),
+        downloadPreferences: DownloadPreferences = mockk {
+            every { removeAfterMarkedAsRead() } returns mockk { every { get() } returns false }
+            every { removeBookmarkedChapters() } returns mockk { every { get() } returns false }
+            every { removeExcludeNovelCategories() } returns mockk { every { get() } returns emptySet() }
+            every { removeAfterReadSlots() } returns mockk { every { get() } returns -1 }
+        },
         getNovelWithChaptersOverride: GetNovelWithChapters? = null,
         novelTranslatedDownloadManager: NovelTranslatedDownloadManager = NovelTranslatedDownloadManager(),
         translationQueueManager: TranslationQueueManager = Injekt.get(),
@@ -1744,7 +1826,9 @@ class NovelScreenModelTest {
         excludedScanlators: Set<String> = emptySet(),
         refreshNovelTracks: RefreshNovelTracks = mockk(relaxed = true),
         trackNovelChapter: TrackNovelChapter = mockk(relaxed = true),
-        resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { _, _ -> emptySet() },
+        resolveDownloadedChapterIds: (Novel, List<NovelChapter>) -> Set<Long> = { novelParam, chaptersParam ->
+            novelDownloadManager.getDownloadedChapterIds(novelParam, chaptersParam)
+        },
         enqueueOriginal: (Novel, List<NovelChapter>) -> Int = { novel, queuedChapters ->
             eu.kanade.tachiyomi.data.download.novel.NovelDownloadQueueManager.enqueueOriginal(novel, queuedChapters)
         },
@@ -1865,6 +1949,8 @@ class NovelScreenModelTest {
             getTracks = getNovelTracks,
             refreshNovelTracks = refreshNovelTracks,
             trackNovelChapter = trackNovelChapter,
+            novelDownloadManager = novelDownloadManager,
+            downloadPreferences = downloadPreferences,
             downloadCacheChanges = downloadCacheChanges,
             downloadQueueState = downloadQueueState,
             downloadCache = null,

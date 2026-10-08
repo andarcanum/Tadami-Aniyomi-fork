@@ -103,6 +103,8 @@ import eu.kanade.presentation.entries.EditCoverAction
 import eu.kanade.presentation.entries.components.EditMetadataSheet
 import eu.kanade.presentation.entries.components.aurora.AuroraNoteEditorDialog
 import eu.kanade.presentation.entries.novel.NovelChapterSettingsDialog
+import eu.kanade.presentation.entries.novel.NovelDeleteDownloadsConfirmDialog
+import eu.kanade.presentation.entries.novel.NovelDeleteDownloadsProgressDialog
 import eu.kanade.presentation.entries.novel.NovelScreen
 import eu.kanade.presentation.entries.novel.NovelTranslationBatchSheet
 import eu.kanade.presentation.entries.novel.TranslatedDownloadOptionsDialog
@@ -204,6 +206,9 @@ class NovelScreen(
         var epubExportProgress by remember { mutableStateOf<NovelEpubExportProgress?>(null) }
         var showNotesDialog by remember { mutableStateOf(false) }
         var showEditMetadataSheet by remember { mutableStateOf(false) }
+        var deleteDownloadsRequest by remember {
+            mutableStateOf<Pair<NovelDownloadDeletionMode, Int>?>(null)
+        }
         val epubExportPreferences = screenModel.getEpubExportPreferences()
         BackHandler(enabled = screenModel.isAnyChapterSelected) {
             screenModel.toggleAllSelection(false)
@@ -568,7 +573,21 @@ class NovelScreen(
             onMultiMarkAsReadClicked = screenModel::markChaptersRead,
             onMarkPreviousAsReadClicked = screenModel::markPreviousChapterRead,
             onMultiDownloadClicked = screenModel::downloadSelectedChapters,
-            onMultiDeleteClicked = screenModel::deleteDownloadedSelectedChapters,
+            onMultiDeleteClicked = {
+                val state = screenModel.state.value as? NovelScreenModel.State.Success
+                val count = state?.selectedChapterIds?.count { it in state.downloadedChapterIds } ?: 0
+                if (count > 0) deleteDownloadsRequest = NovelDownloadDeletionMode.SELECTED to count
+            },
+            onOpenDeleteDownloadsClicked = {
+                val state = screenModel.state.value as? NovelScreenModel.State.Success
+                val count = state?.downloadedChapterIds?.size ?: 0
+                if (count > 0) deleteDownloadsRequest = NovelDownloadDeletionMode.ALL to count
+            },
+            onOpenDeleteReadChaptersClicked = {
+                val state = screenModel.state.value as? NovelScreenModel.State.Success
+                val count = state?.chapters?.count { it.read && it.id in state.downloadedChapterIds } ?: 0
+                if (count > 0) deleteDownloadsRequest = NovelDownloadDeletionMode.READ to count
+            },
             onSaveScrollPosition = screenModel::saveScrollPosition,
             onClickEditInfo = { showEditMetadataSheet = true },
             onRetrySuggestions = screenModel::retrySuggestions,
@@ -637,6 +656,25 @@ class NovelScreen(
                     screenModel.runDownloadAction(action, amount)
                     showBatchDownloadDialog = false
                 },
+            )
+        }
+
+        deleteDownloadsRequest?.let { (mode, count) ->
+            NovelDeleteDownloadsConfirmDialog(
+                isReadMode = mode == NovelDownloadDeletionMode.READ,
+                count = count,
+                onDismissRequest = { deleteDownloadsRequest = null },
+                onConfirm = {
+                    deleteDownloadsRequest = null
+                    screenModel.deleteDownloadedChapters(mode)
+                },
+            )
+        }
+        successState.deletionProgress?.let { progress ->
+            NovelDeleteDownloadsProgressDialog(
+                deleted = progress.deleted,
+                total = progress.total,
+                onHide = screenModel::hideDeletionProgress,
             )
         }
 

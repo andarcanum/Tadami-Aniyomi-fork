@@ -953,6 +953,14 @@
     <string name="novel_download_chip_chapters">глав</string>
     <string name="novel_download_select_chapters_title">Выбор глав для скачивания</string>
     <string name="novel_download_no_available">Нет доступных глав для скачивания</string>
+    <string name="novel_delete_downloaded_title">Удалить загруженные главы</string>
+    <string name="novel_delete_read_title">Удалить прочитанные главы</string>
+    <string name="novel_delete_downloaded_confirm_body">Удалить %1$d загруженных глав с устройства? История чтения и закладки сохранятся.</string>
+    <string name="novel_delete_downloaded_progress">Удаление глав… %1$d из %2$d</string>
+    <string name="novel_delete_downloaded_done">Удалено глав: %1$d</string>
+    <string name="novel_delete_downloaded_menu">Удалить загруженные главы (%1$d)</string>
+    <string name="novel_delete_read_menu">Удалить прочитанные главы (%1$d)</string>
+    <string name="novel_delete_downloaded_offer">Все главы прочитаны. Удалить %1$d загруженных глав?</string>
     <string name="novel_export_as_epub">Экспорт в EPUB</string>
     <string name="novel_epub_short">EPUB</string>
     <string name="novel_translated_download_short">Перевод</string>
