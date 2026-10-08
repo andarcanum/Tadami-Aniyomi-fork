@@ -37,6 +37,7 @@ import com.github.chrisbanes.photoview.PhotoView
 import eu.kanade.domain.base.BasePreferences
 import eu.kanade.tachiyomi.data.coil.cropBorders
 import eu.kanade.tachiyomi.data.coil.customDecoder
+import eu.kanade.tachiyomi.ui.reader.viewer.pager.PagerSubsamplingImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonBorderDetector
 import eu.kanade.tachiyomi.ui.reader.viewer.webtoon.WebtoonSubsamplingImageView
 import eu.kanade.tachiyomi.util.system.animatorDurationScale
@@ -152,11 +153,13 @@ open class ReaderPageImageView @JvmOverloads constructor(
         with(pageView as? SubsamplingScaleImageView) {
             if (this == null) return
             if (isReady) {
+                (this as? PagerSubsamplingImageView)?.applySmartScaleIfNeeded()
                 landscapeZoom(forward)
             } else {
                 setOnImageEventListener(
                     object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
                         override fun onReady() {
+                            (this@with as? PagerSubsamplingImageView)?.applySmartScaleIfNeeded()
                             setupZoom(config)
                             landscapeZoom(forward)
                             this@ReaderPageImageView.onImageLoaded()
@@ -172,9 +175,13 @@ open class ReaderPageImageView @JvmOverloads constructor(
     }
 
     private fun SubsamplingScaleImageView.landscapeZoom(forward: Boolean) {
+        val isCenterInsideOrSmart = config != null && (
+            config!!.minimumScaleType == SCALE_TYPE_CENTER_INSIDE ||
+                config!!.minimumScaleType == SubsamplingScaleImageView.SCALE_TYPE_SMART_FIT
+            )
         if (config != null &&
             config!!.landscapeZoom &&
-            config!!.minimumScaleType == SCALE_TYPE_CENTER_INSIDE &&
+            isCenterInsideOrSmart &&
             sWidth > sHeight &&
             scale == minScale
         ) {
@@ -318,7 +325,7 @@ open class ReaderPageImageView @JvmOverloads constructor(
         pageView = if (isWebtoon) {
             WebtoonSubsamplingImageView(context)
         } else {
-            SubsamplingScaleImageView(context)
+            PagerSubsamplingImageView(context)
         }.apply {
             setMaxTileSize(ImageUtil.hardwareBitmapThreshold)
             setDoubleTapZoomStyle(SubsamplingScaleImageView.ZOOM_FOCUS_CENTER)
@@ -364,14 +371,27 @@ open class ReaderPageImageView @JvmOverloads constructor(
         data: Any,
         config: Config,
     ) = (pageView as? SubsamplingScaleImageView)?.apply {
+        val isSmartFit = config.minimumScaleType == SubsamplingScaleImageView.SCALE_TYPE_SMART_FIT
+        (this as? PagerSubsamplingImageView)?.isSmartFitEnabled = isSmartFit
+
         setZoomEnabled(config.enablePinchToZoom)
         setDoubleTapZoomDuration(config.zoomDuration.getSystemScaledDuration())
-        setMinimumScaleType(config.minimumScaleType)
+        if (isSmartFit) {
+            val initialType = if (width > 0 && height > 0 && isReady) {
+                ReaderScaleUtil.resolveSmartScaleType(width, height, sWidth, sHeight)
+            } else {
+                SCALE_TYPE_CENTER_INSIDE
+            }
+            setMinimumScaleType(initialType)
+        } else {
+            setMinimumScaleType(config.minimumScaleType)
+        }
         setMinimumDpi(1) // Just so that very small image will be fit for initial load
         setCropBorders(config.cropBorders)
         setOnImageEventListener(
             object : SubsamplingScaleImageView.DefaultOnImageEventListener() {
                 override fun onReady() {
+                    (this@apply as? PagerSubsamplingImageView)?.applySmartScaleIfNeeded()
                     setupZoom(config)
                     if (isVisibleOnScreen()) landscapeZoom(true)
                     this@ReaderPageImageView.onImageLoaded()

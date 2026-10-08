@@ -17,6 +17,7 @@ import eu.kanade.tachiyomi.ui.reader.model.ReaderPage
 import eu.kanade.tachiyomi.ui.reader.viewer.ProcessedPageImage
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderPageImageView
 import eu.kanade.tachiyomi.ui.reader.viewer.ReaderProgressIndicator
+import eu.kanade.tachiyomi.ui.reader.viewer.ReaderScaleUtil
 import eu.kanade.tachiyomi.ui.webview.WebViewActivity
 import eu.kanade.tachiyomi.util.system.dpToPx
 import kotlinx.coroutines.Job
@@ -133,7 +134,19 @@ class WebtoonPageHolder(
     }
 
     private fun refreshLayoutParams() {
-        val margin = (Resources.getSystem().displayMetrics.widthPixels * (viewer.config.sidePadding / 100f)).toInt()
+        val displayMetrics = Resources.getSystem().displayMetrics
+        val totalWidth = if (viewer.recycler.width > 0) viewer.recycler.width else displayMetrics.widthPixels
+        val totalHeight = if (viewer.recycler.height > 0) viewer.recycler.height else displayMetrics.heightPixels
+
+        val dims = page?.imageDimensions
+        val margin = ReaderScaleUtil.computeWebtoonAdaptiveSideMargin(
+            viewportWidth = totalWidth,
+            viewportHeight = totalHeight,
+            imageWidth = dims?.width,
+            imageHeight = dims?.height,
+            basePaddingPercent = viewer.config.sidePadding,
+            webtoonSmartFit = viewer.config.webtoonSmartFit,
+        )
         val bottomMargin = if (viewer.hasPageGaps) 15.dpToPx else 0
 
         // Avoid layout thrash: rebinds while scrolling must not trigger a requestLayout
@@ -356,6 +369,8 @@ class WebtoonPageHolder(
                     val ratio = it.height.toFloat() / it.width.toFloat()
                     currentPage.chapter.notePageRatio(ratio)
                     viewer.activity.viewModel.noteSessionPageRatio(ratio)
+                    refreshLayoutParams()
+                    refreshPlaceholderHeight()
                 }
                 when (prepared) {
                     is PageImageData.Encoded -> {
