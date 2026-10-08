@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.data.backup.contentSummary
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupAchievement
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
+import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSeries
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupChapter
@@ -148,7 +149,7 @@ class BackupPayloadEmitterTest {
         backupAchievements = listOf(
             BackupAchievement(id = "id", title = "t", description = "d", category = 0, type = 0),
         ),
-        backupUserProfile = BackupUserProfile(),
+        backupUserProfile = BackupUserProfile(joinDate = 0L),
         backupActivityLog = listOf(BackupDayActivity()),
         backupStats = BackupStats(),
         backupMangaSeries = listOf(BackupMangaSeries(title = "manga series")),
@@ -160,5 +161,6 @@ class BackupPayloadEmitterTest {
         backupReelsFollows = listOf(BackupReelsFollow(sourceId = 1, creator = "creator")),
         backupDiscoveryHidden = listOf(BackupDiscoveryHidden(mediaType = "MANGA", cleanTitle = "title")),
         backupDiscoveryBlacklistTags = listOf(BackupDiscoveryTag(mediaType = "MANGA", tag = "tag")),
+        backupAnimeSeries = listOf(BackupAnimeSeries(title = "anime series")),
     )
 }

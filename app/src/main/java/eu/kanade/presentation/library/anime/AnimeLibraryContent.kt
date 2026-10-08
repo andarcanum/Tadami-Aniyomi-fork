@@ -31,7 +31,7 @@ import kotlin.time.Duration.Companion.seconds
 fun AnimeLibraryContent(
     categories: List<Category>,
     searchQuery: String?,
-    selection: List<LibraryAnime>,
+    selection: List<AnimeLibraryItem>,
     contentPadding: PaddingValues,
     currentPage: () -> Int,
     hasActiveFilters: Boolean,
@@ -39,9 +39,10 @@ fun AnimeLibraryContent(
     onChangeCurrentPage: (Int) -> Unit,
     onCategoryLongSelected: ((Int) -> Unit)? = null,
     onAnimeClicked: (Long) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
     onContinueWatchingClicked: ((LibraryAnime) -> Unit)?,
-    onToggleSelection: (LibraryAnime) -> Unit,
-    onToggleRangeSelection: (LibraryAnime) -> Unit,
+    onToggleSelection: (AnimeLibraryItem) -> Unit,
+    onToggleRangeSelection: (AnimeLibraryItem) -> Unit,
     onTogglePinned: (AnimeLibraryItem) -> Unit,
     onRefresh: suspend (Category?) -> Boolean,
     onGlobalSearchClicked: () -> Unit,
@@ -97,11 +98,15 @@ fun AnimeLibraryContent(
         }
 
         val notSelectionMode = selection.isEmpty()
-        val onClickAnime = { anime: LibraryAnime ->
+        val onClickItem = { item: AnimeLibraryItem ->
             if (notSelectionMode) {
-                onAnimeClicked(anime.anime.id)
+                if (item is AnimeLibraryItem.Series) {
+                    onSeriesClicked(item.librarySeries.id)
+                } else {
+                    onAnimeClicked(item.id)
+                }
             } else {
-                onToggleSelection(anime)
+                onToggleSelection(item)
             }
         }
 
@@ -134,7 +139,8 @@ fun AnimeLibraryContent(
                 getDisplayMode = getDisplayMode,
                 getColumnsForOrientation = getColumnsForOrientation,
                 getLibraryForPage = getAnimeLibraryForPage,
-                onClickAnime = onClickAnime,
+                onClickAnime = onClickItem,
+                onClickSeries = onSeriesClicked,
                 onLongClickAnime = onToggleRangeSelection,
                 onTogglePinned = onTogglePinned,
                 onClickContinueWatching = onContinueWatchingClicked,

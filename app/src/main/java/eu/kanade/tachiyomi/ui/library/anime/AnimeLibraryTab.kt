@@ -176,6 +176,7 @@ import eu.kanade.tachiyomi.ui.player.settings.PlayerPreferences
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
+import eu.kanade.tachiyomi.ui.series.anime.AnimeSeriesScreen
 import eu.kanade.tachiyomi.ui.series.manga.MangaSeriesScreen
 import eu.kanade.tachiyomi.ui.series.novel.NovelSeriesScreen
 import kotlinx.collections.immutable.persistentListOf
@@ -212,6 +213,8 @@ import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
 import java.text.NumberFormat
 import java.util.Locale
+import eu.kanade.presentation.library.anime.components.AddToSeriesDialog as AnimeAddToSeriesDialog
+import eu.kanade.presentation.library.anime.components.CreateSeriesDialog as AnimeCreateSeriesDialog
 import eu.kanade.presentation.library.manga.components.AddToSeriesDialog as MangaAddToSeriesDialog
 import tachiyomi.domain.items.novelchapter.model.NovelChapter as DomainNovelChapter
 
@@ -713,12 +716,13 @@ data object AnimeLibraryTab : Tab {
                         displayMode = animeDisplayMode,
                         columns = animeColumns,
                         onAnimeClicked = { navigator.push(AnimeScreen(it)) },
+                        onSeriesClicked = { navigator.push(AnimeSeriesScreen(it)) },
                         onToggleSelection = screenModel::toggleSelection,
                         onToggleRangeSelection = {
                             screenModel.toggleRangeSelection(it)
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         },
-                        onTogglePinned = { screenModel.togglePinned(it.libraryAnime) },
+                        onTogglePinned = screenModel::togglePinned,
                         onContinueWatchingClicked = { item: LibraryAnime ->
                             if (!continueActionGuard.inFlight) {
                                 continueActionGuard.inFlight = true
@@ -1219,7 +1223,11 @@ data object AnimeLibraryTab : Tab {
                     scope.launch {
                         val randomItem = screenModel.getRandomAnimelibItemForCurrentCategory()
                         if (randomItem != null) {
-                            navigator.push(AnimeScreen(randomItem.libraryAnime.anime.id))
+                            if (randomItem is AnimeLibraryItem.Series) {
+                                navigator.push(AnimeSeriesScreen(randomItem.librarySeries.id))
+                            } else {
+                                navigator.push(AnimeScreen(randomItem.libraryAnime.anime.id))
+                            }
                         } else {
                             snackbarHostState.showSnackbar(
                                 context.stringResource(MR.strings.information_no_entries_found),
@@ -1300,7 +1308,11 @@ data object AnimeLibraryTab : Tab {
                         scope.launch {
                             val randomItem = screenModel.getRandomAnimelibItemForCurrentCategory()
                             if (randomItem != null) {
-                                navigator.push(AnimeScreen(randomItem.libraryAnime.anime.id))
+                                if (randomItem is AnimeLibraryItem.Series) {
+                                    navigator.push(AnimeSeriesScreen(randomItem.librarySeries.id))
+                                } else {
+                                    navigator.push(AnimeScreen(randomItem.libraryAnime.anime.id))
+                                }
                             } else {
                                 snackbarHostState.showSnackbar(
                                     context.stringResource(MR.strings.information_no_entries_found),
@@ -1324,14 +1336,33 @@ data object AnimeLibraryTab : Tab {
                             onMarkAsViewedClicked = { screenModel.markSeenSelection(true) },
                             onMarkAsUnviewedClicked = { screenModel.markSeenSelection(false) },
                             onDownloadClicked = screenModel::runDownloadActionSelection
-                                .takeIf { state.selection.fastAll { !it.anime.isLocal() } },
+                                .takeIf {
+                                    state.selection.fastAll { selected ->
+                                        when (selected) {
+                                            is AnimeLibraryItem.Single -> !selected.libraryAnime.anime.isLocal()
+                                            is AnimeLibraryItem.Series -> selected.librarySeries.entries.fastAll {
+                                                !it.anime.isLocal()
+                                            }
+                                        }
+                                    }
+                                },
                             onMigrateClicked = {
-                                val selectedAnimeIds = state.selection.map { it.anime.id }
+                                val selectedAnimeIds = state.selection
+                                    .flatMap { selected ->
+                                        when (selected) {
+                                            is AnimeLibraryItem.Single -> listOf(selected.libraryAnime.id)
+                                            is AnimeLibraryItem.Series -> selected.librarySeries.entries.map { it.id }
+                                        }
+                                    }
+                                    .distinct()
                                 screenModel.clearSelection()
-                                navigator.push(AnimeMigrationConfigScreen(selectedAnimeIds))
+                                if (selectedAnimeIds.isNotEmpty()) {
+                                    navigator.push(AnimeMigrationConfigScreen(selectedAnimeIds))
+                                }
                             }.takeIf {
-                                state.selection.isNotEmpty() && state.selection.fastAll { it.anime.id > 0L }
+                                state.selection.isNotEmpty()
                             },
+                            onSeriesClicked = { screenModel.openAddToSeries() },
                             onDeleteClicked = screenModel::openDeleteAnimeDialog,
                             isManga = false,
                         )
@@ -1525,6 +1556,7 @@ data object AnimeLibraryTab : Tab {
                             onChangeCurrentPage = { screenModel.activeCategoryIndex = it },
                             onCategoryLongSelected = screenModel::selectAll,
                             onAnimeClicked = { navigator.push(AnimeScreen(it)) },
+                            onSeriesClicked = { navigator.push(AnimeSeriesScreen(it)) },
                             onContinueWatchingClicked = { it: LibraryAnime ->
                                 // D7: single-flight guard - a double tap used to launch two players.
                                 if (!continueActionGuard.inFlight) {
@@ -1545,7 +1577,7 @@ data object AnimeLibraryTab : Tab {
                                 screenModel.toggleRangeSelection(it)
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             },
-                            onTogglePinned = { screenModel.togglePinned(it.libraryAnime) },
+                            onTogglePinned = screenModel::togglePinned,
                             onRefresh = onClickRefresh,
                             onGlobalSearchClicked = {
                                 navigator.push(
@@ -1598,6 +1630,20 @@ data object AnimeLibraryTab : Tab {
                         screenModel.clearSelection()
                     },
                     entryType = DeleteLibraryEntryType.Anime,
+                )
+            }
+            AnimeLibraryScreenModel.Dialog.CreateSeries -> {
+                AnimeCreateSeriesDialog(
+                    onDismissRequest = onDismissRequest,
+                    onCreate = screenModel::createSeries,
+                )
+            }
+            is AnimeLibraryScreenModel.Dialog.AddToSeries -> {
+                AnimeAddToSeriesDialog(
+                    onDismissRequest = onDismissRequest,
+                    series = dialog.series,
+                    onSelect = screenModel::addSelectionToSeries,
+                    onCreateSeries = screenModel::openCreateSeries,
                 )
             }
             null -> {}

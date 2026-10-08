@@ -1,0 +1,41 @@
+CREATE TABLE anime_series_entries (
+    _id INTEGER NOT NULL PRIMARY KEY,
+    series_id INTEGER NOT NULL,
+    anime_id INTEGER NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY(series_id) REFERENCES anime_series(_id) ON DELETE CASCADE,
+    FOREIGN KEY(anime_id) REFERENCES animes(_id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX anime_series_entries_anime_id ON anime_series_entries(anime_id);
+CREATE INDEX anime_series_entries_series_id ON anime_series_entries(series_id);
+
+getEntriesBySeriesId:
+SELECT * FROM anime_series_entries WHERE series_id = :seriesId ORDER BY position;
+
+getEntryByAnimeId:
+SELECT * FROM anime_series_entries WHERE anime_id = :animeId;
+
+getAllAnimeIdsInAnySeries:
+SELECT anime_id FROM anime_series_entries;
+
+insert:
+-- OR REPLACE: an anime can only belong to one series (UNIQUE anime_id), so adding a selection
+-- again (or moving a title into another series) must replace the existing entry instead of
+-- crashing the whole add-selection flow on a constraint violation.
+INSERT OR REPLACE INTO anime_series_entries(series_id, anime_id, position)
+VALUES (:seriesId, :animeId, :position);
+
+deleteByAnimeId:
+DELETE FROM anime_series_entries WHERE anime_id = :animeId;
+
+deleteBySeriesId:
+DELETE FROM anime_series_entries WHERE series_id = :seriesId;
+
+getAllEntries:
+SELECT * FROM anime_series_entries ORDER BY position;
+
+updatePosition:
+UPDATE anime_series_entries
+SET position = :position
+WHERE _id = :id;

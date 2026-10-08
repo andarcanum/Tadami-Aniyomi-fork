@@ -34,6 +34,16 @@ class SeriesCoverCacheTest {
     }
 
     @Test
+    fun `getAnimeSeriesCoverFile hashes series id into anime series cover directory`() {
+        val cache = createCache()
+
+        val file = cache.getAnimeSeriesCoverFile(3L)
+
+        assertTrue(file.parentFile!!.path.replace('\\', '/').endsWith("/series_covers/anime"))
+        assertEquals(DiskUtil.hashKeyForDisk("3"), file.name)
+    }
+
+    @Test
     fun `set and delete custom manga series cover`() {
         val cache = createCache()
         val seriesId = 11L
@@ -61,10 +71,25 @@ class SeriesCoverCacheTest {
         assertFalse(file.exists())
     }
 
+    @Test
+    fun `set and delete custom anime series cover`() {
+        val cache = createCache()
+        val seriesId = 33L
+
+        cache.setAnimeSeriesCoverToCache(seriesId, "anime-cover".byteInputStream())
+        val file = cache.getAnimeSeriesCoverFile(seriesId)
+
+        assertTrue(file.exists())
+        assertEquals("anime-cover", file.readText())
+        assertTrue(cache.deleteAnimeSeriesCover(seriesId))
+        assertFalse(file.exists())
+    }
+
     private fun createCache(): SeriesCoverCache {
         return SeriesCoverCache(
             mangaRootDir = tempDir.resolve("series_covers/manga").toFile(),
             novelRootDir = tempDir.resolve("series_covers/novel").toFile(),
+            animeRootDir = tempDir.resolve("series_covers/anime").toFile(),
             createDir = true,
         )
     }

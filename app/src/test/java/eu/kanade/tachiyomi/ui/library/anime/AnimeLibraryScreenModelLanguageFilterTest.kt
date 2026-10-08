@@ -181,6 +181,8 @@ class AnimeLibraryScreenModelLanguageFilterTest {
     private fun trackedAnimeLibraryScreenModel(): AnimeLibraryScreenModel {
         return AnimeLibraryScreenModel(
             getLibraryAnime = getLibraryAnime,
+            getLibraryAnimeSeries = mockk { every { subscribe() } returns MutableStateFlow(emptyList()) },
+            getAnimeIdsInAnySeries = mockk { every { subscribe() } returns MutableStateFlow(emptySet()) },
             getCategories = getCategories,
             getTracksPerAnime = getTracksPerAnime,
             getNextEpisodes = mockk(relaxed = true),
@@ -188,6 +190,11 @@ class AnimeLibraryScreenModelLanguageFilterTest {
             setSeenStatus = mockk(relaxed = true),
             updateAnime = mockk(relaxed = true),
             setAnimeCategories = mockk(relaxed = true),
+            createAnimeSeries = mockk(relaxed = true),
+            addAnimesToSeries = mockk(relaxed = true),
+            updateAnimeSeries = mockk(relaxed = true),
+            deleteAnimeSeries = mockk(relaxed = true),
+            removeAnimeFromSeries = mockk(relaxed = true),
             preferences = basePreferences,
             libraryPreferences = libraryPreferences,
             coverCache = mockk(relaxed = true),

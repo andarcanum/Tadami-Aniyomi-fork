@@ -7,16 +7,19 @@ import tachiyomi.domain.category.anime.repository.AnimeCategoryRepository
 import tachiyomi.domain.category.model.CategoryUpdate
 import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.series.anime.repository.AnimeSeriesRepository
 
 class DeleteAnimeCategory(
     private val categoryRepository: AnimeCategoryRepository,
     private val libraryPreferences: LibraryPreferences,
     private val downloadPreferences: DownloadPreferences,
+    private val seriesRepository: AnimeSeriesRepository,
 ) {
 
     suspend fun await(categoryId: Long) = withNonCancellableContext {
         try {
             categoryRepository.deleteAnimeCategory(categoryId)
+            seriesRepository.moveSeriesFromCategoryToDefault(categoryId)
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e)
             return@withNonCancellableContext Result.InternalError(e)
