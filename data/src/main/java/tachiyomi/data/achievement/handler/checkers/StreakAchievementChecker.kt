@@ -140,9 +140,7 @@ class StreakAchievementChecker(
         return activity != null && (
             activity.chapterCount > 0 ||
                 activity.episodeCount > 0 ||
-                activity.durationMs > 0 ||
-                activity.level > 0 ||
-                activity.appOpens > 0
+                activity.durationMs > 0
             )
     }
 
