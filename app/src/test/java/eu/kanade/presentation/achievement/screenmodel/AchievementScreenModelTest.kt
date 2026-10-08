@@ -41,6 +41,7 @@ class AchievementScreenModelTest {
     private val pointsManager: PointsManager = mockk()
     private val activityDataRepository: ActivityDataRepository = mockk()
     private val auroraHeartManager: AuroraHeartManager = mockk()
+    private val achievementHandler: tachiyomi.data.achievement.handler.AchievementHandler = mockk(relaxed = true)
     private val activeScreenModels = mutableListOf<AchievementScreenModel>()
 
     private val testDispatcher = StandardTestDispatcher()
@@ -52,6 +53,7 @@ class AchievementScreenModelTest {
         coEvery { repository.getAll() } returns flowOf(emptyList())
         coEvery { repository.getAllProgress() } returns flowOf(emptyList())
         coEvery { loader.loadAchievements() } returns Result.success(0)
+        coEvery { achievementHandler.recomputeStreakAchievements() } returns Unit
         every { pointsManager.subscribeToPoints() } returns flowOf(UserPoints())
         coEvery { activityDataRepository.getActivityData(any()) } returns flowOf(emptyList())
         coEvery { activityDataRepository.getCurrentMonthStats() } returns MonthStats(0, 0, 0, 0)
@@ -179,5 +181,99 @@ class AchievementScreenModelTest {
         )
         startedState.filteredAchievements shouldBe listOf(aurora)
         startedState.totalCount shouldBe 1
+    }
+
+    @Test
+    fun `currentStreak counts consecutive active days including today`() {
+        val today = LocalDate.now()
+        val activities = listOf(
+            DayActivity(
+                date = today.minusDays(2),
+                level = 1,
+                type = tachiyomi.domain.achievement.model.ActivityType.APP_OPEN,
+            ),
+            DayActivity(
+                date = today.minusDays(1),
+                level = 2,
+                type = tachiyomi.domain.achievement.model.ActivityType.READING,
+            ),
+            DayActivity(date = today, level = 1, type = tachiyomi.domain.achievement.model.ActivityType.APP_OPEN),
+        )
+
+        val state = AchievementScreenState.Success(
+            achievements = emptyList(),
+            activityData = activities,
+        )
+
+        state.currentStreak shouldBe 3
+    }
+
+    @Test
+    fun `currentStreak preserves streak from yesterday when today has no activity yet`() {
+        val today = LocalDate.now()
+        val activities = listOf(
+            DayActivity(
+                date = today.minusDays(2),
+                level = 1,
+                type = tachiyomi.domain.achievement.model.ActivityType.READING,
+            ),
+            DayActivity(
+                date = today.minusDays(1),
+                level = 2,
+                type = tachiyomi.domain.achievement.model.ActivityType.READING,
+            ),
+            DayActivity(date = today, level = 0, type = tachiyomi.domain.achievement.model.ActivityType.APP_OPEN),
+        )
+
+        val state = AchievementScreenState.Success(
+            achievements = emptyList(),
+            activityData = activities,
+        )
+
+        state.currentStreak shouldBe 2
+    }
+
+    @Test
+    fun `currentStreak is zero when neither today nor yesterday has activity`() {
+        val today = LocalDate.now()
+        val activities = listOf(
+            DayActivity(
+                date = today.minusDays(2),
+                level = 1,
+                type = tachiyomi.domain.achievement.model.ActivityType.READING,
+            ),
+            DayActivity(
+                date = today.minusDays(1),
+                level = 0,
+                type = tachiyomi.domain.achievement.model.ActivityType.APP_OPEN,
+            ),
+            DayActivity(date = today, level = 0, type = tachiyomi.domain.achievement.model.ActivityType.APP_OPEN),
+        )
+
+        val state = AchievementScreenState.Success(
+            achievements = emptyList(),
+            activityData = activities,
+        )
+
+        state.currentStreak shouldBe 0
+    }
+
+    @Test
+    fun `recomputeStreakAchievements is invoked on init and refreshAchievements`() = runTest {
+        val screenModel = AchievementScreenModel(
+            repository,
+            loader,
+            pointsManager,
+            activityDataRepository,
+            auroraHeartManager,
+            achievementHandler,
+        ).also(activeScreenModels::add)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+        coVerify(exactly = 1) { achievementHandler.recomputeStreakAchievements() }
+
+        screenModel.refreshAchievements()
+        testDispatcher.scheduler.advanceUntilIdle()
+        coVerify(exactly = 2) { achievementHandler.recomputeStreakAchievements() }
     }
 }

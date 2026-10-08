@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import tachiyomi.data.achievement.handler.AchievementHandler
 import tachiyomi.data.achievement.handler.PointsManager
 import tachiyomi.data.achievement.loader.AchievementLoader
 import tachiyomi.domain.achievement.model.Achievement
@@ -34,6 +35,7 @@ class AchievementScreenModel(
     private val pointsManager: PointsManager = Injekt.get(),
     private val activityDataRepository: ActivityDataRepository = Injekt.get(),
     private val auroraHeartManager: AuroraHeartManager = Injekt.get(),
+    private val achievementHandler: AchievementHandler? = runCatching { Injekt.get<AchievementHandler>() }.getOrNull(),
 ) : ScreenModel {
 
     // Separate state for category to avoid being overwritten by combine
@@ -45,6 +47,7 @@ class AchievementScreenModel(
     init {
         screenModelScope.launch {
             loader.loadAchievements()
+            achievementHandler?.recomputeStreakAchievements()
         }
     }
 
@@ -93,6 +96,7 @@ class AchievementScreenModel(
     fun refreshAchievements() {
         screenModelScope.launch {
             loader.loadAchievements()
+            achievementHandler?.recomputeStreakAchievements()
         }
     }
 
@@ -207,18 +211,19 @@ sealed interface AchievementScreenState {
             get() = calculateCurrentStreak(activityData)
 
         private fun calculateCurrentStreak(activities: List<DayActivity>): Int {
-            var streak = 0
+            if (activities.isEmpty()) return 0
+
+            val activityByDate = activities.associateBy { it.date }
             val today = java.time.LocalDate.now()
+            val hasActivityToday = (activityByDate[today]?.level ?: 0) > 0
+            var checkDate = if (hasActivityToday) today else today.minusDays(1)
+            var streak = 0
 
-            for (i in 0 until activities.size) {
-                val date = today.minusDays(i.toLong())
-                val activity = activities.find { it.date == date }
-
-                if (activity != null && activity.level > 0) {
-                    streak++
-                } else {
-                    break
-                }
+            while (true) {
+                val level = activityByDate[checkDate]?.level ?: 0
+                if (level <= 0) break
+                streak++
+                checkDate = checkDate.minusDays(1)
             }
 
             return streak

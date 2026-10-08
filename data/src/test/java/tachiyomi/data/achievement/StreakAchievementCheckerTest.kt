@@ -204,4 +204,63 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
         val streak = streakChecker.getCurrentStreak()
         streak shouldBe 30
     }
+
+    @Test
+    fun `streak counts app opens as activity`() = runTest {
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        database.activityLogQueries.incrementAppOpens(
+            date = today,
+            last_updated = System.currentTimeMillis(),
+        )
+
+        val streak = streakChecker.getCurrentStreak()
+        streak shouldBe 1
+    }
+
+    @Test
+    fun `streak counts reading duration as activity`() = runTest {
+        val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        database.activityLogQueries.addDuration(
+            date = today,
+            duration_ms = 300_000L,
+            last_updated = System.currentTimeMillis(),
+        )
+
+        val streak = streakChecker.getCurrentStreak()
+        streak shouldBe 1
+    }
+
+    @Test
+    fun `streak counts mixed activity types across consecutive days`() = runTest {
+        val today = LocalDate.now()
+
+        // Today: app open
+        database.activityLogQueries.incrementAppOpens(
+            date = today.format(DateTimeFormatter.ISO_LOCAL_DATE),
+            last_updated = System.currentTimeMillis(),
+        )
+        // Yesterday: duration only
+        database.activityLogQueries.addDuration(
+            date = today.minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE),
+            duration_ms = 120_000L,
+            last_updated = System.currentTimeMillis(),
+        )
+        // 2 days ago: chapter read
+        database.activityLogQueries.incrementChapters(
+            date = today.minusDays(2).format(DateTimeFormatter.ISO_LOCAL_DATE),
+            level = 1,
+            count = 1,
+            last_updated = System.currentTimeMillis(),
+        )
+        // 3 days ago: episode watched
+        database.activityLogQueries.incrementEpisodes(
+            date = today.minusDays(3).format(DateTimeFormatter.ISO_LOCAL_DATE),
+            level = 1,
+            count = 1,
+            last_updated = System.currentTimeMillis(),
+        )
+
+        val streak = streakChecker.getCurrentStreak()
+        streak shouldBe 4
+    }
 }

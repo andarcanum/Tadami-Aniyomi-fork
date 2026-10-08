@@ -121,4 +121,50 @@ class AchievementHandlerOptimizationTest {
         // Verify that insertOrUpdateProgress is NEVER called because progress is unchanged
         coVerify(exactly = 0) { repository.insertOrUpdateProgress(any()) }
     }
+
+    @Test
+    fun `recomputeStreakAchievements updates streak achievement progress when streak is higher`() = runTest {
+        val streakAch = testAchievement("month_master", AchievementType.STREAK).copy(threshold = 30)
+        val progressList = listOf(
+            AchievementProgress(achievementId = "month_master", progress = 21, maxProgress = 30, isUnlocked = false),
+        )
+
+        every { repository.getAll() } returns flowOf(listOf(streakAch))
+        every { repository.getAllProgress() } returns flowOf(progressList)
+
+        val streakChecker = mockk<tachiyomi.data.achievement.handler.checkers.StreakAchievementChecker>()
+        coEvery { streakChecker.getCurrentStreak() } returns 24
+
+        val handler = AchievementHandler(
+            eventBus = mockk(relaxed = true),
+            repository = repository,
+            diversityChecker = mockk(relaxed = true),
+            streakChecker = streakChecker,
+            timeBasedChecker = mockk(relaxed = true),
+            featureBasedChecker = mockk(relaxed = true),
+            featureCollector = mockk(relaxed = true),
+            pointsManager = mockk(relaxed = true),
+            unlockableManager = mockk(relaxed = true),
+            mangaHandler = mockk(relaxed = true),
+            animeHandler = mockk(relaxed = true),
+            novelHandler = mockk(relaxed = true),
+            mangaRepository = mockk(relaxed = true),
+            animeRepository = mockk(relaxed = true),
+            novelRepository = mockk(relaxed = true),
+            userProfileManager = mockk(relaxed = true),
+            activityDataRepository = mockk(relaxed = true),
+            ruleRegistry = ruleRegistry,
+        )
+
+        handler.recomputeStreakAchievements()
+
+        // Verify that progress was updated to 24
+        coVerify(exactly = 1) {
+            repository.insertOrUpdateProgress(
+                match {
+                    it.achievementId == "month_master" && it.progress == 24 && !it.isUnlocked
+                },
+            )
+        }
+    }
 }

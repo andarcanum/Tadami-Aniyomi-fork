@@ -193,6 +193,7 @@ internal class NovelProgressPersistenceController(
                 ),
             )
 
+            val sessionDuration = nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
             if (nextUpdate.emitReadEvent) {
                 runCatching {
                     if (eu.kanade.domain.easteregg.aurora.AuroraNight.isVeilThin()) {
@@ -212,7 +213,7 @@ internal class NovelProgressPersistenceController(
                 activityDataRepository.recordReading(
                     id = nextUpdate.chapterId,
                     chaptersCount = 1,
-                    durationMs = nextUpdate.sessionReadDurationMs.coerceAtLeast(0L),
+                    durationMs = sessionDuration,
                 )
                 if (Injekt.get<eu.kanade.domain.track.service.TrackPreferences>().autoUpdateTrack().get()) {
                     val context = Injekt.get<Application>()
@@ -222,6 +223,12 @@ internal class NovelProgressPersistenceController(
                         nextUpdate.chapterNumber.toDouble(),
                     )
                 }
+            } else if (sessionDuration > 0L) {
+                activityDataRepository.recordReading(
+                    id = nextUpdate.chapterId,
+                    chaptersCount = 0,
+                    durationMs = sessionDuration,
+                )
             }
 
             val now = System.currentTimeMillis()

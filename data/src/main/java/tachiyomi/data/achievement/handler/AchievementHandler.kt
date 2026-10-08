@@ -70,6 +70,13 @@ class AchievementHandler(
                     "[ACHIEVEMENTS] Failed to sanitize first achievements: ${e.message}"
                 }
             }
+            try {
+                recomputeStreakAchievements()
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR) {
+                    "[ACHIEVEMENTS] Failed to recompute streak achievements: ${e.message}"
+                }
+            }
 
             eventBus.events.collect { event ->
                 try {
@@ -165,6 +172,50 @@ class AchievementHandler(
         } catch (e: Exception) {
             logcat(LogPriority.ERROR) {
                 "[ACHIEVEMENTS] Genre recompute failed: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Recomputes streak achievements against the current consecutive activity streak.
+     *
+     * Ensures stored achievement progress for STREAK achievements reflects actual
+     * user activity days even if no fresh ChapterRead event has been emitted recently.
+     */
+    suspend fun recomputeStreakAchievements() {
+        try {
+            val allAchievements = repository.getAll().first()
+            val streakAchievements = allAchievements.filter { it.type == AchievementType.STREAK }
+            if (streakAchievements.isEmpty()) return
+
+            val allProgress = repository.getAllProgress().first()
+                .associateBy { it.achievementId }
+                .toMutableMap()
+
+            val streak = streakChecker.getCurrentStreak()
+
+            var updatedCount = 0
+            for (achievement in streakAchievements) {
+                val currentProgress = allProgress[achievement.id]
+                if (currentProgress?.isUnlocked == true) continue
+
+                val existing = currentProgress?.progress ?: 0
+                if (streak > existing) {
+                    val updated = applyProgressUpdate(achievement, currentProgress, streak)
+                    if (updated != null) {
+                        allProgress[achievement.id] = updated
+                    }
+                    updatedCount++
+                }
+            }
+            if (updatedCount > 0) {
+                logcat(LogPriority.INFO) {
+                    "[ACHIEVEMENTS] Streak recompute complete ($updatedCount streak achievements updated)"
+                }
+            }
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR) {
+                "[ACHIEVEMENTS] Streak recompute failed: ${e.message}"
             }
         }
     }
