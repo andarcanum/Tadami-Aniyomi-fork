@@ -16,7 +16,8 @@ class StreakRule(
     ): RuleResult {
         val isMatch = event is AchievementEvent.ChapterRead ||
             event is AchievementEvent.NovelChapterRead ||
-            event is AchievementEvent.EpisodeWatched
+            event is AchievementEvent.EpisodeWatched ||
+            event is AchievementEvent.SessionEnd
         if (!isMatch) return RuleResult.NoChange
 
         val streak = context.getCurrentStreak()

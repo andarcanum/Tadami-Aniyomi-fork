@@ -1753,6 +1753,53 @@ class NovelReaderScreenModelTest {
     }
 
     @Test
+    fun `re-reading already read chapter records reading duration with zero chapter count`() {
+        runBlocking {
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel")
+            val chapter = NovelChapter.create().copy(
+                id = 5L,
+                novelId = 1L,
+                name = "Chapter 1",
+                url = "https://example.org/ch1",
+                read = true,
+                lastPageRead = 0L,
+            )
+            val chapterRepo = FakeNovelChapterRepository(chapter)
+            val activityDataRepository = mockk<ActivityDataRepository>(relaxed = true)
+
+            val screenModel = trackedNovelReaderScreenModel(
+                chapterId = chapter.id,
+                novelChapterRepository = chapterRepo,
+                getNovel = GetNovel(FakeNovelRepository(novel)),
+                sourceManager = FakeNovelSourceManager(sourceId = novel.source, chapterHtml = "<p>Hello</p>"),
+                pluginAssetBindings = emptyPluginAssetBindings(),
+                novelReaderPreferences = createNovelReaderPreferences(),
+                isSystemDark = { false },
+                activityDataRepository = activityDataRepository,
+            )
+
+            withTimeout(1_000) {
+                while (screenModel.state.value is NovelReaderScreenModel.State.Loading) {
+                    yield()
+                }
+            }
+
+            Thread.sleep(50)
+            screenModel.updateReadingProgress(currentIndex = 9, totalItems = 10)
+            screenModel.awaitPendingProgressPersistence()
+            yield()
+
+            coVerify {
+                activityDataRepository.recordReading(
+                    id = chapter.id,
+                    chaptersCount = 0,
+                    durationMs = match { it >= 0L },
+                )
+            }
+        }
+    }
+
+    @Test
     fun `incognito mode does not persist completed chapter progress`() {
         runBlocking {
             val basePreferences = Injekt.get<BasePreferences>()
@@ -3241,6 +3288,14 @@ class NovelReaderScreenModelTest {
                 Injekt.addSingleton(
                     fullType<tachiyomi.domain.book.novel.interactor.GetNovelHighlights>(),
                     tachiyomi.domain.book.novel.interactor.GetNovelHighlights(highlightRepository),
+                )
+            }
+
+        runCatching { Injekt.get<tachiyomi.domain.discovery.repository.DiscoveryRepository>() }
+            .getOrElse {
+                Injekt.addSingleton(
+                    fullType<tachiyomi.domain.discovery.repository.DiscoveryRepository>(),
+                    mockk(relaxed = true),
                 )
             }
     }
