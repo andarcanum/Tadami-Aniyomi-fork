@@ -309,7 +309,7 @@ object SettingsReaderScreen : SearchableSettings {
                 Preference.PreferenceItem.SwitchPreference(
                     preference = readerPreferences.landscapeZoom(),
                     title = stringResource(MR.strings.pref_landscape_zoom),
-                    enabled = imageScaleType == 1,
+                    enabled = imageScaleType == 1 || imageScaleType == 6,
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = readerPreferences.navigateToPan(),
@@ -428,6 +428,10 @@ object SettingsReaderScreen : SearchableSettings {
                 Preference.PreferenceItem.SwitchPreference(
                     preference = readerPreferences.cropBordersWebtoon(),
                     title = stringResource(MR.strings.pref_crop_borders),
+                ),
+                Preference.PreferenceItem.SwitchPreference(
+                    preference = readerPreferences.webtoonSmartFit(),
+                    title = stringResource(MR.strings.pref_webtoon_smart_fit),
                 ),
                 Preference.PreferenceItem.SwitchPreference(
                     preference = readerPreferences.enablePinchToZoom(),
