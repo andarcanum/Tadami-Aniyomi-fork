@@ -31,6 +31,15 @@
     <string name="manga_series_confirm_delete_series">Вы уверены, что хотите удалить эту серию? Тайтлы внутри серии не будут удалены из библиотеки.</string>
     <string name="manga_series_chapters_progress">%1$d/%2$d глав</string>
     <string name="novel_series_chapters_progress">%1$d/%2$d глав</string>
+    <string name="anime_series_caption_label">Сборник</string>
+    <string name="anime_series_tab_titles">По тайтлам</string>
+    <string name="anime_series_tab_episodes">Все эпизоды</string>
+    <string name="anime_series_action_rename_series">Переименовать серию</string>
+    <string name="anime_series_action_delete_series">Удалить серию</string>
+    <string name="anime_series_confirm_delete_series">Вы уверены, что хотите удалить эту серию? Аниме внутри серии не будут удалены из библиотеки.</string>
+    <string name="anime_series_episodes_progress">%1$d/%2$d эпизодов</string>
+    <string name="anime_series_cta_start_watching">Начать просмотр</string>
+    <string name="anime_series_cta_continue_watching">Продолжить просмотр</string>
     <string name="manga_series_cta_start_reading">Начать чтение</string>
     <string name="manga_series_cta_continue_reading">Продолжить чтение</string>
     <string name="manga_series_interstitial_completed">Завершено: %1$s</string>

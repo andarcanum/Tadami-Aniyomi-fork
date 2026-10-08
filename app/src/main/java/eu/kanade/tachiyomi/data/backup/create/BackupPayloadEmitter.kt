@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.backup.create
 import eu.kanade.tachiyomi.data.backup.models.Backup
 import eu.kanade.tachiyomi.data.backup.models.BackupAchievement
 import eu.kanade.tachiyomi.data.backup.models.BackupAnime
+import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSeries
 import eu.kanade.tachiyomi.data.backup.models.BackupAnimeSource
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupCustomButtons
@@ -88,6 +89,7 @@ internal object BackupPayloadEmitter {
             messageList(624, backup.backupDiscoveryHidden, BackupDiscoveryHidden.serializer(), proto)
             messageList(625, backup.backupDiscoveryBlacklistTags, BackupDiscoveryTag.serializer(), proto)
             messageList(627, backup.backupDiscoverySignals, BackupDiscoverySignal.serializer(), proto)
+            messageList(628, backup.backupAnimeSeries, BackupAnimeSeries.serializer(), proto)
         }
     }
 

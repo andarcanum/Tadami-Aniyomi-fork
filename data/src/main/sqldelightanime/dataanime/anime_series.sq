@@ -1,0 +1,55 @@
+import kotlin.Boolean;
+
+CREATE TABLE anime_series (
+    _id INTEGER NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    category_id INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    date_added INTEGER NOT NULL DEFAULT 0,
+    cover_last_modified INTEGER NOT NULL DEFAULT 0,
+    pinned INTEGER AS Boolean NOT NULL DEFAULT 0,
+    cover_mode INTEGER NOT NULL DEFAULT 0,
+    cover_entry_id INTEGER
+);
+
+CREATE INDEX anime_series_category_index ON anime_series(category_id);
+
+getAllSeries:
+SELECT * FROM anime_series;
+
+getSeriesById:
+SELECT * FROM anime_series WHERE _id = :id;
+
+getSeriesByCategory:
+SELECT * FROM anime_series WHERE category_id = :categoryId ORDER BY sort_order;
+
+insert:
+INSERT INTO anime_series(title, description, category_id, sort_order, date_added, cover_last_modified, pinned, cover_mode, cover_entry_id)
+VALUES (:title, :description, :categoryId, :sortOrder, :dateAdded, :coverLastModified, :pinned, :coverMode, :coverEntryId);
+
+update:
+UPDATE anime_series
+SET title = coalesce(:title, title),
+    description = coalesce(:description, description),
+    category_id = coalesce(:categoryId, category_id),
+    sort_order = coalesce(:sortOrder, sort_order),
+    date_added = coalesce(:dateAdded, date_added),
+    cover_last_modified = coalesce(:coverLastModified, cover_last_modified),
+    pinned = coalesce(:pinned, pinned),
+    cover_mode = coalesce(:coverMode, cover_mode),
+    cover_entry_id = :coverEntryId
+WHERE _id = :id;
+
+delete:
+DELETE FROM anime_series WHERE _id = :id;
+
+-- Moves every series of a deleted category back to the default category (0). The
+-- category_id column has no FK, so without this the series keep a dangling id and vanish
+-- from every library page (their group is not associated with any displayed category and
+-- their volumes are suppressed as series members).
+resetCategory:
+UPDATE anime_series SET category_id = 0 WHERE category_id = :categoryId;
+
+selectLastInsertedRowId:
+SELECT last_insert_rowid();

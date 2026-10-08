@@ -156,6 +156,7 @@ import tachiyomi.data.reels.anime.ReelsFollowRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsHiddenRepositoryImpl
 import tachiyomi.data.reels.anime.ReelsWatchRepositoryImpl
 import tachiyomi.data.release.ReleaseServiceImpl
+import tachiyomi.data.series.anime.AnimeSeriesRepositoryImpl
 import tachiyomi.data.series.manga.MangaSeriesRepositoryImpl
 import tachiyomi.data.series.novel.NovelSeriesRepositoryImpl
 import tachiyomi.data.source.anime.AnimeSourceRepositoryImpl
@@ -307,6 +308,15 @@ import tachiyomi.domain.reels.anime.repository.ReelsWatchRepository
 import tachiyomi.domain.release.interactor.GetApplicationRelease
 import tachiyomi.domain.release.service.AppUpdatePreferences
 import tachiyomi.domain.release.service.ReleaseService
+import tachiyomi.domain.series.anime.interactor.AddAnimesToSeries
+import tachiyomi.domain.series.anime.interactor.CreateAnimeSeries
+import tachiyomi.domain.series.anime.interactor.DeleteAnimeSeries
+import tachiyomi.domain.series.anime.interactor.GetAnimeIdsInAnySeries
+import tachiyomi.domain.series.anime.interactor.GetAnimeSeriesWithEntries
+import tachiyomi.domain.series.anime.interactor.GetLibraryAnimeSeries
+import tachiyomi.domain.series.anime.interactor.RemoveAnimeFromSeries
+import tachiyomi.domain.series.anime.interactor.UpdateAnimeSeries
+import tachiyomi.domain.series.anime.repository.AnimeSeriesRepository
 import tachiyomi.domain.series.manga.interactor.AddMangasToSeries
 import tachiyomi.domain.series.manga.interactor.CreateMangaSeries
 import tachiyomi.domain.series.manga.interactor.DeleteMangaSeries
@@ -365,6 +375,7 @@ import uy.kohesive.injekt.api.InjektRegistrar
 import uy.kohesive.injekt.api.addFactory
 import uy.kohesive.injekt.api.addSingletonFactory
 import uy.kohesive.injekt.api.get
+import tachiyomi.domain.series.anime.interactor.ReorderSeriesEntries as ReorderAnimeSeriesEntries
 import tachiyomi.domain.series.manga.interactor.ReorderSeriesEntries as ReorderMangaSeriesEntries
 
 class DomainModule : InjektModule {
@@ -381,7 +392,7 @@ class DomainModule : InjektModule {
         addFactory { ReorderAnimeCategory(get()) }
         addFactory { UpdateAnimeCategory(get()) }
         addFactory { HideAnimeCategory(get()) }
-        addFactory { DeleteAnimeCategory(get(), get(), get()) }
+        addFactory { DeleteAnimeCategory(get(), get(), get(), get()) }
 
         addSingletonFactory<MangaCategoryRepository> { MangaCategoryRepositoryImpl(get()) }
         addFactory { GetMangaCategories(get()) }
@@ -407,6 +418,17 @@ class DomainModule : InjektModule {
         addFactory { HideNovelCategory(get()) }
         addFactory { DeleteNovelCategory(get(), get(), get(), get()) }
         addFactory { SetNovelCategories(get()) }
+
+        addSingletonFactory<AnimeSeriesRepository> { AnimeSeriesRepositoryImpl(get(), get()) }
+        addFactory { CreateAnimeSeries(get()) }
+        addFactory { DeleteAnimeSeries(get()) }
+        addFactory { GetAnimeSeriesWithEntries(get(), get()) }
+        addFactory { GetLibraryAnimeSeries(get()) }
+        addFactory { AddAnimesToSeries(get()) }
+        addFactory { RemoveAnimeFromSeries(get()) }
+        addFactory { ReorderAnimeSeriesEntries(get()) }
+        addFactory { UpdateAnimeSeries(get()) }
+        addFactory { GetAnimeIdsInAnySeries(get()) }
 
         addSingletonFactory<MangaSeriesRepository> { MangaSeriesRepositoryImpl(get(), get()) }
         addFactory { CreateMangaSeries(get()) }

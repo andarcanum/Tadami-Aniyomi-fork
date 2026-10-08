@@ -39,14 +39,15 @@ fun AnimeLibraryPager(
     categories: List<Category>,
     contentPadding: PaddingValues,
     hasActiveFilters: Boolean,
-    selectedAnime: List<LibraryAnime>,
+    selectedAnime: List<AnimeLibraryItem>,
     searchQuery: String?,
     onGlobalSearchClicked: () -> Unit,
     getDisplayMode: (Int) -> PreferenceMutableState<LibraryDisplayMode>,
     getColumnsForOrientation: (Boolean) -> PreferenceMutableState<Int>,
     getLibraryForPage: (Int) -> List<AnimeLibraryItem>,
-    onClickAnime: (LibraryAnime) -> Unit,
-    onLongClickAnime: (LibraryAnime) -> Unit,
+    onClickAnime: (AnimeLibraryItem) -> Unit,
+    onClickSeries: (Long) -> Unit,
+    onLongClickAnime: (AnimeLibraryItem) -> Unit,
     onTogglePinned: (AnimeLibraryItem) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
 ) {
@@ -59,7 +60,7 @@ fun AnimeLibraryPager(
         // position and restore it on the way back (initial index of the state, no visual jump).
         val scrollPositions = remember { mutableMapOf<Pair<Long, LibraryDisplayMode>, Pair<Int, Int>>() }
 
-        val selectedIds = remember(selectedAnime) { selectedAnime.idsToHashSet { it.anime.id } }
+        val selectedIds = remember(selectedAnime) { selectedAnime.idsToHashSet { it.id } }
 
         HorizontalPager(
             modifier = Modifier.fillMaxSize(),
@@ -115,6 +116,7 @@ fun AnimeLibraryPager(
                         selectedIds = selectedIds,
                         state = listState,
                         onClick = onClickAnime,
+                        onSeriesClicked = onClickSeries,
                         onClickContinueWatching = onClickContinueWatching,
                         onLongClick = onLongClickAnime,
                         searchQuery = searchQuery,
@@ -144,6 +146,7 @@ fun AnimeLibraryPager(
                         selectedIds = selectedIds,
                         state = gridState,
                         onClick = onClickAnime,
+                        onSeriesClicked = onClickSeries,
                         onClickContinueWatching = onClickContinueWatching,
                         onLongClick = onLongClickAnime,
                         onTogglePinned = onTogglePinned,
@@ -173,6 +176,7 @@ fun AnimeLibraryPager(
                         selectedIds = selectedIds,
                         state = gridState,
                         onClick = onClickAnime,
+                        onSeriesClicked = onClickSeries,
                         onLongClick = onLongClickAnime,
                         onTogglePinned = onTogglePinned,
                         onClickContinueWatching = onClickContinueWatching,

@@ -96,6 +96,14 @@
         <item quantity="one">%d عنوان</item>
         <item quantity="other">%d عناوين</item>
     </plurals>
+    <plurals name="anime_series_num_titles">
+        <item quantity="one">%d عنوان</item>
+        <item quantity="other">%d عناوين</item>
+    </plurals>
+    <plurals name="anime_series_num_episodes">
+        <item quantity="one">%d حلقة</item>
+        <item quantity="other">%d حلقات</item>
+    </plurals>
     <plurals name="relative_time_hours">
         <item quantity="one">منذ ساعة واحدة</item>
         <item quantity="other">منذ %1$d ساعات</item>

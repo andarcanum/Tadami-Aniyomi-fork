@@ -66,6 +66,15 @@
     <string name="manga_series_confirm_delete_series">Are you sure you want to delete this series? The manga within will NOT be deleted from your library.</string>
     <string name="manga_series_chapters_progress">%1$d/%2$d Chapters</string>
     <string name="novel_series_chapters_progress">%1$d/%2$d Chapters</string>
+    <string name="anime_series_caption_label">Series</string>
+    <string name="anime_series_tab_titles">By Titles</string>
+    <string name="anime_series_tab_episodes">All Episodes</string>
+    <string name="anime_series_action_rename_series">Rename Series</string>
+    <string name="anime_series_action_delete_series">Delete Series</string>
+    <string name="anime_series_confirm_delete_series">Are you sure you want to delete this series? The anime within will NOT be deleted from your library.</string>
+    <string name="anime_series_episodes_progress">%1$d/%2$d Episodes</string>
+    <string name="anime_series_cta_start_watching">Start watching</string>
+    <string name="anime_series_cta_continue_watching">Continue watching</string>
     <string name="manga_series_cta_start_reading">Start reading</string>
     <string name="manga_series_cta_continue_reading">Continue reading</string>
     <string name="manga_series_interstitial_completed">Completed: %1$s</string>

@@ -1,0 +1,25 @@
+import kotlin.Boolean;
+
+CREATE TABLE anime_series (
+    _id INTEGER NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    category_id INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    date_added INTEGER NOT NULL DEFAULT 0,
+    cover_last_modified INTEGER NOT NULL DEFAULT 0,
+    pinned INTEGER AS Boolean NOT NULL DEFAULT 0,
+    cover_mode INTEGER NOT NULL DEFAULT 0,
+    cover_entry_id INTEGER
+);
+CREATE INDEX anime_series_category_index ON anime_series(category_id);
+CREATE TABLE anime_series_entries (
+    _id INTEGER NOT NULL PRIMARY KEY,
+    series_id INTEGER NOT NULL,
+    anime_id INTEGER NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY(series_id) REFERENCES anime_series(_id) ON DELETE CASCADE,
+    FOREIGN KEY(anime_id) REFERENCES animes(_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX anime_series_entries_anime_id ON anime_series_entries(anime_id);
+CREATE INDEX anime_series_entries_series_id ON anime_series_entries(series_id);

@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.presentation.components.AuroraCard
 import eu.kanade.presentation.library.AURORA_LARGE_GRID_PERFORMANCE_THRESHOLD
+import eu.kanade.presentation.library.anime.components.SeriesStackedCoverCard
 import eu.kanade.presentation.library.components.GlobalSearchItem
 import eu.kanade.presentation.library.components.GlowContourLibraryGridItem
 import eu.kanade.presentation.library.components.LazyLibraryGrid
@@ -44,6 +45,7 @@ import tachiyomi.domain.library.anime.LibraryAnime
 import tachiyomi.domain.library.model.AuroraLibraryCardStyle
 import tachiyomi.domain.library.model.LibraryDisplayMode
 import tachiyomi.domain.library.service.LibraryPreferences
+import tachiyomi.domain.series.model.SeriesCoverMode
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.components.Badge
@@ -61,15 +63,16 @@ import androidx.compose.foundation.lazy.items as listItems
 @Composable
 fun AnimeLibraryAuroraContent(
     items: List<AnimeLibraryItem>,
-    selection: List<LibraryAnime>,
+    selection: List<AnimeLibraryItem>,
     selectedIds: Set<Long> = selection.idsToHashSet { it.id },
     searchQuery: String?,
     hasActiveFilters: Boolean,
     displayMode: LibraryDisplayMode,
     columns: Int,
     onAnimeClicked: (Long) -> Unit,
-    onToggleSelection: (LibraryAnime) -> Unit,
-    onToggleRangeSelection: (LibraryAnime) -> Unit,
+    onSeriesClicked: (Long) -> Unit = {},
+    onToggleSelection: (AnimeLibraryItem) -> Unit,
+    onToggleRangeSelection: (AnimeLibraryItem) -> Unit,
     onTogglePinned: (AnimeLibraryItem) -> Unit,
     onContinueWatchingClicked: ((LibraryAnime) -> Unit)?,
     onGlobalSearchClicked: () -> Unit,
@@ -98,11 +101,14 @@ fun AnimeLibraryAuroraContent(
 
     val safeColumns = columns.coerceAtLeast(0)
     val isSelectionMode = selection.isNotEmpty()
-    val onClickAnime = { anime: LibraryAnime ->
+    val onClickAnime = { item: AnimeLibraryItem ->
         if (isSelectionMode) {
-            onToggleSelection(anime)
+            onToggleSelection(item)
         } else {
-            onAnimeClicked(anime.anime.id)
+            when (item) {
+                is AnimeLibraryItem.Single -> onAnimeClicked(item.libraryAnime.anime.id)
+                is AnimeLibraryItem.Series -> onSeriesClicked(item.librarySeries.id)
+            }
         }
     }
 
@@ -116,6 +122,7 @@ fun AnimeLibraryAuroraContent(
                 searchQuery = searchQuery,
                 onGlobalSearchClicked = onGlobalSearchClicked,
                 onClick = onClickAnime,
+                onSeriesClicked = onSeriesClicked,
                 onLongClick = onToggleRangeSelection,
                 onTogglePinned = onTogglePinned,
                 onClickContinueWatching = onContinueWatchingClicked,
@@ -138,6 +145,7 @@ fun AnimeLibraryAuroraContent(
                     onGlobalSearchClicked = onGlobalSearchClicked,
                     showMetadata = true,
                     onClick = onClickAnime,
+                    onSeriesClicked = onSeriesClicked,
                     onLongClick = onToggleRangeSelection,
                     onTogglePinned = onTogglePinned,
                     onClickContinueWatching = onContinueWatchingClicked,
@@ -158,6 +166,7 @@ fun AnimeLibraryAuroraContent(
                     selection = selection,
                     selectedIds = selectedIds,
                     onClick = onClickAnime,
+                    onSeriesClicked = onSeriesClicked,
                     onLongClick = onToggleRangeSelection,
                     onTogglePinned = onTogglePinned,
                     onClickContinueWatching = onContinueWatchingClicked,
@@ -179,6 +188,7 @@ fun AnimeLibraryAuroraContent(
                 onGlobalSearchClicked = onGlobalSearchClicked,
                 showMetadata = false,
                 onClick = onClickAnime,
+                onSeriesClicked = onSeriesClicked,
                 onLongClick = onToggleRangeSelection,
                 onTogglePinned = onTogglePinned,
                 onClickContinueWatching = onContinueWatchingClicked,
@@ -203,6 +213,7 @@ fun AnimeLibraryAuroraContent(
                 onGlobalSearchClicked = onGlobalSearchClicked,
                 showMetadata = true,
                 onClick = onClickAnime,
+                onSeriesClicked = onSeriesClicked,
                 onLongClick = onToggleRangeSelection,
                 onTogglePinned = onTogglePinned,
                 onClickContinueWatching = onContinueWatchingClicked,
@@ -222,12 +233,13 @@ fun AnimeLibraryAuroraContent(
 private fun AnimeLibraryAuroraList(
     items: List<AnimeLibraryItem>,
     contentPadding: PaddingValues,
-    selection: List<LibraryAnime>,
+    selection: List<AnimeLibraryItem>,
     selectedIds: Set<Long>,
     searchQuery: String?,
     onGlobalSearchClicked: () -> Unit,
-    onClick: (LibraryAnime) -> Unit,
-    onLongClick: (LibraryAnime) -> Unit,
+    onClick: (AnimeLibraryItem) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
+    onLongClick: (AnimeLibraryItem) -> Unit,
     onTogglePinned: (AnimeLibraryItem) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
     listMaxWidthDp: Int?,
@@ -267,13 +279,26 @@ private fun AnimeLibraryAuroraList(
 
         listItems(
             items = items,
-            key = { it.libraryAnime.id },
+            key = { it.id },
             contentType = { "anime_library_aurora_list_item" },
         ) { libraryItem ->
+            val isSeries = libraryItem is AnimeLibraryItem.Series
             val libraryAnime = libraryItem.libraryAnime
-            val anime = libraryAnime.anime
-            val subtitle = if (libraryAnime.totalCount > 0) {
-                "${libraryAnime.seenCount}/${libraryAnime.totalCount} ${stringResource(AYMR.strings.episodes)}"
+            val targetAnime = if (isSeries) {
+                libraryItem.librarySeries.entries.firstOrNull {
+                    it.anime.id == libraryItem.librarySeries.activeAnime?.id
+                } ?: libraryAnime
+            } else {
+                libraryAnime
+            }
+            val anime = libraryItem.coverAnime ?: targetAnime.anime
+            val title = if (isSeries) libraryItem.title else anime.displayTitle
+            val subtitle = if (libraryItem.totalEpisodes > 0) {
+                stringResource(
+                    AYMR.strings.anime_series_episodes_progress,
+                    libraryItem.seenCount,
+                    libraryItem.totalEpisodes,
+                )
             } else {
                 null
             }
@@ -281,6 +306,11 @@ private fun AnimeLibraryAuroraList(
                 libraryItem.unseenCount > 0 ||
                 libraryItem.isLocal ||
                 libraryItem.sourceLanguage.isNotBlank()
+            val seriesHeaderText = if (isSeries) {
+                stringResource(AYMR.strings.anime_series_caption_label)
+            } else {
+                null
+            }
 
             val coverData = remember(anime) {
                 AnimeCover(
@@ -296,9 +326,20 @@ private fun AnimeLibraryAuroraList(
                     .fillMaxWidth()
                     .auroraCenteredMaxWidth(listMaxWidthDp)
                     .aspectRatio(2.2f),
-                title = anime.displayTitle,
+                title = title,
                 coverData = coverData,
                 subtitle = subtitle,
+                seriesHeaderText = seriesHeaderText,
+                customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
+                    {
+                        SeriesStackedCoverCard(
+                            covers = libraryItem.covers,
+                            isSelected = selectedIds.contains(libraryItem.id),
+                        )
+                    }
+                } else {
+                    null
+                },
                 badge = if (hasBadge) {
                     {
                         BadgeGroup {
@@ -345,19 +386,25 @@ private fun AnimeLibraryAuroraList(
                     null
                 },
                 menuContent = null,
-                onClick = { onClick(libraryAnime) },
-                onLongClick = { onLongClick(libraryAnime) },
+                onClick = {
+                    if (isSeries && selection.isEmpty()) {
+                        onSeriesClicked(libraryItem.librarySeries.id)
+                    } else {
+                        onClick(libraryItem)
+                    }
+                },
+                onLongClick = { onLongClick(libraryItem) },
                 onClickContinueViewing = if (
                     shouldShowContinueViewingAction(
                         hasContinueAction = onClickContinueWatching != null,
-                        remainingCount = libraryItem.libraryAnime.unseenCount,
+                        remainingCount = libraryItem.unseenCount,
                     )
                 ) {
-                    { onClickContinueWatching?.invoke(libraryAnime) }
+                    { onClickContinueWatching?.invoke(targetAnime) }
                 } else {
                     null
                 },
-                isSelected = selectedIds.contains(libraryAnime.id),
+                isSelected = selectedIds.contains(libraryItem.id),
                 coverHeightFraction = 0.62f,
                 titleMaxLines = 1,
             )
@@ -370,13 +417,14 @@ private fun AnimeLibraryAuroraCardGrid(
     items: List<AnimeLibraryItem>,
     columns: Int,
     contentPadding: PaddingValues,
-    selection: List<LibraryAnime>,
+    selection: List<AnimeLibraryItem>,
     selectedIds: Set<Long>,
     searchQuery: String?,
     onGlobalSearchClicked: () -> Unit,
     showMetadata: Boolean,
-    onClick: (LibraryAnime) -> Unit,
-    onLongClick: (LibraryAnime) -> Unit,
+    onClick: (AnimeLibraryItem) -> Unit,
+    onSeriesClicked: (Long) -> Unit,
+    onLongClick: (AnimeLibraryItem) -> Unit,
     onTogglePinned: (AnimeLibraryItem) -> Unit,
     onClickContinueWatching: ((LibraryAnime) -> Unit)?,
     listMaxWidthDp: Int?,
@@ -414,7 +462,7 @@ private fun AnimeLibraryAuroraCardGrid(
 
         gridItems(
             items = items,
-            key = { it.libraryAnime.id },
+            key = { it.id },
             contentType = {
                 if (showMetadata) {
                     "anime_library_aurora_comfortable_grid_item"
@@ -423,10 +471,28 @@ private fun AnimeLibraryAuroraCardGrid(
                 }
             },
         ) { libraryItem ->
+            val isSeries = libraryItem is AnimeLibraryItem.Series
             val libraryAnime = libraryItem.libraryAnime
-            val anime = libraryAnime.anime
-            val subtitle = if (showMetadata && libraryAnime.totalCount > 0) {
-                "${libraryAnime.seenCount}/${libraryAnime.totalCount} ${stringResource(AYMR.strings.episodes)}"
+            val targetAnime = if (isSeries) {
+                libraryItem.librarySeries.entries.firstOrNull {
+                    it.anime.id == libraryItem.librarySeries.activeAnime?.id
+                } ?: libraryAnime
+            } else {
+                libraryAnime
+            }
+            val anime = libraryItem.coverAnime ?: targetAnime.anime
+            val title = if (isSeries) libraryItem.title else anime.displayTitle
+            val subtitle = if (showMetadata && libraryItem.totalEpisodes > 0) {
+                stringResource(
+                    AYMR.strings.anime_series_episodes_progress,
+                    libraryItem.seenCount,
+                    libraryItem.totalEpisodes,
+                )
+            } else {
+                null
+            }
+            val seriesHeaderText = if (isSeries) {
+                stringResource(AYMR.strings.anime_series_caption_label)
             } else {
                 null
             }
@@ -435,12 +501,12 @@ private fun AnimeLibraryAuroraCardGrid(
                 libraryItem.isLocal ||
                 libraryItem.sourceLanguage.isNotBlank()
             val progressPercent = resolveAnimeLibraryCardProgressPercent(
-                seenCount = libraryAnime.seenCount,
-                totalCount = libraryAnime.totalCount,
+                seenCount = libraryItem.seenCount,
+                totalCount = libraryItem.totalEpisodes,
             )
             val cornerIndicatorState = resolveGlowContourCornerIndicatorState(
                 hasContinueAction = onClickContinueWatching != null,
-                remainingCount = libraryItem.libraryAnime.unseenCount,
+                remainingCount = libraryItem.unseenCount,
                 isFinished = anime.status == SAnime.COMPLETED.toLong() ||
                     anime.status == SAnime.PUBLISHING_FINISHED.toLong() ||
                     anime.status == SAnime.CANCELLED.toLong(),
@@ -459,15 +525,26 @@ private fun AnimeLibraryAuroraCardGrid(
             if (useGlowContourCards) {
                 GlowContourLibraryGridItem(
                     modifier = Modifier,
-                    title = anime.displayTitle,
+                    title = title,
                     subtitle = subtitle,
                     coverData = coverData,
                     progressPercent = progressPercent,
                     cardAspectRatio = 0.76f,
                     cornerIndicatorState = cornerIndicatorState,
-                    textSpec = textSpec,
+                    seriesHeaderText = seriesHeaderText,
                     enabledAuras = enabledAuras,
                     performanceMode = performanceMode,
+                    customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
+                        {
+                            SeriesStackedCoverCard(
+                                covers = libraryItem.covers,
+                                isSelected = selectedIds.contains(libraryItem.id),
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    textSpec = textSpec,
                     badge = if (hasBadge) {
                         {
                             AnimeAuroraBadgeGroup(
@@ -484,29 +561,44 @@ private fun AnimeLibraryAuroraCardGrid(
                         null
                     },
                     menuContent = null,
-                    onClick = { onClick(libraryAnime) },
-                    onLongClick = { onLongClick(libraryAnime) },
+                    onClick = {
+                        if (isSeries && selection.isEmpty()) {
+                            onSeriesClicked(libraryItem.librarySeries.id)
+                        } else {
+                            onClick(libraryItem)
+                        }
+                    },
+                    onLongClick = { onLongClick(libraryItem) },
                     onClickContinueViewing = if (
                         shouldShowContinueViewingAction(
                             hasContinueAction = onClickContinueWatching != null,
-                            remainingCount = libraryItem.libraryAnime.unseenCount,
+                            remainingCount = libraryItem.unseenCount,
                         )
                     ) {
-                        { onClickContinueWatching?.invoke(libraryAnime) }
+                        { onClickContinueWatching?.invoke(targetAnime) }
                     } else {
                         null
                     },
-                    isSelected = selectedIds.contains(libraryAnime.id),
-
+                    isSelected = selectedIds.contains(libraryItem.id),
                     gridColumns = columns,
                 )
             } else {
                 AuroraCard(
                     modifier = Modifier.aspectRatio(if (showMetadata) 0.66f else 0.6f),
-                    title = anime.displayTitle,
+                    title = title,
                     coverData = coverData,
-
                     subtitle = subtitle,
+                    seriesHeaderText = seriesHeaderText,
+                    customCover = if (isSeries && libraryItem.librarySeries.series.coverMode == SeriesCoverMode.AUTO) {
+                        {
+                            SeriesStackedCoverCard(
+                                covers = libraryItem.covers,
+                                isSelected = selectedIds.contains(libraryItem.id),
+                            )
+                        }
+                    } else {
+                        null
+                    },
                     badge = if (hasBadge) {
                         {
                             AnimeAuroraBadgeGroup(
@@ -517,20 +609,25 @@ private fun AnimeLibraryAuroraCardGrid(
                     } else {
                         null
                     },
-                    onClick = { onClick(libraryAnime) },
-                    onLongClick = { onLongClick(libraryAnime) },
+                    onClick = {
+                        if (isSeries && selection.isEmpty()) {
+                            onSeriesClicked(libraryItem.librarySeries.id)
+                        } else {
+                            onClick(libraryItem)
+                        }
+                    },
+                    onLongClick = { onLongClick(libraryItem) },
                     onClickContinueViewing = if (
                         shouldShowContinueViewingAction(
                             hasContinueAction = onClickContinueWatching != null,
-                            remainingCount = libraryItem.libraryAnime.unseenCount,
+                            remainingCount = libraryItem.unseenCount,
                         )
                     ) {
-                        { onClickContinueWatching?.invoke(libraryAnime) }
+                        { onClickContinueWatching?.invoke(targetAnime) }
                     } else {
                         null
                     },
-                    isSelected = selectedIds.contains(libraryAnime.id),
-
+                    isSelected = selectedIds.contains(libraryItem.id),
                     coverHeightFraction = if (showMetadata) 0.68f else 1f,
                     titleMaxLines = if (showMetadata) 1 else 2,
                     gridColumns = columns,
@@ -618,7 +715,7 @@ private fun AnimeLibraryAuroraEmptyScreen(
             .fillMaxSize(),
     ) {
         if (!searchQuery.isNullOrEmpty()) {
-            eu.kanade.presentation.library.components.GlobalSearchItem(
+            GlobalSearchItem(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.CenterHorizontally),

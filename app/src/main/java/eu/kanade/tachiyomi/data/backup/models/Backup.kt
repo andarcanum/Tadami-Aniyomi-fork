@@ -37,6 +37,7 @@ data class LegacyBackup(
     @ProtoNumber(621) var backupNovelSeries: List<BackupNovelSeries> = emptyList(),
     // Feed
     @ProtoNumber(622) var backupFeeds: List<BackupFeed> = emptyList(),
+    @ProtoNumber(628) var backupAnimeSeries: List<BackupAnimeSeries> = emptyList(),
 ) {
     fun toBackup(): Backup {
         return Backup(
@@ -67,6 +68,7 @@ data class LegacyBackup(
             backupStats = backupStats,
             backupMangaSeries = backupMangaSeries,
             backupNovelSeries = backupNovelSeries,
+            backupAnimeSeries = backupAnimeSeries,
         )
     }
 }
@@ -114,6 +116,7 @@ data class Backup(
     @ProtoNumber(625) var backupDiscoveryBlacklistTags: List<BackupDiscoveryTag> = emptyList(),
     // Taste Learning Engine: сигнал-лог вкусов (переживает переустановку вместе с остальным discovery).
     @ProtoNumber(627) var backupDiscoverySignals: List<BackupDiscoverySignal> = emptyList(),
+    @ProtoNumber(628) var backupAnimeSeries: List<BackupAnimeSeries> = emptyList(),
 )
 
 /**
@@ -142,5 +145,6 @@ internal fun Backup.mergeLegacyPayloadIfPresent(legacy: LegacyBackup): Backup {
         backupMangaSeries = backupMangaSeries.ifEmpty { legacy.backupMangaSeries },
         backupNovelSeries = backupNovelSeries.ifEmpty { legacy.backupNovelSeries },
         backupFeeds = backupFeeds.ifEmpty { legacy.backupFeeds },
+        backupAnimeSeries = backupAnimeSeries.ifEmpty { legacy.backupAnimeSeries },
     )
 }

@@ -12,6 +12,7 @@ import eu.kanade.tachiyomi.data.backup.create.creators.AnimeBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.AnimeCategoriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.AnimeExtensionRepoBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.AnimeExtensionStoreBackupCreator
+import eu.kanade.tachiyomi.data.backup.create.creators.AnimeSeriesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.AnimeSourcesBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.CustomButtonBackupCreator
 import eu.kanade.tachiyomi.data.backup.create.creators.DiscoveryBackupCreator
@@ -105,6 +106,7 @@ class BackupCreator(
     private val animeSourcesBackupCreator: AnimeSourcesBackupCreator = AnimeSourcesBackupCreator(),
     private val mangaSourcesBackupCreator: MangaSourcesBackupCreator = MangaSourcesBackupCreator(),
     private val novelSourcesBackupCreator: NovelSourcesBackupCreator = NovelSourcesBackupCreator(),
+    private val animeSeriesBackupCreator: AnimeSeriesBackupCreator = AnimeSeriesBackupCreator(),
     private val mangaSeriesBackupCreator: MangaSeriesBackupCreator = MangaSeriesBackupCreator(),
     private val novelSeriesBackupCreator: NovelSeriesBackupCreator = NovelSeriesBackupCreator(),
     private val feedBackupCreator: FeedBackupCreator = FeedBackupCreator(),
@@ -193,6 +195,9 @@ class BackupCreator(
 
             val achievementData = BackupDiagnosticLog.measure(context, "collect_achievements") {
                 achievementBackupCreator(options)
+            }
+            val backupAnimeSeries = BackupDiagnosticLog.measure(context, "collect_anime_series") {
+                if (shouldBackupAnime) animeSeriesBackupCreator() else emptyList()
             }
             val backupMangaSeries = BackupDiagnosticLog.measure(context, "collect_manga_series") {
                 if (shouldBackupManga) mangaSeriesBackupCreator() else emptyList()
@@ -296,6 +301,7 @@ class BackupCreator(
                 backupStats = if (options.sisterAppCompatible) null else achievementData.stats,
                 backupMangaSeries = if (options.sisterAppCompatible) emptyList() else backupMangaSeries,
                 backupNovelSeries = if (options.sisterAppCompatible) emptyList() else backupNovelSeries,
+                backupAnimeSeries = if (options.sisterAppCompatible) emptyList() else backupAnimeSeries,
                 backupFeeds = if (options.sisterAppCompatible) emptyList() else backupFeeds,
                 backupReelsFavorites = if (options.sisterAppCompatible) {
                     emptyList()
