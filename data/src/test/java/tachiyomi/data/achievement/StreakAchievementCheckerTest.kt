@@ -206,7 +206,7 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
     }
 
     @Test
-    fun `streak counts app opens as activity`() = runTest {
+    fun `streak does not count standalone app open without reading or watching`() = runTest {
         val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         database.activityLogQueries.incrementAppOpens(
             date = today,
@@ -214,7 +214,7 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
         )
 
         val streak = streakChecker.getCurrentStreak()
-        streak shouldBe 1
+        streak shouldBe 0
     }
 
     @Test
@@ -234,9 +234,10 @@ class StreakAchievementCheckerTest : AchievementTestBase() {
     fun `streak counts mixed activity types across consecutive days`() = runTest {
         val today = LocalDate.now()
 
-        // Today: app open
-        database.activityLogQueries.incrementAppOpens(
+        // Today: reading duration
+        database.activityLogQueries.addDuration(
             date = today.format(DateTimeFormatter.ISO_LOCAL_DATE),
+            duration_ms = 60_000L,
             last_updated = System.currentTimeMillis(),
         )
         // Yesterday: duration only
