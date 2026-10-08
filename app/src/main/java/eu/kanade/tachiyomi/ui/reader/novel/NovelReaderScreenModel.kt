@@ -763,6 +763,9 @@ class NovelReaderScreenModel(
 
     override fun progressCurrentNovel(): Novel? = currentNovel
 
+    override fun progressOrderedChapters(): List<NovelChapter> =
+        (if (fullChapterOrderList.isNotEmpty()) fullChapterOrderList else chapterOrderList).toList()
+
     // ---------------------------------------------------------------------------------------------
     // NovelSelectionTranslationHost implementation: the selected-text translation + dictionary
     // controller reaches the shared reader state here.
@@ -1033,6 +1036,7 @@ class NovelReaderScreenModel(
         eventBus = eventBus,
         activityDataRepository = activityDataRepository,
         historyRepository = historyRepository,
+        novelDownloadManager = novelDownloadManager,
     )
 
     private val selectionTranslationController = NovelSelectionTranslationController(

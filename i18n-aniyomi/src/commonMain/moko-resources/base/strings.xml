@@ -1367,6 +1367,14 @@
     <string name="novel_download_chip_chapters">chapters</string>
     <string name="novel_download_select_chapters_title">Select chapters to download</string>
     <string name="novel_download_no_available">No chapters available to download</string>
+    <string name="novel_delete_downloaded_title">Delete downloaded chapters</string>
+    <string name="novel_delete_read_title">Delete read chapters</string>
+    <string name="novel_delete_downloaded_confirm_body">Delete %1$d downloaded chapters from this device? Reading history and bookmarks are kept.</string>
+    <string name="novel_delete_downloaded_progress">Deleting chapters… %1$d of %2$d</string>
+    <string name="novel_delete_downloaded_done">Deleted chapters: %1$d</string>
+    <string name="novel_delete_downloaded_menu">Delete downloaded chapters (%1$d)</string>
+    <string name="novel_delete_read_menu">Delete read chapters (%1$d)</string>
+    <string name="novel_delete_downloaded_offer">All chapters read. Delete %1$d downloaded chapters?</string>
     <string name="novel_export_as_epub">Export as EPUB</string>
     <string name="novel_epub_short">EPUB</string>
     <string name="novel_export_as_fb2">Export as FB2 (plain text)</string>

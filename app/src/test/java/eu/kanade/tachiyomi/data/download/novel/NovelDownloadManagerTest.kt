@@ -6,6 +6,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
@@ -331,6 +332,76 @@ class NovelDownloadManagerTest {
             // ...so the next lookup finds the file via the positive dir cache without a rescan.
             manager.isChapterDownloaded(novel, chapter.id) shouldBe true
             manager.debugScanCount() shouldBe scansAfterMiss
+        }
+    }
+
+    @Test
+    fun `deleteChapters batch removes downloaded files and reports progress`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Novel Ninja")
+            val manager = createManager(source = source, chapterText = "x")
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
+            val chapters = (1L..3L).map {
+                NovelChapter.create().copy(id = it, novelId = 1L, url = "/c$it")
+            }
+            chapters.forEach { manager.downloadChapter(novel, it) shouldBe true }
+
+            val progress = mutableListOf<Pair<Int, Int>>()
+            val deleted = manager.deleteChapters(novel, chapters.map { it.id }) { d, t -> progress.add(d to t) }
+
+            deleted shouldBe 3
+            progress.lastOrNull() shouldBe (3 to 3)
+            val downloads = tempDir.resolve("downloads").toFile()
+            chapters.forEach { ch ->
+                File(downloads, "novels/Novel Ninja/Novel Title [${novel.id}]/${ch.id}.html").exists() shouldBe false
+            }
+            manager.isChapterDownloaded(novel, chapters[0].id) shouldBe false
+        }
+    }
+
+    @Test
+    fun `deleteChapters reconciles the cache when files are already gone from disk`() {
+        runBlocking {
+            val cache = mockk<NovelDownloadCache>(relaxed = true)
+            val storageManager = mockk<StorageManager>()
+            every { storageManager.getDownloadsDirectory() } returns fakeUniFile(
+                tempDir.resolve("downloads").toFile().apply { mkdirs() },
+            )
+            val manager = NovelDownloadManager(
+                application = null,
+                sourceManager = null,
+                storageManager = storageManager,
+                downloadCache = cache,
+                fetchChapterText = { _, _ -> null },
+            )
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
+
+            val deleted = manager.deleteChapters(novel, setOf(5L))
+
+            deleted shouldBe 0
+            verify(exactly = 1) {
+                cache.onChaptersChanged(novel = novel, chapterIds = setOf(5L), downloaded = false)
+            }
+        }
+    }
+
+    @Test
+    fun `deleteChapters skips chapters already missing from disk and still deletes the rest`() {
+        runBlocking {
+            val source = MutableNovelSource(id = 10L, label = "Novel Ninja")
+            val manager = createManager(source = source, chapterText = "x")
+            val novel = Novel.create().copy(id = 1L, source = 10L, title = "Novel Title")
+            val chapters = (1L..2L).map {
+                NovelChapter.create().copy(id = it, novelId = 1L, url = "/c$it")
+            }
+            chapters.forEach { manager.downloadChapter(novel, it) shouldBe true }
+            val downloads = tempDir.resolve("downloads").toFile()
+            File(downloads, "novels/Novel Ninja/Novel Title [${novel.id}]/2.html").delete()
+
+            val deleted = manager.deleteChapters(novel, listOf(1L, 2L))
+
+            deleted shouldBe 1
+            File(downloads, "novels/Novel Ninja/Novel Title [${novel.id}]/1.html").exists() shouldBe false
         }
     }
 

@@ -16,9 +16,12 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.domain.achievement.model.AchievementEvent
 import tachiyomi.domain.achievement.repository.ActivityDataRepository
+import tachiyomi.domain.category.novel.interactor.GetNovelCategories
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.novel.model.Novel
 import tachiyomi.domain.history.novel.model.NovelHistoryUpdate
 import tachiyomi.domain.history.novel.repository.NovelHistoryRepository
+import tachiyomi.domain.items.novelchapter.model.NovelChapter
 import tachiyomi.domain.items.novelchapter.model.NovelChapterUpdate
 import tachiyomi.domain.items.novelchapter.repository.NovelChapterRepository
 import uy.kohesive.injekt.Injekt
@@ -34,6 +37,7 @@ internal interface NovelProgressPersistenceHost {
 
     fun progressCurrentChapterId(): Long?
     fun progressCurrentNovel(): Novel?
+    fun progressOrderedChapters(): List<NovelChapter> = emptyList()
 }
 
 /**
@@ -64,6 +68,22 @@ data class PendingProgressPersistence(
 }
 
 /**
+ * Reading-order slot resolution for "After Reading Automatically Delete" (manga parity:
+ * ReaderViewModel.deleteChapterIfNeeded): when the chapter [completedChapterId] is finished,
+ * the chapter [slots] positions behind it is the one whose download gets removed.
+ */
+internal fun resolveSlotsDeleteTargetId(
+    orderedChapters: List<NovelChapter>,
+    completedChapterId: Long,
+    slots: Int,
+): Long? {
+    if (slots < 0) return null
+    val index = orderedChapters.indexOfFirst { it.id == completedChapterId }
+    if (index < 0) return null
+    return orderedChapters.getOrNull(index - slots)?.id
+}
+
+/**
  * Chapter progress + reading-history persistence subsystem.
  *
  * Owns the pending-progress coalescing queue, the bounded flush pipeline and the per-session
@@ -77,6 +97,9 @@ internal class NovelProgressPersistenceController(
     private val eventBus: AchievementEventBus?,
     private val activityDataRepository: ActivityDataRepository,
     private val historyRepository: NovelHistoryRepository?,
+    private val downloadPreferences: DownloadPreferences = Injekt.get(),
+    private val getNovelCategories: GetNovelCategories = Injekt.get(),
+    private val novelDownloadManager: eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager? = null,
 ) {
 
     private var chapterReadStartTimeMs: Long = System.currentTimeMillis()
@@ -193,6 +216,10 @@ internal class NovelProgressPersistenceController(
                 ),
             )
 
+            if (nextUpdate.read) {
+                maybeDeleteReadChapterDownloads(nextUpdate)
+            }
+
             val sessionDuration = nextUpdate.sessionReadDurationMs.coerceAtLeast(0L)
             if (nextUpdate.emitReadEvent) {
                 runCatching {
@@ -289,6 +316,35 @@ internal class NovelProgressPersistenceController(
         if (readDurationMs <= 0L) return
         pendingHistoryReadDurationMs = 0L
         saveHistorySnapshot(chapterId, readDurationMs)
+    }
+
+    /**
+     * Reader-side auto-cleanup: honors "Remove when marked as read" (delete the finished
+     * chapter download) and "After Reading Automatically Delete" slots (delete the chapter
+     * N behind in reading order), with the same bookmark/category protections as the screen.
+     */
+    private suspend fun maybeDeleteReadChapterDownloads(update: PendingProgressPersistence) {
+        val novel = host.progressCurrentNovel() ?: return
+        val removeMarkedRead = downloadPreferences.removeAfterMarkedAsRead().get()
+        val slots = downloadPreferences.removeAfterReadSlots().get()
+        if (!removeMarkedRead && slots == -1) return
+        val ordered = host.progressOrderedChapters()
+        val completed = ordered.firstOrNull { it.id == update.chapterId } ?: return
+        val targetIds = mutableSetOf<Long>()
+        if (removeMarkedRead) targetIds += completed.id
+        resolveSlotsDeleteTargetId(ordered, completed.id, slots)?.let { targetIds += it }
+        if (targetIds.isEmpty()) return
+        val allowBookmarked = downloadPreferences.removeBookmarkedChapters().get()
+        val excludedCategories = downloadPreferences.removeExcludeNovelCategories().get().mapNotNull {
+            it.toLongOrNull()
+        }
+        if (excludedCategories.isNotEmpty()) {
+            val novelCategoryIds = getNovelCategories.await(novel.id).mapTo(mutableSetOf()) { it.id }
+            if (novelCategoryIds.intersect(excludedCategories).isNotEmpty()) return
+        }
+        val deletable = ordered.filter { it.id in targetIds && (allowBookmarked || !it.bookmark) }
+        if (deletable.isEmpty()) return
+        novelDownloadManager?.deleteChapters(novel, deletable.mapTo(mutableSetOf()) { it.id })
     }
 
     /** Cancels the flush pipeline and drops pending writes (screen model disposal). */
