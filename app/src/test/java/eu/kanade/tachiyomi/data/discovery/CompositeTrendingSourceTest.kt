@@ -1,4 +1,4 @@
-﻿package eu.kanade.tachiyomi.data.discovery
+package eu.kanade.tachiyomi.data.discovery
 
 import io.kotest.matchers.shouldBe
 import kotlinx.coroutines.test.runTest
@@ -75,7 +75,7 @@ class CompositeTrendingSourceTest {
         result.first().title shouldBe "Frieren"
         result.first().provider shouldBe "shikimori_trend"
         shikimori.fetchCalled shouldBe true
-        jikan.fetchCalled shouldBe false
+        jikan.fetchCalled shouldBe true
         anilist.fetchCalled shouldBe false
     }
 
@@ -129,7 +129,7 @@ class CompositeTrendingSourceTest {
         result.first().title shouldBe "Chainsaw Man"
         result.first().provider shouldBe "mangadex_trend"
         mangadex.fetchCalled shouldBe true
-        shikimori.fetchCalled shouldBe false
+        shikimori.fetchCalled shouldBe true
         anilist.fetchCalled shouldBe false
     }
 
@@ -281,5 +281,26 @@ class CompositeTrendingSourceTest {
 
         val result = composite.fetchMeta("Solo Leveling RU", DiscoveryMediaType.MANGA)
         result?.description shouldBe "Отличная история об охотниках"
+    }
+
+    @Test
+    fun `trend fetch merges primary and secondary providers deduped`() = runTest {
+        val primary = MockTrendingSource(
+            "mangadex",
+            items = listOf(
+                DiscoveryTrendingItem("A", "a", null, 0L, null),
+                DiscoveryTrendingItem("B", "b", null, 0L, null),
+            ),
+        )
+        val secondary = MockTrendingSource(
+            "shikimori",
+            items = listOf(
+                DiscoveryTrendingItem("B", "b", null, 0L, null),
+                DiscoveryTrendingItem("C", "c", null, 0L, null),
+            ),
+        )
+        val composite = CompositeTrendingSource(shikimori = secondary, mangadex = primary)
+        composite.fetch(DiscoveryMediaType.MANGA, TrendSeason.CURRENT, TrendSort.POPULARITY, 1, emptySet())
+            .map { it.cleanTitle } shouldBe listOf("a", "b", "c")
     }
 }

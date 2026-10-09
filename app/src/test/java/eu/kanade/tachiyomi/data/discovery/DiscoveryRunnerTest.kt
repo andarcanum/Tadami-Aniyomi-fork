@@ -3,8 +3,13 @@ package eu.kanade.tachiyomi.data.discovery
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.source.service.SourcePreferences
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
@@ -18,7 +23,7 @@ import java.io.IOException
 
 class DiscoveryRunnerTest {
 
-    private class FakeRepository : DiscoveryRepository {
+    private open class FakeRepository : DiscoveryRepository {
         val replaced = mutableListOf<Triple<DiscoveryMediaType, DiscoveryRowType, List<DiscoverySuggestion>>>()
         private val flow = MutableStateFlow<List<DiscoverySuggestion>>(emptyList())
         override fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>> = flow
@@ -158,7 +163,7 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
-        val (media, row, items) = repo.replaced.single()
+        val (media, row, items) = repo.replaced.first { it.second == DiscoveryRowType.LIKE }
         media shouldBe DiscoveryMediaType.NOVEL
         row shouldBe DiscoveryRowType.LIKE
         items.map { it.title } shouldBe listOf("Fresh Pick")
@@ -266,16 +271,29 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
-        repo.replaced shouldBe emptyList()
+        repo.replaced.none { it.second == DiscoveryRowType.LIKE } shouldBe true
     }
 
     @Test
-    fun `empty successful row does not wipe cache`() = runTest {
+    fun `empty successful row does not wipe cache when seeds exist`() = runTest {
         val repo = FakeRepository()
+        val seedSourcesWithActiveSeeds = object : DiscoverySeedSources {
+            override suspend fun candidates(mediaType: DiscoveryMediaType) = listOf(
+                DiscoverySeedInput(
+                    entryId = 1,
+                    title = "Seed One",
+                    genres = listOf("Drama"),
+                    isCompleted = true,
+                    completedAt = System.currentTimeMillis(),
+                    lastInteraction = System.currentTimeMillis(),
+                ),
+            )
+            override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+        }
         val runner = DiscoveryRunner(
             repository = repo,
             preferences = DiscoveryPreferences(InMemoryPreferenceStore()),
-            seedSources = FakeSeedSources(),
+            seedSources = seedSourcesWithActiveSeeds,
             coordinatorFactory = {
                 DiscoveryCoordinator(
                     listOf(
@@ -290,7 +308,7 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
-        repo.replaced shouldBe emptyList()
+        repo.replaced.none { it.second == DiscoveryRowType.LIKE } shouldBe true
     }
 
     @Test
@@ -697,7 +715,88 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
-        repo.replaced.single().third.single().sourceId shouldBe 77L
-        repo.replaced.single().third.single().sourceUrl shouldBe "/manga/77"
+        val sourceRow = repo.replaced.first { it.second == DiscoveryRowType.SOURCE }
+        sourceRow.third.single().sourceId shouldBe 77L
+        sourceRow.third.single().sourceUrl shouldBe "/manga/77"
+    }
+
+    @Test
+    fun `manual refresh count not persisted when generation yields no rows`() = runTest {
+        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(emptyList()) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+        runner.run(listOf(DiscoveryMediaType.MANGA), isManualRefresh = true)
+        prefs.manualRefreshCount(DiscoveryMediaType.MANGA).get() shouldBe 0
+    }
+
+    @Test
+    fun `like row cache cleared when seeds empty and row honestly empty`() = runTest {
+        val repo = FakeRepository()
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = DiscoveryPreferences(InMemoryPreferenceStore()),
+            seedSources = emptySeedSources(),
+            coordinatorFactory = {
+                DiscoveryCoordinator(
+                    listOf(
+                        object : DiscoveryRowBuilder {
+                            override val rowType = DiscoveryRowType.LIKE
+                            override suspend fun build(
+                                context: DiscoveryBuildContext,
+                            ): List<DiscoveryRowItem> = emptyList()
+                        },
+                    ),
+                )
+            },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+        runner.run(listOf(DiscoveryMediaType.MANGA), isManualRefresh = false)
+        repo.replaced.any { it.second == DiscoveryRowType.LIKE && it.third.isEmpty() } shouldBe true
+    }
+
+    @Test
+    fun `parallel runs for the same media type are serialized`() = runTest {
+        var currentConcurrent = 0
+        var maxConcurrent = 0
+        val concurrencyLock = Mutex()
+        val repo = object : FakeRepository() {
+            override suspend fun replaceRows(
+                mediaType: DiscoveryMediaType,
+                rowType: DiscoveryRowType,
+                items: List<DiscoverySuggestion>,
+            ) {
+                concurrencyLock.withLock {
+                    currentConcurrent++
+                    if (currentConcurrent > maxConcurrent) maxConcurrent = currentConcurrent
+                }
+                delay(50)
+                concurrencyLock.withLock {
+                    currentConcurrent--
+                }
+                super.replaceRows(mediaType, rowType, items)
+            }
+        }
+        val builder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.LIKE
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                return listOf(DiscoveryRowItem("T", "t", null, null, "Seed", "anilist", 1.0))
+            }
+        }
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = DiscoveryPreferences(InMemoryPreferenceStore()),
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(builder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+        val j1 = async { runner.run(listOf(DiscoveryMediaType.MANGA)) }
+        val j2 = async { runner.run(listOf(DiscoveryMediaType.MANGA)) }
+        listOf(j1, j2).awaitAll()
+        maxConcurrent shouldBe 1
     }
 }

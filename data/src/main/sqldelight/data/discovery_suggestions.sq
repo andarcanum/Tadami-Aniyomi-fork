@@ -12,7 +12,8 @@ CREATE TABLE discovery_suggestions (
     position INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     source_id INTEGER,
-    source_url TEXT
+    source_url TEXT,
+    genres TEXT
 );
 
 CREATE INDEX discovery_media_row ON discovery_suggestions(media_type, row_type);
@@ -27,8 +28,8 @@ DELETE FROM discovery_suggestions
 WHERE media_type = ? AND row_type = ?;
 
 insert:
-INSERT INTO discovery_suggestions(media_type, row_type, title, clean_title, cover_url, reason, seed_title, provider, score, position, created_at, source_id, source_url)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO discovery_suggestions(media_type, row_type, title, clean_title, cover_url, reason, seed_title, provider, score, position, created_at, source_id, source_url, genres)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 lastUpdatedAt:
 SELECT IFNULL(MAX(created_at), 0) FROM discovery_suggestions

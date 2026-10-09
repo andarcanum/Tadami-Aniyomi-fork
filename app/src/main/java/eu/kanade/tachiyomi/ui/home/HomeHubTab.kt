@@ -730,6 +730,7 @@ internal data class HomeHubDiscoveryItem(
     val sourceUrl: String? = null,
     // Метка последнего показа (48h-окно): hero-карусель Stage заказывает непоказанное вперёд.
     val shownAt: Long? = null,
+    val genres: List<String> = emptyList(),
 )
 
 /** Бейдж «откроется напрямую»: только полная привязка (id + непустой url). */
@@ -1102,6 +1103,7 @@ object HomeHubTab : Tab {
                                 onUndoHidden = onUndoHidden,
                                 onDiscoveryLongClick = onDiscoveryHide,
                                 onDiscoveryBlacklistTag = onDiscoveryBlacklistTag,
+                                onDiscoveryItemFocused = { animeScreenModel.markDiscoveryItemShown(it) },
                                 activeSection = selectedSection,
                                 scrollResetToken = scrollResetToken,
                                 onScrollSignal = onScrollSignal,
@@ -1123,6 +1125,7 @@ object HomeHubTab : Tab {
                                 onUndoHidden = onUndoHidden,
                                 onDiscoveryLongClick = onDiscoveryHide,
                                 onDiscoveryBlacklistTag = onDiscoveryBlacklistTag,
+                                onDiscoveryItemFocused = { mangaScreenModel.markDiscoveryItemShown(it) },
                                 activeSection = selectedSection,
                                 scrollResetToken = scrollResetToken,
                                 onScrollSignal = onScrollSignal,
@@ -1144,6 +1147,7 @@ object HomeHubTab : Tab {
                                 onUndoHidden = onUndoHidden,
                                 onDiscoveryLongClick = onDiscoveryHide,
                                 onDiscoveryBlacklistTag = onDiscoveryBlacklistTag,
+                                onDiscoveryItemFocused = { novelScreenModel.markDiscoveryItemShown(it) },
                                 activeSection = selectedSection,
                                 scrollResetToken = scrollResetToken,
                                 onScrollSignal = onScrollSignal,

@@ -6,6 +6,8 @@ import eu.kanade.tachiyomi.data.suggestions.SuggestionCoordinator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
@@ -123,6 +125,9 @@ class DiscoveryRunner(
         }
     }
 
+    private val mediaRunLocks: java.util.concurrent.ConcurrentHashMap<DiscoveryMediaType, Mutex> =
+        java.util.concurrent.ConcurrentHashMap()
+
     private suspend fun trackTitles(mediaType: DiscoveryMediaType, entryId: Long): List<String> =
         when (mediaType) {
             DiscoveryMediaType.ANIME ->
@@ -136,27 +141,23 @@ class DiscoveryRunner(
                     .getTracksByNovelId(entryId).map { it.title }
         }
 
-    private suspend fun runFor(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false) {
+    private suspend fun runFor(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false) =
+        mediaRunLocks.getOrPut(mediaType) { Mutex() }
+            .withLock { runForLocked(mediaType, isManualRefresh) }
+
+    private suspend fun runForLocked(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false) {
         val candidates = seedSources.candidates(mediaType)
-        val refreshCount = if (isManualRefresh) {
-            val current = preferences.manualRefreshCount(mediaType).get()
-            val next = current + 1
-            preferences.manualRefreshCount(mediaType).set(next)
-            next
+        val candidateRefreshCount = if (isManualRefresh) {
+            preferences.manualRefreshCount(mediaType).get() + 1
         } else {
             preferences.manualRefreshCount(mediaType).get()
         }
-        // Фоновые циклы тоже ротируют страницы провайдеров: иначе авто-обновления
-        // вечно тянут страницу 1 (тренды меняются медленно → лента «не обновляется»).
-        val backgroundCycle = if (isManualRefresh) {
+        val candidateBackgroundCycle = if (isManualRefresh) {
             preferences.backgroundCycleCount(mediaType).get()
         } else {
-            val current = preferences.backgroundCycleCount(mediaType).get()
-            val next = current + 1
-            preferences.backgroundCycleCount(mediaType).set(next)
-            next
+            preferences.backgroundCycleCount(mediaType).get() + 1
         }
-        val seedOffset = if (isManualRefresh) manualSeedOffset(refreshCount) else 0
+        val seedOffset = if (isManualRefresh) manualSeedOffset(candidateRefreshCount) else 0
         val seeds = seedSelector.select(
             candidates,
             SeedSettings(
@@ -253,32 +254,35 @@ class DiscoveryRunner(
             shownTitles
         }
         val pageOffset = if (isManualRefresh) {
-            manualPageOffset(refreshCount)
+            manualPageOffset(candidateRefreshCount)
         } else {
-            backgroundPageOffset(backgroundCycle)
+            backgroundPageOffset(candidateBackgroundCycle)
         }
 
         // Taste Learning Engine: fold сигнал-лога и слияние с библиотечным профилем.
         // Плавный старт (blend) — при пустом логе merge возвращает библиотечный профиль как есть.
         // Неявный негатив: тайтл показан ≥3 раз за 48ч без явного сигнала → жанры
         // получают мягкий минус. Синтез на лету (не пишется в БД), явные сигналы важнее.
+        val libraryTasteProfile = buildTasteProfile(candidates)
+        val libraryProfileGenres = libraryTasteProfile.map { it.first }
         val implicitNegatives = runCatching {
             synthesizeImplicitNegatives(
                 shownWithCount = repository.getShownWithCount(mediaType),
                 explicitSignals = allSignals,
                 currentSuggestions = currentSuggestions,
                 mediaType = mediaType,
+                profileGenres = libraryProfileGenres,
             )
         }.getOrDefault(emptyList())
         val learnedProfile = foldLearnedTasteProfile(signals = allSignals + implicitNegatives)
         val mergedTasteProfile = mergeTasteProfiles(
-            libraryProfile = buildTasteProfile(candidates),
+            libraryProfile = libraryTasteProfile,
             learned = learnedProfile,
         )
         // «Просмотрено/прочитано»: нейтральное исключение — consumed-тайтлы не
         // попадают в новые генерации ленты (вкусовой профиль они не трогают).
         val consumedCleanTitles = allSignals
-            .filter { it.signalType == DiscoverySignalType.CONSUMED }
+            .filter { it.signalType.excludesFromFeed }
             .mapTo(HashSet()) { it.cleanTitle }
 
         val context = DiscoveryBuildContext(
@@ -405,6 +409,7 @@ class DiscoveryRunner(
                         createdAt = System.currentTimeMillis(),
                         sourceId = item.sourceId,
                         sourceUrl = item.sourceUrl,
+                        genres = item.genres,
                     )
                 },
             )
@@ -426,11 +431,33 @@ class DiscoveryRunner(
         // а показывается всякое» из старой генерации. Чистим явно. НО: упавший ряд
         // (провайдер/сеть отвалились) — не «честно пустой», его кэш сохраняем, иначе
         // при отвале сети с включённым фильтром пропадала бы вся лента.
-        if (context.releaseStatuses.isNotEmpty()) {
+        if (context.releaseStatuses.isNotEmpty() || context.requiredGenres.isNotEmpty()) {
             tachiyomi.domain.discovery.model.DiscoveryRowType.entries.forEach { rowType ->
                 if (feed.rows[rowType].isNullOrEmpty() && rowType !in feed.failedRows) {
                     repository.replaceRows(mediaType, rowType, emptyList())
                 }
+            }
+        }
+        // Замороженные ряды: «честно пустой» LIKE при пустых сидах и TASTE при пустом профиле
+        // не должны вечно таскать кэш прошлых генераций.
+        if (feed.rows[DiscoveryRowType.LIKE].isNullOrEmpty() &&
+            DiscoveryRowType.LIKE !in feed.failedRows &&
+            context.seeds.isEmpty()
+        ) {
+            repository.replaceRows(mediaType, DiscoveryRowType.LIKE, emptyList())
+        }
+        if (feed.rows[DiscoveryRowType.TASTE].isNullOrEmpty() &&
+            DiscoveryRowType.TASTE !in feed.failedRows &&
+            context.tasteProfile.isEmpty()
+        ) {
+            repository.replaceRows(mediaType, DiscoveryRowType.TASTE, emptyList())
+        }
+        val anyRowPersisted = feed.rows.values.any { it.isNotEmpty() }
+        if (anyRowPersisted) {
+            if (isManualRefresh) {
+                preferences.manualRefreshCount(mediaType).set(candidateRefreshCount)
+            } else {
+                preferences.backgroundCycleCount(mediaType).set(candidateBackgroundCycle)
             }
         }
         failedRowsSink(mediaType, feed.failedRows)

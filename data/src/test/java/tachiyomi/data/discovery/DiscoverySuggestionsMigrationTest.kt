@@ -31,16 +31,17 @@ class DiscoverySuggestionsMigrationTest {
     }
 
     @Test
-    fun `fresh schema has source binding columns at the end`() {
+    fun `fresh schema has source binding and genres columns at the end`() {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         try {
             Database.Schema.create(driver)
             val info = tableInfo(driver)
             info.map { it.second } shouldContain "source_id"
             info.map { it.second } shouldContain "source_url"
-            // Порядок обязан совпадать с ALTER TABLE из 58.sqm: колонки в конце, после created_at.
+            info.map { it.second } shouldContain "genres"
+            // Порядок обязан совпадать с ALTER TABLE из 58.sqm и 61.sqm: колонки в конце, после created_at.
             val names = info.sortedBy { it.first }.map { it.second }
-            names.takeLast(2) shouldBe listOf("source_id", "source_url")
+            names.takeLast(3) shouldBe listOf("source_id", "source_url", "genres")
         } finally {
             driver.close()
         }
@@ -74,6 +75,41 @@ class DiscoverySuggestionsMigrationTest {
             Database.Schema.migrate(driver, 58, 59)
             val names = tableInfo(driver).sortedBy { it.first }.map { it.second }
             names.takeLast(2) shouldBe listOf("source_id", "source_url")
+        } finally {
+            driver.close()
+        }
+    }
+
+    @Test
+    fun `upgrade from 60 adds genres column`() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        try {
+            // Схема discovery_suggestions ДО миграции 61 (14 колонок).
+            driver.execute(
+                null,
+                """
+                CREATE TABLE discovery_suggestions (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    media_type TEXT NOT NULL,
+                    row_type TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    clean_title TEXT NOT NULL,
+                    cover_url TEXT,
+                    reason TEXT,
+                    seed_title TEXT,
+                    provider TEXT NOT NULL,
+                    score REAL NOT NULL DEFAULT 0,
+                    position INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    source_id INTEGER,
+                    source_url TEXT
+                )
+                """.trimIndent(),
+                0,
+            )
+            Database.Schema.migrate(driver, 61, 62)
+            val names = tableInfo(driver).sortedBy { it.first }.map { it.second }
+            names.takeLast(3) shouldBe listOf("source_id", "source_url", "genres")
         } finally {
             driver.close()
         }

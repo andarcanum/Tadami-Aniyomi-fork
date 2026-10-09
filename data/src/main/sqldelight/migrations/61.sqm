@@ -1,0 +1,3 @@
+-- Жанры карточек подборок всех рядов (TREND/LIKE/SOURCE раньше не персистили жанры:
+-- теговый блэклист и taste-сигналы работали только для reason TASTE). Аддитивная колонка.
+ALTER TABLE discovery_suggestions ADD COLUMN genres TEXT;

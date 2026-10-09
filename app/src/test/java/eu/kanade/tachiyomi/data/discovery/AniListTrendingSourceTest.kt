@@ -1,11 +1,31 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.shouldBe
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import org.junit.Test
 
 class AniListTrendingSourceTest {
+
+    @Test
+    fun `russian profile genres are translated to anilist english names`() {
+        val variables = anilistGenreVariables(listOf("драма", "психологическое"))
+        variables shouldContain "Drama"
+        variables shouldContain "Psychological"
+    }
+
+    @Test
+    fun `unknown genres pass through unchanged`() {
+        anilistGenreVariables(listOf("экзотика-сюр")) shouldContain "экзотика-сюр"
+    }
+
+    @Test
+    fun `result keeps originals and is capped`() {
+        val big = (1..20).map { "genre$it" }
+        anilistGenreVariables(big + "драма").size shouldBe 12
+        anilistGenreVariables(listOf("Action")) shouldContain "Action"
+    }
 
     @Test
     fun `season window resolves current and next with year rollover`() {

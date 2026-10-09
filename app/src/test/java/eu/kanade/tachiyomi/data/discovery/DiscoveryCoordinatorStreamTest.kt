@@ -131,4 +131,57 @@ class DiscoveryCoordinatorStreamTest {
         feed.rows[DiscoveryRowType.LIKE]?.map { it.title } shouldBe listOf("Solo Leveling", "Omniscient Reader")
         feed.rows[DiscoveryRowType.TREND]?.map { it.title } shouldBe listOf("One Piece")
     }
+
+    @Test
+    fun `trend builder cancellation propagates instead of empty row`() = runTest {
+        val cancellingTrending = object : DiscoveryTrendingSource {
+            override suspend fun fetch(
+                mediaType: DiscoveryMediaType,
+                season: TrendSeason,
+                sort: TrendSort,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ): List<DiscoveryTrendingItem> {
+                throw kotlinx.coroutines.CancellationException("cancelled")
+            }
+            override suspend fun fetchByGenres(
+                mediaType: DiscoveryMediaType,
+                genres: List<String>,
+                sort: TrendSort,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ): List<DiscoveryTrendingItem> = emptyList()
+            override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? = null
+        }
+        val emptyCatalog = object : DiscoverySourceCatalog {
+            override suspend fun popular(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ): List<DiscoveryRowItem> = emptyList()
+            override suspend fun latest(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ): List<DiscoveryRowItem> = emptyList()
+            override suspend fun popularWithGenres(
+                mediaType: DiscoveryMediaType,
+                sourceId: Long,
+                genres: List<String>,
+                page: Int,
+                releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
+            ): List<DiscoveryRowItem> = emptyList()
+        }
+        val builder = DiscoveryTrendRowBuilder(
+            trending = cancellingTrending,
+            catalog = emptyCatalog,
+            seasonProvider = { TrendSeason.CURRENT },
+            sortProvider = { TrendSort.POPULARITY },
+        )
+        io.kotest.assertions.throwables.shouldThrow<kotlinx.coroutines.CancellationException> {
+            builder.build(baseContext)
+        }
+    }
 }

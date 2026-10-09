@@ -137,6 +137,7 @@ import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import eu.kanade.tachiyomi.ui.discovery.discoveryCoverData
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -254,8 +255,10 @@ internal fun selectFreshTeaserItems(
             val shownOnScreen = shownPool.filter { it.cleanTitle in currentTitles }
                 .sortedBy { shownCutoffMap[it.cleanTitle] ?: 0L }
 
-            val backfillPool = (shownNotCurrent + shownOnScreen).take(needed)
-                .map { it.toHomeHubDiscoveryItem() }
+            val combined = shownNotCurrent + shownOnScreen
+            val safe = if (combined.size > 1) offset % combined.size else 0
+            val rotated = if (safe > 0) combined.drop(safe) + combined.take(safe) else combined
+            val backfillPool = rotated.take(needed).map { it.toHomeHubDiscoveryItem() }
             (freshCandidates + backfillPool).take(capped)
         }
         else -> {
@@ -266,7 +269,10 @@ internal fun selectFreshTeaserItems(
             val shownOnScreen = shownPool.filter { it.cleanTitle in currentTitles }
                 .sortedBy { shownCutoffMap[it.cleanTitle] ?: 0L }
 
-            val orderedShown = (shownNotCurrent + shownOnScreen).take(capped)
+            val combined = shownNotCurrent + shownOnScreen
+            val safe = if (combined.size > 1) offset % combined.size else 0
+            val rotated = if (safe > 0) combined.drop(safe) + combined.take(safe) else combined
+            val orderedShown = rotated.take(capped)
             orderedShown.map { it.toHomeHubDiscoveryItem() }
         }
     }
@@ -278,16 +284,7 @@ internal fun selectFreshTeaserItems(
         maxPerSeries = if (capped >= 15) 2 else 1,
     )
 
-    return if (pool.size <= capped && clustered.isNotEmpty()) {
-        val safeOffset = offset % clustered.size
-        if (safeOffset <= 0) {
-            clustered
-        } else {
-            clustered.drop(safeOffset) + clustered.take(safeOffset)
-        }
-    } else {
-        clustered
-    }
+    return clustered
 }
 
 /**
@@ -404,21 +401,27 @@ internal fun shouldShowForYouSection(enabled: Boolean): Boolean = enabled
  * (жанры прочих рядов не персистятся; у них пункт меню disabled).
  */
 internal fun firstBlacklistTag(
+    genres: List<String>,
     rowType: DiscoveryRowType,
     reasonPayload: String?,
-): String? = when (rowType) {
-    DiscoveryRowType.TASTE -> reasonPayload?.splitToSequence(",")
-        ?.map { it.trim() }
-        ?.firstOrNull { it.isNotEmpty() }
-    else -> null
-}
+): String? = genres.firstOrNull { it.isNotBlank() }
+    ?: when (rowType) {
+        DiscoveryRowType.TASTE -> reasonPayload?.splitToSequence(",")
+            ?.map { it.trim() }
+            ?.firstOrNull { it.isNotEmpty() }
+        else -> null
+    }
 
 /** Сколько карточек текущего тизера скроется при блэклисте [tag] (для undo-snackbar). */
 internal fun countAffectedTeasers(items: List<HomeHubDiscoveryItem>, tag: String): Int {
     val expanded = eu.kanade.tachiyomi.data.discovery.expandGenreSet(listOf(tag))
     return items.count { item ->
-        item.rowType == DiscoveryRowType.TASTE &&
-            item.reasonPayload?.splitToSequence(",")?.any { it.trim().lowercase() in expanded } == true
+        if (item.genres.isNotEmpty()) {
+            eu.kanade.tachiyomi.data.discovery.matchesAnyGenre(item.genres, expanded)
+        } else {
+            item.rowType == DiscoveryRowType.TASTE &&
+                item.reasonPayload?.splitToSequence(",")?.any { it.trim().lowercase() in expanded } == true
+        }
     }
 }
 
@@ -475,6 +478,7 @@ internal fun DiscoverySuggestion.toHomeHubDiscoveryItem(shownAt: Long? = null) =
     sourceId = sourceId,
     sourceUrl = sourceUrl,
     shownAt = shownAt,
+    genres = genres,
 )
 
 internal fun HomeHubDiscoveryItem.toSuggestionItem(): SuggestionItem = SuggestionItem(
@@ -514,6 +518,7 @@ internal fun HomeHubDiscoveryItem.toDiscoverySuggestion(): DiscoverySuggestion =
     createdAt = 0L,
     sourceId = sourceId,
     sourceUrl = sourceUrl,
+    genres = genres,
 )
 
 // ============================ UI ============================
@@ -1287,8 +1292,7 @@ internal fun DiscoveryHeroCollage(
     onMoreClick: () -> Unit,
     onItemClick: (HomeHubDiscoveryItem) -> Unit,
     onLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
-    isRefreshing: Boolean = false,
-    onRefreshClick: (() -> Unit)? = null,
+    onItemFocused: (HomeHubDiscoveryItem) -> Unit = {},
 ) {
     if (items.isEmpty()) return
     val colors = AuroraTheme.colors
@@ -1296,12 +1300,12 @@ internal fun DiscoveryHeroCollage(
     val discoveryPreferences = remember { Injekt.get<DiscoveryPreferences>() }
     val intervalHours by discoveryPreferences.collageRotationIntervalHours().collectAsStateWithLifecycle()
     val animSpeed by discoveryPreferences.collageAnimationSpeed().collectAsStateWithLifecycle()
-    var offset by rememberSaveable { mutableIntStateOf(discoveryPreferences.collageOffset().get()) }
+    var offset by rememberSaveable { mutableIntStateOf(discoveryPreferences.collageOffset(coverMediaType).get()) }
     var userInteractionToken by remember { mutableIntStateOf(0) }
 
     val updateOffset: (Int) -> Unit = { newOffset ->
         offset = newOffset
-        discoveryPreferences.collageOffset().set(newOffset)
+        discoveryPreferences.collageOffset(coverMediaType).set(newOffset)
     }
 
     // Авто-ротация с настраиваемым интервалом (от 1 до 24 ч, 0 = отключено)
@@ -1310,20 +1314,20 @@ internal fun DiscoveryHeroCollage(
             val intervalMillis = intervalHours * 3600_000L
             while (isActive) {
                 val now = System.currentTimeMillis()
-                val lastTime = discoveryPreferences.collageLastRotationTime().get()
+                val lastTime = discoveryPreferences.collageLastRotationTime(coverMediaType).get()
                 val elapsed = now - lastTime
                 if (lastTime == 0L) {
-                    discoveryPreferences.collageLastRotationTime().set(now)
+                    discoveryPreferences.collageLastRotationTime(coverMediaType).set(now)
                     delay(intervalMillis)
                 } else if (elapsed >= intervalMillis) {
                     updateOffset(offset + 1)
-                    discoveryPreferences.collageLastRotationTime().set(now)
+                    discoveryPreferences.collageLastRotationTime(coverMediaType).set(now)
                     delay(intervalMillis)
                 } else {
                     val remaining = maxOf(1000L, intervalMillis - elapsed)
                     delay(remaining)
                     updateOffset(offset + 1)
-                    discoveryPreferences.collageLastRotationTime().set(System.currentTimeMillis())
+                    discoveryPreferences.collageLastRotationTime(coverMediaType).set(System.currentTimeMillis())
                 }
             }
         }
@@ -1339,6 +1343,10 @@ internal fun DiscoveryHeroCollage(
     // не больше одной плитки серии; реролл (offset+1) меняет состав в обеих группах
     // (фикс «мёртвого реролла» и дублей при <5 айтемах сохранён).
     val tiles = remember(items, offset) { collageTiles(items, offset) }
+    LaunchedEffect(tiles) {
+        delay(1200)
+        tiles.firstOrNull()?.let(onItemFocused)
+    }
     val rest = tiles.drop(1)
     val col1 = listOfNotNull(rest.getOrNull(0), rest.getOrNull(2))
     val col2 = listOfNotNull(rest.getOrNull(1), rest.getOrNull(3))
@@ -1475,10 +1483,9 @@ internal fun DiscoveryHeroCollage(
                     indication = ripple(bounded = false, radius = 20.dp),
                     onClick = {
                         appHaptics.tap()
-                        discoveryPreferences.collageLastRotationTime().set(System.currentTimeMillis())
+                        discoveryPreferences.collageLastRotationTime(coverMediaType).set(System.currentTimeMillis())
                         userInteractionToken++
                         updateOffset(offset + 1)
-                        onRefreshClick?.invoke()
                     },
                 ),
             contentAlignment = Alignment.Center,
@@ -1903,8 +1910,7 @@ internal fun DiscoveryHeroStage(
     onMoreClick: () -> Unit,
     onItemClick: (HomeHubDiscoveryItem) -> Unit,
     onLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
-    isRefreshing: Boolean = false,
-    onRefreshClick: (() -> Unit)? = null,
+    onItemFocused: (HomeHubDiscoveryItem) -> Unit = {},
 ) {
     if (items.isEmpty()) return
     val colors = AuroraTheme.colors
@@ -1912,7 +1918,7 @@ internal fun DiscoveryHeroStage(
     val discoveryPreferences = remember { Injekt.get<DiscoveryPreferences>() }
     val intervalHours by discoveryPreferences.stageRotationIntervalHours().collectAsStateWithLifecycle()
     val speed by discoveryPreferences.stageAnimationSpeed().collectAsStateWithLifecycle()
-    var offset by rememberSaveable { mutableIntStateOf(discoveryPreferences.stageOffset().get()) }
+    var offset by rememberSaveable { mutableIntStateOf(discoveryPreferences.stageOffset(coverMediaType).get()) }
     var userInteractionToken by remember { mutableIntStateOf(0) }
     var center by rememberSaveable { mutableIntStateOf(0) }
 
@@ -1944,6 +1950,15 @@ internal fun DiscoveryHeroStage(
         lastItems.value = items
     }
     val ordered = orderedState.value
+    var focusMarkJob by remember { mutableStateOf<Job?>(null) }
+    fun markFocusedSoon() {
+        focusMarkJob?.cancel()
+        focusMarkJob = scope.launch {
+            delay(1200) // визуальная устойчивость фокуса, не пересборка
+            ordered.getOrNull(stageItemIndex(center, 0, ordered.size))?.let(onItemFocused)
+        }
+    }
+    LaunchedEffect(ordered) { markFocusedSoon() }
     val systemAnimationsEnabled = ValueAnimator.areAnimatorsEnabled()
     val motionSpec = remember(speed, colors.isEInk, systemAnimationsEnabled) {
         resolveStageMotionSpec(speed = speed, isEInk = colors.isEInk, animationsEnabled = systemAnimationsEnabled)
@@ -1958,11 +1973,12 @@ internal fun DiscoveryHeroStage(
     // ленту сразу после ручного перехода (штамп учитывается при следующем пересчёте ожидания).
     fun settleTo(target: Int, isFlick: Boolean, userInitiated: Boolean = true) {
         if (userInitiated) {
-            discoveryPreferences.stageLastRotationTime().set(System.currentTimeMillis())
+            discoveryPreferences.stageLastRotationTime(coverMediaType).set(System.currentTimeMillis())
         }
         if (target != center) {
             center = target
         }
+        markFocusedSoon()
         if (motionSpec.settleMillis == 0) {
             scope.launch(start = CoroutineStart.UNDISPATCHED) { centerAnim.snapTo(target.toFloat()) }
             return
@@ -1996,6 +2012,7 @@ internal fun DiscoveryHeroStage(
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 centerAnim.snapTo(reanchorCenter.toFloat())
             }
+            markFocusedSoon()
         }
         focusAnchor.items = items
         focusAnchor.orderedTitles = ordered.map { it.cleanTitle }
@@ -2034,17 +2051,17 @@ internal fun DiscoveryHeroStage(
             LaunchedEffect(ordered.size, intervalHours, userInteractionToken) {
                 val intervalMillis = intervalHours * 3600_000L
                 while (isActive) {
-                    val last = discoveryPreferences.stageLastRotationTime().get()
+                    val last = discoveryPreferences.stageLastRotationTime(coverMediaType).get()
                     val elapsed = if (last == 0L) 0L else System.currentTimeMillis() - last
                     delay(if (last == 0L) intervalMillis else (intervalMillis - elapsed).coerceAtLeast(1000L))
                     // Пользователь взаимодействовал во время ожидания (settleTo обновил штамп):
                     // пересчитываем остаток вместо немедленного рывка ленты «под рукой».
-                    val lastAfter = discoveryPreferences.stageLastRotationTime().get()
+                    val lastAfter = discoveryPreferences.stageLastRotationTime(coverMediaType).get()
                     if (lastAfter > last && lastAfter != 0L) {
                         val elapsedAfter = System.currentTimeMillis() - lastAfter
                         if (elapsedAfter < intervalMillis) continue
                     }
-                    discoveryPreferences.stageLastRotationTime().set(System.currentTimeMillis())
+                    discoveryPreferences.stageLastRotationTime(coverMediaType).set(System.currentTimeMillis())
                     settleTo(center + 1, isFlick = false, userInitiated = false)
                 }
             }
@@ -2248,10 +2265,9 @@ internal fun DiscoveryHeroStage(
                         scope.launch(start = CoroutineStart.UNDISPATCHED) {
                             centerAnim.snapTo(center.toFloat())
                         }
-                        discoveryPreferences.stageOffset().set(offset)
-                        discoveryPreferences.stageLastRotationTime().set(System.currentTimeMillis())
+                        discoveryPreferences.stageOffset(coverMediaType).set(offset)
+                        discoveryPreferences.stageLastRotationTime(coverMediaType).set(System.currentTimeMillis())
                         userInteractionToken++
-                        onRefreshClick?.invoke()
                     },
                 ),
             contentAlignment = Alignment.Center,

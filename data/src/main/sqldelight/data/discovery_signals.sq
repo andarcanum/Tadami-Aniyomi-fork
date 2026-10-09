@@ -44,10 +44,22 @@ countByMedia:
 SELECT COUNT(*) FROM discovery_signals WHERE media_type = ?;
 
 selectConsumedByMedia:
-SELECT * FROM discovery_signals WHERE media_type = ? AND signal = 'consumed' ORDER BY created_at ASC;
+SELECT * FROM discovery_signals WHERE media_type = ? AND signal IN ('consumed', 'consumed_liked', 'consumed_added') ORDER BY created_at ASC;
 
-evictOldest:
+countConsumedByMedia:
+SELECT COUNT(*) FROM discovery_signals
+WHERE media_type = ? AND signal IN ('consumed', 'consumed_liked', 'consumed_added');
+
+evictOldestLive:
 DELETE FROM discovery_signals WHERE media_type = ? AND clean_title IN (
-    SELECT clean_title FROM discovery_signals WHERE media_type = ?
+    SELECT clean_title FROM discovery_signals
+    WHERE media_type = ? AND signal NOT IN ('consumed', 'consumed_liked', 'consumed_added')
+    ORDER BY created_at ASC LIMIT ?
+);
+
+evictOldestConsumed:
+DELETE FROM discovery_signals WHERE media_type = ? AND clean_title IN (
+    SELECT clean_title FROM discovery_signals
+    WHERE media_type = ? AND signal IN ('consumed', 'consumed_liked', 'consumed_added')
     ORDER BY created_at ASC LIMIT ?
 );

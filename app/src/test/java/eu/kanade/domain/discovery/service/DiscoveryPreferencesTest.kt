@@ -4,6 +4,7 @@ import eu.kanade.domain.ui.model.HomeHeroMode
 import io.kotest.matchers.shouldBe
 import org.junit.Test
 import tachiyomi.core.common.preference.InMemoryPreferenceStore
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 
 class DiscoveryPreferencesTest {
 
@@ -31,9 +32,9 @@ class DiscoveryPreferencesTest {
         prefs.trendSort().get() shouldBe "popularity"
         prefs.collageRotationIntervalHours().get() shouldBe 2
         prefs.collageAnimationSpeed().get() shouldBe "normal"
-        prefs.collageLastRotationTime().get() shouldBe 0L
-        prefs.collageOffset().get() shouldBe 0
-        prefs.manualRefreshAt().get() shouldBe 0L
+        prefs.collageLastRotationTime(DiscoveryMediaType.ANIME).get() shouldBe 0L
+        prefs.collageOffset(DiscoveryMediaType.ANIME).get() shouldBe 0
+        prefs.feedManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME).get() shouldBe 0L
         prefs.homeManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME).get() shouldBe 0L
         prefs.manualRefreshCount(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME).get() shouldBe 0
         prefs.filterNsfw().get() shouldBe true
@@ -54,5 +55,22 @@ class DiscoveryPreferencesTest {
         HomeHeroMode.fromKey("collage") shouldBe HomeHeroMode.Collage
         HomeHeroMode.fromKey(null) shouldBe HomeHeroMode.Continue
         HomeHeroMode.fromKey("bogus") shouldBe HomeHeroMode.Continue
+    }
+
+    @Test
+    fun `feed refresh cooldown preference is scoped per media type`() {
+        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        prefs.feedManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).get() shouldBe 0L
+        prefs.feedManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL).set(123L)
+        prefs.feedManualRefreshAt(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME).get() shouldBe 0L
+    }
+
+    @Test
+    fun `collage and stage rotation prefs are scoped per media type`() {
+        val prefs = DiscoveryPreferences(InMemoryPreferenceStore())
+        prefs.collageOffset(DiscoveryMediaType.ANIME).set(3)
+        prefs.collageOffset(DiscoveryMediaType.NOVEL).get() shouldBe 0
+        prefs.stageLastRotationTime(DiscoveryMediaType.MANGA).set(777L)
+        prefs.stageLastRotationTime(DiscoveryMediaType.ANIME).get() shouldBe 0L
     }
 }

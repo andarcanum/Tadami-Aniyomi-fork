@@ -17,18 +17,42 @@ package tachiyomi.domain.discovery.model
 enum class DiscoverySignalType(val key: String, val weight: Double) {
     SHOWN_IGNORED("shown_ignored", -0.15),
     CLICK("click", 0.4),
-    LIKE("like", 0.8),
     CONSUMED("consumed", 0.0),
+    LIKE("like", 0.8),
+    CONSUMED_LIKED("consumed_liked", 0.8),
     ADD("add", 1.0),
+    CONSUMED_ADDED("consumed_added", 1.0),
     HIDE("hide", -1.0),
     ;
+
+    /** «Просмотрено/прочитано»: сигнал исключает тайтл из лент (read-time и генерация). */
+    val excludesFromFeed: Boolean
+        get() = this == CONSUMED || this == CONSUMED_LIKED || this == CONSUMED_ADDED
 
     companion object {
         fun fromKey(key: String?): DiscoverySignalType? = entries.firstOrNull { it.key == key }
 
-        /** Новый сигнал перезаписывает записанный, только если он сильнее или равен. */
         fun overrides(previous: DiscoverySignalType?, next: DiscoverySignalType): Boolean =
             previous == null || next.ordinal >= previous.ordinal
+
+        /**
+         * Лайк, потребление и добавление ортогональны: пересечения схлопываются в
+         * комбинированные consumed_*-состояния (вкус сохраняется, исключение из
+         * ленты — тоже): CONSUMED_LIKED (прочитано + лайк, +0.8), CONSUMED_ADDED
+         * (прочитано/добавлено в библиотеку, +1.0). Слабые сигналы комбинированные
+         * состояния не понижают; HIDE остаётся сильнейшим.
+         */
+        fun resolveEffectiveSignal(previous: DiscoverySignalType?, next: DiscoverySignalType): DiscoverySignalType =
+            when {
+                previous == CONSUMED && next == LIKE -> CONSUMED_LIKED
+                previous == LIKE && next == CONSUMED -> CONSUMED_LIKED
+                previous == CONSUMED && next == ADD -> CONSUMED_ADDED
+                previous == ADD && next == CONSUMED -> CONSUMED_ADDED
+                previous == CONSUMED_LIKED && next == ADD -> CONSUMED_ADDED
+                previous == CONSUMED_ADDED && next.ordinal <= ADD.ordinal -> CONSUMED_ADDED
+                previous == CONSUMED_LIKED && next.ordinal <= CONSUMED_LIKED.ordinal -> CONSUMED_LIKED
+                else -> next
+            }
     }
 }
 

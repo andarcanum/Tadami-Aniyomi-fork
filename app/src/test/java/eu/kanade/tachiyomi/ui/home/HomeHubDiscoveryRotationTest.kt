@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.home
 import eu.kanade.domain.ui.model.HomeHeroMode
 import eu.kanade.tachiyomi.data.discovery.extractSeriesKey
 import io.kotest.matchers.shouldBe
+import io.kotest.matchers.shouldNotBe
 import org.junit.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
@@ -369,5 +370,17 @@ class HomeHubDiscoveryRotationTest {
         extractSeriesKey("Spy x Family Part 2", "spy x family part 2") shouldBe "spy x family"
         extractSeriesKey("Attack on Titan: The Final Season", "attack on titan: the final season") shouldBe
             "attack on titan"
+    }
+
+    @Test
+    fun `exhausted pool larger than window rotates selection by offset`() {
+        val pool = (1..10).map { suggestion("title$it") }
+        val shown = pool.map { it.cleanTitle }.toSet()
+        val cutoffMap = pool.mapIndexed { idx, item -> item.cleanTitle to 100L * (idx + 1) }.toMap()
+        val window1 =
+            selectFreshTeaserItems(pool, shownTitles = shown, count = 5, offset = 0, shownCutoffMap = cutoffMap)
+        val window2 =
+            selectFreshTeaserItems(pool, shownTitles = shown, count = 5, offset = 5, shownCutoffMap = cutoffMap)
+        window2.map { it.cleanTitle }.toSet() shouldNotBe window1.map { it.cleanTitle }.toSet()
     }
 }

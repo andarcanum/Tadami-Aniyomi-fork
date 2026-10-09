@@ -133,7 +133,8 @@ object SettingsDiscoveryScreen : SearchableSettings {
             val allSignals = DiscoveryMediaType.entries.flatMap { repository.getSignals(it) }
             tasteSignalCount = allSignals.size
             tasteTopGenres = eu.kanade.tachiyomi.data.discovery.foldLearnedTasteProfile(allSignals)
-                .genres.take(5)
+                .genres.filter { it.second > 0.0 }
+                .take(5)
         }
         LaunchedEffect(Unit) { reloadTaste() }
 
@@ -145,7 +146,7 @@ object SettingsDiscoveryScreen : SearchableSettings {
         val reloadConsumed: suspend () -> Unit = {
             consumedSignals = DiscoveryMediaType.entries
                 .flatMap { repository.getSignals(it) }
-                .filter { it.signalType == tachiyomi.domain.discovery.model.DiscoverySignalType.CONSUMED }
+                .filter { it.signalType.excludesFromFeed }
                 .sortedByDescending { it.createdAt }
         }
 

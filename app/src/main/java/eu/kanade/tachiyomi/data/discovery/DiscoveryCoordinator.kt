@@ -73,7 +73,10 @@ class DiscoveryCoordinator(
                         context.shownCutoffMap,
                         context.currentFeedCleanTitles,
                     )
-                    selected.forEach { seenSoFar += it.cleanTitle }
+                    selected.forEach {
+                        seenSoFar += it.cleanTitle
+                        seenSoFar += it.altCleanTitles
+                    }
 
                     if (finalRows[pType] != selected) {
                         finalRows[pType] = selected
@@ -109,7 +112,10 @@ class DiscoveryCoordinator(
         currentFeedCleanTitles: Set<String> = emptySet(),
     ): List<DiscoveryRowItem> {
         val valid = items
-            .filterNot { it.cleanTitle.isBlank() || it.cleanTitle in excluded || it.cleanTitle in seen }
+            .filterNot { item ->
+                val keys = listOf(item.cleanTitle) + item.altCleanTitles
+                keys.any { it.isBlank() || it in excluded || it in seen }
+            }
             .distinctBy { it.cleanTitle }
 
         val clustered = filterFranchiseClustering(valid, maxPerSeries = 2)
