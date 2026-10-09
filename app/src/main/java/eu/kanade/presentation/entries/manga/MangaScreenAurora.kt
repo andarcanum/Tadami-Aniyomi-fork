@@ -199,6 +199,8 @@ fun MangaScreenAuroraImpl(
     autoJumpToNextLabel: String,
     onToggleAutoJumpToNext: () -> Unit,
     onClickEditInfo: (() -> Unit)? = null,
+    onDeleteDownloadsClicked: () -> Unit = {},
+    onDeleteReadChaptersClicked: () -> Unit = {},
     onRetrySuggestions: () -> Unit = {},
     onOpenSuggestions: () -> Unit = {},
     onGenreClick: ((String) -> Unit)? = null,
@@ -1583,6 +1585,12 @@ fun MangaScreenAuroraImpl(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false },
                     ) {
+                        val downloadedChapters = remember(chapters) {
+                            chapters.filterIsInstance<ChapterList.Item>().count { it.isDownloaded }
+                        }
+                        val readDownloadedChapters = remember(chapters) {
+                            chapters.filterIsInstance<ChapterList.Item>().count { it.isDownloaded && it.chapter.read }
+                        }
                         resolveMangaAuroraOverflowActions(
                             hasGlobalSearch = globalSearchQuery != null,
                             hasShare = onShareClicked != null,
@@ -1591,6 +1599,8 @@ fun MangaScreenAuroraImpl(
                             hasEditInfo = onClickEditInfo != null,
                             hasMigrate = onMigrateClicked != null,
                             hasSuggestions = entrySuggestionsEnabled && entrySuggestionsInOverflow,
+                            hasDeleteDownloads = downloadedChapters > 0,
+                            hasDeleteRead = readDownloadedChapters > 0,
                         ).forEach { action ->
                             AuroraEntryDropdownMenuItem(
                                 text = when (action) {
@@ -1600,6 +1610,10 @@ fun MangaScreenAuroraImpl(
                                         stringResource(MR.strings.action_entry_refresh)
                                     AuroraMangaOverflowAction.AutoJump ->
                                         autoJumpToNextLabel
+                                    AuroraMangaOverflowAction.DeleteDownloads ->
+                                        stringResource(AYMR.strings.novel_delete_downloaded_menu, downloadedChapters)
+                                    AuroraMangaOverflowAction.DeleteRead ->
+                                        stringResource(AYMR.strings.novel_delete_read_menu, readDownloadedChapters)
                                     AuroraMangaOverflowAction.GlobalSearch ->
                                         stringResource(MR.strings.action_global_search)
                                     AuroraMangaOverflowAction.Share ->
@@ -1619,6 +1633,8 @@ fun MangaScreenAuroraImpl(
                                     when (action) {
                                         AuroraMangaOverflowAction.Refresh -> onRefresh()
                                         AuroraMangaOverflowAction.AutoJump -> onToggleAutoJumpToNext()
+                                        AuroraMangaOverflowAction.DeleteDownloads -> onDeleteDownloadsClicked()
+                                        AuroraMangaOverflowAction.DeleteRead -> onDeleteReadChaptersClicked()
                                         AuroraMangaOverflowAction.GlobalSearch -> onSearch(globalSearchQuery!!, true)
                                         AuroraMangaOverflowAction.Share -> onShareClicked!!()
                                         AuroraMangaOverflowAction.Settings -> onSettingsClicked!!()
@@ -1728,6 +1744,8 @@ internal fun shouldAutoExpandAuroraChaptersListForFastScroll(
 internal enum class AuroraMangaOverflowAction {
     Refresh,
     AutoJump,
+    DeleteDownloads,
+    DeleteRead,
     GlobalSearch,
     Share,
     Settings,
@@ -1745,10 +1763,14 @@ internal fun resolveMangaAuroraOverflowActions(
     hasEditInfo: Boolean = false,
     hasMigrate: Boolean,
     hasSuggestions: Boolean = false,
+    hasDeleteDownloads: Boolean = false,
+    hasDeleteRead: Boolean = false,
 ): List<AuroraMangaOverflowAction> {
     return buildList {
         add(AuroraMangaOverflowAction.Refresh)
         add(AuroraMangaOverflowAction.AutoJump)
+        if (hasDeleteDownloads) add(AuroraMangaOverflowAction.DeleteDownloads)
+        if (hasDeleteRead) add(AuroraMangaOverflowAction.DeleteRead)
         if (hasGlobalSearch) add(AuroraMangaOverflowAction.GlobalSearch)
         if (hasShare) add(AuroraMangaOverflowAction.Share)
         if (hasSettings) add(AuroraMangaOverflowAction.Settings)

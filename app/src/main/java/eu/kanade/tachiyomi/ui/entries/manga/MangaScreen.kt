@@ -35,6 +35,7 @@ import eu.kanade.presentation.entries.components.AuthRequiredDialog
 import eu.kanade.presentation.entries.components.DeleteItemsDialog
 import eu.kanade.presentation.entries.components.DuplicateEntryDialog
 import eu.kanade.presentation.entries.components.EditMetadataSheet
+import eu.kanade.presentation.entries.components.EntryDeleteProgressDialog
 import eu.kanade.presentation.entries.components.SetIntervalDialog
 import eu.kanade.presentation.entries.components.aurora.AuroraNoteEditorDialog
 import eu.kanade.presentation.entries.manga.ChapterSettingsDialog
@@ -233,6 +234,8 @@ class MangaScreen(
             onClickEditInfo = {
                 showEditMetadataSheet = true
             },
+            onDeleteDownloadsClicked = screenModel::deleteAllDownloadedChapters,
+            onDeleteReadChaptersClicked = screenModel::deleteReadDownloadedChapters,
             onMigrateClicked = {
                 navigator.push(MigrateMangaSearchScreen(successState.manga.id))
             }.takeIf { shouldExposeMangaMigrationAction(successState.manga.id) },
@@ -399,6 +402,20 @@ class MangaScreen(
                         .takeIf { screenModel.isUpdateIntervalEnabled },
                 )
             }
+        }
+
+        successState.deletionProgress?.let { progress ->
+            EntryDeleteProgressDialog(
+                title = stringResource(AYMR.strings.novel_delete_downloaded_title),
+                progressText = stringResource(
+                    AYMR.strings.novel_delete_downloaded_progress,
+                    progress.deleted,
+                    progress.total,
+                ),
+                deleted = progress.deleted,
+                total = progress.total,
+                onHide = screenModel::hideDeletionProgress,
+            )
         }
 
         if (showScanlatorsDialog) {

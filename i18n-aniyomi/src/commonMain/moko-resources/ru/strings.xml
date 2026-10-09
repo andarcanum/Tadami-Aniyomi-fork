@@ -961,6 +961,13 @@
     <string name="novel_delete_downloaded_menu">Удалить загруженные главы (%1$d)</string>
     <string name="novel_delete_read_menu">Удалить прочитанные главы (%1$d)</string>
     <string name="novel_delete_downloaded_offer">Все главы прочитаны. Удалить %1$d загруженных глав?</string>
+    <string name="anime_delete_downloaded_title">Удалить загруженные серии</string>
+    <string name="anime_delete_read_title">Удалить просмотренные серии</string>
+    <string name="anime_delete_downloaded_progress">Удаление серий… %1$d из %2$d</string>
+    <string name="anime_delete_downloaded_done">Удалено серий: %1$d</string>
+    <string name="anime_delete_downloaded_menu">Удалить загруженные серии (%1$d)</string>
+    <string name="anime_delete_read_menu">Удалить просмотренные серии (%1$d)</string>
+    <string name="anime_delete_downloaded_offer">Все серии просмотрены. Удалить %1$d загруженных серий?</string>
     <string name="novel_export_as_epub">Экспорт в EPUB</string>
     <string name="novel_epub_short">EPUB</string>
     <string name="novel_translated_download_short">Перевод</string>

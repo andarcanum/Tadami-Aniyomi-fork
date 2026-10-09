@@ -40,6 +40,7 @@ import eu.kanade.presentation.entries.anime.components.AnimeImagesDialog
 import eu.kanade.presentation.entries.components.DeleteItemsDialog
 import eu.kanade.presentation.entries.components.DuplicateEntryDialog
 import eu.kanade.presentation.entries.components.EditMetadataSheet
+import eu.kanade.presentation.entries.components.EntryDeleteProgressDialog
 import eu.kanade.presentation.entries.components.SetIntervalDialog
 import eu.kanade.presentation.entries.components.aurora.AuroraNoteEditorDialog
 import eu.kanade.presentation.more.settings.screen.player.PlayerSettingsGesturesScreen.SkipIntroLengthDialog
@@ -252,6 +253,8 @@ class AnimeScreen(
             onMultiMarkAsSeenClicked = screenModel::markEpisodesSeen,
             onMarkPreviousAsSeenClicked = screenModel::markPreviousEpisodeSeen,
             onMultiDeleteClicked = screenModel::showDeleteEpisodeDialog,
+            onDeleteDownloadsClicked = screenModel::deleteAllDownloadedEpisodes,
+            onDeleteReadEpisodesClicked = screenModel::deleteWatchedDownloadedEpisodes,
             onEpisodeSwipe = screenModel::episodeSwipe,
             onEpisodeSelected = screenModel::toggleSelection,
             onAllEpisodeSelected = screenModel::toggleAllSelection,
@@ -495,6 +498,20 @@ class AnimeScreen(
                     },
                 )
             }
+        }
+
+        successState.deletionProgress?.let { progress ->
+            EntryDeleteProgressDialog(
+                title = stringResource(AYMR.strings.anime_delete_downloaded_title),
+                progressText = stringResource(
+                    AYMR.strings.anime_delete_downloaded_progress,
+                    progress.deleted,
+                    progress.total,
+                ),
+                deleted = progress.deleted,
+                total = progress.total,
+                onHide = screenModel::hideDeletionProgress,
+            )
         }
 
         if (showNotesDialog) {

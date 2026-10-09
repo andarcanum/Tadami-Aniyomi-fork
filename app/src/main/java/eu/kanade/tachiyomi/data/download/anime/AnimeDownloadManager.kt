@@ -7,6 +7,7 @@ import eu.kanade.tachiyomi.data.download.anime.model.AnimeDownload
 import eu.kanade.tachiyomi.data.download.engine.DownloadCompletionTracker
 import eu.kanade.tachiyomi.data.download.engine.DownloadTelemetryEmitter
 import eu.kanade.tachiyomi.util.size
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.drop
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.i18n.stringResource
 import tachiyomi.core.common.util.lang.launchIO
@@ -287,28 +289,40 @@ class AnimeDownloadManager(
      * @param episodes the list of episodes to delete.
      * @param anime the anime of the episodes.
      * @param source the source of the episodes.
+     * @param onProgress optional progress callback reporting (deleted, total).
+     * @return the number of deleted episode directories.
      */
-    fun deleteEpisodes(episodes: List<Episode>, anime: Anime, source: AnimeSource) {
-        launchIO {
-            val filteredEpisodes = getEpisodesToDelete(episodes, anime)
-            if (filteredEpisodes.isEmpty()) {
-                return@launchIO
-            }
-
-            removeFromDownloadQueue(filteredEpisodes)
-            val (animeDir, episodeDirs) = provider.findEpisodeDirs(
-                filteredEpisodes,
-                anime,
-                source,
-            )
-            episodeDirs.forEach { it.delete() }
-            cache.removeEpisodes(filteredEpisodes, anime)
-
-            // Delete anime directory if empty
-            if (animeDir?.listFiles()?.isEmpty() == true) {
-                deleteAnime(anime, source, removeQueued = false)
-            }
+    suspend fun deleteEpisodes(
+        episodes: List<Episode>,
+        anime: Anime,
+        source: AnimeSource,
+        onProgress: ((deleted: Int, total: Int) -> Unit)? = null,
+    ): Int = withContext(Dispatchers.IO) {
+        val filteredEpisodes = getEpisodesToDelete(episodes, anime)
+        if (filteredEpisodes.isEmpty()) {
+            onProgress?.invoke(0, 0)
+            return@withContext 0
         }
+
+        removeFromDownloadQueue(filteredEpisodes)
+        var deletedCount = 0
+        val (animeDir, episodeDirs) = provider.findEpisodeDirs(
+            filteredEpisodes,
+            anime,
+            source,
+        )
+        episodeDirs.forEach { dir ->
+            dir.delete()
+            deletedCount++
+            onProgress?.invoke(deletedCount, episodeDirs.size)
+        }
+        cache.removeEpisodes(filteredEpisodes, anime)
+
+        // Delete anime directory if empty
+        if (animeDir?.listFiles()?.isEmpty() == true) {
+            deleteAnime(anime, source, removeQueued = false)
+        }
+        deletedCount
     }
 
     /**
@@ -368,7 +382,9 @@ class AnimeDownloadManager(
         val pendingEpisodes = pendingDeleter.getPendingEpisodes()
         for ((anime, episodes) in pendingEpisodes) {
             val source = sourceManager.get(anime.source) ?: continue
-            deleteEpisodes(episodes, anime, source)
+            launchIO {
+                deleteEpisodes(episodes, anime, source)
+            }
         }
     }
 
