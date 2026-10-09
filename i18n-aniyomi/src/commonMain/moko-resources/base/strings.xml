@@ -1375,6 +1375,13 @@
     <string name="novel_delete_downloaded_menu">Delete downloaded chapters (%1$d)</string>
     <string name="novel_delete_read_menu">Delete read chapters (%1$d)</string>
     <string name="novel_delete_downloaded_offer">All chapters read. Delete %1$d downloaded chapters?</string>
+    <string name="anime_delete_downloaded_title">Delete downloaded episodes</string>
+    <string name="anime_delete_read_title">Delete watched episodes</string>
+    <string name="anime_delete_downloaded_progress">Deleting episodes… %1$d of %2$d</string>
+    <string name="anime_delete_downloaded_done">Deleted episodes: %1$d</string>
+    <string name="anime_delete_downloaded_menu">Delete downloaded episodes (%1$d)</string>
+    <string name="anime_delete_read_menu">Delete watched episodes (%1$d)</string>
+    <string name="anime_delete_downloaded_offer">All episodes watched. Delete %1$d downloaded episodes?</string>
     <string name="novel_export_as_epub">Export as EPUB</string>
     <string name="novel_epub_short">EPUB</string>
     <string name="novel_export_as_fb2">Export as FB2 (plain text)</string>

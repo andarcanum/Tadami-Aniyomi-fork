@@ -107,6 +107,7 @@ import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.manga.interactor.GetMangaCategories
 import tachiyomi.domain.category.manga.interactor.SetMangaCategories
 import tachiyomi.domain.category.model.Category
+import tachiyomi.domain.download.service.DownloadPreferences
 import tachiyomi.domain.entries.applyFilter
 import tachiyomi.domain.entries.manga.interactor.GetDuplicateLibraryManga
 import tachiyomi.domain.entries.manga.interactor.GetMangaWithChapters
@@ -157,6 +158,7 @@ class MangaScreenModel(
     private val setMangaChapterFlags: SetMangaChapterFlags = Injekt.get(),
     private val setMangaDefaultChapterFlags: SetMangaDefaultChapterFlags = Injekt.get(),
     private val setReadStatus: SetReadStatus = Injekt.get(),
+    private val downloadPreferences: DownloadPreferences = Injekt.get(),
     private val updateChapter: UpdateChapter = Injekt.get(),
     private val updateManga: UpdateManga = Injekt.get(),
     private val syncChaptersWithSource: SyncChaptersWithSource = Injekt.get(),
@@ -641,6 +643,7 @@ class MangaScreenModel(
                         }
                     }
                 }
+                maybeOfferDownloadsCleanup()
             }
 
             val fetchFromSourceTasks = if (screenModelScope.isActive) {
@@ -1660,6 +1663,7 @@ class MangaScreenModel(
 
             if (read) {
                 updateNewChapterIds(clearedIds = chapters.map { it.id })
+                maybeOfferDownloadsCleanup()
             }
 
             if (!read || successState?.hasLoggedInTrackers == false || autoTrackState == AutoTrackState.NEVER) {
@@ -1750,15 +1754,73 @@ class MangaScreenModel(
         screenModelScope.launchNonCancellable {
             try {
                 successState?.let { state ->
-                    downloadManager.deleteChapters(
-                        chapters,
-                        state.manga,
-                        state.source,
-                    )
+                    updateSuccessState {
+                        it.copy(deletionProgress = State.Success.ChapterDeletionProgress(0, chapters.size))
+                    }
+                    val deleted = downloadManager.deleteChapters(chapters, state.manga, state.source) { done, total ->
+                        updateSuccessState {
+                            it.copy(deletionProgress = State.Success.ChapterDeletionProgress(done, total))
+                        }
+                    }
+                    updateSuccessState { it.copy(deletionProgress = null) }
+                    runCatching {
+                        snackbarHostState.showSnackbar(
+                            message = context.stringResource(AYMR.strings.novel_delete_downloaded_done, deleted),
+                        )
+                    }
                 }
             } catch (e: Throwable) {
+                updateSuccessState { it.copy(deletionProgress = null) }
                 logcat(LogPriority.ERROR, e)
             }
+        }
+    }
+
+    fun deleteAllDownloadedChapters() {
+        val chapters = successState?.chapters
+            ?.filter { it.isDownloaded }
+            ?.map { it.chapter }
+            ?: return
+        if (chapters.isNotEmpty()) showDeleteChapterDialog(chapters)
+    }
+
+    fun deleteReadDownloadedChapters() {
+        val chapters = successState?.chapters
+            ?.filter { it.isDownloaded && it.chapter.read }
+            ?.map { it.chapter }
+            ?: return
+        if (chapters.isNotEmpty()) showDeleteChapterDialog(chapters)
+    }
+
+    fun hideDeletionProgress() {
+        updateSuccessState { it.copy(deletionProgress = null) }
+    }
+
+    private var downloadsCleanupOfferShown = false
+
+    /**
+     * One-shot, non-intrusive offer per screen instance: when the manga just became fully read
+     * (or already is, on open) and still has downloads, suggest cleaning them up via the existing
+     * confirm dialog. Skipped when removeAfterMarkedAsRead is on — the auto-cleanup handles that.
+     */
+    private suspend fun maybeOfferDownloadsCleanup() {
+        if (downloadsCleanupOfferShown) return
+        if (downloadPreferences.removeAfterMarkedAsRead().get()) return
+        val state = successState ?: return
+        val downloadedChapters = state.chapters.filter { it.isDownloaded }
+        if (downloadedChapters.isEmpty()) return
+        if (!state.chapters.all { it.chapter.read }) return
+        downloadsCleanupOfferShown = true
+        val result = runCatching {
+            snackbarHostState.showSnackbar(
+                message = context.stringResource(AYMR.strings.novel_delete_downloaded_offer, downloadedChapters.size),
+                actionLabel = context.stringResource(MR.strings.action_delete),
+                duration = SnackbarDuration.Long,
+                withDismissAction = true,
+            )
+        }.getOrNull() ?: return
+        if (result == SnackbarResult.ActionPerformed) {
+            showDeleteChapterDialog(downloadedChapters.map { it.chapter })
         }
     }
 
@@ -2101,9 +2163,13 @@ class MangaScreenModel(
             val scrollIndex: Int = 0,
             val scrollOffset: Int = 0,
             val suggestions: SuggestionState = SuggestionState.Idle,
+            val deletionProgress: ChapterDeletionProgress? = null,
             /** Display-only preview from source list (after getChapterList, before full sync). Real persisted chapters come via DB flow. */
             val chapterSourcePreview: List<ChapterList.Item>? = null,
         ) : State {
+            @Immutable
+            data class ChapterDeletionProgress(val deleted: Int, val total: Int)
+
             val processedChapters by lazy {
                 val displayChapters = chapterSourcePreview ?: chapters
                 displayChapters.applyFilters(manga).toList()

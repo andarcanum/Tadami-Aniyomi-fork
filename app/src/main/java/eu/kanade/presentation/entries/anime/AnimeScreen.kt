@@ -225,6 +225,8 @@ fun AnimeScreen(
     onClickEditInfo: (() -> Unit)? = null,
     onRetrySuggestions: () -> Unit = {},
     onOpenSuggestions: () -> Unit = {},
+    onDeleteDownloadsClicked: () -> Unit = {},
+    onDeleteReadEpisodesClicked: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val uiPreferences = Injekt.get<eu.kanade.domain.ui.UiPreferences>()
@@ -306,6 +308,8 @@ fun AnimeScreen(
             onClickEditInfo = onClickEditInfo,
             onRetrySuggestions = onRetrySuggestions,
             onOpenSuggestions = onOpenSuggestions,
+            onDeleteDownloadsClicked = onDeleteDownloadsClicked,
+            onDeleteReadEpisodesClicked = onDeleteReadEpisodesClicked,
         )
         return
     }

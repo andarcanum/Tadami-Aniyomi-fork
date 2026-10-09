@@ -1,6 +1,8 @@
 package eu.kanade.presentation.entries.manga
 
 import eu.kanade.presentation.theme.aurora.adaptive.AuroraDeviceClass
+import io.kotest.matchers.collections.shouldContain
+import io.kotest.matchers.collections.shouldNotContain
 import io.kotest.matchers.shouldBe
 import org.junit.jupiter.api.Test
 
@@ -28,5 +30,30 @@ class MangaScreenAuroraLayoutTest {
             hasNotes = false,
             hasMigrate = true,
         ).contains(AuroraMangaOverflowAction.Migrate) shouldBe true
+    }
+
+    @Test
+    fun `resolver includes delete actions only when downloads exist`() {
+        val withDownloads = resolveMangaAuroraOverflowActions(
+            hasGlobalSearch = false,
+            hasShare = false,
+            hasSettings = false,
+            hasNotes = false,
+            hasMigrate = false,
+            hasDeleteDownloads = true,
+            hasDeleteRead = true,
+        )
+        withDownloads shouldContain AuroraMangaOverflowAction.DeleteDownloads
+        withDownloads shouldContain AuroraMangaOverflowAction.DeleteRead
+
+        val without = resolveMangaAuroraOverflowActions(
+            hasGlobalSearch = false,
+            hasShare = false,
+            hasSettings = false,
+            hasNotes = false,
+            hasMigrate = false,
+        )
+        without shouldNotContain AuroraMangaOverflowAction.DeleteDownloads
+        without shouldNotContain AuroraMangaOverflowAction.DeleteRead
     }
 }
