@@ -98,6 +98,24 @@ import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
+/**
+ * Показывает разовые уведомления Home Hub: модели эмитят типизированные эффекты
+ * ([BaseHomeHubScreenModel.effects]) вместо прямого Toast, потому что пайплайны подборки
+ * работают на Dispatchers.IO, а Toast требует Looper на вызывающем потоке.
+ */
+@Composable
+private fun HomeHubEffects(screenModel: BaseHomeHubScreenModel) {
+    val context = LocalContext.current
+    val poolLimitedMessage = stringResource(AYMR.strings.for_you_limited_pool)
+    LaunchedEffect(screenModel) {
+        screenModel.effects.collect { effect ->
+            when (effect) {
+                HomeHubEffect.DiscoveryPoolLimited -> context.toast(poolLimitedMessage)
+            }
+        }
+    }
+}
+
 @Composable
 internal fun AnimeHomeHub(
     contentPadding: PaddingValues,
@@ -115,6 +133,7 @@ internal fun AnimeHomeHub(
     providedScreenModel: HomeHubScreenModel? = null,
 ) {
     val screenModel = providedScreenModel ?: HomeHubTab.rememberScreenModel { HomeHubScreenModel() }
+    HomeHubEffects(screenModel)
     val state by screenModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
@@ -251,6 +270,7 @@ internal fun MangaHomeHub(
     providedScreenModel: MangaHomeHubScreenModel? = null,
 ) {
     val screenModel = providedScreenModel ?: HomeHubTab.rememberScreenModel { MangaHomeHubScreenModel() }
+    HomeHubEffects(screenModel)
     val state by screenModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.currentOrThrow
     val context = LocalContext.current
@@ -390,6 +410,7 @@ internal fun NovelHomeHub(
     providedScreenModel: NovelHomeHubScreenModel? = null,
 ) {
     val screenModel = providedScreenModel ?: HomeHubTab.rememberScreenModel { NovelHomeHubScreenModel() }
+    HomeHubEffects(screenModel)
     val state by screenModel.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.currentOrThrow
     val tabNavigator = LocalTabNavigator.current

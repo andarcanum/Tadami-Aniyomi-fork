@@ -5,6 +5,10 @@ import android.os.Looper
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.ui.UserProfilePreferences
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
 import tachiyomi.core.common.util.lang.launchIO
 
@@ -15,6 +19,24 @@ internal abstract class BaseHomeHubScreenModel(
 ) : StateScreenModel<HomeHubUiState>(initialState) {
 
     protected abstract val avatarFileName: String
+
+    /**
+     * Разовые UI-эффекты (тосты и т.п.). Модель не показывает их сама: пайплайны Home Hub
+     * работают на Dispatchers.IO, а Toast требует Looper — прямой вызов из модели роняет процесс
+     * (NPE «Can't toast on a thread that has not called Looper.prepare()», краш 0.62.9).
+     * Без replay: если экран не подписан, эффект не показывается вовсе, а не всплывает позже
+     * при возврате на вкладку.
+     */
+    private val _effects = MutableSharedFlow<HomeHubEffect>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    val effects: SharedFlow<HomeHubEffect> = _effects.asSharedFlow()
+
+    protected fun emitEffect(effect: HomeHubEffect) {
+        _effects.tryEmit(effect)
+    }
 
     open fun rotateOrRefreshDiscovery() {}
     open fun onScreenReentry() {}
@@ -96,6 +118,12 @@ internal abstract class BaseHomeHubScreenModel(
         } catch (_: Exception) {
         }
     }
+}
+
+/** Разовые UI-эффекты Home Hub, которые показывает экран (см. [BaseHomeHubScreenModel.effects]). */
+internal sealed interface HomeHubEffect {
+    /** Пул подборки «Для вас» мал или пересекается с текущим окном: обновление почти не меняет ленту. */
+    data object DiscoveryPoolLimited : HomeHubEffect
 }
 
 /**

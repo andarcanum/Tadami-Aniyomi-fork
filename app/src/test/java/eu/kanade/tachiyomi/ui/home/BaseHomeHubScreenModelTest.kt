@@ -9,10 +9,15 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
@@ -100,6 +105,28 @@ class BaseHomeHubScreenModelTest {
         unmockkObject(HomeGreetingSession)
     }
 
+    @Test
+    fun `emitted effect reaches an active collector`() = kotlinx.coroutines.runBlocking {
+        val received = CompletableDeferred<HomeHubEffect>()
+        val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+            screenModel.effects.collect { received.complete(it) }
+        }
+
+        screenModel.emitForTest(HomeHubEffect.DiscoveryPoolLimited)
+
+        received.await() shouldBe HomeHubEffect.DiscoveryPoolLimited
+        collector.cancel()
+    }
+
+    @Test
+    fun `effect emitted with no subscriber is not replayed to a late collector`() {
+        kotlinx.coroutines.runBlocking {
+            screenModel.emitForTest(HomeHubEffect.DiscoveryPoolLimited)
+
+            withTimeoutOrNull(100) { screenModel.effects.first() } shouldBe null
+        }
+    }
+
     internal class TestHomeHubScreenModel(
         initialState: HomeHubUiState,
         userProfilePreferences: UserProfilePreferences,
@@ -116,6 +143,8 @@ class BaseHomeHubScreenModelTest {
         override fun updateCacheUserAvatar(path: String) {
             cachedAvatar = path
         }
+
+        fun emitForTest(effect: HomeHubEffect) = emitEffect(effect)
     }
 
     private class MutablePreferenceStore : PreferenceStore {
