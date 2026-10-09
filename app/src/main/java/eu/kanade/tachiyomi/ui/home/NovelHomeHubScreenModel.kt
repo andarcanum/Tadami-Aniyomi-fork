@@ -6,7 +6,6 @@ import eu.kanade.domain.source.novel.interactor.GetEnabledNovelSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
-import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
@@ -26,7 +25,6 @@ import tachiyomi.source.local.io.novel.hasSupportedLocalNovelContent
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import uy.kohesive.injekt.injectLazy
-import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
 internal class NovelHomeHubScreenModel(
     context: android.content.Context = Injekt.get<android.app.Application>(),
@@ -376,9 +374,8 @@ internal class NovelHomeHubScreenModel(
 
         if (notifyIfLimited && currentTitles.isNotEmpty()) {
             val distinctPoolSize = pool.distinctBy { it.cleanTitle }.size
-            val hasOverlap = teaser.any { it.cleanTitle in currentTitles }
-            if (hasOverlap || distinctPoolSize <= count) {
-                context.toast(context.contextStringResource(AYMR.strings.for_you_limited_pool))
+            if (shouldNotifyDiscoveryPoolLimited(teaser, currentTitles, distinctPoolSize, count)) {
+                emitEffect(HomeHubEffect.DiscoveryPoolLimited)
             }
         }
 

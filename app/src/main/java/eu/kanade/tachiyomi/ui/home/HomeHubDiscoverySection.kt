@@ -291,6 +291,19 @@ internal fun selectFreshTeaserItems(
 }
 
 /**
+ * Показывать ли уведомление «подборка ограничена» после ручного обновления тизера.
+ * Сигнал нужен, когда обновление почти не меняет ленту: пул не больше окна тизера
+ * (ротация лишь переставляет те же карточки) или новое окно пересекается с текущим.
+ * Модель зовёт её уже после проверки `notifyIfLimited && currentTitles.isNotEmpty()`.
+ */
+internal fun shouldNotifyDiscoveryPoolLimited(
+    teaser: List<HomeHubDiscoveryItem>,
+    currentTitles: Set<String>,
+    distinctPoolSize: Int,
+    count: Int,
+): Boolean = distinctPoolSize <= count || teaser.any { it.cleanTitle in currentTitles }
+
+/**
  * Точечное обновление тизера ленты при скрытии или отметке «Просмотрено»:
  * оставляет все валидные карточки на их прежних позициях, заменяя только выпавшую(ие)
  * карточку свежими кандидатами из пула (без перезагрузки всей ленты).
