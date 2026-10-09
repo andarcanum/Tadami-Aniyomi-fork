@@ -127,6 +127,7 @@ internal fun AnimeHomeHub(
     onUndoHidden: () -> Unit = {},
     onDiscoveryLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryBlacklistTag: ((HomeHubDiscoveryItem, String, Int) -> Unit)? = null,
+    onDiscoveryItemFocused: ((HomeHubDiscoveryItem) -> Unit)? = null,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
@@ -244,6 +245,7 @@ internal fun AnimeHomeHub(
         onLibraryClick = { tabNavigator.current = AnimeLibraryTab },
         onForYouMoreClick = { navigator.push(DiscoveryFeedScreen(DiscoveryMediaType.ANIME.key)) },
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
+        onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -264,6 +266,7 @@ internal fun MangaHomeHub(
     onUndoHidden: () -> Unit = {},
     onDiscoveryLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryBlacklistTag: ((HomeHubDiscoveryItem, String, Int) -> Unit)? = null,
+    onDiscoveryItemFocused: ((HomeHubDiscoveryItem) -> Unit)? = null,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
@@ -384,6 +387,7 @@ internal fun MangaHomeHub(
         },
         onForYouMoreClick = { navigator.push(DiscoveryFeedScreen(DiscoveryMediaType.MANGA.key)) },
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
+        onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -404,6 +408,7 @@ internal fun NovelHomeHub(
     onUndoHidden: () -> Unit = {},
     onDiscoveryLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryBlacklistTag: ((HomeHubDiscoveryItem, String, Int) -> Unit)? = null,
+    onDiscoveryItemFocused: ((HomeHubDiscoveryItem) -> Unit)? = null,
     activeSection: HomeHubSection,
     scrollResetToken: Int,
     onScrollSignal: (HomeHubSection, Float, Boolean) -> Unit,
@@ -527,6 +532,7 @@ internal fun NovelHomeHub(
         },
         onForYouMoreClick = { navigator.push(DiscoveryFeedScreen(DiscoveryMediaType.NOVEL.key)) },
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
+        onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -566,6 +572,7 @@ private fun HomeHubScreen(
     onLibraryClick: () -> Unit,
     onForYouMoreClick: () -> Unit,
     onDiscoveryRefreshClick: (() -> Unit)? = null,
+    onDiscoveryItemFocused: (HomeHubDiscoveryItem) -> Unit = {},
     onDiscoveryItemClick: (HomeHubDiscoveryItem) -> Unit,
     // Direct open тизера: пушит экран тайтла своего медиатипа (fromSource = true).
     openDirectEntry: ((Long) -> Unit)? = null,
@@ -758,8 +765,7 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
-                                isRefreshing = state.isDiscoveryRefreshing,
-                                onRefreshClick = onDiscoveryRefreshClick,
+                                onItemFocused = onDiscoveryItemFocused,
                             )
                             heroPresentation == HomeHeroMode.Collage -> DiscoveryHeroCollage(
                                 items = heroFeedItems,
@@ -767,8 +773,7 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
-                                isRefreshing = state.isDiscoveryRefreshing,
-                                onRefreshClick = onDiscoveryRefreshClick,
+                                onItemFocused = onDiscoveryItemFocused,
                             )
                             heroPresentation == HomeHeroMode.Hybrid && hero != null -> Column {
                                 HeroSection(
@@ -926,7 +931,7 @@ private fun HomeHubScreen(
         longPressItem?.let { lpItem ->
             DiscoveryHideOptionsSheet(
                 itemTitle = lpItem.title,
-                tag = firstBlacklistTag(lpItem.rowType, lpItem.reasonPayload),
+                tag = firstBlacklistTag(lpItem.genres, lpItem.rowType, lpItem.reasonPayload),
                 onHide = {
                     longPressItem = null
                     onDiscoveryLongClick?.invoke(lpItem)

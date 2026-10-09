@@ -13,6 +13,8 @@ data class DiscoveryRowItem(
     val score: Double,
     val sourceId: Long? = null,
     val sourceUrl: String? = null,
+    val genres: List<String> = emptyList(),
+    val altCleanTitles: List<String> = emptyList(),
 )
 
 data class DiscoveryBuildContext(

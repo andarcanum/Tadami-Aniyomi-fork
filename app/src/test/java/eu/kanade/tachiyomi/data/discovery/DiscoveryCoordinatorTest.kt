@@ -122,4 +122,27 @@ class DiscoveryCoordinatorTest {
         feed.failedRows shouldBe setOf(DiscoveryRowType.LIKE)
         feed.rows[DiscoveryRowType.TREND]?.map { it.title } shouldBe listOf("Ok")
     }
+
+    @Test
+    fun `item matching library by alt title is excluded`() = runTest {
+        val item = DiscoveryRowItem(
+            title = "Kimetsu no Yaiba",
+            cleanTitle = "kimetsu no yaiba",
+            coverUrl = null,
+            reason = null,
+            seedTitle = null,
+            provider = "anilist",
+            score = 1.0,
+            altCleanTitles = listOf("клинок рассекающий демонов"),
+        )
+        val context = DiscoveryBuildContext(
+            mediaType = DiscoveryMediaType.MANGA,
+            seeds = emptyList(),
+            libraryCleanTitles = setOf("клинок рассекающий демонов"),
+            historyCleanTitles = emptySet(),
+            hiddenCleanTitles = emptySet(),
+        )
+        val feed = DiscoveryCoordinator(listOf(builder(DiscoveryRowType.TREND, listOf(item)))).buildFeed(context)
+        feed.rows[DiscoveryRowType.TREND].orEmpty() shouldBe emptyList()
+    }
 }

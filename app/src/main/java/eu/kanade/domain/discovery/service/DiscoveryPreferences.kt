@@ -31,8 +31,9 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun refreshAfterLibrary(): Preference<Boolean> = preferenceStore.getBoolean("discovery_refresh_after_library", true)
     fun refreshWifiOnly(): Preference<Boolean> = preferenceStore.getBoolean("discovery_refresh_wifi_only", false)
 
-    /** Момент последнего РУЧНОГО обновления (общий cooldown home/feed, 5 мин от нажатия). */
-    fun manualRefreshAt(): Preference<Long> = preferenceStore.getLong("discovery_manual_refresh_at", 0L)
+    /** Момент последнего РУЧНОГО обновления ленты на полном экране (5 мин cooldown, per-media). */
+    fun feedManualRefreshAt(mediaType: DiscoveryMediaType): Preference<Long> =
+        preferenceStore.getLong("discovery_feed_manual_refresh_at_" + mediaType.key, 0L)
 
     /** Момент последнего РУЧНОГО обновления ленты на главном экране (10 сек cooldown per-media). */
     fun homeManualRefreshAt(mediaType: DiscoveryMediaType): Preference<Long> =
@@ -128,11 +129,15 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
 
     fun collageRotationIntervalHours(): Preference<Int> = preferenceStore.getInt("collage_rotation_interval_hours", 2)
     fun collageAnimationSpeed(): Preference<String> = preferenceStore.getString("collage_animation_speed", "normal")
-    fun collageLastRotationTime(): Preference<Long> = preferenceStore.getLong("collage_last_rotation_time", 0L)
-    fun collageOffset(): Preference<Int> = preferenceStore.getInt("collage_offset", 0)
+    fun collageLastRotationTime(mediaType: DiscoveryMediaType): Preference<Long> =
+        preferenceStore.getLong("collage_last_rotation_time_" + mediaType.key, 0L)
+    fun collageOffset(mediaType: DiscoveryMediaType): Preference<Int> =
+        preferenceStore.getInt("collage_offset_" + mediaType.key, 0)
 
     fun stageRotationIntervalHours(): Preference<Int> = preferenceStore.getInt("stage_rotation_interval_hours", 2)
     fun stageAnimationSpeed(): Preference<String> = preferenceStore.getString("stage_animation_speed", "normal")
-    fun stageLastRotationTime(): Preference<Long> = preferenceStore.getLong("stage_last_rotation_time", 0L)
-    fun stageOffset(): Preference<Int> = preferenceStore.getInt("stage_offset", 0)
+    fun stageLastRotationTime(mediaType: DiscoveryMediaType): Preference<Long> =
+        preferenceStore.getLong("stage_last_rotation_time_" + mediaType.key, 0L)
+    fun stageOffset(mediaType: DiscoveryMediaType): Preference<Int> =
+        preferenceStore.getInt("stage_offset_" + mediaType.key, 0)
 }

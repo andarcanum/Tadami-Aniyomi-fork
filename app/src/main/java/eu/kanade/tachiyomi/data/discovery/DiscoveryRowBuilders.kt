@@ -100,7 +100,7 @@ class DiscoveryTrendRowBuilder(
         val expandedBlacklist = expandGenreSet(context.blacklistedTags.toList())
 
         val fromSource = if (context.mediaType == DiscoveryMediaType.NOVEL && preferredSourceId > 0) {
-            runCatching {
+            runCatchingUnlessCancelled {
                 catalog.latest(
                     context.mediaType,
                     preferredSourceId,
@@ -117,7 +117,7 @@ class DiscoveryTrendRowBuilder(
             emptyList()
         }
 
-        val fromTrending = runCatching {
+        val fromTrending = runCatchingUnlessCancelled {
             trending.fetch(
                 mediaType = context.mediaType,
                 season = seasonProvider(),
@@ -136,12 +136,18 @@ class DiscoveryTrendRowBuilder(
                 DiscoveryRowItem(
                     title = item.title,
                     cleanTitle = item.cleanTitle,
+                    altCleanTitles = listOfNotNull(
+                        item.altTitle?.let {
+                            normalizeDiscoveryTitle(it)
+                        },
+                    ).filter { it.isNotBlank() },
                     coverUrl = item.coverUrl,
                     // Payload "current"/"next"/"source"/null — шаблон строки выбирается на рендере.
                     reason = item.seasonLabel,
                     seedTitle = null,
                     provider = item.provider,
                     score = 0.0,
+                    genres = item.genres,
                 )
             }
 
@@ -169,7 +175,7 @@ class DiscoveryTrendRowBuilder(
             // Фолбэк при недоступности трендов:
             // Запрашиваем «Свежее» (latest updates) из активного/установленного источника пользователя!
             if (preferredSourceId > 0) {
-                val fallbackSource = runCatching {
+                val fallbackSource = runCatchingUnlessCancelled {
                     catalog.latest(
                         context.mediaType,
                         preferredSourceId,
@@ -224,7 +230,7 @@ class DiscoveryTasteRowBuilder(
             genreNames
         }
         val trendingResult = if (includeExternal) {
-            runCatching {
+            runCatchingUnlessCancelled {
                 trending.fetchByGenres(
                     context.mediaType,
                     genreNames,
@@ -237,7 +243,7 @@ class DiscoveryTasteRowBuilder(
             null
         }
         val sourceResult = if (context.sourceId > 0) {
-            runCatching {
+            runCatchingUnlessCancelled {
                 catalog.popularWithGenres(
                     context.mediaType,
                     context.sourceId,
@@ -258,12 +264,18 @@ class DiscoveryTasteRowBuilder(
                 DiscoveryRowItem(
                     title = item.title,
                     cleanTitle = item.cleanTitle,
+                    altCleanTitles = listOfNotNull(
+                        item.altTitle?.let {
+                            normalizeDiscoveryTitle(it)
+                        },
+                    ).filter { it.isNotBlank() },
                     coverUrl = item.coverUrl,
                     reason = matchedGenres(item.genres, activeProfile).joinToString(", "),
                     seedTitle = null,
                     provider = item.provider,
                     // V3: приоритетные жанры — буст скора (×1.5), не отсекают.
                     score = boostedTasteScore(item.genres, activeProfile, context.priorityGenres),
+                    genres = item.genres,
                 )
             }
         val fromSource = sourceResult?.getOrNull().orEmpty().map { item ->
@@ -308,7 +320,7 @@ class DiscoverySourceRowBuilder(
         val latestQuota = perSource - perSource / 5
         var failures = 0
         val parts = ordered.map { id ->
-            val latestResult = runCatching {
+            val latestResult = runCatchingUnlessCancelled {
                 catalog.latest(
                     context.mediaType,
                     id,
@@ -318,7 +330,7 @@ class DiscoverySourceRowBuilder(
             }
             val latestItems = latestResult.getOrDefault(emptyList()).take(latestQuota)
             val latestTitles = latestItems.mapTo(HashSet()) { it.cleanTitle }
-            val popularResult = runCatching {
+            val popularResult = runCatchingUnlessCancelled {
                 catalog.popular(
                     context.mediaType,
                     id,

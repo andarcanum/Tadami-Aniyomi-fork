@@ -192,7 +192,7 @@ internal class MangaHomeHubScreenModel(
                         )
                     }
                     if (enabled) {
-                        updateDiscoveryTeaser(advanceOffset = false)
+                        updateDiscoveryTeaser(advanceOffset = false, teaserCount = count)
                     } else {
                         mutableState.update {
                             it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList())
@@ -212,6 +212,7 @@ internal class MangaHomeHubScreenModel(
         advanceOffset: Boolean = false,
         forceUpdate: Boolean = false,
         notifyIfLimited: Boolean = false,
+        teaserCount: Int? = null,
     ) {
         if (!discoveryPreferences.discoveryEnabled().get()) {
             mutableState.update {
@@ -219,7 +220,7 @@ internal class MangaHomeHubScreenModel(
             }
             return
         }
-        val count = discoveryPreferences.teaserCount().get().coerceIn(3, 20)
+        val count = teaserCount ?: discoveryPreferences.teaserCount().get().coerceIn(3, 20)
         val pool = cachedDiscoveryPool
         if (pool.isEmpty()) {
             mutableState.update {
@@ -351,7 +352,6 @@ internal class MangaHomeHubScreenModel(
         }
 
         discoveryPreferences.homeManualRefreshAt(mediaType).set(now)
-        discoveryPreferences.manualRefreshAt().set(now)
         mutableState.update { it.copy(isDiscoveryRefreshing = true) }
         screenModelScope.launchIO {
             try {
@@ -362,6 +362,15 @@ internal class MangaHomeHubScreenModel(
             } finally {
                 mutableState.update { it.copy(isDiscoveryRefreshing = false) }
                 updateDiscoveryTeaser(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
+            }
+        }
+    }
+
+    fun markDiscoveryItemShown(item: HomeHubDiscoveryItem) {
+        if (item.cleanTitle.isBlank()) return
+        screenModelScope.launchIO {
+            runCatching {
+                discoveryRepository.markShown(item.mediaType, listOf(item.cleanTitle))
             }
         }
     }

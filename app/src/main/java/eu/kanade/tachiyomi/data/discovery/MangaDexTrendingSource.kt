@@ -79,9 +79,19 @@ internal fun parseMangaDexData(
 
         val rawStatus = runCatching { attributes["status"]?.jsonPrimitive?.contentOrNull }.getOrNull()
 
+        val altTitle = if (primaryTitle == ruTitle) {
+            enTitle ?: jaTitle ?: firstTitle
+        } else {
+            ruTitle ?: altTitles?.firstNotNullOfOrNull {
+                it["en"]?.jsonPrimitive?.contentOrNull
+                    ?: it["ru"]?.jsonPrimitive?.contentOrNull
+            }
+        }
+
         DiscoveryTrendingItem(
             title = primaryTitle,
             cleanTitle = normalizeDiscoveryTitle(primaryTitle),
+            altTitle = altTitle,
             coverUrl = coverUrl,
             anilistId = 0L,
             seasonLabel = null,
@@ -143,7 +153,7 @@ open class MangaDexTrendingSource(
     private val nsfwAllowedProvider: () -> Boolean = { !discoveryNsfwFilterEnabled() },
 ) : DiscoveryTrendingSource {
 
-    private val metaCache = mutableMapOf<String, DiscoveryMeta>()
+    private val metaCache = DiscoveryLruCache<String, DiscoveryMeta>(200)
 
     private val headers = Headers.Builder()
         .add("User-Agent", "Tadami/1.0 (Android)")
@@ -214,7 +224,7 @@ open class MangaDexTrendingSource(
 
     override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
         if (mediaType != DiscoveryMediaType.MANGA) return null
-        metaCache[title]?.let { return it }
+        metaCache.get(title)?.let { return it }
 
         return try {
             val url = "https://api.mangadex.org/manga?title=${URLEncoder.encode(
@@ -252,7 +262,7 @@ open class MangaDexTrendingSource(
                 genres = tags,
                 altTitle = altTitle,
             )
-            metaCache[title] = meta
+            metaCache.put(title, meta)
             meta
         } catch (e: CancellationException) {
             throw e

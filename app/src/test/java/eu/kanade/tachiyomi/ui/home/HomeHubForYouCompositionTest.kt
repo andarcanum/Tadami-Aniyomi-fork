@@ -123,17 +123,18 @@ class HomeHubForYouCompositionTest {
     }
 
     @Test
-    fun `firstBlacklistTag picks first taste genre only`() {
-        firstBlacklistTag(DiscoveryRowType.TASTE, "Фэнтези, Драма") shouldBe "Фэнтези"
-        firstBlacklistTag(DiscoveryRowType.TASTE, " Фэнтези ") shouldBe "Фэнтези"
-        firstBlacklistTag(DiscoveryRowType.TASTE, "") shouldBe null
-        firstBlacklistTag(DiscoveryRowType.TASTE, null) shouldBe null
-        firstBlacklistTag(DiscoveryRowType.LIKE, "anything") shouldBe null
-        firstBlacklistTag(DiscoveryRowType.SOURCE, "anything") shouldBe null
+    fun `firstBlacklistTag picks first genre or falls back to taste reason`() {
+        firstBlacklistTag(listOf("Фэнтези", "Драма"), DiscoveryRowType.TREND, null) shouldBe "Фэнтези"
+        firstBlacklistTag(emptyList(), DiscoveryRowType.TASTE, "Фэнтези, Драма") shouldBe "Фэнтези"
+        firstBlacklistTag(emptyList(), DiscoveryRowType.TASTE, " Фэнтези ") shouldBe "Фэнтези"
+        firstBlacklistTag(emptyList(), DiscoveryRowType.TASTE, "") shouldBe null
+        firstBlacklistTag(emptyList(), DiscoveryRowType.TASTE, null) shouldBe null
+        firstBlacklistTag(emptyList(), DiscoveryRowType.LIKE, "anything") shouldBe null
+        firstBlacklistTag(emptyList(), DiscoveryRowType.SOURCE, "anything") shouldBe null
     }
 
     @Test
-    fun `countAffectedTeasers counts taste cards matching tag with translations`() {
+    fun `countAffectedTeasers counts cards matching tag with translations`() {
         val items = listOf(
             composeTeaserItems(
                 listOf(suggestion(DiscoveryRowType.TASTE, "A", 0, reason = "Фэнтези, Драма")),
@@ -147,8 +148,19 @@ class HomeHubForYouCompositionTest {
                 listOf(suggestion(DiscoveryRowType.LIKE, "C", 0)),
                 6,
             ).single(),
+            HomeHubDiscoveryItem(
+                title = "D",
+                cleanTitle = "d",
+                coverUrl = null,
+                seedTitle = null,
+                reasonPayload = null,
+                provider = "test",
+                rowType = DiscoveryRowType.TREND,
+                mediaType = DiscoveryMediaType.NOVEL,
+                genres = listOf("Fantasy"),
+            ),
         )
-        countAffectedTeasers(items, "Fantasy") shouldBe 1
+        countAffectedTeasers(items, "Fantasy") shouldBe 2
         countAffectedTeasers(items, "Экшен") shouldBe 1
         countAffectedTeasers(items, "Комедия") shouldBe 0
     }

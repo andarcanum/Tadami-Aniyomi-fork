@@ -30,6 +30,9 @@ object DiscoveryMapper {
         createdAt = row.created_at,
         sourceId = row.source_id,
         sourceUrl = row.source_url,
+        genres = row.genres?.splitToSequence(",")
+            ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
+            ?.toList().orEmpty(),
     )
 }
 
@@ -69,6 +72,7 @@ class DiscoveryRepositoryImpl(
                     created_at = item.createdAt,
                     source_id = item.sourceId,
                     source_url = item.sourceUrl,
+                    genres = item.genres.joinToString(","),
                 )
             }
         }
@@ -268,15 +272,16 @@ class DiscoveryRepositoryImpl(
             val existing = db.discovery_signalsQueries
                 .selectByTitle(mediaType.key, cleanTitle, ::signalMapper)
                 .executeAsOneOrNull()
-            if (!DiscoverySignalType.overrides(existing?.signalType, signalType)) {
+            val effectiveNext = DiscoverySignalType.resolveEffectiveSignal(existing?.signalType, signalType)
+            if (!DiscoverySignalType.overrides(existing?.signalType, effectiveNext)) {
                 return@await
             }
             db.discovery_signalsQueries.upsert(
                 media_type = mediaType.key,
                 clean_title = cleanTitle,
                 title = title,
-                signal = signalType.key,
-                weight = signalType.weight,
+                signal = effectiveNext.key,
+                weight = effectiveNext.weight,
                 genres = genres.joinToString(","),
                 provider = provider,
                 source_key = sourceKey,
@@ -285,10 +290,20 @@ class DiscoveryRepositoryImpl(
             // LRU-cap: лог не растёт бесконечно, вытесняются самые старые записи.
             val count = db.discovery_signalsQueries.countByMedia(mediaType.key).executeAsOne()
             if (count > SIGNALS_CAP_PER_MEDIA) {
-                db.discovery_signalsQueries.evictOldest(
+                // Общий кап чистит ТОЛЬКО живые сигналы: consumed-исключения долговечны
+                // (свой отдельный лимит ниже) — «прочитанное» не должно возвращаться в ленту.
+                db.discovery_signalsQueries.evictOldestLive(
                     mediaType.key,
                     mediaType.key,
-                    (count - SIGNALS_CAP_PER_MEDIA).toLong(),
+                    count - SIGNALS_CAP_PER_MEDIA,
+                )
+            }
+            val consumedCount = db.discovery_signalsQueries.countConsumedByMedia(mediaType.key).executeAsOne()
+            if (consumedCount > CONSUMED_CAP_PER_MEDIA) {
+                db.discovery_signalsQueries.evictOldestConsumed(
+                    mediaType.key,
+                    mediaType.key,
+                    consumedCount - CONSUMED_CAP_PER_MEDIA,
                 )
             }
         }
@@ -316,15 +331,16 @@ class DiscoveryRepositoryImpl(
                 val existing = db.discovery_signalsQueries
                     .selectByTitle(signal.mediaType.key, signal.cleanTitle, ::signalMapper)
                     .executeAsOneOrNull()
-                if (!DiscoverySignalType.overrides(existing?.signalType, signal.signalType)) {
+                val effectiveNext = DiscoverySignalType.resolveEffectiveSignal(existing?.signalType, signal.signalType)
+                if (!DiscoverySignalType.overrides(existing?.signalType, effectiveNext)) {
                     return@forEach
                 }
                 db.discovery_signalsQueries.upsert(
                     media_type = signal.mediaType.key,
                     clean_title = signal.cleanTitle,
                     title = signal.title,
-                    signal = signal.signalType.key,
-                    weight = signal.signalType.weight,
+                    signal = effectiveNext.key,
+                    weight = effectiveNext.weight,
                     genres = signal.genres.joinToString(","),
                     provider = signal.provider,
                     source_key = signal.sourceKey,
@@ -336,10 +352,18 @@ class DiscoveryRepositoryImpl(
             DiscoveryMediaType.entries.forEach { mediaType ->
                 val count = db.discovery_signalsQueries.countByMedia(mediaType.key).executeAsOne()
                 if (count > SIGNALS_CAP_PER_MEDIA) {
-                    db.discovery_signalsQueries.evictOldest(
+                    db.discovery_signalsQueries.evictOldestLive(
                         mediaType.key,
                         mediaType.key,
-                        (count - SIGNALS_CAP_PER_MEDIA).toLong(),
+                        count - SIGNALS_CAP_PER_MEDIA,
+                    )
+                }
+                val consumedCount = db.discovery_signalsQueries.countConsumedByMedia(mediaType.key).executeAsOne()
+                if (consumedCount > CONSUMED_CAP_PER_MEDIA) {
+                    db.discovery_signalsQueries.evictOldestConsumed(
+                        mediaType.key,
+                        mediaType.key,
+                        consumedCount - CONSUMED_CAP_PER_MEDIA,
                     )
                 }
             }
@@ -348,5 +372,6 @@ class DiscoveryRepositoryImpl(
 
     private companion object {
         const val SIGNALS_CAP_PER_MEDIA = 500L
+        const val CONSUMED_CAP_PER_MEDIA = 5000L
     }
 }

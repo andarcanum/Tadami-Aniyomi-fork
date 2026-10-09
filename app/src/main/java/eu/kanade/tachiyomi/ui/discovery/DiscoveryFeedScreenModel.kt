@@ -278,6 +278,7 @@ internal class DiscoveryFeedScreenModel(
                     }
                     prefetchJob?.cancel()
                     prefetchJob = screenModelScope.launchIO {
+                        kotlinx.coroutines.delay(500) // коалесцируем всплески эмиссий при регенерации рядов
                         prefetchDiscoveryMeta(mix, mediaType, trendingSource)
                         recoverMissingCovers(
                             mix,
@@ -309,6 +310,9 @@ internal class DiscoveryFeedScreenModel(
         seedTitle = seedTitle,
         provider = provider,
         score = score,
+        sourceId = sourceId,
+        sourceUrl = sourceUrl,
+        genres = genres,
     )
 
     private fun refreshingFlow(): Flow<Boolean> =
@@ -316,15 +320,14 @@ internal class DiscoveryFeedScreenModel(
 
     fun refreshNow(): Long {
         val now = System.currentTimeMillis()
-        // Cooldown считается от нажатия (общий pref с home-рефрешем), а не от возраста контента:
-        // фоновое автообновление больше не блокирует ручное.
+        val media = state.value.mediaType
         val remaining = remainingCooldownSeconds(
-            preferences.manualRefreshAt().get().takeIf { it > 0L },
+            preferences.feedManualRefreshAt(media).get().takeIf { it > 0L },
             now,
         )
         if (remaining > 0L) return remaining
-        preferences.manualRefreshAt().set(now)
-        DiscoveryUpdateJob.refreshNow(context, state.value.mediaType)
+        preferences.feedManualRefreshAt(media).set(now)
+        DiscoveryUpdateJob.refreshNow(context, media)
         return 0L
     }
 
@@ -334,7 +337,7 @@ internal class DiscoveryFeedScreenModel(
         screenModelScope.launchIO {
             // Taste Engine: скрытие = сильный негативный сигнал (undo удаляет строку лога).
             TasteSignalRecorder.record(repository, item, DiscoverySignalType.HIDE)
-            repository.hide(state.value.mediaType, item.cleanTitle)
+            repository.hide(item.mediaType, item.cleanTitle)
         }
     }
 
@@ -342,9 +345,9 @@ internal class DiscoveryFeedScreenModel(
         val item = lastHidden ?: return
         mutableState.update { it.copy(hiddenSnackbarTitle = null) }
         screenModelScope.launchIO {
-            repository.unhide(state.value.mediaType, item.cleanTitle)
+            repository.unhide(item.mediaType, item.cleanTitle)
             // Taste Engine: undo отменяет и сигнал (профиль возвращается к «до скрытия»).
-            repository.removeSignal(state.value.mediaType, item.cleanTitle)
+            repository.removeSignal(item.mediaType, item.cleanTitle)
         }
     }
 

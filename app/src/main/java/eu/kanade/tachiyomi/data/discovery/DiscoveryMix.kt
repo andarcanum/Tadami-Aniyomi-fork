@@ -12,6 +12,15 @@ data class DiscoveryMixQuotas(
     val total: Int get() = similar + taste + fresh + source
 }
 
+/** runCatching, не глотающий отмену корутины: отмена = отмена, а не «пустой ряд». */
+internal inline fun <T> runCatchingUnlessCancelled(block: () -> T): Result<T> = try {
+    Result.success(block())
+} catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
+} catch (e: Throwable) {
+    Result.failure(e)
+}
+
 /**
  * Смешанный поток: round-robin по квотам сигналов (LIKE → TASTE → TREND → SOURCE),
  * внутри сигнала — порядок ряда (скор). Квота пустого сигнала перераспределяется
@@ -298,11 +307,10 @@ internal fun <T> applyRequiredGenres(
     itemGenres: (T) -> List<String>,
 ): List<T> {
     if (requiredGenres.isEmpty()) return items
-    val filtered = items.filter { item ->
+    return items.filter { item ->
         val genres = itemGenres(item)
         genres.isEmpty() || genres.any { g -> requiredGenres.any { req -> GenreMatcher.matches(req, g) } }
     }
-    return if (filtered.isEmpty()) items else filtered
 }
 
 /** Перегрузка для [DiscoveryTrendingItem]: жанры — поле genres. */
@@ -380,6 +388,7 @@ internal fun isBlacklisted(
     expandedBlacklist: Set<String>,
 ): Boolean {
     if (expandedBlacklist.isEmpty()) return false
+    if (item.genres.isNotEmpty()) return matchesAnyGenre(item.genres, expandedBlacklist)
     if (item.rowType != tachiyomi.domain.discovery.model.DiscoveryRowType.TASTE) return false
     val reason = item.reason ?: return false
     return reason.splitToSequence(",").any { tag -> matchesAnyGenre(listOf(tag), expandedBlacklist) }

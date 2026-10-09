@@ -379,7 +379,7 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
             longPressItem?.let { lpItem ->
                 eu.kanade.tachiyomi.ui.home.DiscoveryHideOptionsSheet(
                     itemTitle = lpItem.title,
-                    tag = eu.kanade.tachiyomi.ui.home.firstBlacklistTag(lpItem.rowType, lpItem.reason),
+                    tag = eu.kanade.tachiyomi.ui.home.firstBlacklistTag(lpItem.genres, lpItem.rowType, lpItem.reason),
                     onHide = {
                         screenModel.hide(lpItem)
                         longPressItem = null

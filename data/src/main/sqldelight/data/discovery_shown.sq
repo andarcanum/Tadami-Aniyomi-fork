@@ -25,8 +25,16 @@ upsert:
 INSERT INTO discovery_shown(media_type, clean_title, shown_at, shown_count)
 VALUES (?, ?, ?, 1)
 ON CONFLICT(media_type, clean_title) DO UPDATE SET
-    shown_at = excluded.shown_at,
-    shown_count = shown_count + 1;
+    -- Показ = экспозиция, отделённая от предыдущей ≥15 минут: пересборки ленты
+    -- (эмиссии БД, тизер + Stage на одном тайтле) не накручивают счётчик.
+    shown_at = CASE
+        WHEN excluded.shown_at - shown_at < 900000 THEN shown_at
+        ELSE excluded.shown_at
+    END,
+    shown_count = CASE
+        WHEN excluded.shown_at - shown_at < 900000 THEN shown_count
+        ELSE shown_count + 1
+    END;
 
 cleanupOld:
 DELETE FROM discovery_shown

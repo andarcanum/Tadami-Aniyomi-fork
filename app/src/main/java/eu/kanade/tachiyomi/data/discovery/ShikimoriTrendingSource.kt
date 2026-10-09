@@ -86,6 +86,8 @@ internal fun parseShikimoriItems(
         ?: item.image?.preview?.let { "https://shikimori.one$it" }
     val genreList = item.genres?.map { it.russian?.takeIf { r -> r.isNotBlank() } ?: it.name }.orEmpty()
 
+    val altTitle = if (title == item.russian) item.name else item.russian
+
     DiscoveryTrendingItem(
         title = title,
         cleanTitle = normalizeDiscoveryTitle(title),
@@ -96,6 +98,7 @@ internal fun parseShikimoriItems(
         provider = "shikimori_trend",
         // V1: сырой статус Shikimori — для пост-фильтра при множественном выборе.
         releaseStatus = item.status,
+        altTitle = altTitle,
     )
 }
 
@@ -159,7 +162,7 @@ open class ShikimoriTrendingSource(
     private val nsfwFilterProvider: () -> Boolean = { discoveryNsfwFilterEnabled() },
 ) : DiscoveryTrendingSource {
 
-    private val metaCache = mutableMapOf<String, DiscoveryMeta>()
+    private val metaCache = DiscoveryLruCache<String, DiscoveryMeta>(200)
 
     private val headers = Headers.Builder()
         .add("User-Agent", "Tadami/1.0 (Android)")
@@ -306,7 +309,7 @@ open class ShikimoriTrendingSource(
 
     override suspend fun fetchMeta(title: String, mediaType: DiscoveryMediaType): DiscoveryMeta? {
         if (mediaType == DiscoveryMediaType.NOVEL) return null
-        metaCache[title]?.let { return it }
+        metaCache.get(title)?.let { return it }
 
         return try {
             val endpoint = if (mediaType == DiscoveryMediaType.ANIME) "animes" else "mangas"
@@ -338,7 +341,7 @@ open class ShikimoriTrendingSource(
                 genres = genreNames,
                 altTitle = altTitle,
             )
-            metaCache[title] = meta
+            metaCache.put(title, meta)
             meta
         } catch (e: CancellationException) {
             throw e

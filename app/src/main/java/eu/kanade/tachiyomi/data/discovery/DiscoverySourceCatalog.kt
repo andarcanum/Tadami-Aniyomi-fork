@@ -129,7 +129,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     }
                 }
                 keptMangas.mapIndexed { idx, m ->
-                    rowItem(m.title, m.thumbnail_url, source.name, idx, sourceId, m.url)
+                    rowItem(m.title, m.thumbnail_url, source.name, idx, sourceId, m.url, parseGenres(m.genre))
                 }
             }
             DiscoveryMediaType.ANIME -> {
@@ -157,7 +157,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     }
                 }
                 keptAnimes.mapIndexed { idx, a ->
-                    rowItem(a.title, a.thumbnail_url, source.name, idx, sourceId, a.url)
+                    rowItem(a.title, a.thumbnail_url, source.name, idx, sourceId, a.url, parseGenres(a.genre))
                 }
             }
             DiscoveryMediaType.NOVEL -> {
@@ -185,7 +185,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     }
                 }
                 keptNovels.mapIndexed { idx, n ->
-                    rowItem(n.title, n.thumbnail_url, source.name, idx, sourceId, n.url)
+                    rowItem(n.title, n.thumbnail_url, source.name, idx, sourceId, n.url, parseGenres(n.genre))
                 }
             }
         }
@@ -231,7 +231,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     ?.filter { SourceStatusFilterMatcher.entryPasses(it.status, releaseStatuses) }
                     ?: return null
                 mangas.mapIndexed { idx, m ->
-                    rowItem(m.title, m.thumbnail_url, source.name, idx, sourceId, m.url)
+                    rowItem(m.title, m.thumbnail_url, source.name, idx, sourceId, m.url, parseGenres(m.genre))
                 }
             }
             DiscoveryMediaType.ANIME -> {
@@ -251,7 +251,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     ?.filter { SourceStatusFilterMatcher.entryPasses(it.status, releaseStatuses) }
                     ?: return null
                 animes.mapIndexed { idx, a ->
-                    rowItem(a.title, a.thumbnail_url, source.name, idx, sourceId, a.url)
+                    rowItem(a.title, a.thumbnail_url, source.name, idx, sourceId, a.url, parseGenres(a.genre))
                 }
             }
             DiscoveryMediaType.NOVEL -> {
@@ -271,7 +271,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     ?.filter { SourceStatusFilterMatcher.entryPasses(it.status, releaseStatuses) }
                     ?: return null
                 novels.mapIndexed { idx, n ->
-                    rowItem(n.title, n.thumbnail_url, source.name, idx, sourceId, n.url)
+                    rowItem(n.title, n.thumbnail_url, source.name, idx, sourceId, n.url, parseGenres(n.genre))
                 }
             }
         }
@@ -326,7 +326,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     }
                 }
                 keptMangas.mapIndexed { idx, m ->
-                    rowItem(m.title, m.thumbnail_url, source.name, idx, sourceId, m.url)
+                    rowItem(m.title, m.thumbnail_url, source.name, idx, sourceId, m.url, parseGenres(m.genre))
                 }
             }
             DiscoveryMediaType.ANIME -> {
@@ -361,7 +361,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     }
                 }
                 keptAnimes.mapIndexed { idx, a ->
-                    rowItem(a.title, a.thumbnail_url, source.name, idx, sourceId, a.url)
+                    rowItem(a.title, a.thumbnail_url, source.name, idx, sourceId, a.url, parseGenres(a.genre))
                 }
             }
             DiscoveryMediaType.NOVEL -> {
@@ -396,7 +396,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     }
                 }
                 keptNovels.mapIndexed { idx, n ->
-                    rowItem(n.title, n.thumbnail_url, source.name, idx, sourceId, n.url)
+                    rowItem(n.title, n.thumbnail_url, source.name, idx, sourceId, n.url, parseGenres(n.genre))
                 }
             }
         }
@@ -412,6 +412,9 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
         throw e
     }
 
+    private fun parseGenres(genre: String?): List<String> =
+        genre.orEmpty().splitToSequence(",").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toList()
+
     private fun rowItem(
         title: String,
         thumbnailUrl: String?,
@@ -419,6 +422,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
         index: Int,
         sourceId: Long,
         sourceUrl: String?,
+        genres: List<String> = emptyList(),
     ) = DiscoveryRowItem(
         title = title,
         cleanTitle = normalizeDiscoveryTitle(title),
@@ -429,6 +433,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
         score = 1.0 - index * 0.01,
         sourceId = sourceId,
         sourceUrl = sourceUrl,
+        genres = genres,
     )
 
     private suspend fun withMangaGenreFilters(filters: FilterList, genres: List<String>): FilterList? {

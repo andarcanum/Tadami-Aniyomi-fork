@@ -9,16 +9,32 @@ import tachiyomi.domain.discovery.repository.DiscoveryRepository
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
+/** Общий инстанс для кэшей меты (globalMetaCache статический, per-source кэши — общие). */
+private val sharedTrendingSource: CompositeTrendingSource by lazy { CompositeTrendingSource() }
+
+/** Альт-ключ consumed-сигнала: нормализованное альтернативное название тайтла. */
+internal fun consumedAltKey(primaryTitle: String, meta: DiscoveryMeta?): String? {
+    val alt = meta?.altTitle?.trim().orEmpty()
+    if (alt.isEmpty()) return null
+    val altKey = tachiyomi.domain.discovery.model.normalizeDiscoveryTitle(alt)
+    val primaryKey = tachiyomi.domain.discovery.model.normalizeDiscoveryTitle(primaryTitle)
+    return altKey.takeIf { it.isNotBlank() && it != primaryKey }
+}
+
 /**
  * Taste Learning Engine: wiring записи сигналов взаимодействия.
  * Жанры — best-effort снимок: TASTE-ряд хранит их в reason-CSV; для прочих
  * рядов жанрового вклада нет, но source-аффинити (по sourceId) считается.
- * Сеть в момент сигнала не трогается — обогащение остаётся за генерацией ленты.
+ * Сеть в момент non-consumed сигналов не трогается; для consumed-сигналов
+ * допустим best-effort резолв альтернативного названия через мету (fire-and-forget, throttled).
+ * Диалог «Просмотренные» в настройках покажет альт-строку отдельной записью (undo по языковой форме).
+ * Alt-строка с уже существующим LIKE/CLICK на этом ключе мержится в CONSUMED_LIKED обычной матрицей.
  */
 object TasteSignalRecorder {
 
-    /** Жанры тайтла из reason-CSV (TASTE), с фоллбэком на cached meta для прочих рядов. */
+    /** Жанры тайтла из genres (все ряды) с фоллбэком на reason-CSV (TASTE) и cached meta. */
     fun snapshotGenres(item: DiscoverySuggestion): List<String> {
+        if (item.genres.isNotEmpty()) return item.genres
         val fromReason = if (item.rowType == DiscoveryRowType.TASTE) {
             item.reason
                 ?.splitToSequence(",")
@@ -43,9 +59,12 @@ object TasteSignalRecorder {
         repository: DiscoveryRepository,
         item: DiscoverySuggestion,
         signalType: DiscoverySignalType,
+        altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta? = { t, m ->
+            runCatchingUnlessCancelled { sharedTrendingSource.fetchMeta(t, m) }.getOrNull()
+        },
     ) {
         val sourceKey = resolveSourceKey(item.mediaType, item.sourceId)
-        runCatching {
+        runCatchingUnlessCancelled {
             repository.recordSignal(
                 mediaType = item.mediaType,
                 cleanTitle = item.cleanTitle,
@@ -54,6 +73,15 @@ object TasteSignalRecorder {
                 genres = snapshotGenres(item),
                 provider = item.provider,
                 sourceKey = sourceKey,
+            )
+        }
+        if (signalType.excludesFromFeed) {
+            recordConsumedAltKeys(
+                repository = repository,
+                mediaType = item.mediaType,
+                primaryTitle = item.title,
+                sourceKey = sourceKey,
+                altMetaResolver = altMetaResolver,
             )
         }
         if (signalType == DiscoverySignalType.CONSUMED) {
@@ -73,11 +101,14 @@ object TasteSignalRecorder {
         mediaType: DiscoveryMediaType,
         title: String,
         sourceId: Long?,
+        altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta? = { t, m ->
+            runCatchingUnlessCancelled { sharedTrendingSource.fetchMeta(t, m) }.getOrNull()
+        },
     ) {
         val cleanTitle = tachiyomi.domain.discovery.model.normalizeDiscoveryTitle(title)
         if (cleanTitle.isBlank()) return
         val sourceKey = resolveSourceKey(mediaType, sourceId)
-        runCatching {
+        runCatchingUnlessCancelled {
             repository.recordSignal(
                 mediaType = mediaType,
                 cleanTitle = cleanTitle,
@@ -88,7 +119,42 @@ object TasteSignalRecorder {
                 sourceKey = sourceKey,
             )
         }
+        recordConsumedAltKeys(
+            repository = repository,
+            mediaType = mediaType,
+            primaryTitle = title,
+            sourceKey = sourceKey,
+            altMetaResolver = altMetaResolver,
+        )
         afterConsumed(repository, mediaType, cleanTitle)
+    }
+
+    /**
+     * Мультиключевой consumed: тот же тайтл от другого провайдера называется иначе
+     * (ромадзи/EN/RU) — single-ключ не совпадает и тайтл рекомендуется повторно.
+     * Best-effort резолв альтернативного названия через мету (кэш → сеть), сигнал
+     * пишется и под альтернативным именем. Ошибка резолва молча пропускается.
+     */
+    private suspend fun recordConsumedAltKeys(
+        repository: DiscoveryRepository,
+        mediaType: DiscoveryMediaType,
+        primaryTitle: String,
+        sourceKey: String?,
+        altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta?,
+    ) {
+        val meta = runCatchingUnlessCancelled { altMetaResolver(primaryTitle, mediaType) }.getOrNull() ?: return
+        val altKey = consumedAltKey(primaryTitle, meta) ?: return
+        runCatchingUnlessCancelled {
+            repository.recordSignal(
+                mediaType = mediaType,
+                cleanTitle = altKey,
+                title = meta.altTitle!!,
+                signalType = DiscoverySignalType.CONSUMED,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = sourceKey,
+            )
+        }
     }
 
     /**

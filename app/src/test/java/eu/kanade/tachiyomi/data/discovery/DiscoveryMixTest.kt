@@ -1,11 +1,15 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import io.kotest.matchers.booleans.shouldBeTrue
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.doubles.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import org.junit.Test
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
+import tachiyomi.domain.discovery.model.DiscoverySuggestion
 
 class DiscoveryMixTest {
 
@@ -331,4 +335,34 @@ class DiscoveryMixTest {
         position = position,
         createdAt = 0L,
     )
+
+    private fun itemWithGenres(title: String, genres: List<String>) =
+        DiscoveryTrendingItem(title, title.lowercase(), null, 0L, null, genres)
+
+    @Test
+    fun `required genres filter is strict and may return empty`() {
+        val items = listOf(itemWithGenres("a", listOf("harem")), itemWithGenres("b", listOf("drama")))
+        applyRequiredGenres(items, setOf("romance")) { it.genres }.shouldBeEmpty()
+    }
+
+    @Test
+    fun `blacklist checks genres column for any row type`() {
+        val item = DiscoverySuggestion(
+            id = 1L, mediaType = DiscoveryMediaType.MANGA, rowType = DiscoveryRowType.TREND,
+            title = "t", cleanTitle = "t", coverUrl = null, reason = "next", seedTitle = null,
+            provider = "anilist", score = 0.0, position = 0L, createdAt = 0L,
+            genres = listOf("harem"),
+        )
+        isBlacklisted(item, expandGenreSet(listOf("гарем"))).shouldBeTrue()
+    }
+
+    @Test
+    fun `blacklist falls back to taste reason for legacy rows without genres`() {
+        val legacy = DiscoverySuggestion(
+            id = 1L, mediaType = DiscoveryMediaType.MANGA, rowType = DiscoveryRowType.TASTE,
+            title = "t", cleanTitle = "t", coverUrl = null, reason = "harem, drama", seedTitle = null,
+            provider = "anilist", score = 0.0, position = 0L, createdAt = 0L,
+        )
+        isBlacklisted(legacy, expandGenreSet(listOf("harem"))).shouldBeTrue()
+    }
 }

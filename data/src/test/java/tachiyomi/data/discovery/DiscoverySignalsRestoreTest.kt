@@ -106,4 +106,133 @@ class DiscoverySignalsRestoreTest {
         repository.restoreSignals(listOf(signal("New One", DiscoverySignalType.LIKE)))
         repository.getSignals(DiscoveryMediaType.NOVEL).single().title shouldBe "New One"
     }
+
+    @Test
+    fun `eviction prefers live signals and keeps consumed rows`() = runTest {
+        for (i in 1..498) {
+            repository.recordSignal(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "consumed $i",
+                title = "Consumed $i",
+                signalType = DiscoverySignalType.CONSUMED,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = null,
+                timestamp = i.toLong(),
+            )
+        }
+        for (i in 1..3) {
+            repository.recordSignal(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "like $i",
+                title = "Like $i",
+                signalType = DiscoverySignalType.LIKE,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = null,
+                timestamp = 1000L + i,
+            )
+        }
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "like 4",
+            title = "Like 4",
+            signalType = DiscoverySignalType.LIKE,
+            genres = emptyList(),
+            provider = null,
+            sourceKey = null,
+            timestamp = 1004L,
+        )
+
+        val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        signals.size shouldBe 500
+        val consumedCount = signals.count { it.signalType == DiscoverySignalType.CONSUMED }
+        consumedCount shouldBe 498
+        signals.map { it.cleanTitle }.contains("like 1") shouldBe false
+        signals.map { it.cleanTitle }.contains("like 4") shouldBe true
+    }
+
+    @Test
+    fun `total cap does not evict consumed rows when live signals are insufficient`() = runTest {
+        for (i in 1..600) {
+            repository.recordSignal(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "consumed $i",
+                title = "Consumed $i",
+                signalType = DiscoverySignalType.CONSUMED,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = null,
+                timestamp = i.toLong(),
+            )
+        }
+        for (i in 1..3) {
+            repository.recordSignal(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "like $i",
+                title = "Like $i",
+                signalType = DiscoverySignalType.LIKE,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = null,
+                timestamp = 1000L + i,
+            )
+        }
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "like 4",
+            title = "Like 4",
+            signalType = DiscoverySignalType.LIKE,
+            genres = emptyList(),
+            provider = null,
+            sourceKey = null,
+            timestamp = 1004L,
+        )
+
+        val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        val consumedCount = signals.count { it.signalType == DiscoverySignalType.CONSUMED }
+        consumedCount shouldBe 600
+        signals.size shouldBe 600
+    }
+
+    @Test
+    fun `consumed cap evicts oldest consumed above 5000`() = runTest {
+        for (i in 1..5001) {
+            repository.recordSignal(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "consumed $i",
+                title = "Consumed $i",
+                signalType = DiscoverySignalType.CONSUMED,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = null,
+                timestamp = i.toLong(),
+            )
+        }
+        val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        signals.size shouldBe 5000
+        signals.map { it.cleanTitle }.contains("consumed 1") shouldBe false
+        signals.map { it.cleanTitle }.contains("consumed 2") shouldBe true
+        signals.map { it.cleanTitle }.contains("consumed 5001") shouldBe true
+    }
+
+    @Test
+    fun `repeated marks within 15 minutes do not bump count or time`() = runTest {
+        repository.markShown(DiscoveryMediaType.NOVEL, listOf("solo leveling"), timestamp = 1_000L)
+        repository.markShown(DiscoveryMediaType.NOVEL, listOf("solo leveling"), timestamp = 2_000L)
+
+        val shown = repository.getShownWithCount(DiscoveryMediaType.NOVEL, Long.MAX_VALUE / 2)
+        shown.single() shouldBe Triple("solo leveling", 1_000L, 1)
+    }
+
+    @Test
+    fun `mark after 15 minutes counts as new impression`() = runTest {
+        val t1 = 1_000L
+        val t2 = t1 + 16 * 60_000L
+        repository.markShown(DiscoveryMediaType.NOVEL, listOf("solo leveling"), timestamp = t1)
+        repository.markShown(DiscoveryMediaType.NOVEL, listOf("solo leveling"), timestamp = t2)
+
+        val shown = repository.getShownWithCount(DiscoveryMediaType.NOVEL, Long.MAX_VALUE / 2)
+        shown.single() shouldBe Triple("solo leveling", t2, 2)
+    }
 }
