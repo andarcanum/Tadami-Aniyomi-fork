@@ -3248,6 +3248,28 @@ class NovelReaderUiVisibilityTest {
     }
 
     @Test
+    fun `vertical seekbar tap progress maps the active track and rejects outside coordinates`() {
+        assertEquals(
+            0.5f,
+            resolveVerticalSeekbarTapProgress(yPx = 50f, trackHeightPx = 100f)!!,
+            0.0001f,
+        )
+        assertEquals(
+            0f,
+            resolveVerticalSeekbarTapProgress(yPx = 0f, trackHeightPx = 100f)!!,
+            0.0001f,
+        )
+        assertEquals(
+            1f,
+            resolveVerticalSeekbarTapProgress(yPx = 100f, trackHeightPx = 100f)!!,
+            0.0001f,
+        )
+        assertNull(resolveVerticalSeekbarTapProgress(yPx = -1f, trackHeightPx = 100f))
+        assertNull(resolveVerticalSeekbarTapProgress(yPx = 101f, trackHeightPx = 100f))
+        assertNull(resolveVerticalSeekbarTapProgress(yPx = 0f, trackHeightPx = 0f))
+    }
+
+    @Test
     fun `vertical seekbar drag deltas accumulate from the latest scrub position`() {
         val first = resolveVerticalSeekbarDragProgress(
             currentProgress = 0.2f,
