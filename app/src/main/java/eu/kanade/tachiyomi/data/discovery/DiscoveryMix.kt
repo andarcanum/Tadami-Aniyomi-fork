@@ -554,3 +554,81 @@ internal fun <T> balancePluginDiversity(
 
     return result.take(limit)
 }
+
+private fun normalizeWeight(raw: Double?): Double {
+    if (raw == null || raw.isNaN() || raw <= 0.0) return 0.0
+    if (raw.isInfinite()) return 1_000_000.0
+    return raw
+}
+
+/**
+ * Распределяет целое число слотов [totalSlots] между источниками [sourceIds]
+ * с учётом их эффективных весов [effectiveWeights].
+ *
+ * Если слотов достаточно (totalSlots >= sourceIds.size): каждый получает минимум 1 слот,
+ * а остаток делится пропорционально положительным весам методом Largest Remainder (Гамильтона).
+ * При равенстве остатков приоритет отдаётся исходному порядку.
+ * Если источников больше, чем слотов: выбираются источники с наибольшим весом (tie-break — исходный порядок).
+ * При неположительном totalSlots или пустом списке источников возвращается пустая карта.
+ */
+internal fun allocateSourceSlots(
+    sourceIds: List<Long>,
+    effectiveWeights: Map<Long, Double>,
+    totalSlots: Int,
+): Map<Long, Int> {
+    if (totalSlots <= 0 || sourceIds.isEmpty()) return emptyMap()
+
+    if (sourceIds.size > totalSlots) {
+        val indexed = sourceIds.mapIndexed { index, id ->
+            Triple(id, normalizeWeight(effectiveWeights[id]), index)
+        }
+        val sorted = indexed.sortedWith(
+            compareByDescending<Triple<Long, Double, Int>> { it.second }
+                .thenBy { it.third },
+        )
+        val selected = sorted.take(totalSlots)
+        return selected.sortedBy { it.third }.associate { it.first to 1 }
+    }
+
+    val allocation = LinkedHashMap<Long, Int>(sourceIds.size)
+    sourceIds.forEach { allocation[it] = 1 }
+    val remainingSlots = totalSlots - sourceIds.size
+    if (remainingSlots == 0) return allocation
+
+    val weights = sourceIds.map { id -> id to normalizeWeight(effectiveWeights[id]) }
+    val totalWeight = weights.sumOf { it.second }
+
+    val effectiveShares = if (totalWeight > 0.0) {
+        weights.map { (id, w) -> id to (w / totalWeight) }
+    } else {
+        val equalShare = 1.0 / sourceIds.size
+        weights.map { (id, _) -> id to equalShare }
+    }
+
+    val exactQuotas = effectiveShares.map { (id, share) ->
+        val exact = remainingSlots * share
+        val floor = exact.toInt()
+        val remainder = exact - floor
+        id to (floor to remainder)
+    }
+
+    exactQuotas.forEach { (id, pair) ->
+        allocation[id] = (allocation[id] ?: 1) + pair.first
+    }
+
+    var leftover = remainingSlots - exactQuotas.sumOf { it.second.first }
+    val indexedRemainders = exactQuotas.mapIndexed { index, (id, pair) ->
+        Triple(id, pair.second, index)
+    }.sortedWith(
+        compareByDescending<Triple<Long, Double, Int>> { it.second }
+            .thenBy { it.third },
+    )
+
+    for (item in indexedRemainders) {
+        if (leftover <= 0) break
+        allocation[item.first] = (allocation[item.first] ?: 1) + 1
+        leftover--
+    }
+
+    return allocation
+}

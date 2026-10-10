@@ -154,14 +154,15 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
 
         private const val TAG_AFTER_CONSUMED = "DiscoveryRefillAfterConsumed"
 
+        fun refillWorkName(mediaType: DiscoveryMediaType): String = "$TAG_AFTER_CONSUMED:${mediaType.key}"
+
         /**
-         * Дебаунс-дозаполнение ленты после «просмотрено»: 10 минут REPLACE-очередью —
-         * каждое новое чтение сдвигает окно, шторма обновлений нет (не более одного
-         * прогона на очередь). Прогон фоновый: consumed-тайтл исключён (сигнал-лог +
-         * 48h-полка), ряды добираются свежим из тех же плагинов — прочитанное
-         * заменяется, а не оставляет дыру.
+         * Дебаунс-дозаполнение ленты после явного сигнала («просмотрено», LIKE): 10 минут
+         * REPLACE-очередью — каждое новое действие сдвигает окно, шторма обновлений нет
+         * (не более одного прогона на очередь). Прогон фоновый: consumed-тайтл исключён,
+         * liked-тайтл входит в сиды похожих рекомендаций, ряды добираются свежим.
          */
-        fun scheduleConsumedRefill(context: Context, mediaType: DiscoveryMediaType) {
+        fun scheduleRefill(context: Context, mediaType: DiscoveryMediaType) {
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return
             val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
@@ -177,11 +178,14 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                 )
                 .build()
             context.workManager.enqueueUniqueWork(
-                TAG_AFTER_CONSUMED + ":" + mediaType.key,
+                refillWorkName(mediaType),
                 ExistingWorkPolicy.REPLACE,
                 request,
             )
         }
+
+        fun scheduleConsumedRefill(context: Context, mediaType: DiscoveryMediaType) =
+            scheduleRefill(context, mediaType)
     }
 }
 

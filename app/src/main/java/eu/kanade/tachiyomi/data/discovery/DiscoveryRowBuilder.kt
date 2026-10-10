@@ -17,9 +17,17 @@ data class DiscoveryRowItem(
     val altCleanTitles: List<String> = emptyList(),
 )
 
+data class DiscoveryFeedbackSeed(
+    val title: String,
+    val cleanTitle: String,
+    val genres: List<String> = emptyList(),
+    val timestamp: Long = 0L,
+)
+
 data class DiscoveryBuildContext(
     val mediaType: DiscoveryMediaType,
     val seeds: List<DiscoverySeedInput>,
+    val feedbackSeeds: List<DiscoveryFeedbackSeed> = emptyList(),
     val libraryCleanTitles: Set<String>,
     val historyCleanTitles: Set<String>,
     val hiddenCleanTitles: Set<String>,
@@ -35,6 +43,8 @@ data class DiscoveryBuildContext(
     val sourceId: Long = -1L,
     /** C1: источники библиотеки, упорядоченные по весу (топ-3) — для ряда SOURCE. */
     val sourceIds: List<Long> = emptyList(),
+    /** Эффективные веса источников (applySourceAffinity) для взвешенного распределения слотов в ряду SOURCE. */
+    val sourceWeights: Map<Long, Double> = emptyMap(),
     val recentCleanTitles: Set<String> = emptySet(),
     /** cleanTitle → таймстамп последнего показа (48h окно): порядок stale-добора в координаторе. */
     val shownCutoffMap: Map<String, Long> = emptyMap(),

@@ -96,6 +96,38 @@ class TasteSignalRecorderAltKeyTest {
             )
         }
     }
+
+    @Test
+    fun `record returns true on success and false on failure`() = runTest {
+        val repo = RecordingFakeRepository()
+        val success = TasteSignalRecorder.record(
+            repository = repo,
+            item = suggestionOf("test"),
+            signalType = DiscoverySignalType.LIKE,
+        )
+        success shouldBe true
+
+        val failingRepo = object : RecordingFakeRepository() {
+            override suspend fun recordSignal(
+                mediaType: DiscoveryMediaType,
+                cleanTitle: String,
+                title: String,
+                signalType: DiscoverySignalType,
+                genres: List<String>,
+                provider: String?,
+                sourceKey: String?,
+                timestamp: Long,
+            ) {
+                throw java.io.IOException("db failed")
+            }
+        }
+        val failure = TasteSignalRecorder.record(
+            repository = failingRepo,
+            item = suggestionOf("test"),
+            signalType = DiscoverySignalType.LIKE,
+        )
+        failure shouldBe false
+    }
 }
 
 private fun suggestionOf(title: String) = DiscoverySuggestion(
@@ -113,7 +145,7 @@ private fun suggestionOf(title: String) = DiscoverySuggestion(
     createdAt = 0L,
 )
 
-private class RecordingFakeRepository : DiscoveryRepository {
+private open class RecordingFakeRepository : DiscoveryRepository {
     val recorded = mutableListOf<Triple<DiscoveryMediaType, String, DiscoverySignalType>>()
 
     override suspend fun recordSignal(

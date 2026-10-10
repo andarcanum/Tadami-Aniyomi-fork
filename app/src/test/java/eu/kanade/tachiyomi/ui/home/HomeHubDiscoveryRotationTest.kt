@@ -383,4 +383,110 @@ class HomeHubDiscoveryRotationTest {
             selectFreshTeaserItems(pool, shownTitles = shown, count = 5, offset = 5, shownCutoffMap = cutoffMap)
         window2.map { it.cleanTitle }.toSet() shouldNotBe window1.map { it.cleanTitle }.toSet()
     }
+
+    private fun discoveryItem(title: String, type: DiscoveryRowType = DiscoveryRowType.TREND) = HomeHubDiscoveryItem(
+        title = title,
+        cleanTitle = title.lowercase(),
+        coverUrl = null,
+        seedTitle = null,
+        reasonPayload = null,
+        provider = "test",
+        rowType = type,
+        mediaType = DiscoveryMediaType.MANGA,
+    )
+
+    @Test
+    fun `patchAfterLocalLike replaces liked card with first available candidate from persistent pool at same index`() {
+        val currentTeaser = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3"))
+        val persistedPool = listOf(
+            discoveryItem("Card 1"),
+            discoveryItem("Card 2"),
+            discoveryItem("Card 3"),
+            discoveryItem("Card 4"),
+            discoveryItem("Card 5"),
+        )
+
+        val result = patchAfterLocalLike(
+            currentTeaser = currentTeaser,
+            persistedPool = persistedPool,
+            likedCleanTitle = "card 2",
+            targetCount = 3,
+        )
+
+        result.map { it.title } shouldBe listOf("Card 1", "Card 4", "Card 3")
+    }
+
+    @Test
+    fun `patchAfterLocalLike skips candidates already in current teaser or in dismissed set`() {
+        val currentTeaser = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3"))
+        val persistedPool = listOf(
+            discoveryItem("Card 1"),
+            discoveryItem("Card 2"),
+            discoveryItem("Card 3"),
+            discoveryItem("Card 4"),
+            discoveryItem("Card 5"),
+        )
+
+        val result = patchAfterLocalLike(
+            currentTeaser = currentTeaser,
+            persistedPool = persistedPool,
+            likedCleanTitle = "card 2",
+            targetCount = 3,
+            dismissedTitles = setOf("card 4"),
+        )
+
+        result.map { it.title } shouldBe listOf("Card 1", "Card 5", "Card 3")
+    }
+
+    @Test
+    fun `patchAfterLocalLike removes card and shrinks list when no candidates available in persistent pool`() {
+        val currentTeaser = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3"))
+        val persistedPool = listOf(
+            discoveryItem("Card 1"),
+            discoveryItem("Card 2"),
+            discoveryItem("Card 3"),
+        )
+
+        val result = patchAfterLocalLike(
+            currentTeaser = currentTeaser,
+            persistedPool = persistedPool,
+            likedCleanTitle = "card 2",
+            targetCount = 3,
+        )
+
+        result.map { it.title } shouldBe listOf("Card 1", "Card 3")
+    }
+
+    @Test
+    fun `patchAfterLocalLike returns unchanged list when liked title is not in current teaser`() {
+        val currentTeaser = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"))
+        val persistedPool = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3"))
+
+        val result = patchAfterLocalLike(
+            currentTeaser = currentTeaser,
+            persistedPool = persistedPool,
+            likedCleanTitle = "nonexistent",
+            targetCount = 2,
+        )
+
+        result.map { it.title } shouldBe listOf("Card 1", "Card 2")
+    }
+
+    @Test
+    fun `reduceDismissTeaserCard updates discovery list in HomeHubUiState using patchAfterLocalLike`() {
+        val state = HomeHubUiState(
+            userName = "User",
+            userAvatar = "",
+            greeting = tachiyomi.i18n.MR.strings.app_name,
+            greetingReady = true,
+            isLoading = false,
+            showWelcome = false,
+            discovery = listOf(discoveryItem("Card 1"), discoveryItem("Card 2")),
+            discoveryPool = listOf(discoveryItem("Card 1"), discoveryItem("Card 2"), discoveryItem("Card 3")),
+        )
+
+        val updated = state.reduceDismissTeaserCard(likedCleanTitle = "card 1")
+        updated.discovery.map { it.title } shouldBe listOf("Card 3", "Card 2")
+        updated.discoveryPool.map { it.title } shouldBe listOf("Card 1", "Card 2", "Card 3")
+    }
 }
