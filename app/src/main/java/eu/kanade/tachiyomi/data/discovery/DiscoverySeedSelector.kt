@@ -1,5 +1,40 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
+import tachiyomi.domain.discovery.model.DiscoverySignal
+import tachiyomi.domain.discovery.model.DiscoverySignalType
+import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
+
+internal fun selectFeedbackSeeds(
+    signals: List<DiscoverySignal>,
+    mediaType: DiscoveryMediaType,
+    limit: Int = 2,
+): List<DiscoveryFeedbackSeed> {
+    if (limit <= 0) return emptyList()
+    val seen = hashSetOf<String>()
+    return signals.asSequence()
+        .filter { it.mediaType == mediaType }
+        .filter {
+            it.signalType == DiscoverySignalType.LIKE || it.signalType == DiscoverySignalType.ADD ||
+                it.signalType == DiscoverySignalType.CONSUMED_LIKED ||
+                it.signalType == DiscoverySignalType.CONSUMED_ADDED
+        }
+        .sortedByDescending { it.createdAt }
+        .mapNotNull { signal ->
+            val cleanTitle = normalizeDiscoveryTitle(signal.cleanTitle.ifBlank { signal.title })
+            if (cleanTitle.isBlank()) return@mapNotNull null
+            if (!seen.add(cleanTitle)) return@mapNotNull null
+            DiscoveryFeedbackSeed(
+                title = signal.title.ifBlank { cleanTitle },
+                cleanTitle = cleanTitle,
+                genres = signal.genres,
+                timestamp = signal.createdAt,
+            )
+        }
+        .take(limit)
+        .toList()
+}
+
 data class DiscoverySeedInput(
     val entryId: Long,
     val title: String,

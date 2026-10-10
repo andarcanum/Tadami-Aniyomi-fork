@@ -34,7 +34,38 @@ class DiscoveryLikeRowBuilder(
             DiscoveryMediaType.NOVEL -> SuggestionMediaType.NOVEL
         }
         var fullyFailedSeeds = 0
-        val perSeed = context.seeds.map { seed ->
+        val feedbackPerSeed = context.feedbackSeeds.map { feedbackSeed ->
+            val suggestionSeed = SuggestionSeed(
+                mediaType = mediaType,
+                primaryTitle = feedbackSeed.title,
+                candidateTitles = SuggestionTitleResolver.resolveCandidates(feedbackSeed.title, null),
+                description = null,
+                author = null,
+                genres = feedbackSeed.genres.ifEmpty { null },
+            )
+            val result = suggestionCoordinator.fetchSuggestions(
+                suggestionSeed,
+                limit = 25,
+                releaseStatuses = context.releaseStatuses,
+            )
+            if (result.items.isEmpty() && result.attemptedSources > 0 &&
+                result.failedSources == result.attemptedSources
+            ) {
+                fullyFailedSeeds++
+            }
+            result.items.map { item ->
+                DiscoveryRowItem(
+                    title = item.title,
+                    cleanTitle = normalizeDiscoveryTitle(item.title),
+                    coverUrl = item.thumbnailUrl,
+                    reason = null,
+                    seedTitle = feedbackSeed.title,
+                    provider = item.providerName,
+                    score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
+                )
+            }
+        }
+        val libraryPerSeed = context.seeds.map { seed ->
             val suggestionSeed = SuggestionSeed(
                 mediaType = mediaType,
                 primaryTitle = seed.title,
@@ -66,8 +97,10 @@ class DiscoveryLikeRowBuilder(
                 )
             }
         }
+        val perSeed = feedbackPerSeed + libraryPerSeed
         val merged = mergeSeedResults(perSeed)
-        if (merged.isEmpty() && context.seeds.isNotEmpty() && fullyFailedSeeds == context.seeds.size) {
+        val totalSeeds = context.seeds.size + context.feedbackSeeds.size
+        if (merged.isEmpty() && totalSeeds > 0 && fullyFailedSeeds == totalSeeds) {
             throw IOException("all suggestion providers failed for every seed")
         }
         return merged
@@ -302,24 +335,29 @@ class DiscoveryTasteRowBuilder(
  */
 class DiscoverySourceRowBuilder(
     private val catalog: DiscoverySourceCatalog,
-    private val maxSources: Int = 3,
     private val rowCap: Int = 20,
 ) : DiscoveryRowBuilder {
 
     override val rowType = DiscoveryRowType.SOURCE
 
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
-        val ids = context.sourceIds.filter { it > 0 }.take(maxSources)
+        val ids = context.sourceIds.filter { it > 0 }
             .ifEmpty { listOf(context.sourceId).filter { it > 0 } }
         if (ids.isEmpty()) return emptyList()
         val rotation = (context.pageOffset - 1).coerceAtLeast(0) % ids.size
         val ordered = ids.drop(rotation) + ids.take(rotation)
-        val perSource = (rowCap + ordered.size - 1) / ordered.size
-        // Popular-витрина первой страницы почти статична, latest-обновления ротируются
-        // каждый час: основа ряда — Latest, Popular остаётся якорем качества (~20%).
-        val latestQuota = perSource - perSource / 5
+        val slotAllocations = allocateSourceSlots(ordered, context.sourceWeights, rowCap)
+        val activeSources = ordered.filter { (slotAllocations[it] ?: 0) > 0 }
+        if (activeSources.isEmpty()) return emptyList()
+
         var failures = 0
+        val surplusParts = mutableListOf<List<DiscoveryRowItem>>()
         val parts = ordered.map { id ->
+            val perSource = slotAllocations[id] ?: 0
+            if (perSource <= 0) return@map emptyList<DiscoveryRowItem>()
+            // Popular-витрина первой страницы почти статична, latest-обновления ротируются
+            // каждый час: основа ряда — Latest, Popular остаётся якорем качества (~20%).
+            val latestQuota = perSource - perSource / 5
             val latestResult = runCatchingUnlessCancelled {
                 catalog.latest(
                     context.mediaType,
@@ -344,21 +382,34 @@ class DiscoverySourceRowBuilder(
             val popularItems = popularResult.getOrDefault(emptyList())
                 .filterNot { it.cleanTitle in latestTitles }
                 .take(perSource - latestItems.size)
-            latestItems + popularItems
+            val selected = latestItems + popularItems
+            val selectedTitles = selected.mapTo(HashSet()) { it.cleanTitle }
+            surplusParts += (latestResult.getOrDefault(emptyList()) + popularResult.getOrDefault(emptyList()))
+                .filterNot { it.cleanTitle in selectedTitles }
+                .distinctBy { it.cleanTitle }
+                .take(rowCap)
+            selected
         }
         // Все источники упали — ряд помечается failed (кэш не затирается,
         // баннер «часть подборок не обновилась» честный), как в LIKE/TASTE.
-        if (failures == ordered.size) {
+        if (failures == activeSources.size) {
             throw IOException("all source catalog fetches failed")
         }
-        return interleaveSourceParts(parts, rowCap)
+        val selected = interleaveSourceParts(parts, rowCap).distinctBy { it.cleanTitle }
+        if (selected.size >= rowCap) return selected
+        val selectedTitles = selected.mapTo(HashSet()) { it.cleanTitle }
+        val backfill = interleaveSourceParts(
+            surplusParts.map { items -> items.filterNot { it.cleanTitle in selectedTitles } },
+            rowCap,
+        ).distinctBy { it.cleanTitle }
+        return (selected + backfill).take(rowCap)
     }
 }
 
 /** Round-robin по частям (источникам): топ каждого источника виден сразу. */
 internal fun interleaveSourceParts(
     parts: List<List<DiscoveryRowItem>>,
-    cap: Int = 20,
+    cap: Int = 50,
 ): List<DiscoveryRowItem> {
     val queues = parts.filter { it.isNotEmpty() }.map { ArrayDeque(it) }
     val out = mutableListOf<DiscoveryRowItem>()

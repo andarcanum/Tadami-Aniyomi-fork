@@ -62,9 +62,9 @@ object TasteSignalRecorder {
         altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta? = { t, m ->
             runCatchingUnlessCancelled { sharedTrendingSource.fetchMeta(t, m) }.getOrNull()
         },
-    ) {
+    ): Boolean {
         val sourceKey = resolveSourceKey(item.mediaType, item.sourceId)
-        runCatchingUnlessCancelled {
+        val recorded = runCatchingUnlessCancelled {
             repository.recordSignal(
                 mediaType = item.mediaType,
                 cleanTitle = item.cleanTitle,
@@ -74,7 +74,8 @@ object TasteSignalRecorder {
                 provider = item.provider,
                 sourceKey = sourceKey,
             )
-        }
+        }.isSuccess
+        if (!recorded) return false
         if (signalType.excludesFromFeed) {
             recordConsumedAltKeys(
                 repository = repository,
@@ -86,7 +87,13 @@ object TasteSignalRecorder {
         }
         if (signalType == DiscoverySignalType.CONSUMED) {
             afterConsumed(repository, item.mediaType, item.cleanTitle)
+        } else if (signalType == DiscoverySignalType.LIKE) {
+            runCatching {
+                val app = Injekt.get<android.app.Application>()
+                DiscoveryUpdateJob.scheduleRefill(app, item.mediaType)
+            }
         }
+        return true
     }
 
     /**

@@ -5,6 +5,7 @@ import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.collections.shouldContain
 import io.kotest.matchers.doubles.plusOrMinus
 import io.kotest.matchers.doubles.shouldBeGreaterThan
+import io.kotest.matchers.ints.shouldBeGreaterThan
 import io.kotest.matchers.shouldBe
 import org.junit.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
@@ -364,5 +365,48 @@ class DiscoveryMixTest {
             provider = "anilist", score = 0.0, position = 0L, createdAt = 0L,
         )
         isBlacklisted(legacy, expandGenreSet(listOf("harem"))).shouldBeTrue()
+    }
+
+    @Test
+    fun `allocateSourceSlots equal 3 weights 10 slots gives 4 3 3 in input order`() {
+        val slots = allocateSourceSlots(
+            sourceIds = listOf(1L, 2L, 3L),
+            effectiveWeights = mapOf(1L to 2.0, 2L to 2.0, 3L to 2.0),
+            totalSlots = 10,
+        )
+        slots shouldBe mapOf(1L to 4, 2L to 3, 3L to 3)
+    }
+
+    @Test
+    fun `allocateSourceSlots weights 6 2 1 with 11 slots respects ranking and minimums`() {
+        val slots = allocateSourceSlots(
+            sourceIds = listOf(1L, 2L, 3L),
+            effectiveWeights = mapOf(1L to 6.0, 2L to 2.0, 3L to 1.0),
+            totalSlots = 11,
+        )
+        slots.values.all { it >= 1 }.shouldBeTrue()
+        slots[1L]!! shouldBeGreaterThan slots[2L]!!
+        slots[2L]!! shouldBeGreaterThan slots[3L]!!
+        slots shouldBe mapOf(1L to 6, 2L to 3, 3L to 2)
+    }
+
+    @Test
+    fun `allocateSourceSlots handles empty or zero totalSlots`() {
+        allocateSourceSlots(emptyList(), emptyMap(), 10) shouldBe emptyMap()
+        allocateSourceSlots(listOf(1L, 2L), mapOf(1L to 1.0), 0) shouldBe emptyMap()
+        allocateSourceSlots(listOf(1L, 2L), mapOf(1L to 1.0), -3) shouldBe emptyMap()
+    }
+
+    @Test
+    fun `allocateSourceSlots normalizes super positive and non numeric weights deterministically`() {
+        val slots = allocateSourceSlots(
+            sourceIds = listOf(1L, 2L, 3L),
+            effectiveWeights = mapOf(1L to Double.POSITIVE_INFINITY, 2L to Double.NaN, 3L to -5.0),
+            totalSlots = 10,
+        )
+        slots.values.sum() shouldBe 10
+        slots.values.all { it >= 1 }.shouldBeTrue()
+        slots[1L]!! shouldBeGreaterThan slots[2L]!!
+        slots[1L]!! shouldBeGreaterThan slots[3L]!!
     }
 }

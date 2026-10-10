@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.formatKeyCsv
 import eu.kanade.tachiyomi.data.discovery.groupSourcesByPlugin
 import eu.kanade.tachiyomi.data.discovery.parseKeyCsv
+import eu.kanade.tachiyomi.data.discovery.selectPluginRepresentative
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
 import eu.kanade.tachiyomi.extension.anime.model.AnimeExtension
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
@@ -128,7 +129,12 @@ class DiscoverySourcesScreenModel(
     }
 
     private suspend fun loadMedia(mediaType: DiscoveryMediaType): MediaData {
-        data class PluginRaw(val key: String, val name: String, val memberIds: List<Long>)
+        data class PluginRaw(
+            val key: String,
+            val name: String,
+            val memberIds: List<Long>,
+            val langs: Map<Long, String> = emptyMap(),
+        )
         val catalogueIds: Set<Long>
         val raws: List<PluginRaw>
         var mangaIcons = emptyMap<String, MangaExtension.Installed>()
@@ -144,6 +150,7 @@ class DiscoverySourcesScreenModel(
                         key = ext.pkgName,
                         name = ext.name,
                         memberIds = ext.sources.map { it.id }.filter { it in catalogueIds },
+                        langs = ext.sources.filter { it.id in catalogueIds }.associate { it.id to it.lang },
                     )
                 }
             }
@@ -156,25 +163,38 @@ class DiscoverySourcesScreenModel(
                         key = ext.pkgName,
                         name = ext.name,
                         memberIds = ext.sources.map { it.id }.filter { it in catalogueIds },
+                        langs = ext.sources.filter { it.id in catalogueIds }.associate { it.id to it.lang },
                     )
                 }
             }
             DiscoveryMediaType.NOVEL -> {
-                catalogueIds = Injekt.get<NovelSourceManager>().getCatalogueSources().mapTo(HashSet()) { it.id }
+                val novelSourceManager = Injekt.get<NovelSourceManager>()
+                catalogueIds = novelSourceManager.getCatalogueSources().mapTo(HashSet()) { it.id }
                 val manager = Injekt.get<NovelExtensionManager>()
                 val plugins = manager.installedPluginsFlow.first()
                 novelIcons = plugins.associateBy { it.id }
                 raws = groupSourcesByPlugin(catalogueIds) { manager.getPluginId(it) }.map { (key, ids) ->
-                    PluginRaw(key = key, name = plugins.firstOrNull { it.id == key }?.name ?: key, memberIds = ids)
+                    val langs = ids.mapNotNull { id ->
+                        runCatching { id to novelSourceManager.getOrStub(id).lang }.getOrNull()
+                    }.toMap()
+                    PluginRaw(
+                        key = key,
+                        name = plugins.firstOrNull { it.id == key }?.name ?: key,
+                        memberIds = ids,
+                        langs = langs,
+                    )
                 }
             }
         }
         val candidates = seedSources.candidates(mediaType)
         val weights = candidates.filter { it.sourceId > 0 }.groupingBy { it.sourceId }.eachCount()
         val ordered = raws.mapNotNull { raw ->
-            val representative = raw.memberIds.sortedWith(
-                compareByDescending<Long> { weights[it] ?: 0 }.thenBy { it },
-            ).firstOrNull() ?: return@mapNotNull null
+            val representative = selectPluginRepresentative(
+                memberIds = raw.memberIds.toSet(),
+                weights = weights,
+                langs = raw.langs,
+                appLang = java.util.Locale.getDefault().language.lowercase(),
+            ) ?: return@mapNotNull null
             PluginEntry(
                 key = raw.key,
                 name = raw.name,

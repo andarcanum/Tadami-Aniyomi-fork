@@ -72,6 +72,32 @@ class DiscoverySourceRowBuilderTest {
     )
 
     @Test
+    fun `failed dominant source slots are backfilled from fetched surplus`() = runTest {
+        val catalog = FakeCatalog(
+            itemsBySource = mapOf(2L to items("S2", 50)),
+            failing = setOf(1L),
+            failingLatest = setOf(1L),
+        )
+        val result = DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L, 2L)).copy(sourceWeights = mapOf(1L to 99.0, 2L to 1.0)),
+        )
+        result.size shouldBe 50
+        result.map { it.cleanTitle }.distinct().size shouldBe 50
+        catalog.requestedPopular.size shouldBe 2
+        catalog.requestedLatest.size shouldBe 2
+    }
+
+    @Test
+    fun `sparse dominant source slots are backfilled from fetched surplus`() = runTest {
+        val catalog = FakeCatalog(itemsBySource = mapOf(1L to items("S1", 2), 2L to items("S2", 50)))
+        val result = DiscoverySourceRowBuilder(catalog, rowCap = 50).build(
+            context(sourceIds = listOf(1L, 2L)).copy(sourceWeights = mapOf(1L to 99.0, 2L to 1.0)),
+        )
+        result.size shouldBe 50
+        result.count { it.provider == "S1" } shouldBe 2
+    }
+
+    @Test
     fun `single weighted source fills up to row cap`() = runTest {
         val catalog = FakeCatalog(mapOf(1L to items("S1", 25)))
         val result = DiscoverySourceRowBuilder(catalog).build(context(sourceIds = listOf(1L)))
@@ -208,5 +234,26 @@ class DiscoverySourceRowBuilderTest {
     @Test
     fun `builder row type is SOURCE`() {
         DiscoverySourceRowBuilder(FakeCatalog()).rowType shouldBe DiscoveryRowType.SOURCE
+    }
+
+    @Test
+    fun `fifteen sources query latest and popular for each and cap at 50 with stable round robin`() = runTest {
+        val sourceIds = (1L..15L).toList()
+        val latestMap = sourceIds.associateWith { id -> items("S$id-L", 10) }
+        val popularMap = sourceIds.associateWith { id -> items("S$id-P", 10) }
+        val catalog = FakeCatalog(itemsBySource = popularMap, latestBySource = latestMap)
+
+        val builder = DiscoverySourceRowBuilder(catalog, rowCap = 50)
+        val result = builder.build(context(sourceIds = sourceIds))
+
+        catalog.requestedLatest.map { it.first }.distinct() shouldBe sourceIds
+        catalog.requestedPopular.map { it.first }.distinct() shouldBe sourceIds
+        result.size shouldBe 50
+        result.take(15).map { it.provider.substringBefore("-") } shouldBe sourceIds.map { "S$it" }
+
+        val rotated = builder.build(context(sourceIds = sourceIds, pageOffset = 2))
+        rotated.size shouldBe 50
+        rotated.take(15).map { it.provider.substringBefore("-") } shouldBe
+            (sourceIds.drop(1) + sourceIds.take(1)).map { "S$it" }
     }
 }

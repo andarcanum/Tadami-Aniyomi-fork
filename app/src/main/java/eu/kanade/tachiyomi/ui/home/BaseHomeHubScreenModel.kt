@@ -10,7 +10,11 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.common.util.lang.launchIO
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 
 internal abstract class BaseHomeHubScreenModel(
     protected val context: android.content.Context,
@@ -36,6 +40,35 @@ internal abstract class BaseHomeHubScreenModel(
 
     protected fun emitEffect(effect: HomeHubEffect) {
         _effects.tryEmit(effect)
+    }
+
+    private val dismissedSessionTitles = mutableSetOf<String>()
+    private val discoveryLikeMutex = Mutex()
+
+    open fun likeDiscoveryItem(item: HomeHubDiscoveryItem) {
+        if (item.cleanTitle.isBlank()) return
+        screenModelScope.launchIO {
+            val suggestion = item.toDiscoverySuggestion()
+            val tasteRepository = Injekt.get<tachiyomi.domain.discovery.repository.DiscoveryRepository>()
+            val recorded = eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
+                tasteRepository,
+                suggestion,
+                tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE,
+            )
+            if (recorded) {
+                discoveryLikeMutex.withLock {
+                    dismissedSessionTitles += item.cleanTitle
+                    val dismissedTitles = dismissedSessionTitles.toSet()
+                    mutableState.update { current ->
+                        current.reduceDismissTeaserCard(
+                            likedCleanTitle = item.cleanTitle,
+                            targetCount = current.discovery.size,
+                            dismissedTitles = dismissedTitles,
+                        )
+                    }
+                }
+            }
+        }
     }
 
     open fun rotateOrRefreshDiscovery() {}

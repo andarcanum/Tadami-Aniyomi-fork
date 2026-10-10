@@ -27,11 +27,49 @@ interface DiscoverySeedSources {
 /**
  * Плагин (расширение) как единица участия в подборках: один ключ (pkgName / id novel-плагина)
  * объединяет все языковые варианты источников расширения — без дублей в пикере и в рядах ленты.
+ * [langs] — карта sourceId → ISO-код языка варианта; заполняется провайдером,
+ * пустая карта = легаси-провайдер (язык неизвестен, прежняя семантика выбора).
  */
 data class DiscoveryInstalledPlugin(
     val key: String,
     val sourceIds: List<Long>,
+    val langs: Map<Long, String> = emptyMap(),
 )
+
+/**
+ * Представительный источник плагина с языковым преференсом.
+ *
+ * Порядок: (1) варианты на языке приложения или английском имеют абсолютный приоритет —
+ * это фикс «случайного языка» мультиязычного плагина при пустой библиотеке (вес 0 у всех
+ * вариантов → прежний тай-брейк min(id) выбирал произвольный язык); (2) внутри группы —
+ * max вес библиотеки (реально читаемый язык важнее); (3) при равенстве — lang-приоритет
+ * (appLang > en); (4) тай-брейк — min id (стабильность). Пустая карта [langs] = легаси:
+ * только вес → min id.
+ */
+internal fun selectPluginRepresentative(
+    memberIds: Set<Long>,
+    weights: Map<Long, Int>,
+    langs: Map<Long, String>,
+    appLang: String,
+): Long? {
+    if (memberIds.isEmpty()) return null
+    val langOf: (Long) -> String? = { langs[it]?.lowercase() }
+    val langPriority: (Long) -> Int = { id ->
+        when (langOf(id)) {
+            appLang -> 0
+            "en" -> 1
+            null -> 2
+            else -> 3
+        }
+    }
+    val preferred = memberIds.filter { langPriority(it) in 0..1 }
+    val candidates = preferred.ifEmpty { memberIds.toList() }
+    return candidates.sortedWith(
+        compareByDescending<Long> { weights[it] ?: 0 }
+            .thenBy(langPriority)
+            .thenBy { it },
+    ).firstOrNull()
+}
 
 /**
  * Оркестратор фонового обновления ленты «Для тебя»:
@@ -79,9 +117,11 @@ class DiscoveryRunner(
                         .getCatalogueSources().mapTo(HashSet()) { it.id }
                     Injekt.get<eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager>()
                         .installedExtensionsFlow.first().map { ext ->
+                            val ids = ext.sources.map { it.id }.filter { it in catalogueIds }
                             DiscoveryInstalledPlugin(
                                 key = ext.pkgName,
-                                sourceIds = ext.sources.map { it.id }.filter { it in catalogueIds },
+                                sourceIds = ids,
+                                langs = ext.sources.filter { it.id in catalogueIds }.associate { it.id to it.lang },
                             )
                         }.filter { it.sourceIds.isNotEmpty() }
                 }
@@ -90,19 +130,26 @@ class DiscoveryRunner(
                         .getCatalogueSources().mapTo(HashSet()) { it.id }
                     Injekt.get<eu.kanade.tachiyomi.extension.manga.MangaExtensionManager>()
                         .installedExtensionsFlow.first().map { ext ->
+                            val ids = ext.sources.map { it.id }.filter { it in catalogueIds }
                             DiscoveryInstalledPlugin(
                                 key = ext.pkgName,
-                                sourceIds = ext.sources.map { it.id }.filter { it in catalogueIds },
+                                sourceIds = ids,
+                                langs = ext.sources.filter { it.id in catalogueIds }.associate { it.id to it.lang },
                             )
                         }.filter { it.sourceIds.isNotEmpty() }
                 }
                 DiscoveryMediaType.NOVEL -> {
-                    val catalogueIds = Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>()
-                        .getCatalogueSources().mapTo(HashSet()) { it.id }
+                    val novelSourceManager = Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>()
+                    val catalogueIds = novelSourceManager.getCatalogueSources().mapTo(HashSet()) { it.id }
                     val manager = Injekt.get<eu.kanade.tachiyomi.extension.novel.NovelExtensionManager>()
                     // Только источники с плагином: OmniSource (−42), локальный (0) и сироты не участвуют.
                     groupSourcesByPlugin(catalogueIds) { manager.getPluginId(it) }
-                        .map { (key, ids) -> DiscoveryInstalledPlugin(key, ids) }
+                        .map { (key, ids) ->
+                            val langs = ids.mapNotNull { id ->
+                                runCatching { id to novelSourceManager.getOrStub(id).lang }.getOrNull()
+                            }.toMap()
+                            DiscoveryInstalledPlugin(key, ids, langs)
+                        }
                 }
             }
         }.getOrDefault(emptyList())
@@ -158,23 +205,36 @@ class DiscoveryRunner(
             preferences.backgroundCycleCount(mediaType).get() + 1
         }
         val seedOffset = if (isManualRefresh) manualSeedOffset(candidateRefreshCount) else 0
-        val seeds = seedSelector.select(
-            candidates,
-            SeedSettings(
-                maxSeeds = preferences.seedCount().get(),
-                useCompleted = preferences.seedCompleted().get(),
-                useActive14 = preferences.seedActive14().get(),
-                useAdded = preferences.seedAdded().get(),
-                completedWindowDays = preferences.seedCompletedDays().get().toLong(),
-                activeWindowDays = preferences.seedActiveDays().get().toLong(),
-            ),
-            offset = seedOffset,
-        )
-        val sourcePreferences = sourcePreferencesProvider()
+        val totalSeedBudget = preferences.seedCount().get().coerceIn(1, 5)
         // Taste Learning Engine: один запрос сигнал-лога на генерацию — и на
-        // source-аффинити участия плагинов, и на fold/merge вкуса, и на
-        // «просмотрено»-исключение ниже.
+        // feedback-сиды, и на source-аффинити участия плагинов, и на fold/merge вкуса,
+        // и на «просмотрено»-исключение ниже.
         val allSignals = runCatching { repository.getSignals(mediaType) }.getOrDefault(emptyList())
+        val feedbackSeeds = selectFeedbackSeeds(allSignals, mediaType, limit = minOf(2, totalSeedBudget))
+        val librarySeedBudget = (totalSeedBudget - feedbackSeeds.size).coerceAtLeast(0)
+        val feedbackCleanTitles = feedbackSeeds.mapTo(HashSet()) { it.cleanTitle }
+        val libraryCandidates = if (librarySeedBudget > 0) {
+            candidates.filterNot { normalizeDiscoveryTitle(it.title) in feedbackCleanTitles }
+        } else {
+            emptyList()
+        }
+        val seeds = if (librarySeedBudget > 0) {
+            seedSelector.select(
+                libraryCandidates,
+                SeedSettings(
+                    maxSeeds = librarySeedBudget,
+                    useCompleted = preferences.seedCompleted().get(),
+                    useActive14 = preferences.seedActive14().get(),
+                    useAdded = preferences.seedAdded().get(),
+                    completedWindowDays = preferences.seedCompletedDays().get().toLong(),
+                    activeWindowDays = preferences.seedActiveDays().get().toLong(),
+                ),
+                offset = seedOffset,
+            )
+        } else {
+            emptyList()
+        }
+        val sourcePreferences = sourcePreferencesProvider()
         val preferredSourceId = when (mediaType) {
             DiscoveryMediaType.ANIME -> sourcePreferences.lastUsedAnimeSource().get()
             DiscoveryMediaType.MANGA -> sourcePreferences.lastUsedMangaSource().get()
@@ -188,9 +248,12 @@ class DiscoveryRunner(
         // плагина (плавный tanh-буст, порядок честен и при негативе — кламп 0.4..2.0x).
         val learnedSourceAffinity = foldLearnedTasteProfile(signals = allSignals).sourceAffinity
         val pluginStats = plugins.mapNotNull { plugin ->
-            val representative = plugin.sourceIds.sortedWith(
-                compareByDescending<Long> { sourceWeights[it] ?: 0 }.thenBy { it },
-            ).firstOrNull() ?: return@mapNotNull null
+            val representative = selectPluginRepresentative(
+                memberIds = plugin.sourceIds.toSet(),
+                weights = sourceWeights,
+                langs = plugin.langs,
+                appLang = java.util.Locale.getDefault().language.lowercase(),
+            ) ?: return@mapNotNull null
             DiscoveryPluginStat(
                 key = plugin.key,
                 representative = representative,
@@ -203,6 +266,9 @@ class DiscoveryRunner(
                 applySourceAffinity(it.weight, it.affinity)
             }.thenBy { it.representative },
         )
+        val effectiveSourceWeights = pluginStats.associate {
+            it.representative to applySourceAffinity(it.weight, it.affinity)
+        }
         val excludedKeys = parseKeyCsv(preferences.discoverySourceExcluded(mediaType).get())
         val participation = if (pluginStats.isEmpty()) {
             // Плагины неизвестны (юнит-тесты / расширения ещё не загружены при раннем старте):
@@ -288,6 +354,7 @@ class DiscoveryRunner(
         val context = DiscoveryBuildContext(
             mediaType = mediaType,
             seeds = seedsWithTracks,
+            feedbackSeeds = feedbackSeeds,
             libraryCleanTitles = candidates.mapTo(HashSet()) { normalizeDiscoveryTitle(it.title) },
             historyCleanTitles = seedSources.historyCleanTitles(mediaType),
             hiddenCleanTitles = repository.getHiddenTitles(mediaType) + consumedCleanTitles,
@@ -304,8 +371,9 @@ class DiscoveryRunner(
                 .let { (canon, raw) -> canon + raw.toSet() },
             sourceId = participation.primarySourceId,
             // C1 + участие плагинов: состав определяет resolveSourceParticipation
-            // (auto — топ-3 по весу библиотеки, manual — все выбранные, cap 8).
+            // (auto — топ-3 по весу библиотеки, manual — все выбранные).
             sourceIds = participation.sourceIds,
+            sourceWeights = effectiveSourceWeights,
             recentCleanTitles = recentCleanTitles,
             shownCutoffMap = shownCutoffMap,
             // Ручной рефреш: тайтлы текущей ленты не возвращаются stale-добором —
@@ -373,7 +441,7 @@ class DiscoveryRunner(
                 )
             }
             if (preferences.rowSourceEnabled().get()) {
-                add(DiscoverySourceRowBuilder(sourceCatalog, maxSources = 8, rowCap = 50))
+                add(DiscoverySourceRowBuilder(sourceCatalog, rowCap = 50))
             }
         }
         if (builders.isEmpty()) {

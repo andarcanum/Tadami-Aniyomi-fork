@@ -246,6 +246,7 @@ internal fun AnimeHomeHub(
         onForYouMoreClick = { navigator.push(DiscoveryFeedScreen(DiscoveryMediaType.ANIME.key)) },
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
         onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
+        onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -388,6 +389,7 @@ internal fun MangaHomeHub(
         onForYouMoreClick = { navigator.push(DiscoveryFeedScreen(DiscoveryMediaType.MANGA.key)) },
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
         onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
+        onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -533,6 +535,7 @@ internal fun NovelHomeHub(
         onForYouMoreClick = { navigator.push(DiscoveryFeedScreen(DiscoveryMediaType.NOVEL.key)) },
         onDiscoveryRefreshClick = { screenModel.rotateOrRefreshDiscovery() },
         onDiscoveryItemFocused = onDiscoveryItemFocused ?: { screenModel.markDiscoveryItemShown(it) },
+        onDiscoveryLikeClick = { screenModel.likeDiscoveryItem(it) },
         onDiscoveryItemClick = { item ->
             scope.launch {
                 val suggestionItem = item.toSuggestionItem()
@@ -573,6 +576,7 @@ private fun HomeHubScreen(
     onForYouMoreClick: () -> Unit,
     onDiscoveryRefreshClick: (() -> Unit)? = null,
     onDiscoveryItemFocused: (HomeHubDiscoveryItem) -> Unit = {},
+    onDiscoveryLikeClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     onDiscoveryItemClick: (HomeHubDiscoveryItem) -> Unit,
     // Direct open тизера: пушит экран тайтла своего медиатипа (fromSource = true).
     openDirectEntry: ((Long) -> Unit)? = null,
@@ -943,13 +947,17 @@ private fun HomeHubScreen(
                 onDismiss = { longPressItem = null },
                 onMoreLikeThis = {
                     longPressItem = null
-                    // Taste Engine: явный лайк — сильный позитивный сигнал.
-                    scope.launch {
-                        eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
-                            tasteRepository,
-                            lpItem.toDiscoverySuggestion(),
-                            tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE,
-                        )
+                    // Taste Engine: явный лайк — сильный позитивный сигнал + локальная замена карточки в тизере.
+                    if (onDiscoveryLikeClick != null) {
+                        onDiscoveryLikeClick.invoke(lpItem)
+                    } else {
+                        scope.launch {
+                            eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
+                                tasteRepository,
+                                lpItem.toDiscoverySuggestion(),
+                                tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE,
+                            )
+                        }
                     }
                     context.toast(
                         context.contextStringResource(AYMR.strings.for_you_more_like_this_toast),

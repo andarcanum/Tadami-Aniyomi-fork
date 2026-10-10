@@ -41,7 +41,7 @@ internal fun groupSourcesByPlugin(
  * @param weightOrder установленные источники медиатипа: вес библиотеки desc, id asc,
  *   хвост нулевого веса — id asc.
  * allowed = weightOrder − excludedIds;
- * auto берёт top [autoTop], manual — top [manualCap] (soft-cap ручного режима).
+ * auto берёт top [autoTop], manual — все разрешённые (allowed).
  * primary = lastUsed (если задан и не исключён) → первый из sourceIds → fallback (если не исключён) → -1.
  */
 internal fun resolveSourceParticipation(
@@ -51,10 +51,9 @@ internal fun resolveSourceParticipation(
     lastUsedId: Long,
     fallbackId: Long,
     autoTop: Int = 3,
-    manualCap: Int = 8,
 ): SourceParticipation {
     val allowed = weightOrder.filterNot { it in excludedIds }
-    val sourceIds = if (mode == "manual") allowed.take(manualCap) else allowed.take(autoTop)
+    val sourceIds = if (mode == "manual") allowed else allowed.take(autoTop)
     val primary = when {
         lastUsedId > 0 && lastUsedId !in excludedIds -> lastUsedId
         sourceIds.isNotEmpty() -> sourceIds.first()

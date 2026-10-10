@@ -17,4 +17,11 @@ class DiscoveryUpdateJobTest {
     fun `manual work name without media type falls back to shared tag name`() {
         DiscoveryUpdateJob.manualWorkName(null) shouldBe DiscoveryUpdateJob.TAG_MANUAL
     }
+
+    @Test
+    fun `refill work name formats work name per media type`() {
+        DiscoveryUpdateJob.refillWorkName(DiscoveryMediaType.ANIME) shouldBe "DiscoveryRefillAfterConsumed:anime"
+        DiscoveryUpdateJob.refillWorkName(DiscoveryMediaType.MANGA) shouldBe "DiscoveryRefillAfterConsumed:manga"
+        DiscoveryUpdateJob.refillWorkName(DiscoveryMediaType.NOVEL) shouldBe "DiscoveryRefillAfterConsumed:novel"
+    }
 }

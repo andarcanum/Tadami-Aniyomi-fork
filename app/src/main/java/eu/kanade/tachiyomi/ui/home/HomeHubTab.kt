@@ -691,6 +691,21 @@ internal data class HomeHubUiState(
     val availableSources: List<HomeSourceItem> = emptyList(),
 )
 
+internal fun HomeHubUiState.reduceDismissTeaserCard(
+    likedCleanTitle: String,
+    targetCount: Int = discovery.size,
+    dismissedTitles: Set<String> = emptySet(),
+): HomeHubUiState {
+    val patched = patchAfterLocalLike(
+        currentTeaser = discovery,
+        persistedPool = discoveryPool,
+        likedCleanTitle = likedCleanTitle,
+        targetCount = targetCount,
+        dismissedTitles = dismissedTitles,
+    )
+    return copy(discovery = patched)
+}
+
 internal data class HomeHubHero(
     val entryId: Long,
     val title: String,

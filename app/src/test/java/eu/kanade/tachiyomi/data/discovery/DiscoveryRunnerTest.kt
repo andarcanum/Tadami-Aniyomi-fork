@@ -23,7 +23,9 @@ import java.io.IOException
 
 class DiscoveryRunnerTest {
 
-    private open class FakeRepository : DiscoveryRepository {
+    private open class FakeRepository(
+        val initialSignals: List<DiscoverySignal> = emptyList(),
+    ) : DiscoveryRepository {
         val replaced = mutableListOf<Triple<DiscoveryMediaType, DiscoveryRowType, List<DiscoverySuggestion>>>()
         private val flow = MutableStateFlow<List<DiscoverySuggestion>>(emptyList())
         override fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>> = flow
@@ -90,7 +92,7 @@ class DiscoveryRunnerTest {
         override suspend fun hasUnboundSourceRows(): Boolean = false
 
         val recordedSignals = mutableListOf<Triple<DiscoveryMediaType, String, DiscoverySignalType>>()
-        var signals: List<DiscoverySignal> = emptyList()
+        var signals: List<DiscoverySignal> = initialSignals
         override suspend fun getSignals(mediaType: DiscoveryMediaType): List<DiscoverySignal> = signals
         override fun subscribeConsumed(mediaType: DiscoveryMediaType): kotlinx.coroutines.flow.Flow<Set<String>> =
             kotlinx.coroutines.flow.MutableStateFlow(emptySet())
@@ -620,7 +622,7 @@ class DiscoveryRunnerTest {
     }
 
     @Test
-    fun `manual mode caps sources at eight`() = runTest {
+    fun `manual mode includes all 15 plugin representatives and maps source weights`() = runTest {
         val captured = mutableListOf<DiscoveryBuildContext>()
         val runner = DiscoveryRunner(
             repository = FakeRepository(),
@@ -630,10 +632,11 @@ class DiscoveryRunnerTest {
             seedSources = emptySeedSources(),
             coordinatorFactory = { DiscoveryCoordinator(listOf(capturingBuilder(captured))) },
             sourcePreferencesProvider = ::testSourcePrefs,
-            installedPluginsProvider = { (1L..10L).map { DiscoveryInstalledPlugin("p$it", listOf(it)) } },
+            installedPluginsProvider = { (1L..15L).map { DiscoveryInstalledPlugin("p$it", listOf(it)) } },
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
-        captured.single().sourceIds shouldBe (1L..8L).toList()
+        captured.single().sourceIds shouldBe (1L..15L).toList()
+        captured.single().sourceWeights.keys shouldBe (1L..15L).toSet()
     }
 
     @Test
@@ -670,6 +673,7 @@ class DiscoveryRunnerTest {
     @Test
     fun `language variants of one plugin collapse into single pick source`() = runTest {
         val captured = mutableListOf<DiscoveryBuildContext>()
+        val appLang = java.util.Locale.getDefault().language.lowercase()
         val runner = DiscoveryRunner(
             repository = FakeRepository(),
             preferences = discoveryPrefs(),
@@ -678,11 +682,43 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
             // Одно расширение с пятью языковыми вариантами — в ряд попадает один репрезентативный.
             installedPluginsProvider = {
-                listOf(DiscoveryInstalledPlugin("multi.lang", listOf(101L, 102L, 103L, 104L, 105L)))
+                listOf(
+                    DiscoveryInstalledPlugin(
+                        "multi.lang",
+                        listOf(101L, 102L, 103L, 104L, 105L),
+                        mapOf(101L to appLang, 102L to "id", 103L to "en", 104L to "es", 105L to "ja"),
+                    ),
+                )
             },
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
         captured.single().sourceIds shouldBe listOf(101L)
+    }
+
+    @Test
+    fun `feed rows avoid indonesian variant when app language available`() = runTest {
+        // Индонезийский имеет МИНИМАЛЬНЫЙ id — прежний выбор отдал бы его.
+        val captured = mutableListOf<DiscoveryBuildContext>()
+        val appLang = java.util.Locale.getDefault().language.lowercase()
+        val nonAppLang = if (appLang == "id") "xx" else "id"
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = discoveryPrefs(),
+            seedSources = emptySeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(capturingBuilder(captured))) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = {
+                listOf(
+                    DiscoveryInstalledPlugin(
+                        "multi.lang",
+                        listOf(200L, 250L),
+                        mapOf(200L to nonAppLang, 250L to appLang),
+                    ),
+                )
+            },
+        )
+        runner.run(listOf(DiscoveryMediaType.NOVEL))
+        captured.single().sourceIds shouldBe listOf(250L)
     }
 
     // ── Прямое открытие plugin-bound подборок (Task 1, data-срез) ───────────────
@@ -798,5 +834,190 @@ class DiscoveryRunnerTest {
         val j2 = async { runner.run(listOf(DiscoveryMediaType.MANGA)) }
         listOf(j1, j2).awaitAll()
         maxConcurrent shouldBe 1
+    }
+
+    // ── Языковой преференс представителя плагина ───────────────────────────────
+
+    @Test
+    fun `representative prefers app language variant regardless of id order`() {
+        // id инверсия: индонезийский id меньше русского — прежде выбирался бы он.
+        val langs = mapOf(900L to "id", 950L to "ru", 910L to "en")
+        selectPluginRepresentative(
+            memberIds = setOf(900L, 950L, 910L),
+            weights = emptyMap(),
+            langs = langs,
+            appLang = "ru",
+        ) shouldBe 950L
+    }
+
+    @Test
+    fun `representative falls back to english when app language variant absent`() {
+        val langs = mapOf(900L to "id", 940L to "en")
+        selectPluginRepresentative(
+            memberIds = setOf(900L, 940L),
+            weights = emptyMap(),
+            langs = langs,
+            appLang = "ru",
+        ) shouldBe 940L
+    }
+
+    @Test
+    fun `representative weight dominates within preferred language group`() {
+        // Оба варианта ru, но 902 имеет вес библиотеки — он и представитель.
+        val langs = mapOf(901L to "ru", 902L to "ru", 903L to "id")
+        selectPluginRepresentative(
+            memberIds = setOf(901L, 902L, 903L),
+            weights = mapOf(901L to 3, 902L to 7),
+            langs = langs,
+            appLang = "ru",
+        ) shouldBe 902L
+    }
+
+    @Test
+    fun `representative keeps legacy behaviour when langs unknown`() {
+        // Пустая карта lang (легаси-провайдер / тест) — прежняя семантика max weight → min id.
+        selectPluginRepresentative(
+            memberIds = setOf(101L, 102L, 103L),
+            weights = mapOf(101L to 2, 102L to 2, 103L to 5),
+            langs = emptyMap(),
+            appLang = "ru",
+        ) shouldBe 103L
+        selectPluginRepresentative(
+            memberIds = setOf(101L, 102L),
+            weights = emptyMap(),
+            langs = emptyMap(),
+            appLang = "ru",
+        ) shouldBe 101L
+    }
+
+    @Test
+    fun `representative returns null for empty members`() {
+        selectPluginRepresentative(setOf(), emptyMap(), emptyMap(), "ru") shouldBe null
+    }
+
+    @Test
+    fun `consumed positive signals remain feedback seeds without becoming output candidates`() {
+        val signals = listOf(
+            testSignal("consumed liked", DiscoverySignalType.CONSUMED_LIKED, createdAt = 300L),
+            testSignal("consumed added", DiscoverySignalType.CONSUMED_ADDED, createdAt = 200L),
+            testSignal("consumed", DiscoverySignalType.CONSUMED, createdAt = 400L),
+        )
+        selectFeedbackSeeds(signals, DiscoveryMediaType.MANGA).map { it.cleanTitle } shouldBe
+            listOf("consumed liked", "consumed added")
+        signals.all { it.signalType.excludesFromFeed } shouldBe true
+    }
+
+    private fun testSignal(
+        cleanTitle: String,
+        signalType: DiscoverySignalType,
+        mediaType: DiscoveryMediaType = DiscoveryMediaType.MANGA,
+        title: String = cleanTitle,
+        genres: List<String> = emptyList(),
+        createdAt: Long = 1000L,
+    ): DiscoverySignal = DiscoverySignal(
+        mediaType = mediaType,
+        cleanTitle = cleanTitle,
+        title = title,
+        signalType = signalType,
+        genres = genres,
+        provider = null,
+        sourceKey = null,
+        createdAt = createdAt,
+    )
+
+    @Test
+    fun `selectFeedbackSeeds selects newest like or add and dedupes cleanTitle up to two`() {
+        val signals = listOf(
+            testSignal("title 1", DiscoverySignalType.LIKE, createdAt = 100L),
+            testSignal("title 1", DiscoverySignalType.ADD, createdAt = 200L),
+            testSignal("Title 1", DiscoverySignalType.LIKE, createdAt = 50L),
+            testSignal("title 2", DiscoverySignalType.LIKE, createdAt = 150L),
+            testSignal("title 3", DiscoverySignalType.ADD, createdAt = 120L),
+            testSignal("other media", DiscoverySignalType.LIKE, mediaType = DiscoveryMediaType.ANIME, createdAt = 300L),
+            testSignal("hide", DiscoverySignalType.HIDE, createdAt = 500L),
+            testSignal("click", DiscoverySignalType.CLICK, createdAt = 500L),
+            testSignal("consumed", DiscoverySignalType.CONSUMED, createdAt = 500L),
+        )
+
+        val selected = selectFeedbackSeeds(signals, DiscoveryMediaType.MANGA, limit = 2)
+
+        selected.size shouldBe 2
+        selected[0].cleanTitle shouldBe "title 1"
+        selected[0].timestamp shouldBe 200L
+        selected[1].cleanTitle shouldBe "title 2"
+        selected[1].timestamp shouldBe 150L
+    }
+
+    @Test
+    fun `runner populates feedback seeds from signals with priority without fake entry id`() = runTest {
+        val captured = mutableListOf<DiscoveryBuildContext>()
+        val signals = listOf(
+            testSignal(
+                "liked title 1",
+                DiscoverySignalType.LIKE,
+                mediaType = DiscoveryMediaType.MANGA,
+                genres = listOf("Action"),
+                createdAt = 100L,
+            ),
+            testSignal(
+                "liked title 2",
+                DiscoverySignalType.ADD,
+                mediaType = DiscoveryMediaType.MANGA,
+                genres = listOf("Fantasy"),
+                createdAt = 200L,
+            ),
+        )
+        val now = System.currentTimeMillis()
+        val libraryCandidates = listOf(
+            DiscoverySeedInput(
+                entryId = 101L,
+                title = "liked title 1",
+                isCompleted = true,
+                completedAt = now,
+                lastInteraction = now,
+            ),
+            DiscoverySeedInput(
+                entryId = 102L,
+                title = "library title 2",
+                isCompleted = true,
+                completedAt = now,
+                lastInteraction = now,
+            ),
+            DiscoverySeedInput(
+                entryId = 103L,
+                title = "library title 3",
+                isCompleted = true,
+                completedAt = now,
+                lastInteraction = now,
+            ),
+        )
+        val seedSources = object : DiscoverySeedSources {
+            override suspend fun candidates(mediaType: DiscoveryMediaType) = libraryCandidates
+            override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+        }
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(initialSignals = signals),
+            preferences = discoveryPrefs(),
+            seedSources = seedSources,
+            coordinatorFactory = { DiscoveryCoordinator(listOf(capturingBuilder(captured))) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            installedPluginsProvider = { emptyList() },
+        )
+
+        runner.run(listOf(DiscoveryMediaType.MANGA))
+
+        val ctx = captured.single()
+        ctx.feedbackSeeds.size shouldBe 2
+        ctx.feedbackSeeds.map { it.cleanTitle } shouldBe listOf("liked title 2", "liked title 1")
+        ctx.feedbackSeeds[0].title shouldBe "liked title 2"
+        ctx.feedbackSeeds[0].genres shouldBe listOf("Fantasy")
+        ctx.feedbackSeeds[0].timestamp shouldBe 200L
+        ctx.feedbackSeeds[1].title shouldBe "liked title 1"
+        ctx.feedbackSeeds[1].genres shouldBe listOf("Action")
+        ctx.feedbackSeeds[1].timestamp shouldBe 100L
+
+        ctx.seeds.size shouldBe 1
+        ctx.seeds.single().entryId shouldBe 102L
+        ctx.seeds.single().title shouldBe "library title 2"
     }
 }

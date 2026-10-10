@@ -199,6 +199,39 @@ internal fun composeTeaserItems(
 }
 
 /**
+ * Локальная замена карточки Home-тизера при лайке:
+ * 1. Ищет лайкнутый тайтл в [currentTeaser] по [likedCleanTitle].
+ * 2. Если найден, ищет в [persistedPool] первого кандидата, отсутствующего в [currentTeaser]
+ *    и не помеченного как dismissed ([dismissedTitles]).
+ * 3. Если кандидат найден, ставит его ровно на место лайкнутой карточки.
+ * 4. Если кандидата нет, лайкнутая карточка удаляется, список сжимается.
+ * 5. Сеть не ждёт, persistent pool не мутирует, markShown/CONSUMED не трогает.
+ */
+internal fun patchAfterLocalLike(
+    currentTeaser: List<HomeHubDiscoveryItem>,
+    persistedPool: List<HomeHubDiscoveryItem>,
+    likedCleanTitle: String,
+    targetCount: Int = currentTeaser.size,
+    dismissedTitles: Set<String> = emptySet(),
+): List<HomeHubDiscoveryItem> {
+    val index = currentTeaser.indexOfFirst { it.cleanTitle == likedCleanTitle }
+    if (index < 0) return currentTeaser
+
+    val existingTitles = currentTeaser.mapTo(HashSet()) { it.cleanTitle }
+    val excluded = existingTitles + dismissedTitles + likedCleanTitle
+
+    val replacement = persistedPool.firstOrNull { it.cleanTitle !in excluded }
+
+    val mutable = currentTeaser.toMutableList()
+    if (replacement != null && mutable.size <= targetCount) {
+        mutable[index] = replacement
+    } else {
+        mutable.removeAt(index)
+    }
+    return mutable
+}
+
+/**
  * Выбирает элементы тизера с соблюдением 48-часовой уникальности и минимизацией
  * пересечения с карточками, видимыми прямо сейчас:
  * 1. Исключает тайтлы из [shownTitles] (показанные за последние 48 ч).
@@ -1000,8 +1033,19 @@ internal fun ForYouSection(
                 key = { it.rowType.key + ":" + it.cleanTitle },
                 contentType = { "home_hub_discovery_card" },
             ) { item ->
+                val cardModifier = if (colors.isEInk) {
+                    Modifier.width(cardWidth)
+                } else {
+                    Modifier
+                        .animateItem(
+                            fadeInSpec = tween(180, easing = LinearEasing),
+                            fadeOutSpec = tween(180, easing = LinearEasing),
+                            placementSpec = null,
+                        )
+                        .width(cardWidth)
+                }
                 DiscoveryPosterCard(
-                    modifier = Modifier.width(cardWidth),
+                    modifier = cardModifier,
                     title = item.title,
                     coverUrl = item.coverUrl,
                     subtitle = discoveryReasonOrNull(item),

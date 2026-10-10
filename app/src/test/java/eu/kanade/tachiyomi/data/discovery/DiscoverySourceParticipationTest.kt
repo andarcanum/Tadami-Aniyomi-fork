@@ -17,15 +17,23 @@ class DiscoverySourceParticipationTest {
     }
 
     @Test
-    fun `manual caps at 8 in weight order`() {
-        val weightOrder = (1L..10L).toList()
+    fun `manual allows all 15 in weight order and respects exclusions`() {
+        val weightOrder = (1L..15L).toList()
         resolveSourceParticipation(
             mode = "manual",
             excludedIds = emptySet(),
             weightOrder = weightOrder,
             lastUsedId = -1L,
             fallbackId = -1L,
-        ).sourceIds shouldBe (1L..8L).toList()
+        ).sourceIds shouldBe (1L..15L).toList()
+
+        resolveSourceParticipation(
+            mode = "manual",
+            excludedIds = setOf(2L, 5L, 10L),
+            weightOrder = weightOrder,
+            lastUsedId = -1L,
+            fallbackId = -1L,
+        ).sourceIds shouldBe weightOrder.filterNot { it in setOf(2L, 5L, 10L) }
     }
 
     @Test
