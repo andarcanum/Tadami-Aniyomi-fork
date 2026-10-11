@@ -37,13 +37,13 @@ class DiscoveryMixTest {
     }
 
     @Test
-    fun `default quotas sum to 30 items`() {
+    fun `default quotas sum to 60 items`() {
         val quotas = DiscoveryMixQuotas()
-        quotas.total shouldBe 30
-        quotas.similar shouldBe 10
-        quotas.taste shouldBe 8
-        quotas.fresh shouldBe 6
-        quotas.source shouldBe 6
+        quotas.total shouldBe 60
+        quotas.similar shouldBe 20
+        quotas.taste shouldBe 16
+        quotas.fresh shouldBe 12
+        quotas.source shouldBe 12
     }
 
     @Test
@@ -292,11 +292,12 @@ class DiscoveryMixTest {
         val trend = (1..8).map { item(DiscoveryRowType.TREND, "T$it", 0.0) }
         val rows = mapOf(DiscoveryRowType.LIKE to like, DiscoveryRowType.TREND to trend)
 
+        val quotas = DiscoveryMixQuotas(similar = 10, taste = 8, fresh = 6, source = 6)
         // без rrf — прежнее поведение по сырым скорам (LIKE 100/99 топится выше TREND 0.0)
-        interleaveMix(rows, total = 30).takeLast(4).map { it.title } shouldBe
+        interleaveMix(rows, quotas = quotas, total = 30).takeLast(4).map { it.title } shouldBe
             listOf("L11", "L12", "T7", "T8")
         // с rrf — ранг важнее шкалы: T7 (rank 6) опережает L11 (rank 10)
-        interleaveMix(rows, total = 30, rrf = rrfScores(rows)).takeLast(4).map { it.title } shouldBe
+        interleaveMix(rows, quotas = quotas, total = 30, rrf = rrfScores(rows)).takeLast(4).map { it.title } shouldBe
             listOf("T7", "T8", "L11", "L12")
     }
 

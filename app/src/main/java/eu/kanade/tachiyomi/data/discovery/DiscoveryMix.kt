@@ -4,10 +4,10 @@ import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
 
 data class DiscoveryMixQuotas(
-    val similar: Int = 10,
-    val taste: Int = 8,
-    val fresh: Int = 6,
-    val source: Int = 6,
+    val similar: Int = 20,
+    val taste: Int = 16,
+    val fresh: Int = 12,
+    val source: Int = 12,
 ) {
     val total: Int get() = similar + taste + fresh + source
 }

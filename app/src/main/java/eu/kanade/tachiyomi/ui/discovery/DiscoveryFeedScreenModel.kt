@@ -70,6 +70,8 @@ internal data class DiscoveryFeedUiState(
     // Табы, видимые при текущих настройках рядов/провайдеров (выключенный ряд = мёртвый таб).
     val visibleTabs: Set<FeedSignalTab> = FeedSignalTab.entries.toSet(),
     val progressText: String? = null,
+    val tabOffsets: Map<FeedSignalTab, Int> = emptyMap(),
+    val activeWindows: Map<FeedSignalTab, List<DiscoverySuggestion>> = emptyMap(),
 )
 
 /** CSV ключей упавших рядов из prefs → набор [DiscoveryRowType]. */
@@ -285,8 +287,37 @@ internal class DiscoveryFeedScreenModel(
                     // RRF для fill-фазы: сырые скоры сигналов несопоставимы (LIKE 0..100 vs TREND 0.0).
                     val mix = interleaveMix(rowItems, rrf = rrfScores(rowItems))
                         .mapNotNull { row -> visible.firstOrNull { it.cleanTitle == row.cleanTitle } }
-                    mutableState.update {
-                        it.copy(
+                    mutableState.update { current ->
+                        val currentWindows = current.activeWindows
+                        val updatedWindows = if (currentWindows.isEmpty() ||
+                            currentWindows[FeedSignalTab.MIX].isNullOrEmpty()
+                        ) {
+                            if (mix.isNotEmpty()) {
+                                val initialMixWindow = sliceFeedWindow(mix, 0, FEED_WINDOW_SIZE)
+                                screenModelScope.launchIO {
+                                    repository.markShown(mediaType, initialMixWindow.map { it.cleanTitle })
+                                }
+                                mapOf(FeedSignalTab.MIX to initialMixWindow)
+                            } else {
+                                emptyMap()
+                            }
+                        } else {
+                            currentWindows.mapValues { (tab, currentWindow) ->
+                                val pool = if (tab == FeedSignalTab.MIX) mix else rows[tab.rowType()].orEmpty()
+                                val valid = currentWindow.filter { w -> pool.any { it.cleanTitle == w.cleanTitle } }
+                                if (valid.isEmpty() && pool.isNotEmpty()) {
+                                    val offset = current.tabOffsets[tab] ?: 0
+                                    val window = sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
+                                    screenModelScope.launchIO {
+                                        repository.markShown(mediaType, window.map { it.cleanTitle })
+                                    }
+                                    window
+                                } else {
+                                    valid
+                                }
+                            }
+                        }
+                        current.copy(
                             rows = rows,
                             mix = mix,
                             hidden = hidden,
@@ -294,6 +325,7 @@ internal class DiscoveryFeedScreenModel(
                             isRefreshing = refreshing,
                             isLoading = false,
                             failedRows = parseFailedRows(failedCsv),
+                            activeWindows = updatedWindows,
                         )
                     }
                     prefetchJob?.cancel()
@@ -351,6 +383,102 @@ internal class DiscoveryFeedScreenModel(
         return 0L
     }
 
+    fun displayedItems(tab: FeedSignalTab, provider: String?): List<DiscoverySuggestion> {
+        val window = state.value.activeWindows[tab] ?: run {
+            val pool = itemsForTab(state.value, tab)
+            val offset = state.value.tabOffsets[tab] ?: 0
+            sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
+        }
+        return filterByProvider(window, provider)
+    }
+
+    fun onTabSelected(tab: FeedSignalTab) {
+        val currentState = state.value
+        if (currentState.activeWindows[tab] == null) {
+            val pool = itemsForTab(currentState, tab)
+            val offset = currentState.tabOffsets[tab] ?: 0
+            val window = sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
+            mutableState.update { it.copy(activeWindows = it.activeWindows + (tab to window)) }
+            if (window.isNotEmpty()) {
+                screenModelScope.launchIO {
+                    repository.markShown(currentState.mediaType, window.map { it.cleanTitle })
+                }
+            }
+        }
+    }
+
+    fun rotateOrRefreshFeed(currentTab: FeedSignalTab): Long {
+        val currentState = state.value
+        val pool = itemsForTab(currentState, currentTab)
+        val currentOffset = currentState.tabOffsets[currentTab] ?: 0
+        val now = System.currentTimeMillis()
+        val media = currentState.mediaType
+        val remaining = remainingCooldownSeconds(
+            preferences.feedManualRefreshAt(media).get().takeIf { it > 0L },
+            now,
+        )
+        val canNetworkRefresh = remaining == 0L
+        val (nextOffset, shouldNetworkRefresh) = resolveNextFeedOffset(
+            currentOffset = currentOffset,
+            poolSize = pool.size,
+            windowSize = FEED_WINDOW_SIZE,
+            canNetworkRefresh = canNetworkRefresh,
+        )
+
+        if (shouldNetworkRefresh) {
+            mutableState.update { it.copy(tabOffsets = emptyMap(), activeWindows = emptyMap()) }
+            return refreshNow()
+        }
+
+        if (pool.size <= FEED_WINDOW_SIZE && remaining > 0L) {
+            return remaining
+        }
+
+        val newWindow = sliceFeedWindow(pool, nextOffset, FEED_WINDOW_SIZE)
+        mutableState.update {
+            it.copy(
+                tabOffsets = it.tabOffsets + (currentTab to nextOffset),
+                activeWindows = it.activeWindows + (currentTab to newWindow),
+            )
+        }
+        if (newWindow.isNotEmpty()) {
+            screenModelScope.launchIO {
+                repository.markShown(currentState.mediaType, newWindow.map { it.cleanTitle })
+            }
+        }
+        return 0L
+    }
+
+    private suspend fun backfillRemovedItem(removed: DiscoverySuggestion, tab: FeedSignalTab) {
+        val currentState = state.value
+        val pool = itemsForTab(currentState, tab)
+        val currentOffset = currentState.tabOffsets[tab] ?: 0
+        val currentWindow = currentState.activeWindows[tab]
+            ?: sliceFeedWindow(pool, currentOffset, FEED_WINDOW_SIZE)
+        val currentWindowTitles = currentWindow.map { it.cleanTitle }.toSet()
+        val shownTitles = repository.getShownTitles(currentState.mediaType)
+
+        val candidate = selectBackfillCandidate(
+            removedItem = removed,
+            pool = pool,
+            currentWindowTitles = currentWindowTitles,
+            shownTitles = shownTitles,
+        )
+        val patchedWindow = patchFeedWindowAfterRemoval(
+            currentWindow = currentWindow,
+            removedTitle = removed.cleanTitle,
+            replacement = candidate,
+        )
+        mutableState.update { current ->
+            current.copy(
+                activeWindows = current.activeWindows + (tab to patchedWindow),
+            )
+        }
+        if (candidate != null) {
+            repository.markShown(currentState.mediaType, listOf(candidate.cleanTitle))
+        }
+    }
+
     fun cancelRefresh() {
         val media = state.value.mediaType
         DiscoveryUpdateJob.stop(context, media)
@@ -358,10 +486,11 @@ internal class DiscoveryFeedScreenModel(
         mutableState.update { it.copy(isRefreshing = false, progressText = null) }
     }
 
-    fun hide(item: DiscoverySuggestion) {
+    fun hide(item: DiscoverySuggestion, activeTab: FeedSignalTab = FeedSignalTab.MIX) {
         lastHidden = item
         mutableState.update { it.copy(hiddenSnackbarTitle = item.title) }
         screenModelScope.launchIO {
+            backfillRemovedItem(item, activeTab)
             // Taste Engine: скрытие = сильный негативный сигнал (undo удаляет строку лога).
             TasteSignalRecorder.record(repository, item, DiscoverySignalType.HIDE)
             repository.hide(item.mediaType, item.cleanTitle)
@@ -441,8 +570,9 @@ internal class DiscoveryFeedScreenModel(
     }
 
     /** Taste Engine: «Просмотрено» — нейтральное исключение (вкус не трогает) + тост. */
-    fun recordConsumed(item: DiscoverySuggestion) {
+    fun recordConsumed(item: DiscoverySuggestion, activeTab: FeedSignalTab = FeedSignalTab.MIX) {
         screenModelScope.launchIO {
+            backfillRemovedItem(item, activeTab)
             TasteSignalRecorder.record(repository, item, DiscoverySignalType.CONSUMED)
         }
         context.toast(

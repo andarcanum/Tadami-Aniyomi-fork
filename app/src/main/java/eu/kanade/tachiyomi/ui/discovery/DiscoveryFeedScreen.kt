@@ -207,11 +207,13 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
             // Выбранный таб могли скрыть в настройках после открытия экрана — контент
             // и табы показывают effectiveTab (fallback MIX), чтобы не было пустого разрыва.
             val effectiveTab = if (tab in state.visibleTabs) tab else FeedSignalTab.MIX
+            val feedItems = remember(state, effectiveTab, provider) {
+                screenModel.displayedItems(effectiveTab, provider)
+            }
             FeedBody(
                 state = state,
                 hazeState = hazeState,
-                tab = effectiveTab,
-                provider = provider,
+                items = feedItems,
                 contentPadding = PaddingValues(
                     start = 16.dp,
                     end = 16.dp,
@@ -295,7 +297,7 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                                 screenModel.cancelRefresh()
                                 context.toast(context.contextStringResource(MR.strings.action_cancel))
                             } else {
-                                val cooldown = screenModel.refreshNow()
+                                val cooldown = screenModel.rotateOrRefreshFeed(effectiveTab)
                                 if (cooldown > 0L) {
                                     context.toast(
                                         context.contextStringResource(AYMR.strings.for_you_refresh_cooldown, cooldown),
@@ -333,7 +335,10 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                     FeedTabs(
                         tab = effectiveTab,
                         counts = tabCounts,
-                        onTab = { tab = it },
+                        onTab = {
+                            tab = it
+                            screenModel.onTabSelected(it)
+                        },
                         visibleTabs = state.visibleTabs,
                     )
                     FeedProviderChips(
@@ -376,7 +381,7 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                         navigateFor(item)
                     },
                     onHide = {
-                        screenModel.hide(item)
+                        screenModel.hide(item, effectiveTab)
                         sheetItem = null
                     },
                     hazeState = hazeState,
@@ -387,7 +392,7 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                     itemTitle = lpItem.title,
                     tag = eu.kanade.tachiyomi.ui.home.firstBlacklistTag(lpItem.genres, lpItem.rowType, lpItem.reason),
                     onHide = {
-                        screenModel.hide(lpItem)
+                        screenModel.hide(lpItem, effectiveTab)
                         longPressItem = null
                     },
                     onBlacklistTag = { tag ->
@@ -401,7 +406,7 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                     },
                     onMarkConsumed = {
                         longPressItem = null
-                        screenModel.recordConsumed(lpItem)
+                        screenModel.recordConsumed(lpItem, effectiveTab)
                     },
                 )
             }
@@ -751,8 +756,7 @@ private fun FeedProviderChips(
 private fun FeedBody(
     state: DiscoveryFeedUiState,
     hazeState: HazeState,
-    tab: FeedSignalTab,
-    provider: String?,
+    items: List<DiscoverySuggestion>,
     contentPadding: PaddingValues,
     onItemClick: (DiscoverySuggestion) -> Unit,
     onItemLongClick: (DiscoverySuggestion) -> Unit,
@@ -767,9 +771,6 @@ private fun FeedBody(
     val similarTemplate = stringResource(AYMR.strings.for_you_reason_similar)
     val trendTemplate = stringResource(AYMR.strings.for_you_reason_trending)
     val nextTemplate = stringResource(AYMR.strings.for_you_reason_season_next)
-    val items = remember(state, tab, provider) {
-        filterByProvider(itemsForTab(state, tab), provider)
-    }
 
     when {
         state.isLoading -> Box(
