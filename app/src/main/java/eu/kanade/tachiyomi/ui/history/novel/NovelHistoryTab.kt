@@ -36,6 +36,7 @@ fun Screen.novelHistoryTab(
     val navigator = LocalNavigator.currentOrThrow
     val screenModel = rememberScreenModel { NovelHistoryScreenModel() }
     val state by screenModel.state.collectAsStateWithLifecycle()
+    val searchQuery by screenModel.query.collectAsStateWithLifecycle()
 
     val navigateUp: (() -> Unit)? = if (navigator.canPop) {
         { navigator.pop() }
@@ -45,9 +46,11 @@ fun Screen.novelHistoryTab(
 
     return TabContent(
         titleRes = AYMR.strings.label_novel,
+        searchEnabled = true,
         content = { _, _ ->
             NovelHistoryScreen(
                 state = state,
+                searchQuery = searchQuery,
                 snackbarHostState = snackbarHostState,
                 onClickCover = { navigator.push(NovelScreen(it)) },
                 onClickResume = { navigator.push(NovelReaderScreen(it)) },

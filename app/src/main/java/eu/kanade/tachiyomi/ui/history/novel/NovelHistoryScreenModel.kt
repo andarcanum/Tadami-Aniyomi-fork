@@ -13,9 +13,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -42,23 +44,39 @@ class NovelHistoryScreenModel(
     private val _events: Channel<Event> = Channel(Channel.UNLIMITED)
     val events: Flow<Event> = _events.receiveAsFlow()
 
+    private val _query: MutableStateFlow<String?> = MutableStateFlow(null)
+    val query: StateFlow<String?> = _query.asStateFlow()
+
+    private val searchQueryState = MutableStateFlow<String?>(null)
     private val dialogState = MutableStateFlow<Dialog?>(null)
 
-    val state: StateFlow<State> = historyRepository.getNovelHistory("")
-        .catch { error ->
-            logcat(LogPriority.ERROR, error)
-            _events.send(Event.InternalError)
-        }
-        .distinctUntilChanged()
-        .map { items -> items.filterVisibleLocalNovels().toHistoryUiModels() }
-        .flowOn(Dispatchers.IO)
-        .combine(dialogState) { list, dialog ->
-            State(
-                list = list,
-                dialog = dialog,
-            )
-        }
+    val state: StateFlow<State> = combine(
+        _query.flatMapLatest { query ->
+            historyRepository.getNovelHistory(query ?: "")
+                .catch { error ->
+                    logcat(LogPriority.ERROR, error)
+                    _events.send(Event.InternalError)
+                }
+                .distinctUntilChanged()
+                .map { items -> items.filterVisibleLocalNovels().toHistoryUiModels() }
+                .flowOn(Dispatchers.IO)
+        },
+        dialogState,
+        searchQueryState,
+    ) { list, dialog, searchQuery ->
+        State(
+            searchQuery = searchQuery,
+            list = list,
+            dialog = dialog,
+        )
+    }
         .stateIn(screenModelScope, SharingStarted.WhileSubscribed(5000), State())
+
+    fun search(query: String?) {
+        screenModelScope.launchIO {
+            _query.emit(query)
+        }
+    }
 
     private suspend fun List<NovelHistoryWithRelations>.filterVisibleLocalNovels(): List<NovelHistoryWithRelations> {
         if (isEmpty()) return this
@@ -102,6 +120,10 @@ class NovelHistoryScreenModel(
         dialogState.update { dialog }
     }
 
+    fun updateSearchQuery(query: String?) {
+        searchQueryState.update { query }
+    }
+
     fun removeFromHistory(history: NovelHistoryWithRelations) {
         screenModelScope.launchIO {
             historyRepository.resetNovelHistory(history.id)
@@ -126,6 +148,7 @@ class NovelHistoryScreenModel(
 
     @Immutable
     data class State(
+        val searchQuery: String? = null,
         val list: List<NovelHistoryUiModel>? = null,
         val dialog: Dialog? = null,
     )
