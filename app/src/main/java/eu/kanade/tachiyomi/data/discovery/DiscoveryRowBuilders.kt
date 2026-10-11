@@ -8,11 +8,16 @@ import eu.kanade.tachiyomi.data.suggestions.util.bestMatchScoreFor
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.normalizeDiscoveryTitle
 import java.io.IOException
+
+internal const val SOURCE_FETCH_TIMEOUT_MS = 6_000L
 
 /** Кандидаты LIKE-сида: resolver дополняет сырой тайтл оригиналом из описания и нормализованными вариантами. */
 internal fun likeSeedCandidateTitles(seed: DiscoverySeedInput): List<String> =
@@ -122,34 +127,37 @@ class DiscoveryLikeRowBuilder(
                 ).filter { it.second.isNotEmpty() }
             if (allSeeds.isEmpty()) return emptyList()
 
-            val perSeed = allSeeds.mapIndexed { seedIndex, (seedTitle, genres) ->
-                val seedSources = if (sourceIds.size <= 2) {
-                    sourceIds
-                } else {
-                    val start = (seedIndex * 2) % sourceIds.size
-                    listOf(sourceIds[start], sourceIds[(start + 1) % sourceIds.size])
-                }
-                val seedItems = supervisorScope {
-                    seedSources.map { sourceId ->
-                        async {
-                            runCatchingUnlessCancelled {
-                                catalog.popularWithGenres(
-                                    context.mediaType,
-                                    sourceId,
-                                    genres = genres.take(3),
-                                    page = 1,
-                                    releaseStatuses = context.releaseStatuses,
-                                )
-                            }.getOrDefault(emptyList())
+            val perSeed = supervisorScope {
+                allSeeds.mapIndexed { seedIndex, (seedTitle, genres) ->
+                    async {
+                        val seedSources = if (sourceIds.size <= 2) {
+                            sourceIds
+                        } else {
+                            val start = (seedIndex * 2) % sourceIds.size
+                            listOf(sourceIds[start], sourceIds[(start + 1) % sourceIds.size])
                         }
-                    }.awaitAll()
-                }.flatten().map { item ->
-                    item.copy(
-                        seedTitle = seedTitle,
-                        reason = null,
-                    )
-                }
-                seedItems
+                        seedSources.map { sourceId ->
+                            async {
+                                runCatchingUnlessCancelled {
+                                    withTimeoutOrNull(SOURCE_FETCH_TIMEOUT_MS) {
+                                        catalog.popularWithGenres(
+                                            context.mediaType,
+                                            sourceId,
+                                            genres = genres.take(3),
+                                            page = 1,
+                                            releaseStatuses = context.releaseStatuses,
+                                        )
+                                    }
+                                }.getOrNull().orEmpty()
+                            }
+                        }.awaitAll().flatten().map { item ->
+                            item.copy(
+                                seedTitle = seedTitle,
+                                reason = null,
+                            )
+                        }
+                    }
+                }.awaitAll()
             }
             return mergeSeedResults(perSeed)
         }
@@ -351,14 +359,16 @@ class DiscoveryTasteRowBuilder(
                     toQuery.map { id ->
                         async {
                             runCatchingUnlessCancelled {
-                                catalog.popularWithGenres(
-                                    context.mediaType,
-                                    id,
-                                    sourceGenreNames,
-                                    page = context.pageOffset,
-                                    releaseStatuses = context.releaseStatuses,
-                                )
-                            }
+                                withTimeoutOrNull(SOURCE_FETCH_TIMEOUT_MS) {
+                                    catalog.popularWithGenres(
+                                        context.mediaType,
+                                        id,
+                                        sourceGenreNames,
+                                        page = context.pageOffset,
+                                        releaseStatuses = context.releaseStatuses,
+                                    )
+                                }
+                            }.map { it.orEmpty() }
                         }
                     }.awaitAll()
                 }
@@ -422,6 +432,8 @@ class DiscoveryTasteRowBuilder(
 class DiscoverySourceRowBuilder(
     private val catalog: DiscoverySourceCatalog,
     private val rowCap: Int = 20,
+    private val sourceTimeoutMs: Long = SOURCE_FETCH_TIMEOUT_MS,
+    private val maxConcurrency: Int = 4,
 ) : DiscoveryRowBuilder {
 
     override val rowType = DiscoveryRowType.SOURCE
@@ -436,51 +448,78 @@ class DiscoverySourceRowBuilder(
         val activeSources = ordered.filter { (slotAllocations[it] ?: 0) > 0 }
         if (activeSources.isEmpty()) return emptyList()
 
-        var failures = 0
-        val surplusParts = mutableListOf<List<DiscoveryRowItem>>()
-        val parts = ordered.map { id ->
-            val perSource = slotAllocations[id] ?: 0
-            if (perSource <= 0) return@map emptyList<DiscoveryRowItem>()
-            // Popular-витрина первой страницы почти статична, latest-обновления ротируются
-            // каждый час: основа ряда — Latest, Popular остаётся якорем качества (~20%).
-            val latestQuota = perSource - perSource / 5
-            val latestResult = runCatchingUnlessCancelled {
-                catalog.latest(
-                    context.mediaType,
-                    id,
-                    page = context.pageOffset,
-                    releaseStatuses = context.releaseStatuses,
-                )
-            }
-            val latestItems = latestResult.getOrDefault(emptyList()).take(latestQuota)
-            val latestTitles = latestItems.mapTo(HashSet()) { it.cleanTitle }
-            val popularResult = runCatchingUnlessCancelled {
-                catalog.popular(
-                    context.mediaType,
-                    id,
-                    page = context.pageOffset,
-                    releaseStatuses = context.releaseStatuses,
-                )
-            }
-            // Источник считается провалившимся, только если popular упал И latest ничего
-            // не дал — иначе ряд честно строится из реального контента.
-            if (popularResult.isFailure && latestItems.isEmpty()) failures++
-            val popularItems = popularResult.getOrDefault(emptyList())
-                .filterNot { it.cleanTitle in latestTitles }
-                .take(perSource - latestItems.size)
-            val selected = latestItems + popularItems
-            val selectedTitles = selected.mapTo(HashSet()) { it.cleanTitle }
-            surplusParts += (latestResult.getOrDefault(emptyList()) + popularResult.getOrDefault(emptyList()))
-                .filterNot { it.cleanTitle in selectedTitles }
-                .distinctBy { it.cleanTitle }
-                .take(rowCap)
-            selected
+        val semaphore = Semaphore(maxConcurrency)
+        val results = supervisorScope {
+            ordered.map { id ->
+                async {
+                    val perSource = slotAllocations[id] ?: 0
+                    if (perSource <= 0) {
+                        return@async Triple(emptyList<DiscoveryRowItem>(), emptyList<DiscoveryRowItem>(), false)
+                    }
+                    semaphore.withPermit {
+                        val latestQuota = perSource - perSource / 5
+                        val latestDeferred = async {
+                            runCatchingUnlessCancelled {
+                                withTimeoutOrNull(sourceTimeoutMs) {
+                                    catalog.latest(
+                                        context.mediaType,
+                                        id,
+                                        page = context.pageOffset,
+                                        releaseStatuses = context.releaseStatuses,
+                                    )
+                                }
+                            }
+                        }
+                        val popularDeferred = async {
+                            runCatchingUnlessCancelled {
+                                withTimeoutOrNull(sourceTimeoutMs) {
+                                    catalog.popular(
+                                        context.mediaType,
+                                        id,
+                                        page = context.pageOffset,
+                                        releaseStatuses = context.releaseStatuses,
+                                    )
+                                }
+                            }
+                        }
+
+                        val latestResult = latestDeferred.await()
+                        val popularResult = popularDeferred.await()
+
+                        val latestFetched = latestResult.getOrNull().orEmpty()
+                        val latestItems = latestFetched.take(latestQuota)
+                        val latestTitles = latestItems.mapTo(HashSet()) { it.cleanTitle }
+
+                        val popularFetched = popularResult.getOrNull().orEmpty()
+                        val popularItems = popularFetched
+                            .filterNot { it.cleanTitle in latestTitles }
+                            .take(perSource - latestItems.size)
+
+                        val popularFailed = popularResult.isFailure || popularResult.getOrNull() == null
+                        val isFailed = popularFailed && latestItems.isEmpty()
+
+                        val selected = latestItems + popularItems
+
+                        val selectedTitles = selected.mapTo(HashSet()) { it.cleanTitle }
+                        val surplus = (latestFetched + popularFetched)
+                            .filterNot { it.cleanTitle in selectedTitles }
+                            .distinctBy { it.cleanTitle }
+                            .take(rowCap)
+
+                        Triple(selected, surplus, isFailed)
+                    }
+                }
+            }.awaitAll()
         }
-        // Все источники упали — ряд помечается failed (кэш не затирается,
-        // баннер «часть подборок не обновилась» честный), как в LIKE/TASTE.
+
+        val failures = results.count { it.third }
         if (failures == activeSources.size) {
             throw IOException("all source catalog fetches failed")
         }
+
+        val parts = results.map { it.first }
+        val surplusParts = results.map { it.second }
+
         val selected = interleaveSourceParts(parts, rowCap).distinctBy { it.cleanTitle }
         if (selected.size >= rowCap) return selected
         val selectedTitles = selected.mapTo(HashSet()) { it.cleanTitle }
