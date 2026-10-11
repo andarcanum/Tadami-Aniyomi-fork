@@ -104,4 +104,32 @@ class DiscoveryFeedLogicTest {
         suggestion(DiscoveryRowType.SOURCE, "P", provider = "InkStory")
             .toSuggestionItem().reason shouldBe SuggestionReason.SEARCH_TITLE
     }
+
+    @Test
+    fun `itemsForTab returns mix for MIX and row items for signal tabs`() {
+        val s1 = suggestion(DiscoveryRowType.LIKE, "S1")
+        val s2 = suggestion(DiscoveryRowType.TREND, "S2")
+        val state = DiscoveryFeedUiState(
+            mix = listOf(s1, s2),
+            rows = mapOf(
+                DiscoveryRowType.LIKE to listOf(s1),
+                DiscoveryRowType.TREND to listOf(s2),
+            ),
+        )
+        itemsForTab(state, FeedSignalTab.MIX) shouldBe listOf(s1, s2)
+        itemsForTab(state, FeedSignalTab.SIMILAR) shouldBe listOf(s1)
+        itemsForTab(state, FeedSignalTab.FRESH) shouldBe listOf(s2)
+        itemsForTab(state, FeedSignalTab.TASTE) shouldBe emptyList()
+    }
+
+    @Test
+    fun `filterByProvider filters by provider name when non-null and preserves all when null or blank`() {
+        val s1 = suggestion(DiscoveryRowType.LIKE, "S1", provider = "AniList")
+        val s2 = suggestion(DiscoveryRowType.LIKE, "S2", provider = "MAL")
+        val items = listOf(s1, s2)
+        filterByProvider(items, null) shouldBe items
+        filterByProvider(items, "") shouldBe items
+        filterByProvider(items, "AniList") shouldBe listOf(s1)
+        filterByProvider(items, "Unknown") shouldBe emptyList()
+    }
 }
