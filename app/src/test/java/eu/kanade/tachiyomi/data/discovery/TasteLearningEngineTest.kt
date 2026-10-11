@@ -263,6 +263,26 @@ class TasteLearningEngineTest {
         (zeroLibZeroAffinity >= 1.0) shouldBe true
     }
 
+    @Test
+    fun `applySourceAffinity in manual mode ignores library weight and starts at 1_0`() {
+        val zeroAffinity = applySourceAffinity(libraryWeight = 100, affinity = 0.0, isManualMode = true)
+        zeroAffinity shouldBe 1.0
+    }
+
+    @Test
+    fun `applySourceAffinity in manual mode boosts weight with positive affinity up to 4_5`() {
+        val positive = applySourceAffinity(libraryWeight = 0, affinity = 4.0, isManualMode = true)
+        val huge = applySourceAffinity(libraryWeight = 0, affinity = 1000.0, isManualMode = true)
+        (positive > 1.0) shouldBe true
+        (huge <= 4.5) shouldBe true
+    }
+
+    @Test
+    fun `applySourceAffinity in manual mode does not drop below 1_0 for negative affinity`() {
+        val negative = applySourceAffinity(libraryWeight = 100, affinity = -5.0, isManualMode = true)
+        negative shouldBe 1.0
+    }
+
     private companion object {
         const val DAY_MS_TEST = 24L * 60 * 60 * 1000
     }

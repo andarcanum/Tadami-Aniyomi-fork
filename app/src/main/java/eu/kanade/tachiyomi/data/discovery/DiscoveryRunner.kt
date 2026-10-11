@@ -244,8 +244,7 @@ class DiscoveryRunner(
         // auto = топ-3 плагинов по весу библиотеки, manual = набор пользователя (cap 8).
         val plugins = installedPluginsProvider(mediaType)
         val sourceWeights = candidates.filter { it.sourceId > 0 }.groupingBy { it.sourceId }.eachCount()
-        // Taste Learning Engine: аффинити источников из сигнал-лога бустит вес участия
-        // плагина (плавный tanh-буст, порядок честен и при негативе — кламп 0.4..2.0x).
+        val isManualMode = preferences.discoverySourceMode(mediaType).get() == "manual"
         val learnedSourceAffinity = foldLearnedTasteProfile(signals = allSignals).sourceAffinity
         val pluginStats = plugins.mapNotNull { plugin ->
             val representative = selectPluginRepresentative(
@@ -258,16 +257,16 @@ class DiscoveryRunner(
                 key = plugin.key,
                 representative = representative,
                 memberIds = plugin.sourceIds.toSet(),
-                weight = plugin.sourceIds.sumOf { sourceWeights[it] ?: 0 },
+                weight = if (isManualMode) 1 else plugin.sourceIds.sumOf { sourceWeights[it] ?: 0 },
                 affinity = learnedSourceAffinity[plugin.key] ?: 0.0,
             )
         }.sortedWith(
             compareByDescending<DiscoveryPluginStat> {
-                applySourceAffinity(it.weight, it.affinity)
+                applySourceAffinity(it.weight, it.affinity, isManualMode = isManualMode)
             }.thenBy { it.representative },
         )
         val effectiveSourceWeights = pluginStats.associate {
-            it.representative to applySourceAffinity(it.weight, it.affinity)
+            it.representative to applySourceAffinity(it.weight, it.affinity, isManualMode = isManualMode)
         }
         val excludedKeys = parseKeyCsv(preferences.discoverySourceExcluded(mediaType).get())
         val participation = if (pluginStats.isEmpty()) {
@@ -392,7 +391,7 @@ class DiscoveryRunner(
         // Выключенные в настройках ряды: чистим их записи в БД, чтобы UI не показывал «зомби».
         // LIKE/TREND — чисто внешние ряды: при выключенных внешних провайдерах их тоже не строим.
         val useExternal = preferences.externalProvidersEnabled().get()
-        if (!preferences.rowLikeEnabled().get() || !useExternal) {
+        if (!preferences.rowLikeEnabled().get()) {
             repository.replaceRows(mediaType, tachiyomi.domain.discovery.model.DiscoveryRowType.LIKE, emptyList())
         }
         if (!preferences.rowTasteEnabled().get()) {
@@ -405,8 +404,14 @@ class DiscoveryRunner(
             repository.replaceRows(mediaType, tachiyomi.domain.discovery.model.DiscoveryRowType.SOURCE, emptyList())
         }
         val builders = buildList {
-            if (preferences.rowLikeEnabled().get() && useExternal) {
-                add(DiscoveryLikeRowBuilder(suggestionCoordinatorFactory()))
+            if (preferences.rowLikeEnabled().get()) {
+                add(
+                    DiscoveryLikeRowBuilder(
+                        suggestionCoordinator = suggestionCoordinatorFactory(),
+                        catalog = sourceCatalog,
+                        includeExternal = useExternal,
+                    ),
+                )
             }
             if (preferences.rowTasteEnabled().get()) {
                 add(

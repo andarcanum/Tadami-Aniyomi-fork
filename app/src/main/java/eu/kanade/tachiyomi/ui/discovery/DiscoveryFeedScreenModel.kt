@@ -223,7 +223,7 @@ internal class DiscoveryFeedScreenModel(
             ) { like, trend, taste, source, external ->
                 buildSet {
                     add(FeedSignalTab.MIX)
-                    if (like && external) add(FeedSignalTab.SIMILAR)
+                    if (like) add(FeedSignalTab.SIMILAR)
                     if (taste) add(FeedSignalTab.TASTE)
                     if (trend && external) add(FeedSignalTab.FRESH)
                     if (source) add(FeedSignalTab.SOURCE)

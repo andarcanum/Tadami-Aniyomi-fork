@@ -38,6 +38,7 @@ class DiscoveryTasteRowBuilderTest {
 
     private class FakeCatalog(
         private val genreItems: List<DiscoveryRowItem> = emptyList(),
+        private val perSourceGenreItems: Map<Long, List<DiscoveryRowItem>> = emptyMap(),
         private val shouldFail: Boolean = false,
     ) : DiscoverySourceCatalog {
         override suspend fun popular(
@@ -55,7 +56,7 @@ class DiscoveryTasteRowBuilderTest {
             releaseStatuses: Set<DiscoveryReleaseStatus>,
         ): List<DiscoveryRowItem> {
             if (shouldFail) throw IOException("catalog boom")
-            return genreItems
+            return perSourceGenreItems[sourceId] ?: genreItems
         }
 
         override suspend fun latest(
@@ -189,5 +190,33 @@ class DiscoveryTasteRowBuilderTest {
             ).build(context())
         }
         result.getOrDefault(emptyList()) shouldBe emptyList()
+    }
+
+    @Test
+    fun `includeExternal false queries multiple sources and interleaves results`() = runTest {
+        val catalog = FakeCatalog(
+            perSourceGenreItems = mapOf(
+                10L to listOf(
+                    DiscoveryRowItem("Src10 Item 1", "src10 item 1", null, null, null, "Src10", 1.0, sourceId = 10L),
+                    DiscoveryRowItem("Src10 Item 2", "src10 item 2", null, null, null, "Src10", 0.9, sourceId = 10L),
+                ),
+                20L to listOf(
+                    DiscoveryRowItem("Src20 Item 1", "src20 item 1", null, null, null, "Src20", 1.0, sourceId = 20L),
+                    DiscoveryRowItem("Src20 Item 2", "src20 item 2", null, null, null, "Src20", 0.9, sourceId = 20L),
+                ),
+            ),
+        )
+        val ctx = context().copy(
+            sourceId = 10L,
+            sourceIds = listOf(10L, 20L),
+        )
+        val result = DiscoveryTasteRowBuilder(
+            trending = FakeTrending(shouldFail = true),
+            catalog = catalog,
+            sortProvider = { TrendSort.POPULARITY },
+            includeExternal = false,
+        ).build(ctx)
+
+        result.map { it.title } shouldBe listOf("Src10 Item 1", "Src20 Item 1", "Src10 Item 2", "Src20 Item 2")
     }
 }

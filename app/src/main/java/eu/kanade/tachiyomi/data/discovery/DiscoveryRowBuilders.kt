@@ -5,6 +5,9 @@ import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.SuggestionTitleResolver
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import eu.kanade.tachiyomi.data.suggestions.util.bestMatchScoreFor
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.supervisorScope
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
@@ -23,6 +26,8 @@ internal fun likeSeedCandidateTitles(seed: DiscoverySeedInput): List<String> =
  */
 class DiscoveryLikeRowBuilder(
     private val suggestionCoordinator: SuggestionCoordinator,
+    private val catalog: DiscoverySourceCatalog? = null,
+    private val includeExternal: Boolean = true,
 ) : DiscoveryRowBuilder {
 
     override val rowType = DiscoveryRowType.LIKE
@@ -33,77 +38,121 @@ class DiscoveryLikeRowBuilder(
             DiscoveryMediaType.MANGA -> SuggestionMediaType.MANGA
             DiscoveryMediaType.NOVEL -> SuggestionMediaType.NOVEL
         }
-        var fullyFailedSeeds = 0
-        val feedbackPerSeed = context.feedbackSeeds.map { feedbackSeed ->
-            val suggestionSeed = SuggestionSeed(
-                mediaType = mediaType,
-                primaryTitle = feedbackSeed.title,
-                candidateTitles = SuggestionTitleResolver.resolveCandidates(feedbackSeed.title, null),
-                description = null,
-                author = null,
-                genres = feedbackSeed.genres.ifEmpty { null },
-            )
-            val result = suggestionCoordinator.fetchSuggestions(
-                suggestionSeed,
-                limit = 25,
-                releaseStatuses = context.releaseStatuses,
-            )
-            if (result.items.isEmpty() && result.attemptedSources > 0 &&
-                result.failedSources == result.attemptedSources
-            ) {
-                fullyFailedSeeds++
-            }
-            result.items.map { item ->
-                DiscoveryRowItem(
-                    title = item.title,
-                    cleanTitle = normalizeDiscoveryTitle(item.title),
-                    coverUrl = item.thumbnailUrl,
-                    reason = null,
-                    seedTitle = feedbackSeed.title,
-                    provider = item.providerName,
-                    score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
+        if (includeExternal) {
+            var fullyFailedSeeds = 0
+            val feedbackPerSeed = context.feedbackSeeds.map { feedbackSeed ->
+                val suggestionSeed = SuggestionSeed(
+                    mediaType = mediaType,
+                    primaryTitle = feedbackSeed.title,
+                    candidateTitles = SuggestionTitleResolver.resolveCandidates(feedbackSeed.title, null),
+                    description = null,
+                    author = null,
+                    genres = feedbackSeed.genres.ifEmpty { null },
                 )
-            }
-        }
-        val libraryPerSeed = context.seeds.map { seed ->
-            val suggestionSeed = SuggestionSeed(
-                mediaType = mediaType,
-                primaryTitle = seed.title,
-                candidateTitles = likeSeedCandidateTitles(seed),
-                description = seed.description,
-                author = seed.author,
-                genres = seed.genres.ifEmpty { null },
-            )
-            val result = suggestionCoordinator.fetchSuggestions(
-                suggestionSeed,
-                limit = 25,
-                releaseStatuses = context.releaseStatuses,
-            )
-            if (result.items.isEmpty() && result.attemptedSources > 0 &&
-                result.failedSources == result.attemptedSources
-            ) {
-                fullyFailedSeeds++
-            }
-            result.items.map { item ->
-                DiscoveryRowItem(
-                    title = item.title,
-                    cleanTitle = normalizeDiscoveryTitle(item.title),
-                    coverUrl = item.thumbnailUrl,
-                    // Локализованный текст «Похоже на „X“» композится на рендере из seedTitle.
-                    reason = null,
-                    seedTitle = seed.title,
-                    provider = item.providerName,
-                    score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
+                val result = suggestionCoordinator.fetchSuggestions(
+                    suggestionSeed,
+                    limit = 25,
+                    releaseStatuses = context.releaseStatuses,
                 )
+                if (result.items.isEmpty() && result.attemptedSources > 0 &&
+                    result.failedSources == result.attemptedSources
+                ) {
+                    fullyFailedSeeds++
+                }
+                result.items.map { item ->
+                    DiscoveryRowItem(
+                        title = item.title,
+                        cleanTitle = normalizeDiscoveryTitle(item.title),
+                        coverUrl = item.thumbnailUrl,
+                        reason = null,
+                        seedTitle = feedbackSeed.title,
+                        provider = item.providerName,
+                        score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
+                    )
+                }
             }
+            val libraryPerSeed = context.seeds.map { seed ->
+                val suggestionSeed = SuggestionSeed(
+                    mediaType = mediaType,
+                    primaryTitle = seed.title,
+                    candidateTitles = likeSeedCandidateTitles(seed),
+                    description = seed.description,
+                    author = seed.author,
+                    genres = seed.genres.ifEmpty { null },
+                )
+                val result = suggestionCoordinator.fetchSuggestions(
+                    suggestionSeed,
+                    limit = 25,
+                    releaseStatuses = context.releaseStatuses,
+                )
+                if (result.items.isEmpty() && result.attemptedSources > 0 &&
+                    result.failedSources == result.attemptedSources
+                ) {
+                    fullyFailedSeeds++
+                }
+                result.items.map { item ->
+                    DiscoveryRowItem(
+                        title = item.title,
+                        cleanTitle = normalizeDiscoveryTitle(item.title),
+                        coverUrl = item.thumbnailUrl,
+                        // Локализованный текст «Похоже на „X“» композится на рендере из seedTitle.
+                        reason = null,
+                        seedTitle = seed.title,
+                        provider = item.providerName,
+                        score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
+                    )
+                }
+            }
+            val perSeed = feedbackPerSeed + libraryPerSeed
+            val merged = mergeSeedResults(perSeed)
+            val totalSeeds = context.seeds.size + context.feedbackSeeds.size
+            if (merged.isEmpty() && totalSeeds > 0 && fullyFailedSeeds == totalSeeds) {
+                throw IOException("all suggestion providers failed for every seed")
+            }
+            return merged
+        } else {
+            if (catalog == null) return emptyList()
+            val sourceIds = context.sourceIds.filter { it > 0 }
+                .ifEmpty { listOf(context.sourceId).filter { it > 0 } }
+            if (sourceIds.isEmpty()) return emptyList()
+
+            val allSeeds = (
+                context.feedbackSeeds.map { it.title to it.genres } +
+                    context.seeds.map { it.title to it.genres }
+                ).filter { it.second.isNotEmpty() }
+            if (allSeeds.isEmpty()) return emptyList()
+
+            val perSeed = allSeeds.mapIndexed { seedIndex, (seedTitle, genres) ->
+                val seedSources = if (sourceIds.size <= 2) {
+                    sourceIds
+                } else {
+                    val start = (seedIndex * 2) % sourceIds.size
+                    listOf(sourceIds[start], sourceIds[(start + 1) % sourceIds.size])
+                }
+                val seedItems = supervisorScope {
+                    seedSources.map { sourceId ->
+                        async {
+                            runCatchingUnlessCancelled {
+                                catalog.popularWithGenres(
+                                    context.mediaType,
+                                    sourceId,
+                                    genres = genres.take(3),
+                                    page = 1,
+                                    releaseStatuses = context.releaseStatuses,
+                                )
+                            }.getOrDefault(emptyList())
+                        }
+                    }.awaitAll()
+                }.flatten().map { item ->
+                    item.copy(
+                        seedTitle = seedTitle,
+                        reason = null,
+                    )
+                }
+                seedItems
+            }
+            return mergeSeedResults(perSeed)
         }
-        val perSeed = feedbackPerSeed + libraryPerSeed
-        val merged = mergeSeedResults(perSeed)
-        val totalSeeds = context.seeds.size + context.feedbackSeeds.size
-        if (merged.isEmpty() && totalSeeds > 0 && fullyFailedSeeds == totalSeeds) {
-            throw IOException("all suggestion providers failed for every seed")
-        }
-        return merged
     }
 }
 
@@ -275,18 +324,47 @@ class DiscoveryTasteRowBuilder(
         } else {
             null
         }
-        val sourceResult = if (context.sourceId > 0) {
-            runCatchingUnlessCancelled {
-                catalog.popularWithGenres(
-                    context.mediaType,
-                    context.sourceId,
-                    sourceGenreNames,
-                    page = context.pageOffset,
-                    releaseStatuses = context.releaseStatuses,
+        val sourceIds = context.sourceIds.filter { it > 0 }
+            .ifEmpty { listOf(context.sourceId).filter { it > 0 } }
+        val sourceResults = if (includeExternal) {
+            if (context.sourceId > 0) {
+                listOf(
+                    runCatchingUnlessCancelled {
+                        catalog.popularWithGenres(
+                            context.mediaType,
+                            context.sourceId,
+                            sourceGenreNames,
+                            page = context.pageOffset,
+                            releaseStatuses = context.releaseStatuses,
+                        )
+                    },
                 )
+            } else {
+                emptyList()
             }
         } else {
-            null
+            if (sourceIds.isNotEmpty()) {
+                val rotation = (context.pageOffset - 1).coerceAtLeast(0) % sourceIds.size
+                val ordered = sourceIds.drop(rotation) + sourceIds.take(rotation)
+                val toQuery = ordered.take(6)
+                supervisorScope {
+                    toQuery.map { id ->
+                        async {
+                            runCatchingUnlessCancelled {
+                                catalog.popularWithGenres(
+                                    context.mediaType,
+                                    id,
+                                    sourceGenreNames,
+                                    page = context.pageOffset,
+                                    releaseStatuses = context.releaseStatuses,
+                                )
+                            }
+                        }
+                    }.awaitAll()
+                }
+            } else {
+                emptyList()
+            }
         }
         val fromTrending = trendingResult?.getOrNull().orEmpty()
             // best-effort: провайдеры без жанров в выдаче (source-latest) не фильтруются
@@ -311,14 +389,22 @@ class DiscoveryTasteRowBuilder(
                     genres = item.genres,
                 )
             }
-        val fromSource = sourceResult?.getOrNull().orEmpty().map { item ->
-            item.copy(
-                reason = genreNames.take(2).joinToString(", "),
-                score = 0.5 + item.score * 0.1,
-            )
+        val sourceParts = sourceResults.map { res ->
+            res.getOrNull().orEmpty().map { item ->
+                item.copy(
+                    reason = genreNames.take(2).joinToString(", "),
+                    score = 0.5 + item.score * 0.1,
+                )
+            }
         }
-        val combined = mergeNormalized(fromTrending, fromSource)
-        val anyFailed = (trendingResult?.isFailure ?: false) || (sourceResult?.isFailure ?: false)
+        val fromSource = if (sourceParts.size > 1) {
+            interleaveSourceParts(sourceParts, cap = 50).distinctBy { it.cleanTitle }
+        } else {
+            sourceParts.flatten()
+        }
+        val combined = if (fromTrending.isEmpty()) fromSource else mergeNormalized(fromTrending, fromSource)
+        val anyFailed =
+            (trendingResult?.isFailure ?: false) || (sourceResults.isNotEmpty() && sourceResults.all { it.isFailure })
         if (combined.isEmpty() && anyFailed) {
             throw IOException("taste sources failed without results")
         }

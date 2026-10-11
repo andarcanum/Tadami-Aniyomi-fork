@@ -503,6 +503,7 @@ internal fun <T> balancePluginDiversity(
     limit: Int,
     sourceKeyExtractor: (T) -> String,
     minOtherCount: Int = 3,
+    maxDominantShare: Double = 0.30,
 ): List<T> {
     if (items.size <= 1 || limit <= 0) return items.take(limit)
 
@@ -518,7 +519,16 @@ internal fun <T> balancePluginDiversity(
     val otherCandidates = items.filter { sourceKeyExtractor(it) != dominantSource }
     if (otherCandidates.isEmpty()) return items.take(limit)
 
-    val targetOtherCount = minOf(minOtherCount, otherCandidates.size).coerceAtMost(maxOf(0, limit - 1))
+    // При N >= 4 доминирующий источник ограничивается потолком maxDominantShare (дефолт 30%).
+    // При N < 4 потолок не применяется (дефолтное поведение: minOtherCount).
+    val dominantCap = if (sourceCounts.size >= 4) {
+        maxOf(1, kotlin.math.ceil(limit * maxDominantShare).toInt())
+    } else {
+        limit - minOf(minOtherCount, otherCandidates.size)
+    }
+    val targetOtherCount = minOf(otherCandidates.size, limit - dominantCap)
+        .coerceAtLeast(minOf(minOtherCount, otherCandidates.size))
+        .coerceAtMost(maxOf(0, limit - 1))
     val maxDominant = limit - targetOtherCount
 
     val result = mutableListOf<T>()
@@ -575,6 +585,7 @@ internal fun allocateSourceSlots(
     sourceIds: List<Long>,
     effectiveWeights: Map<Long, Double>,
     totalSlots: Int,
+    maxDominantShare: Double = 0.30,
 ): Map<Long, Int> {
     if (totalSlots <= 0 || sourceIds.isEmpty()) return emptyMap()
 
@@ -595,39 +606,69 @@ internal fun allocateSourceSlots(
     val remainingSlots = totalSlots - sourceIds.size
     if (remainingSlots == 0) return allocation
 
-    val weights = sourceIds.map { id -> id to normalizeWeight(effectiveWeights[id]) }
-    val totalWeight = weights.sumOf { it.second }
-
-    val effectiveShares = if (totalWeight > 0.0) {
-        weights.map { (id, w) -> id to (w / totalWeight) }
+    // При N >= 4 источниках ни один источник не может получить больше maxDominantShare от totalSlots
+    val slotCap = if (sourceIds.size >= 4) {
+        maxOf(1, (totalSlots * maxDominantShare).toInt())
     } else {
-        val equalShare = 1.0 / sourceIds.size
-        weights.map { (id, _) -> id to equalShare }
+        totalSlots
     }
 
-    val exactQuotas = effectiveShares.map { (id, share) ->
-        val exact = remainingSlots * share
-        val floor = exact.toInt()
-        val remainder = exact - floor
-        id to (floor to remainder)
-    }
+    val activeIds = sourceIds.toMutableList()
+    var slotsLeft = remainingSlots
 
-    exactQuotas.forEach { (id, pair) ->
-        allocation[id] = (allocation[id] ?: 1) + pair.first
-    }
+    while (slotsLeft > 0 && activeIds.isNotEmpty()) {
+        val weights = activeIds.map { id -> id to normalizeWeight(effectiveWeights[id]) }
+        val totalWeight = weights.sumOf { it.second }
 
-    var leftover = remainingSlots - exactQuotas.sumOf { it.second.first }
-    val indexedRemainders = exactQuotas.mapIndexed { index, (id, pair) ->
-        Triple(id, pair.second, index)
-    }.sortedWith(
-        compareByDescending<Triple<Long, Double, Int>> { it.second }
-            .thenBy { it.third },
-    )
+        val effectiveShares = if (totalWeight > 0.0) {
+            weights.map { (id, w) -> id to (w / totalWeight) }
+        } else {
+            val equalShare = 1.0 / activeIds.size
+            weights.map { (id, _) -> id to equalShare }
+        }
 
-    for (item in indexedRemainders) {
-        if (leftover <= 0) break
-        allocation[item.first] = (allocation[item.first] ?: 1) + 1
-        leftover--
+        val exactQuotas = effectiveShares.map { (id, share) ->
+            val exact = slotsLeft * share
+            val floor = exact.toInt()
+            val remainder = exact - floor
+            id to (floor to remainder)
+        }
+
+        var hitCap = false
+        for ((id, pair) in exactQuotas) {
+            val cur = allocation[id] ?: 1
+            val next = cur + pair.first
+            if (next >= slotCap && cur < slotCap) {
+                allocation[id] = slotCap
+                activeIds.remove(id)
+                hitCap = true
+            } else if (next < slotCap) {
+                allocation[id] = next
+            }
+        }
+
+        if (hitCap) {
+            slotsLeft = totalSlots - allocation.values.sum()
+            continue
+        }
+
+        var leftover = slotsLeft - exactQuotas.sumOf { it.second.first }
+        val indexedRemainders = exactQuotas.mapIndexed { index, (id, pair) ->
+            Triple(id, pair.second, index)
+        }.sortedWith(
+            compareByDescending<Triple<Long, Double, Int>> { it.second }
+                .thenBy { it.third },
+        )
+
+        for (item in indexedRemainders) {
+            if (leftover <= 0) break
+            val cur = allocation[item.first] ?: 1
+            if (cur < slotCap) {
+                allocation[item.first] = cur + 1
+                leftover--
+            }
+        }
+        break
     }
 
     return allocation

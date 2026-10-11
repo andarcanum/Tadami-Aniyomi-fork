@@ -409,4 +409,44 @@ class DiscoveryMixTest {
         slots[1L]!! shouldBeGreaterThan slots[2L]!!
         slots[1L]!! shouldBeGreaterThan slots[3L]!!
     }
+
+    @Test
+    fun `allocateSourceSlots enforces 30 percent dominance cap when source count is at least 4`() {
+        val sources = (1L..15L).toList()
+        // Source 1L has huge weight, others have weight 1.0
+        val weights = sources.associateWith { if (it == 1L) 1000.0 else 1.0 }
+        val slots = allocateSourceSlots(
+            sourceIds = sources,
+            effectiveWeights = weights,
+            totalSlots = 50,
+            maxDominantShare = 0.30,
+        )
+        slots.values.sum() shouldBe 50
+        // Dominant source 1L should not exceed 30% of 50 = 15 slots
+        slots[1L]!! shouldBe 15
+        // Other sources all get at least 1 slot
+        sources.drop(1).forEach { id ->
+            (slots[id]!! >= 1).shouldBeTrue()
+        }
+    }
+
+    @Test
+    fun `balancePluginDiversity enforces 30 percent dominance cap when 4 or more sources present`() {
+        data class TestItem(val title: String, val provider: String)
+        val dominantItems = (1..30).map { TestItem("Dominant $it", "src1") }
+        val other1 = (1..5).map { TestItem("Other1 $it", "src2") }
+        val other2 = (1..5).map { TestItem("Other2 $it", "src3") }
+        val other3 = (1..5).map { TestItem("Other3 $it", "src4") }
+        val allItems = dominantItems + other1 + other2 + other3
+
+        val balanced = balancePluginDiversity(
+            items = allItems,
+            limit = 20,
+            sourceKeyExtractor = { it.provider },
+            maxDominantShare = 0.30,
+        )
+        balanced.size shouldBe 20
+        // Dominant source src1 should not exceed 30% of 20 = 6 items
+        balanced.count { it.provider == "src1" } shouldBe 6
+    }
 }
