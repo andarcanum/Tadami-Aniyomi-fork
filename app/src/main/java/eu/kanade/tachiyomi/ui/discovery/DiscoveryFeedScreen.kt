@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Warning
@@ -290,11 +291,16 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                         state = state,
                         onBack = { navigator.pop() },
                         onRefresh = {
-                            val cooldown = screenModel.refreshNow()
-                            if (cooldown > 0L) {
-                                context.toast(
-                                    context.contextStringResource(AYMR.strings.for_you_refresh_cooldown, cooldown),
-                                )
+                            if (state.isRefreshing) {
+                                screenModel.cancelRefresh()
+                                context.toast(context.contextStringResource(MR.strings.action_cancel))
+                            } else {
+                                val cooldown = screenModel.refreshNow()
+                                if (cooldown > 0L) {
+                                    context.toast(
+                                        context.contextStringResource(AYMR.strings.for_you_refresh_cooldown, cooldown),
+                                    )
+                                }
                             }
                         },
                     )
@@ -412,12 +418,16 @@ private fun FeedToolbar(
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val (labelKind, labelValue) = resolveUpdatedLabel(state.lastUpdatedAt, System.currentTimeMillis())
-    val updatedLabel = when (labelKind) {
-        UpdatedLabelKind.MINUTES ->
-            stringResource(AYMR.strings.for_you_updated_minutes, labelValue?.toInt() ?: 0)
-        UpdatedLabelKind.HOURS ->
-            stringResource(AYMR.strings.for_you_updated_hours, labelValue?.toInt() ?: 0)
-        UpdatedLabelKind.NEVER -> stringResource(AYMR.strings.for_you_updated_never)
+    val updatedLabel = if (state.isRefreshing && !state.progressText.isNullOrBlank()) {
+        state.progressText
+    } else {
+        when (labelKind) {
+            UpdatedLabelKind.MINUTES ->
+                stringResource(AYMR.strings.for_you_updated_minutes, labelValue?.toInt() ?: 0)
+            UpdatedLabelKind.HOURS ->
+                stringResource(AYMR.strings.for_you_updated_hours, labelValue?.toInt() ?: 0)
+            UpdatedLabelKind.NEVER -> stringResource(AYMR.strings.for_you_updated_never)
+        }
     }
     Row(
         Modifier
@@ -464,7 +474,6 @@ private fun FeedToolbar(
                 .size(44.dp)
                 .clip(CircleShape)
                 .clickable(
-                    enabled = !state.isRefreshing,
                     interactionSource = remember { MutableInteractionSource() },
                     indication = ripple(bounded = false, radius = 22.dp),
                     onClick = {
@@ -475,11 +484,19 @@ private fun FeedToolbar(
             contentAlignment = Alignment.Center,
         ) {
             if (state.isRefreshing) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = colors.accent,
-                    strokeWidth = 2.dp,
-                )
+                Box(contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp),
+                        color = colors.accent,
+                        strokeWidth = 2.dp,
+                    )
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = stringResource(MR.strings.action_cancel),
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(12.dp),
+                    )
+                }
             } else {
                 Icon(
                     Icons.Filled.Refresh,

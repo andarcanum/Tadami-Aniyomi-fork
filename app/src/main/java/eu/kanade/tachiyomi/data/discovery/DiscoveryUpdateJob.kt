@@ -7,18 +7,36 @@ import androidx.work.CoroutineWorker
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
+import androidx.work.ListenableWorker
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
+import eu.kanade.tachiyomi.util.system.setForegroundSafely
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.util.concurrent.TimeUnit
+
+internal fun resolveWorkResult(
+    isManual: Boolean,
+    runAttemptCount: Int,
+    isSuccess: Boolean,
+    maxAutoAttempts: Int = 2,
+): ListenableWorker.Result = when {
+    isSuccess -> ListenableWorker.Result.success()
+    isManual -> ListenableWorker.Result.failure()
+    runAttemptCount > maxAutoAttempts -> ListenableWorker.Result.failure()
+    else -> ListenableWorker.Result.retry()
+}
 
 /**
  * Фоновое обновление ленты «Для тебя» (паттерн SyncJob):
@@ -28,24 +46,69 @@ import java.util.concurrent.TimeUnit
 class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
 
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val targetKey = inputData.getString(KEY_TARGET_MEDIA_TYPE)
+        val mediaType = targetKey?.let { DiscoveryMediaType.fromKey(it) }
+        return DiscoveryNotifier(applicationContext).getForegroundInfo(mediaType)
+    }
+
     override suspend fun doWork(): Result {
         val preferences = Injekt.get<DiscoveryPreferences>()
         if (!preferences.discoveryEnabled().get()) return Result.success()
+        val isManual = tags.contains(TAG_MANUAL)
+        if (isManual) {
+            setForegroundSafely()
+        }
+        val targetKey = inputData.getString(KEY_TARGET_MEDIA_TYPE)
+        val mediaTypes = if (targetKey != null) {
+            listOfNotNull(DiscoveryMediaType.fromKey(targetKey))
+        } else {
+            DiscoveryMediaType.entries
+        }
+        val notifier = DiscoveryNotifier(applicationContext)
         return try {
-            val targetKey = inputData.getString(KEY_TARGET_MEDIA_TYPE)
-            val mediaTypes = if (targetKey != null) {
-                listOfNotNull(DiscoveryMediaType.fromKey(targetKey))
-            } else {
-                DiscoveryMediaType.entries
+            coroutineScope {
+                val progressJob = if (isManual) {
+                    launch {
+                        DiscoveryProgressTracker.progress.collect { progress ->
+                            if (progress.isRunning) {
+                                notifier.showProgress(
+                                    mediaType = progress.mediaType,
+                                    progressText = progress.stageText,
+                                    current = progress.current,
+                                    total = progress.total,
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    null
+                }
+                try {
+                    val completed = withTimeoutOrNull(WORKER_TIMEOUT_MS) {
+                        Injekt.get<DiscoveryRunner>().run(mediaTypes, isManualRefresh = isManual)
+                        true
+                    } ?: false
+                    if (completed) {
+                        Result.success()
+                    } else {
+                        logcat { "[DiscoveryUpdateJob] TIMEOUT after ${WORKER_TIMEOUT_MS}ms" }
+                        resolveWorkResult(isManual, runAttemptCount, isSuccess = false)
+                    }
+                } finally {
+                    progressJob?.cancel()
+                }
             }
-            val isManual = tags.contains(TAG_MANUAL)
-            Injekt.get<DiscoveryRunner>().run(mediaTypes, isManualRefresh = isManual)
-            Result.success()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             logcat { "[DiscoveryUpdateJob] FAILED: ${e.message}" }
-            Result.retry()
+            resolveWorkResult(isManual, runAttemptCount, isSuccess = false)
+        } finally {
+            if (isManual) {
+                notifier.cancel()
+                DiscoveryProgressTracker.reset()
+            }
         }
     }
 
@@ -53,11 +116,30 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         private const val TAG_AUTO = "DiscoveryUpdate"
         private const val TAG_AFTER_LIBRARY = "DiscoveryUpdateAfterLibrary"
         const val TAG_MANUAL = "DiscoveryUpdateManual"
+        const val WORKER_TIMEOUT_MS = 120_000L
 
         private fun networkType(preferences: DiscoveryPreferences): NetworkType =
             if (preferences.refreshWifiOnly().get()) NetworkType.UNMETERED else NetworkType.CONNECTED
 
+        fun stop(context: Context, mediaType: DiscoveryMediaType? = null) {
+            val wm = context.workManager
+            wm.cancelUniqueWork(manualWorkName(mediaType))
+            if (mediaType == null) {
+                wm.cancelAllWorkByTag(TAG_MANUAL)
+            }
+            DiscoveryProgressTracker.reset()
+            DiscoveryNotifier(context).cancel()
+        }
+
+        fun cleanupStaleManualWork(context: Context) {
+            val wm = context.workManager
+            wm.cancelAllWorkByTag(TAG_MANUAL)
+            DiscoveryProgressTracker.reset()
+            DiscoveryNotifier(context).cancel()
+        }
+
         fun setupTask(context: Context) {
+            cleanupStaleManualWork(context)
             val preferences = Injekt.get<DiscoveryPreferences>()
             val interval = preferences.refreshIntervalHours().get()
             if (interval > 0 && preferences.discoveryEnabled().get()) {

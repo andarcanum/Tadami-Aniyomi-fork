@@ -24,4 +24,30 @@ class DiscoveryUpdateJobTest {
         DiscoveryUpdateJob.refillWorkName(DiscoveryMediaType.MANGA) shouldBe "DiscoveryRefillAfterConsumed:manga"
         DiscoveryUpdateJob.refillWorkName(DiscoveryMediaType.NOVEL) shouldBe "DiscoveryRefillAfterConsumed:novel"
     }
+
+    @Test
+    fun `manual refresh failure always returns failure result and never retries`() {
+        resolveWorkResult(isManual = true, runAttemptCount = 0, isSuccess = false) shouldBe
+            androidx.work.ListenableWorker.Result.failure()
+        resolveWorkResult(isManual = true, runAttemptCount = 5, isSuccess = false) shouldBe
+            androidx.work.ListenableWorker.Result.failure()
+    }
+
+    @Test
+    fun `successful work returns success result`() {
+        resolveWorkResult(isManual = true, runAttemptCount = 0, isSuccess = true) shouldBe
+            androidx.work.ListenableWorker.Result.success()
+        resolveWorkResult(isManual = false, runAttemptCount = 1, isSuccess = true) shouldBe
+            androidx.work.ListenableWorker.Result.success()
+    }
+
+    @Test
+    fun `auto background refresh retries on low attempt count but caps at max attempts`() {
+        resolveWorkResult(isManual = false, runAttemptCount = 1, isSuccess = false, maxAutoAttempts = 2) shouldBe
+            androidx.work.ListenableWorker.Result.retry()
+        resolveWorkResult(isManual = false, runAttemptCount = 2, isSuccess = false, maxAutoAttempts = 2) shouldBe
+            androidx.work.ListenableWorker.Result.retry()
+        resolveWorkResult(isManual = false, runAttemptCount = 3, isSuccess = false, maxAutoAttempts = 2) shouldBe
+            androidx.work.ListenableWorker.Result.failure()
+    }
 }
