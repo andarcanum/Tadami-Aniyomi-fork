@@ -69,6 +69,7 @@ internal data class DiscoveryFeedUiState(
     val coverRecoveryTick: Int = 0,
     // Табы, видимые при текущих настройках рядов/провайдеров (выключенный ряд = мёртвый таб).
     val visibleTabs: Set<FeedSignalTab> = FeedSignalTab.entries.toSet(),
+    val progressText: String? = null,
 )
 
 /** CSV ключей упавших рядов из prefs → набор [DiscoveryRowType]. */
@@ -209,6 +210,25 @@ internal class DiscoveryFeedScreenModel(
     fun start() {
         observeMedia(state.value.mediaType)
         observeVisibleTabs()
+        observeProgress()
+    }
+
+    private fun observeProgress() {
+        screenModelScope.launchIO {
+            eu.kanade.tachiyomi.data.discovery.DiscoveryProgressTracker.progress.collectLatest { progress ->
+                mutableState.update { current ->
+                    current.copy(
+                        progressText = if (progress.isRunning &&
+                            (progress.mediaType == null || progress.mediaType == current.mediaType)
+                        ) {
+                            progress.stageText
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+        }
     }
 
     /** Табы по настройкам рядов/провайдеров: выключенный ряд — мёртвый таб, скрываем. */
@@ -329,6 +349,13 @@ internal class DiscoveryFeedScreenModel(
         preferences.feedManualRefreshAt(media).set(now)
         DiscoveryUpdateJob.refreshNow(context, media)
         return 0L
+    }
+
+    fun cancelRefresh() {
+        val media = state.value.mediaType
+        DiscoveryUpdateJob.stop(context, media)
+        preferences.feedManualRefreshAt(media).set(0L)
+        mutableState.update { it.copy(isRefreshing = false, progressText = null) }
     }
 
     fun hide(item: DiscoverySuggestion) {

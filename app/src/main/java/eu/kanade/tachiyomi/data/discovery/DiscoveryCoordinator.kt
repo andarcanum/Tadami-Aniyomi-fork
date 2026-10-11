@@ -52,8 +52,23 @@ class DiscoveryCoordinator(
             }
         }
 
+        var completed = 0
         repeat(rowBuilders.size) {
             val (type, items) = channel.receive()
+            completed++
+            val stage = when (type) {
+                DiscoveryRowType.LIKE -> "Подбор похожего"
+                DiscoveryRowType.TASTE -> "Анализ предпочтений"
+                DiscoveryRowType.TREND -> "Загрузка трендов"
+                DiscoveryRowType.SOURCE -> "Опрос источников"
+            }
+            DiscoveryProgressTracker.update(
+                isRunning = true,
+                mediaType = context.mediaType,
+                stageText = "$stage ($completed/${rowBuilders.size})",
+                current = completed,
+                total = rowBuilders.size,
+            )
             if (items == null) {
                 failed += type
             } else {

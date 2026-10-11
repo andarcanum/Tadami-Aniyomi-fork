@@ -161,14 +161,18 @@ class DiscoveryRunner(
         isManualRefresh: Boolean = false,
     ) {
         if (!preferences.discoveryEnabled().get()) return
-        for (mediaType in mediaTypes) {
-            try {
-                runFor(mediaType, isManualRefresh = isManualRefresh)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                logcat { "[DiscoveryRunner] $mediaType FAILED: ${e.message}" }
+        try {
+            for (mediaType in mediaTypes) {
+                try {
+                    runFor(mediaType, isManualRefresh = isManualRefresh)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat { "[DiscoveryRunner] $mediaType FAILED: ${e.message}" }
+                }
             }
+        } finally {
+            DiscoveryProgressTracker.reset()
         }
     }
 
@@ -193,6 +197,13 @@ class DiscoveryRunner(
             .withLock { runForLocked(mediaType, isManualRefresh) }
 
     private suspend fun runForLocked(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false) {
+        DiscoveryProgressTracker.update(
+            isRunning = true,
+            mediaType = mediaType,
+            stageText = "Подготовка рекомендаций...",
+            current = 0,
+            total = 4,
+        )
         val candidates = seedSources.candidates(mediaType)
         val candidateRefreshCount = if (isManualRefresh) {
             preferences.manualRefreshCount(mediaType).get() + 1
@@ -534,6 +545,13 @@ class DiscoveryRunner(
             }
         }
         failedRowsSink(mediaType, feed.failedRows)
+        DiscoveryProgressTracker.update(
+            isRunning = true,
+            mediaType = mediaType,
+            stageText = "Готово",
+            current = builders.size,
+            total = builders.size,
+        )
     }
 }
 

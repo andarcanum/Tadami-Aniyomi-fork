@@ -10,6 +10,7 @@ import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.presentation.series.manga.resolveMangaResumeChapter
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.ui.reader.ReaderActivity
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
@@ -106,6 +107,7 @@ internal class MangaHomeHubScreenModel(
 
     private var heroChapter: Chapter? = null
     private var originalHeroChapterId: Long? = null
+    private var discoveryRefreshJob: Job? = null
 
     override fun updateCacheUserName(name: String) {
         fastCache.updateUserName(name)
@@ -331,13 +333,19 @@ internal class MangaHomeHubScreenModel(
 
     override fun rotateOrRefreshDiscovery() {
         if (!discoveryPreferences.discoveryEnabled().get()) return
-        if (state.value.isDiscoveryRefreshing) return
+        val mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA
+        if (state.value.isDiscoveryRefreshing) {
+            discoveryRefreshJob?.cancel()
+            eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.stop(context, mediaType)
+            discoveryPreferences.homeManualRefreshAt(mediaType).set(0L)
+            mutableState.update { it.copy(isDiscoveryRefreshing = false) }
+            return
+        }
 
         val now = System.currentTimeMillis()
         if (now - lastRefreshClickTime < 500L) return
         lastRefreshClickTime = now
 
-        val mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA
         val lastManual = discoveryPreferences.homeManualRefreshAt(mediaType).get().takeIf { it > 0L }
         val cooldown = eu.kanade.tachiyomi.ui.discovery.remainingCooldownSeconds(
             lastManual,
@@ -353,7 +361,7 @@ internal class MangaHomeHubScreenModel(
 
         discoveryPreferences.homeManualRefreshAt(mediaType).set(now)
         mutableState.update { it.copy(isDiscoveryRefreshing = true) }
-        screenModelScope.launchIO {
+        discoveryRefreshJob = screenModelScope.launchIO {
             try {
                 Injekt.get<eu.kanade.tachiyomi.data.discovery.DiscoveryRunner>().run(
                     listOf(mediaType),
