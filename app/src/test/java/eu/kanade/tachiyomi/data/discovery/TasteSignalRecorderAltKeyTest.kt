@@ -128,6 +128,31 @@ class TasteSignalRecorderAltKeyTest {
         )
         failure shouldBe false
     }
+
+    @Test
+    fun `like signal on item without genres enriches genres via sourceDetailsResolver`() = runTest {
+        val repo = RecordingFakeRepository()
+        val item = suggestionOf("Solo Leveling").copy(
+            sourceId = 42L,
+            sourceUrl = "/manga/solo-leveling",
+            genres = emptyList(),
+        )
+        var resolverCalled = false
+        val success = TasteSignalRecorder.record(
+            repository = repo,
+            item = item,
+            signalType = DiscoverySignalType.LIKE,
+            sourceDetailsResolver = { mediaType, sourceId, sourceUrl ->
+                resolverCalled = true
+                sourceId shouldBe 42L
+                sourceUrl shouldBe "/manga/solo-leveling"
+                listOf("Action", "Fantasy")
+            },
+        )
+        success shouldBe true
+        resolverCalled shouldBe true
+        repo.recordedGenres.last() shouldBe listOf("Action", "Fantasy")
+    }
 }
 
 private fun suggestionOf(title: String) = DiscoverySuggestion(
@@ -147,6 +172,7 @@ private fun suggestionOf(title: String) = DiscoverySuggestion(
 
 private open class RecordingFakeRepository : DiscoveryRepository {
     val recorded = mutableListOf<Triple<DiscoveryMediaType, String, DiscoverySignalType>>()
+    val recordedGenres = mutableListOf<List<String>>()
 
     override suspend fun recordSignal(
         mediaType: DiscoveryMediaType,
@@ -159,6 +185,7 @@ private open class RecordingFakeRepository : DiscoveryRepository {
         timestamp: Long,
     ) {
         recorded += Triple(mediaType, cleanTitle, signalType)
+        recordedGenres += genres
     }
 
     override fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>> =

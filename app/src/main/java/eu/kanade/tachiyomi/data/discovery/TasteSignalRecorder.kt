@@ -1,11 +1,17 @@
 package eu.kanade.tachiyomi.data.discovery
 
+import eu.kanade.tachiyomi.animesource.model.SAnime
+import eu.kanade.tachiyomi.novelsource.model.SNovel
+import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.flow.first
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
 import tachiyomi.domain.discovery.model.DiscoverySuggestion
 import tachiyomi.domain.discovery.repository.DiscoveryRepository
+import tachiyomi.domain.source.anime.model.StubAnimeSource
+import tachiyomi.domain.source.manga.model.StubMangaSource
+import tachiyomi.domain.source.novel.model.StubNovelSource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -62,6 +68,13 @@ object TasteSignalRecorder {
         altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta? = { t, m ->
             runCatchingUnlessCancelled { sharedTrendingSource.fetchMeta(t, m) }.getOrNull()
         },
+        sourceDetailsResolver: suspend (
+            DiscoveryMediaType,
+            Long,
+            String,
+        ) -> List<String> = { mediaType, sourceId, sourceUrl ->
+            fetchSourceGenres(mediaType, sourceId, sourceUrl)
+        },
     ): Boolean {
         val sourceKey = resolveSourceKey(item.mediaType, item.sourceId)
         val recorded = runCatchingUnlessCancelled {
@@ -88,6 +101,27 @@ object TasteSignalRecorder {
         if (signalType == DiscoverySignalType.CONSUMED) {
             afterConsumed(repository, item.mediaType, item.cleanTitle)
         } else if (signalType == DiscoverySignalType.LIKE) {
+            val initialGenres = snapshotGenres(item)
+            if (initialGenres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
+                val sourceId = item.sourceId!!
+                val sourceUrl = item.sourceUrl!!
+                val enriched = runCatchingUnlessCancelled {
+                    sourceDetailsResolver(item.mediaType, sourceId, sourceUrl)
+                }.getOrNull().orEmpty()
+                if (enriched.isNotEmpty()) {
+                    runCatchingUnlessCancelled {
+                        repository.recordSignal(
+                            mediaType = item.mediaType,
+                            cleanTitle = item.cleanTitle,
+                            title = item.title,
+                            signalType = signalType,
+                            genres = enriched,
+                            provider = item.provider,
+                            sourceKey = sourceKey,
+                        )
+                    }
+                }
+            }
             runCatching {
                 val app = Injekt.get<android.app.Application>()
                 DiscoveryUpdateJob.scheduleRefill(app, item.mediaType)
@@ -219,4 +253,46 @@ object TasteSignalRecorder {
             }
         }.getOrNull()
     }
+
+    internal suspend fun fetchSourceGenres(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        sourceUrl: String,
+    ): List<String> = runCatching {
+        when (mediaType) {
+            DiscoveryMediaType.MANGA -> {
+                val source = Injekt.get<tachiyomi.domain.source.manga.service.MangaSourceManager>().get(sourceId)
+                if (source != null && source !is StubMangaSource) {
+                    val sManga = SManga.create().apply { url = sourceUrl }
+                    val details = source.getMangaDetails(sManga)
+                    parseGenres(details.genre)
+                } else {
+                    emptyList()
+                }
+            }
+            DiscoveryMediaType.ANIME -> {
+                val source = Injekt.get<tachiyomi.domain.source.anime.service.AnimeSourceManager>().get(sourceId)
+                if (source != null && source !is StubAnimeSource) {
+                    val sAnime = SAnime.create().apply { url = sourceUrl }
+                    val details = source.getAnimeDetails(sAnime)
+                    parseGenres(details.genre)
+                } else {
+                    emptyList()
+                }
+            }
+            DiscoveryMediaType.NOVEL -> {
+                val source = Injekt.get<tachiyomi.domain.source.novel.service.NovelSourceManager>().get(sourceId)
+                if (source != null && source !is StubNovelSource) {
+                    val sNovel = SNovel.create().apply { url = sourceUrl }
+                    val details = source.getNovelDetails(sNovel)
+                    parseGenres(details.genre)
+                } else {
+                    emptyList()
+                }
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    internal fun parseGenres(genre: String?): List<String> =
+        genre.orEmpty().splitToSequence(",").mapNotNull { it.trim().takeIf(String::isNotEmpty) }.toList()
 }

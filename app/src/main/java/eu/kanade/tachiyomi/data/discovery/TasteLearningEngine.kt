@@ -115,7 +115,12 @@ internal fun applySourceAffinity(
     affinity: Double,
     affinityScale: Double = 4.0,
     boostCap: Double = 0.6,
+    isManualMode: Boolean = false,
 ): Double {
+    if (isManualMode) {
+        val positiveAffinity = affinity.coerceAtLeast(0.0)
+        return 1.0 + 3.5 * kotlin.math.tanh(positiveAffinity / affinityScale)
+    }
     val boost = 1.0 + boostCap * kotlin.math.tanh(affinity / affinityScale)
     val effectiveBase = libraryWeight.coerceAtLeast(1)
     return effectiveBase * boost.coerceIn(0.4, 2.0)

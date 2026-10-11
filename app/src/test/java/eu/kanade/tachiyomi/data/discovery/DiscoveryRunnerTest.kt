@@ -431,7 +431,7 @@ class DiscoveryRunnerTest {
     }
 
     @Test
-    fun `external providers off skips like and trend builders and clears their cache`() = runTest {
+    fun `external providers off skips trend builder, enables local like, and clears trend cache`() = runTest {
         val repo = FakeRepository()
         val prefs = DiscoveryPreferences(
             InMemoryPreferenceStore(
@@ -452,11 +452,10 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
         )
         runner.run(listOf(DiscoveryMediaType.NOVEL))
-        // Чисто внешние ряды (LIKE/TREND) не строятся — билдеры не создаются.
-        seenBuilderTypes.filter { it == DiscoveryRowType.LIKE || it == DiscoveryRowType.TREND } shouldBe emptyList()
-        // Их кэш-ряды очищены (как при выключенных рядах), TASTE тоже: пустая генерация
-        // без внешних жанровых провайдеров не должна оставлять старые внешние тайтлы.
-        // (LIKE/TREND чистятся до сборки, TASTE — после: порядок вызовов не значим.)
+        // Чисто внешний ряд TREND не строится — билдер не создаётся; LIKE строится локально из каталогов.
+        seenBuilderTypes.filter { it == DiscoveryRowType.TREND } shouldBe emptyList()
+        seenBuilderTypes.filter { it == DiscoveryRowType.LIKE } shouldBe listOf(DiscoveryRowType.LIKE)
+        // Кэш чисто внешнего ряда TREND очищен (как при выключенных рядах), TASTE и LIKE сохранены/обновлены.
         repo.replaced.map { it.second }.toSet() shouldBe setOf(
             DiscoveryRowType.LIKE,
             DiscoveryRowType.TASTE,
