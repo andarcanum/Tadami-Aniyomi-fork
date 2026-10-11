@@ -166,7 +166,10 @@ fun TabbedScreenAurora(
     scrollable: Boolean = false,
     animeSearchQuery: String? = null,
     onChangeAnimeSearchQuery: (String?) -> Unit = {},
+    novelSearchQuery: String? = null,
+    onChangeNovelSearchQuery: (String?) -> Unit = {},
     isMangaTab: (Int) -> Boolean = { it % 2 == 1 },
+    isNovelTab: (Int) -> Boolean = { false },
     showCompactHeader: Boolean = false,
     userName: String? = null,
     userAvatar: String? = null,
@@ -201,8 +204,17 @@ fun TabbedScreenAurora(
     }
 
     val isMangaPage = isMangaTab(currentPage)
-    val activeSearchQuery = if (isMangaPage) mangaSearchQuery else animeSearchQuery
-    val onChangeSearchQuery = if (isMangaPage) onChangeMangaSearchQuery else onChangeAnimeSearchQuery
+    val isNovelPage = isNovelTab(currentPage)
+    val activeSearchQuery = when {
+        isNovelPage -> novelSearchQuery
+        isMangaPage -> mangaSearchQuery
+        else -> animeSearchQuery
+    }
+    val onChangeSearchQuery = when {
+        isNovelPage -> onChangeNovelSearchQuery
+        isMangaPage -> onChangeMangaSearchQuery
+        else -> onChangeAnimeSearchQuery
+    }
     val isSearchActive = activeSearchQuery != null
 
     val colors = AuroraTheme.colors

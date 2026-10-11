@@ -32,6 +32,7 @@ import eu.kanade.tachiyomi.ui.history.anime.AnimeHistoryScreenModel
 import eu.kanade.tachiyomi.ui.history.anime.animeHistoryTab
 import eu.kanade.tachiyomi.ui.history.manga.MangaHistoryScreenModel
 import eu.kanade.tachiyomi.ui.history.manga.mangaHistoryTab
+import eu.kanade.tachiyomi.ui.history.novel.NovelHistoryScreenModel
 import eu.kanade.tachiyomi.ui.history.novel.novelHistoryTab
 import eu.kanade.tachiyomi.ui.main.MainActivity
 import eu.kanade.tachiyomi.ui.player.PlayerActivity
@@ -113,6 +114,9 @@ data object HistoriesTab : Tab {
         val animeHistoryScreenModel = rememberScreenModel { AnimeHistoryScreenModel() }
         val animeSearchQuery by animeHistoryScreenModel.query.collectAsStateWithLifecycle()
 
+        val novelHistoryScreenModel = rememberScreenModel { NovelHistoryScreenModel() }
+        val novelSearchQuery by novelHistoryScreenModel.query.collectAsStateWithLifecycle()
+
         val sectionTabs = historyContentTabs(showAnimeSection, showMangaSection, showNovelSection)
         val tabs = sectionTabs
             .map { tab ->
@@ -149,6 +153,9 @@ data object HistoriesTab : Tab {
         val isMangaTab: (Int) -> Boolean = { page ->
             sectionTabs.getOrNull(page) == HistoryContentTab.MANGA
         }
+        val isNovelTab: (Int) -> Boolean = { page ->
+            sectionTabs.getOrNull(page) == HistoryContentTab.NOVEL
+        }
 
         if (theme.isAuroraStyle) {
             TabbedScreenAurora(
@@ -159,9 +166,12 @@ data object HistoriesTab : Tab {
                 onChangeMangaSearchQuery = mangaHistoryScreenModel::search,
                 animeSearchQuery = animeSearchQuery,
                 onChangeAnimeSearchQuery = animeHistoryScreenModel::search,
+                novelSearchQuery = novelSearchQuery,
+                onChangeNovelSearchQuery = novelHistoryScreenModel::search,
                 highlightSearchAction = false,
                 extraSearchToActionsGap = 4.dp,
                 isMangaTab = isMangaTab,
+                isNovelTab = isNovelTab,
             )
         } else {
             TabbedScreen(
@@ -172,9 +182,12 @@ data object HistoriesTab : Tab {
                 onChangeMangaSearchQuery = mangaHistoryScreenModel::search,
                 animeSearchQuery = animeSearchQuery,
                 onChangeAnimeSearchQuery = animeHistoryScreenModel::search,
+                novelSearchQuery = novelSearchQuery,
+                onChangeNovelSearchQuery = novelHistoryScreenModel::search,
                 searchActionIconTint = MaterialTheme.colorScheme.onSurface,
                 extraSearchToActionsGap = 4.dp,
                 isMangaTab = isMangaTab,
+                isNovelTab = isNovelTab,
             )
         }
 
