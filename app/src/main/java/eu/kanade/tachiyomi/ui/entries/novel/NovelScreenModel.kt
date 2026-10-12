@@ -978,7 +978,7 @@ class NovelScreenModel(
 
                 coroutineScope {
                     // Task 1: External Suggestions (AniList/etc)
-                    launch {
+                    val externalJob = launch {
                         try {
                             val externalResult = suggestionCoordinator.fetchSuggestions(seed, limit = 40)
                             if (externalResult.items.isNotEmpty()) {
@@ -1011,7 +1011,9 @@ class NovelScreenModel(
                     }
 
                     // Task 2: Native Related suggestions
-                    if (currentNovel != null && currentSource != null) {
+                    val relatedJob = if (currentNovel != null && currentSource != null &&
+                        currentSource.supportsRelatedNovels
+                    ) {
                         launch {
                             try {
                                 val relatedOutcome = relatedCoordinator.fetchRelatedSuggestions(
@@ -1038,10 +1040,15 @@ class NovelScreenModel(
                                 logcat { "[NovelScreenModel] Native related suggestions failed: ${e.message}" }
                             }
                         }
+                    } else {
+                        null
                     }
 
-                    // Task 3: Search Fallback suggestions
-                    if (currentNovel != null && currentSource != null) {
+                    externalJob.join()
+                    relatedJob?.join()
+
+                    // Task 3: Search Fallback suggestions only when external and related returned nothing
+                    if (currentNovel != null && currentSource != null && suggestionsList.isEmpty()) {
                         launch {
                             try {
                                 val searchOutcome = searchFallbackEngine.fetchSearchFallback(

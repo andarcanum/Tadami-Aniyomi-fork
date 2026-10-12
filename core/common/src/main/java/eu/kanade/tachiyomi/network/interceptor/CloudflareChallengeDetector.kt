@@ -78,10 +78,29 @@ object CloudflareChallengeDetector {
     /**
      * P7: JS-проба наличия виджета человеческой верификации (Turnstile и т.п.) - общий
      * источник для фонового резолвера и ручного WebView-экрана.
+     * Возвращает false для страниц, уже содержащих содержательный текст/статью (где Turnstile
+     * может присутствовать лишь как форма для комментариев в подвале).
      */
     val interactiveWidgetProbeJs: String = """
         (function() {
             try {
+                var title = (document.title || '').toLowerCase();
+                var isChallengeTitle = title.indexOf('just a moment') !== -1 ||
+                    title.indexOf('bot verification') !== -1 ||
+                    title.indexOf('attention required') !== -1 ||
+                    title.indexOf('security verification') !== -1 ||
+                    title.indexOf('security check') !== -1 ||
+                    title.indexOf('verifying you are human') !== -1 ||
+                    title.indexOf('проверк') !== -1;
+
+                var textLength = (document.body ? (document.body.innerText || document.body.textContent || '') : '').trim().length;
+                var pCount = document.querySelectorAll('p').length;
+
+                // Если страница уже содержит статьи/главы и заголовок не челлендж - это форма комментариев, а не блокирующий Turnstile
+                if (!isChallengeTitle && (textLength >= 300 || pCount >= 3)) {
+                    return false;
+                }
+
                 return document.querySelector('.cf-turnstile, [data-sitekey], iframe[src*="challenges.cloudflare.com"]') != null;
             } catch (_) {
                 return false;
@@ -99,15 +118,26 @@ object CloudflareChallengeDetector {
                 var title = (document.title || '').toLowerCase();
                 if (title.indexOf('just a moment') !== -1 ||
                     title.indexOf('bot verification') !== -1 ||
-                    title.indexOf('redirecting') !== -1 ||
-                    title.indexOf('you are being redirected') !== -1 ||
-                    title.indexOf('проверк') !== -1 ||
-                    title.indexOf('security verification') !== -1) {
+                    title.indexOf('attention required') !== -1 ||
+                    title.indexOf('security verification') !== -1 ||
+                    title.indexOf('security check') !== -1 ||
+                    title.indexOf('verifying you are human') !== -1 ||
+                    title.indexOf('проверк') !== -1) {
                     return true;
                 }
+                if (document.getElementById('challenge-running') !== null ||
+                    document.getElementById('challenge-stage') !== null ||
+                    document.getElementById('challenge-form') !== null ||
+                    document.querySelector('.cf-browser-verification') !== null) {
+                    return true;
+                }
+                var textLength = (document.body ? (document.body.innerText || document.body.textContent || '') : '').trim().length;
+                var pCount = document.querySelectorAll('p').length;
+                if (textLength >= 300 || pCount >= 3) {
+                    return false;
+                }
                 var html = document.documentElement ? document.documentElement.outerHTML.slice(0, 8192).toLowerCase() : '';
-                var markers = ['cf-turnstile', 'challenges.cloudflare.com', 'data-sitekey',
-                    '_cf_chl_opt', 'cf_chl_opt', '/cdn-cgi/challenge-platform/',
+                var markers = ['cf-turnstile', '_cf_chl_opt', 'cf_chl_opt', '/cdn-cgi/challenge-platform/',
                     'challenge-platform', 'cf-browser-verification', 'cf-challenge-running',
                     'challenge-error-title', 'challenge-error-text', 'just a moment', 'проверк'];
                 for (var i = 0; i < markers.length; i++) {
@@ -123,40 +153,127 @@ object CloudflareChallengeDetector {
     /**
      * JS-проба готовности контентной страницы в WebView:
      * - "challenge" если на странице есть активный Cloudflare challenge / Turnstile;
-     * - "ready" если документ готов (readyState complete/interactive), body не пустой и нет маркеров challenge;
+     * - "ready" если документ готов (readyState complete/interactive), body не пустой и нет активного challenge;
      * - "waiting" если документ ещё рендерится/загружается.
      */
     val pageReadyProbeJs: String = """
         (function() {
             try {
                 var title = (document.title || '').toLowerCase();
-                if (title.indexOf('just a moment') !== -1 ||
+                var isChallengeTitle = title.indexOf('just a moment') !== -1 ||
                     title.indexOf('bot verification') !== -1 ||
-                    title.indexOf('redirecting') !== -1 ||
-                    title.indexOf('you are being redirected') !== -1 ||
-                    title.indexOf('проверк') !== -1 ||
-                    title.indexOf('security verification') !== -1) {
+                    title.indexOf('attention required') !== -1 ||
+                    title.indexOf('security verification') !== -1 ||
+                    title.indexOf('security check') !== -1 ||
+                    title.indexOf('verifying you are human') !== -1 ||
+                    title.indexOf('проверк') !== -1;
+
+                if (isChallengeTitle) {
                     return 'challenge';
                 }
-                var html = document.documentElement ? document.documentElement.outerHTML.slice(0, 8192).toLowerCase() : '';
-                var markers = ['cf-turnstile', 'challenges.cloudflare.com', 'data-sitekey',
-                    '_cf_chl_opt', 'cf_chl_opt', '/cdn-cgi/challenge-platform/',
-                    'challenge-platform', 'cf-browser-verification', 'cf-challenge-running',
-                    'challenge-error-title', 'challenge-error-text', 'just a moment', 'проверк'];
-                for (var i = 0; i < markers.length; i++) {
-                    if (html.indexOf(markers[i]) !== -1) return 'challenge';
+
+                var hasActiveChallenge = document.getElementById('challenge-running') !== null ||
+                    document.getElementById('challenge-stage') !== null ||
+                    document.getElementById('challenge-form') !== null ||
+                    document.querySelector('.cf-browser-verification') !== null;
+
+                if (hasActiveChallenge) {
+                    return 'challenge';
                 }
+
                 var isReady = document.readyState === 'complete' || document.readyState === 'interactive';
-                var bodyLength = document.body ? document.body.innerHTML.length : 0;
-                if (isReady && bodyLength >= 50) {
+                var textLength = (document.body ? (document.body.innerText || document.body.textContent || '') : '').trim().length;
+                var pCount = document.querySelectorAll('p').length;
+
+                // Страница со статьёй/главой и параграфами готова, даже если в подвале есть форма с Turnstile
+                if (isReady && (textLength >= 300 || pCount >= 3)) {
                     return 'ready';
                 }
+
+                // Виджет Turnstile на пустой странице означает активную проверку
+                var hasTurnstile = document.querySelector('.cf-turnstile, iframe[src*="challenges.cloudflare.com"]') !== null;
+                if (hasTurnstile && textLength < 300 && pCount < 2) {
+                    return 'challenge';
+                }
+
+                if (isReady && textLength >= 50) {
+                    return 'ready';
+                }
+
                 return 'waiting';
             } catch (_) {
-                return 'challenge';
+                return 'waiting';
             }
         })();
     """.trimIndent()
+
+    /**
+     * Определяет, является ли [body] активной блокирующей страницей Cloudflare challenge,
+     * а не легитимной страницей контента со встроенной формой комментариев (где есть data-sitekey / cf-turnstile).
+     */
+    fun isBlockingChallengePage(body: String, title: String? = null): Boolean {
+        if (body.isBlank()) return false
+        val lower = body.lowercase(Locale.ROOT)
+
+        val pageTitle = title?.lowercase(Locale.ROOT) ?: extractTitle(lower)
+        if (pageTitle != null && isChallengeTitle(pageTitle)) {
+            return true
+        }
+
+        val hasActiveChallengeContainer = lower.contains("id=\"challenge-running\"") ||
+            lower.contains("id=\"challenge-stage\"") ||
+            lower.contains("id=\"challenge-form\"") ||
+            lower.contains("class=\"cf-browser-verification\"") ||
+            lower.contains("id=\"challenge-error-title\"") ||
+            lower.contains("id=\"challenge-error-text\"")
+        if (hasActiveChallengeContainer) {
+            return true
+        }
+
+        // Страница с абзацами текста или объёмным контентом без активного контейнера не является экраном блокировки CF
+        val pCount = countParagraphTags(lower)
+        val hasSubstantialContent = (lower.length >= 1000 && pCount >= 3) || lower.length >= 8192
+        if (hasSubstantialContent && (pageTitle == null || !isChallengeTitle(pageTitle))) {
+            return false
+        }
+
+        return hasChallengeMarkers(body)
+    }
+
+    fun countParagraphTags(html: String): Int {
+        var count = 0
+        var idx = 0
+        while (true) {
+            idx = html.indexOf("<p", idx)
+            if (idx == -1) break
+            val next = html.getOrNull(idx + 2)
+            if (next == ' ' || next == '>' || next == '/' || next == '\n' || next == '\r' || next == '\t') {
+                count++
+            }
+            idx += 2
+        }
+        return count
+    }
+
+    private fun extractTitle(lowerHtml: String): String? {
+        val start = lowerHtml.indexOf("<title")
+        if (start == -1) return null
+        val tagEnd = lowerHtml.indexOf('>', start)
+        if (tagEnd == -1) return null
+        val end = lowerHtml.indexOf("</title>", tagEnd)
+        if (end == -1) return null
+        return lowerHtml.substring(tagEnd + 1, end).trim()
+    }
+
+    fun isChallengeTitle(lowerTitle: String): Boolean {
+        return lowerTitle.contains("just a moment") ||
+            lowerTitle.contains("bot verification") ||
+            lowerTitle.contains("attention required") ||
+            lowerTitle.contains("security verification") ||
+            lowerTitle.contains("security check") ||
+            lowerTitle.contains("проверк") ||
+            lowerTitle.contains("verifying you are human")
+    }
 
     /**
      * Полная классификация ответа. `bodyPeek` — первые килобайты тела

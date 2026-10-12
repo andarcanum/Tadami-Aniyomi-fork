@@ -113,4 +113,59 @@ class NovelWebViewFetchBridgeTest {
         detector.hasChallengeMarkers(orchestrateScript) shouldBe true
         detector.hasChallengeMarkers(cleanChapterHtml) shouldBe false
     }
+
+    @Test
+    fun `isBlockingChallengePage distinguishes blocking challenges from chapter pages with comment widgets`() {
+        val detector = eu.kanade.tachiyomi.network.interceptor.CloudflareChallengeDetector
+        val russianTurnstile =
+            "<html><body>Выполнение проверки безопасности ... Ожидание ответа www.novelupdates.com</body></html>"
+        val activeChallenge =
+            "<html><head><title>Just a moment...</title></head><body><div id=\"challenge-stage\"></div></body></html>"
+        val chapterWithTurnstileWidget = (1..60).joinToString("\n") {
+            "<p>Paragraph $it of substantial novel text describing an intense fight scene.</p>"
+        } + """<form id="commentform"><div class="cf-turnstile" data-sitekey="0x4AAA"></div></form>"""
+
+        detector.isBlockingChallengePage(russianTurnstile) shouldBe true
+        detector.isBlockingChallengePage(activeChallenge) shouldBe true
+        detector.isBlockingChallengePage(chapterWithTurnstileWidget) shouldBe false
+    }
+
+    @Test
+    fun `countParagraphTags counts real p tags and ignores pre, path, param, picture`() {
+        val detector = eu.kanade.tachiyomi.network.interceptor.CloudflareChallengeDetector
+        val htmlWithOtherTags = """
+            <pre>code block</pre>
+            <svg><path d="M0 0"/></svg>
+            <object><param name="foo" value="bar"/></object>
+            <picture><source srcset="x.jpg"/></picture>
+        """.trimIndent()
+        detector.countParagraphTags(htmlWithOtherTags) shouldBe 0
+
+        val htmlWithPTags = """
+            <p>First paragraph</p>
+            <p class="chapter-text">Second paragraph</p>
+            <p
+               id="p3">Third paragraph</p>
+        """.trimIndent()
+        detector.countParagraphTags(htmlWithPTags) shouldBe 3
+    }
+
+    @Test
+    fun `isChallengeTitle rejects normal redirecting titles and catches cloudflare titles`() {
+        val detector = eu.kanade.tachiyomi.network.interceptor.CloudflareChallengeDetector
+        detector.isChallengeTitle("redirecting to chapter 1...") shouldBe false
+        detector.isChallengeTitle("you are being redirected") shouldBe false
+        detector.isChallengeTitle("just a moment...") shouldBe true
+        detector.isChallengeTitle("attention required! | cloudflare") shouldBe true
+        detector.isChallengeTitle("проверка безопасности...") shouldBe true
+    }
+
+    @Test
+    fun `isMeaningfulSearchQuery filters out stopword queries`() {
+        val engine = eu.kanade.tachiyomi.data.suggestions.novel.NovelSearchFallbackEngine
+        engine.isMeaningfulSearchQuery("i'm the") shouldBe false
+        engine.isMeaningfulSearchQuery("the a an") shouldBe false
+        engine.isMeaningfulSearchQuery("Solo Leveling") shouldBe true
+        engine.isMeaningfulSearchQuery("I'm the Grim Reaper") shouldBe true
+    }
 }

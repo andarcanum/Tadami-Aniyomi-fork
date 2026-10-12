@@ -6,9 +6,9 @@ import org.junit.jupiter.api.Test
 class CloudflareBridgeRegistryTest {
 
     @Test
-    fun `novelupdates hosts are always bridged without marking`() {
-        CloudflareBridgeRegistry.isBridged("www.novelupdates.com") shouldBe true
-        CloudflareBridgeRegistry.isBridged("novelupdates.com") shouldBe true
+    fun `novelupdates hosts are not statically bridged without marking`() {
+        CloudflareBridgeRegistry.isBridged("www.novelupdates.com") shouldBe false
+        CloudflareBridgeRegistry.isBridged("novelupdates.com") shouldBe false
     }
 
     @Test

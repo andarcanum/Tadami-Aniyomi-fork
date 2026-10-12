@@ -142,6 +142,9 @@ internal class WebViewCloudflareChallengeResolver(
             createdWebView.loadUrl(origRequestUrl, headers)
         }
 
+        var isFingerprintMismatch = false
+        var isDestroyed = false
+
         // Stage 1 -- optimistic wait. Most managed challenges self-solve within a couple of
         // seconds, so we first wait only up to the *soft* limit; the poller keeps running in
         // the background and releases the latch as soon as the cookie appears.
@@ -153,7 +156,7 @@ internal class WebViewCloudflareChallengeResolver(
             // challenge will never self-solve, so fail it here instead of sitting out the full
             // timeout. Widget-free challenges (or a cookie that appears during the probe) keep
             // their remaining time below, so slow auto-solves are not aborted.
-            if (!waiter.bypassed && !hasInteractiveWidget && detectInteractiveWidgetSync(webview)) {
+            if (!waiter.bypassed && !hasInteractiveWidget && detectInteractiveWidgetSync(webview, isDestroyed)) {
                 hasInteractiveWidget = true
                 release()
             } else if (!waiter.bypassed) {
@@ -161,11 +164,15 @@ internal class WebViewCloudflareChallengeResolver(
                 // clean page (no widget, no challenge markers) yet no clearance appeared, so the
                 // remaining wait would only burn ~21s for a cookie that is never issued - the
                 // caller routes these hosts via the WebView bridge instead.
-                if (pageFinishedOnce && !detectChallengeMarkersSync(webview)) {
+                if (pageFinishedOnce && !detectChallengeMarkersSync(webview, isDestroyed)) {
+                    isFingerprintMismatch = true
                     release()
                 } else {
                     // Stage 3 -- give a widget-free auto-solve the rest of the window up to the hard cap.
                     latch.await(CHALLENGE_RESOLVE_TIMEOUT_MS - waiter.softLimitMs, TimeUnit.MILLISECONDS)
+                    if (!waiter.bypassed && pageFinishedOnce && !detectChallengeMarkersSync(webview, isDestroyed)) {
+                        isFingerprintMismatch = true
+                    }
                 }
             }
         } finally {
@@ -173,6 +180,7 @@ internal class WebViewCloudflareChallengeResolver(
             // poller used to outlive the resolve (running sync cookie probes on main) long
             // after the WebView was destroyed.
             release()
+            isDestroyed = true
             // Guaranteed teardown: an interrupted worker thread used to unwind before this
             // block ran, leaking the created WebView (an OOM driver on low-heap devices).
             mainExecutor.execute {
@@ -202,7 +210,7 @@ internal class WebViewCloudflareChallengeResolver(
             // challenge. The visible WebView shows the same clean logged-in page with no captcha,
             // so registering a manual solve would only show a dead-end button. Route via the
             // WebView bridge instead (caller marks the host).
-            if (pageFinishedOnce && !detectChallengeMarkersSync(webview)) {
+            if (isFingerprintMismatch) {
                 throw CloudflareFingerprintMismatchException()
             }
 
@@ -218,11 +226,15 @@ internal class WebViewCloudflareChallengeResolver(
         )
     }
 
-    private fun detectInteractiveWidgetSync(webview: WebView?): Boolean {
-        if (webview == null) return false
+    private fun detectInteractiveWidgetSync(webview: WebView?, isDestroyed: Boolean): Boolean {
+        if (webview == null || isDestroyed) return false
         val checkLatch = CountDownLatch(1)
         var detected = false
         mainExecutor.execute {
+            if (isDestroyed) {
+                checkLatch.countDown()
+                return@execute
+            }
             try {
                 webview.evaluateJavascript(INTERACTIVE_WIDGET_PROBE) { result ->
                     detected = result == "true"
@@ -236,11 +248,15 @@ internal class WebViewCloudflareChallengeResolver(
         return detected
     }
 
-    private fun detectChallengeMarkersSync(webview: WebView?): Boolean {
-        if (webview == null) return true
+    private fun detectChallengeMarkersSync(webview: WebView?, isDestroyed: Boolean): Boolean {
+        if (webview == null || isDestroyed) return true
         val checkLatch = CountDownLatch(1)
         var detected = true
         mainExecutor.execute {
+            if (isDestroyed) {
+                checkLatch.countDown()
+                return@execute
+            }
             try {
                 webview.evaluateJavascript(CHALLENGE_MARKERS_PROBE) { result ->
                     // "true" = challenge markers present, "false" = clean page, null = unknown.
