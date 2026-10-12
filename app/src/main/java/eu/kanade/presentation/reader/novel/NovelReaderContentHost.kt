@@ -1071,6 +1071,24 @@ internal fun NovelReaderContentHost(
         contentPaddingPx
     }
     val spreadContentPaddingPx = with(density) { spreadContentPadding.roundToPx() }
+    val pageReaderCutoutTopPx = rootInsets
+        ?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout())
+        ?.top ?: 0
+    val pageReaderCutoutTop = with(density) { pageReaderCutoutTopPx.toDp() }
+    val pageReaderCutoutBottomPx = rootInsets
+        ?.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.displayCutout())
+        ?.bottom ?: 0
+    val isReaderFullScreen = state.readerSettings.fullScreenMode
+    val pageReaderStatusBarTopPadding = resolvePageReaderStableTopPadding(
+        isFullScreen = isReaderFullScreen,
+        cutoutTopDp = pageReaderCutoutTop,
+        statusBarTopPaddingDp = statusBarTopPadding,
+    )
+    val pageReaderNavigationBarHeightPx = resolvePageReaderStableNavigationBarHeightPx(
+        isFullScreen = isReaderFullScreen,
+        cutoutBottomPx = pageReaderCutoutBottomPx,
+        navigationBarHeightPx = navigationBarHeight,
+    )
     val pageReaderPages: List<List<PlainPageSlice>> = remember(
         state.chapter.id,
         pageReaderTextBlocks,
@@ -1088,7 +1106,7 @@ internal fun NovelReaderContentHost(
         chapterTitleTypeface,
         pageViewportSize,
         contentPaddingPx,
-        statusBarTopPadding,
+        pageReaderStatusBarTopPadding,
         novelSpreadColumns,
     ) {
         if (!shouldPaginatePageReader || (pageReaderTextBlocks.isEmpty() && pageReaderImageBlocks.isEmpty())) {
@@ -1099,7 +1117,7 @@ internal fun NovelReaderContentHost(
             val screenHeightPx = pageViewportSize.height.takeIf { it > 0 }
                 ?: with(density) { configuration.screenHeightDp.dp.roundToPx() }
             val horizontalPaddingPx = with(density) { (state.readerSettings.margin.dp * 2).roundToPx() }
-            val topPaddingPx = with(density) { (contentPaddingPx + statusBarTopPadding).roundToPx() }
+            val topPaddingPx = with(density) { (contentPaddingPx + pageReaderStatusBarTopPadding).roundToPx() }
             val bottomPaddingPx = with(density) { contentPaddingPx.roundToPx() }
             val bookBottomInsetPx = with(density) {
                 resolveNovelPageReaderBookBottomInset(
@@ -1132,7 +1150,7 @@ internal fun NovelReaderContentHost(
                     bottomPaddingPx = bottomPaddingPx,
                     bookBottomInsetPx = bookBottomInsetPx,
                     pageFitSafetyPx = pageFitSafetyPx,
-                    navigationBarHeightPx = navigationBarHeight,
+                    navigationBarHeightPx = pageReaderNavigationBarHeightPx,
                 )
             }
             // Spread columns keep the same horizontal margin the single-page reader applies, so a
@@ -1187,7 +1205,7 @@ internal fun NovelReaderContentHost(
         chapterTitleTypeface,
         pageViewportSize,
         contentPaddingPx,
-        statusBarTopPadding,
+        pageReaderStatusBarTopPadding,
         novelSpreadColumns,
     ) {
         if (!shouldPaginateRichForPageReader) {
@@ -1198,7 +1216,7 @@ internal fun NovelReaderContentHost(
             val screenHeightPx = pageViewportSize.height.takeIf { it > 0 }
                 ?: with(density) { configuration.screenHeightDp.dp.roundToPx() }
             val horizontalPaddingPx = with(density) { (state.readerSettings.margin.dp * 2).roundToPx() }
-            val topPaddingPx = with(density) { (contentPaddingPx + statusBarTopPadding).roundToPx() }
+            val topPaddingPx = with(density) { (contentPaddingPx + pageReaderStatusBarTopPadding).roundToPx() }
             val bottomPaddingPx = with(density) { contentPaddingPx.roundToPx() }
             val bookBottomInsetPx = with(density) {
                 resolveNovelPageReaderBookBottomInset(
@@ -1226,7 +1244,7 @@ internal fun NovelReaderContentHost(
                     bottomPaddingPx = bottomPaddingPx,
                     bookBottomInsetPx = bookBottomInsetPx,
                     pageFitSafetyPx = pageFitSafetyPx,
-                    navigationBarHeightPx = navigationBarHeight,
+                    navigationBarHeightPx = pageReaderNavigationBarHeightPx,
                 )
             }
             val spreadColumnWidthPx = resolveNovelSpreadColumnTextWidth(
@@ -1595,9 +1613,28 @@ internal fun NovelReaderContentHost(
     // on the slot that contains the currently displayed page instead of letting the raw index carry
     // over — toggling the spread off from spread slot 2 must land on real page 4 (the first page of
     // that spread), not on page 2.
-    LaunchedEffect(pagerState, pageReaderRendererRoute, novelSpreadColumns, pageReaderSpreadSlotCount) {
+    var previousSpreadColumns by remember(pagerState) {
+        mutableIntStateOf(novelSpreadColumns)
+    }
+    var previousRendererRoute by remember(pagerState) {
+        mutableStateOf(pageReaderRendererRoute)
+    }
+    LaunchedEffect(pagerState, pageReaderRendererRoute, novelSpreadColumns) {
+        val columnsChanged = previousSpreadColumns != novelSpreadColumns
+        val routeChanged = previousRendererRoute != pageReaderRendererRoute
+        previousSpreadColumns = novelSpreadColumns
+        previousRendererRoute = pageReaderRendererRoute
+
+        if (!columnsChanged && !routeChanged) return@LaunchedEffect
+        if (pageReaderSpreadSlotCount <= 0 || pageReaderItemsCount <= 0) return@LaunchedEffect
+
         val currentRealPage = pageReaderProgressPageIndex.coerceIn(0, (pageReaderItemsCount - 1).coerceAtLeast(0))
         val targetSlot = resolveSpreadSlotForPageIndex(currentRealPage, novelSpreadColumns)
+        val maxVirtualPage = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
+            (composePagerVirtualPageCount - 1).coerceAtLeast(0)
+        } else {
+            (pageReaderSpreadSlotCount - 1).coerceAtLeast(0)
+        }
         val targetVirtualPage = if (pageReaderRendererRoute == NovelPageReaderRendererRoute.COMPOSE_PAGER) {
             resolveComposePagerVirtualPageIndex(
                 actualPageIndex = targetSlot,
@@ -1605,7 +1642,7 @@ internal fun NovelReaderContentHost(
             )
         } else {
             targetSlot
-        }.coerceIn(0, (pagerState.pageCount - 1).coerceAtLeast(0))
+        }.coerceIn(0, maxVirtualPage)
         if (pagerState.currentPage != targetVirtualPage) {
             pagerState.scrollToPage(targetVirtualPage)
         }
@@ -2686,7 +2723,7 @@ internal fun NovelReaderContentHost(
                             textTypeface = composeTypeface,
                             chapterTitleTypeface = chapterTitleTypeface,
                             contentPadding = spreadContentPadding,
-                            statusBarTopPadding = statusBarTopPadding,
+                            statusBarTopPadding = pageReaderStatusBarTopPadding,
                             spreadCutoutLeftDp = with(density) { spreadCutoutLeftPx.toDp() },
                             spreadCutoutRightDp = with(density) { spreadCutoutRightPx.toDp() },
                             ttsHighlightState = ttsHighlightState,
@@ -2757,7 +2794,7 @@ internal fun NovelReaderContentHost(
                             textTypeface = composeTypeface,
                             chapterTitleTypeface = chapterTitleTypeface,
                             contentPadding = spreadContentPadding,
-                            statusBarTopPadding = statusBarTopPadding,
+                            statusBarTopPadding = pageReaderStatusBarTopPadding,
                             spreadCutoutLeftDp = with(density) { spreadCutoutLeftPx.toDp() },
                             spreadCutoutRightDp = with(density) { spreadCutoutRightPx.toDp() },
                             ttsHighlightState = ttsHighlightState,
@@ -2812,7 +2849,7 @@ internal fun NovelReaderContentHost(
                             textTypeface = composeTypeface,
                             chapterTitleTypeface = chapterTitleTypeface,
                             contentPadding = spreadContentPadding,
-                            statusBarTopPadding = statusBarTopPadding,
+                            statusBarTopPadding = pageReaderStatusBarTopPadding,
                             spreadCutoutLeftDp = with(density) { spreadCutoutLeftPx.toDp() },
                             spreadCutoutRightDp = with(density) { spreadCutoutRightPx.toDp() },
                             ttsHighlightState = ttsHighlightState,

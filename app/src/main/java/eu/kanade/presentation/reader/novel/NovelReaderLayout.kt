@@ -12,6 +12,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichBlockTextAlign
 import eu.kanade.tachiyomi.ui.reader.novel.NovelRichContentBlock
 import kotlin.math.ceil
@@ -746,6 +747,42 @@ internal fun resolveNovelPageReaderVerticalPaddingPx(
         bookBottomInsetPx +
         pageFitSafetyPx +
         uncoveredNavigationBarPx
+}
+
+/**
+ * Resolves the top padding used for page reader pagination and rendering.
+ *
+ * In fullscreen mode, reading takes place with system bars hidden; temporary chrome overlays
+ * must not alter the content's vertical budget or trigger full-chapter repagination.
+ */
+internal fun resolvePageReaderStableTopPadding(
+    isFullScreen: Boolean,
+    cutoutTopDp: Dp,
+    statusBarTopPaddingDp: Dp,
+): Dp {
+    return if (isFullScreen) {
+        cutoutTopDp
+    } else {
+        statusBarTopPaddingDp
+    }
+}
+
+/**
+ * Resolves the navigation bar bottom height used for single-page vertical padding budget.
+ *
+ * In fullscreen mode, the bottom navigation bar is hidden during reading; temporary chrome
+ * must not introduce extra bottom insets into the pagination calculation.
+ */
+internal fun resolvePageReaderStableNavigationBarHeightPx(
+    isFullScreen: Boolean,
+    cutoutBottomPx: Int,
+    navigationBarHeightPx: Int,
+): Int {
+    return if (isFullScreen) {
+        cutoutBottomPx.coerceAtLeast(0)
+    } else {
+        navigationBarHeightPx.coerceAtLeast(0)
+    }
 }
 
 /**
