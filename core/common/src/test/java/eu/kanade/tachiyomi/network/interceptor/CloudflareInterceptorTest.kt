@@ -23,6 +23,7 @@ class CloudflareInterceptorTest {
     fun clearTracker() {
         // The tracker is process-wide; isolate tests from each other's interactive records.
         CloudflareInteractiveChallengeTracker.clearAll()
+        CloudflareBridgeRegistry.clearAll()
     }
 
     @Test
@@ -286,6 +287,111 @@ class CloudflareInterceptorTest {
             // expected
         }
         verify(exactly = 2) { challengeResolver.resolve(request, null) }
+    }
+
+    @Test
+    fun `fingerprint mismatch marks bridge registry and never the manual solve registry`() {
+        val request = Request.Builder()
+            .url("https://mismatch.example/page/1")
+            .build()
+        CloudflareInteractiveChallengeTracker.clear(request.url.host)
+
+        val initialResponse = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+        )
+
+        val cookieJar = mockk<AndroidCookieJar>()
+        every { cookieJar.get(request.url) } returns emptyList()
+
+        val challengeResolver = mockk<CloudflareChallengeResolver>()
+        every { challengeResolver.resolve(request, null) } throws CloudflareFingerprintMismatchException()
+
+        val chain = mockk<Interceptor.Chain>()
+
+        val interceptor = CloudflareInterceptor(
+            context = mockk<Context>(relaxed = true),
+            cookieManager = cookieJar,
+            defaultUserAgentProvider = { "test-agent" },
+            challengeResolver = challengeResolver,
+            clock = { 0L },
+        )
+
+        try {
+            interceptor.intercept(chain, request, initialResponse)
+            assert(false) { "expected IOException" }
+        } catch (e: IOException) {
+            assert(e.cause is CloudflareFingerprintMismatchException)
+        }
+        // Bridge routing is marked so following plugin fetches go silent via WebView...
+        assert(CloudflareBridgeRegistry.isBridged(request.url.host))
+        // ...while the dead-end manual captcha button stays hidden.
+        assert(!CloudflareManualSolveRegistry.isPending(request.url.host))
+        verify(exactly = 0) { chain.proceed(request) }
+    }
+
+    @Test
+    fun `bridged hosts fast-fail without paying for a hidden webview solve`() {
+        val request = Request.Builder()
+            .url("https://bridged.example/page/1")
+            .build()
+        CloudflareBridgeRegistry.mark(request.url.host)
+
+        val initialResponse = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+        )
+
+        val cookieJar = mockk<AndroidCookieJar>()
+        val challengeResolver = mockk<CloudflareChallengeResolver>()
+        val chain = mockk<Interceptor.Chain>()
+
+        val interceptor = CloudflareInterceptor(
+            context = mockk<Context>(relaxed = true),
+            cookieManager = cookieJar,
+            defaultUserAgentProvider = { "test-agent" },
+            challengeResolver = challengeResolver,
+            clock = { 0L },
+        )
+
+        try {
+            interceptor.intercept(chain, request, initialResponse)
+            assert(false) { "expected IOException" }
+        } catch (e: IOException) {
+            assert(e.cause is CloudflareFingerprintMismatchException)
+        }
+        verify(exactly = 0) { challengeResolver.resolve(any(), any()) }
+        verify(exactly = 0) { chain.proceed(any()) }
+    }
+
+    @Test
+    fun `cover requests never trigger a cloudflare solve`() {
+        val request = Request.Builder()
+            .url("https://covers.example/img/1.jpg")
+            .header(CoverRequestPolicy.HEADER_COVER_REQUEST, "1")
+            .build()
+
+        val challengeResponse = response(
+            request = request,
+            code = 403,
+            message = "Forbidden",
+            server = "cloudflare",
+            cfMitigated = true,
+        )
+
+        val interceptor = CloudflareInterceptor(
+            context = mockk<Context>(relaxed = true),
+            cookieManager = mockk<AndroidCookieJar>(relaxed = true),
+            defaultUserAgentProvider = { "test-agent" },
+            challengeResolver = mockk<CloudflareChallengeResolver>(relaxed = true),
+            clock = { 0L },
+        )
+
+        assert(!interceptor.shouldIntercept(challengeResponse))
     }
 
     private fun response(

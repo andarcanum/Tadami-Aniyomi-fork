@@ -41,6 +41,9 @@ object CloudflareChallengeDetector {
         "cf-browser-verification",
         "cf-challenge-running",
         "just a moment",
+        "проверки безопасности",
+        "проверка безопасности",
+        "выполнение проверки",
     )
 
     /**
@@ -82,6 +85,75 @@ object CloudflareChallengeDetector {
                 return document.querySelector('.cf-turnstile, [data-sitekey], iframe[src*="challenges.cloudflare.com"]') != null;
             } catch (_) {
                 return false;
+            }
+        })();
+    """.trimIndent()
+
+    /**
+     * JS-проба наличия маркеров Cloudflare challenge (интерстишал / Turnstile / ошибка)
+     * в текущем DOM WebView. Единый источник истины для резолвера и WebView fetch bridge.
+     */
+    val challengeMarkersProbeJs: String = """
+        (function() {
+            try {
+                var title = (document.title || '').toLowerCase();
+                if (title.indexOf('just a moment') !== -1 ||
+                    title.indexOf('bot verification') !== -1 ||
+                    title.indexOf('redirecting') !== -1 ||
+                    title.indexOf('you are being redirected') !== -1 ||
+                    title.indexOf('проверк') !== -1 ||
+                    title.indexOf('security verification') !== -1) {
+                    return true;
+                }
+                var html = document.documentElement ? document.documentElement.outerHTML.slice(0, 8192).toLowerCase() : '';
+                var markers = ['cf-turnstile', 'challenges.cloudflare.com', 'data-sitekey',
+                    '_cf_chl_opt', 'cf_chl_opt', '/cdn-cgi/challenge-platform/',
+                    'challenge-platform', 'cf-browser-verification', 'cf-challenge-running',
+                    'challenge-error-title', 'challenge-error-text', 'just a moment', 'проверк'];
+                for (var i = 0; i < markers.length; i++) {
+                    if (html.indexOf(markers[i]) !== -1) return true;
+                }
+                return false;
+            } catch (_) {
+                return true;
+            }
+        })();
+    """.trimIndent()
+
+    /**
+     * JS-проба готовности контентной страницы в WebView:
+     * - "challenge" если на странице есть активный Cloudflare challenge / Turnstile;
+     * - "ready" если документ готов (readyState complete/interactive), body не пустой и нет маркеров challenge;
+     * - "waiting" если документ ещё рендерится/загружается.
+     */
+    val pageReadyProbeJs: String = """
+        (function() {
+            try {
+                var title = (document.title || '').toLowerCase();
+                if (title.indexOf('just a moment') !== -1 ||
+                    title.indexOf('bot verification') !== -1 ||
+                    title.indexOf('redirecting') !== -1 ||
+                    title.indexOf('you are being redirected') !== -1 ||
+                    title.indexOf('проверк') !== -1 ||
+                    title.indexOf('security verification') !== -1) {
+                    return 'challenge';
+                }
+                var html = document.documentElement ? document.documentElement.outerHTML.slice(0, 8192).toLowerCase() : '';
+                var markers = ['cf-turnstile', 'challenges.cloudflare.com', 'data-sitekey',
+                    '_cf_chl_opt', 'cf_chl_opt', '/cdn-cgi/challenge-platform/',
+                    'challenge-platform', 'cf-browser-verification', 'cf-challenge-running',
+                    'challenge-error-title', 'challenge-error-text', 'just a moment', 'проверк'];
+                for (var i = 0; i < markers.length; i++) {
+                    if (html.indexOf(markers[i]) !== -1) return 'challenge';
+                }
+                var isReady = document.readyState === 'complete' || document.readyState === 'interactive';
+                var bodyLength = document.body ? document.body.innerHTML.length : 0;
+                if (isReady && bodyLength >= 50) {
+                    return 'ready';
+                }
+                return 'waiting';
+            } catch (_) {
+                return 'challenge';
             }
         })();
     """.trimIndent()

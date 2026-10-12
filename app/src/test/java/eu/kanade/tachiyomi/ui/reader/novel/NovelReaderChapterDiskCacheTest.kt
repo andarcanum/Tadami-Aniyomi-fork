@@ -92,4 +92,63 @@ class NovelReaderChapterDiskCacheTest {
             dir.toFile().deleteRecursively()
         }
     }
+
+    @Test
+    fun `does not store or serve error pages like next js 500 error`() {
+        val dir = Files.createTempDirectory("novel-reader-cache-test")
+        try {
+            val cache = NovelReaderChapterDiskCache(
+                directory = dir.toFile(),
+                maxEntries = 10,
+                maxTotalBytes = 1024 * 1024,
+                maxEntryBytes = 256 * 1024,
+            )
+
+            val nextJsErrorHtml = """
+                <html id="__next_error__">
+                <head><title>500: This page couldn’t load</title></head>
+                <body><div>500: This page couldn’t load</div></body>
+                </html>
+            """.trimIndent()
+
+            cache.put(chapterId = 500L, html = nextJsErrorHtml)
+            cache.contains(500L) shouldBe false
+            cache.get(500L) shouldBe null
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `deletes previously cached file if it contains error markers on get`() {
+        val dir = Files.createTempDirectory("novel-reader-cache-test")
+        try {
+            val cache = NovelReaderChapterDiskCache(
+                directory = dir.toFile(),
+                maxEntries = 10,
+                maxTotalBytes = 1024 * 1024,
+                maxEntryBytes = 256 * 1024,
+            )
+
+            // Store legitimate chapter first
+            cache.put(chapterId = 123L, html = "<p>Valid Chapter Content</p>")
+            cache.contains(123L) shouldBe true
+
+            // Manually overwrite the gz file with a 500 error payload to simulate legacy corrupt cache
+            val file = dir.resolve("123.gz").toFile()
+            val errorHtml = "<html id=\"__next_error__\"><title>500: This page couldn't load</title></html>"
+            val baos = java.io.ByteArrayOutputStream()
+            java.util.zip.GZIPOutputStream(baos).use { gz ->
+                gz.write(errorHtml.toByteArray(Charsets.UTF_8))
+            }
+            file.writeBytes(baos.toByteArray())
+
+            // Getting it now must detect error, delete the file, and return null
+            cache.get(123L) shouldBe null
+            cache.contains(123L) shouldBe false
+            file.exists() shouldBe false
+        } finally {
+            dir.toFile().deleteRecursively()
+        }
+    }
 }

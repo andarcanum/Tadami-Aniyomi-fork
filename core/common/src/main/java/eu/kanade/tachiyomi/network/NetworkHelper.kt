@@ -103,27 +103,35 @@ class NetworkHelper(
     @Suppress("UNUSED")
     val cloudflareClient: OkHttpClient = client
 
-    fun defaultUserAgentProvider() = preferences.defaultUserAgent().get().trim()
+    fun defaultUserAgentProvider(): String {
+        val configured = preferences.defaultUserAgent().get().trim()
+        if (preferences.defaultUserAgent().isSet() && configured.isNotBlank()) {
+            return configured
+        }
+        // Unset preference: mirror the device WebView fingerprint instead of the hardcoded
+        // fallback. Sessions and cf_clearance cookies are bound to the agent that earned them,
+        // so every client (plugin fetches, covers, hidden solves, manual WebView) must share
+        // one. NovelUpdates kills the login session when the same cookies arrive from two
+        // different agents within minutes (plugin fetches used the device agent while covers
+        // used the hardcoded one) - LnReader uses a single agent everywhere and holds login.
+        return deviceWebViewUserAgent.ifBlank { configured }
+    }
 
     /**
      * User agent for the JS plugin runtime fetches.
      *
-     * Cloudflare-protected plugin hosts (novelupdates) challenge the generic built-in default
-     * agent while letting the device's real WebView agent pass - Lnreader, which fetches with
-     * exactly that agent, gets through with no challenge handling at all. Until the reader
-     * customizes the default agent the plugin fetches therefore mirror the WebView fingerprint,
-     * which also keeps cf_clearance cookies (bound to the agent that earned them) valid across
-     * WebViews and OkHttp.
+     * Same value as [defaultUserAgentProvider]: one agent everywhere keeps cf_clearance cookies
+     * (bound to the agent that earned them) valid across WebViews and OkHttp and keeps login
+     * sessions alive on hosts that bind them to the agent (NovelUpdates).
      */
-    fun pluginUserAgentProvider(): String {
-        val configured = defaultUserAgentProvider()
-        if (preferences.defaultUserAgent().isSet() && configured.isNotBlank()) {
-            return configured
-        }
-        return deviceWebViewUserAgent.ifBlank { configured }
-    }
+    fun pluginUserAgentProvider(): String = defaultUserAgentProvider()
 
     private val deviceWebViewUserAgent: String by lazy {
-        runCatching { android.webkit.WebSettings.getDefaultUserAgent(context) }.getOrDefault("")
+        // Genuine device WebView user agent: matches the system WebView and Android Conscrypt TLS stack.
+        // Stripping the Version marker to pretend to be standalone desktop Chrome creates a TLS/UA mismatch
+        // that triggers bot detection (Cloudflare) and invalidates agent-bound sessions.
+        runCatching { android.webkit.WebSettings.getDefaultUserAgent(context) }
+            .getOrDefault("")
+            .trim()
     }
 }

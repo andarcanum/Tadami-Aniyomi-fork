@@ -137,11 +137,13 @@ internal class NovelTranslationBatchExecutor(
             runCatching {
                 if (hasReusableTranslationCache(nextChapter.id, settings)) return@runCatching
                 val cacheReadChapters = host.batchCacheReadChapters()
-                val nextHtml = NovelReaderChapterPrefetchCache.get(nextChapter.id)
+                val nextHtml = NovelReaderChapterPrefetchCache.get(nextChapter.id)?.takeIf { it.isNotBlank() }
                     ?: source.getChapterText(nextChapter.toSNovelChapter()).also { fetchedHtml ->
-                        NovelReaderChapterPrefetchCache.put(nextChapter.id, fetchedHtml)
-                        if (cacheReadChapters) {
-                            NovelReaderChapterDiskCacheStore.put(nextChapter.id, fetchedHtml)
+                        if (fetchedHtml.isNotBlank()) {
+                            NovelReaderChapterPrefetchCache.put(nextChapter.id, fetchedHtml)
+                            if (cacheReadChapters) {
+                                NovelReaderChapterDiskCacheStore.put(nextChapter.id, fetchedHtml)
+                            }
                         }
                     }
                 if (nextHtml.isBlank()) return@runCatching

@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.extension.novel.runtime
 import android.content.Context
 import android.util.Log
 import eu.kanade.tachiyomi.network.NetworkHelper
+import eu.kanade.tachiyomi.network.interceptor.CloudflareBridgeRegistry
 import eu.kanade.tachiyomi.network.interceptor.CloudflareManualSolveRegistry
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -76,8 +77,11 @@ class NovelJsRuntimeFactory(
             // Hosts whose Cloudflare challenge the hidden solve could not finish are flagged by
             // the interceptor; their requests go through the WebView network stack, which
             // Cloudflare trusts, instead of paying for a doomed OkHttp + solve cycle every time.
+            // Fingerprint-mismatched hosts (OkHttp challenged, WebView clean - e.g. NovelUpdates)
+            // route the same way but never show a manual-solve prompt: there is no captcha to
+            // pass in the visible WebView, only the shared-cookie bridge helps.
             val blockedHost = resolvedUrl.toHttpUrlOrNull()?.host
-                ?.takeIf { CloudflareManualSolveRegistry.isPending(it) }
+                ?.takeIf { CloudflareManualSolveRegistry.isPending(it) || CloudflareBridgeRegistry.isBridged(it) }
             if (blockedHost != null) {
                 logcat(priority = LogPriority.DEBUG, tag = "NovelWebViewBridge") {
                     "gate: routing via bridge host=$blockedHost url=$resolvedUrl"
@@ -138,7 +142,12 @@ class NovelJsRuntimeFactory(
                 // very first blocked call can still recover through the WebView bridge instead of
                 // handing the plugin a dead status 0 after a 30s solve.
                 val failedHost = resolvedUrl.toHttpUrlOrNull()?.host
-                if (failedHost != null && CloudflareManualSolveRegistry.isPending(failedHost)) {
+                if (failedHost != null &&
+                    (
+                        CloudflareManualSolveRegistry.isPending(failedHost) ||
+                            CloudflareBridgeRegistry.isBridged(failedHost)
+                        )
+                ) {
                     logcat(priority = LogPriority.DEBUG, tag = "NovelWebViewBridge") {
                         "post-failure retry via bridge host=$failedHost url=$resolvedUrl"
                     }

@@ -67,7 +67,9 @@ fun attachWebViewToWindow(webView: WebView): Boolean {
     val activity = CurrentActivityTracker.current ?: return false
     val decorView = activity.window?.decorView as? android.widget.FrameLayout ?: return false
     return runCatching {
-        webView.alpha = 0f
+        if (webView.parent === decorView) return true
+        (webView.parent as? android.view.ViewGroup)?.removeView(webView)
+        webView.alpha = 0.01f
         webView.isClickable = false
         webView.isFocusable = false
         webView.isFocusableInTouchMode = false
