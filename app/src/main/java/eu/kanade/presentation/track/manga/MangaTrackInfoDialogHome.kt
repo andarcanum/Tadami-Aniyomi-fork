@@ -171,9 +171,9 @@ private fun TrackInfoItem(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BadgedBox(
-                badge = {
-                    if (private) {
+            if (private) {
+                BadgedBox(
+                    badge = {
                         Badge(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -185,9 +185,15 @@ private fun TrackInfoItem(
                                 modifier = Modifier.size(14.dp),
                             )
                         }
-                    }
-                },
-            ) {
+                    },
+                ) {
+                    TrackLogoIcon(
+                        tracker = tracker,
+                        onClick = onOpenInBrowser,
+                        onLongClick = onCopyLink,
+                    )
+                }
+            } else {
                 TrackLogoIcon(
                     tracker = tracker,
                     onClick = onOpenInBrowser,
