@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.reader.novel
 
 import android.app.Application
+import eu.kanade.tachiyomi.network.interceptor.CloudflareChallengeDetector
+import eu.kanade.tachiyomi.network.interceptor.HttpErrorPageDetector
 import eu.kanade.tachiyomi.ui.reader.novel.cache.NovelReaderCacheCoordinator
 import eu.kanade.tachiyomi.ui.reader.novel.cache.NovelReaderCacheReporter
 import eu.kanade.tachiyomi.ui.reader.novel.setting.NovelReaderPreferences
@@ -66,7 +68,7 @@ internal class NovelReaderChapterDiskCache(
                 return null
             }
 
-            return runCatching {
+            val cachedContent = runCatching {
                 GZIPInputStream(file.inputStream().buffered()).use { input ->
                     input.readBytes().toString(Charsets.UTF_8)
                 }
@@ -75,11 +77,26 @@ internal class NovelReaderChapterDiskCache(
             }.onFailure {
                 file.delete()
             }.getOrNull()
+
+            if (cachedContent != null && (
+                    CloudflareChallengeDetector.hasChallengeMarkers(cachedContent) ||
+                        HttpErrorPageDetector.isErrorPage(cachedContent)
+                    )
+            ) {
+                file.delete()
+                return null
+            }
+            return cachedContent
         }
     }
 
     fun put(chapterId: Long, html: String) {
-        if (html.isBlank()) return
+        if (html.isBlank() ||
+            CloudflareChallengeDetector.hasChallengeMarkers(html) ||
+            HttpErrorPageDetector.isErrorPage(html)
+        ) {
+            return
+        }
 
         val config = configProvider()
         val compressed = runCatching { gzip(html) }.getOrNull() ?: return

@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import android.os.PowerManager
 import eu.kanade.domain.items.novelchapter.model.toSNovelChapter
 import eu.kanade.tachiyomi.data.download.novel.NovelDownloadManager
+import eu.kanade.tachiyomi.network.interceptor.CloudflareChallengeDetector
 import eu.kanade.tachiyomi.novelsource.NovelSource
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterDiskCacheStore
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderChapterPrefetchCache
@@ -62,7 +63,10 @@ internal class ContentPrefetchService(
             downloadManager = downloadManager,
             cacheReadChapters = cacheReadChapters,
         ) ?: source.getChapterText(chapter.toSNovelChapter()).also { html ->
-            if (cacheReadChapters) {
+            // Never cache blank results: a failed fetch (rate-limit/captcha page parsed as a
+            // plugin error surfaces as "") must stay retryable instead of poisoning the cache
+            // into permanent "empty chapter" without any further network attempt.
+            if (cacheReadChapters && html.isNotBlank()) {
                 NovelReaderChapterDiskCacheStore.put(chapter.id, html)
             }
         }
@@ -92,9 +96,13 @@ internal class ContentPrefetchService(
                 false
             } else {
                 val html = source.getChapterText(chapter.toSNovelChapter())
-                cacheNovelChapterText(chapter = chapter, html = html, cacheReadChapters = cacheReadChapters)
-                NovelReaderChapterPrefetchCache.put(chapter.id, html)
-                true
+                if (html.isBlank() || CloudflareChallengeDetector.hasChallengeMarkers(html)) {
+                    false
+                } else {
+                    cacheNovelChapterText(chapter = chapter, html = html, cacheReadChapters = cacheReadChapters)
+                    NovelReaderChapterPrefetchCache.put(chapter.id, html)
+                    true
+                }
             }
         } catch (e: CancellationException) {
             throw e
@@ -110,12 +118,14 @@ internal class ContentPrefetchService(
         cacheReadChapters: Boolean,
     ): String? {
         val downloadedText = downloadManager.getDownloadedChapterText(novel, chapter.id)
+            ?.takeIf { it.isNotBlank() && !CloudflareChallengeDetector.hasChallengeMarkers(it) }
         if (downloadedText != null) {
             return downloadedText
         }
 
         val cachedText = if (cacheReadChapters) {
             NovelReaderChapterDiskCacheStore.get(chapter.id)
+                ?.takeIf { it.isNotBlank() && !CloudflareChallengeDetector.hasChallengeMarkers(it) }
         } else {
             null
         }
@@ -123,11 +133,13 @@ internal class ContentPrefetchService(
             return cachedText
         }
 
-        return NovelReaderChapterPrefetchCache.get(chapter.id)?.also { html ->
-            if (cacheReadChapters) {
-                NovelReaderChapterDiskCacheStore.put(chapter.id, html)
+        return NovelReaderChapterPrefetchCache.get(chapter.id)
+            ?.takeIf { it.isNotBlank() && !CloudflareChallengeDetector.hasChallengeMarkers(it) }
+            ?.also { html ->
+                if (cacheReadChapters) {
+                    NovelReaderChapterDiskCacheStore.put(chapter.id, html)
+                }
             }
-        }
     }
 
     private suspend fun hasCachedNovelChapterText(

@@ -1262,6 +1262,8 @@ class NovelReaderScreenModel(
         nextChapterPrefetchJob?.cancel()
         nextChapterPrefetchJob = screenModelScope.launch(Dispatchers.IO) {
             runCatching {
+                // Polite delay to prevent burst request collisions on rate-sensitive hosts (e.g. NovelUpdates /extnu/)
+                kotlinx.coroutines.delay(2000L)
                 val state = mutableState.value as? State.Success ?: return@runCatching
                 contentPrefetchService.prefetchNovelChapterText(
                     prefetchEnabled = state.readerSettings.prefetchNextChapter,
@@ -2911,7 +2913,9 @@ internal fun hasReachedGeminiNextChapterTranslationPrefetchThreshold(
     }
 }
 internal object NovelReaderChapterPrefetchCache {
-    private const val MAX_ENTRIES = 4
+    // Sized for back-navigation on rate-limited hosts (NovelUpdates 429s on bursts): re-entered
+    // chapters must come from memory instead of paying another network round-trip.
+    private const val MAX_ENTRIES = 12
     private val cache = object : LinkedHashMap<Long, String>(MAX_ENTRIES, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, String>?): Boolean {
             return size > MAX_ENTRIES

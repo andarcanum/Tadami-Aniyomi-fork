@@ -399,6 +399,7 @@ fun WebViewScreenContent(
                         ?.let { webView.settings.userAgentString = it }
                 },
                 onDispose = { webView ->
+                    runCatching { CookieManager.getInstance().flush() }
                     val window = windowStack.items.find { it.webView == webView }
                     if (window == null) {
                         webView.destroy()

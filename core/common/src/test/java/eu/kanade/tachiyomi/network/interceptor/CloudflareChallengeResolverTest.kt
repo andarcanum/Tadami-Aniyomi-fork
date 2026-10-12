@@ -18,6 +18,14 @@ class CloudflareChallengeResolverTest {
     }
 
     @Test
+    fun `challenge markers probe covers interstitial error and widget markers`() {
+        assertTrue(CHALLENGE_MARKERS_PROBE.contains("just a moment"))
+        assertTrue(CHALLENGE_MARKERS_PROBE.contains("challenge-platform"))
+        assertTrue(CHALLENGE_MARKERS_PROBE.contains("challenge-error-title"))
+        assertTrue(CHALLENGE_MARKERS_PROBE.contains("cf-turnstile"))
+    }
+
+    @Test
     fun `clearance equal to the old cookie is not new (P4)`() {
         val original = "https://example.org/page".toHttpUrl()
         val old = Cookie.Builder().domain("example.org").name("cf_clearance").value("abc").build()
