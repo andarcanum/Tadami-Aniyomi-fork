@@ -97,6 +97,9 @@ internal object NovelWebViewFetchBridge {
     @Volatile
     private var activePageFinished: Boolean = false
 
+    @Volatile
+    private var pageFinishedAtMs: Long = 0L
+
     /**
      * Short-lived memory cache for bridge GET responses. NovelUpdates rate-limits bursts hard
      * (catalogue paging + details + chapter + prefetch within seconds) while the bridge
@@ -463,7 +466,7 @@ internal object NovelWebViewFetchBridge {
                 return null
             }
             val body = payload.body
-            if (body == null || body.length < 200 || CloudflareChallengeDetector.hasChallengeMarkers(body)) {
+            if (body == null || body.length < 200 || CloudflareChallengeDetector.isBlockingChallengePage(body)) {
                 logcat(priority = LogPriority.WARN, tag = TAG) {
                     "extracted dom contains challenge markers or too short (${body?.length} chars), discarding url=$landedUrl"
                 }
@@ -522,7 +525,36 @@ internal object NovelWebViewFetchBridge {
                         return
                     }
 
-                    view.evaluateJavascript(CloudflareChallengeDetector.pageReadyProbeJs) { result ->
+                    // For redirected translator chapter pages, give client-side SPAs (React/Vue) a small
+                    // grace window after page load so chapter text paragraphs have time to mount in DOM,
+                    // unless paragraphs (pCount >= 3) are already present.
+                    val timeSinceFinished = if (activePageFinished) {
+                        System.currentTimeMillis() - pageFinishedAtMs
+                    } else {
+                        0L
+                    }
+                    val requiresSpaGrace = expectRedirect && timeSinceFinished < 1_500L
+                    val probeJs = if (requiresSpaGrace) {
+                        """
+                        (function() {
+                            try {
+                                var res = (${CloudflareChallengeDetector.pageReadyProbeJs});
+                                if (res !== 'ready') return res;
+                                var pCount = document.querySelectorAll('p').length;
+                                var b = document.body;
+                                var textLen = (b ? (b.innerText || b.textContent || '') : '').trim().length;
+                                if (pCount < 3 && textLen < 300) return 'waiting';
+                                return 'ready';
+                            } catch (_) {
+                                return 'waiting';
+                            }
+                        })();
+                        """.trimIndent()
+                    } else {
+                        CloudflareChallengeDetector.pageReadyProbeJs
+                    }
+
+                    view.evaluateJavascript(probeJs) { result ->
                         if (latch.count == 0L) return@evaluateJavascript
                         val status = result?.trim('"', ' ', '\n', '\r')
                         if (status == "ready") {
@@ -602,11 +634,13 @@ internal object NovelWebViewFetchBridge {
         view.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                 activePageFinished = false
+                pageFinishedAtMs = 0L
                 lastMainFrameStatusCode = 200
             }
 
             override fun onPageFinished(view: WebView, url: String) {
                 activePageFinished = true
+                pageFinishedAtMs = System.currentTimeMillis()
                 loadedPageUrl = url
                 loadedOrigin = url.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}" }
                 runCatching {

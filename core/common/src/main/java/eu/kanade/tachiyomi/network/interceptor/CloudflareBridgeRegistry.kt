@@ -13,28 +13,29 @@ import java.util.concurrent.ConcurrentHashMap
  * which reuses the trusted WebView stack plus the shared CookieManager (login persists).
  *
  * Unlike [CloudflareManualSolveRegistry] (human can help, show the captcha button), a bridged
- * host needs no manual action: plugin fetches route via the bridge silently. Entries live 24h;
- * well-known OkHttp-distrusted hosts are always bridged so the very first request skips the
- * doomed 30s solve.
+ * host needs no manual action: plugin fetches route via the bridge silently. Dynamic entries live
+ * for a bounded cooldown period (15 minutes), after which fast OkHttp traffic resumes automatically.
  */
 object CloudflareBridgeRegistry {
 
-    private const val TTL_MS = 24 * 60 * 60 * 1000L
+    private const val TTL_MS = 15 * 60 * 1000L
 
     /**
      * Hosts where OkHttp is systematically challenged but the WebView passes clean.
-     * NovelUpdates is the confirmed case: LnReader (WebView-UA fetch + shared cookies) loads
-     * instantly after one login, while any OkHttp fetch is challenged on every endpoint.
+     * Dynamic hosts are registered via [mark]. With Chromium client hints in place,
+     * NovelUpdates serves catalogue and search queries fast via OkHttp without
+     * needing static pre-bridging.
      */
-    private val alwaysBridgedHosts = setOf(
-        "www.novelupdates.com",
-        "novelupdates.com",
-    )
+    private val alwaysBridgedHosts = emptySet<String>()
 
     private val bridged = ConcurrentHashMap<String, Long>()
 
     fun mark(host: String) {
         bridged[host.lowercase()] = System.currentTimeMillis()
+    }
+
+    fun unmark(host: String) {
+        bridged.remove(host.lowercase())
     }
 
     fun isBridged(host: String): Boolean {

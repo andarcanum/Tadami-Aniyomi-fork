@@ -682,7 +682,7 @@ class NovelJsSource internal constructor(
                 if (payload.isBlank() || payload == "null") "" else json.decodeFromString<String>(payload)
             }
             if (html.isNotBlank() && (
-                    CloudflareChallengeDetector.hasChallengeMarkers(html) ||
+                    CloudflareChallengeDetector.isBlockingChallengePage(html) ||
                         HttpErrorPageDetector.isErrorPage(html)
                     )
             ) {
