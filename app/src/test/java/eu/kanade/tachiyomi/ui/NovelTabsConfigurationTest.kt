@@ -32,6 +32,42 @@ class NovelTabsConfigurationTest {
     }
 
     @Test
+    fun `download tabs filter correctly when manga only is selected`() {
+        downloadQueueTabs(
+            showAnimeSection = false,
+            showMangaSection = true,
+            showNovelSection = false,
+        ) shouldBe listOf(
+            DownloadQueueTab.MANGA,
+        )
+    }
+
+    @Test
+    fun `download tabs filter correctly with partial section selection`() {
+        downloadQueueTabs(
+            showAnimeSection = true,
+            showMangaSection = false,
+            showNovelSection = true,
+        ) shouldBe listOf(
+            DownloadQueueTab.ANIME,
+            DownloadQueueTab.NOVEL,
+        )
+    }
+
+    @Test
+    fun `download tabs fallback to all tabs when all sections disabled`() {
+        downloadQueueTabs(
+            showAnimeSection = false,
+            showMangaSection = false,
+            showNovelSection = false,
+        ) shouldBe listOf(
+            DownloadQueueTab.ANIME,
+            DownloadQueueTab.MANGA,
+            DownloadQueueTab.NOVEL,
+        )
+    }
+
+    @Test
     fun `stats tabs include novel tab in expected order`() {
         statsContentTabs() shouldBe listOf(
             StatsContentTab.ANIME,
