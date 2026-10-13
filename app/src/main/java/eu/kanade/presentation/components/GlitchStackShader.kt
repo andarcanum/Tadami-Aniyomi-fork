@@ -28,7 +28,13 @@ internal class GlitchStackShader {
         null
     }
 
-    val isAvailable: Boolean get() = shader != null
+    private val cachedRenderEffect = shader?.let {
+        RenderEffect
+            .createRuntimeShaderEffect(it, "content")
+            .asComposeRenderEffect()
+    }
+
+    val isAvailable: Boolean get() = shader != null && cachedRenderEffect != null
 
     fun Modifier.attach(
         time: Float,
@@ -37,6 +43,7 @@ internal class GlitchStackShader {
         size: IntSize,
     ): Modifier {
         val activeShader = shader ?: return this
+        val effect = cachedRenderEffect ?: return this
         if (size.width == 0 || size.height == 0) return this
         return this.graphicsLayer {
             activeShader.setFloatUniform("resolution", size.width.toFloat(), size.height.toFloat())
@@ -44,9 +51,7 @@ internal class GlitchStackShader {
             activeShader.setFloatUniform("intensity", intensity)
             activeShader.setFloatUniform("ca", if (config.chromaticAberration) 0.010f else 0f)
             activeShader.setFloatUniform("redBleed", config.redBleed)
-            renderEffect = RenderEffect
-                .createRuntimeShaderEffect(activeShader, "content")
-                .asComposeRenderEffect()
+            renderEffect = effect
             clip = true
             compositingStrategy = CompositingStrategy.Offscreen
         }

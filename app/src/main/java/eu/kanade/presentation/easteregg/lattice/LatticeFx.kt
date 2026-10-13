@@ -7,7 +7,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameMillis
@@ -19,6 +18,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.dp
 
 /** Shader clock in seconds; ticks only while active. */
@@ -82,8 +82,9 @@ fun Modifier.latticeLightCycles(): Modifier {
         return this.latticeShaderFill(LatticeShaders.LIGHT_CYCLES)
     }
     // CPU fallback: cycles racing toward the horizon (up the floor)
-    val time by rememberLatticeTimeSeconds(active = true)
+    val timeState = rememberLatticeTimeSeconds(active = true)
     return this.drawBehind {
+        val time = timeState.value
         val horizon = size.height * 0.48f
         fun drawTowardHorizon(lane: Float, speed: Float, phase: Float, color: androidx.compose.ui.graphics.Color) {
             val t = (time * speed + phase).mod(1f) // 0 near camera, 1 at horizon
@@ -288,7 +289,7 @@ fun Modifier.latticeRibbon(): Modifier {
 @Composable
 fun LatticeTitleEnergyBar(modifier: Modifier = Modifier) {
     val reduced = rememberLatticeReducedMotion()
-    val time by rememberLatticeTimeSeconds(active = !reduced)
+    val timeState = rememberLatticeTimeSeconds(active = !reduced)
     Canvas(modifier = modifier) {
         val y = size.height / 2f
         drawLine(
@@ -298,6 +299,7 @@ fun LatticeTitleEnergyBar(modifier: Modifier = Modifier) {
             strokeWidth = 1.5f,
         )
         if (!reduced) {
+            val time = timeState.value
             val head = (time * 0.35f).mod(1f) * size.width
             drawLine(
                 brush = Brush.horizontalGradient(
@@ -319,23 +321,12 @@ fun LatticeTitleEnergyBar(modifier: Modifier = Modifier) {
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 private fun Modifier.latticeShaderFill(source: String): Modifier {
-    val time by rememberLatticeTimeSeconds(active = true)
+    val timeState = rememberLatticeTimeSeconds(active = true)
+    val runner = remember(source) { LatticeShaderRunner(source) }
     return this.drawWithCache {
-        val shader = RuntimeShader(source)
-        shader.setFloatUniform("uResolution", size.width, size.height)
-        shader.setColorUniform(
-            "uTint",
-            android.graphics.Color.valueOf(
-                LatticeColors.Signal.red,
-                LatticeColors.Signal.green,
-                LatticeColors.Signal.blue,
-                1f,
-            ),
-        )
-        val brush = ShaderBrush(shader)
+        runner.onCache(size.width, size.height)
         onDrawBehind {
-            shader.setFloatUniform("uTime", time)
-            drawRect(brush)
+            with(runner) { drawFill(timeState.value) }
         }
     }
 }
@@ -343,23 +334,11 @@ private fun Modifier.latticeShaderFill(source: String): Modifier {
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 private fun Modifier.latticeShaderProgress(source: String, progress: Float): Modifier {
+    val runner = remember(source) { LatticeShaderRunner(source) }
     return this.drawWithCache {
-        val shader = RuntimeShader(source)
-        shader.setFloatUniform("uResolution", size.width, size.height)
-        shader.setFloatUniform("uProgress", progress.coerceIn(0f, 1f))
-        shader.setColorUniform(
-            "uTint",
-            android.graphics.Color.valueOf(
-                LatticeColors.Signal.red,
-                LatticeColors.Signal.green,
-                LatticeColors.Signal.blue,
-                1f,
-            ),
-        )
-        val brush = ShaderBrush(shader)
+        runner.onCache(size.width, size.height, progress)
         onDrawBehind {
-            shader.setFloatUniform("uProgress", progress.coerceIn(0f, 1f))
-            drawRect(brush)
+            with(runner) { drawProgress(progress) }
         }
     }
 }
@@ -368,11 +347,26 @@ private fun Modifier.latticeShaderProgress(source: String, progress: Float): Mod
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 private fun Modifier.latticeShaderProgressTimed(source: String, progress: Float): Modifier {
-    val time by rememberLatticeTimeSeconds(active = true)
+    val timeState = rememberLatticeTimeSeconds(active = true)
+    val runner = remember(source) { LatticeShaderRunner(source) }
     return this.drawWithCache {
-        val shader = RuntimeShader(source)
-        shader.setFloatUniform("uResolution", size.width, size.height)
-        shader.setFloatUniform("uProgress", progress.coerceIn(0f, 1f))
+        runner.onCache(size.width, size.height, progress)
+        onDrawBehind {
+            with(runner) { drawProgressTimed(timeState.value, progress) }
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private class LatticeShaderRunner(source: String) {
+    private val shader = RuntimeShader(source)
+    private val brush = ShaderBrush(shader)
+
+    fun onCache(width: Float, height: Float, progress: Float? = null) {
+        shader.setFloatUniform("uResolution", width, height)
+        if (progress != null) {
+            shader.setFloatUniform("uProgress", progress.coerceIn(0f, 1f))
+        }
         shader.setColorUniform(
             "uTint",
             android.graphics.Color.valueOf(
@@ -382,11 +376,21 @@ private fun Modifier.latticeShaderProgressTimed(source: String, progress: Float)
                 1f,
             ),
         )
-        val brush = ShaderBrush(shader)
-        onDrawBehind {
-            shader.setFloatUniform("uTime", time)
-            shader.setFloatUniform("uProgress", progress.coerceIn(0f, 1f))
-            drawRect(brush)
-        }
+    }
+
+    fun DrawScope.drawFill(time: Float) {
+        shader.setFloatUniform("uTime", time)
+        drawRect(brush)
+    }
+
+    fun DrawScope.drawProgress(progress: Float) {
+        shader.setFloatUniform("uProgress", progress.coerceIn(0f, 1f))
+        drawRect(brush)
+    }
+
+    fun DrawScope.drawProgressTimed(time: Float, progress: Float) {
+        shader.setFloatUniform("uTime", time)
+        shader.setFloatUniform("uProgress", progress.coerceIn(0f, 1f))
+        drawRect(brush)
     }
 }

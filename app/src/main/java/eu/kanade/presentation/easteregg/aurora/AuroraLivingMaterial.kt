@@ -7,10 +7,10 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalContext
 import eu.kanade.domain.easteregg.aurora.AuroraPayload
 import kotlin.math.sin
@@ -138,29 +139,25 @@ half4 main(float2 frag) {
  */
 @Composable
 fun Modifier.auroraMetal(spec: AuroraMaterialSpec): Modifier {
-    val tilt by rememberAuroraTilt()
-    val time by produceState(0f) {
+    val tiltState = rememberAuroraTilt()
+    val timeState = produceState(0f) {
         val start = withFrameNanos { it }
         while (true) {
             withFrameNanos { now -> value = (now - start) / 1_000_000_000f }
         }
     }
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val shader = remember { RuntimeShader(AURORA_METAL_SKSL) }
-        val brush = remember(shader) { ShaderBrush(shader) }
+        val helper = remember { AuroraLivingMaterialShader() }
         drawBehind {
-            shader.setFloatUniform("res", size.width, size.height)
-            shader.setFloatUniform("time", time)
-            shader.setFloatUniform("tilt", tilt.x, tilt.y)
-            shader.setFloatUniform("base", spec.baseColor.red, spec.baseColor.green, spec.baseColor.blue)
-            shader.setFloatUniform("sheen", spec.sheenColor.red, spec.sheenColor.green, spec.sheenColor.blue)
-            shader.setFloatUniform("irid", spec.iridescence)
-            shader.setFloatUniform("gloss", spec.gloss)
-            drawRect(brush)
+            with(helper) {
+                draw(spec, tiltState.value, timeState.value)
+            }
         }
     } else {
         // Fallback < API 33: полоса света градиентом, движимая тем же наклоном
         drawBehind {
+            val tilt = tiltState.value
+            val time = timeState.value
             drawRect(spec.baseColor)
             val pos = 0.5f + 0.42f * tilt.x - 0.18f * tilt.y + 0.04f * sin(time * 0.5f)
             val dir = Offset(size.width, size.height * 0.88f)
@@ -178,5 +175,22 @@ fun Modifier.auroraMetal(spec: AuroraMaterialSpec): Modifier {
                 ),
             )
         }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+private class AuroraLivingMaterialShader {
+    private val shader = RuntimeShader(AURORA_METAL_SKSL)
+    private val brush = ShaderBrush(shader)
+
+    fun DrawScope.draw(spec: AuroraMaterialSpec, tilt: Offset, time: Float) {
+        shader.setFloatUniform("res", size.width, size.height)
+        shader.setFloatUniform("time", time)
+        shader.setFloatUniform("tilt", tilt.x, tilt.y)
+        shader.setFloatUniform("base", spec.baseColor.red, spec.baseColor.green, spec.baseColor.blue)
+        shader.setFloatUniform("sheen", spec.sheenColor.red, spec.sheenColor.green, spec.sheenColor.blue)
+        shader.setFloatUniform("irid", spec.iridescence)
+        shader.setFloatUniform("gloss", spec.gloss)
+        drawRect(brush)
     }
 }

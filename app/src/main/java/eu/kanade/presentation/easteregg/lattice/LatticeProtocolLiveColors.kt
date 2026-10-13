@@ -36,6 +36,23 @@ data class LatticeProtocolLiveColors(
     val tertiary: Color,
 )
 
+/**
+ * Static Lattice Protocol colors without animations.
+ * Used in base theme overlay to prevent full-tree recomposition thrashing.
+ */
+fun getLatticeProtocolStaticColors(): LatticeProtocolLiveColors {
+    val cyanCore = LatticeProtocolLivePalette.cyanCore
+    val cyanDeep = LatticeProtocolLivePalette.cyanDeep
+    val amber = LatticeProtocolLivePalette.amber
+    val amberSoft = LatticeProtocolLivePalette.amberSoft
+    val breath = 0.5f
+    return LatticeProtocolLiveColors(
+        primary = lerp(cyanDeep, cyanCore, 0.45f + 0.55f * breath),
+        secondary = lerp(cyanDeep, cyanCore, 0.25f + 0.4f * (1f - breath)),
+        tertiary = lerp(amberSoft, amber, 0.35f + 0.65f * breath),
+    )
+}
+
 @Composable
 fun rememberLatticeProtocolLiveColors(animated: Boolean = true): LatticeProtocolLiveColors {
     val reduced = rememberLatticeReducedMotion()
