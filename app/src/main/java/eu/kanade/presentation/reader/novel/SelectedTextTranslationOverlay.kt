@@ -58,12 +58,28 @@ import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreenModel
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextSelection
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationErrorReason
 import eu.kanade.tachiyomi.ui.reader.novel.NovelSelectedTextTranslationUiState
+import eu.kanade.tachiyomi.ui.reader.novel.SelectedTextAction
 import tachiyomi.i18n.aniyomi.AYMR
 import tachiyomi.presentation.core.i18n.stringResource
 
-private enum class TabType {
+internal enum class SelectedTextOverlayTab {
     DICTIONARY,
     TRANSLATION,
+}
+
+internal fun resolveSelectedTextOverlayInitialTab(
+    selection: NovelSelectedTextSelection?,
+    showTranslation: Boolean,
+    showDictionary: Boolean,
+): SelectedTextOverlayTab {
+    val action = selection?.triggerAction
+    return when {
+        action == SelectedTextAction.TRANSLATION && showTranslation -> SelectedTextOverlayTab.TRANSLATION
+        action == SelectedTextAction.DICTIONARY && showDictionary -> SelectedTextOverlayTab.DICTIONARY
+        showDictionary -> SelectedTextOverlayTab.DICTIONARY
+        showTranslation -> SelectedTextOverlayTab.TRANSLATION
+        else -> SelectedTextOverlayTab.DICTIONARY
+    }
 }
 
 @Composable
@@ -91,19 +107,23 @@ internal fun SelectedTextTranslationOverlay(
 
     var activeTab by remember(selection) {
         mutableStateOf(
-            if (showDictionary) TabType.DICTIONARY else TabType.TRANSLATION,
+            resolveSelectedTextOverlayInitialTab(
+                selection = selection,
+                showTranslation = showTranslation,
+                showDictionary = showDictionary,
+            ),
         )
     }
 
     // Auto-trigger load when switching tabs if state is Idle
     LaunchedEffect(activeTab, selection) {
         if (selection != null) {
-            if (activeTab == TabType.DICTIONARY && dictionaryState is NovelDictionaryUiState.Looking) {
-                // Already loading
-            } else if (activeTab == TabType.TRANSLATION &&
-                translationState is NovelSelectedTextTranslationUiState.Translating
+            if (activeTab == SelectedTextOverlayTab.DICTIONARY && dictionaryState is NovelDictionaryUiState.Idle) {
+                onLookupDefinition()
+            } else if (activeTab == SelectedTextOverlayTab.TRANSLATION &&
+                translationState is NovelSelectedTextTranslationUiState.Idle
             ) {
-                // Already loading
+                onTranslate()
             }
         }
     }
@@ -138,9 +158,9 @@ internal fun SelectedTextTranslationOverlay(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Tab(
-                                selected = activeTab == TabType.DICTIONARY,
+                                selected = activeTab == SelectedTextOverlayTab.DICTIONARY,
                                 onClick = {
-                                    activeTab = TabType.DICTIONARY
+                                    activeTab = SelectedTextOverlayTab.DICTIONARY
                                     if (dictionaryState is NovelDictionaryUiState.Idle) {
                                         onLookupDefinition()
                                     }
@@ -158,9 +178,9 @@ internal fun SelectedTextTranslationOverlay(
                                 },
                             )
                             Tab(
-                                selected = activeTab == TabType.TRANSLATION,
+                                selected = activeTab == SelectedTextOverlayTab.TRANSLATION,
                                 onClick = {
-                                    activeTab = TabType.TRANSLATION
+                                    activeTab = SelectedTextOverlayTab.TRANSLATION
                                     if (translationState is NovelSelectedTextTranslationUiState.Idle) {
                                         onTranslate()
                                     }
@@ -191,7 +211,7 @@ internal fun SelectedTextTranslationOverlay(
                             .fillMaxWidth()
                             .padding(horizontal = 8.dp),
                     ) {
-                        if (activeTab == TabType.DICTIONARY) {
+                        if (activeTab == SelectedTextOverlayTab.DICTIONARY) {
                             DictionaryContent(
                                 selection = selection,
                                 state = dictionaryState,
