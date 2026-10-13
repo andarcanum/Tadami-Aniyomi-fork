@@ -37,6 +37,24 @@ data class AuroraPrimeColors(
 )
 
 /**
+ * Статичная палитра AURORA_PRIME без анимаций и сенсоров.
+ * Используется в базовой теме приложения для исключения recomposition thrashing.
+ */
+fun getAuroraPrimeStaticColors(payload: AuroraPayload?): AuroraPrimeColors {
+    val themeColors = payload?.themeColors
+
+    fun hex(key: String): Color? = themeColors?.get(key)
+        ?.let { runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull() }
+
+    val primary = hex("primary") ?: AuroraPublicPalette.Green
+    val secondary = hex("secondary") ?: AuroraPublicPalette.Violet
+    val accent = hex("accent") ?: AuroraPublicPalette.Blue
+    val background = hex("background") ?: AuroraPublicPalette.Night
+    val surface = hex("surface") ?: Color(0xFF0A1626)
+    return AuroraPrimeColors(primary, secondary, accent, background, surface)
+}
+
+/**
  * Живая палитра AURORA_PRIME. Всегда non-null: без payload или без
  * themeMaterial — статичная палитра (fallback на AuroraPublicPalette).
  *
@@ -48,17 +66,7 @@ fun rememberAuroraPrimeColors(
     payload: AuroraPayload?,
     animated: Boolean = true,
 ): AuroraPrimeColors {
-    val themeColors = payload?.themeColors
-
-    fun hex(key: String): Color? = themeColors?.get(key)
-        ?.let { runCatching { Color(android.graphics.Color.parseColor(it)) }.getOrNull() }
-
-    val primary = hex("primary") ?: AuroraPublicPalette.Green
-    val secondary = hex("secondary") ?: AuroraPublicPalette.Violet
-    val accent = hex("accent") ?: AuroraPublicPalette.Blue
-    val background = hex("background") ?: AuroraPublicPalette.Night
-    val surface = hex("surface") ?: Color(0xFF0A1626)
-    val static = AuroraPrimeColors(primary, secondary, accent, background, surface)
+    val static = remember(payload) { getAuroraPrimeStaticColors(payload) }
 
     val material = AuroraMaterialSpec.from(payload)
     if (material == null || !animated) return static
@@ -81,12 +89,12 @@ fun rememberAuroraPrimeColors(
 
     return AuroraPrimeColors(
         // Металлический отблеск: primary/accent вспыхивают к цвету блика
-        primary = lerp(primary, material.sheenColor, 0.22f * g),
-        accent = lerp(accent, material.sheenColor, 0.18f * g),
+        primary = lerp(static.primary, material.sheenColor, 0.22f * g),
+        accent = lerp(static.accent, material.sheenColor, 0.18f * g),
         // Иридисценция: secondary медленно переливается в сторону accent
-        secondary = lerp(secondary, accent, 0.30f * material.iridescence * gleam),
-        background = background,
+        secondary = lerp(static.secondary, static.accent, 0.30f * material.iridescence * gleam),
+        background = static.background,
         // Поверхности едва заметно теплеют от сияния
-        surface = lerp(surface, primary, 0.04f * material.iridescence * gleam),
+        surface = lerp(static.surface, static.primary, 0.04f * material.iridescence * gleam),
     )
 }

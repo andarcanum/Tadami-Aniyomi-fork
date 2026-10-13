@@ -1,7 +1,5 @@
 package eu.kanade.presentation.theme
 
-import android.content.Context
-import android.os.PowerManager
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.ColorScheme
@@ -20,8 +18,8 @@ import eu.kanade.domain.ui.model.AppTheme
 import eu.kanade.domain.ui.model.EInkProfile
 import eu.kanade.domain.ui.model.EInkThemeMode
 import eu.kanade.presentation.easteregg.aurora.AuroraPrimeColors
-import eu.kanade.presentation.easteregg.aurora.rememberAuroraPrimeColors
-import eu.kanade.presentation.easteregg.lattice.rememberLatticeProtocolLiveColors
+import eu.kanade.presentation.easteregg.aurora.getAuroraPrimeStaticColors
+import eu.kanade.presentation.easteregg.lattice.getLatticeProtocolStaticColors
 import eu.kanade.presentation.theme.colorscheme.AuroraColorScheme
 import eu.kanade.presentation.theme.colorscheme.AuroraPrimeColorScheme
 import eu.kanade.presentation.theme.colorscheme.BaseColorScheme
@@ -246,47 +244,44 @@ internal val colorSchemes: Map<AppTheme, BaseColorScheme> = mapOf(
 @Composable
 private fun auroraPrimeOverlay(base: ColorScheme, isAmoled: Boolean, isDark: Boolean): ColorScheme {
     val context = LocalContext.current
-    val manager = remember { eu.kanade.domain.easteregg.aurora.AuroraHeartManager.get(context) }
-    val payload = remember { manager.unlockedPayload() }
-    val powerSave = remember {
-        (context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager)?.isPowerSaveMode == true
+    val manager = remember(context) { eu.kanade.domain.easteregg.aurora.AuroraHeartManager.get(context) }
+    val payload = remember(manager) { manager.unlockedPayload() }
+    val staticColors = remember(payload) { getAuroraPrimeStaticColors(payload) }
+    return remember(base, staticColors, isAmoled, isDark) {
+        applyAuroraPrimeOverlay(
+            base = base,
+            live = staticColors,
+            isAmoled = isAmoled,
+            isDark = isDark,
+        )
     }
-    val live = rememberAuroraPrimeColors(payload, animated = !powerSave)
-    return applyAuroraPrimeOverlay(
-        base = base,
-        live = live,
-        isAmoled = isAmoled,
-        isDark = isDark,
-    )
 }
 
 @Composable
 private fun latticeProtocolOverlay(base: ColorScheme, isAmoled: Boolean, isDark: Boolean): ColorScheme {
-    val context = LocalContext.current
-    val powerSave = remember {
-        (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isPowerSaveMode == true
+    val staticColors = remember { getLatticeProtocolStaticColors() }
+    return remember(base, staticColors, isAmoled, isDark) {
+        base.copy(
+            primary = staticColors.primary,
+            onPrimary = base.onPrimary,
+            primaryContainer = staticColors.primary.copy(alpha = 0.22f),
+            onPrimaryContainer = base.onPrimary,
+            secondary = staticColors.secondary,
+            onSecondary = base.onSecondary,
+            secondaryContainer = staticColors.secondary.copy(alpha = 0.18f),
+            onSecondaryContainer = base.onSecondary,
+            tertiary = staticColors.tertiary,
+            onTertiary = base.onTertiary,
+            tertiaryContainer = staticColors.tertiary.copy(alpha = 0.2f),
+            onTertiaryContainer = base.onTertiary,
+            surfaceTint = staticColors.primary,
+            outline = staticColors.primary.copy(alpha = if (isDark) 0.5f else 0.35f),
+            outlineVariant = staticColors.primary.copy(alpha = if (isDark) 0.22f else 0.16f),
+            // Keep void blacks in dark/AMOLED; light scheme surfaces stay from base.
+            background = if (isDark && !isAmoled) Color(0xFF050608) else base.background,
+            surface = if (isDark && !isAmoled) Color(0xFF050608) else base.surface,
+        )
     }
-    val live = rememberLatticeProtocolLiveColors(animated = !powerSave)
-    return base.copy(
-        primary = live.primary,
-        onPrimary = base.onPrimary,
-        primaryContainer = live.primary.copy(alpha = 0.22f),
-        onPrimaryContainer = base.onPrimary,
-        secondary = live.secondary,
-        onSecondary = base.onSecondary,
-        secondaryContainer = live.secondary.copy(alpha = 0.18f),
-        onSecondaryContainer = base.onSecondary,
-        tertiary = live.tertiary,
-        onTertiary = base.onTertiary,
-        tertiaryContainer = live.tertiary.copy(alpha = 0.2f),
-        onTertiaryContainer = base.onTertiary,
-        surfaceTint = live.primary,
-        outline = live.primary.copy(alpha = if (isDark) 0.5f else 0.35f),
-        outlineVariant = live.primary.copy(alpha = if (isDark) 0.22f else 0.16f),
-        // Keep void blacks in dark/AMOLED; light scheme surfaces stay from base.
-        background = if (isDark && !isAmoled) Color(0xFF050608) else base.background,
-        surface = if (isDark && !isAmoled) Color(0xFF050608) else base.surface,
-    )
 }
 
 /**
