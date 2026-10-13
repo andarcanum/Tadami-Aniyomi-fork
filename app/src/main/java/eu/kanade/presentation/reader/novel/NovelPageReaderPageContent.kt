@@ -335,6 +335,11 @@ internal fun applyNovelPageReaderTextViewMetrics(
     textView.setLineSpacing(0f, metrics.lineSpacingMultiplier)
     textView.typeface = metrics.typeface
     textView.gravity = resolveNovelPageReaderTextGravity(metrics.textAlign)
+    textView.breakStrategy = Layout.BREAK_STRATEGY_SIMPLE
+    textView.hyphenationFrequency = Layout.HYPHENATION_FREQUENCY_NONE
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        textView.isFallbackLineSpacing = false
+    }
     metrics.shadow?.let { resolvedShadow ->
         textView.setShadowLayer(
             resolvedShadow.blurRadius,
