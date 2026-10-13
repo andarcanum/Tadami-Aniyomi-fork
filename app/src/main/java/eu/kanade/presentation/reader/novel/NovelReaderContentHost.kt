@@ -1179,6 +1179,7 @@ internal fun NovelReaderContentHost(
                 textAlign = pageReaderLayoutTextAlign,
                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
                 chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
+                density = density.density,
             )
         }
     }
@@ -1266,6 +1267,7 @@ internal fun NovelReaderContentHost(
                 textAlign = pageReaderLayoutTextAlign,
                 forceParagraphIndent = state.readerSettings.forceParagraphIndent,
                 chapterTitle = if (showPageChapterTitle) state.chapter.name else null,
+                density = density.density,
             )
         }
     }

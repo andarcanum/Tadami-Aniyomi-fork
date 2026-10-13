@@ -51,4 +51,25 @@ class NovelPageReaderSpannableTextTest {
 
         assertTrue(clickedUrl == "https://example.org")
     }
+
+    @Test
+    fun `applyNovelPageReaderTextViewMetrics aligns break strategy, hyphenation and fallback line spacing`() {
+        val textView = TextView(ApplicationProvider.getApplicationContext())
+        val metrics = resolveNovelPageReaderTextViewMetrics(
+            textSizePx = 40f,
+            lineSpacingMultiplier = 1.2f,
+            typeface = null,
+            textAlign = eu.kanade.tachiyomi.ui.reader.novel.setting.TextAlign.JUSTIFY,
+            shadow = null,
+        )
+
+        applyNovelPageReaderTextViewMetrics(textView, metrics)
+
+        assertEquals(android.text.Layout.BREAK_STRATEGY_SIMPLE, textView.breakStrategy)
+        assertEquals(android.text.Layout.HYPHENATION_FREQUENCY_NONE, textView.hyphenationFrequency)
+        assertEquals(android.text.Layout.JUSTIFICATION_MODE_INTER_WORD, textView.justificationMode)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            assertEquals(false, textView.isFallbackLineSpacing)
+        }
+    }
 }

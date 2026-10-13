@@ -1,5 +1,6 @@
 package eu.kanade.presentation.reader.novel
 
+import android.os.Build
 import android.text.Layout
 import android.text.SpannableStringBuilder
 import android.text.StaticLayout
@@ -265,6 +266,7 @@ internal fun paginateTextIntoPageRanges(
     typeface: android.graphics.Typeface?,
     textAlign: ReaderTextAlign,
     firstLineIndentPx: Int? = null,
+    density: Float = 1.0f,
 ): List<TextPageRange> {
     if (text.isBlank()) return emptyList()
 
@@ -279,6 +281,7 @@ internal fun paginateTextIntoPageRanges(
         typeface = typeface,
         textAlign = textAlign,
         firstLineIndentPx = firstLineIndentPx,
+        density = density,
     ) ?: run {
         val safeTextSize = textSizePx.coerceAtLeast(1f)
         val approxCharsPerLine = (safeWidth / (safeTextSize * 0.55f)).toInt().coerceAtLeast(15)
@@ -397,6 +400,7 @@ internal fun buildReaderStaticLayout(
     typeface: android.graphics.Typeface?,
     textAlign: ReaderTextAlign,
     firstLineIndentPx: Int? = null,
+    density: Float = 1.0f,
 ): StaticLayout? {
     return runCatching {
         val layoutText = firstLineIndentPx
@@ -416,12 +420,27 @@ internal fun buildReaderStaticLayout(
             isAntiAlias = true
             this.textSize = textSizePx.coerceAtLeast(1f)
             this.typeface = typeface
+            this.density = density
         }
-        StaticLayout.Builder.obtain(layoutText, 0, layoutText.length, paint, widthPx.coerceAtLeast(1))
+        val builder = StaticLayout.Builder.obtain(layoutText, 0, layoutText.length, paint, widthPx.coerceAtLeast(1))
             .setAlignment(textAlign.toLayoutAlignment())
             .setIncludePad(false)
             .setLineSpacing(0f, lineHeightMultiplier.coerceAtLeast(1f))
-            .build()
+            .setBreakStrategy(Layout.BREAK_STRATEGY_SIMPLE)
+            .setHyphenationFrequency(Layout.HYPHENATION_FREQUENCY_NONE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setJustificationMode(
+                if (textAlign == ReaderTextAlign.JUSTIFY) {
+                    Layout.JUSTIFICATION_MODE_INTER_WORD
+                } else {
+                    Layout.JUSTIFICATION_MODE_NONE
+                },
+            )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            builder.setUseLineSpacingFromFallbacks(false)
+        }
+        builder.build()
     }.getOrNull()
 }
 
@@ -793,20 +812,24 @@ internal fun resolvePageReaderStableNavigationBarHeightPx(
  * Fill goes only to real paragraph gaps (spacingBefore > 0): stretching inside a paragraph or
  * between continuation slices would look like a rendering bug. Each gap gains at most half a
  * line, the visual step books use between paragraphs; when the leftover is larger, the excess
- * still stays at the bottom (books do the same rather than tearing paragraphs apart).
+ * A small [safetyBufferPx] is kept unallocated so multi-view Compose rendering never clips the
+ * final line due to integer rounding or subpixel glyph advances.
  */
 internal fun resolveNovelPageReaderJustifyFillPx(
     sliceSpacingBeforePx: List<Int>,
     leftoverPx: Int,
     sliceLineHeightPx: Int,
+    safetyBufferPx: Int = 6,
 ): List<Int> {
     if (sliceSpacingBeforePx.isEmpty() || leftoverPx <= 0) {
         return List(sliceSpacingBeforePx.size) { 0 }
     }
     val gapIndices = sliceSpacingBeforePx.indices.filter { sliceSpacingBeforePx[it] > 0 }
     if (gapIndices.isEmpty()) return List(sliceSpacingBeforePx.size) { 0 }
+    val usableLeftoverPx = (leftoverPx - safetyBufferPx).coerceAtLeast(0)
+    if (usableLeftoverPx <= 0) return List(sliceSpacingBeforePx.size) { 0 }
     val perGapCapPx = (sliceLineHeightPx.coerceAtLeast(1) / 2)
-    val fillPerGapPx = (leftoverPx / gapIndices.size).coerceAtMost(perGapCapPx)
+    val fillPerGapPx = (usableLeftoverPx / gapIndices.size).coerceAtMost(perGapCapPx)
     return List(sliceSpacingBeforePx.size) { index ->
         if (index in gapIndices) fillPerGapPx else 0
     }
@@ -824,6 +847,7 @@ internal fun paginatePlainPageBlocks(
     textAlign: ReaderTextAlign,
     forceParagraphIndent: Boolean = false,
     chapterTitle: String? = null,
+    density: Float = 1.0f,
 ): List<List<PlainPageSlice>> {
     val safeHeight = heightPx.coerceAtLeast(1)
     val pages = mutableListOf<List<PlainPageSlice>>()
@@ -902,6 +926,7 @@ internal fun paginatePlainPageBlocks(
             },
             textAlign = textAlign,
             firstLineIndentPx = firstLineIndentPx,
+            density = density,
         )
         if (layout == null) {
             var start = 0
@@ -1028,6 +1053,7 @@ internal fun paginatePlainPageBlocksWithImages(
     textAlign: ReaderTextAlign,
     forceParagraphIndent: Boolean = false,
     chapterTitle: String? = null,
+    density: Float = 1.0f,
 ): List<List<PlainPageSlice>> {
     if (imageBlocks.isEmpty()) {
         return paginatePlainPageBlocks(
@@ -1042,6 +1068,7 @@ internal fun paginatePlainPageBlocksWithImages(
             textAlign = textAlign,
             forceParagraphIndent = forceParagraphIndent,
             chapterTitle = chapterTitle,
+            density = density,
         )
     }
 
@@ -1063,6 +1090,7 @@ internal fun paginatePlainPageBlocksWithImages(
             textAlign = textAlign,
             forceParagraphIndent = forceParagraphIndent,
             chapterTitle = chapterTitle,
+            density = density,
         )
         pendingText.clear()
     }
@@ -1204,6 +1232,7 @@ internal fun paginateRichPageBlocks(
     textAlign: ReaderTextAlign,
     chapterTitle: String? = null,
     allowChapterTitleBlock: Boolean = true,
+    density: Float = 1.0f,
 ): List<List<RichPageSlice.Text>> {
     val safeHeight = heightPx.coerceAtLeast(1)
     val pages = mutableListOf<List<RichPageSlice.Text>>()
@@ -1277,6 +1306,7 @@ internal fun paginateRichPageBlocks(
             },
             textAlign = textAlign,
             firstLineIndentPx = firstLineIndentPx,
+            density = density,
         )
         if (layout == null) {
             var start = 0
@@ -1392,6 +1422,7 @@ internal fun paginateMixedRichPageBlocks(
     textAlign: ReaderTextAlign,
     forceParagraphIndent: Boolean,
     chapterTitle: String? = null,
+    density: Float = 1.0f,
 ): MixedRichPagePagination {
     val allBlockTexts = mutableListOf<RichPageBlockText>()
     val currentChunkTexts = mutableListOf<RichPageBlockText>()
@@ -1413,6 +1444,7 @@ internal fun paginateMixedRichPageBlocks(
             textAlign = textAlign,
             chapterTitle = chapterTitle,
             allowChapterTitleBlock = currentChunkCanUseChapterTitle,
+            density = density,
         )
         currentChunkTexts.clear()
         currentChunkCanUseChapterTitle = false
