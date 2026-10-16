@@ -5,12 +5,18 @@ import eu.kanade.domain.entries.novel.LocalNovelVisibility
 import eu.kanade.domain.source.novel.interactor.GetEnabledNovelSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
+import eu.kanade.tachiyomi.ui.discovery.ManualRefreshAction
+import eu.kanade.tachiyomi.ui.discovery.manualRefreshFlow
+import eu.kanade.tachiyomi.ui.discovery.resolveManualRefreshAction
 import eu.kanade.tachiyomi.ui.novel.resolveNovelResumeChapter
-import kotlinx.coroutines.Job
+import eu.kanade.tachiyomi.util.system.workManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import logcat.LogPriority
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.category.novel.interactor.GetNovelCategories
 import tachiyomi.domain.entries.novel.interactor.GetLibraryNovel
 import tachiyomi.domain.entries.novel.interactor.GetNovel
@@ -131,6 +137,24 @@ internal class NovelHomeHubScreenModel(
     }
 
     init {
+        observeDiscoveryRefreshFailure(
+            discoveryPreferences,
+            tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL,
+        )
+        screenModelScope.launchIO {
+            var wasRefreshing = false
+            manualRefreshFlow(
+                context.workManager,
+                tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL,
+            ).collectLatest { refreshing ->
+                mutableState.update { it.copy(isDiscoveryRefreshing = refreshing) }
+                if (wasRefreshing && !refreshing) {
+                    updateDiscoveryTeaser(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
+                }
+                wasRefreshing = refreshing
+            }
+        }
+
         val cached = fastCache.load()
         val hadCache = !cached.isEmpty || cached.isInitialized
 
@@ -290,7 +314,6 @@ internal class NovelHomeHubScreenModel(
     private var lastReentryTime: Long = 0L
 
     private var lastRefreshClickTime = 0L
-    private var discoveryRefreshJob: Job? = null
 
     private suspend fun updateDiscoveryTeaser(
         advanceOffset: Boolean = false,
@@ -415,45 +438,31 @@ internal class NovelHomeHubScreenModel(
 
     override fun rotateOrRefreshDiscovery() {
         if (!discoveryPreferences.discoveryEnabled().get()) return
-        val mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL
-        if (state.value.isDiscoveryRefreshing) {
-            discoveryRefreshJob?.cancel()
-            eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.stop(context, mediaType)
-            discoveryPreferences.homeManualRefreshAt(mediaType).set(0L)
-            mutableState.update { it.copy(isDiscoveryRefreshing = false) }
-            return
-        }
-
         val now = System.currentTimeMillis()
         if (now - lastRefreshClickTime < 500L) return
         lastRefreshClickTime = now
 
-        val lastManual = discoveryPreferences.homeManualRefreshAt(mediaType).get().takeIf { it > 0L }
+        val mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL
         val cooldown = eu.kanade.tachiyomi.ui.discovery.remainingCooldownSeconds(
-            lastManual,
+            discoveryPreferences.manualRefreshAt(mediaType).get().takeIf { it > 0L },
             now,
-            cooldownMs = eu.kanade.tachiyomi.ui.discovery.HOME_DISCOVERY_COOLDOWN_MS,
         )
-        if (cooldown > 0L) {
+        val action = resolveManualRefreshAction(state.value.isDiscoveryRefreshing, cooldown)
+        if (action == ManualRefreshAction.CANCEL) {
+            eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.stop(context, mediaType)
+            mutableState.update { it.copy(isDiscoveryRefreshing = false) }
+            return
+        }
+
+        if (action == ManualRefreshAction.ROTATE || !discoveryPreferences.tryStartManualRefresh(mediaType, now)) {
             screenModelScope.launchIO {
                 updateDiscoveryTeaser(advanceOffset = true, forceUpdate = true, notifyIfLimited = true)
             }
             return
         }
 
-        discoveryPreferences.homeManualRefreshAt(mediaType).set(now)
         mutableState.update { it.copy(isDiscoveryRefreshing = true) }
-        discoveryRefreshJob = screenModelScope.launchIO {
-            try {
-                Injekt.get<eu.kanade.tachiyomi.data.discovery.DiscoveryRunner>().run(
-                    listOf(mediaType),
-                    isManualRefresh = true,
-                )
-            } finally {
-                mutableState.update { it.copy(isDiscoveryRefreshing = false) }
-                updateDiscoveryTeaser(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
-            }
-        }
+        eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.refreshNow(context, mediaType)
     }
 
     fun markDiscoveryItemShown(item: HomeHubDiscoveryItem) {
@@ -467,6 +476,20 @@ internal class NovelHomeHubScreenModel(
 
     fun startLiveUpdates() {
         if (liveUpdatesStarted) return
+
+        // Защита от NPE «kotlin.Lazy.getValue() on a null object reference»:
+        // если injectLazy()-делегат ещё не проинициализирован (DI не готов),
+        // любой доступ к injectLazy-полю внутри combine/collectLatest уронит процесс.
+        // Проверяем готовность DI до установки liveUpdatesStarted, чтобы при
+        // неудаче метод можно было вызвать повторно.
+        if (!runCatching {
+                getNovelCategories
+                Unit
+            }.isSuccess
+        ) {
+            return
+        }
+
         liveUpdatesStarted = true
 
         screenModelScope.launchIO {
@@ -479,128 +502,134 @@ internal class NovelHomeHubScreenModel(
             ) { name, avatar, categories, historyList, novelList ->
                 LiveData(name, avatar, categories, historyList, novelList)
             }.collectLatest { data ->
-                val hiddenCategoryIds = hiddenHomeHubCategoryIds(
-                    categories = data.categories,
-                    isHiddenFromHomeHub = { it.hiddenFromHomeHub },
-                    idSelector = { it.id },
-                )
-                val novelCategoryIdsByNovelId = homeHubCategoryIdsByEntryId(
-                    items = data.novelList,
-                    entryIdSelector = { it.novel.id },
-                    categoryIdSelector = { it.category },
-                )
-
-                val categoryFilteredHistory = filterHomeHubEntriesBy(
-                    items = data.historyList,
-                    keySelector = { it.novelId },
-                    entryCategoryIds = novelCategoryIdsByNovelId,
-                    hiddenCategoryIds = hiddenCategoryIds,
-                )
-                val filteredHistory = filterGhostLocalNovelHistory(categoryFilteredHistory)
-
-                val categoryFilteredNovel = filterHomeHubEntriesByDistinct(
-                    items = data.novelList,
-                    keySelector = { it.novel.id },
-                    entryCategoryIds = novelCategoryIdsByNovelId,
-                    hiddenCategoryIds = hiddenCategoryIds,
-                )
-                val filteredNovel = categoryFilteredNovel.filter { item ->
-                    LocalNovelVisibility.shouldShowLocalNovelEntry(
-                        sourceId = item.novel.source,
-                        url = item.novel.url,
-                        coverUrl = item.novel.thumbnailUrl,
-                        hasSupportedContent = localNovelSourceFileSystem::hasSupportedLocalNovelContent,
+                try {
+                    val hiddenCategoryIds = hiddenHomeHubCategoryIds(
+                        categories = data.categories,
+                        isHiddenFromHomeHub = { it.hiddenFromHomeHub },
+                        idSelector = { it.id },
                     )
-                }
+                    val novelCategoryIdsByNovelId = homeHubCategoryIdsByEntryId(
+                        items = data.novelList,
+                        entryIdSelector = { it.novel.id },
+                        categoryIdSelector = { it.category },
+                    )
 
-                val hero = filteredHistory.firstOrNull()
-                val history = takeHomeHubHistoryExcluding(
-                    items = filteredHistory,
-                    limit = 6,
-                    excludedEntryId = hero?.novelId,
-                    entryIdSelector = { it.novelId },
-                )
+                    val categoryFilteredHistory = filterHomeHubEntriesBy(
+                        items = data.historyList,
+                        keySelector = { it.novelId },
+                        entryCategoryIds = novelCategoryIdsByNovelId,
+                        hiddenCategoryIds = hiddenCategoryIds,
+                    )
+                    val filteredHistory = filterGhostLocalNovelHistory(categoryFilteredHistory)
 
-                val hasData = hero != null || history.isNotEmpty() || filteredNovel.isNotEmpty()
-                val isInitialized = hasData ||
-                    (
-                        state.value.showFilteredEmpty ||
-                            (state.value.showWelcome.not() && state.value.isLoading.not())
+                    val categoryFilteredNovel = filterHomeHubEntriesByDistinct(
+                        items = data.novelList,
+                        keySelector = { it.novel.id },
+                        entryCategoryIds = novelCategoryIdsByNovelId,
+                        hiddenCategoryIds = hiddenCategoryIds,
+                    )
+                    val filteredNovel = categoryFilteredNovel.filter { item ->
+                        LocalNovelVisibility.shouldShowLocalNovelEntry(
+                            sourceId = item.novel.source,
+                            url = item.novel.url,
+                            coverUrl = item.novel.thumbnailUrl,
+                            hasSupportedContent = localNovelSourceFileSystem::hasSupportedLocalNovelContent,
                         )
+                    }
 
-                val novelRecommendations = filteredNovel
-                    .sortedByDescending { it.novel.dateAdded }
-                    .take(10)
-
-                val previousHero = state.value.hero
-                val previousHeroChapterId = originalHeroChapterId
-
-                originalHeroChapterId = hero?.chapterId
-
-                val isEmpty = hero == null && history.isEmpty() && novelRecommendations.isEmpty()
-                val showWelcome = !isInitialized && isEmpty
-                val showFilteredEmpty = isInitialized && isEmpty
-
-                mutableState.update {
-                    it.copy(
-                        hero = hero?.let { h ->
-                            HomeHubHero(
-                                entryId = h.novelId,
-                                title = h.title,
-                                progressNumber = h.chapterNumber,
-                                coverData = h.coverData,
-                            )
-                        },
-                        history = history.map { h ->
-                            HomeHubHistory(
-                                entryId = h.novelId,
-                                title = h.title,
-                                progressNumber = h.chapterNumber,
-                                coverData = h.coverData,
-                                section = HomeHubSection.Novel,
-                            )
-                        },
-                        recommendations = novelRecommendations.map { n ->
-                            HomeHubRecommendation(
-                                entryId = n.novel.id,
-                                title = n.novel.title,
-                                coverData = NovelCover(
-                                    novelId = n.novel.id,
-                                    sourceId = n.novel.source,
-                                    isNovelFavorite = n.novel.favorite,
-                                    url = n.novel.thumbnailUrl,
-                                    lastModified = n.novel.coverLastModified,
-                                ),
-                                section = HomeHubSection.Novel,
-                                progressNumerator = n.readCount,
-                                progressDenominator = n.totalChapters,
-                            )
-                        },
-                        userName = data.name,
-                        userAvatar = data.avatar,
-                        isLoading = false,
-                        showWelcome = showWelcome,
-                        showFilteredEmpty = showFilteredEmpty,
+                    val hero = filteredHistory.firstOrNull()
+                    val history = takeHomeHubHistoryExcluding(
+                        items = filteredHistory,
+                        limit = 6,
+                        excludedEntryId = hero?.novelId,
+                        entryIdSelector = { it.novelId },
                     )
-                }
 
-                if (hasData && !fastCache.load().isInitialized) {
-                    fastCache.markInitialized()
-                }
+                    val hasData = hero != null || history.isNotEmpty() || filteredNovel.isNotEmpty()
+                    val isInitialized = hasData ||
+                        (
+                            state.value.showFilteredEmpty ||
+                                (state.value.showWelcome.not() && state.value.isLoading.not())
+                            )
 
-                if (
-                    hero != null &&
-                    shouldReloadNovelHomeHeroChapterId(
-                        previousHeroNovelId = previousHero?.entryId,
-                        previousHeroChapterId = previousHeroChapterId,
-                        currentHeroNovelId = hero.novelId,
-                        currentHeroChapterId = hero.chapterId,
-                    )
-                ) {
-                    loadHeroChapterId(hero.novelId, hero.chapterId)
-                }
+                    val novelRecommendations = filteredNovel
+                        .sortedByDescending { it.novel.dateAdded }
+                        .take(10)
 
-                saveCache()
+                    val previousHero = state.value.hero
+                    val previousHeroChapterId = originalHeroChapterId
+
+                    originalHeroChapterId = hero?.chapterId
+
+                    val isEmpty = hero == null && history.isEmpty() && novelRecommendations.isEmpty()
+                    val showWelcome = !isInitialized && isEmpty
+                    val showFilteredEmpty = isInitialized && isEmpty
+
+                    mutableState.update {
+                        it.copy(
+                            hero = hero?.let { h ->
+                                HomeHubHero(
+                                    entryId = h.novelId,
+                                    title = h.title,
+                                    progressNumber = h.chapterNumber,
+                                    coverData = h.coverData,
+                                )
+                            },
+                            history = history.map { h ->
+                                HomeHubHistory(
+                                    entryId = h.novelId,
+                                    title = h.title,
+                                    progressNumber = h.chapterNumber,
+                                    coverData = h.coverData,
+                                    section = HomeHubSection.Novel,
+                                )
+                            },
+                            recommendations = novelRecommendations.map { n ->
+                                HomeHubRecommendation(
+                                    entryId = n.novel.id,
+                                    title = n.novel.title,
+                                    coverData = NovelCover(
+                                        novelId = n.novel.id,
+                                        sourceId = n.novel.source,
+                                        isNovelFavorite = n.novel.favorite,
+                                        url = n.novel.thumbnailUrl,
+                                        lastModified = n.novel.coverLastModified,
+                                    ),
+                                    section = HomeHubSection.Novel,
+                                    progressNumerator = n.readCount,
+                                    progressDenominator = n.totalChapters,
+                                )
+                            },
+                            userName = data.name,
+                            userAvatar = data.avatar,
+                            isLoading = false,
+                            showWelcome = showWelcome,
+                            showFilteredEmpty = showFilteredEmpty,
+                        )
+                    }
+
+                    if (hasData && !fastCache.load().isInitialized) {
+                        fastCache.markInitialized()
+                    }
+
+                    if (
+                        hero != null &&
+                        shouldReloadNovelHomeHeroChapterId(
+                            previousHeroNovelId = previousHero?.entryId,
+                            previousHeroChapterId = previousHeroChapterId,
+                            currentHeroNovelId = hero.novelId,
+                            currentHeroChapterId = hero.chapterId,
+                        )
+                    ) {
+                        loadHeroChapterId(hero.novelId, hero.chapterId)
+                    }
+
+                    saveCache()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    logcat(LogPriority.ERROR, e) { "Failed to update novel home hub data" }
+                }
             }
         }
     }
