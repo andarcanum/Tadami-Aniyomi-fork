@@ -6,6 +6,32 @@ import tachiyomi.domain.discovery.model.DiscoveryMediaType
 
 class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
 
+    fun manualRefreshAt(mediaType: DiscoveryMediaType): Preference<Long> = synchronized(manualRefreshLock) {
+        val shared = preferenceStore.getLong("discovery_manual_refresh_at_" + mediaType.key, 0L)
+        val migrated = preferenceStore.getBoolean("discovery_manual_refresh_migrated_" + mediaType.key, false)
+        if (!migrated.get()) {
+            val home = homeManualRefreshAt(mediaType)
+            val feed = feedManualRefreshAt(mediaType)
+            shared.set(maxOf(shared.get(), home.get(), feed.get()))
+            home.delete()
+            feed.delete()
+            migrated.set(true)
+        }
+        shared
+    }
+
+    fun clearManualRefreshAt(mediaType: DiscoveryMediaType) = synchronized(manualRefreshLock) {
+        manualRefreshAt(mediaType).set(0L)
+    }
+
+    fun tryStartManualRefresh(mediaType: DiscoveryMediaType, now: Long): Boolean = synchronized(manualRefreshLock) {
+        val timestamp = manualRefreshAt(mediaType)
+        val previous = timestamp.get()
+        if (previous > 0L && now - previous in 0 until MANUAL_REFRESH_COOLDOWN_MS) return@synchronized false
+        timestamp.set(now)
+        true
+    }
+
     fun discoveryEnabled(): Preference<Boolean> = preferenceStore.getBoolean("discovery_enabled", true)
     fun homeHeroMode(): Preference<String> = preferenceStore.getString("home_hero_mode", "auto")
 
@@ -31,11 +57,23 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun refreshAfterLibrary(): Preference<Boolean> = preferenceStore.getBoolean("discovery_refresh_after_library", true)
     fun refreshWifiOnly(): Preference<Boolean> = preferenceStore.getBoolean("discovery_refresh_wifi_only", false)
 
-    /** Момент последнего РУЧНОГО обновления ленты на полном экране (5 мин cooldown, per-media). */
+    /** Legacy migration input; new refreshes use [manualRefreshAt]. */
     fun feedManualRefreshAt(mediaType: DiscoveryMediaType): Preference<Long> =
         preferenceStore.getLong("discovery_feed_manual_refresh_at_" + mediaType.key, 0L)
 
-    /** Момент последнего РУЧНОГО обновления ленты на главном экране (10 сек cooldown per-media). */
+    fun manualRefreshWorkId(mediaType: DiscoveryMediaType): Preference<String> =
+        preferenceStore.getString("discovery_manual_refresh_work_id_" + mediaType.key, "")
+
+    fun claimManualRefreshFailure(mediaType: DiscoveryMediaType, requestId: String): Boolean =
+        synchronized(manualRefreshLock) {
+            if (requestId.isBlank() || manualRefreshWorkId(mediaType).get() != requestId) return@synchronized false
+            val shown = preferenceStore.getString("discovery_manual_refresh_failure_shown_" + mediaType.key, "")
+            if (shown.get() == requestId) return@synchronized false
+            shown.set(requestId)
+            true
+        }
+
+    /** Legacy migration input; new refreshes use [manualRefreshAt]. */
     fun homeManualRefreshAt(mediaType: DiscoveryMediaType): Preference<Long> =
         preferenceStore.getLong("discovery_home_manual_refresh_at_" + mediaType.key, 0L)
 
@@ -140,4 +178,10 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
         preferenceStore.getLong("stage_last_rotation_time_" + mediaType.key, 0L)
     fun stageOffset(mediaType: DiscoveryMediaType): Preference<Int> =
         preferenceStore.getInt("stage_offset_" + mediaType.key, 0)
+
+    companion object {
+        private val manualRefreshLock = Any()
+
+        const val MANUAL_REFRESH_COOLDOWN_MS = 5 * 60_000L
+    }
 }

@@ -14,17 +14,23 @@ data class DiscoveryProgress(
 )
 
 object DiscoveryProgressTracker {
-    private val _progress = MutableStateFlow(DiscoveryProgress())
-    val progress: StateFlow<DiscoveryProgress> = _progress.asStateFlow()
+    private val progressByMedia = DiscoveryMediaType.entries.associateWith { MutableStateFlow(DiscoveryProgress()) }
+
+    fun progress(mediaType: DiscoveryMediaType): StateFlow<DiscoveryProgress> =
+        progressByMedia.getValue(mediaType).asStateFlow()
+
+    fun reset(mediaType: DiscoveryMediaType) {
+        progressByMedia.getValue(mediaType).value = DiscoveryProgress()
+    }
 
     fun update(
         isRunning: Boolean = true,
-        mediaType: DiscoveryMediaType? = null,
+        mediaType: DiscoveryMediaType,
         stageText: String = "",
         current: Int = 0,
         total: Int = 0,
     ) {
-        _progress.value = DiscoveryProgress(
+        progressByMedia.getValue(mediaType).value = DiscoveryProgress(
             isRunning = isRunning,
             mediaType = mediaType,
             stageText = stageText,
@@ -34,6 +40,6 @@ object DiscoveryProgressTracker {
     }
 
     fun reset() {
-        _progress.value = DiscoveryProgress()
+        DiscoveryMediaType.entries.forEach(::reset)
     }
 }

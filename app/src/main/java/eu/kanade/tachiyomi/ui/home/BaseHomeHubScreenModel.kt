@@ -4,15 +4,22 @@ import android.os.Handler
 import android.os.Looper
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
+import eu.kanade.tachiyomi.ui.discovery.manualRefreshWorkInfoFlow
+import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.common.util.lang.launchIO
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 
@@ -36,10 +43,29 @@ internal abstract class BaseHomeHubScreenModel(
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
+    private val _discoveryRefreshFailures = MutableStateFlow<Map<DiscoveryMediaType, String>>(emptyMap())
+
     val effects: SharedFlow<HomeHubEffect> = _effects.asSharedFlow()
+    val discoveryRefreshFailures = _discoveryRefreshFailures.asStateFlow()
+
+    fun acknowledgeDiscoveryRefreshFailure(mediaType: DiscoveryMediaType, requestId: String) {
+        _discoveryRefreshFailures.update { pending ->
+            if (pending[mediaType] == requestId) pending - mediaType else pending
+        }
+    }
 
     protected fun emitEffect(effect: HomeHubEffect) {
         _effects.tryEmit(effect)
+    }
+
+    protected fun observeDiscoveryRefreshFailure(preferences: DiscoveryPreferences, mediaType: DiscoveryMediaType) {
+        screenModelScope.launchIO {
+            manualRefreshWorkInfoFlow(context.workManager, preferences, mediaType).collectLatest { workInfo ->
+                if (workInfo?.state == androidx.work.WorkInfo.State.FAILED) {
+                    _discoveryRefreshFailures.update { it + (mediaType to workInfo.id.toString()) }
+                }
+            }
+        }
     }
 
     private val dismissedSessionTitles = mutableSetOf<String>()

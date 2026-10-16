@@ -1,13 +1,63 @@
 package eu.kanade.tachiyomi.data.discovery
 
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCoordinator
+import eu.kanade.tachiyomi.data.suggestions.SuggestionFetchResult
+import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
+import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryReleaseStatus
+import java.io.IOException
 
 class DiscoveryLikeRowBuilderTest {
+
+    @Test
+    fun `partial feedback provider failure is reported even with successful items`() = runTest {
+        val suggestions = mockk<SuggestionCoordinator>()
+        coEvery { suggestions.fetchSuggestions(any(), any(), any()) } returns SuggestionFetchResult(
+            items = listOf(
+                SuggestionItem(
+                    title = "Fresh Pick",
+                    thumbnailUrl = null,
+                    providerName = "AniList",
+                    providerUrl = "https://anilist.co/manga/1",
+                    providerId = "1",
+                    mediaType = SuggestionMediaType.NOVEL,
+                ),
+            ),
+            attemptedSources = 2,
+            failedSources = 1,
+        )
+        val builder = DiscoveryLikeRowBuilder(suggestions)
+
+        val failure = runCatching { builder.build(externalContext(feedback = true)) }.exceptionOrNull()
+
+        (failure is IOException) shouldBe true
+    }
+
+    @Test
+    fun `empty successful providers remain honestly empty for library and feedback seeds`() = runTest {
+        val suggestions = mockk<SuggestionCoordinator>()
+        coEvery { suggestions.fetchSuggestions(any(), any(), any()) } returns
+            SuggestionFetchResult(emptyList(), attemptedSources = 2, failedSources = 0)
+        val builder = DiscoveryLikeRowBuilder(suggestions)
+
+        builder.build(externalContext(feedback = false)) shouldBe emptyList()
+        builder.build(externalContext(feedback = true)) shouldBe emptyList()
+    }
+
+    private fun externalContext(feedback: Boolean) = DiscoveryBuildContext(
+        mediaType = DiscoveryMediaType.NOVEL,
+        seeds = if (feedback) emptyList() else listOf(DiscoverySeedInput(entryId = 1L, title = "Seed One")),
+        feedbackSeeds = if (feedback) listOf(DiscoveryFeedbackSeed("Seed One", "seed one")) else emptyList(),
+        libraryCleanTitles = emptySet(),
+        historyCleanTitles = emptySet(),
+        hiddenCleanTitles = emptySet(),
+    )
 
     private class FakeCatalog(
         private val items: List<DiscoveryRowItem> = emptyList(),

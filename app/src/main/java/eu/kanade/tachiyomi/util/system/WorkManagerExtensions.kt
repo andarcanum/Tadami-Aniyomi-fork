@@ -41,6 +41,15 @@ fun WorkManager.isRunningFlow(tag: String): Flow<Boolean> {
         .distinctUntilChanged()
 }
 
+internal fun isActiveWorkState(state: WorkInfo.State): Boolean =
+    state == WorkInfo.State.ENQUEUED || state == WorkInfo.State.RUNNING
+
+fun WorkManager.isRunningOrEnqueuedFlow(tag: String): Flow<Boolean> {
+    return this.getWorkInfosByTagLiveData(tag).asFlow()
+        .map { list -> list.any { isActiveWorkState(it.state) } }
+        .distinctUntilChanged()
+}
+
 /**
  * Makes this worker run in the context of a foreground service.
  *

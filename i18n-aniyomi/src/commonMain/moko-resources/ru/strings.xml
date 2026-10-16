@@ -1842,6 +1842,7 @@
     <string name="for_you_updated_never">Ещё не обновлялось</string>
     <string name="for_you_refresh_cooldown">Подождите %1$d сек. перед следующим обновлением</string>
     <string name="for_you_limited_pool">Рекомендации обновлены из имеющегося набора</string>
+    <string name="for_you_refresh_failed">Не удалось обновить рекомендации. Попробуйте позже.</string>
     <string name="for_you_tab_mix">Микс</string>
     <string name="for_you_tab_similar">Похоже</string>
     <string name="for_you_tab_taste">Твой вкус</string>

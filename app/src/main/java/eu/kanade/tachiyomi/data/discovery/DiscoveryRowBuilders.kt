@@ -45,6 +45,7 @@ class DiscoveryLikeRowBuilder(
         }
         if (includeExternal) {
             var fullyFailedSeeds = 0
+            var hasFailedSources = false
             val feedbackPerSeed = context.feedbackSeeds.map { feedbackSeed ->
                 val suggestionSeed = SuggestionSeed(
                     mediaType = mediaType,
@@ -59,6 +60,9 @@ class DiscoveryLikeRowBuilder(
                     limit = 25,
                     releaseStatuses = context.releaseStatuses,
                 )
+                if (result.failedSources > 0) {
+                    hasFailedSources = true
+                }
                 if (result.items.isEmpty() && result.attemptedSources > 0 &&
                     result.failedSources == result.attemptedSources
                 ) {
@@ -90,6 +94,9 @@ class DiscoveryLikeRowBuilder(
                     limit = 25,
                     releaseStatuses = context.releaseStatuses,
                 )
+                if (result.failedSources > 0) {
+                    hasFailedSources = true
+                }
                 if (result.items.isEmpty() && result.attemptedSources > 0 &&
                     result.failedSources == result.attemptedSources
                 ) {
@@ -111,6 +118,9 @@ class DiscoveryLikeRowBuilder(
             val perSeed = feedbackPerSeed + libraryPerSeed
             val merged = mergeSeedResults(perSeed)
             val totalSeeds = context.seeds.size + context.feedbackSeeds.size
+            if (hasFailedSources) {
+                throw IOException("one or more suggestion providers failed")
+            }
             if (merged.isEmpty() && totalSeeds > 0 && fullyFailedSeeds == totalSeeds) {
                 throw IOException("all suggestion providers failed for every seed")
             }

@@ -4,6 +4,15 @@ import tachiyomi.domain.discovery.model.DiscoverySuggestion
 
 internal const val FEED_WINDOW_SIZE = 20
 
+internal enum class ManualRefreshAction { CANCEL, ROTATE, REFRESH }
+
+internal fun resolveManualRefreshAction(isActive: Boolean, remainingCooldown: Long): ManualRefreshAction =
+    when {
+        isActive -> ManualRefreshAction.CANCEL
+        remainingCooldown > 0L -> ManualRefreshAction.ROTATE
+        else -> ManualRefreshAction.REFRESH
+    }
+
 /**
  * Вычисляет следующий оффсет окна ленты и флаг необходимости сетевого рефреша.
  *

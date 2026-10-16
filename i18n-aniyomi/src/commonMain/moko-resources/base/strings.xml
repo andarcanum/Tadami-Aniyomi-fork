@@ -2208,6 +2208,7 @@
     <string name="for_you_updated_never">Not updated yet</string>
     <string name="for_you_refresh_cooldown">Wait %1$d seconds before refreshing again</string>
     <string name="for_you_limited_pool">Recommendations refreshed from available items</string>
+    <string name="for_you_refresh_failed">Could not refresh recommendations. Try again later.</string>
     <string name="for_you_tab_mix">Mix</string>
     <string name="for_you_tab_similar">Similar</string>
     <string name="for_you_tab_taste">Your taste</string>

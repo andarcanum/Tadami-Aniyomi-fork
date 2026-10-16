@@ -159,21 +159,21 @@ class DiscoveryRunner(
     suspend fun run(
         mediaTypes: List<DiscoveryMediaType> = DiscoveryMediaType.entries,
         isManualRefresh: Boolean = false,
-    ) {
-        if (!preferences.discoveryEnabled().get()) return
-        try {
-            for (mediaType in mediaTypes) {
-                try {
-                    runFor(mediaType, isManualRefresh = isManualRefresh)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    logcat { "[DiscoveryRunner] $mediaType FAILED: ${e.message}" }
-                }
+    ): Map<DiscoveryMediaType, Result<Unit>> {
+        if (!preferences.discoveryEnabled().get()) return emptyMap()
+        val outcomes = mutableMapOf<DiscoveryMediaType, Result<Unit>>()
+        for (mediaType in mediaTypes) {
+            try {
+                runFor(mediaType, isManualRefresh = isManualRefresh)
+                outcomes[mediaType] = Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat { "[DiscoveryRunner] $mediaType FAILED: ${e.message}" }
+                outcomes[mediaType] = Result.failure(e)
             }
-        } finally {
-            DiscoveryProgressTracker.reset()
         }
+        return outcomes
     }
 
     private val mediaRunLocks: java.util.concurrent.ConcurrentHashMap<DiscoveryMediaType, Mutex> =
@@ -194,7 +194,13 @@ class DiscoveryRunner(
 
     private suspend fun runFor(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false) =
         mediaRunLocks.getOrPut(mediaType) { Mutex() }
-            .withLock { runForLocked(mediaType, isManualRefresh) }
+            .withLock {
+                try {
+                    runForLocked(mediaType, isManualRefresh)
+                } finally {
+                    DiscoveryProgressTracker.reset(mediaType)
+                }
+            }
 
     private suspend fun runForLocked(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false) {
         DiscoveryProgressTracker.update(
@@ -321,7 +327,28 @@ class DiscoveryRunner(
             if (trackTitles.isEmpty()) seed else seed.copy(altTitles = (seed.altTitles + trackTitles).distinct())
         }
 
-        val currentSuggestions = runCatching { repository.subscribe(mediaType).firstOrNull() }.getOrNull().orEmpty()
+        val useExternal = preferences.externalProvidersEnabled().get()
+        val disabledLikeProviders = buildSet {
+            if (!useExternal) {
+                addAll(listOf("AniList", "Shikimori", "MyAnimeList", "MangaUpdates", "NovelUpdates"))
+            } else {
+                if (!sourcePreferences.suggestionsUseShikimori().get()) add("Shikimori")
+                if (!sourcePreferences.suggestionsUseMangaUpdatesNovel().get()) add("MangaUpdates")
+                if (!sourcePreferences.suggestionsUseNovelUpdates().get()) add("NovelUpdates")
+            }
+        }
+        val cachedSuggestions = runCatching { repository.subscribe(mediaType).firstOrNull() }.getOrNull().orEmpty()
+        val currentSuggestions = cachedSuggestions.filterNot {
+            it.rowType == DiscoveryRowType.LIKE && it.provider in disabledLikeProviders
+        }
+        // Explicit opt-out prunes only that provider's LIKE cache, even if the replacement row fails.
+        if (preferences.rowLikeEnabled().get() && currentSuggestions.size != cachedSuggestions.size) {
+            repository.replaceRows(
+                mediaType,
+                DiscoveryRowType.LIKE,
+                currentSuggestions.filter { it.rowType == DiscoveryRowType.LIKE },
+            )
+        }
         val shownCutoffMap = runCatching { repository.getShownTitlesWithTimestamp(mediaType) }.getOrDefault(emptyMap())
         val shownTitles = shownCutoffMap.keys
         val recentCleanTitles = if (isManualRefresh) {
@@ -400,8 +427,7 @@ class DiscoveryRunner(
                 "statuses=${context.releaseStatuses} sources=${context.sourceIds} primary=${context.sourceId}"
         }
         // Выключенные в настройках ряды: чистим их записи в БД, чтобы UI не показывал «зомби».
-        // LIKE/TREND — чисто внешние ряды: при выключенных внешних провайдерах их тоже не строим.
-        val useExternal = preferences.externalProvidersEnabled().get()
+        // TREND — чисто внешний ряд; LIKE при выключенных внешних провайдерах строится из плагинов.
         if (!preferences.rowLikeEnabled().get()) {
             repository.replaceRows(mediaType, tachiyomi.domain.discovery.model.DiscoveryRowType.LIKE, emptyList())
         }

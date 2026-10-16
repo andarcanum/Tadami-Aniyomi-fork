@@ -2,7 +2,13 @@ package eu.kanade.tachiyomi.data.discovery
 
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.source.service.SourcePreferences
+import eu.kanade.tachiyomi.data.suggestions.SuggestionCoordinator
+import eu.kanade.tachiyomi.data.suggestions.SuggestionFetchResult
+import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
+import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import io.kotest.matchers.shouldBe
+import io.mockk.coEvery
+import io.mockk.mockk
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -23,11 +29,57 @@ import java.io.IOException
 
 class DiscoveryRunnerTest {
 
+    @Test
+    fun `runner cancellation propagates and clears only owned media progress`() = runTest {
+        val cancelled = kotlinx.coroutines.CancellationException("cancelled")
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = DiscoveryPreferences(InMemoryPreferenceStore()),
+            seedSources = object : DiscoverySeedSources {
+                override suspend fun candidates(mediaType: DiscoveryMediaType): List<DiscoverySeedInput> =
+                    throw cancelled
+                override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            },
+        )
+        DiscoveryProgressTracker.update(mediaType = DiscoveryMediaType.ANIME, stageText = "Still running")
+        try {
+            runCatching { runner.run(listOf(DiscoveryMediaType.NOVEL)) }.exceptionOrNull() shouldBe cancelled
+            DiscoveryProgressTracker.progress(DiscoveryMediaType.NOVEL).value.isRunning shouldBe false
+            DiscoveryProgressTracker.progress(DiscoveryMediaType.ANIME).value.stageText shouldBe "Still running"
+        } finally {
+            DiscoveryProgressTracker.reset()
+        }
+    }
+
+    @Test
+    fun `unexpected media failure is returned while other media can finish`() = runTest {
+        val failure = IllegalStateException("seed storage failed")
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = DiscoveryPreferences(InMemoryPreferenceStore()),
+            seedSources = object : DiscoverySeedSources {
+                override suspend fun candidates(mediaType: DiscoveryMediaType): List<DiscoverySeedInput> {
+                    if (mediaType == DiscoveryMediaType.NOVEL) throw failure
+                    return emptyList()
+                }
+                override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+            },
+            coordinatorFactory = { DiscoveryCoordinator(emptyList()) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL, DiscoveryMediaType.ANIME)) shouldBe mapOf(
+            DiscoveryMediaType.NOVEL to Result.failure<Unit>(failure),
+            DiscoveryMediaType.ANIME to Result.success(Unit),
+        )
+    }
+
     private open class FakeRepository(
         val initialSignals: List<DiscoverySignal> = emptyList(),
+        initialSuggestions: List<DiscoverySuggestion> = emptyList(),
     ) : DiscoveryRepository {
         val replaced = mutableListOf<Triple<DiscoveryMediaType, DiscoveryRowType, List<DiscoverySuggestion>>>()
-        private val flow = MutableStateFlow<List<DiscoverySuggestion>>(emptyList())
+        val flow = MutableStateFlow(initialSuggestions)
         override fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>> = flow
         override fun subscribeHidden(mediaType: DiscoveryMediaType): Flow<Set<String>> = MutableStateFlow(emptySet())
         override suspend fun replaceRows(
@@ -36,6 +88,7 @@ class DiscoveryRunnerTest {
             items: List<DiscoverySuggestion>,
         ) {
             replaced += Triple(mediaType, rowType, items)
+            flow.value = flow.value.filterNot { it.mediaType == mediaType && it.rowType == rowType } + items
         }
 
         override suspend fun getHiddenTitles(mediaType: DiscoveryMediaType): Set<String> = setOf("hidden one")
@@ -265,15 +318,19 @@ class DiscoveryRunnerTest {
     @Test
     fun `failing row is not persisted (cache preserved)`() = runTest {
         val repo = FakeRepository()
+        val failedRows = mutableListOf<Set<DiscoveryRowType>>()
         val runner = DiscoveryRunner(
             repository = repo,
             preferences = DiscoveryPreferences(InMemoryPreferenceStore()),
             seedSources = FakeSeedSources(),
             coordinatorFactory = { DiscoveryCoordinator(fakeBuilders(failLike = true)) },
             sourcePreferencesProvider = ::testSourcePrefs,
+            failedRowsSink = { _, rows -> failedRows += rows },
         )
-        runner.run(listOf(DiscoveryMediaType.NOVEL))
+        runner.run(listOf(DiscoveryMediaType.NOVEL)) shouldBe
+            mapOf(DiscoveryMediaType.NOVEL to Result.success(Unit))
         repo.replaced.none { it.second == DiscoveryRowType.LIKE } shouldBe true
+        failedRows.single() shouldBe setOf(DiscoveryRowType.LIKE)
     }
 
     @Test
@@ -463,6 +520,211 @@ class DiscoveryRunnerTest {
         )
         repo.replaced.all { it.third.isEmpty() } shouldBe true
     }
+
+    @Test
+    fun `global external opt out prunes only external like cache when local replacement is empty`() = runTest {
+        val repo = FakeRepository(initialSuggestions = cachedProviderSuggestions())
+        val runner = cachePolicyRunner(
+            repo,
+            preferences = discoveryPrefs(
+                InMemoryPreferenceStore.InMemoryPreference("discovery_external_providers", false, true),
+            ),
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL))
+
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
+            listOf("Local Plugin", "AniList Plugin")
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.SOURCE }.map { it.provider } shouldBe
+            listOf("Local Plugin")
+    }
+
+    @Test
+    fun `shikimori similar opt out prunes only its like cache and preserves trend on row failure`() = runTest {
+        val repo = FakeRepository(initialSuggestions = cachedProviderSuggestions())
+        val runner = cachePolicyRunner(
+            repo,
+            sourcePreferences = cachePolicySourcePrefs("suggestions_use_shikimori"),
+            failLike = true,
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL))
+
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
+            listOf("AniList", "MyAnimeList", "MangaUpdates", "NovelUpdates", "Local Plugin", "AniList Plugin")
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.TREND }.map { it.provider } shouldBe
+            listOf("Shikimori")
+        repo.replaced.none { it.second == DiscoveryRowType.TREND || it.second == DiscoveryRowType.SOURCE } shouldBe true
+    }
+
+    @Test
+    fun `manga updates opt out prunes only its like cache`() = runTest {
+        val repo = FakeRepository(initialSuggestions = cachedProviderSuggestions())
+        val runner = cachePolicyRunner(
+            repo,
+            sourcePreferences = cachePolicySourcePrefs("suggestions_use_mangaupdates_novel"),
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL))
+
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
+            listOf("AniList", "Shikimori", "MyAnimeList", "NovelUpdates", "Local Plugin", "AniList Plugin")
+    }
+
+    @Test
+    fun `novel updates opt out prunes only its like cache`() = runTest {
+        val repo = FakeRepository(initialSuggestions = cachedProviderSuggestions())
+        val runner = cachePolicyRunner(
+            repo,
+            sourcePreferences = cachePolicySourcePrefs("suggestions_use_novelupdates"),
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL))
+
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
+            listOf("AniList", "Shikimori", "MyAnimeList", "MangaUpdates", "Local Plugin", "AniList Plugin")
+    }
+
+    @Test
+    fun `enabled providers keep like cache on row failure`() = runTest {
+        val cached = cachedProviderSuggestions()
+        val repo = FakeRepository(initialSuggestions = cached)
+        val runner = cachePolicyRunner(repo, failLike = true)
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL))
+
+        repo.flow.value shouldBe cached
+        repo.replaced.none { it.second == DiscoveryRowType.LIKE } shouldBe true
+    }
+
+    @Test
+    fun `partial provider failure preserves enabled like cache after explicit opt out pruning`() = runTest {
+        val repo = FakeRepository(initialSuggestions = cachedProviderSuggestions())
+        val suggestions = mockk<SuggestionCoordinator>()
+        coEvery { suggestions.fetchSuggestions(any(), any(), any()) } returns SuggestionFetchResult(
+            items = listOf(
+                SuggestionItem(
+                    title = "Fresh Pick",
+                    thumbnailUrl = null,
+                    providerName = "AniList",
+                    providerUrl = "https://anilist.co/manga/1",
+                    providerId = "1",
+                    mediaType = SuggestionMediaType.NOVEL,
+                ),
+            ),
+            attemptedSources = 2,
+            failedSources = 1,
+        )
+        val runner = cachePolicyRunner(
+            repo,
+            sourcePreferences = cachePolicySourcePrefs("suggestions_use_shikimori"),
+            likeBuilder = DiscoveryLikeRowBuilder(suggestions),
+        )
+
+        runner.run(listOf(DiscoveryMediaType.NOVEL))
+
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
+            listOf("AniList", "MyAnimeList", "MangaUpdates", "NovelUpdates", "Local Plugin", "AniList Plugin")
+        repo.flow.value.map { it.title } shouldBe
+            listOf("Cached 7", "Cached 8", "Cached 0", "Cached 2", "Cached 3", "Cached 4", "Cached 5", "Cached 6")
+        repo.replaced.filter { it.second == DiscoveryRowType.LIKE }.map { it.second } shouldBe
+            listOf(DiscoveryRowType.LIKE)
+        repo.replaced.none { it.second == DiscoveryRowType.TREND || it.second == DiscoveryRowType.SOURCE } shouldBe true
+    }
+
+    private fun cachedProviderSuggestions(): List<DiscoverySuggestion> {
+        val likeProviders = listOf(
+            "AniList",
+            "Shikimori",
+            "MyAnimeList",
+            "MangaUpdates",
+            "NovelUpdates",
+            "Local Plugin",
+            "AniList Plugin",
+        )
+        val rows = likeProviders.map { DiscoveryRowType.LIKE to it } + listOf(
+            DiscoveryRowType.TREND to "Shikimori",
+            DiscoveryRowType.SOURCE to "Local Plugin",
+        )
+        return rows.mapIndexed { index, (rowType, provider) ->
+            DiscoverySuggestion(
+                id = index.toLong(),
+                mediaType = DiscoveryMediaType.NOVEL,
+                rowType = rowType,
+                title = "Cached $index",
+                cleanTitle = "cached $index",
+                coverUrl = null,
+                reason = null,
+                seedTitle = "Seed One",
+                provider = provider,
+                score = 1.0,
+                position = index.toLong(),
+                createdAt = 1L,
+            )
+        }
+    }
+
+    private fun cachePolicySourcePrefs(disabledKey: String? = null) = SourcePreferences(
+        InMemoryPreferenceStore(
+            sequenceOf(
+                InMemoryPreferenceStore.InMemoryPreference(
+                    "suggestions_use_shikimori",
+                    disabledKey != "suggestions_use_shikimori",
+                    true,
+                ),
+                InMemoryPreferenceStore.InMemoryPreference(
+                    "suggestions_use_mangaupdates_novel",
+                    disabledKey != "suggestions_use_mangaupdates_novel",
+                    true,
+                ),
+                InMemoryPreferenceStore.InMemoryPreference(
+                    "suggestions_use_novelupdates",
+                    disabledKey != "suggestions_use_novelupdates",
+                    false,
+                ),
+            ),
+        ),
+    )
+
+    private fun cachePolicyRunner(
+        repo: FakeRepository,
+        preferences: DiscoveryPreferences = discoveryPrefs(),
+        sourcePreferences: SourcePreferences = cachePolicySourcePrefs(),
+        failLike: Boolean = false,
+        likeBuilder: DiscoveryRowBuilder? = null,
+    ) = DiscoveryRunner(
+        repository = repo,
+        preferences = preferences,
+        seedSources = object : DiscoverySeedSources {
+            override suspend fun candidates(mediaType: DiscoveryMediaType) = listOf(
+                DiscoverySeedInput(
+                    entryId = 1L,
+                    title = "Seed One",
+                    sourceId = 77L,
+                    isCompleted = true,
+                    completedAt = System.currentTimeMillis(),
+                    lastInteraction = System.currentTimeMillis(),
+                ),
+            )
+            override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
+        },
+        coordinatorFactory = {
+            DiscoveryCoordinator(
+                listOf(
+                    likeBuilder ?: object : DiscoveryRowBuilder {
+                        override val rowType = DiscoveryRowType.LIKE
+                        override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+                            context.seeds.size shouldBe 1
+                            if (failLike) throw IOException("provider unavailable")
+                            return emptyList()
+                        }
+                    },
+                ),
+            )
+        },
+        sourcePreferencesProvider = { sourcePreferences },
+        installedPluginsProvider = { listOf(DiscoveryInstalledPlugin("local.plugin", listOf(77L))) },
+    )
 
     @Test
     fun `status filter active wipes empty row caches instead of keeping stale statuses`() = runTest {
