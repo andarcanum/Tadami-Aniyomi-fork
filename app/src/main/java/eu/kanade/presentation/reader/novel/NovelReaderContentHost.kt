@@ -607,6 +607,9 @@ internal fun NovelReaderContentHost(
     }
     var webAutoScrollNearEnd by remember(state.chapter.id) { mutableStateOf(false) }
     var shouldRestoreWebScroll by remember(state.chapter.id) { mutableStateOf(true) }
+
+    /** Relative scroll percent (0-100) to restore after WebView reload when only settings/content of the same chapter changed (no chapter switch). -1 = no restore needed. Stored in a plain int array instead of Compose state because it is written from the AndroidView update block, where a snapshot state write would schedule recomposition during a layout pass. */
+    val scrollTargetPercentAfterReload = remember(state.chapter.id) { intArrayOf(-1) }
     var webViewPageReadyForAutoScroll by remember(state.chapter.id) { mutableStateOf(false) }
     var appliedWebCssFingerprint by remember(state.chapter.id) { mutableStateOf<String?>(null) }
     // Deliberately a plain holder instead of Compose state: it has to survive an in-place chapter
@@ -3860,9 +3863,24 @@ internal fun NovelReaderContentHost(
                                         )
                                     }
 
-                                    if (shouldRestoreWebScroll) {
+                                    val targetRestorePercent = when {
+                                        scrollTargetPercentAfterReload[0] >= 0 -> {
+                                            // Restore to the live scroll percent that was current before
+                                            // WebView reload when only settings/content of the same chapter
+                                            // changed. Uses restoreWebViewScroll so it waits for Blink layout
+                                            // (up to 14 attempts), reveals only after positioning, and reports
+                                            // progress — avoiding the 0-clamp, flashing and desync bugs.
+                                            val target = scrollTargetPercentAfterReload[0]
+                                            scrollTargetPercentAfterReload[0] = -1
+                                            target
+                                        }
+                                        shouldRestoreWebScroll -> currentRestoreProgress
+                                        else -> null
+                                    }
+
+                                    if (targetRestorePercent != null) {
                                         view?.restoreWebViewScroll(
-                                            progressPercent = currentRestoreProgress,
+                                            progressPercent = targetRestorePercent,
                                             onComplete = { restored ->
                                                 shouldRestoreWebScroll = resolveWebViewRestoreGate(restored)
                                                 if (restored) {
@@ -3874,6 +3892,7 @@ internal fun NovelReaderContentHost(
                                                         )
                                                     ) {
                                                         webProgressPercent = settledProgress
+                                                        webAutoScrollNearEnd = settledProgress >= 100
                                                         reportReadingProgress(
                                                             settledProgress,
                                                             100,
@@ -3943,7 +3962,19 @@ internal fun NovelReaderContentHost(
                                     hideUntilReveal = shouldHideWebViewUntilReveal && !seamlessInstantSwap,
                                 )
                                 val shouldEarlyRevealWebView = shouldUseEarlyWebViewReveal(state.html)
-                                shouldRestoreWebScroll = true
+                                if (isSeamlessChapterSwap) {
+                                    // Chapter switch — restore the saved progress position.
+                                    scrollTargetPercentAfterReload[0] = -1
+                                    shouldRestoreWebScroll = true
+                                } else {
+                                    // Only settings/content of the same chapter changed: save the
+                                    // current live scroll percent and restore it after loading via
+                                    // restoreWebViewScroll, instead of returning to the saved point
+                                    // (rubber-band scroll bug). Relative percent survives translation
+                                    // and reflow that change the document's pixel height.
+                                    scrollTargetPercentAfterReload[0] = webProgressPercent
+                                    shouldRestoreWebScroll = false
+                                }
                                 appliedWebCssFingerprint = null
                                 webView.animate().cancel()
                                 webView.alpha = if (shouldHideWebViewUntilReveal && !seamlessInstantSwap) 0f else 1f
