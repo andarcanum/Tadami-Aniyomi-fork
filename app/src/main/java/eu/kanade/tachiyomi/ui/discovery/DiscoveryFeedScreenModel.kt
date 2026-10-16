@@ -1,6 +1,8 @@
 package eu.kanade.tachiyomi.ui.discovery
 
 import android.content.Context
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
@@ -20,15 +22,21 @@ import eu.kanade.tachiyomi.data.discovery.rrfScores
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
-import eu.kanade.tachiyomi.util.system.isRunningFlow
+import eu.kanade.tachiyomi.util.system.isRunningOrEnqueuedFlow
 import eu.kanade.tachiyomi.util.system.toast
 import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
@@ -42,6 +50,7 @@ import tachiyomi.domain.entries.novel.interactor.NetworkToLocalNovel
 import tachiyomi.i18n.aniyomi.AYMR
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.UUID
 import tachiyomi.core.common.i18n.stringResource as contextStringResource
 
 internal data class DiscoveryFeedUiState(
@@ -106,8 +115,29 @@ internal fun filterByProvider(items: List<DiscoverySuggestion>, provider: String
 internal fun providerOptions(state: DiscoveryFeedUiState): List<String> =
     state.rows.values.flatten().map { it.provider }.distinct().sorted()
 
-internal const val DISCOVERY_REFRESH_COOLDOWN_MS = 5 * 60_000L
-internal const val HOME_DISCOVERY_COOLDOWN_MS = 10_000L
+internal const val DISCOVERY_REFRESH_COOLDOWN_MS = DiscoveryPreferences.MANUAL_REFRESH_COOLDOWN_MS
+
+internal fun manualRefreshFlow(workManager: WorkManager, mediaType: DiscoveryMediaType): Flow<Boolean> =
+    workManager.isRunningOrEnqueuedFlow(DiscoveryUpdateJob.manualWorkTag(mediaType))
+
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun manualRefreshWorkInfoFlow(
+    workManager: WorkManager,
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+): Flow<WorkInfo?> = preferences.manualRefreshWorkId(mediaType).changes()
+    .distinctUntilChanged()
+    .flatMapLatest { requestId ->
+        val uuid = runCatching { UUID.fromString(requestId) }.getOrNull()
+        if (uuid == null) flowOf(null) else workManager.getWorkInfoByIdFlow(uuid)
+    }
+
+internal fun claimManualRefreshFailure(
+    preferences: DiscoveryPreferences,
+    mediaType: DiscoveryMediaType,
+    workInfo: WorkInfo?,
+): Boolean = workInfo?.state == WorkInfo.State.FAILED &&
+    preferences.claimManualRefreshFailure(mediaType, workInfo.id.toString())
 
 internal fun remainingCooldownSeconds(
     lastRefreshAt: Long?,
@@ -205,6 +235,8 @@ internal class DiscoveryFeedScreenModel(
 ) : StateScreenModel<DiscoveryFeedUiState>(DiscoveryFeedUiState(mediaType = initialMedia)) {
 
     private var observeJob: Job? = null
+    private var progressJob: Job? = null
+    private var failureJob: Job? = null
     private var prefetchJob: Job? = null
     private var lastHidden: DiscoverySuggestion? = null
     private var lastBlacklistedTag: String? = null
@@ -212,12 +244,12 @@ internal class DiscoveryFeedScreenModel(
     fun start() {
         observeMedia(state.value.mediaType)
         observeVisibleTabs()
-        observeProgress()
     }
 
-    private fun observeProgress() {
-        screenModelScope.launchIO {
-            eu.kanade.tachiyomi.data.discovery.DiscoveryProgressTracker.progress.collectLatest { progress ->
+    private fun observeProgress(mediaType: DiscoveryMediaType) {
+        progressJob?.cancel()
+        progressJob = screenModelScope.launchIO {
+            eu.kanade.tachiyomi.data.discovery.DiscoveryProgressTracker.progress(mediaType).collectLatest { progress ->
                 mutableState.update { current ->
                     current.copy(
                         progressText = if (progress.isRunning &&
@@ -257,6 +289,17 @@ internal class DiscoveryFeedScreenModel(
     }
 
     private fun observeMedia(mediaType: DiscoveryMediaType) {
+        observeProgress(mediaType)
+        failureJob?.cancel()
+        failureJob = screenModelScope.launchIO {
+            manualRefreshWorkInfoFlow(context.workManager, preferences, mediaType).collectLatest { workInfo ->
+                withContext(Dispatchers.Main.immediate) {
+                    if (claimManualRefreshFailure(preferences, mediaType, workInfo)) {
+                        context.toast(context.contextStringResource(AYMR.strings.for_you_refresh_failed))
+                    }
+                }
+            }
+        }
         observeJob?.cancel()
         observeJob = screenModelScope.launchIO {
             combine(
@@ -368,18 +411,26 @@ internal class DiscoveryFeedScreenModel(
     )
 
     private fun refreshingFlow(): Flow<Boolean> =
-        context.workManager.isRunningFlow(DiscoveryUpdateJob.TAG_MANUAL)
+        manualRefreshFlow(context.workManager, state.value.mediaType)
 
     fun refreshNow(): Long {
         val now = System.currentTimeMillis()
         val media = state.value.mediaType
         val remaining = remainingCooldownSeconds(
-            preferences.feedManualRefreshAt(media).get().takeIf { it > 0L },
+            preferences.manualRefreshAt(media).get().takeIf { it > 0L },
             now,
         )
-        if (remaining > 0L) return remaining
-        preferences.feedManualRefreshAt(media).set(now)
-        DiscoveryUpdateJob.refreshNow(context, media)
+        when (resolveManualRefreshAction(state.value.isRefreshing, remaining)) {
+            ManualRefreshAction.CANCEL -> cancelRefresh()
+            ManualRefreshAction.ROTATE -> return remaining
+            ManualRefreshAction.REFRESH -> {
+                if (!preferences.tryStartManualRefresh(media, now)) {
+                    return remainingCooldownSeconds(preferences.manualRefreshAt(media).get(), now)
+                }
+                mutableState.update { it.copy(isRefreshing = true) }
+                DiscoveryUpdateJob.refreshNow(context, media)
+            }
+        }
         return 0L
     }
 
@@ -414,10 +465,15 @@ internal class DiscoveryFeedScreenModel(
         val now = System.currentTimeMillis()
         val media = currentState.mediaType
         val remaining = remainingCooldownSeconds(
-            preferences.feedManualRefreshAt(media).get().takeIf { it > 0L },
+            preferences.manualRefreshAt(media).get().takeIf { it > 0L },
             now,
         )
-        val canNetworkRefresh = remaining == 0L
+        val action = resolveManualRefreshAction(currentState.isRefreshing, remaining)
+        if (action == ManualRefreshAction.CANCEL) {
+            cancelRefresh()
+            return 0L
+        }
+        val canNetworkRefresh = action == ManualRefreshAction.REFRESH
         val (nextOffset, shouldNetworkRefresh) = resolveNextFeedOffset(
             currentOffset = currentOffset,
             poolSize = pool.size,
@@ -482,7 +538,6 @@ internal class DiscoveryFeedScreenModel(
     fun cancelRefresh() {
         val media = state.value.mediaType
         DiscoveryUpdateJob.stop(context, media)
-        preferences.feedManualRefreshAt(media).set(0L)
         mutableState.update { it.copy(isRefreshing = false, progressText = null) }
     }
 

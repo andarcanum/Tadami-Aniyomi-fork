@@ -69,10 +69,10 @@ class DiscoveryNotifier(private val context: Context) {
         }.build()
     }
 
-    fun getForegroundInfo(mediaType: DiscoveryMediaType? = null): ForegroundInfo {
+    fun getForegroundInfo(mediaType: DiscoveryMediaType): ForegroundInfo {
         val notification = buildProgressNotification(mediaType)
         return ForegroundInfo(
-            Notifications.ID_DISCOVERY_PROGRESS,
+            Notifications.discoveryProgressId(mediaType),
             notification,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -83,16 +83,20 @@ class DiscoveryNotifier(private val context: Context) {
     }
 
     fun showProgress(
-        mediaType: DiscoveryMediaType? = null,
+        mediaType: DiscoveryMediaType,
         progressText: String? = null,
         current: Int = 0,
         total: Int = 0,
     ) {
         val notification = buildProgressNotification(mediaType, progressText, current, total)
-        context.notify(Notifications.ID_DISCOVERY_PROGRESS, notification)
+        context.notify(Notifications.discoveryProgressId(mediaType), notification)
+    }
+
+    fun cancel(mediaType: DiscoveryMediaType) {
+        NotificationManagerCompat.from(context).cancel(Notifications.discoveryProgressId(mediaType))
     }
 
     fun cancel() {
-        NotificationManagerCompat.from(context).cancel(Notifications.ID_DISCOVERY_PROGRESS)
+        DiscoveryMediaType.entries.forEach(::cancel)
     }
 }

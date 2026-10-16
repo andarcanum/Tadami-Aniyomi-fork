@@ -1,8 +1,18 @@
+@file:Suppress("ktlint:standard:max-line-length")
+
 package eu.kanade.tachiyomi.ui.home
 
 import android.content.ContentResolver
 import android.content.Context
+import androidx.work.Data
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import cafe.adriel.voyager.core.model.ScreenModelStore
+import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
+import eu.kanade.tachiyomi.test.PersistingPreferenceStore
+import eu.kanade.tachiyomi.ui.discovery.manualRefreshWorkInfoFlow
+import eu.kanade.tachiyomi.util.system.workManager
 import io.kotest.matchers.shouldBe
 import io.mockk.coEvery
 import io.mockk.every
@@ -12,20 +22,182 @@ import io.mockk.unmockkObject
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
+import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.i18n.aniyomi.AYMR
 import java.io.ByteArrayInputStream
+import java.util.UUID
 
 class BaseHomeHubScreenModelTest {
+
+    @OptIn(
+        kotlinx.coroutines.ExperimentalCoroutinesApi::class,
+        cafe.adriel.voyager.core.annotation.InternalVoyagerApi::class,
+    )
+    @Test
+    fun `failures received before UI collection are retained independently per media`() =
+        kotlinx.coroutines.runBlocking {
+            Dispatchers.setMain(UnconfinedTestDispatcher())
+            val holderKey = UUID.randomUUID().toString()
+            ScreenModelStore.getOrPut(holderKey, tag = null) { screenModel }
+            val preferences = DiscoveryPreferences(PersistingPreferenceStore())
+            val animeId = UUID.randomUUID()
+            val novelId = UUID.randomUUID()
+            preferences.manualRefreshWorkId(DiscoveryMediaType.ANIME).set(animeId.toString())
+            preferences.manualRefreshWorkId(DiscoveryMediaType.NOVEL).set(novelId.toString())
+            val animeWork = MutableStateFlow<WorkInfo?>(null)
+            val novelWork = MutableStateFlow<WorkInfo?>(null)
+            val manager = mockk<WorkManager>()
+            io.mockk.mockkStatic("eu.kanade.tachiyomi.util.system.WorkManagerExtensionsKt")
+            io.mockk.mockkStatic("eu.kanade.tachiyomi.ui.discovery.DiscoveryFeedScreenModelKt")
+            every { mockContext.workManager } returns manager
+            every { manualRefreshWorkInfoFlow(manager, preferences, DiscoveryMediaType.ANIME) } returns animeWork
+            every { manualRefreshWorkInfoFlow(manager, preferences, DiscoveryMediaType.NOVEL) } returns novelWork
+            try {
+                screenModel.observeFailureForTest(preferences, DiscoveryMediaType.ANIME)
+                screenModel.observeFailureForTest(preferences, DiscoveryMediaType.NOVEL)
+                animeWork.value = WorkInfo(animeId, WorkInfo.State.FAILED, emptySet(), Data.EMPTY)
+                withTimeout(5_000) {
+                    screenModel.discoveryRefreshFailures.first { it[DiscoveryMediaType.ANIME] == animeId.toString() }
+                }
+                novelWork.value = WorkInfo(novelId, WorkInfo.State.FAILED, emptySet(), Data.EMPTY)
+                withTimeout(5_000) {
+                    screenModel.discoveryRefreshFailures.first { it[DiscoveryMediaType.NOVEL] == novelId.toString() }
+                }
+
+                val pending = withTimeout(5_000) { screenModel.discoveryRefreshFailures.first() }
+                pending shouldBe mapOf(
+                    DiscoveryMediaType.ANIME to animeId.toString(),
+                    DiscoveryMediaType.NOVEL to novelId.toString(),
+                )
+                pending.forEach { (mediaType, requestId) ->
+                    preferences.claimManualRefreshFailure(mediaType, requestId) shouldBe true
+                    preferences.claimManualRefreshFailure(mediaType, requestId) shouldBe false
+                    screenModel.acknowledgeDiscoveryRefreshFailure(mediaType, requestId)
+                }
+                screenModel.discoveryRefreshFailures.value shouldBe emptyMap()
+
+                val nextAnimeId = UUID.randomUUID()
+                preferences.manualRefreshWorkId(DiscoveryMediaType.ANIME).set(nextAnimeId.toString())
+                animeWork.value = WorkInfo(nextAnimeId, WorkInfo.State.FAILED, emptySet(), Data.EMPTY)
+                withTimeout(5_000) {
+                    screenModel.discoveryRefreshFailures.first {
+                        it[DiscoveryMediaType.ANIME] == nextAnimeId.toString()
+                    }
+                }
+                // A late acknowledgement of an older failure cannot erase its successor.
+                screenModel.acknowledgeDiscoveryRefreshFailure(DiscoveryMediaType.ANIME, animeId.toString())
+                screenModel.discoveryRefreshFailures.value shouldBe
+                    mapOf(DiscoveryMediaType.ANIME to nextAnimeId.toString())
+                // Replacement before consumption makes this pending failure stale.
+                preferences.manualRefreshWorkId(DiscoveryMediaType.ANIME).set(UUID.randomUUID().toString())
+                preferences.claimManualRefreshFailure(DiscoveryMediaType.ANIME, nextAnimeId.toString()) shouldBe false
+                screenModel.acknowledgeDiscoveryRefreshFailure(DiscoveryMediaType.ANIME, nextAnimeId.toString())
+                screenModel.discoveryRefreshFailures.value shouldBe emptyMap()
+
+                val nextNovelId = UUID.randomUUID()
+                preferences.manualRefreshWorkId(DiscoveryMediaType.NOVEL).set(nextNovelId.toString())
+                // A full-screen consumer can handle the UUID before Home drains it.
+                preferences.claimManualRefreshFailure(DiscoveryMediaType.NOVEL, nextNovelId.toString()) shouldBe true
+                novelWork.value = WorkInfo(nextNovelId, WorkInfo.State.FAILED, emptySet(), Data.EMPTY)
+                val alreadyClaimed = withTimeout(5_000) {
+                    screenModel.discoveryRefreshFailures.first {
+                        it[DiscoveryMediaType.NOVEL] == nextNovelId.toString()
+                    }
+                }
+                alreadyClaimed.forEach { (mediaType, requestId) ->
+                    preferences.claimManualRefreshFailure(mediaType, requestId) shouldBe false
+                    screenModel.acknowledgeDiscoveryRefreshFailure(mediaType, requestId)
+                }
+                screenModel.discoveryRefreshFailures.value shouldBe emptyMap()
+            } finally {
+                ScreenModelStore.onDisposeNavigator(holderKey)
+                io.mockk.unmockkAll()
+                Dispatchers.resetMain()
+            }
+            Unit
+        }
+
+    @OptIn(
+        kotlinx.coroutines.ExperimentalCoroutinesApi::class,
+        cafe.adriel.voyager.core.annotation.InternalVoyagerApi::class,
+    )
+    @Test
+    fun `departing collector leaves failed request available to another surface and Home reentry`() =
+        kotlinx.coroutines.runBlocking {
+            Dispatchers.setMain(UnconfinedTestDispatcher())
+            val holderKey = UUID.randomUUID().toString()
+            ScreenModelStore.getOrPut(holderKey, tag = null) { screenModel }
+            val preferences = DiscoveryPreferences(PersistingPreferenceStore())
+            val media = DiscoveryMediaType.NOVEL
+            val request = UUID.randomUUID()
+            preferences.manualRefreshWorkId(media).set(request.toString())
+            val work = MutableStateFlow<WorkInfo?>(null)
+            val manager = mockk<WorkManager>()
+            io.mockk.mockkStatic("eu.kanade.tachiyomi.util.system.WorkManagerExtensionsKt")
+            io.mockk.mockkStatic("eu.kanade.tachiyomi.ui.discovery.DiscoveryFeedScreenModelKt")
+            every { mockContext.workManager } returns manager
+            every { manualRefreshWorkInfoFlow(manager, preferences, media) } returns work
+            val observed = CompletableDeferred<Map<DiscoveryMediaType, String>>()
+            val consume = CompletableDeferred<Unit>()
+            val collector = launch(start = CoroutineStart.UNDISPATCHED) {
+                screenModel.discoveryRefreshFailures.collect {
+                    if (it.containsKey(media)) {
+                        observed.complete(it)
+                        consume.await()
+                    }
+                }
+            }
+            try {
+                screenModel.observeFailureForTest(preferences, media)
+                work.value = WorkInfo(request, WorkInfo.State.FAILED, emptySet(), Data.EMPTY)
+                withTimeout(5_000) { observed.await() }
+                collector.cancelAndJoin()
+
+                // A full-screen consumer must still be able to claim after Home leaves before handling.
+                preferences.claimManualRefreshFailure(media, request.toString()) shouldBe true
+                val replayed = withTimeout(5_000) { screenModel.discoveryRefreshFailures.first() }
+                replayed shouldBe mapOf(media to request.toString())
+                preferences.claimManualRefreshFailure(media, replayed.getValue(media)) shouldBe false
+                screenModel.acknowledgeDiscoveryRefreshFailure(media, replayed.getValue(media))
+                screenModel.discoveryRefreshFailures.value shouldBe emptyMap()
+
+                // Home can consume a later unclaimed failure after departure and reentry.
+                val nextRequest = UUID.randomUUID()
+                preferences.manualRefreshWorkId(media).set(nextRequest.toString())
+                work.value = WorkInfo(nextRequest, WorkInfo.State.FAILED, emptySet(), Data.EMPTY)
+                val pending = withTimeout(5_000) {
+                    screenModel.discoveryRefreshFailures.first { it[media] == nextRequest.toString() }
+                }
+                val onReentry = withTimeout(5_000) { screenModel.discoveryRefreshFailures.first() }
+                onReentry shouldBe pending
+                preferences.claimManualRefreshFailure(media, onReentry.getValue(media)) shouldBe true
+                preferences.claimManualRefreshFailure(media, onReentry.getValue(media)) shouldBe false
+                screenModel.acknowledgeDiscoveryRefreshFailure(media, onReentry.getValue(media))
+                screenModel.discoveryRefreshFailures.value shouldBe emptyMap()
+            } finally {
+                collector.cancelAndJoin()
+                ScreenModelStore.onDisposeNavigator(holderKey)
+                io.mockk.unmockkAll()
+                Dispatchers.resetMain()
+            }
+            Unit
+        }
 
     private lateinit var prefs: UserProfilePreferences
     private lateinit var screenModel: TestHomeHubScreenModel
@@ -145,6 +317,9 @@ class BaseHomeHubScreenModelTest {
         }
 
         fun emitForTest(effect: HomeHubEffect) = emitEffect(effect)
+
+        fun observeFailureForTest(preferences: DiscoveryPreferences, mediaType: DiscoveryMediaType) =
+            observeDiscoveryRefreshFailure(preferences, mediaType)
     }
 
     private class MutablePreferenceStore : PreferenceStore {

@@ -8,6 +8,24 @@ import tachiyomi.domain.discovery.model.DiscoverySuggestion
 
 class DiscoveryFeedWindowLogicTest {
 
+    @Test
+    fun `manual tap rotates locally during shared cooldown and requests refresh after expiry`() {
+        resolveManualRefreshAction(isActive = false, remainingCooldown = 300L) shouldBe
+            ManualRefreshAction.ROTATE
+        resolveManualRefreshAction(isActive = false, remainingCooldown = 1L) shouldBe
+            ManualRefreshAction.ROTATE
+        resolveManualRefreshAction(isActive = false, remainingCooldown = 0L) shouldBe
+            ManualRefreshAction.REFRESH
+    }
+
+    @Test
+    fun `manual tap cancels active enqueued or running work even during cooldown`() {
+        resolveManualRefreshAction(isActive = true, remainingCooldown = 300L) shouldBe
+            ManualRefreshAction.CANCEL
+        resolveManualRefreshAction(isActive = true, remainingCooldown = 0L) shouldBe
+            ManualRefreshAction.CANCEL
+    }
+
     private fun mockSuggestion(
         title: String,
         provider: String = "anilist",

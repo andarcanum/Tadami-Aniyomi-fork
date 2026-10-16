@@ -1,7 +1,16 @@
 package eu.kanade.tachiyomi.ui.discovery
 
+import androidx.work.WorkManager
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
+import eu.kanade.tachiyomi.util.system.isRunningOrEnqueuedFlow
 import io.kotest.matchers.shouldBe
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkAll
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
@@ -47,6 +56,23 @@ class DiscoveryFeedLogicTest {
         canManualRefresh(lastRefreshAt = now - 60_000, now = now) shouldBe false
         canManualRefresh(lastRefreshAt = now - 6 * 60_000, now = now) shouldBe true
         canManualRefresh(lastRefreshAt = null, now = now) shouldBe true
+    }
+
+    @Test
+    fun `foreign and legacy manual tags do not mark target media refreshing`() = runBlocking {
+        val workManager = mockk<WorkManager>()
+        mockkStatic("eu.kanade.tachiyomi.util.system.WorkManagerExtensionsKt")
+        try {
+            val activeTags = setOf("DiscoveryUpdateManual", "DiscoveryUpdateManual:anime")
+            every { workManager.isRunningOrEnqueuedFlow(any()) } answers {
+                flowOf(firstArg<String>() in activeTags)
+            }
+            manualRefreshFlow(workManager, DiscoveryMediaType.ANIME).first() shouldBe true
+            manualRefreshFlow(workManager, DiscoveryMediaType.MANGA).first() shouldBe false
+            manualRefreshFlow(workManager, DiscoveryMediaType.NOVEL).first() shouldBe false
+        } finally {
+            unmockkAll()
+        }
     }
 
     @Test

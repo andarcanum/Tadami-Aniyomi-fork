@@ -8,8 +8,11 @@ import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
+import eu.kanade.tachiyomi.ui.discovery.ManualRefreshAction
+import eu.kanade.tachiyomi.ui.discovery.manualRefreshFlow
+import eu.kanade.tachiyomi.ui.discovery.resolveManualRefreshAction
 import eu.kanade.tachiyomi.ui.main.MainActivity
-import kotlinx.coroutines.Job
+import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
@@ -110,7 +113,6 @@ internal class HomeHubScreenModel(
 
     private var heroEpisode: Episode? = null
     private var originalHeroEpisodeId: Long? = null
-    private var discoveryRefreshJob: Job? = null
 
     override fun updateCacheUserName(name: String) {
         fastCache.updateUserName(name)
@@ -208,6 +210,24 @@ internal class HomeHubScreenModel(
                         },
                     )
                 }
+            }
+        }
+
+        observeDiscoveryRefreshFailure(
+            discoveryPreferences,
+            tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
+        )
+        screenModelScope.launchIO {
+            var wasRefreshing = false
+            manualRefreshFlow(
+                context.workManager,
+                tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
+            ).collectLatest { refreshing ->
+                mutableState.update { it.copy(isDiscoveryRefreshing = refreshing) }
+                if (wasRefreshing && !refreshing) {
+                    updateDiscoveryTeaser(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
+                }
+                wasRefreshing = refreshing
             }
         }
 
@@ -393,45 +413,31 @@ internal class HomeHubScreenModel(
 
     override fun rotateOrRefreshDiscovery() {
         if (!discoveryPreferences.discoveryEnabled().get()) return
-        val mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME
-        if (state.value.isDiscoveryRefreshing) {
-            discoveryRefreshJob?.cancel()
-            eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.stop(context, mediaType)
-            discoveryPreferences.homeManualRefreshAt(mediaType).set(0L)
-            mutableState.update { it.copy(isDiscoveryRefreshing = false) }
-            return
-        }
-
         val now = System.currentTimeMillis()
         if (now - lastRefreshClickTime < 500L) return
         lastRefreshClickTime = now
 
-        val lastManual = discoveryPreferences.homeManualRefreshAt(mediaType).get().takeIf { it > 0L }
+        val mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME
         val cooldown = eu.kanade.tachiyomi.ui.discovery.remainingCooldownSeconds(
-            lastManual,
+            discoveryPreferences.manualRefreshAt(mediaType).get().takeIf { it > 0L },
             now,
-            cooldownMs = eu.kanade.tachiyomi.ui.discovery.HOME_DISCOVERY_COOLDOWN_MS,
         )
-        if (cooldown > 0L) {
+        val action = resolveManualRefreshAction(state.value.isDiscoveryRefreshing, cooldown)
+        if (action == ManualRefreshAction.CANCEL) {
+            eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.stop(context, mediaType)
+            mutableState.update { it.copy(isDiscoveryRefreshing = false) }
+            return
+        }
+
+        if (action == ManualRefreshAction.ROTATE || !discoveryPreferences.tryStartManualRefresh(mediaType, now)) {
             screenModelScope.launchIO {
                 updateDiscoveryTeaser(advanceOffset = true, forceUpdate = true, notifyIfLimited = true)
             }
             return
         }
 
-        discoveryPreferences.homeManualRefreshAt(mediaType).set(now)
         mutableState.update { it.copy(isDiscoveryRefreshing = true) }
-        discoveryRefreshJob = screenModelScope.launchIO {
-            try {
-                Injekt.get<eu.kanade.tachiyomi.data.discovery.DiscoveryRunner>().run(
-                    listOf(mediaType),
-                    isManualRefresh = true,
-                )
-            } finally {
-                mutableState.update { it.copy(isDiscoveryRefreshing = false) }
-                updateDiscoveryTeaser(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
-            }
-        }
+        eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.refreshNow(context, mediaType)
     }
 
     fun markDiscoveryItemShown(item: HomeHubDiscoveryItem) {

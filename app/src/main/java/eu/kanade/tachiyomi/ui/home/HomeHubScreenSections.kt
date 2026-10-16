@@ -107,10 +107,22 @@ import tachiyomi.core.common.i18n.stringResource as contextStringResource
 private fun HomeHubEffects(screenModel: BaseHomeHubScreenModel) {
     val context = LocalContext.current
     val poolLimitedMessage = stringResource(AYMR.strings.for_you_limited_pool)
+    val refreshFailedMessage = stringResource(AYMR.strings.for_you_refresh_failed)
     LaunchedEffect(screenModel) {
         screenModel.effects.collect { effect ->
             when (effect) {
                 HomeHubEffect.DiscoveryPoolLimited -> context.toast(poolLimitedMessage)
+            }
+        }
+    }
+    LaunchedEffect(screenModel) {
+        val discoveryPreferences = Injekt.get<eu.kanade.domain.discovery.service.DiscoveryPreferences>()
+        screenModel.discoveryRefreshFailures.collect { pending ->
+            pending.forEach { (mediaType, requestId) ->
+                if (discoveryPreferences.claimManualRefreshFailure(mediaType, requestId)) {
+                    context.toast(refreshFailedMessage)
+                }
+                screenModel.acknowledgeDiscoveryRefreshFailure(mediaType, requestId)
             }
         }
     }

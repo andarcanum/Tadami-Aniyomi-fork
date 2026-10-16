@@ -921,6 +921,7 @@ class NotificationReceiver : BroadcastReceiver() {
         ): PendingIntent {
             val intent = Intent(context, NotificationReceiver::class.java).apply {
                 action = ACTION_CANCEL_DISCOVERY_UPDATE
+                data = "$ID.discovery/cancel/${mediaType?.key ?: "all"}".toUri()
                 if (mediaType != null) {
                     putExtra(EXTRA_DISCOVERY_MEDIA_TYPE, mediaType.key)
                 }
