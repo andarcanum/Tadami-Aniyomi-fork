@@ -65,10 +65,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import dev.icerock.moko.resources.StringResource
 import eu.kanade.presentation.entries.components.AuroraEntryDropdownMenu
@@ -432,14 +433,14 @@ private fun RulesGlassDialog(
                     spotColor = Color.Black.copy(alpha = 0.28f),
                 )
                 .clip(cardShape)
-                .hazeEffect(
-                    state = hazeState,
-                    style = HazeStyle(
-                        backgroundColor = colors.background,
-                        tint = HazeTint(colors.surface.copy(alpha = 0.55f)),
-                        blurRadius = 24.dp,
-                        noiseFactor = 0.12f,
-                    ),
+                .hazeBlur(
+                    input = HazeInput.Sources(hazeState),
+                    style = HazeBlurStyle {
+                        backgroundColor(colors.background)
+                        colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.55f))))
+                        blurRadius(24.dp)
+                        noiseFactor(0.12f)
+                    },
                 )
                 .background(cardFrostBase)
                 .clickable(

@@ -42,10 +42,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.presentation.theme.aurora.adaptive.auroraCenteredMaxWidth
 import kotlinx.collections.immutable.persistentMapOf
@@ -112,14 +113,14 @@ fun AuroraHeroScaffold(
                         val hazeModifier = if (hazeState != null) {
                             Modifier
                                 .clip(panelShape)
-                                .hazeEffect(
-                                    state = hazeState,
-                                    style = HazeStyle(
-                                        backgroundColor = Color.Transparent,
-                                        tint = HazeTint(Color.White.copy(alpha = 0.18f)),
-                                        blurRadius = 20.dp,
-                                        noiseFactor = 0f,
-                                    ),
+                                .hazeBlur(
+                                    input = HazeInput.Sources(hazeState),
+                                    style = HazeBlurStyle {
+                                        backgroundColor(Color.Transparent)
+                                        colorEffects(listOf(HazeColorEffect.tint(Color.White.copy(alpha = 0.18f))))
+                                        blurRadius(20.dp)
+                                        noiseFactor(0f)
+                                    },
                                 )
                         } else {
                             Modifier
