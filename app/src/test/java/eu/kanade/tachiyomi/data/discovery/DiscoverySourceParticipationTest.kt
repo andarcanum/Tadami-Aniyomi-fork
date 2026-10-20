@@ -113,4 +113,16 @@ class DiscoverySourceParticipationTest {
         groupSourcesByPlugin(setOf(1L, 2L, 3L)) { id -> if (id == 3L) "ext.b" else "ext.a" } shouldBe
             mapOf("ext.a" to listOf(1L, 2L), "ext.b" to listOf(3L))
     }
+
+    @Test
+    fun `selectPluginRepresentative prefers active library source over preferred language fallback`() {
+        val members = setOf(1L, 2L)
+        val selected = selectPluginRepresentative(
+            memberIds = members,
+            langs = mapOf(1L to "ru", 2L to "en"),
+            weights = mapOf(1L to 100, 2L to 0),
+            appLang = "en",
+        )
+        selected shouldBe 1L
+    }
 }

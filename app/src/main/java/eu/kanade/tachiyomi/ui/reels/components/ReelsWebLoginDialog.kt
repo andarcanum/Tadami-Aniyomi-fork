@@ -263,6 +263,19 @@ fun ReelsWebLoginDialog(
                                     ): Boolean {
                                         val url = request.url.toString()
                                         if (handleRedirect(view, url)) return true
+                                        val scheme = request.url.scheme
+                                        if (scheme != null && scheme != "http" && scheme != "https") {
+                                            runCatching {
+                                                val intent = android.content.Intent(
+                                                    android.content.Intent.ACTION_VIEW,
+                                                    request.url,
+                                                ).apply {
+                                                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                                }
+                                                view.context.startActivity(intent)
+                                            }
+                                            return true
+                                        }
                                         return false
                                     }
 

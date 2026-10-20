@@ -62,8 +62,11 @@ internal fun selectPluginRepresentative(
             else -> 3
         }
     }
-    val preferred = memberIds.filter { langPriority(it) in 0..1 }
-    val candidates = preferred.ifEmpty { memberIds.toList() }
+    val withReadHistory = memberIds.filter { (weights[it] ?: 0) > 0 }
+    val candidates = withReadHistory.ifEmpty {
+        val preferred = memberIds.filter { langPriority(it) in 0..1 }
+        preferred.ifEmpty { memberIds.toList() }
+    }
     return candidates.sortedWith(
         compareByDescending<Long> { weights[it] ?: 0 }
             .thenBy(langPriority)

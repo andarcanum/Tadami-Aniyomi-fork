@@ -239,6 +239,7 @@ internal class DiscoveryFeedScreenModel(
     private var failureJob: Job? = null
     private var prefetchJob: Job? = null
     private var lastHidden: DiscoverySuggestion? = null
+    private var lastHiddenTab: FeedSignalTab = FeedSignalTab.MIX
     private var lastBlacklistedTag: String? = null
 
     fun start() {
@@ -543,6 +544,7 @@ internal class DiscoveryFeedScreenModel(
 
     fun hide(item: DiscoverySuggestion, activeTab: FeedSignalTab = FeedSignalTab.MIX) {
         lastHidden = item
+        lastHiddenTab = activeTab
         mutableState.update { it.copy(hiddenSnackbarTitle = item.title) }
         screenModelScope.launchIO {
             backfillRemovedItem(item, activeTab)
@@ -554,7 +556,26 @@ internal class DiscoveryFeedScreenModel(
 
     fun undoHide() {
         val item = lastHidden ?: return
-        mutableState.update { it.copy(hiddenSnackbarTitle = null) }
+        val tab = lastHiddenTab
+        lastHidden = null
+        mutableState.update { current ->
+            val window = current.activeWindows[tab]
+            val updatedWindow = if (window != null && window.none { it.cleanTitle == item.cleanTitle }) {
+                listOf(item) + window.dropLast(1)
+            } else {
+                window
+            }
+            current.copy(
+                hiddenSnackbarTitle = null,
+                activeWindows = if (updatedWindow !=
+                    null
+                ) {
+                    current.activeWindows + (tab to updatedWindow)
+                } else {
+                    current.activeWindows
+                },
+            )
+        }
         screenModelScope.launchIO {
             repository.unhide(item.mediaType, item.cleanTitle)
             // Taste Engine: undo отменяет и сигнал (профиль возвращается к «до скрытия»).

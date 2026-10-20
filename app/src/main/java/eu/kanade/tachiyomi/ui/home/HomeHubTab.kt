@@ -1038,10 +1038,13 @@ object HomeHubTab : Tab {
                 val item = hiddenSnackItem
                 hiddenSnackItem = null
                 if (item != null) {
-                    discoveryHideScope.launch {
-                        discoveryRepository.unhide(item.mediaType, item.cleanTitle)
-                        // Taste Engine: undo отменяет и сигнал скрытия.
-                        discoveryRepository.removeSignal(item.mediaType, item.cleanTitle)
+                    when (item.mediaType) {
+                        tachiyomi.domain.discovery.model.DiscoveryMediaType.NOVEL ->
+                            novelScreenModel.restoreHiddenTeaserItem(item)
+                        tachiyomi.domain.discovery.model.DiscoveryMediaType.MANGA ->
+                            mangaScreenModel.restoreHiddenTeaserItem(item)
+                        tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME ->
+                            animeScreenModel.restoreHiddenTeaserItem(item)
                     }
                 }
             }

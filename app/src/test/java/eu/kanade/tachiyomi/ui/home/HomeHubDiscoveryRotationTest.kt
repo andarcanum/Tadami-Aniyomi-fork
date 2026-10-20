@@ -137,6 +137,30 @@ class HomeHubDiscoveryRotationTest {
     }
 
     @Test
+    fun `shouldRenderHomeHubHeroSlot renders hybrid when hero is null but discovery is present`() {
+        shouldRenderHomeHubHeroSlot(
+            heroPresentation = HomeHeroMode.Hybrid,
+            hasHero = false,
+            reserveHeroSlot = false,
+            hasDiscovery = true,
+        ) shouldBe true
+
+        shouldRenderHomeHubHeroSlot(
+            heroPresentation = HomeHeroMode.Hybrid,
+            hasHero = false,
+            reserveHeroSlot = false,
+            hasDiscovery = false,
+        ) shouldBe false
+
+        shouldRenderHomeHubHeroSlot(
+            heroPresentation = HomeHeroMode.Hybrid,
+            hasHero = true,
+            reserveHeroSlot = false,
+            hasDiscovery = false,
+        ) shouldBe true
+    }
+
+    @Test
     fun `resolveCollageSlotTransition produces instant transitions on EInk and animated on standard display`() {
         val eInkTransition = resolveCollageSlotTransition(delayMillis = 0, isEInk = true)
         (eInkTransition != null) shouldBe true
@@ -488,5 +512,44 @@ class HomeHubDiscoveryRotationTest {
         val updated = state.reduceDismissTeaserCard(likedCleanTitle = "card 1")
         updated.discovery.map { it.title } shouldBe listOf("Card 3", "Card 2")
         updated.discoveryPool.map { it.title } shouldBe listOf("Card 1", "Card 2", "Card 3")
+    }
+
+    @Test
+    fun `restoreTeaserItem replaces last candidate or inserts restored item at target count`() {
+        val item1 = discoveryItem("Card 1")
+        val item2 = discoveryItem("Card 2")
+        val restored = discoveryItem("Card Restored")
+
+        val current = listOf(item1, item2)
+        val result = restoreTeaserItem(current, restored, targetCount = 2)
+
+        result.size shouldBe 2
+        result.any { it.cleanTitle == "card restored" } shouldBe true
+        result[1].title shouldBe "Card Restored"
+    }
+
+    @Test
+    fun `restoreTeaserItem returns unchanged list when restored item already in current list`() {
+        val item1 = discoveryItem("Card 1")
+        val item2 = discoveryItem("Card 2")
+
+        val current = listOf(item1, item2)
+        val result = restoreTeaserItem(current, item1, targetCount = 2)
+
+        result shouldBe current
+    }
+
+    @Test
+    fun `pruneDismissedSessionTitles keeps size under maximum limit`() {
+        val titles = (1..150).map { "item$it" }.toSet()
+        val pruned = pruneDismissedSessionTitles(titles, maxLimit = 100, keepRecent = 50)
+        pruned.size shouldBe 50
+        pruned shouldBe (101..150).map { "item$it" }.toSet()
+    }
+
+    @Test
+    fun `pruneDismissedSessionTitles returns original set if below maximum limit`() {
+        val titles = setOf("a", "b", "c")
+        pruneDismissedSessionTitles(titles, maxLimit = 100, keepRecent = 50) shouldBe titles
     }
 }

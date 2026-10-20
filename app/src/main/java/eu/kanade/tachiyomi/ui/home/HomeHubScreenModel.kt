@@ -273,8 +273,13 @@ internal class HomeHubScreenModel(
                             },
                         )
                     }
+                    val isFirstTeaserLoad = state.value.discovery.isEmpty()
                     if (enabled) {
-                        updateDiscoveryTeaser(advanceOffset = false, teaserCount = count)
+                        updateDiscoveryTeaser(
+                            advanceOffset = false,
+                            forceUpdate = isFirstTeaserLoad,
+                            teaserCount = count,
+                        )
                     } else {
                         mutableState.update {
                             it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList())
@@ -282,6 +287,10 @@ internal class HomeHubScreenModel(
                     }
                 }
         }
+    }
+
+    override fun onItemDismissedFromPool(cleanTitle: String) {
+        cachedDiscoveryPool = cachedDiscoveryPool.filterNot { it.cleanTitle == cleanTitle }
     }
 
     private var cachedDiscoveryPool: List<tachiyomi.domain.discovery.model.DiscoverySuggestion> = emptyList()
