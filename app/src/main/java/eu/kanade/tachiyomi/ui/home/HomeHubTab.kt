@@ -83,10 +83,11 @@ import cafe.adriel.voyager.navigator.Navigator
 import cafe.adriel.voyager.navigator.tab.LocalTabNavigator
 import cafe.adriel.voyager.navigator.tab.TabOptions
 import com.tadami.aurora.R
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.domain.ui.model.HomeHeaderLayoutElement
@@ -1285,7 +1286,7 @@ object HomeHubTab : Tab {
             homeContent()
 
             // Studio editors (nickname + greeting): installed into the Home overlay host,
-            // which is rendered OUTSIDE the tabs' hazeSource so hazeEffect can blur only
+            // which is rendered OUTSIDE the tabs' hazeSource so haze blur can target only
             // the content under the frosted panel.
             val homeOverlayHost = LocalHomeOverlayHost.current
             val homeHazeState = LocalHomeHazeState.current
@@ -1740,7 +1741,7 @@ private fun NameDialog(
 
     BackHandler(onBack = onDismiss)
 
-    // Backdrop blur is applied ONLY under this panel via hazeEffect: the overlay is
+    // Backdrop blur is applied ONLY under this panel via haze blur: the overlay is
     // hosted outside the home hazeSource, so haze capture works, and the rest of the
     // screen stays sharp (dimmed by the scrim, never blurred).
     val hasBackdropBlur = hazeState != null && !colors.isEInk
@@ -1799,14 +1800,14 @@ private fun NameDialog(
                 .clip(cardShape)
                 .then(
                     if (hazeState != null && hasBackdropBlur) {
-                        Modifier.hazeEffect(
-                            state = hazeState,
-                            style = HazeStyle(
-                                backgroundColor = colors.background,
-                                tint = HazeTint(colors.surface.copy(alpha = 0.55f)),
-                                blurRadius = 24.dp,
-                                noiseFactor = 0.12f,
-                            ),
+                        Modifier.hazeBlur(
+                            input = HazeInput.Sources(hazeState),
+                            style = HazeBlurStyle {
+                                backgroundColor(colors.background)
+                                colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.55f))))
+                                blurRadius(24.dp)
+                                noiseFactor(0.12f)
+                            },
                         )
                     } else {
                         Modifier
@@ -2426,14 +2427,14 @@ private fun GreetingStyleDialog(
                 .clip(cardShape)
                 .then(
                     if (hazeState != null && hasBackdropBlur) {
-                        Modifier.hazeEffect(
-                            state = hazeState,
-                            style = HazeStyle(
-                                backgroundColor = colors.background,
-                                tint = HazeTint(colors.surface.copy(alpha = 0.55f)),
-                                blurRadius = 24.dp,
-                                noiseFactor = 0.12f,
-                            ),
+                        Modifier.hazeBlur(
+                            input = HazeInput.Sources(hazeState),
+                            style = HazeBlurStyle {
+                                backgroundColor(colors.background)
+                                colorEffects(listOf(HazeColorEffect.tint(colors.surface.copy(alpha = 0.55f))))
+                                blurRadius(24.dp)
+                                noiseFactor(0.12f)
+                            },
                         )
                     } else {
                         Modifier

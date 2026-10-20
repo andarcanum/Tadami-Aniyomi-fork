@@ -68,10 +68,11 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
@@ -267,14 +268,20 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                                 .background(colors.surface)
                                 .border(1.dp, colors.divider)
                         } else {
-                            Modifier.hazeEffect(
-                                state = hazeState,
-                                style = HazeStyle(
-                                    backgroundColor = colors.background,
-                                    tint = HazeTint(colors.surface.copy(alpha = if (colors.isDark) 0.72f else 0.82f)),
-                                    blurRadius = 22.dp,
-                                    noiseFactor = 0.10f,
-                                ),
+                            Modifier.hazeBlur(
+                                input = HazeInput.Sources(hazeState),
+                                style = HazeBlurStyle {
+                                    backgroundColor(colors.background)
+                                    colorEffects(
+                                        listOf(
+                                            HazeColorEffect.tint(
+                                                colors.surface.copy(alpha = if (colors.isDark) 0.72f else 0.82f),
+                                            ),
+                                        ),
+                                    )
+                                    blurRadius(22.dp)
+                                    noiseFactor(0.10f)
+                                },
                             )
                         },
                     )

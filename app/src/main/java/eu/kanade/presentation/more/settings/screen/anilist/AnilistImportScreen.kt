@@ -60,10 +60,11 @@ import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import eu.kanade.presentation.components.AuroraBackground
 import eu.kanade.presentation.components.AuroraFrostCancel
@@ -953,14 +954,14 @@ private fun Modifier.importGlass(
     }
     return this
         .clip(shape)
-        .hazeEffect(
-            state = hazeState,
-            style = HazeStyle(
-                backgroundColor = colors.background,
-                tint = HazeTint(tint),
-                blurRadius = blurRadius,
-                noiseFactor = 0.10f,
-            ),
+        .hazeBlur(
+            input = HazeInput.Sources(hazeState),
+            style = HazeBlurStyle {
+                backgroundColor(colors.background)
+                colorEffects(listOf(HazeColorEffect.tint(tint)))
+                blurRadius(blurRadius)
+                noiseFactor(0.10f)
+            },
         )
         .border(BorderStroke(1.dp, outline), shape)
 }

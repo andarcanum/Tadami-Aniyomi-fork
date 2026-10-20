@@ -237,7 +237,8 @@ dependencies {
     debugImplementation(compose.ui.tooling)
     implementation(compose.ui.tooling.preview)
     implementation(compose.ui.util)
-    implementation(compose.haze)
+    implementation(compose.haze.core)
+    implementation(compose.haze.blur)
 
     implementation(androidx.interpolator)
 
