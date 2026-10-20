@@ -2460,6 +2460,14 @@ class AnimeScreenModel(
                 anime = currentState.anime,
                 source = currentState.anime.toCatalogueSource(),
             )
+        } catch (e: OutOfMemoryError) {
+            // Metadata payloads can be large enough to fail on an already tight heap. Stop the
+            // spinner and keep source-provided data instead of crashing or offering a retry that
+            // would immediately hit the same exhaustion.
+            logcat(LogPriority.WARN) { "Out of memory while loading anime metadata for anime $animeId" }
+            updateSuccessState {
+                it.copy(isMetadataLoading = false)
+            }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to load anime metadata for anime $animeId" }
 

@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.suggestions.manga
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCache
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
+import eu.kanade.tachiyomi.data.suggestions.SuggestionSearchGate
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.SuggestionTitleResolver
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
@@ -208,7 +209,9 @@ class MangaSearchFallbackEngine {
                         try {
                             logcat { "[MangaSearchFallbackEngine] Searching for query: '$query'" }
                             val page = searchSemaphore.withPermit {
-                                source.getSearchManga(1, query, filterList)
+                                SuggestionSearchGate.withPermit {
+                                    source.getSearchManga(1, query, filterList)
+                                }
                             }
                             if (page.mangas.isEmpty()) {
                                 logcat {
