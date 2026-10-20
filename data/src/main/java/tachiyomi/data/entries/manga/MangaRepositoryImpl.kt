@@ -3,8 +3,6 @@ package tachiyomi.data.entries.manga
 import kotlinx.coroutines.flow.Flow
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
-import tachiyomi.data.MangaUpdateStrategyColumnAdapter
-import tachiyomi.data.StringListColumnAdapter
 import tachiyomi.data.achievement.handler.AchievementEventBus
 import tachiyomi.data.handlers.manga.MangaDatabaseHandler
 import tachiyomi.domain.achievement.model.AchievementCategory
@@ -160,7 +158,7 @@ class MangaRepositoryImpl(
                         author = updated.author,
                         description = updated.description,
                         notes = updated.notes,
-                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        genre = updated.genre,
                         title = updated.title,
                         status = updated.status,
                         rating = updated.rating.toDouble(),
@@ -176,7 +174,7 @@ class MangaRepositoryImpl(
                         coverLastModified = updated.coverLastModified,
                         dateAdded = updated.dateAdded,
                         mangaId = updated.id,
-                        updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        updateStrategy = updated.updateStrategy,
                         version = updated.version,
                         isSyncing = 0,
                         completedAt = updated.completedAt,
@@ -193,7 +191,7 @@ class MangaRepositoryImpl(
                         author = updated.author,
                         description = updated.description,
                         notes = updated.notes,
-                        genre = updated.genre?.let(StringListColumnAdapter::encode),
+                        genre = updated.genre,
                         title = updated.title,
                         status = updated.status,
                         rating = updated.rating.toDouble(),
@@ -209,7 +207,7 @@ class MangaRepositoryImpl(
                         coverLastModified = updated.coverLastModified,
                         dateAdded = updated.dateAdded,
                         mangaId = updated.id,
-                        updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                        updateStrategy = updated.updateStrategy,
                         version = updated.version,
                         isSyncing = 0,
                         completedAt = updated.completedAt,
@@ -232,7 +230,7 @@ class MangaRepositoryImpl(
                             author = updated.author,
                             description = updated.description,
                             notes = updated.notes,
-                            genre = updated.genre?.let(StringListColumnAdapter::encode),
+                            genre = updated.genre,
                             title = updated.title,
                             status = updated.status,
                             rating = updated.rating.toDouble(),
@@ -248,7 +246,7 @@ class MangaRepositoryImpl(
                             coverLastModified = updated.coverLastModified,
                             dateAdded = updated.dateAdded,
                             mangaId = updated.id,
-                            updateStrategy = MangaUpdateStrategyColumnAdapter.encode(updated.updateStrategy),
+                            updateStrategy = updated.updateStrategy,
                             version = updated.version,
                             isSyncing = 0,
                             completedAt = updated.completedAt,
@@ -343,7 +341,7 @@ class MangaRepositoryImpl(
                     author = value.author,
                     description = value.description,
                     notes = value.notes,
-                    genre = value.genre?.let(StringListColumnAdapter::encode),
+                    genre = value.genre,
                     title = value.title,
                     status = value.status,
                     rating = value.rating?.toDouble(),
@@ -359,7 +357,7 @@ class MangaRepositoryImpl(
                     coverLastModified = value.coverLastModified,
                     dateAdded = value.dateAdded,
                     mangaId = value.id,
-                    updateStrategy = value.updateStrategy?.let(MangaUpdateStrategyColumnAdapter::encode),
+                    updateStrategy = value.updateStrategy,
                     version = value.version,
                     isSyncing = 0,
                     completedAt = value.completedAt,

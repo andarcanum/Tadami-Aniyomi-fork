@@ -8,7 +8,6 @@ import eu.kanade.tachiyomi.data.backup.models.BackupNovel
 import eu.kanade.tachiyomi.data.backup.models.BackupNovelBookState
 import eu.kanade.tachiyomi.data.backup.models.BackupNovelHighlight
 import eu.kanade.tachiyomi.data.backup.restore.resolveRestoredText
-import tachiyomi.data.MangaUpdateStrategyColumnAdapter
 import tachiyomi.data.handlers.novel.NovelDatabaseHandler
 import tachiyomi.domain.book.novel.interactor.UpsertNovelBookState
 import tachiyomi.domain.book.novel.model.NovelBookState
@@ -123,7 +122,7 @@ class NovelRestorer(
                 author = novel.author,
                 description = novel.description,
                 notes = novel.notes,
-                genre = novel.genre?.joinToString(separator = ", "),
+                genre = novel.genre,
                 title = novel.title,
                 status = novel.status,
                 thumbnailUrl = novel.thumbnailUrl,
@@ -138,7 +137,7 @@ class NovelRestorer(
                 coverLastModified = novel.coverLastModified,
                 dateAdded = novel.dateAdded,
                 novelId = novel.id,
-                updateStrategy = novel.updateStrategy.let(MangaUpdateStrategyColumnAdapter::encode),
+                updateStrategy = novel.updateStrategy,
                 version = novel.version,
                 isSyncing = 1,
                 completedAt = novel.completedAt,

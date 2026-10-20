@@ -7,8 +7,6 @@ import eu.kanade.tachiyomi.data.backup.models.BackupAnimeTracking
 import eu.kanade.tachiyomi.data.backup.models.BackupCategory
 import eu.kanade.tachiyomi.data.backup.models.BackupEpisode
 import eu.kanade.tachiyomi.data.backup.restore.resolveRestoredText
-import tachiyomi.data.AnimeUpdateStrategyColumnAdapter
-import tachiyomi.data.FetchTypeColumnAdapter
 import tachiyomi.data.handlers.anime.AnimeDatabaseHandler
 import tachiyomi.domain.category.anime.interactor.GetAnimeCategories
 import tachiyomi.domain.entries.anime.interactor.AnimeFetchInterval
@@ -146,7 +144,7 @@ class AnimeRestorer(
                 author = anime.author,
                 description = anime.description,
                 notes = anime.notes,
-                genre = anime.genre?.joinToString(separator = ", "),
+                genre = anime.genre,
                 title = anime.title,
                 status = anime.status,
                 thumbnailUrl = anime.thumbnailUrl,
@@ -161,10 +159,10 @@ class AnimeRestorer(
                 coverLastModified = anime.coverLastModified,
                 dateAdded = anime.dateAdded,
                 animeId = anime.id,
-                updateStrategy = anime.updateStrategy.let(AnimeUpdateStrategyColumnAdapter::encode),
+                updateStrategy = anime.updateStrategy,
                 version = anime.version,
                 isSyncing = 1,
-                fetchType = anime.fetchType.let(FetchTypeColumnAdapter::encode),
+                fetchType = anime.fetchType,
                 parentId = anime.parentId,
                 seasonFlags = anime.seasonFlags,
                 seasonNumber = anime.seasonNumber,

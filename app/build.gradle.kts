@@ -360,14 +360,14 @@ dependencies {
     testImplementation(kotlinx.coroutines.test)
     testImplementation(libs.robolectric)
     testImplementation(libs.sqldelight.sqlite.driver)
-    testImplementation("androidx.test:core:1.6.1")
-    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation(androidx.test.core)
+    testImplementation(androidx.test.junit)
 
     androidTestImplementation(platform(compose.bom))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation("androidx.compose.ui:ui-test-manifest")
-    androidTestImplementation("androidx.test:core:1.6.1")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation(androidx.test.core)
+    androidTestImplementation(androidx.test.junit)
 
     // mpv-android
     implementation(aniyomilibs.aniyomi.mpv)
