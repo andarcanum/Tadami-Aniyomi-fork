@@ -68,7 +68,7 @@ internal abstract class BaseHomeHubScreenModel(
         }
     }
 
-    private val dismissedSessionTitles = mutableSetOf<String>()
+    private var dismissedSessionTitles = mutableSetOf<String>()
     private val discoveryLikeMutex = Mutex()
 
     open fun likeDiscoveryItem(item: HomeHubDiscoveryItem) {
@@ -84,18 +84,48 @@ internal abstract class BaseHomeHubScreenModel(
             if (recorded) {
                 discoveryLikeMutex.withLock {
                     dismissedSessionTitles += item.cleanTitle
+                    dismissedSessionTitles = pruneDismissedSessionTitles(dismissedSessionTitles).toMutableSet()
                     val dismissedTitles = dismissedSessionTitles.toSet()
                     mutableState.update { current ->
-                        current.reduceDismissTeaserCard(
+                        val updated = current.reduceDismissTeaserCard(
                             likedCleanTitle = item.cleanTitle,
                             targetCount = current.discovery.size,
                             dismissedTitles = dismissedTitles,
                         )
+                        val updatedPool = current.discoveryPool.filterNot { it.cleanTitle == item.cleanTitle }
+                        updated.copy(discoveryPool = updatedPool)
                     }
                 }
+                onItemDismissedFromPool(item.cleanTitle)
             }
         }
     }
+
+    open fun restoreHiddenTeaserItem(item: HomeHubDiscoveryItem) {
+        if (item.cleanTitle.isBlank()) return
+        screenModelScope.launchIO {
+            val tasteRepository = Injekt.get<tachiyomi.domain.discovery.repository.DiscoveryRepository>()
+            tasteRepository.unhide(item.mediaType, item.cleanTitle)
+            tasteRepository.removeSignal(item.mediaType, item.cleanTitle)
+            discoveryLikeMutex.withLock {
+                dismissedSessionTitles -= item.cleanTitle
+                mutableState.update { current ->
+                    val updatedDiscovery = restoreTeaserItem(
+                        current = current.discovery,
+                        restored = item,
+                        targetCount = current.discovery.size,
+                    )
+                    val updatedPool =
+                        listOf(item) + current.discoveryPool.filterNot { it.cleanTitle == item.cleanTitle }
+                    current.copy(discovery = updatedDiscovery, discoveryPool = updatedPool)
+                }
+            }
+            onItemRestoredToPool(item.cleanTitle)
+        }
+    }
+
+    protected open fun onItemDismissedFromPool(cleanTitle: String) {}
+    protected open fun onItemRestoredToPool(cleanTitle: String) {}
 
     open fun rotateOrRefreshDiscovery() {}
     open fun onScreenReentry() {}
@@ -199,3 +229,16 @@ internal fun shouldAdvanceDiscoveryTeaserOnReentry(
     lastReentryTimeMs: Long,
     cooldownMs: Long = DISCOVERY_REENTRY_COOLDOWN_MS,
 ): Boolean = lastReentryTimeMs <= 0L || (nowMs - lastReentryTimeMs) >= cooldownMs
+
+/**
+ * Ограничение размера сессионного кэша исключённых тайтлов:
+ * если размер превышает [maxLimit], оставляет последние [keepRecent] элементов.
+ */
+internal fun pruneDismissedSessionTitles(
+    titles: Set<String>,
+    maxLimit: Int = 100,
+    keepRecent: Int = 50,
+): Set<String> {
+    if (titles.size <= maxLimit) return titles
+    return titles.toList().takeLast(keepRecent).toSet()
+}

@@ -810,6 +810,15 @@ private fun HomeHubScreen(
                                     onRefreshClick = onDiscoveryRefreshClick,
                                 )
                             }
+                            heroPresentation == HomeHeroMode.Hybrid && hero == null -> HybridDiscoveryStrip(
+                                items = discovery,
+                                coverMediaType = section.toDiscoveryMediaType(),
+                                onMoreClick = onForYouMoreClick,
+                                onItemClick = { openTeaser(it) },
+                                onLongClick = { longPressItem = it },
+                                isRefreshing = state.isDiscoveryRefreshing,
+                                onRefreshClick = onDiscoveryRefreshClick,
+                            )
                             hero != null -> HeroSection(
                                 hero = hero,
                                 section = section,
@@ -1125,7 +1134,12 @@ internal fun shouldRenderHomeHubHeroSlot(
     reserveHeroSlot: Boolean,
     hasDiscovery: Boolean,
 ): Boolean {
-    if ((heroPresentation == HomeHeroMode.Collage || heroPresentation == HomeHeroMode.Stage) && hasDiscovery) {
+    if ((
+            heroPresentation == HomeHeroMode.Collage || heroPresentation == HomeHeroMode.Stage ||
+                heroPresentation == HomeHeroMode.Hybrid
+            ) &&
+        hasDiscovery
+    ) {
         return true
     }
     return hasHero || reserveHeroSlot

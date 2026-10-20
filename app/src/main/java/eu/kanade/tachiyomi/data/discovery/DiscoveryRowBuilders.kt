@@ -344,47 +344,29 @@ class DiscoveryTasteRowBuilder(
         }
         val sourceIds = context.sourceIds.filter { it > 0 }
             .ifEmpty { listOf(context.sourceId).filter { it > 0 } }
-        val sourceResults = if (includeExternal) {
-            if (context.sourceId > 0) {
-                listOf(
-                    runCatchingUnlessCancelled {
-                        catalog.popularWithGenres(
-                            context.mediaType,
-                            context.sourceId,
-                            sourceGenreNames,
-                            page = context.pageOffset,
-                            releaseStatuses = context.releaseStatuses,
-                        )
-                    },
-                )
-            } else {
-                emptyList()
+        val sourceResults = if (sourceIds.isNotEmpty()) {
+            val rotation = (context.pageOffset - 1).coerceAtLeast(0) % sourceIds.size
+            val ordered = sourceIds.drop(rotation) + sourceIds.take(rotation)
+            val toQuery = ordered.take(6)
+            supervisorScope {
+                toQuery.map { id ->
+                    async {
+                        runCatchingUnlessCancelled {
+                            withTimeoutOrNull(SOURCE_FETCH_TIMEOUT_MS) {
+                                catalog.popularWithGenres(
+                                    context.mediaType,
+                                    id,
+                                    sourceGenreNames,
+                                    page = context.pageOffset,
+                                    releaseStatuses = context.releaseStatuses,
+                                )
+                            }
+                        }.map { it.orEmpty() }
+                    }
+                }.awaitAll()
             }
         } else {
-            if (sourceIds.isNotEmpty()) {
-                val rotation = (context.pageOffset - 1).coerceAtLeast(0) % sourceIds.size
-                val ordered = sourceIds.drop(rotation) + sourceIds.take(rotation)
-                val toQuery = ordered.take(6)
-                supervisorScope {
-                    toQuery.map { id ->
-                        async {
-                            runCatchingUnlessCancelled {
-                                withTimeoutOrNull(SOURCE_FETCH_TIMEOUT_MS) {
-                                    catalog.popularWithGenres(
-                                        context.mediaType,
-                                        id,
-                                        sourceGenreNames,
-                                        page = context.pageOffset,
-                                        releaseStatuses = context.releaseStatuses,
-                                    )
-                                }
-                            }.map { it.orEmpty() }
-                        }
-                    }.awaitAll()
-                }
-            } else {
-                emptyList()
-            }
+            emptyList()
         }
         val fromTrending = trendingResult?.getOrNull().orEmpty()
             // best-effort: провайдеры без жанров в выдаче (source-latest) не фильтруются

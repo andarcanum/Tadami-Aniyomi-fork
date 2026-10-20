@@ -438,33 +438,42 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
 
     private suspend fun withMangaGenreFilters(filters: FilterList, genres: List<String>): FilterList? {
         val group = filters.filterIsInstance<Filter.Group<*>>()
-            .firstOrNull { it.name.contains("genre", true) || it.name.contains("жанр", true) }
+            .firstOrNull { isGenreGroupName(it.name) }
             ?: return null
         val boxes = group.state.filterIsInstance<Filter.CheckBox>()
-        // Эвристика жанров: чекбоксы любого языка матчатся с запросом; непонятые
+        val tris = group.state.filterIsInstance<Filter.TriState>()
+        val allOptions = (boxes.map { it.name } + tris.map { it.name }).distinct()
+        // Эвристика жанров: чекбоксы и тристейты любого языка матчатся с запросом; непонятые
         // названия источник-специфичной экзотики переводятся один раз (M2).
-        val matched = genreFallback.selectSourceGenres(genres, boxes.map { it.name })
+        val matched = genreFallback.selectSourceGenres(genres, allOptions)
         boxes.filter { it.name in matched }.forEach { it.state = true }
+        tris.filter { it.name in matched }.forEach { it.state = Filter.TriState.STATE_INCLUDE }
         return if (matched.isNotEmpty()) filters else null
     }
 
     private suspend fun withAnimeGenreFilters(filters: AnimeFilterList, genres: List<String>): AnimeFilterList? {
         val group = filters.filterIsInstance<AnimeFilter.Group<*>>()
-            .firstOrNull { it.name.contains("genre", true) || it.name.contains("жанр", true) }
+            .firstOrNull { isGenreGroupName(it.name) }
             ?: return null
         val boxes = group.state.filterIsInstance<AnimeFilter.CheckBox>()
-        val matched = genreFallback.selectSourceGenres(genres, boxes.map { it.name })
+        val tris = group.state.filterIsInstance<AnimeFilter.TriState>()
+        val allOptions = (boxes.map { it.name } + tris.map { it.name }).distinct()
+        val matched = genreFallback.selectSourceGenres(genres, allOptions)
         boxes.filter { it.name in matched }.forEach { it.state = true }
+        tris.filter { it.name in matched }.forEach { it.state = AnimeFilter.TriState.STATE_INCLUDE }
         return if (matched.isNotEmpty()) filters else null
     }
 
     private suspend fun withNovelGenreFilters(filters: NovelFilterList, genres: List<String>): NovelFilterList? {
         val group = filters.filterIsInstance<NovelFilter.Group<*>>()
-            .firstOrNull { it.name.contains("genre", true) || it.name.contains("жанр", true) }
+            .firstOrNull { isGenreGroupName(it.name) }
             ?: return null
         val boxes = group.state.filterIsInstance<NovelFilter.CheckBox>()
-        val matched = genreFallback.selectSourceGenres(genres, boxes.map { it.name })
+        val tris = group.state.filterIsInstance<NovelFilter.TriState>()
+        val allOptions = (boxes.map { it.name } + tris.map { it.name }).distinct()
+        val matched = genreFallback.selectSourceGenres(genres, allOptions)
         boxes.filter { it.name in matched }.forEach { it.state = true }
+        tris.filter { it.name in matched }.forEach { it.state = NovelFilter.TriState.STATE_INCLUDE }
         return if (matched.isNotEmpty()) filters else null
     }
 
@@ -673,3 +682,10 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
         const val DETAILS_ENRICH_CAP = 8
     }
 }
+
+internal val GENRE_GROUP_ALIASES = listOf(
+    "genre", "жанр", "tag", "тег", "categor", "категор", "género", "genero", "ジャンル",
+)
+
+internal fun isGenreGroupName(name: String): Boolean =
+    GENRE_GROUP_ALIASES.any { name.contains(it, ignoreCase = true) }

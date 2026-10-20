@@ -153,6 +153,61 @@ class TasteSignalRecorderAltKeyTest {
         resolverCalled shouldBe true
         repo.recordedGenres.last() shouldBe listOf("Action", "Fantasy")
     }
+
+    @Test
+    fun `record signal for click enriches empty genres from local repository when available`() = runTest {
+        val repo = RecordingFakeRepository()
+        val item = suggestionOf("Solo Leveling").copy(
+            sourceId = 42L,
+            sourceUrl = "/manga/solo-leveling",
+            genres = emptyList(),
+        )
+        var localResolverCalled = false
+        var sourceResolverCalled = false
+        val success = TasteSignalRecorder.record(
+            repository = repo,
+            item = item,
+            signalType = DiscoverySignalType.CLICK,
+            localEntryResolver = { mediaType, sourceId, sourceUrl ->
+                localResolverCalled = true
+                sourceId shouldBe 42L
+                sourceUrl shouldBe "/manga/solo-leveling"
+                listOf("Action", "Fantasy")
+            },
+            sourceDetailsResolver = { _, _, _ ->
+                sourceResolverCalled = true
+                listOf("NetworkAction")
+            },
+        )
+        success shouldBe true
+        localResolverCalled shouldBe true
+        sourceResolverCalled shouldBe false
+        repo.recordedGenres.last() shouldBe listOf("Action", "Fantasy")
+    }
+
+    @Test
+    fun `record signal for click does not call sourceDetailsResolver when genres are empty`() = runTest {
+        val repo = RecordingFakeRepository()
+        val item = suggestionOf("Unknown Manga").copy(
+            sourceId = 42L,
+            sourceUrl = "/manga/unknown",
+            genres = emptyList(),
+        )
+        var sourceResolverCalled = false
+        val success = TasteSignalRecorder.record(
+            repository = repo,
+            item = item,
+            signalType = DiscoverySignalType.CLICK,
+            localEntryResolver = { _, _, _ -> emptyList() },
+            sourceDetailsResolver = { _, _, _ ->
+                sourceResolverCalled = true
+                listOf("NetworkAction")
+            },
+        )
+        success shouldBe true
+        sourceResolverCalled shouldBe false
+        repo.recordedGenres.last() shouldBe emptyList()
+    }
 }
 
 private fun suggestionOf(title: String) = DiscoverySuggestion(

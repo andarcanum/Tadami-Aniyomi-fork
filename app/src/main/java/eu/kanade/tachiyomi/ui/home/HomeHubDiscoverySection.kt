@@ -232,6 +232,27 @@ internal fun patchAfterLocalLike(
 }
 
 /**
+ * Локальное восстановление карточки Home-тизера при отмене скрытия (Undo):
+ * 1. Если карточка уже присутствует в [current], возвращает список без изменений.
+ * 2. Если размер списка >= [targetCount], заменяет последнюю карточку на восстановленную.
+ * 3. Если меньше, добавляет восстановленную карточку в начало.
+ */
+internal fun restoreTeaserItem(
+    current: List<HomeHubDiscoveryItem>,
+    restored: HomeHubDiscoveryItem,
+    targetCount: Int = current.size,
+): List<HomeHubDiscoveryItem> {
+    if (current.any { it.cleanTitle == restored.cleanTitle }) return current
+    val mutable = current.toMutableList()
+    if (mutable.size >= targetCount && mutable.isNotEmpty()) {
+        mutable[mutable.lastIndex] = restored
+    } else {
+        mutable.add(0, restored)
+    }
+    return mutable
+}
+
+/**
  * Выбирает элементы тизера с соблюдением 48-часовой уникальности и минимизацией
  * пересечения с карточками, видимыми прямо сейчас:
  * 1. Исключает тайтлы из [shownTitles] (показанные за последние 48 ч).
@@ -1935,7 +1956,8 @@ internal fun shouldAutoRotateStage(
     intervalHours: Int,
     isLifecycleResumed: Boolean,
     systemAnimationsEnabled: Boolean,
-): Boolean = shouldAnimateAuroraBackground(
+    isScrollInProgress: Boolean = false,
+): Boolean = !isScrollInProgress && shouldAnimateAuroraBackground(
     userEnabled = !isEInk && intervalHours > 0,
     isLifecycleResumed = isLifecycleResumed,
     systemAnimationsEnabled = systemAnimationsEnabled,
@@ -1965,6 +1987,7 @@ internal fun DiscoveryHeroStage(
     var offset by rememberSaveable { mutableIntStateOf(discoveryPreferences.stageOffset(coverMediaType).get()) }
     var userInteractionToken by remember { mutableIntStateOf(0) }
     var center by rememberSaveable { mutableIntStateOf(0) }
+    var isDragging by remember { mutableStateOf(false) }
 
     // B1: непрерывный центр сцены. Драг двигает его за пальцем (snapTo), отпускание/кнопки/авто-ротация
     // доводят tween'ом от текущей визуальной позиции — без скачков. Касание ловит сцену в любой точке
@@ -2089,15 +2112,24 @@ internal fun DiscoveryHeroStage(
     val contentMaxWidthDp = auroraAdaptiveSpec.updatesMaxWidthDp ?: auroraAdaptiveSpec.entryMaxWidthDp
     val outerShape = RoundedCornerShape(20.dp)
 
+    val isScrollInProgress = isDragging || centerAnim.isRunning
     // Авто-ротация по кругу: выключается в e-ink, при нулевом интервале, на паузе и без системных анимаций.
     if (ordered.size > 1) {
-        if (shouldAutoRotateStage(colors.isEInk, intervalHours, isLifecycleResumed, systemAnimationsEnabled)) {
+        if (shouldAutoRotateStage(
+                colors.isEInk,
+                intervalHours,
+                isLifecycleResumed,
+                systemAnimationsEnabled,
+                isScrollInProgress,
+            )
+        ) {
             LaunchedEffect(ordered.size, intervalHours, userInteractionToken) {
                 val intervalMillis = intervalHours * 3600_000L
                 while (isActive) {
                     val last = discoveryPreferences.stageLastRotationTime(coverMediaType).get()
                     val elapsed = if (last == 0L) 0L else System.currentTimeMillis() - last
                     delay(if (last == 0L) intervalMillis else (intervalMillis - elapsed).coerceAtLeast(1000L))
+                    if (isDragging || centerAnim.isRunning) continue
                     // Пользователь взаимодействовал во время ожидания (settleTo обновил штамп):
                     // пересчитываем остаток вместо немедленного рывка ленты «под рукой».
                     val lastAfter = discoveryPreferences.stageLastRotationTime(coverMediaType).get()
@@ -2149,50 +2181,56 @@ internal fun DiscoveryHeroStage(
                         var totalDy = 0f
                         var dragAccumulator = 0f
                         val pointerId = down.id
-                        while (true) {
-                            // Initial-пасс: родитель видит движение раньше детей — потребление здесь
-                            // глушит click/long-press слотов и вертикальный скролл родителя.
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-                            if (!change.pressed) {
-                                // Отпускание отслеживаемого пальца — финализируем жест.
-                                // Якорь финальной позиции: без него VelocityTracker считает скорость
-                                // по устаревшим сэмплам и выдаёт спайк при подъёме пальца.
-                                tracker.addPosition(change.uptimeMillis, change.position)
-                                if (lockedAxis == 1 || (caughtMoving && lockedAxis == 0)) {
-                                    change.consume()
+                        try {
+                            while (true) {
+                                // Initial-пасс: родитель видит движение раньше детей — потребление здесь
+                                // глушит click/long-press слотов и вертикальный скролл родителя.
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                if (!change.pressed) {
+                                    // Отпускание отслеживаемого пальца — финализируем жест.
+                                    // Якорь финальной позиции: без него VelocityTracker считает скорость
+                                    // по устаревшим сэмплам и выдаёт спайк при подъёме пальца.
+                                    tracker.addPosition(change.uptimeMillis, change.position)
+                                    if (lockedAxis == 1 || (caughtMoving && lockedAxis == 0)) {
+                                        change.consume()
+                                    }
+                                    break
                                 }
-                                break
-                            }
-                            val delta = change.positionChange()
-                            if (delta != Offset.Zero) {
-                                if (lockedAxis == 0) {
-                                    totalDx += delta.x
-                                    totalDy += delta.y
-                                    if (abs(totalDx) > slopPx || abs(totalDy) > slopPx) {
-                                        lockedAxis = if (abs(totalDx) >= abs(totalDy)) 1 else -1
-                                        if (lockedAxis == 1) {
-                                            dragAccumulator = totalDx
-                                            tracker.addPosition(change.uptimeMillis, change.position)
+                                val delta = change.positionChange()
+                                if (delta != Offset.Zero) {
+                                    if (lockedAxis == 0) {
+                                        totalDx += delta.x
+                                        totalDy += delta.y
+                                        if (abs(totalDx) > slopPx || abs(totalDy) > slopPx) {
+                                            lockedAxis = if (abs(totalDx) >= abs(totalDy)) 1 else -1
+                                            if (lockedAxis == 1) {
+                                                isDragging = true
+                                                dragAccumulator = totalDx
+                                                tracker.addPosition(change.uptimeMillis, change.position)
+                                            }
+                                        }
+                                    } else if (lockedAxis == 1) {
+                                        isDragging = true
+                                        dragAccumulator += delta.x
+                                        tracker.addPosition(change.uptimeMillis, change.position)
+                                        // Сцена едет за пальцем. Restricted-ско́п жеста не позволяет
+                                        // звать suspend напрямую — UNDISPATCHED-запуск выполняется
+                                        // синхронно до первой приостановки, а snapTo на свободном
+                                        // (уже остановленном на down) мьютексе не подвисает.
+                                        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                            centerAnim.snapTo(dragBase - dragAccumulator / travelPx)
                                         }
                                     }
-                                } else if (lockedAxis == 1) {
-                                    dragAccumulator += delta.x
-                                    tracker.addPosition(change.uptimeMillis, change.position)
-                                    // Сцена едет за пальцем. Restricted-ско́п жеста не позволяет
-                                    // звать suspend напрямую — UNDISPATCHED-запуск выполняется
-                                    // синхронно до первой приостановки, а snapTo на свободном
-                                    // (уже остановленном на down) мьютексе не подвисает.
-                                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                        centerAnim.snapTo(dragBase - dragAccumulator / travelPx)
-                                    }
                                 }
+                                if (lockedAxis == 1 || (caughtMoving && lockedAxis == 0)) {
+                                    // Наш драг или ловля летящей сцены: клики слота под пальцем подавлены.
+                                    change.consume()
+                                }
+                                // lockedAxis == −1: вертикаль отдаётся родителю без потребления.
                             }
-                            if (lockedAxis == 1 || (caughtMoving && lockedAxis == 0)) {
-                                // Наш драг или ловля летящей сцены: клики слота под пальцем подавлены.
-                                change.consume()
-                            }
-                            // lockedAxis == −1: вертикаль отдаётся родителю без потребления.
+                        } finally {
+                            isDragging = false
                         }
                         if (lockedAxis == 1) {
                             // Отпускание с драгом: флик проецирует полёт от позиции пальца.

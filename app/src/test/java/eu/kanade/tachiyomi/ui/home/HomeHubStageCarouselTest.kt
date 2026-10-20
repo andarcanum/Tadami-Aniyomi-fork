@@ -186,6 +186,13 @@ class HomeHubStageCarouselTest {
             isLifecycleResumed = true,
             systemAnimationsEnabled = true,
         ) shouldBe true
+        shouldAutoRotateStage(
+            isEInk = false,
+            intervalHours = 2,
+            isLifecycleResumed = true,
+            systemAnimationsEnabled = true,
+            isScrollInProgress = true,
+        ) shouldBe false
     }
 
     @Test

@@ -219,4 +219,30 @@ class DiscoveryTasteRowBuilderTest {
 
         result.map { it.title } shouldBe listOf("Src10 Item 1", "Src20 Item 1", "Src10 Item 2", "Src20 Item 2")
     }
+
+    @Test
+    fun `includeExternal true queries multiple sources and interleaves results with external trends`() = runTest {
+        val catalog = FakeCatalog(
+            perSourceGenreItems = mapOf(
+                10L to listOf(
+                    DiscoveryRowItem("Src10 Item 1", "src10 item 1", null, null, null, "Src10", 1.0, sourceId = 10L),
+                ),
+                20L to listOf(
+                    DiscoveryRowItem("Src20 Item 1", "src20 item 1", null, null, null, "Src20", 1.0, sourceId = 20L),
+                ),
+            ),
+        )
+        val ctx = context().copy(
+            sourceId = 10L,
+            sourceIds = listOf(10L, 20L),
+        )
+        val result = DiscoveryTasteRowBuilder(
+            trending = FakeTrending(shouldFail = true),
+            catalog = catalog,
+            sortProvider = { TrendSort.POPULARITY },
+            includeExternal = true,
+        ).build(ctx)
+
+        result.map { it.title } shouldBe listOf("Src10 Item 1", "Src20 Item 1")
+    }
 }

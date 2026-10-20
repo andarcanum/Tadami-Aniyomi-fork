@@ -75,15 +75,31 @@ object TasteSignalRecorder {
         ) -> List<String> = { mediaType, sourceId, sourceUrl ->
             fetchSourceGenres(mediaType, sourceId, sourceUrl)
         },
+        localEntryResolver: suspend (
+            DiscoveryMediaType,
+            Long,
+            String,
+        ) -> List<String> = { mediaType, sourceId, sourceUrl ->
+            fetchLocalGenres(mediaType, sourceId, sourceUrl)
+        },
     ): Boolean {
         val sourceKey = resolveSourceKey(item.mediaType, item.sourceId)
+        var genres = snapshotGenres(item)
+        if (genres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
+            val local = runCatchingUnlessCancelled {
+                localEntryResolver(item.mediaType, item.sourceId!!, item.sourceUrl!!)
+            }.getOrNull().orEmpty()
+            if (local.isNotEmpty()) {
+                genres = local
+            }
+        }
         val recorded = runCatchingUnlessCancelled {
             repository.recordSignal(
                 mediaType = item.mediaType,
                 cleanTitle = item.cleanTitle,
                 title = item.title,
                 signalType = signalType,
-                genres = snapshotGenres(item),
+                genres = genres,
                 provider = item.provider,
                 sourceKey = sourceKey,
             )
@@ -101,8 +117,7 @@ object TasteSignalRecorder {
         if (signalType == DiscoverySignalType.CONSUMED) {
             afterConsumed(repository, item.mediaType, item.cleanTitle)
         } else if (signalType == DiscoverySignalType.LIKE) {
-            val initialGenres = snapshotGenres(item)
-            if (initialGenres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
+            if (genres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
                 val sourceId = item.sourceId!!
                 val sourceUrl = item.sourceUrl!!
                 val enriched = runCatchingUnlessCancelled {
@@ -289,6 +304,27 @@ object TasteSignalRecorder {
                 } else {
                     emptyList()
                 }
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    internal suspend fun fetchLocalGenres(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        sourceUrl: String,
+    ): List<String> = runCatching {
+        when (mediaType) {
+            DiscoveryMediaType.MANGA -> {
+                val getManga = Injekt.get<tachiyomi.domain.entries.manga.interactor.GetMangaByUrlAndSourceId>()
+                getManga.await(sourceUrl, sourceId)?.genre.orEmpty()
+            }
+            DiscoveryMediaType.ANIME -> {
+                val getAnime = Injekt.get<tachiyomi.domain.entries.anime.interactor.GetAnimeByUrlAndSourceId>()
+                getAnime.await(sourceUrl, sourceId)?.genre.orEmpty()
+            }
+            DiscoveryMediaType.NOVEL -> {
+                val getNovel = Injekt.get<tachiyomi.domain.entries.novel.interactor.GetNovelByUrlAndSourceId>()
+                getNovel.await(sourceUrl, sourceId)?.genre.orEmpty()
             }
         }
     }.getOrDefault(emptyList())
