@@ -482,6 +482,10 @@ class AnimeScreenModel(
                             }
                         } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                             throw e
+                        } catch (e: OutOfMemoryError) {
+                            logcat(LogPriority.WARN) {
+                                "[AnimeScreenModel] External suggestions aborted (out of memory): ${e.message}"
+                            }
                         } catch (e: LinkageError) {
                             logcat {
                                 "[AnimeScreenModel] External suggestions failed (incompatible extension): ${e.message}"
@@ -519,6 +523,10 @@ class AnimeScreenModel(
                                 }
                             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                                 throw e
+                            } catch (e: OutOfMemoryError) {
+                                logcat(LogPriority.WARN) {
+                                    "[AnimeScreenModel] Native search fallback aborted (out of memory): ${e.message}"
+                                }
                             } catch (e: LinkageError) {
                                 logcat {
                                     "[AnimeScreenModel] Native search fallback failed (incompatible extension): ${e.message}"
@@ -557,6 +565,13 @@ class AnimeScreenModel(
                 }
             } catch (e: kotlin.coroutines.cancellation.CancellationException) {
                 throw e
+            } catch (e: OutOfMemoryError) {
+                // Suggestions are decorative: never let a source that exhausted the heap
+                // take the whole process down while the user is merely reading an entry.
+                logcat(LogPriority.WARN) {
+                    "[AnimeScreenModel] Suggestions aborted (out of memory): ${e.message}"
+                }
+                updateSuccessState { it.copy(suggestions = SuggestionState.Empty()) }
             } catch (e: LinkageError) {
                 logcat { "AnimeScreenModel suggestions fetch failed (incompatible extension): ${e.message}" }
                 updateSuccessState {
