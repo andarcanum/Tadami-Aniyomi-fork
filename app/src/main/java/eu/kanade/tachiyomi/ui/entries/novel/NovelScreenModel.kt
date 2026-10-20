@@ -1001,6 +1001,10 @@ class NovelScreenModel(
                             }
                         } catch (e: CancellationException) {
                             throw e
+                        } catch (e: OutOfMemoryError) {
+                            logcat(LogPriority.WARN) {
+                                "[NovelScreenModel] External suggestions aborted (out of memory): ${e.message}"
+                            }
                         } catch (e: LinkageError) {
                             logcat {
                                 "[NovelScreenModel] External suggestions failed (incompatible extension): ${e.message}"
@@ -1032,6 +1036,10 @@ class NovelScreenModel(
                                 }
                             } catch (e: CancellationException) {
                                 throw e
+                            } catch (e: OutOfMemoryError) {
+                                logcat(LogPriority.WARN) {
+                                    "[NovelScreenModel] Native related suggestions aborted (out of memory): ${e.message}"
+                                }
                             } catch (e: LinkageError) {
                                 logcat {
                                     "[NovelScreenModel] Native related suggestions failed (incompatible extension): ${e.message}"
@@ -1077,6 +1085,10 @@ class NovelScreenModel(
                                 }
                             } catch (e: CancellationException) {
                                 throw e
+                            } catch (e: OutOfMemoryError) {
+                                logcat(LogPriority.WARN) {
+                                    "[NovelScreenModel] Native search suggestions aborted (out of memory): ${e.message}"
+                                }
                             } catch (e: LinkageError) {
                                 logcat {
                                     "[NovelScreenModel] Native search suggestions failed (incompatible extension): ${e.message}"
@@ -1121,6 +1133,13 @@ class NovelScreenModel(
                 updateSuccessState { it.copy(suggestions = nextState) }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: OutOfMemoryError) {
+                // Suggestions are decorative: never let a source that exhausted the heap
+                // take the whole process down while the user is merely reading an entry.
+                logcat(LogPriority.WARN) {
+                    "[NovelScreenModel] Suggestions aborted (out of memory): ${e.message}"
+                }
+                updateSuccessState { it.copy(suggestions = SuggestionState.Empty()) }
             } catch (e: LinkageError) {
                 logcat { "NovelScreenModel suggestions fetch failed (incompatible extension): ${e.message}" }
                 updateSuccessState {

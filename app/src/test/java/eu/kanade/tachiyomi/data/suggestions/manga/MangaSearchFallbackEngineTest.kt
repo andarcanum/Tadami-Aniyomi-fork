@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.suggestions.manga
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
 import eu.kanade.tachiyomi.source.model.FilterList
+import eu.kanade.tachiyomi.source.model.MangasPage
 import eu.kanade.tachiyomi.source.model.SManga
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -200,5 +201,73 @@ class MangaSearchFallbackEngineTest {
 
         assertTrue(outcome is MangaFallbackOutcome.Success)
         assertEquals(1, (outcome as MangaFallbackOutcome.Success).items.size)
+    }
+
+    @Test
+    fun `fetchSearchFallback contains extension OutOfMemoryError and stops remaining tiers`() = runTest {
+        val manga = Manga.create().copy(
+            id = 123L,
+            title = "Solo Leveling",
+            author = "Chugong",
+            genre = listOf("Fantasy"),
+            url = "/solo-oom-abort",
+        )
+        var searchCalls = 0
+        val source = object : FakeMangaCatalogueSource() {
+            override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
+                searchCalls++
+                // Mirrors the extension-side OOM in the crash log (HashMap.resize /
+                // kotlinx.serialization buffer growth during getSearchManga).
+                throw OutOfMemoryError("Failed to allocate a 8388624 byte allocation")
+            }
+        }
+
+        val seed = SuggestionSeed(
+            mediaType = SuggestionMediaType.MANGA,
+            primaryTitle = "Solo Leveling",
+            candidateTitles = listOf("Solo Leveling"),
+            description = "",
+        )
+
+        val outcome = MangaSearchFallbackEngine().fetchSearchFallback(manga, source, seed)
+
+        assertTrue(outcome is MangaFallbackOutcome.Empty)
+        // Tier 1 is the only tier that may run: the heap is already exhausted, so the
+        // author/genre tiers must not issue more requests against the same source.
+        assertEquals(1, searchCalls)
+    }
+
+    @Test
+    fun `fetchSearchFallback keeps already collected items when a later query runs out of memory`() = runTest {
+        val manga = Manga.create().copy(id = 123L, title = "Solo Leveling", url = "/solo-oom-retain")
+        val source = object : FakeMangaCatalogueSource() {
+            override suspend fun getSearchManga(page: Int, query: String, filters: FilterList): MangasPage {
+                if (query == "Solo Leveling") {
+                    return MangasPage(
+                        listOf(
+                            SManga.create().apply {
+                                title = "Solo Leveling Side Stories"
+                                url = "/solo-oom-result"
+                            },
+                        ),
+                        false,
+                    )
+                }
+                throw OutOfMemoryError("Failed to allocate a 8388624 byte allocation")
+            }
+        }
+
+        val seed = SuggestionSeed(
+            mediaType = SuggestionMediaType.MANGA,
+            primaryTitle = "Solo Leveling",
+            candidateTitles = listOf("Solo Leveling"),
+            description = "",
+        )
+
+        val outcome = MangaSearchFallbackEngine().fetchSearchFallback(manga, source, seed)
+
+        val success = outcome as MangaFallbackOutcome.Success
+        assertEquals(1, success.items.size)
+        assertEquals("Solo Leveling Side Stories", success.items.single().title)
     }
 }
