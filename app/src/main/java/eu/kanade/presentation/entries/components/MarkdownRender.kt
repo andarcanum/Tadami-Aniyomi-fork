@@ -10,6 +10,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
@@ -30,11 +31,14 @@ import com.mikepenz.markdown.compose.elements.MarkdownTableRow
 import com.mikepenz.markdown.compose.elements.listDepth
 import com.mikepenz.markdown.model.DefaultMarkdownColors
 import com.mikepenz.markdown.model.DefaultMarkdownTypography
+import com.mikepenz.markdown.model.MarkdownAlertPadding
 import com.mikepenz.markdown.model.MarkdownAnnotator
 import com.mikepenz.markdown.model.MarkdownColors
 import com.mikepenz.markdown.model.MarkdownPadding
 import com.mikepenz.markdown.model.MarkdownTypography
 import com.mikepenz.markdown.model.NoOpImageTransformerImpl
+import com.mikepenz.markdown.model.markdownAlertColors
+import com.mikepenz.markdown.model.markdownAlertPadding
 import com.mikepenz.markdown.model.markdownAnnotator
 import com.mikepenz.markdown.model.rememberMarkdownState
 import org.intellij.markdown.flavours.MarkdownFlavourDescriptor
@@ -93,6 +97,9 @@ private fun getMarkdownColors(): MarkdownColors {
         inlineCodeBackground = codeBackground,
         dividerColor = MaterialTheme.colorScheme.outlineVariant,
         tableBackground = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+        alert = markdownAlertColors(MaterialTheme.colorScheme.background.luminance() < 0.5f),
+        highlightText = MaterialTheme.colorScheme.onSecondaryContainer,
+        highlightBackground = MaterialTheme.colorScheme.secondaryContainer,
     )
 }
 
@@ -138,6 +145,7 @@ private val markdownPadding = object : MarkdownPadding {
     override val listIndent: Dp = 8.dp
     override val listItemBottom: Dp = 0.dp
     override val listItemTop: Dp = 0.dp
+    override val alert: MarkdownAlertPadding = markdownAlertPadding()
 }
 
 private val markdownComponents = markdownComponents(
