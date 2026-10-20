@@ -5,6 +5,7 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCache
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
+import eu.kanade.tachiyomi.data.suggestions.SuggestionSearchGate
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.SuggestionTitleResolver
 import eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType
@@ -208,7 +209,9 @@ class AnimeSearchFallbackEngine {
                         try {
                             logcat { "[AnimeSearchFallbackEngine] Searching for query: '$query'" }
                             val page = searchSemaphore.withPermit {
-                                source.getSearchAnime(1, query, filterList)
+                                SuggestionSearchGate.withPermit {
+                                    source.getSearchAnime(1, query, filterList)
+                                }
                             }
                             if (page.animes.isEmpty()) {
                                 logcat {

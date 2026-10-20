@@ -965,6 +965,14 @@ class MangaScreenModel(
                 manga = currentState.manga,
                 source = currentState.manga.toCatalogueSource(),
             )
+        } catch (e: OutOfMemoryError) {
+            // Metadata payloads can be large enough to fail on an already tight heap. Stop the
+            // spinner and keep source-provided data instead of crashing or offering a retry that
+            // would immediately hit the same exhaustion.
+            logcat(LogPriority.WARN) { "Out of memory while loading manga metadata for manga $mangaId" }
+            updateSuccessState {
+                it.copy(isMetadataLoading = false)
+            }
         } catch (e: Exception) {
             logcat(LogPriority.ERROR, e) { "Failed to load manga metadata for manga $mangaId" }
             val error = when {

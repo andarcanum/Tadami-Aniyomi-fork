@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.data.suggestions.novel
 import eu.kanade.tachiyomi.data.suggestions.SuggestionCache
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
 import eu.kanade.tachiyomi.data.suggestions.SuggestionReason
+import eu.kanade.tachiyomi.data.suggestions.SuggestionSearchGate
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSeed
 import eu.kanade.tachiyomi.data.suggestions.SuggestionSourceWeight
 import eu.kanade.tachiyomi.data.suggestions.SuggestionTitleResolver
@@ -222,7 +223,9 @@ class NovelSearchFallbackEngine {
                             logcat { "[NovelSearchFallbackEngine] Searching for query: '$query'" }
                             val page = searchSemaphore.withPermit {
                                 delay(QUERY_PACING_MS)
-                                source.getSearchNovels(1, query, filterList)
+                                SuggestionSearchGate.withPermit {
+                                    source.getSearchNovels(1, query, filterList)
+                                }
                             }
                             if (page.novels.isEmpty()) {
                                 logcat {
