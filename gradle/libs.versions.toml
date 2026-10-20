@@ -1,6 +1,6 @@
 [versions]
-aboutlib_plugin_version = "14.0.0-b03"
-aboutlib_runtime_version = "14.0.0-b03"
+aboutlib_plugin_version = "15.3.0"
+aboutlib_runtime_version = "15.3.0"
 leakcanary = "2.14"
 media3 = "1.11.1"
 google-api-version = "v3-rev197-1.25.0"

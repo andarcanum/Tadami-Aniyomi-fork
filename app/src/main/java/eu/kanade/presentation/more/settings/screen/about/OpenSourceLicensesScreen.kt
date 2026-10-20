@@ -48,6 +48,7 @@ class OpenSourceLicensesScreen : Screen() {
                             license = it.licenses.firstOrNull()?.licenseContent?.replace("\n", "<br />").orEmpty(),
                         ),
                     )
+                    true
                 },
             )
         }
