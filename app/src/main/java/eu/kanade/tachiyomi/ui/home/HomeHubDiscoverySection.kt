@@ -2520,7 +2520,7 @@ private fun BoxScope.StageSlot(
             .clip(tileShape)
             .background(colors.cardBackground)
             .then(
-                if (colors.isDark || colors.isEInk) {
+                if (colors.isEInk) {
                     Modifier.border(1.dp, colors.divider, tileShape)
                 } else {
                     Modifier
