@@ -2,6 +2,7 @@ package eu.kanade.tachiyomi.util.system
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -11,12 +12,12 @@ import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
+import android.provider.OpenableColumns
 import android.provider.Settings
 import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.content.PermissionChecker
 import androidx.core.content.getSystemService
 import androidx.core.net.toUri
-import com.hippo.unifile.UniFile
 import com.tadami.aurora.R
 import eu.kanade.domain.ui.UiPreferences
 import eu.kanade.domain.ui.model.ThemeMode
@@ -176,7 +177,23 @@ fun Context.createReaderThemeContext(): Context {
  * @return document size of [uri] or null if size can't be obtained
  */
 fun Context.getUriSize(uri: Uri): Long? {
-    return UniFile.fromUri(this, uri)?.length()?.takeIf { it >= 0 }
+    if (uri.scheme == ContentResolver.SCHEME_FILE) {
+        return uri.path?.let { File(it).length() }?.takeIf { it >= 0 }
+    }
+
+    // Resolve through the content resolver: UniFile can't map arbitrary content providers
+    // (such as our own FileProvider) to a file, and the installers need the exact APK size.
+    runCatching { contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } }
+        .getOrNull()
+        ?.takeIf { it >= 0 }
+        ?.let { return it }
+
+    return runCatching {
+        contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null
+        }
+    }.getOrNull()
+        ?.takeIf { it >= 0 }
 }
 
 /**

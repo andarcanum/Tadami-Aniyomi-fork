@@ -33,7 +33,8 @@ class ShizukuInstallerManga(private val service: Service) : InstallerManga(servi
         scope.launch {
             var sessionId: String? = null
             try {
-                val size = service.getUriSize(entry.uri) ?: throw IllegalStateException()
+                val size = service.getUriSize(entry.uri)
+                    ?: throw IllegalStateException("Unable to determine APK size for ${entry.uri}")
                 val inputStream =
                     service.contentResolver.openInputStream(entry.uri)
                         ?: throw IllegalStateException("Unable to open APK input stream")
