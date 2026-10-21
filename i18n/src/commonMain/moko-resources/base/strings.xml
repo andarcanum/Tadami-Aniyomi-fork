@@ -1325,6 +1325,9 @@
     <string name="exception_http">HTTP %d, check website in WebView</string>
     <string name="exception_offline">No Internet connection</string>
     <string name="exception_unknown_host">Couldn\'t reach %s</string>
+    <string name="exception_network">Couldn\'t connect to the source. Check your Internet connection and try again.</string>
+    <string name="exception_timeout">The source didn\'t respond in time. Try again later.</string>
+    <string name="exception_source_error">Couldn\'t load data from the source. Try again later.</string>
 
     <!-- Novel reader - AI Translation -->
     <string name="reader_translation_running">Translation running</string>

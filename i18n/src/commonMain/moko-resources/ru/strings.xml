@@ -899,6 +899,9 @@
     <string name="exception_http">HTTP %d, проверьте сайт в WebView</string>
     <string name="exception_offline">Нет подключения к интернету</string>
     <string name="exception_unknown_host">Не удалось достичь %s</string>
+    <string name="exception_network">Не удалось подключиться к источнику. Проверьте подключение к интернету и повторите попытку.</string>
+    <string name="exception_timeout">Источник не ответил вовремя. Попробуйте позже.</string>
+    <string name="exception_source_error">Не удалось загрузить данные источника. Попробуйте позже.</string>
     <string name="unlock_app_title">Разблокировать %s</string>
     <string name="action_move_to_bottom_all_for_series">Переместить серию в конец</string>
     <string name="pref_relative_format">Относительные временные метки</string>
