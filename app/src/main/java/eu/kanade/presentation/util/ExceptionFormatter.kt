@@ -10,7 +10,12 @@ import tachiyomi.domain.source.anime.model.AnimeSourceNotInstalledException
 import tachiyomi.domain.source.manga.model.SourceNotInstalledException
 import tachiyomi.i18n.MR
 import tachiyomi.i18n.aniyomi.AYMR
+import java.io.FileNotFoundException
+import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketException
 import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 
 fun Throwable.formattedMessage(appContext: Context): String {
     when (this) {
@@ -34,9 +39,11 @@ fun Throwable.formattedMessage(appContext: Context): String {
         is SourceNotInstalledException, is AnimeSourceNotInstalledException -> return appContext.stringResource(
             MR.strings.loader_not_implemented_error,
         )
+        is FileNotFoundException -> return appContext.stringResource(MR.strings.exception_source_error)
+        is InterruptedIOException -> return appContext.stringResource(MR.strings.exception_timeout)
+        is SSLException, is SocketException, is IOException -> {
+            return appContext.stringResource(MR.strings.exception_network)
+        }
     }
-    return when (val className = this::class.simpleName) {
-        "Exception", "IOException" -> message ?: className
-        else -> "$className: $message"
-    }
+    return appContext.stringResource(MR.strings.exception_source_error)
 }
