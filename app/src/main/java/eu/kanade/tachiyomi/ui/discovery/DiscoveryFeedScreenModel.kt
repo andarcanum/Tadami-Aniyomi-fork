@@ -513,7 +513,7 @@ internal class DiscoveryFeedScreenModel(
         val currentWindow = currentState.activeWindows[tab]
             ?: sliceFeedWindow(pool, currentOffset, FEED_WINDOW_SIZE)
         val currentWindowTitles = currentWindow.map { it.cleanTitle }.toSet()
-        val shownTitles = repository.getShownTitles(currentState.mediaType)
+        val shownTitles = repository.getRecentExclusions(currentState.mediaType)
 
         val candidate = selectBackfillCandidate(
             removedItem = removed,

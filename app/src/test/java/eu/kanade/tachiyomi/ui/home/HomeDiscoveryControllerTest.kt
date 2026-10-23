@@ -92,12 +92,36 @@ class HomeDiscoveryControllerTest {
             windowMillis: Long,
         ): List<Triple<String, Long, Int>> = emptyList()
 
-        override suspend fun markShown(
+        override suspend fun recordExposure(
             mediaType: DiscoveryMediaType,
             cleanTitles: Collection<String>,
             timestamp: Long,
         ) {
             markedShownTitles.addAll(cleanTitles)
+        }
+
+        override suspend fun suppressRecentlyConsumed(
+            mediaType: DiscoveryMediaType,
+            cleanTitles: Collection<String>,
+            timestamp: Long,
+        ) = Unit
+
+        override suspend fun getRecentExclusions(
+            mediaType: DiscoveryMediaType,
+            windowMillis: Long,
+        ): Set<String> = emptySet()
+
+        override suspend fun getRecentExclusionsWithTimestamp(
+            mediaType: DiscoveryMediaType,
+            windowMillis: Long,
+        ): Map<String, Long> = emptyMap()
+
+        override suspend fun markShown(
+            mediaType: DiscoveryMediaType,
+            cleanTitles: Collection<String>,
+            timestamp: Long,
+        ) {
+            recordExposure(mediaType, cleanTitles, timestamp)
         }
 
         override suspend fun clearShown(mediaType: DiscoveryMediaType) = Unit
@@ -211,7 +235,11 @@ class HomeDiscoveryControllerTest {
 
             controller.restoreHiddenTeaserItem(testSuggestion("Card 1").toHomeHubDiscoveryItem())
 
-            waitUntil { repo.unhiddenTitles.isNotEmpty() && repo.removedSignalTitles.isNotEmpty() }
+            waitUntil {
+                repo.unhiddenTitles.isNotEmpty() &&
+                    repo.removedSignalTitles.isNotEmpty() &&
+                    currentState.discovery.any { it.cleanTitle == "card 1" }
+            }
 
             repo.unhiddenTitles shouldBe listOf("card 1")
             repo.removedSignalTitles shouldBe listOf("card 1")

@@ -366,7 +366,9 @@ class DiscoveryRunner(
                 currentSuggestions.filter { it.rowType == DiscoveryRowType.LIKE },
             )
         }
-        val shownCutoffMap = runCatching { repository.getShownTitlesWithTimestamp(mediaType) }.getOrDefault(emptyMap())
+        val shownCutoffMap = runCatching {
+            repository.getRecentExclusionsWithTimestamp(mediaType)
+        }.getOrDefault(emptyMap())
         val shownTitles = shownCutoffMap.keys
         val recentCleanTitles = if (isManualRefresh) {
             currentSuggestions.mapTo(HashSet()) { it.cleanTitle } + shownTitles

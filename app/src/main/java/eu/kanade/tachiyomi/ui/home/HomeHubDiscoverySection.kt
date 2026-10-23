@@ -1026,6 +1026,9 @@ internal fun ForYouSection(
     onLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     isRefreshing: Boolean = false,
     onRefreshClick: (() -> Unit)? = null,
+    tracker: HomeDiscoveryExposureTracker? = null,
+    isSectionActive: Boolean = true,
+    isResumed: Boolean = true,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
@@ -1106,7 +1109,12 @@ internal fun ForYouSection(
                             placementSpec = null,
                         )
                         .width(cardWidth)
-                }
+                }.trackDiscoveryExposure(
+                    tracker = tracker,
+                    item = item,
+                    isSectionActive = isSectionActive,
+                    isResumed = isResumed,
+                )
                 DiscoveryPosterCard(
                     modifier = cardModifier,
                     title = item.title,
@@ -1137,6 +1145,9 @@ internal fun HybridDiscoveryStrip(
     onLongClick: ((HomeHubDiscoveryItem) -> Unit)? = null,
     isRefreshing: Boolean = false,
     onRefreshClick: (() -> Unit)? = null,
+    tracker: HomeDiscoveryExposureTracker? = null,
+    isSectionActive: Boolean = true,
+    isResumed: Boolean = true,
 ) {
     if (items.isEmpty()) return
     val colors = AuroraTheme.colors
@@ -1218,8 +1229,16 @@ internal fun HybridDiscoveryStrip(
                 key = { it.rowType.key + ":" + it.cleanTitle },
                 contentType = { "hybrid_discovery_tile" },
             ) { item ->
+                val cardModifier = Modifier
+                    .width(cardWidth)
+                    .trackDiscoveryExposure(
+                        tracker = tracker,
+                        item = item,
+                        isSectionActive = isSectionActive,
+                        isResumed = isResumed,
+                    )
                 DiscoveryPosterCard(
-                    modifier = Modifier.width(cardWidth),
+                    modifier = cardModifier,
                     title = item.title,
                     coverUrl = item.coverUrl,
                     subtitle = discoveryReasonOrNull(item),

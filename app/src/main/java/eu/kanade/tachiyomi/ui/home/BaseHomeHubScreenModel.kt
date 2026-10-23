@@ -88,6 +88,10 @@ internal abstract class BaseHomeHubScreenModel(
         discoveryController?.onScreenReentry()
     }
 
+    open fun recordExposure(item: HomeHubDiscoveryItem) {
+        discoveryController?.recordExposure(item)
+    }
+
     open fun markDiscoveryItemShown(item: HomeHubDiscoveryItem) {
         discoveryController?.markDiscoveryItemShown(item)
     }
