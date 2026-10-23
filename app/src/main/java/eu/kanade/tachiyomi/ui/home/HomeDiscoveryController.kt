@@ -61,6 +61,9 @@ internal class HomeDiscoveryController(
                 onStateUpdate { it.copy(isDiscoveryRefreshing = refreshing) }
                 if (wasRefreshing && !refreshing) {
                     mutex.withLock {
+                        val failedCsv = preferences.lastFailedRows(mediaType).get()
+                        val isFailed = failedCsv.isNotBlank() && cachedDiscoveryPool.isEmpty()
+                        onStateUpdate { it.copy(isDiscoveryFailed = isFailed) }
                         updateDiscoveryTeaserLocked(
                             advanceOffset = false,
                             forceUpdate = true,
@@ -84,32 +87,40 @@ internal class HomeDiscoveryController(
                 combine(
                     repository.subscribeBlacklist(mediaType),
                     preferences.ignoredGenres().changes(),
-                ) { blacklist, ignoredCsv ->
+                    preferences.lastFailedRows(mediaType).changes(),
+                ) { blacklist, ignoredCsv, failedCsv ->
                     val (canon, raw) = parseGenreFilterCsv(ignoredCsv)
-                    blacklist to (canon + raw.toSet())
+                    val policy = DiscoveryCandidatePolicy(
+                        blacklistedTags = blacklist,
+                        ignoredGenres = canon + raw.toSet(),
+                    )
+                    policy to failedCsv
                 },
-            ) { items, enabled, count, hiddenAndConsumed, (blacklist, ignoredGenres) ->
+            ) { items, enabled, count, hiddenAndConsumed, (policy, failedCsv) ->
                 val (hidden, consumed) = hiddenAndConsumed
-                val policy = DiscoveryCandidatePolicy(
-                    blacklistedTags = blacklist,
-                    ignoredGenres = ignoredGenres,
+                val visible = items.filterNot { it.cleanTitle in hidden || it.cleanTitle in consumed }
+                DiscoveryObservationState(
+                    visible = visible,
+                    enabled = enabled,
+                    count = count,
+                    policy = policy,
+                    failedCsv = failedCsv,
                 )
-                items.filterNot { it.cleanTitle in hidden || it.cleanTitle in consumed } to Triple(
-                    enabled,
-                    count,
-                    policy,
-                )
-            }.collectLatest { (visible, prefs) ->
-                val (enabled, count, policy) = prefs
+            }.collectLatest { obs ->
                 mutex.withLock {
-                    if (!enabled) {
+                    if (!obs.enabled) {
                         cachedDiscoveryPool = emptyList()
                         onStateUpdate {
-                            it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList())
+                            it.copy(
+                                discovery = emptyList(),
+                                discoveryEnabled = false,
+                                discoveryPool = emptyList(),
+                                isDiscoveryFailed = false,
+                            )
                         }
                         return@collectLatest
                     }
-                    val filtered = visible.filter { policy.isAllowed(it) }
+                    val filtered = obs.visible.filter { obs.policy.isAllowed(it) }
                     cachedDiscoveryPool = dedupeCrossRow(filtered).filterNot { it.cleanTitle in dismissedSessionTitles }
                     val shownAtByTitle = runCatching {
                         repository.getRecentExclusionsWithTimestamp(mediaType)
@@ -118,13 +129,24 @@ internal class HomeDiscoveryController(
                     val updatedPool = cachedDiscoveryPool.map { item ->
                         item.toHomeHubDiscoveryItem(shownAtByTitle[item.cleanTitle])
                     }
-                    onStateUpdate { it.copy(discoveryPool = updatedPool, discoveryEnabled = true) }
+                    val lastUpdated = obs.visible.maxOfOrNull { it.createdAt } ?: runCatching {
+                        repository.lastUpdatedAt(mediaType)
+                    }.getOrNull()
+                    val isFailed = obs.failedCsv.isNotBlank() && cachedDiscoveryPool.isEmpty()
+                    onStateUpdate {
+                        it.copy(
+                            discoveryPool = updatedPool,
+                            discoveryEnabled = true,
+                            discoveryLastUpdated = lastUpdated,
+                            isDiscoveryFailed = isFailed,
+                        )
+                    }
 
                     val isFirstTeaserLoad = currentState().discovery.isEmpty()
                     updateDiscoveryTeaserLocked(
                         advanceOffset = false,
                         forceUpdate = isFirstTeaserLoad,
-                        teaserCount = count,
+                        teaserCount = obs.count,
                     )
                 }
             }
@@ -351,3 +373,11 @@ internal class HomeDiscoveryController(
         recordExposure(item)
     }
 }
+
+private data class DiscoveryObservationState(
+    val visible: List<DiscoverySuggestion>,
+    val enabled: Boolean,
+    val count: Int,
+    val policy: DiscoveryCandidatePolicy,
+    val failedCsv: String,
+)

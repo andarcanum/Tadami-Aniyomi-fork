@@ -759,6 +759,7 @@ private fun HomeHubScreen(
         historyCount = historyItems.size,
         recommendationCount = recommendations.size,
         discoveryCount = heroFeedItems.size,
+        discoveryEnabled = state.discoveryEnabled,
     )
 
     Box(Modifier.fillMaxSize()) {
@@ -775,7 +776,7 @@ private fun HomeHubScreen(
                     WelcomeSection(onBrowseClick = onBrowseClick, onExtensionClick = onExtensionClick)
                 }
                 // Онбординг не должен лишать discovery: тизер под приветственным блоком.
-                if (discovery.isNotEmpty()) {
+                if (shouldShowForYouSection(state.discoveryEnabled)) {
                     item(key = "for_you_welcome", contentType = "home_hub_for_you") {
                         ForYouSection(
                             items = discovery,
@@ -783,6 +784,18 @@ private fun HomeHubScreen(
                             onMoreClick = onForYouMoreClick,
                             onItemClick = { openTeaser(it) },
                             onLongClick = { longPressItem = it },
+                            isRefreshing = state.isDiscoveryRefreshing,
+                            onRefreshClick = onDiscoveryRefreshClick,
+                            tracker = exposureTracker,
+                            isSectionActive = isSectionActive,
+                            isResumed = isResumed,
+                            emptyState = resolveForYouEmptyState(
+                                discoveryEnabled = state.discoveryEnabled,
+                                isRefreshing = state.isDiscoveryRefreshing,
+                                hasItems = discovery.isNotEmpty(),
+                                lastUpdatedAt = state.discoveryLastUpdated,
+                                isFailed = state.isDiscoveryFailed,
+                            ),
                         )
                     }
                 }
@@ -907,6 +920,13 @@ private fun HomeHubScreen(
                             tracker = exposureTracker,
                             isSectionActive = isSectionActive,
                             isResumed = isResumed,
+                            emptyState = resolveForYouEmptyState(
+                                discoveryEnabled = state.discoveryEnabled,
+                                isRefreshing = state.isDiscoveryRefreshing,
+                                hasItems = forYouItems.isNotEmpty(),
+                                lastUpdatedAt = state.discoveryLastUpdated,
+                                isFailed = state.isDiscoveryFailed,
+                            ),
                         )
                     }
                 }
@@ -1200,10 +1220,11 @@ internal fun shouldEnableHomeHubScroll(
     historyCount: Int,
     recommendationCount: Int,
     discoveryCount: Int = 0,
+    discoveryEnabled: Boolean = false,
 ): Boolean {
-    // Под Welcome-блоком скролл нужен, если есть discovery-контент (тизер под онбордингом).
-    if (showWelcome) return discoveryCount > 0
-    return historyCount > 0 || recommendationCount > 0 || discoveryCount > 0
+    // Под Welcome-блоком скролл нужен, если есть discovery-контент (тизер или empty card с действием).
+    if (showWelcome) return discoveryCount > 0 || discoveryEnabled
+    return historyCount > 0 || recommendationCount > 0 || discoveryCount > 0 || discoveryEnabled
 }
 
 internal fun resolveForYouItems(

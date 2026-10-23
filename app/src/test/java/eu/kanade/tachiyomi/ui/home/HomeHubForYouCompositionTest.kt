@@ -308,4 +308,91 @@ class HomeHubForYouCompositionTest {
         teaser.count { it.provider == "plugin-b" } shouldBe 3
         teaser.count { it.provider == "plugin-a" } shouldBe 5
     }
+
+    @Test
+    fun `resolveForYouEmptyState distinguishes all five operational states`() {
+        // 1. Discovery disabled
+        resolveForYouEmptyState(
+            discoveryEnabled = false,
+            isRefreshing = false,
+            hasItems = false,
+            lastUpdatedAt = null,
+            isFailed = false,
+        ) shouldBe ForYouEmptyState.DISABLED
+
+        // 2. Refreshing in progress
+        resolveForYouEmptyState(
+            discoveryEnabled = true,
+            isRefreshing = true,
+            hasItems = false,
+            lastUpdatedAt = null,
+            isFailed = false,
+        ) shouldBe ForYouEmptyState.REFRESHING
+
+        // 3. Failed refresh
+        resolveForYouEmptyState(
+            discoveryEnabled = true,
+            isRefreshing = false,
+            hasItems = false,
+            lastUpdatedAt = null,
+            isFailed = true,
+        ) shouldBe ForYouEmptyState.FAILED
+
+        // 4. Not loaded yet (cold install / clean database)
+        resolveForYouEmptyState(
+            discoveryEnabled = true,
+            isRefreshing = false,
+            hasItems = false,
+            lastUpdatedAt = null,
+            isFailed = false,
+        ) shouldBe ForYouEmptyState.NOT_LOADED_YET
+
+        // 5. Successful generation but zero candidates passed filters
+        resolveForYouEmptyState(
+            discoveryEnabled = true,
+            isRefreshing = false,
+            hasItems = false,
+            lastUpdatedAt = 123456789L,
+            isFailed = false,
+        ) shouldBe ForYouEmptyState.NO_CANDIDATES
+
+        // When items are present, no empty state
+        resolveForYouEmptyState(
+            discoveryEnabled = true,
+            isRefreshing = false,
+            hasItems = true,
+            lastUpdatedAt = 123456789L,
+            isFailed = false,
+        ) shouldBe null
+    }
+
+    @Test
+    fun `shouldEnableHomeHubScroll enables scrolling on welcome screen when discovery is enabled`() {
+        // Cold install with welcome screen: user must be able to scroll to see the For You card / refresh button
+        shouldEnableHomeHubScroll(
+            showWelcome = true,
+            historyCount = 0,
+            recommendationCount = 0,
+            discoveryCount = 0,
+            discoveryEnabled = true,
+        ) shouldBe true
+
+        // Welcome screen with discovery disabled: no need to scroll
+        shouldEnableHomeHubScroll(
+            showWelcome = true,
+            historyCount = 0,
+            recommendationCount = 0,
+            discoveryCount = 0,
+            discoveryEnabled = false,
+        ) shouldBe false
+
+        // Welcome screen with items: scroll enabled
+        shouldEnableHomeHubScroll(
+            showWelcome = true,
+            historyCount = 0,
+            recommendationCount = 0,
+            discoveryCount = 3,
+            discoveryEnabled = true,
+        ) shouldBe true
+    }
 }

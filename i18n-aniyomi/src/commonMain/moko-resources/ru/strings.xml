@@ -1858,6 +1858,11 @@
     <string name="for_you_refresh">Обновить подборку</string>
     <string name="for_you_empty_title">Пока пусто</string>
     <string name="for_you_empty_subtitle">Лента обновляется в фоне. Обновите подборки вручную.</string>
+    <string name="for_you_no_candidates_title">Нет подходящих рекомендаций</string>
+    <string name="for_you_no_candidates_subtitle">Все доступные тайтлы просмотрены или скрыты настройками жанров.</string>
+    <string name="for_you_refreshing_title">Обновление подборок…</string>
+    <string name="for_you_refreshing_subtitle">Ищем лучшие рекомендации для вас.</string>
+    <string name="for_you_failed_title">Не удалось обновить</string>
     <string name="for_you_retry">Повторить</string>
     <string name="for_you_direct_open_badge">Откроется сразу в источнике</string>
     <string name="pref_discovery_title">Подборки «Для тебя»</string>

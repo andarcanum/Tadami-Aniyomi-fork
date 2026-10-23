@@ -55,8 +55,10 @@ import androidx.compose.material.icons.automirrored.outlined.LabelOff
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -1022,11 +1024,21 @@ internal fun ForYouSection(
     tracker: HomeDiscoveryExposureTracker? = null,
     isSectionActive: Boolean = true,
     isResumed: Boolean = true,
+    emptyState: ForYouEmptyState? = null,
 ) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     if (items.isEmpty()) {
-        EmptyForYouCard(onMoreClick = onMoreClick)
+        val resolvedEmpty = emptyState ?: when {
+            isRefreshing -> ForYouEmptyState.REFRESHING
+            else -> ForYouEmptyState.NOT_LOADED_YET
+        }
+        EmptyForYouCard(
+            emptyState = resolvedEmpty,
+            onMoreClick = onMoreClick,
+            isRefreshing = isRefreshing,
+            onRefreshClick = onRefreshClick,
+        )
         return
     }
     val auroraAdaptiveSpec = rememberAuroraAdaptiveSpec()
@@ -2784,16 +2796,93 @@ private fun CollageTile(
     }
 }
 
+internal enum class ForYouEmptyState {
+    DISABLED,
+    REFRESHING,
+    NOT_LOADED_YET,
+    FAILED,
+    NO_CANDIDATES,
+}
+
+internal fun resolveForYouEmptyState(
+    discoveryEnabled: Boolean,
+    isRefreshing: Boolean,
+    hasItems: Boolean,
+    lastUpdatedAt: Long?,
+    isFailed: Boolean,
+): ForYouEmptyState? {
+    if (hasItems) return null
+    return when {
+        !discoveryEnabled -> ForYouEmptyState.DISABLED
+        isRefreshing -> ForYouEmptyState.REFRESHING
+        isFailed -> ForYouEmptyState.FAILED
+        lastUpdatedAt == null || lastUpdatedAt == 0L -> ForYouEmptyState.NOT_LOADED_YET
+        else -> ForYouEmptyState.NO_CANDIDATES
+    }
+}
+
+private data class EmptyCardContent(
+    val icon: ImageVector,
+    val title: String,
+    val subtitle: String,
+    val actionText: String?,
+    val actionClick: (() -> Unit)?,
+)
+
 /**
- * Пустая лента: карточка-вход на полный экран «Для тебя» (там есть рефреш).
- * Без неё при пустом кэше рефреш недостижим (тизер скрывался вместе с точкой входа).
+ * Пустая лента: карточка-вход на полный экран «Для тебя» с дифференцированными
+ * состояниями (загрузка, ошибка, нет кандидатов, первое открытие).
  */
 @Composable
-private fun EmptyForYouCard(onMoreClick: () -> Unit) {
+internal fun EmptyForYouCard(
+    emptyState: ForYouEmptyState = ForYouEmptyState.NOT_LOADED_YET,
+    onMoreClick: () -> Unit,
+    isRefreshing: Boolean = false,
+    onRefreshClick: (() -> Unit)? = null,
+) {
     val colors = AuroraTheme.colors
     val appHaptics = LocalAppHaptics.current
     val emptyAdaptiveSpec = rememberAuroraAdaptiveSpec()
     val emptyMaxWidthDp = emptyAdaptiveSpec.updatesMaxWidthDp ?: emptyAdaptiveSpec.entryMaxWidthDp
+
+    if (emptyState == ForYouEmptyState.DISABLED) return
+
+    val content = when (emptyState) {
+        ForYouEmptyState.DISABLED -> return
+        ForYouEmptyState.REFRESHING -> EmptyCardContent(
+            icon = Icons.Outlined.AutoAwesome,
+            title = stringResource(AYMR.strings.for_you_refreshing_title),
+            subtitle = stringResource(AYMR.strings.for_you_refreshing_subtitle),
+            actionText = null,
+            actionClick = null,
+        )
+        ForYouEmptyState.FAILED -> EmptyCardContent(
+            icon = Icons.Outlined.ErrorOutline,
+            title = stringResource(AYMR.strings.for_you_failed_title),
+            subtitle = stringResource(AYMR.strings.for_you_refresh_failed),
+            actionText = stringResource(AYMR.strings.for_you_retry),
+            actionClick = onRefreshClick ?: onMoreClick,
+        )
+        ForYouEmptyState.NO_CANDIDATES -> EmptyCardContent(
+            icon = Icons.Outlined.AutoAwesome,
+            title = stringResource(AYMR.strings.for_you_no_candidates_title),
+            subtitle = stringResource(AYMR.strings.for_you_no_candidates_subtitle),
+            actionText = stringResource(AYMR.strings.for_you_all_picks),
+            actionClick = onMoreClick,
+        )
+        ForYouEmptyState.NOT_LOADED_YET -> EmptyCardContent(
+            icon = Icons.Outlined.AutoAwesome,
+            title = stringResource(AYMR.strings.for_you_empty_title),
+            subtitle = stringResource(AYMR.strings.for_you_empty_subtitle),
+            actionText = if (onRefreshClick != null) {
+                stringResource(AYMR.strings.for_you_refresh)
+            } else {
+                stringResource(AYMR.strings.for_you_all_picks)
+            },
+            actionClick = onRefreshClick ?: onMoreClick,
+        )
+    }
+
     Column(
         Modifier
             .fillMaxWidth()
@@ -2811,43 +2900,53 @@ private fun EmptyForYouCard(onMoreClick: () -> Unit) {
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
-            Icons.Outlined.AutoAwesome,
-            contentDescription = null,
-            tint = colors.accent,
-            modifier = Modifier.size(40.dp),
-        )
+        if (emptyState == ForYouEmptyState.REFRESHING) {
+            CircularProgressIndicator(
+                color = colors.accent,
+                modifier = Modifier.size(36.dp),
+            )
+        } else {
+            Icon(
+                content.icon,
+                contentDescription = null,
+                tint = if (emptyState == ForYouEmptyState.FAILED) colors.error else colors.accent,
+                modifier = Modifier.size(40.dp),
+            )
+        }
         Spacer(Modifier.height(12.dp))
         Text(
-            stringResource(AYMR.strings.for_you_empty_title),
+            content.title,
             color = colors.textPrimary,
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            stringResource(AYMR.strings.for_you_empty_subtitle),
+            content.subtitle,
             color = colors.textSecondary,
             fontSize = 12.sp,
             lineHeight = 17.sp,
+            textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(16.dp))
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(colors.accent)
-                .clickable {
-                    appHaptics.tap()
-                    onMoreClick()
-                }
-                .padding(horizontal = 20.dp, vertical = 10.dp),
-        ) {
-            Text(
-                stringResource(AYMR.strings.for_you_all_picks),
-                color = colors.textOnAccent,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-            )
+        if (content.actionText != null && content.actionClick != null) {
+            Spacer(Modifier.height(16.dp))
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.accent)
+                    .clickable {
+                        appHaptics.tap()
+                        content.actionClick.invoke()
+                    }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    content.actionText,
+                    color = colors.textOnAccent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }

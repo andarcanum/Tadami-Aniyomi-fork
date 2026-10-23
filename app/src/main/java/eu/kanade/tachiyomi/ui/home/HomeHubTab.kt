@@ -682,6 +682,8 @@ internal data class HomeHubUiState(
     val discoveryPool: List<HomeHubDiscoveryItem> = emptyList(),
     val discoveryEnabled: Boolean = false,
     val isDiscoveryRefreshing: Boolean = false,
+    val isDiscoveryFailed: Boolean = false,
+    val discoveryLastUpdated: Long? = null,
     val userName: String,
     val userAvatar: String,
     val greeting: dev.icerock.moko.resources.StringResource,
