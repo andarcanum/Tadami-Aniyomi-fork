@@ -30,6 +30,7 @@ import tachiyomi.domain.reels.anime.model.ReelsAlbum
 import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
 import tachiyomi.domain.source.anime.model.StubAnimeSource
 import tachiyomi.domain.source.anime.service.AnimeSourceManager
+import java.util.concurrent.atomic.AtomicInteger
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReelsNichesScreenModelTest {
@@ -120,6 +121,32 @@ class ReelsNichesScreenModelTest {
             return FeedCategoryPage(
                 categories = listOf(FeedCategory(id = "c$page", name = "niche$page")),
                 hasNextPage = true,
+            )
+        }
+
+        override suspend fun getCategoryFeed(categoryId: String, page: Int, cursor: String?): FeedPage =
+            FeedPage(emptyList(), false)
+    }
+
+    /** Whole directory in one page, the way a channel catalog is served. */
+    private class CatalogBrowseSource(override val id: Long = 4005L) : AnimeFeedSource, AnimeFeedBrowseSource {
+        override val name: String = "Catalog Browse"
+        override val lang: String = "all"
+        val requests = AtomicInteger(0)
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            FeedPage(emptyList(), false)
+
+        override suspend fun getBrowseCategories(page: Int, cursor: String?): FeedCategoryPage {
+            requests.incrementAndGet()
+            return FeedCategoryPage(
+                categories = listOf(
+                    FeedCategory(id = "channel:durov", name = "Pavel Durov"),
+                    FeedCategory(id = "channel:anime_clips", name = "Anime Clips"),
+                    FeedCategory(id = "channel:films", name = "Films · без видео"),
+                    FeedCategory(id = "niche:mix", name = "All channels"),
+                ),
+                hasNextPage = false,
             )
         }
 
@@ -236,6 +263,61 @@ class ReelsNichesScreenModelTest {
 
         model.onPageErrorShown()
         model.state.value.pageError shouldBe null
+    }
+
+    @Test
+    fun `search narrows the whole catalog locally without extra requests`() = runTest(testDispatcher) {
+        val source = CatalogBrowseSource()
+        val model = ReelsNichesScreenModel(
+            sourceId = 4005L,
+            sourceManager = sourceManagerOf(source),
+            ioDispatcher = testDispatcher,
+            albumRepository = FakeAlbumRepository(),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.visibleCategories.shouldHaveSize(4)
+        source.requests.get() shouldBe 1
+
+        // @username, any register: matched against the category id, not the visible title.
+        model.onSearchQueryChange("@ANIME")
+        model.state.value.visibleCategories.map { it.id } shouldBe listOf("channel:anime_clips")
+
+        // Title match, without the leading "@".
+        model.onSearchQueryChange("durov")
+        model.state.value.visibleCategories.map { it.name } shouldBe listOf("Pavel Durov")
+
+        // The full directory is kept: filtering never drops pages from the state.
+        model.state.value.categories.shouldHaveSize(4)
+
+        // A blank query restores everything; a miss yields an empty (but non-error) grid.
+        model.onSearchQueryChange("   ")
+        model.state.value.visibleCategories.shouldHaveSize(4)
+        model.onSearchQueryChange("nothing-matches")
+        model.state.value.visibleCategories.shouldHaveSize(0)
+
+        // No extra directory request (and no feed search) was issued while typing.
+        source.requests.get() shouldBe 1
+        model.state.value.error shouldBe null
+    }
+
+    @Test
+    fun `retry keeps the search query`() = runTest(testDispatcher) {
+        val source = CatalogBrowseSource()
+        val model = ReelsNichesScreenModel(
+            sourceId = 4005L,
+            sourceManager = sourceManagerOf(source),
+            ioDispatcher = testDispatcher,
+            albumRepository = FakeAlbumRepository(),
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.onSearchQueryChange("durov")
+        model.retry()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.searchQuery shouldBe "durov"
+        model.state.value.visibleCategories.map { it.name } shouldBe listOf("Pavel Durov")
     }
 
     private class FakeAlbumRepository : ReelsAlbumRepository {

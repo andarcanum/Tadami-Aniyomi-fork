@@ -186,6 +186,13 @@ Rules for sources:
 - `page` arrives 1-based and resets to 1 on every generation reset
   (search/filter/source switch) — `cursor` is `null` in that first request,
   even if the previous generation was cursor-based.
+- **Opaque cursors expire.** A cursor the source can no longer resolve (TTL,
+  LRU eviction, logout, account/source-set change) must **not** be silently
+  restarted from the head under the same `page` number. Return a terminal page
+  (`hasNextPage = false`, `nextCursor = null`); the next generation starts with
+  `cursor = null`. `FeedPage` has no error channel: throwing makes the host
+  treat it as a transient failure and retry the same dead cursor on every
+  scroll (there is no per-cursor backoff).
 - The host dedupes by `ShortVideoItem.id` across pages (first occurrence
   wins), so seam duplicates from cursor APIs are safe — but `id` values must
   be stable between requests.

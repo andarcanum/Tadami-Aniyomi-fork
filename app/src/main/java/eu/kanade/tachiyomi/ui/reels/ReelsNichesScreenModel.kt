@@ -47,7 +47,24 @@ class ReelsNichesScreenModel(
         val cursorMode: Boolean = false,
         // Albums collection marks for the add-to-collection button on each category cell.
         val savedAlbumIds: Set<String> = emptySet(),
-    )
+        // Local filter over the loaded directory (channel title or @username).
+        val searchQuery: String = "",
+    ) {
+        /**
+         * Categories matching [searchQuery]. The filter is local and instant: a feed source
+         * serves its whole directory in one page (hasNextPage = false), so this searches the
+         * full known catalog rather than the visible slice of the grid — and never falls back
+         * to a feed search request. Leading "@" is ignored so "@durov" and "durov" match.
+         */
+        val visibleCategories: ImmutableList<FeedCategory>
+            get() {
+                val needle = searchQuery.trim().removePrefix("@").trim()
+                if (needle.isEmpty()) return categories
+                return categories
+                    .filter { it.name.contains(needle, ignoreCase = true) || it.id.contains(needle, ignoreCase = true) }
+                    .toImmutableList()
+            }
+    }
 
     // Monotonic generation token (the same pattern as ReelsFeedScreenModel): every retry and
     // every loadMore bumps it, and a superseded attempt must not append its page or clobber
@@ -99,9 +116,18 @@ class ReelsNichesScreenModel(
         loadGeneration.incrementAndGet()
         loadJob?.cancel()
         loading = false
-        mutableState.update { State() }
+        mutableState.update { State(searchQuery = it.searchQuery) }
         loadMore()
         reloadSavedAlbums()
+    }
+
+    /**
+     * Filters the loaded directory by channel title or @username. Purely local: the source's
+     * category page is already the whole catalog, so no extra request (and no feed search)
+     * is issued while typing.
+     */
+    fun onSearchQueryChange(query: String) {
+        mutableState.update { it.copy(searchQuery = query) }
     }
 
     fun loadMore() {

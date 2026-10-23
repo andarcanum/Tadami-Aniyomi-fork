@@ -1950,6 +1950,8 @@
     <string name="reels_web_login_not_yet">Session not detected yet — finish signing in, then press Done</string>
     <string name="reels_niches">Niches</string>
     <string name="reels_niches_empty">No niches</string>
+    <string name="reels_niches_search">Search channels or @username</string>
+    <string name="reels_niches_search_empty">Nothing found</string>
     <string name="reels_search_tab_niches">Niches</string>
     <string name="reels_search_tab_creators">Creators</string>
     <string name="reels_search_tab_tags">Tags</string>
