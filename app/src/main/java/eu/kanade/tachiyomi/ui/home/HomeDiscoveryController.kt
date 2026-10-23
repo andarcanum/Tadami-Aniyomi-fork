@@ -2,11 +2,13 @@ package eu.kanade.tachiyomi.ui.home
 
 import android.content.Context
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
+import eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy
 import eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob
 import eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder
 import eu.kanade.tachiyomi.data.discovery.dedupeCrossRow
 import eu.kanade.tachiyomi.data.discovery.expandGenreSet
 import eu.kanade.tachiyomi.data.discovery.isBlacklisted
+import eu.kanade.tachiyomi.data.discovery.parseGenreFilterCsv
 import eu.kanade.tachiyomi.ui.discovery.ManualRefreshAction
 import eu.kanade.tachiyomi.ui.discovery.manualRefreshFlow
 import eu.kanade.tachiyomi.ui.discovery.remainingCooldownSeconds
@@ -48,10 +50,14 @@ internal class HomeDiscoveryController(
     fun startObserving() {
         scope.launchIO {
             var wasRefreshing = false
-            manualRefreshFlow(
-                context.workManager,
-                mediaType,
-            ).collectLatest { refreshing ->
+            val refreshFlow = runCatching {
+                manualRefreshFlow(
+                    context.workManager,
+                    mediaType,
+                )
+            }.getOrNull() ?: return@launchIO
+
+            refreshFlow.collectLatest { refreshing ->
                 onStateUpdate { it.copy(isDiscoveryRefreshing = refreshing) }
                 if (wasRefreshing && !refreshing) {
                     mutex.withLock {
@@ -75,16 +81,26 @@ internal class HomeDiscoveryController(
                     repository.subscribeHidden(mediaType),
                     repository.subscribeConsumed(mediaType),
                 ) { hidden, consumed -> hidden to consumed },
-                repository.subscribeBlacklist(mediaType),
-            ) { items, enabled, count, hiddenAndConsumed, blacklist ->
+                combine(
+                    repository.subscribeBlacklist(mediaType),
+                    preferences.ignoredGenres().changes(),
+                ) { blacklist, ignoredCsv ->
+                    val (canon, raw) = parseGenreFilterCsv(ignoredCsv)
+                    blacklist to (canon + raw.toSet())
+                },
+            ) { items, enabled, count, hiddenAndConsumed, (blacklist, ignoredGenres) ->
                 val (hidden, consumed) = hiddenAndConsumed
+                val policy = DiscoveryCandidatePolicy(
+                    blacklistedTags = blacklist,
+                    ignoredGenres = ignoredGenres,
+                )
                 items.filterNot { it.cleanTitle in hidden || it.cleanTitle in consumed } to Triple(
                     enabled,
                     count,
-                    expandGenreSet(blacklist.toList()),
+                    policy,
                 )
             }.collectLatest { (visible, prefs) ->
-                val (enabled, count, expandedBlacklist) = prefs
+                val (enabled, count, policy) = prefs
                 mutex.withLock {
                     if (!enabled) {
                         cachedDiscoveryPool = emptyList()
@@ -93,7 +109,7 @@ internal class HomeDiscoveryController(
                         }
                         return@collectLatest
                     }
-                    val filtered = visible.filterNot { isBlacklisted(it, expandedBlacklist) }
+                    val filtered = visible.filter { policy.isAllowed(it) }
                     cachedDiscoveryPool = dedupeCrossRow(filtered).filterNot { it.cleanTitle in dismissedSessionTitles }
                     val shownAtByTitle = runCatching {
                         repository.getRecentExclusionsWithTimestamp(mediaType)

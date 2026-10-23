@@ -510,15 +510,8 @@ internal fun firstBlacklistTag(
 
 /** Сколько карточек текущего тизера скроется при блэклисте [tag] (для undo-snackbar). */
 internal fun countAffectedTeasers(items: List<HomeHubDiscoveryItem>, tag: String): Int {
-    val expanded = eu.kanade.tachiyomi.data.discovery.expandGenreSet(listOf(tag))
-    return items.count { item ->
-        if (item.genres.isNotEmpty()) {
-            eu.kanade.tachiyomi.data.discovery.matchesAnyGenre(item.genres, expanded)
-        } else {
-            item.rowType == DiscoveryRowType.TASTE &&
-                item.reasonPayload?.splitToSequence(",")?.any { it.trim().lowercase() in expanded } == true
-        }
-    }
+    val policy = eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy(blacklistedTags = setOf(tag))
+    return items.count { !policy.isAllowed(it.toDiscoverySuggestion()) }
 }
 
 /**

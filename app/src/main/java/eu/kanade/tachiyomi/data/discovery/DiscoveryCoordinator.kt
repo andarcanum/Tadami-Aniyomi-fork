@@ -85,8 +85,19 @@ class DiscoveryCoordinator(
 
                 for (pType in DiscoveryRowType.entries) {
                     val candidates = rawCandidates[pType] ?: continue
-                    val selected = selectRowItems(
+                    val policyFiltered = context.candidatePolicy.filterRowCandidates(
                         candidates,
+                        genresSelector = { it.genres },
+                        fallbackTagsSelector = { item ->
+                            if (pType == DiscoveryRowType.TASTE) {
+                                DiscoveryCandidatePolicy.extractFallbackTags(item.reason)
+                            } else {
+                                emptyList()
+                            }
+                        },
+                    )
+                    val selected = selectRowItems(
+                        policyFiltered,
                         excluded,
                         seenSoFar,
                         context.recentCleanTitles,

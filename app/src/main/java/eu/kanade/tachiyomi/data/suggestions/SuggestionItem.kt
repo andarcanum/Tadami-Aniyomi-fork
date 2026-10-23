@@ -61,6 +61,7 @@ data class SuggestionItem(
      * опирается на него; null у провайдеров без статуса (MAL/MU/NU similar).
      */
     val releaseStatus: String? = null,
+    val genres: List<String> = emptyList(),
 ) : Serializable {
 
     /**

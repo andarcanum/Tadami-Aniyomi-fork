@@ -145,4 +145,39 @@ class DiscoveryCoordinatorTest {
         val feed = DiscoveryCoordinator(listOf(builder(DiscoveryRowType.TREND, listOf(item)))).buildFeed(context)
         feed.rows[DiscoveryRowType.TREND].orEmpty() shouldBe emptyList()
     }
+
+    @Test
+    fun `blacklisted candidate in higher row is filtered before dedup so lower row survives`() = runTest {
+        val likeItem = DiscoveryRowItem(
+            title = "Shared Novel",
+            cleanTitle = "shared novel",
+            coverUrl = null,
+            reason = null,
+            seedTitle = null,
+            provider = "like",
+            score = 10.0,
+            genres = listOf("Hentai"),
+        )
+        val trendItem = DiscoveryRowItem(
+            title = "Shared Novel",
+            cleanTitle = "shared novel",
+            coverUrl = null,
+            reason = null,
+            seedTitle = null,
+            provider = "trend",
+            score = 1.0,
+            genres = listOf("Fantasy"),
+        )
+
+        val like = builder(DiscoveryRowType.LIKE, listOf(likeItem))
+        val trend = builder(DiscoveryRowType.TREND, listOf(trendItem))
+
+        val context = baseContext.copy(
+            blacklistedTags = setOf("Hentai"),
+        )
+        val feed = DiscoveryCoordinator(listOf(like, trend)).buildFeed(context)
+
+        feed.rows[DiscoveryRowType.LIKE]?.map { it.title }.orEmpty() shouldBe emptyList()
+        feed.rows[DiscoveryRowType.TREND]?.map { it.title } shouldBe listOf("Shared Novel")
+    }
 }
