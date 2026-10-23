@@ -181,4 +181,62 @@ class HomeDiscoveryExposureTrackerTest {
         // Still only 1 exposure recorded
         exposed shouldBe listOf("card 1")
     }
+
+    @Test
+    fun `injected clock allows re-recording after 15 minute interval`() = runTest {
+        var currentTime = 1_000_000L
+        val exposed = mutableListOf<String>()
+        val tracker = HomeDiscoveryExposureTracker(
+            scope = this,
+            clock = { currentTime },
+            onExposure = { exposed.add(it.cleanTitle) },
+        )
+
+        val item = testItem("Card 1")
+        tracker.onVisibilityChanged(item, 0.60f, isSectionActive = true, isResumed = true)
+        testScheduler.advanceTimeBy(1001)
+        testScheduler.runCurrent()
+        exposed shouldBe listOf("card 1")
+
+        // 10 minutes later: within dedupe interval, not exposed again
+        currentTime += 10 * 60_000L
+        tracker.onVisibilityChanged(item, 0.0f, isSectionActive = true, isResumed = true)
+        tracker.onVisibilityChanged(item, 0.60f, isSectionActive = true, isResumed = true)
+        testScheduler.advanceTimeBy(1001)
+        testScheduler.runCurrent()
+        exposed shouldBe listOf("card 1")
+
+        // 16 minutes after first exposure: interval expired, records again
+        currentTime += 6 * 60_000L
+        tracker.onVisibilityChanged(item, 0.0f, isSectionActive = true, isResumed = true)
+        tracker.onVisibilityChanged(item, 0.60f, isSectionActive = true, isResumed = true)
+        testScheduler.advanceTimeBy(1001)
+        testScheduler.runCurrent()
+        exposed shouldBe listOf("card 1", "card 1")
+    }
+
+    @Test
+    fun `resume re-triggers exposure when card remains visible`() = runTest {
+        val exposed = mutableListOf<String>()
+        val tracker = HomeDiscoveryExposureTracker(scope = this, onExposure = { exposed.add(it.cleanTitle) })
+        val item = testItem("Card 1")
+
+        // Visible for 500ms
+        tracker.onVisibilityChanged(item, 0.70f, isSectionActive = true, isResumed = true)
+        testScheduler.advanceTimeBy(500)
+        testScheduler.runCurrent()
+        exposed shouldBe emptyList()
+
+        // App paused
+        tracker.onVisibilityChanged(item, 0f, isSectionActive = false, isResumed = false)
+        testScheduler.advanceTimeBy(1000)
+        testScheduler.runCurrent()
+        exposed shouldBe emptyList()
+
+        // App resumed without scroll, with remembered visible ratio
+        tracker.onVisibilityChanged(item, 0.70f, isSectionActive = true, isResumed = true)
+        testScheduler.advanceTimeBy(1001)
+        testScheduler.runCurrent()
+        exposed shouldBe listOf("card 1")
+    }
 }
