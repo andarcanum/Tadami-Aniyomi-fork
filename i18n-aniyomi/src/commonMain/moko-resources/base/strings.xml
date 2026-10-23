@@ -2224,6 +2224,11 @@
     <string name="for_you_refresh">Refresh recommendations</string>
     <string name="for_you_empty_title">Nothing here yet</string>
     <string name="for_you_empty_subtitle">The feed refreshes in the background. Pull fresh picks manually.</string>
+    <string name="for_you_no_candidates_title">No matching recommendations</string>
+    <string name="for_you_no_candidates_subtitle">All available picks were viewed or filtered out by genre settings.</string>
+    <string name="for_you_refreshing_title">Refreshing recommendations…</string>
+    <string name="for_you_refreshing_subtitle">Finding the best picks for you.</string>
+    <string name="for_you_failed_title">Refresh failed</string>
     <string name="for_you_retry">Retry</string>
     <string name="for_you_direct_open_badge">Opens directly in the source</string>
     <string name="pref_discovery_title">For You suggestions</string>

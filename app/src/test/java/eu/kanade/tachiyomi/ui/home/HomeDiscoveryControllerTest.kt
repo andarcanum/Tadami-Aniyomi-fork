@@ -3,6 +3,7 @@ package eu.kanade.tachiyomi.ui.home
 import android.content.Context
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.tachiyomi.test.PersistingPreferenceStore
+import io.kotest.matchers.collections.shouldBeEmpty
 import io.kotest.matchers.shouldBe
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
@@ -386,6 +387,111 @@ class HomeDiscoveryControllerTest {
             currentState.discovery.none { it.cleanTitle == "spicy 2" } shouldBe true
             currentState.discoveryPool.none { it.cleanTitle == "spicy 2" } shouldBe true
             currentState.discovery.map { it.title } shouldBe listOf("Safe 1", "Safe 4", "Safe 3")
+        }
+    }
+
+    @Test
+    fun `controller flags failed state when pool is empty and rows failed`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(true)
+            val context = mockk<Context>(relaxed = true)
+
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = true,
+            )
+
+            val controller = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            prefs.lastFailedRows(DiscoveryMediaType.ANIME).set("trend,source")
+            controller.startObserving()
+
+            waitUntil { currentState.isDiscoveryFailed }
+            currentState.isDiscoveryFailed shouldBe true
+            currentState.discovery.shouldBeEmpty()
+
+            // Resolve empty state
+            val emptyState = resolveForYouEmptyState(
+                discoveryEnabled = currentState.discoveryEnabled,
+                isRefreshing = currentState.isDiscoveryRefreshing,
+                hasItems = currentState.discovery.isNotEmpty(),
+                lastUpdatedAt = currentState.discoveryLastUpdated,
+                isFailed = currentState.isDiscoveryFailed,
+            )
+            emptyState shouldBe ForYouEmptyState.FAILED
+        }
+    }
+
+    @Test
+    fun `controller preserves mediaType isolation between anime manga and novel`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(true)
+            prefs.lastFailedRows(DiscoveryMediaType.ANIME).set("trend")
+            val context = mockk<Context>(relaxed = true)
+
+            var animeState = HomeHubUiState(
+                userName = "AnimeUser",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = true,
+            )
+
+            var novelState = HomeHubUiState(
+                userName = "NovelUser",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = true,
+            )
+
+            val animeController = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> animeState = updater(animeState) },
+                currentState = { animeState },
+                onEmitEffect = {},
+            )
+
+            val novelController = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.NOVEL,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> novelState = updater(novelState) },
+                currentState = { novelState },
+                onEmitEffect = {},
+            )
+
+            animeController.startObserving()
+            novelController.startObserving()
+
+            waitUntil { animeState.isDiscoveryFailed }
+            animeState.isDiscoveryFailed shouldBe true
+            novelState.isDiscoveryFailed shouldBe false
         }
     }
 
