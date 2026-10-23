@@ -103,8 +103,8 @@ object TasteSignalRecorder {
             }
         }
         val eventTimestamp = nextMonotonicTimestamp()
-        val recorded = runCatchingUnlessCancelled {
-            repository.recordSignal(
+        val recordedTimestamp = runCatchingUnlessCancelled {
+            repository.recordSignalWithReceipt(
                 mediaType = item.mediaType,
                 cleanTitle = item.cleanTitle,
                 title = item.title,
@@ -114,8 +114,7 @@ object TasteSignalRecorder {
                 sourceKey = sourceKey,
                 timestamp = eventTimestamp,
             )
-        }.isSuccess
-        if (!recorded) return false
+        }.getOrNull() ?: return false
         if (signalType.excludesFromFeed) {
             recordConsumedAltKeys(
                 repository = repository,
@@ -138,7 +137,7 @@ object TasteSignalRecorder {
                         repository = repository,
                         item = item,
                         sourceKey = sourceKey,
-                        expectedCreatedAt = eventTimestamp,
+                        expectedCreatedAt = recordedTimestamp,
                         sourceDetailsResolver = sourceDetailsResolver,
                     )
                 }

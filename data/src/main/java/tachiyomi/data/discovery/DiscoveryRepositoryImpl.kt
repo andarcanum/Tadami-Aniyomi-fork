@@ -357,8 +357,20 @@ class DiscoveryRepositoryImpl(
         sourceKey: String?,
         timestamp: Long,
     ) {
-        val eventTimestamp = nextMonotonicTimestamp(timestamp)
-        handler.await(inTransaction = true) { db ->
+        recordSignalWithReceipt(mediaType, cleanTitle, title, signalType, genres, provider, sourceKey, timestamp)
+    }
+
+    override suspend fun recordSignalWithReceipt(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        title: String,
+        signalType: DiscoverySignalType,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+        timestamp: Long,
+    ): Long? {
+        return handler.await(inTransaction = true) { db ->
             // Старшинство: слабый сигнал не затирает уже записанный сильный
             // (клик после лайка не понижает вес).
             val existing = db.discovery_signalsQueries
@@ -366,8 +378,9 @@ class DiscoveryRepositoryImpl(
                 .executeAsOneOrNull()
             val effectiveNext = DiscoverySignalType.resolveEffectiveSignal(existing?.signalType, signalType)
             if (!DiscoverySignalType.overrides(existing?.signalType, effectiveNext)) {
-                return@await
+                return@await null
             }
+            val eventTimestamp = nextMonotonicTimestamp(timestamp)
             val mergedMeta = mergeSignalMetadata(
                 existing = existing,
                 incomingTitle = title,
@@ -387,6 +400,7 @@ class DiscoveryRepositoryImpl(
                 created_at = eventTimestamp,
             )
             enforceSignalCaps(db.discovery_signalsQueries, mediaType)
+            eventTimestamp
         }
     }
 
@@ -426,6 +440,13 @@ class DiscoveryRepositoryImpl(
 
     override suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String) {
         handler.await { db -> db.discovery_signalsQueries.delete(mediaType.key, cleanTitle) }
+    }
+
+    override suspend fun undoHide(mediaType: DiscoveryMediaType, cleanTitle: String) {
+        handler.await(inTransaction = true) { db ->
+            db.discovery_hiddenQueries.delete(mediaType.key, cleanTitle)
+            db.discovery_signalsQueries.deleteHideByTitle(mediaType.key, cleanTitle)
+        }
     }
 
     override suspend fun clearSignals(mediaType: DiscoveryMediaType) {

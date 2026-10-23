@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
@@ -558,26 +559,24 @@ internal class DiscoveryFeedScreenModel(
         lastHidden = null
         mutableState.update { it.copy(hiddenSnackbarTitle = null) }
         screenModelScope.launchIO {
-            repository.unhide(item.mediaType, item.cleanTitle)
-            // Taste Engine: undo отменяет и сигнал (профиль возвращается к «до скрытия»).
-            repository.removeSignal(item.mediaType, item.cleanTitle)
-            val enabled = preferences.discoveryEnabled().get()
-            if (!enabled) return@launchIO
+            repository.undoHide(item.mediaType, item.cleanTitle)
+            val freshItem = repository.subscribe(item.mediaType).first()
+                .firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@launchIO
+            val consumed = repository.getSignals(item.mediaType)
+                .any { it.cleanTitle == item.cleanTitle && it.signalType.excludesFromFeed }
+            if (consumed || item.cleanTitle in repository.getHiddenTitles(item.mediaType)) return@launchIO
             val blacklist = repository.getBlacklistedTags(item.mediaType)
-            val filterSpec = preferences.genreFilterSpec()
-            val policy = DiscoveryCandidatePolicy(spec = filterSpec, blacklistedTags = blacklist)
-            if (!policy.isAllowed(item)) return@launchIO
-            val consumedTitles = runCatching {
-                repository.getSignals(item.mediaType)
-                    .filter { it.signalType.excludesFromFeed }
-                    .mapTo(HashSet()) { it.cleanTitle }
-            }.getOrDefault(emptySet())
-            if (item.cleanTitle in consumedTitles) return@launchIO
+            val policy = DiscoveryCandidatePolicy(
+                spec = preferences.genreFilterSpec(),
+                blacklistedTags = blacklist,
+            )
+            if (!preferences.discoveryEnabled().get() || !policy.isAllowed(freshItem)) return@launchIO
 
             mutableState.update { current ->
+                if (current.mediaType != item.mediaType) return@update current
                 val window = current.activeWindows[tab]
-                val updatedWindow = if (window != null && window.none { it.cleanTitle == item.cleanTitle }) {
-                    listOf(item) + window.dropLast(1)
+                val updatedWindow = if (window != null && window.none { it.cleanTitle == freshItem.cleanTitle }) {
+                    listOf(freshItem) + window.dropLast(1)
                 } else {
                     window
                 }

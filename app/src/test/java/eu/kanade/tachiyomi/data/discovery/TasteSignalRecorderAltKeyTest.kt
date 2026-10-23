@@ -268,6 +268,50 @@ class TasteSignalRecorderAltKeyTest {
     }
 
     @Test
+    fun `like enrichment uses the receipt returned by the repository`() = runTest {
+        var expectedByEnrichment: Long? = null
+        var persistedReceipt: Long? = null
+        val repo = object : RecordingFakeRepository() {
+            override suspend fun recordSignalWithReceipt(
+                mediaType: DiscoveryMediaType,
+                cleanTitle: String,
+                title: String,
+                signalType: DiscoverySignalType,
+                genres: List<String>,
+                provider: String?,
+                sourceKey: String?,
+                timestamp: Long,
+            ): Long? {
+                persistedReceipt = timestamp + 10L
+                return persistedReceipt
+            }
+
+            override suspend fun enrichSignalMetadataIfCurrent(
+                mediaType: DiscoveryMediaType,
+                cleanTitle: String,
+                expectedCreatedAt: Long,
+                genres: List<String>,
+                provider: String?,
+                sourceKey: String?,
+            ): Boolean {
+                expectedByEnrichment = expectedCreatedAt
+                return true
+            }
+        }
+        TasteSignalRecorder.record(
+            repository = repo,
+            item = suggestionOf("Receipt Regression").copy(sourceId = 42L, sourceUrl = "/receipt"),
+            signalType = DiscoverySignalType.LIKE,
+            enrichmentScope = this,
+            sourceDetailsResolver = { _, _, _ -> listOf("Fantasy") },
+            localEntryResolver = { _, _, _ -> emptyList() },
+        ) shouldBe true
+        testScheduler.advanceUntilIdle()
+        (persistedReceipt != null) shouldBe true
+        expectedByEnrichment shouldBe persistedReceipt
+    }
+
+    @Test
     fun `nextMonotonicTimestamp produces strictly increasing values`() {
         val count = 1000
         val timestamps = (1..count).map { TasteSignalRecorder.nextMonotonicTimestamp() }
