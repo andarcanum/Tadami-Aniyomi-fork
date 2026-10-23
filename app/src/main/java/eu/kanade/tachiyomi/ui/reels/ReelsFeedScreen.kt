@@ -614,6 +614,16 @@ data class ReelsFeedScreen(
                             }
                     }
 
+                    // The settled page only changes after the fling ends. The runway needs the
+                    // live page during the fling so the next page can already be in flight.
+                    LaunchedEffect(pagerState) {
+                        snapshotFlow { pagerState.currentPage }
+                            .distinctUntilChanged()
+                            .collect { page ->
+                                screenModel.onPagerPositionChanged(page)
+                            }
+                    }
+
                     // Mid-feed append failures keep the feed usable; surface them transiently
                     // instead of replacing the whole screen with the error state.
                     val genericLoadError = stringResource(MR.strings.reels_feed_load_failed)
