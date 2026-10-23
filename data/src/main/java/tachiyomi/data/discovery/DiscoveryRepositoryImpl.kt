@@ -1,6 +1,7 @@
 package tachiyomi.data.discovery
 
 import data.Discovery_signals
+import data.Discovery_signalsQueries
 import data.Discovery_suggestions
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -276,36 +277,25 @@ class DiscoveryRepositoryImpl(
             if (!DiscoverySignalType.overrides(existing?.signalType, effectiveNext)) {
                 return@await
             }
+            val mergedMeta = mergeSignalMetadata(
+                existing = existing,
+                incomingTitle = title,
+                incomingGenres = genres,
+                incomingProvider = provider,
+                incomingSourceKey = sourceKey,
+            )
             db.discovery_signalsQueries.upsert(
                 media_type = mediaType.key,
                 clean_title = cleanTitle,
-                title = title,
+                title = mergedMeta.title,
                 signal = effectiveNext.key,
                 weight = effectiveNext.weight,
-                genres = genres.joinToString(","),
-                provider = provider,
-                source_key = sourceKey,
+                genres = mergedMeta.genres.joinToString(","),
+                provider = mergedMeta.provider,
+                source_key = mergedMeta.sourceKey,
                 created_at = timestamp,
             )
-            // LRU-cap: лог не растёт бесконечно, вытесняются самые старые записи.
-            val count = db.discovery_signalsQueries.countByMedia(mediaType.key).executeAsOne()
-            if (count > SIGNALS_CAP_PER_MEDIA) {
-                // Общий кап чистит ТОЛЬКО живые сигналы: consumed-исключения долговечны
-                // (свой отдельный лимит ниже) — «прочитанное» не должно возвращаться в ленту.
-                db.discovery_signalsQueries.evictOldestLive(
-                    mediaType.key,
-                    mediaType.key,
-                    count - SIGNALS_CAP_PER_MEDIA,
-                )
-            }
-            val consumedCount = db.discovery_signalsQueries.countConsumedByMedia(mediaType.key).executeAsOne()
-            if (consumedCount > CONSUMED_CAP_PER_MEDIA) {
-                db.discovery_signalsQueries.evictOldestConsumed(
-                    mediaType.key,
-                    mediaType.key,
-                    consumedCount - CONSUMED_CAP_PER_MEDIA,
-                )
-            }
+            enforceSignalCaps(db.discovery_signalsQueries, mediaType)
         }
     }
 
@@ -325,7 +315,7 @@ class DiscoveryRepositoryImpl(
         if (signals.isEmpty()) return
         handler.await(inTransaction = true) { db ->
             signals.forEach { signal ->
-                // Страршинство и при restore: бэкапный слабый сигнал не затирает
+                // Старшинство и при restore: бэкапный слабый сигнал не затирает
                 // локальный сильный (устройство A: HIDE; устройство B: LIKE →
                 // после restore остаётся HIDE — пользователь на A скрыл осознанно).
                 val existing = db.discovery_signalsQueries
@@ -335,38 +325,52 @@ class DiscoveryRepositoryImpl(
                 if (!DiscoverySignalType.overrides(existing?.signalType, effectiveNext)) {
                     return@forEach
                 }
+                val mergedMeta = mergeSignalMetadata(
+                    existing = existing,
+                    incomingTitle = signal.title,
+                    incomingGenres = signal.genres,
+                    incomingProvider = signal.provider,
+                    incomingSourceKey = signal.sourceKey,
+                )
                 db.discovery_signalsQueries.upsert(
                     media_type = signal.mediaType.key,
                     clean_title = signal.cleanTitle,
-                    title = signal.title,
+                    title = mergedMeta.title,
                     signal = effectiveNext.key,
                     weight = effectiveNext.weight,
-                    genres = signal.genres.joinToString(","),
-                    provider = signal.provider,
-                    source_key = signal.sourceKey,
+                    genres = mergedMeta.genres.joinToString(","),
+                    provider = mergedMeta.provider,
+                    source_key = mergedMeta.sourceKey,
                     created_at = signal.createdAt,
                 )
             }
             // Тот же LRU-cap, что у live-записей: restore старого большого бэкапа
             // не должен раздувать таблицу сверх лимита.
             DiscoveryMediaType.entries.forEach { mediaType ->
-                val count = db.discovery_signalsQueries.countByMedia(mediaType.key).executeAsOne()
-                if (count > SIGNALS_CAP_PER_MEDIA) {
-                    db.discovery_signalsQueries.evictOldestLive(
-                        mediaType.key,
-                        mediaType.key,
-                        count - SIGNALS_CAP_PER_MEDIA,
-                    )
-                }
-                val consumedCount = db.discovery_signalsQueries.countConsumedByMedia(mediaType.key).executeAsOne()
-                if (consumedCount > CONSUMED_CAP_PER_MEDIA) {
-                    db.discovery_signalsQueries.evictOldestConsumed(
-                        mediaType.key,
-                        mediaType.key,
-                        consumedCount - CONSUMED_CAP_PER_MEDIA,
-                    )
-                }
+                enforceSignalCaps(db.discovery_signalsQueries, mediaType)
             }
+        }
+    }
+
+    private fun enforceSignalCaps(
+        queries: Discovery_signalsQueries,
+        mediaType: DiscoveryMediaType,
+    ) {
+        val liveCount = queries.countLiveByMedia(mediaType.key).executeAsOne()
+        if (liveCount > SIGNALS_CAP_PER_MEDIA) {
+            queries.evictOldestLive(
+                mediaType.key,
+                mediaType.key,
+                liveCount - SIGNALS_CAP_PER_MEDIA,
+            )
+        }
+        val consumedCount = queries.countConsumedByMedia(mediaType.key).executeAsOne()
+        if (consumedCount > CONSUMED_CAP_PER_MEDIA) {
+            queries.evictOldestConsumed(
+                mediaType.key,
+                mediaType.key,
+                consumedCount - CONSUMED_CAP_PER_MEDIA,
+            )
         }
     }
 
@@ -374,4 +378,30 @@ class DiscoveryRepositoryImpl(
         const val SIGNALS_CAP_PER_MEDIA = 500L
         const val CONSUMED_CAP_PER_MEDIA = 5000L
     }
+}
+
+internal data class MergedSignalMetadata(
+    val title: String,
+    val genres: List<String>,
+    val provider: String?,
+    val sourceKey: String?,
+)
+
+internal fun mergeSignalMetadata(
+    existing: DiscoverySignal?,
+    incomingTitle: String,
+    incomingGenres: List<String>,
+    incomingProvider: String?,
+    incomingSourceKey: String?,
+): MergedSignalMetadata {
+    val title = incomingTitle.takeIf { it.isNotBlank() } ?: existing?.title.orEmpty()
+    val genres = incomingGenres.ifEmpty { existing?.genres.orEmpty() }
+    val provider = incomingProvider?.takeIf { it.isNotBlank() } ?: existing?.provider
+    val sourceKey = incomingSourceKey?.takeIf { it.isNotBlank() } ?: existing?.sourceKey
+    return MergedSignalMetadata(
+        title = title,
+        genres = genres,
+        provider = provider,
+        sourceKey = sourceKey,
+    )
 }
