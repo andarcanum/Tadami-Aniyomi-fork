@@ -341,15 +341,37 @@ internal class HomeDiscoveryController(
             repository.removeSignal(item.mediaType, item.cleanTitle)
             mutex.withLock {
                 dismissedSessionTitles -= item.cleanTitle
+                val enabled = preferences.discoveryEnabled().get()
+                if (!enabled) return@withLock
+                val blacklist = repository.getBlacklistedTags(mediaType)
+                val filterSpec = preferences.genreFilterSpec()
+                val policy = DiscoveryCandidatePolicy(spec = filterSpec, blacklistedTags = blacklist)
+                val suggestion = item.toDiscoverySuggestion()
+                if (!policy.isAllowed(suggestion)) return@withLock
+                val consumedTitles = runCatching {
+                    repository.getSignals(mediaType)
+                        .filter { it.signalType.excludesFromFeed }
+                        .mapTo(HashSet()) { it.cleanTitle }
+                }.getOrDefault(emptySet())
+                if (item.cleanTitle in consumedTitles) return@withLock
+
+                val shownMap = runCatching {
+                    repository.getRecentExclusionsWithTimestamp(mediaType)
+                }.getOrDefault(emptyMap())
+                val freshItem = item.copy(shownAt = shownMap[item.cleanTitle])
                 onStateUpdate { current ->
                     val updatedDiscovery = restoreTeaserItem(
                         current = current.discovery,
-                        restored = item,
+                        restored = freshItem,
                         targetCount = current.discovery.size,
                     )
                     val updatedPool =
-                        listOf(item) + current.discoveryPool.filterNot { it.cleanTitle == item.cleanTitle }
-                    current.copy(discovery = updatedDiscovery, discoveryPool = updatedPool)
+                        listOf(freshItem) + current.discoveryPool.filterNot { it.cleanTitle == freshItem.cleanTitle }
+                    current.copy(
+                        discovery = updatedDiscovery,
+                        discoveryPool = updatedPool,
+                        discoveryEnabled = true,
+                    )
                 }
             }
         }

@@ -66,7 +66,7 @@ class HomeDiscoveryControllerTest {
         }
         override suspend fun clearHidden(mediaType: DiscoveryMediaType) = Unit
         override suspend fun lastUpdatedAt(mediaType: DiscoveryMediaType): Long? = null
-        override suspend fun getBlacklistedTags(mediaType: DiscoveryMediaType): Set<String> = emptySet()
+        override suspend fun getBlacklistedTags(mediaType: DiscoveryMediaType): Set<String> = blacklistFlow.value
         override suspend fun blacklistTag(mediaType: DiscoveryMediaType, tag: String) = Unit
         override suspend fun unblacklistTag(mediaType: DiscoveryMediaType, tag: String) = Unit
         override suspend fun clearBlacklist(mediaType: DiscoveryMediaType) = Unit
@@ -127,7 +127,8 @@ class HomeDiscoveryControllerTest {
 
         override suspend fun clearShown(mediaType: DiscoveryMediaType) = Unit
         override suspend fun hasUnboundSourceRows(): Boolean = false
-        override suspend fun getSignals(mediaType: DiscoveryMediaType): List<DiscoverySignal> = emptyList()
+        val signalsList = mutableListOf<DiscoverySignal>()
+        override suspend fun getSignals(mediaType: DiscoveryMediaType): List<DiscoverySignal> = signalsList
 
         override suspend fun recordSignal(
             mediaType: DiscoveryMediaType,
@@ -256,6 +257,151 @@ class HomeDiscoveryControllerTest {
 
             currentState.discovery.any { it.cleanTitle == "card 1" } shouldBe true
             currentState.discoveryPool.any { it.cleanTitle == "card 1" } shouldBe true
+        }
+    }
+
+    @Test
+    fun `restoreHiddenTeaserItem does not restore card if policy now forbids it`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(true)
+            val context = mockk<Context>(relaxed = true)
+
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+                discovery = listOf(
+                    testSuggestion("Safe Card").toHomeHubDiscoveryItem(),
+                ),
+                discoveryPool = listOf(
+                    testSuggestion("Safe Card").toHomeHubDiscoveryItem(),
+                ),
+            )
+
+            val controller = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            // Policy now ignores "ecchi"
+            prefs.ignoredGenres().set("ecchi")
+
+            val forbiddenItem = testSuggestion("Spicy Card").copy(genres = listOf("Ecchi")).toHomeHubDiscoveryItem()
+            controller.restoreHiddenTeaserItem(forbiddenItem)
+
+            waitUntil { repo.unhiddenTitles.isNotEmpty() && repo.removedSignalTitles.isNotEmpty() }
+
+            // DB was unhidden and signal removed
+            repo.unhiddenTitles shouldBe listOf("spicy card")
+            repo.removedSignalTitles shouldBe listOf("spicy card")
+
+            // BUT card is NOT admitted into discovery or discoveryPool due to policy!
+            currentState.discovery.none { it.cleanTitle == "spicy card" } shouldBe true
+            currentState.discoveryPool.none { it.cleanTitle == "spicy card" } shouldBe true
+        }
+    }
+
+    @Test
+    fun `restoreHiddenTeaserItem does not restore card if item is now consumed`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(true)
+            val context = mockk<Context>(relaxed = true)
+
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+                discovery = listOf(testSuggestion("Safe Card").toHomeHubDiscoveryItem()),
+                discoveryPool = listOf(testSuggestion("Safe Card").toHomeHubDiscoveryItem()),
+            )
+
+            val controller = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            // Item was marked consumed in signals
+            repo.signalsList += DiscoverySignal(
+                mediaType = DiscoveryMediaType.ANIME,
+                cleanTitle = "consumed card",
+                title = "Consumed Card",
+                signalType = DiscoverySignalType.CONSUMED,
+                genres = emptyList(),
+                provider = "test",
+                sourceKey = null,
+                createdAt = 1000L,
+            )
+
+            val consumedItem = testSuggestion("Consumed Card").toHomeHubDiscoveryItem()
+            controller.restoreHiddenTeaserItem(consumedItem)
+
+            waitUntil { repo.unhiddenTitles.isNotEmpty() && repo.removedSignalTitles.isNotEmpty() }
+
+            // DB unhidden, but NOT restored to UI!
+            currentState.discovery.none { it.cleanTitle == "consumed card" } shouldBe true
+            currentState.discoveryPool.none { it.cleanTitle == "consumed card" } shouldBe true
+        }
+    }
+
+    @Test
+    fun `restoreHiddenTeaserItem does not restore card if discovery is disabled`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(false)
+            val context = mockk<Context>(relaxed = true)
+
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+                discovery = emptyList(),
+                discoveryPool = emptyList(),
+            )
+
+            val controller = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            val item = testSuggestion("Card 1").toHomeHubDiscoveryItem()
+            controller.restoreHiddenTeaserItem(item)
+
+            waitUntil { repo.unhiddenTitles.isNotEmpty() && repo.removedSignalTitles.isNotEmpty() }
+
+            currentState.discovery shouldBe emptyList()
+            currentState.discoveryPool shouldBe emptyList()
         }
     }
 

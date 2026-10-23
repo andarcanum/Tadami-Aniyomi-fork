@@ -552,28 +552,39 @@ internal class DiscoveryFeedScreenModel(
         val item = lastHidden ?: return
         val tab = lastHiddenTab
         lastHidden = null
-        mutableState.update { current ->
-            val window = current.activeWindows[tab]
-            val updatedWindow = if (window != null && window.none { it.cleanTitle == item.cleanTitle }) {
-                listOf(item) + window.dropLast(1)
-            } else {
-                window
-            }
-            current.copy(
-                hiddenSnackbarTitle = null,
-                activeWindows = if (updatedWindow !=
-                    null
-                ) {
-                    current.activeWindows + (tab to updatedWindow)
-                } else {
-                    current.activeWindows
-                },
-            )
-        }
+        mutableState.update { it.copy(hiddenSnackbarTitle = null) }
         screenModelScope.launchIO {
             repository.unhide(item.mediaType, item.cleanTitle)
             // Taste Engine: undo отменяет и сигнал (профиль возвращается к «до скрытия»).
             repository.removeSignal(item.mediaType, item.cleanTitle)
+            val enabled = preferences.discoveryEnabled().get()
+            if (!enabled) return@launchIO
+            val blacklist = repository.getBlacklistedTags(item.mediaType)
+            val filterSpec = preferences.genreFilterSpec()
+            val policy = DiscoveryCandidatePolicy(spec = filterSpec, blacklistedTags = blacklist)
+            if (!policy.isAllowed(item)) return@launchIO
+            val consumedTitles = runCatching {
+                repository.getSignals(item.mediaType)
+                    .filter { it.signalType.excludesFromFeed }
+                    .mapTo(HashSet()) { it.cleanTitle }
+            }.getOrDefault(emptySet())
+            if (item.cleanTitle in consumedTitles) return@launchIO
+
+            mutableState.update { current ->
+                val window = current.activeWindows[tab]
+                val updatedWindow = if (window != null && window.none { it.cleanTitle == item.cleanTitle }) {
+                    listOf(item) + window.dropLast(1)
+                } else {
+                    window
+                }
+                current.copy(
+                    activeWindows = if (updatedWindow != null) {
+                        current.activeWindows + (tab to updatedWindow)
+                    } else {
+                        current.activeWindows
+                    },
+                )
+            }
         }
     }
 
