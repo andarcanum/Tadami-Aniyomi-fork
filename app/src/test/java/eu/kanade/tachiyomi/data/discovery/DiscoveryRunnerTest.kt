@@ -60,18 +60,19 @@ class DiscoveryRunnerTest {
             seedSources = object : DiscoverySeedSources {
                 override suspend fun candidates(mediaType: DiscoveryMediaType): List<DiscoverySeedInput> {
                     if (mediaType == DiscoveryMediaType.NOVEL) throw failure
-                    return emptyList()
+                    return listOf(DiscoverySeedInput(entryId = 1, title = "Seed One", isCompleted = true))
                 }
                 override suspend fun historyCleanTitles(mediaType: DiscoveryMediaType) = emptySet<String>()
             },
-            coordinatorFactory = { DiscoveryCoordinator(emptyList()) },
+            coordinatorFactory = { DiscoveryCoordinator(fakeBuilders(failLike = false)) },
             sourcePreferencesProvider = ::testSourcePrefs,
         )
 
-        runner.run(listOf(DiscoveryMediaType.NOVEL, DiscoveryMediaType.ANIME)) shouldBe mapOf(
-            DiscoveryMediaType.NOVEL to Result.failure<Unit>(failure),
-            DiscoveryMediaType.ANIME to Result.success(Unit),
-        )
+        val outcomes = runner.run(listOf(DiscoveryMediaType.NOVEL, DiscoveryMediaType.ANIME))
+        outcomes[DiscoveryMediaType.NOVEL]?.status shouldBe DiscoveryRunStatus.FAILED
+        outcomes[DiscoveryMediaType.NOVEL]?.cause shouldBe failure
+        outcomes[DiscoveryMediaType.ANIME]?.status shouldBe DiscoveryRunStatus.PARTIAL
+        outcomes[DiscoveryMediaType.ANIME]?.persistedRows shouldBe setOf(DiscoveryRowType.LIKE)
     }
 
     private open class FakeRepository(
@@ -327,10 +328,54 @@ class DiscoveryRunnerTest {
             sourcePreferencesProvider = ::testSourcePrefs,
             failedRowsSink = { _, rows -> failedRows += rows },
         )
-        runner.run(listOf(DiscoveryMediaType.NOVEL)) shouldBe
-            mapOf(DiscoveryMediaType.NOVEL to Result.success(Unit))
+        val outcomes = runner.run(listOf(DiscoveryMediaType.NOVEL))
+        outcomes[DiscoveryMediaType.NOVEL]?.status shouldBe DiscoveryRunStatus.FAILED
+        outcomes[DiscoveryMediaType.NOVEL]?.failedRows shouldBe setOf(DiscoveryRowType.LIKE)
         repo.replaced.none { it.second == DiscoveryRowType.LIKE } shouldBe true
         failedRows.single() shouldBe setOf(DiscoveryRowType.LIKE)
+    }
+
+    @Test
+    fun `partial row failure produces PARTIAL status and preserves successful rows`() = runTest {
+        val repo = FakeRepository()
+        val failedRows = mutableListOf<Set<DiscoveryRowType>>()
+        val tasteBuilder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.TASTE
+            override suspend fun build(context: DiscoveryBuildContext) = listOf(
+                DiscoveryRowItem("Taste Pick", "taste pick", null, null, null, "catalog", 0.9),
+            )
+        }
+        val mixedBuilders = fakeBuilders(failLike = true) + tasteBuilder
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = DiscoveryPreferences(InMemoryPreferenceStore()),
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(mixedBuilders) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            failedRowsSink = { _, rows -> failedRows += rows },
+        )
+        val outcomes = runner.run(listOf(DiscoveryMediaType.NOVEL))
+        val outcome = outcomes[DiscoveryMediaType.NOVEL]!!
+        outcome.status shouldBe DiscoveryRunStatus.PARTIAL
+        outcome.failedRows shouldBe setOf(DiscoveryRowType.LIKE)
+        outcome.persistedRows shouldBe setOf(DiscoveryRowType.TASTE)
+        repo.replaced.any { it.second == DiscoveryRowType.TASTE } shouldBe true
+        repo.replaced.none { it.second == DiscoveryRowType.LIKE } shouldBe true
+    }
+
+    @Test
+    fun `disabled discovery returns SKIPPED status`() = runTest {
+        val prefs = discoveryPrefs(
+            InMemoryPreferenceStore.InMemoryPreference("discovery_enabled", false, true),
+        )
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+        val outcomes = runner.run(listOf(DiscoveryMediaType.NOVEL))
+        outcomes[DiscoveryMediaType.NOVEL]?.status shouldBe DiscoveryRunStatus.SKIPPED
     }
 
     @Test
@@ -598,7 +643,7 @@ class DiscoveryRunnerTest {
     }
 
     @Test
-    fun `partial provider failure preserves enabled like cache after explicit opt out pruning`() = runTest {
+    fun `partial provider failure yields fresh recommendations instead of discarding them`() = runTest {
         val repo = FakeRepository(initialSuggestions = cachedProviderSuggestions())
         val suggestions = mockk<SuggestionCoordinator>()
         coEvery { suggestions.fetchSuggestions(any(), any(), any()) } returns SuggestionFetchResult(
@@ -621,7 +666,36 @@ class DiscoveryRunnerTest {
             likeBuilder = DiscoveryLikeRowBuilder(suggestions),
         )
 
-        runner.run(listOf(DiscoveryMediaType.NOVEL))
+        val outcomes = runner.run(listOf(DiscoveryMediaType.NOVEL))
+        val outcome = outcomes[DiscoveryMediaType.NOVEL]!!
+        outcome.degradedRows shouldBe setOf(DiscoveryRowType.LIKE)
+
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
+            listOf("AniList")
+        repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.title } shouldBe
+            listOf("Fresh Pick")
+        repo.replaced.filter { it.second == DiscoveryRowType.LIKE }.size shouldBe 2
+        repo.replaced.none { it.second == DiscoveryRowType.TREND || it.second == DiscoveryRowType.SOURCE } shouldBe true
+    }
+
+    @Test
+    fun `complete provider failure preserves enabled like cache after explicit opt out pruning`() = runTest {
+        val repo = FakeRepository(initialSuggestions = cachedProviderSuggestions())
+        val suggestions = mockk<SuggestionCoordinator>()
+        coEvery { suggestions.fetchSuggestions(any(), any(), any()) } returns SuggestionFetchResult(
+            items = emptyList(),
+            attemptedSources = 2,
+            failedSources = 2,
+        )
+        val runner = cachePolicyRunner(
+            repo,
+            sourcePreferences = cachePolicySourcePrefs("suggestions_use_shikimori"),
+            likeBuilder = DiscoveryLikeRowBuilder(suggestions),
+        )
+
+        val outcomes = runner.run(listOf(DiscoveryMediaType.NOVEL))
+        val outcome = outcomes[DiscoveryMediaType.NOVEL]!!
+        outcome.failedRows shouldBe setOf(DiscoveryRowType.LIKE)
 
         repo.flow.value.filter { it.rowType == DiscoveryRowType.LIKE }.map { it.provider } shouldBe
             listOf("AniList", "MyAnimeList", "MangaUpdates", "NovelUpdates", "Local Plugin", "AniList Plugin")

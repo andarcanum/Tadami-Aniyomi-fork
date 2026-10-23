@@ -313,4 +313,62 @@ class DiscoveryUpdateJobTest {
         resolveWorkResult(isManual = false, runAttemptCount = 3, isSuccess = false, maxAutoAttempts = 2) shouldBe
             androidx.work.ListenableWorker.Result.failure()
     }
+
+    @Test
+    fun `setupTask does not cancel manual work`() {
+        preferences.discoveryEnabled().set(true)
+        preferences.refreshIntervalHours().set(12)
+
+        DiscoveryUpdateJob.setupTask(context)
+
+        verify(exactly = 0) { workManager.cancelAllWorkByTag(DiscoveryUpdateJob.TAG_MANUAL) }
+        verify(exactly = 0) { workManager.cancelUniqueWork(any()) }
+    }
+
+    @Test
+    fun `cancelAllManualRefreshes cancels manual tags and notification`() {
+        DiscoveryUpdateJob.cancelAllManualRefreshes(context)
+
+        listOf(
+            "DiscoveryUpdateManual",
+            "DiscoveryUpdateManual:anime",
+            "DiscoveryUpdateManual:manga",
+            "DiscoveryUpdateManual:novel",
+        ).forEach { tag -> verify(exactly = 1) { workManager.cancelAllWorkByTag(tag) } }
+        verify(exactly = 1) { anyConstructed<DiscoveryNotifier>().cancel() }
+    }
+
+    @Test
+    fun `resolveWorkResult with partial or success outcomes returns success`() {
+        val outcomes = listOf(
+            DiscoveryRunOutcome(
+                mediaType = DiscoveryMediaType.ANIME,
+                status = DiscoveryRunStatus.SUCCESS,
+            ),
+            DiscoveryRunOutcome(
+                mediaType = DiscoveryMediaType.MANGA,
+                status = DiscoveryRunStatus.PARTIAL,
+            ),
+        )
+        resolveWorkResult(isManual = false, runAttemptCount = 1, outcomes = outcomes) shouldBe
+            androidx.work.ListenableWorker.Result.success()
+        resolveWorkResult(isManual = true, runAttemptCount = 0, outcomes = outcomes) shouldBe
+            androidx.work.ListenableWorker.Result.success()
+    }
+
+    @Test
+    fun `resolveWorkResult with failed outcome respects manual and attempt limits`() {
+        val outcomes = listOf(
+            DiscoveryRunOutcome(
+                mediaType = DiscoveryMediaType.NOVEL,
+                status = DiscoveryRunStatus.FAILED,
+            ),
+        )
+        resolveWorkResult(isManual = true, runAttemptCount = 0, outcomes = outcomes) shouldBe
+            androidx.work.ListenableWorker.Result.failure()
+        resolveWorkResult(isManual = false, runAttemptCount = 1, outcomes = outcomes, maxAutoAttempts = 2) shouldBe
+            androidx.work.ListenableWorker.Result.retry()
+        resolveWorkResult(isManual = false, runAttemptCount = 3, outcomes = outcomes, maxAutoAttempts = 2) shouldBe
+            androidx.work.ListenableWorker.Result.failure()
+    }
 }

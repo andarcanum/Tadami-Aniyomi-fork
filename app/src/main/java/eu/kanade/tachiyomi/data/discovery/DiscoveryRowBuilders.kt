@@ -36,6 +36,8 @@ class DiscoveryLikeRowBuilder(
 ) : DiscoveryRowBuilder {
 
     override val rowType = DiscoveryRowType.LIKE
+    override var isDegraded: Boolean = false
+        private set
 
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
         val mediaType = when (context.mediaType) {
@@ -118,10 +120,10 @@ class DiscoveryLikeRowBuilder(
             val perSeed = feedbackPerSeed + libraryPerSeed
             val merged = mergeSeedResults(perSeed)
             val totalSeeds = context.seeds.size + context.feedbackSeeds.size
-            if (hasFailedSources) {
-                throw IOException("one or more suggestion providers failed")
+            if (hasFailedSources && merged.isNotEmpty()) {
+                isDegraded = true
             }
-            if (merged.isEmpty() && totalSeeds > 0 && fullyFailedSeeds == totalSeeds) {
+            if (merged.isEmpty() && totalSeeds > 0 && (fullyFailedSeeds == totalSeeds || hasFailedSources)) {
                 throw IOException("all suggestion providers failed for every seed")
             }
             return merged

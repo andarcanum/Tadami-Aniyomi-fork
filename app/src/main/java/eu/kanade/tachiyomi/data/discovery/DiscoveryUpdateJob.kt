@@ -46,6 +46,21 @@ internal fun resolveWorkResult(
     else -> ListenableWorker.Result.retry()
 }
 
+internal fun resolveWorkResult(
+    isManual: Boolean,
+    runAttemptCount: Int,
+    outcomes: Collection<DiscoveryRunOutcome>,
+    maxAutoAttempts: Int = 2,
+): ListenableWorker.Result {
+    val allSuccessfulOrSkipped = outcomes.isEmpty() || outcomes.all { it.isSuccess || it.isSkipped }
+    return resolveWorkResult(
+        isManual = isManual,
+        runAttemptCount = runAttemptCount,
+        isSuccess = allSuccessfulOrSkipped,
+        maxAutoAttempts = maxAutoAttempts,
+    )
+}
+
 internal fun finishManualRefresh(
     mediaType: DiscoveryMediaType,
     workId: UUID,
@@ -112,7 +127,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                         Injekt.get<DiscoveryRunner>().run(mediaTypes, isManualRefresh = isManual)
                     }
                     if (completed != null) {
-                        resolveWorkResult(isManual, runAttemptCount, isSuccess = completed.values.all { it.isSuccess })
+                        resolveWorkResult(isManual, runAttemptCount, outcomes = completed.values)
                     } else {
                         logcat { "[DiscoveryUpdateJob] TIMEOUT after ${WORKER_TIMEOUT_MS}ms" }
                         resolveWorkResult(isManual, runAttemptCount, isSuccess = false)
@@ -147,7 +162,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         fun stop(context: Context, mediaType: DiscoveryMediaType? = null) {
             val wm = context.workManager
             if (mediaType == null) {
-                cleanupStaleManualWork(context)
+                cancelAllManualRefreshes(context)
             } else {
                 wm.cancelUniqueWork(manualWorkName(mediaType))
                 Injekt.get<DiscoveryPreferences>().clearManualRefreshAt(mediaType)
@@ -155,15 +170,19 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             }
         }
 
-        fun cleanupStaleManualWork(context: Context) {
+        fun cancelAllManualRefreshes(context: Context) {
             val wm = context.workManager
             wm.cancelAllWorkByTag(TAG_MANUAL)
             DiscoveryMediaType.entries.forEach { wm.cancelAllWorkByTag(manualWorkTag(it)) }
             DiscoveryNotifier(context).cancel()
         }
 
+        @Deprecated("Use cancelAllManualRefreshes", ReplaceWith("cancelAllManualRefreshes(context)"))
+        fun cleanupStaleManualWork(context: Context) {
+            cancelAllManualRefreshes(context)
+        }
+
         fun setupTask(context: Context) {
-            cleanupStaleManualWork(context)
             val preferences = Injekt.get<DiscoveryPreferences>()
             val interval = preferences.refreshIntervalHours().get()
             if (interval > 0 && preferences.discoveryEnabled().get()) {
