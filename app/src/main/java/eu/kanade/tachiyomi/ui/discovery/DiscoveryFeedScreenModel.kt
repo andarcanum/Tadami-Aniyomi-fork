@@ -240,6 +240,7 @@ internal class DiscoveryFeedScreenModel(
     private var progressJob: Job? = null
     private var failureJob: Job? = null
     private var prefetchJob: Job? = null
+    private val hideUndoOperations = DiscoveryHideUndoQueue(screenModelScope)
     private var lastHidden: DiscoverySuggestion? = null
     private var lastHiddenTab: FeedSignalTab = FeedSignalTab.MIX
     private var lastBlacklistedTag: String? = null
@@ -544,33 +545,33 @@ internal class DiscoveryFeedScreenModel(
     fun hide(item: DiscoverySuggestion, activeTab: FeedSignalTab = FeedSignalTab.MIX) {
         lastHidden = item
         lastHiddenTab = activeTab
-        mutableState.update { it.copy(hiddenSnackbarTitle = item.title) }
-        screenModelScope.launchIO {
+        hideUndoOperations.enqueue {
             backfillRemovedItem(item, activeTab)
             // Taste Engine: скрытие = сильный негативный сигнал (undo удаляет строку лога).
             TasteSignalRecorder.record(repository, item, DiscoverySignalType.HIDE)
             repository.hide(item.mediaType, item.cleanTitle)
         }
+        // Register Hide before exposing its Undo action.
+        mutableState.update { it.copy(hiddenSnackbarTitle = item.title) }
     }
 
     fun undoHide() {
         val item = lastHidden ?: return
         val tab = lastHiddenTab
         lastHidden = null
-        mutableState.update { it.copy(hiddenSnackbarTitle = null) }
-        screenModelScope.launchIO {
+        hideUndoOperations.enqueue {
             repository.undoHide(item.mediaType, item.cleanTitle)
             val freshItem = repository.subscribe(item.mediaType).first()
-                .firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@launchIO
+                .firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@enqueue
             val consumed = repository.getSignals(item.mediaType)
                 .any { it.cleanTitle == item.cleanTitle && it.signalType.excludesFromFeed }
-            if (consumed || item.cleanTitle in repository.getHiddenTitles(item.mediaType)) return@launchIO
+            if (consumed || item.cleanTitle in repository.getHiddenTitles(item.mediaType)) return@enqueue
             val blacklist = repository.getBlacklistedTags(item.mediaType)
             val policy = DiscoveryCandidatePolicy(
                 spec = preferences.genreFilterSpec(),
                 blacklistedTags = blacklist,
             )
-            if (!preferences.discoveryEnabled().get() || !policy.isAllowed(freshItem)) return@launchIO
+            if (!preferences.discoveryEnabled().get() || !policy.isAllowed(freshItem)) return@enqueue
 
             mutableState.update { current ->
                 if (current.mediaType != item.mediaType) return@update current
@@ -589,6 +590,7 @@ internal class DiscoveryFeedScreenModel(
                 )
             }
         }
+        mutableState.update { it.copy(hiddenSnackbarTitle = null) }
     }
 
     fun dismissHiddenSnackbar() = mutableState.update { it.copy(hiddenSnackbarTitle = null) }
