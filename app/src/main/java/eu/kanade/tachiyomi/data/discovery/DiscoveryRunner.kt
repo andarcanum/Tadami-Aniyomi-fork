@@ -162,18 +162,29 @@ class DiscoveryRunner(
     suspend fun run(
         mediaTypes: List<DiscoveryMediaType> = DiscoveryMediaType.entries,
         isManualRefresh: Boolean = false,
-    ): Map<DiscoveryMediaType, Result<Unit>> {
-        if (!preferences.discoveryEnabled().get()) return emptyMap()
-        val outcomes = mutableMapOf<DiscoveryMediaType, Result<Unit>>()
+    ): Map<DiscoveryMediaType, DiscoveryRunOutcome> {
+        if (!preferences.discoveryEnabled().get()) {
+            return mediaTypes.associateWith { mediaType ->
+                DiscoveryRunOutcome(
+                    mediaType = mediaType,
+                    status = DiscoveryRunStatus.SKIPPED,
+                )
+            }
+        }
+        val outcomes = mutableMapOf<DiscoveryMediaType, DiscoveryRunOutcome>()
         for (mediaType in mediaTypes) {
             try {
-                runFor(mediaType, isManualRefresh = isManualRefresh)
-                outcomes[mediaType] = Result.success(Unit)
+                val outcome = runFor(mediaType, isManualRefresh = isManualRefresh)
+                outcomes[mediaType] = outcome
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 logcat { "[DiscoveryRunner] $mediaType FAILED: ${e.message}" }
-                outcomes[mediaType] = Result.failure(e)
+                outcomes[mediaType] = DiscoveryRunOutcome(
+                    mediaType = mediaType,
+                    status = DiscoveryRunStatus.FAILED,
+                    cause = e,
+                )
             }
         }
         return outcomes
@@ -195,7 +206,7 @@ class DiscoveryRunner(
                     .getTracksByNovelId(entryId).map { it.title }
         }
 
-    private suspend fun runFor(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false) =
+    private suspend fun runFor(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false): DiscoveryRunOutcome =
         mediaRunLocks.getOrPut(mediaType) { Mutex() }
             .withLock {
                 try {
@@ -205,7 +216,10 @@ class DiscoveryRunner(
                 }
             }
 
-    private suspend fun runForLocked(mediaType: DiscoveryMediaType, isManualRefresh: Boolean = false) {
+    private suspend fun runForLocked(
+        mediaType: DiscoveryMediaType,
+        isManualRefresh: Boolean = false,
+    ): DiscoveryRunOutcome {
         DiscoveryProgressTracker.update(
             isRunning = true,
             mediaType = mediaType,
@@ -491,9 +505,15 @@ class DiscoveryRunner(
         }
         if (builders.isEmpty()) {
             failedRowsSink(mediaType, emptySet())
-            return
+            return DiscoveryRunOutcome(
+                mediaType = mediaType,
+                status = DiscoveryRunStatus.SKIPPED,
+                attemptedRows = emptySet(),
+            )
         }
 
+        val attemptedRows = builders.map { it.rowType }.toSet()
+        val persistedRows = mutableSetOf<DiscoveryRowType>()
         val coordinator = coordinatorFactory(builders)
         val feed = coordinator.streamFeed(context) { rowType, items ->
             // Пустой ряд НЕ перезаписывает кэш: прежняя подборка живёт до следующего
@@ -502,6 +522,7 @@ class DiscoveryRunner(
                 logcat { "[DiscoveryRunner] $mediaType row $rowType empty — cache preserved" }
                 return@streamFeed
             }
+            persistedRows += rowType
             repository.replaceRows(
                 mediaType = mediaType,
                 rowType = rowType,
@@ -565,7 +586,7 @@ class DiscoveryRunner(
         ) {
             repository.replaceRows(mediaType, DiscoveryRowType.TASTE, emptyList())
         }
-        val anyRowPersisted = feed.rows.values.any { it.isNotEmpty() }
+        val anyRowPersisted = persistedRows.isNotEmpty()
         if (anyRowPersisted) {
             if (isManualRefresh) {
                 preferences.manualRefreshCount(mediaType).set(candidateRefreshCount)
@@ -580,6 +601,22 @@ class DiscoveryRunner(
             stageText = "Готово",
             current = builders.size,
             total = builders.size,
+        )
+
+        val status = when {
+            persistedRows.isEmpty() -> DiscoveryRunStatus.FAILED
+            feed.failedRows.isNotEmpty() || feed.degradedRows.isNotEmpty() -> DiscoveryRunStatus.PARTIAL
+            persistedRows.size < attemptedRows.size -> DiscoveryRunStatus.PARTIAL
+            else -> DiscoveryRunStatus.SUCCESS
+        }
+
+        return DiscoveryRunOutcome(
+            mediaType = mediaType,
+            status = status,
+            attemptedRows = attemptedRows,
+            failedRows = feed.failedRows,
+            degradedRows = feed.degradedRows,
+            persistedRows = persistedRows,
         )
     }
 }

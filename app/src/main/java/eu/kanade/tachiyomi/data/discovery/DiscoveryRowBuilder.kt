@@ -55,5 +55,6 @@ data class DiscoveryBuildContext(
 
 interface DiscoveryRowBuilder {
     val rowType: DiscoveryRowType
+    val isDegraded: Boolean get() = false
     suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem>
 }

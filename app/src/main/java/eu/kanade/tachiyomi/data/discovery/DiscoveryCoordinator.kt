@@ -12,6 +12,7 @@ data class DiscoveryFeed(
     val mediaType: DiscoveryMediaType,
     val rows: Map<DiscoveryRowType, List<DiscoveryRowItem>>,
     val failedRows: Set<DiscoveryRowType>,
+    val degradedRows: Set<DiscoveryRowType> = emptySet(),
     val generatedAt: Long,
 )
 
@@ -32,8 +33,9 @@ class DiscoveryCoordinator(
         context: DiscoveryBuildContext,
         onRowAvailable: suspend (DiscoveryRowType, List<DiscoveryRowItem>) -> Unit,
     ): DiscoveryFeed = supervisorScope {
-        val channel = Channel<Pair<DiscoveryRowType, List<DiscoveryRowItem>?>>(Channel.UNLIMITED)
+        val channel = Channel<Triple<DiscoveryRowType, List<DiscoveryRowItem>?, Boolean>>(Channel.UNLIMITED)
         val failed = mutableSetOf<DiscoveryRowType>()
+        val degraded = mutableSetOf<DiscoveryRowType>()
         val excluded = context.libraryCleanTitles + context.historyCleanTitles + context.hiddenCleanTitles
         val rawCandidates = mutableMapOf<DiscoveryRowType, List<DiscoveryRowItem>>()
         val finalRows = mutableMapOf<DiscoveryRowType, List<DiscoveryRowItem>>()
@@ -48,13 +50,13 @@ class DiscoveryCoordinator(
                     logcat { "[DiscoveryCoordinator] row ${builder.rowType} FAILED: ${e.message}" }
                     null
                 }
-                channel.send(builder.rowType to items)
+                channel.send(Triple(builder.rowType, items, builder.isDegraded))
             }
         }
 
         var completed = 0
         repeat(rowBuilders.size) {
-            val (type, items) = channel.receive()
+            val (type, items, isDegraded) = channel.receive()
             completed++
             val stage = when (type) {
                 DiscoveryRowType.LIKE -> "Подбор похожего"
@@ -72,6 +74,9 @@ class DiscoveryCoordinator(
             if (items == null) {
                 failed += type
             } else {
+                if (isDegraded) {
+                    degraded += type
+                }
                 rawCandidates[type] = items
 
                 // Пересчитываем все полученные ряды в строгом порядке приоритета enum: LIKE > TASTE > TREND > SOURCE.
@@ -111,6 +116,7 @@ class DiscoveryCoordinator(
             mediaType = context.mediaType,
             rows = finalRows,
             failedRows = failed,
+            degradedRows = degraded,
             generatedAt = System.currentTimeMillis(),
         )
     }

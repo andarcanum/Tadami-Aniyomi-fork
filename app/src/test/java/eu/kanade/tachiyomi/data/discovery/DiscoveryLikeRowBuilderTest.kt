@@ -16,7 +16,7 @@ import java.io.IOException
 class DiscoveryLikeRowBuilderTest {
 
     @Test
-    fun `partial feedback provider failure is reported even with successful items`() = runTest {
+    fun `partial feedback provider failure returns successful items and marks builder degraded`() = runTest {
         val suggestions = mockk<SuggestionCoordinator>()
         coEvery { suggestions.fetchSuggestions(any(), any(), any()) } returns SuggestionFetchResult(
             items = listOf(
@@ -31,6 +31,22 @@ class DiscoveryLikeRowBuilderTest {
             ),
             attemptedSources = 2,
             failedSources = 1,
+        )
+        val builder = DiscoveryLikeRowBuilder(suggestions)
+
+        val items = builder.build(externalContext(feedback = true))
+
+        items.map { it.title } shouldBe listOf("Fresh Pick")
+        builder.isDegraded shouldBe true
+    }
+
+    @Test
+    fun `complete provider failure for all seeds throws exception`() = runTest {
+        val suggestions = mockk<SuggestionCoordinator>()
+        coEvery { suggestions.fetchSuggestions(any(), any(), any()) } returns SuggestionFetchResult(
+            items = emptyList(),
+            attemptedSources = 2,
+            failedSources = 2,
         )
         val builder = DiscoveryLikeRowBuilder(suggestions)
 
