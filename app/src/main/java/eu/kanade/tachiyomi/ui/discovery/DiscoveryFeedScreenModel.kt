@@ -328,10 +328,14 @@ internal class DiscoveryFeedScreenModel(
                 .collectLatest { (all, refreshing, hidden, failedCsv, policy, consumed) ->
                     // Кросс-рядовой дедуп: упавший ряд живёт старым кэшем и может
                     // содержать тайтлы свежих рядов — приоритет у rowType.ordinal.
+                    val allowed = all.filter { item ->
+                        item.cleanTitle !in hidden && item.cleanTitle !in consumed && policy.isAllowed(item)
+                    }
                     val visible = dedupeCrossRow(
-                        all.filter { item ->
-                            item.cleanTitle !in hidden && item.cleanTitle !in consumed && policy.isAllowed(item)
-                        },
+                        allowed.groupBy { it.rowType }
+                            .flatMap { (_, items) ->
+                                policy.filterRowCandidates(items, { it.genres }, scoreSelector = { it.score })
+                            },
                     )
                     val rows = groupFeedRows(visible)
                     val rowItems = rows.mapValues { (_, items) -> items.map { it.toRowItem() } }
