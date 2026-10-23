@@ -8,11 +8,7 @@ import eu.kanade.domain.source.anime.interactor.GetEnabledAnimeSources
 import eu.kanade.domain.source.service.SourcePreferences
 import eu.kanade.domain.ui.UserProfilePreferences
 import eu.kanade.tachiyomi.extension.anime.AnimeExtensionManager
-import eu.kanade.tachiyomi.ui.discovery.ManualRefreshAction
-import eu.kanade.tachiyomi.ui.discovery.manualRefreshFlow
-import eu.kanade.tachiyomi.ui.discovery.resolveManualRefreshAction
 import eu.kanade.tachiyomi.ui.main.MainActivity
-import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
@@ -103,6 +99,19 @@ internal class HomeHubScreenModel(
     private val activityDataRepository: tachiyomi.domain.achievement.repository.ActivityDataRepository by injectLazy()
     private val discoveryRepository: tachiyomi.domain.discovery.repository.DiscoveryRepository by injectLazy()
     private val discoveryPreferences: eu.kanade.domain.discovery.service.DiscoveryPreferences by injectLazy()
+
+    override val discoveryController: HomeDiscoveryController by lazy {
+        HomeDiscoveryController(
+            mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
+            repository = discoveryRepository,
+            preferences = discoveryPreferences,
+            context = context,
+            scope = screenModelScope,
+            onStateUpdate = { update -> mutableState.update(update) },
+            currentState = { state.value },
+            onEmitEffect = { emitEffect(it) },
+        )
+    }
 
     override val avatarFileName: String = "user_avatar.jpg"
 
@@ -217,245 +226,7 @@ internal class HomeHubScreenModel(
             discoveryPreferences,
             tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
         )
-        screenModelScope.launchIO {
-            var wasRefreshing = false
-            manualRefreshFlow(
-                context.workManager,
-                tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
-            ).collectLatest { refreshing ->
-                mutableState.update { it.copy(isDiscoveryRefreshing = refreshing) }
-                if (wasRefreshing && !refreshing) {
-                    updateDiscoveryTeaser(advanceOffset = false, forceUpdate = true, notifyIfLimited = true)
-                }
-                wasRefreshing = refreshing
-            }
-        }
-
-        // Тизер ленты «Для тебя» — чтение только из БД (ноль сети на рендер Home).
-        screenModelScope.launchIO {
-            combine(
-                discoveryRepository.subscribe(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME),
-                discoveryPreferences.discoveryEnabled().changes(),
-                discoveryPreferences.teaserCount().changes(),
-                // «Просмотрено/прочитано»: реактивно исчезает из пула/тизера сразу
-                // после открытия читалки (в т.ч. в инкогнито) или ручной отметки.
-                combine(
-                    discoveryRepository.subscribeHidden(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME),
-                    discoveryRepository.subscribeConsumed(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME),
-                ) { hidden, consumed -> hidden to consumed },
-                discoveryRepository.subscribeBlacklist(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME),
-            ) { items, enabled, count, hiddenAndConsumed, blacklist ->
-                val hidden = hiddenAndConsumed.first
-                val consumed = hiddenAndConsumed.second
-                items.filterNot { it.cleanTitle in hidden || it.cleanTitle in consumed } to Triple(
-                    enabled,
-                    count,
-                    eu.kanade.tachiyomi.data.discovery.expandGenreSet(blacklist.toList()),
-                )
-            }
-                .collectLatest { (visible, prefs) ->
-                    val (enabled, count, expandedBlacklist) = prefs
-                    val filtered = visible.filterNot {
-                        eu.kanade.tachiyomi.data.discovery.isBlacklisted(it, expandedBlacklist)
-                    }
-                    cachedDiscoveryPool = eu.kanade.tachiyomi.data.discovery.dedupeCrossRow(filtered)
-                    // 48h-метки показа: hero-карусель Stage заказывает непоказанное вперёд.
-                    val shownAtByTitle = runCatching {
-                        discoveryRepository.getShownTitlesWithTimestamp(
-                            tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
-                        )
-                    }.getOrDefault(emptyMap())
-                    // Полный пул для hero-карусели: без тизерного окна, чтобы листать всю подборку.
-                    mutableState.update {
-                        it.copy(
-                            discoveryPool = cachedDiscoveryPool.map { item ->
-                                item.toHomeHubDiscoveryItem(shownAtByTitle[item.cleanTitle])
-                            },
-                        )
-                    }
-                    val isFirstTeaserLoad = state.value.discovery.isEmpty()
-                    if (enabled) {
-                        updateDiscoveryTeaser(
-                            advanceOffset = false,
-                            forceUpdate = isFirstTeaserLoad,
-                            teaserCount = count,
-                        )
-                    } else {
-                        mutableState.update {
-                            it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList())
-                        }
-                    }
-                }
-        }
-    }
-
-    override fun onItemDismissedFromPool(cleanTitle: String) {
-        cachedDiscoveryPool = cachedDiscoveryPool.filterNot { it.cleanTitle == cleanTitle }
-    }
-
-    private var cachedDiscoveryPool: List<tachiyomi.domain.discovery.model.DiscoverySuggestion> = emptyList()
-    private var discoveryOffset: Int = 0
-    private var lastReentryTime: Long = 0L
-
-    private var lastRefreshClickTime = 0L
-
-    private suspend fun updateDiscoveryTeaser(
-        advanceOffset: Boolean = false,
-        forceUpdate: Boolean = false,
-        notifyIfLimited: Boolean = false,
-        teaserCount: Int? = null,
-    ) {
-        if (!discoveryPreferences.discoveryEnabled().get()) {
-            mutableState.update {
-                it.copy(discovery = emptyList(), discoveryEnabled = false, discoveryPool = emptyList())
-            }
-            return
-        }
-        val count = teaserCount ?: discoveryPreferences.teaserCount().get().coerceIn(3, 20)
-        val pool = cachedDiscoveryPool
-        if (pool.isEmpty()) {
-            mutableState.update {
-                it.copy(discovery = emptyList(), discoveryEnabled = true, discoveryPool = emptyList())
-            }
-            return
-        }
-
-        if (!forceUpdate && !advanceOffset && state.value.discovery.isNotEmpty()) {
-            val validCleanTitles = pool.mapTo(HashSet()) { it.cleanTitle }
-            val currentValid = state.value.discovery.filter { it.cleanTitle in validCleanTitles }
-            if (currentValid.size == count) {
-                return
-            }
-            val shownMap = runCatching {
-                discoveryRepository.getShownTitlesWithTimestamp(
-                    tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
-                )
-            }.getOrDefault(emptyMap())
-            val patched = patchTeaserItems(
-                currentItems = state.value.discovery,
-                pool = pool,
-                validCleanTitles = validCleanTitles,
-                targetCount = count,
-                shownTitles = shownMap.keys,
-                shownCutoffMap = shownMap,
-            )
-            val existingValidSet = currentValid.mapTo(HashSet()) { it.cleanTitle }
-            val newTitles = patched.map { it.cleanTitle }.filterNot { it in existingValidSet }
-            if (newTitles.isNotEmpty()) {
-                runCatching {
-                    discoveryRepository.markShown(
-                        mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
-                        cleanTitles = newTitles,
-                    )
-                }
-            }
-            val updatedPool = pool.filter { it.cleanTitle in validCleanTitles }.map { p ->
-                p.toHomeHubDiscoveryItem(shownMap[p.cleanTitle])
-            }
-            mutableState.update {
-                it.copy(
-                    discovery = patched,
-                    discoveryEnabled = true,
-                    discoveryPool = updatedPool,
-                )
-            }
-            return
-        }
-
-        if (advanceOffset) {
-            val step = if (pool.size > count) count else 1
-            discoveryOffset = (discoveryOffset + step) % pool.size
-        }
-
-        val shownMap = runCatching {
-            discoveryRepository.getShownTitlesWithTimestamp(tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME)
-        }.getOrDefault(emptyMap())
-        val shownTitles = shownMap.keys
-        val currentTitles = state.value.discovery.mapTo(HashSet()) { it.cleanTitle }
-
-        val teaser = selectFreshTeaserItems(
-            pool = pool,
-            shownTitles = shownTitles,
-            count = count,
-            offset = discoveryOffset,
-            shownCutoffMap = shownMap,
-            currentTitles = currentTitles,
-        )
-
-        if (notifyIfLimited && currentTitles.isNotEmpty()) {
-            val distinctPoolSize = pool.distinctBy { it.cleanTitle }.size
-            if (shouldNotifyDiscoveryPoolLimited(teaser, currentTitles, distinctPoolSize, count)) {
-                emitEffect(HomeHubEffect.DiscoveryPoolLimited)
-            }
-        }
-
-        val cleanTitlesToMark = teaser.map { it.cleanTitle }
-        if (cleanTitlesToMark.isNotEmpty()) {
-            runCatching {
-                discoveryRepository.markShown(
-                    mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME,
-                    cleanTitles = cleanTitlesToMark,
-                )
-            }
-        }
-
-        val updatedPool = pool.map { p ->
-            p.toHomeHubDiscoveryItem(shownMap[p.cleanTitle])
-        }
-        mutableState.update {
-            it.copy(
-                discovery = teaser,
-                discoveryEnabled = true,
-                discoveryPool = updatedPool,
-            )
-        }
-    }
-
-    override fun onScreenReentry() {
-        val now = System.currentTimeMillis()
-        if (!shouldAdvanceDiscoveryTeaserOnReentry(now, lastReentryTime)) return
-        lastReentryTime = now
-        screenModelScope.launchIO {
-            updateDiscoveryTeaser(advanceOffset = true)
-        }
-    }
-
-    override fun rotateOrRefreshDiscovery() {
-        if (!discoveryPreferences.discoveryEnabled().get()) return
-        val now = System.currentTimeMillis()
-        if (now - lastRefreshClickTime < 500L) return
-        lastRefreshClickTime = now
-
-        val mediaType = tachiyomi.domain.discovery.model.DiscoveryMediaType.ANIME
-        val cooldown = eu.kanade.tachiyomi.ui.discovery.remainingCooldownSeconds(
-            discoveryPreferences.manualRefreshAt(mediaType).get().takeIf { it > 0L },
-            now,
-        )
-        val action = resolveManualRefreshAction(state.value.isDiscoveryRefreshing, cooldown)
-        if (action == ManualRefreshAction.CANCEL) {
-            eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.stop(context, mediaType)
-            mutableState.update { it.copy(isDiscoveryRefreshing = false) }
-            return
-        }
-
-        if (action == ManualRefreshAction.ROTATE || !discoveryPreferences.tryStartManualRefresh(mediaType, now)) {
-            screenModelScope.launchIO {
-                updateDiscoveryTeaser(advanceOffset = true, forceUpdate = true, notifyIfLimited = true)
-            }
-            return
-        }
-
-        mutableState.update { it.copy(isDiscoveryRefreshing = true) }
-        eu.kanade.tachiyomi.data.discovery.DiscoveryUpdateJob.refreshNow(context, mediaType)
-    }
-
-    fun markDiscoveryItemShown(item: HomeHubDiscoveryItem) {
-        if (item.cleanTitle.isBlank()) return
-        screenModelScope.launchIO {
-            runCatching {
-                discoveryRepository.markShown(item.mediaType, listOf(item.cleanTitle))
-            }
-        }
+        discoveryController.startObserving()
     }
 
     fun startLiveUpdates() {

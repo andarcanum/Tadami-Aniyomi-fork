@@ -552,4 +552,87 @@ class HomeHubDiscoveryRotationTest {
         val titles = setOf("a", "b", "c")
         pruneDismissedSessionTitles(titles, maxLimit = 100, keepRecent = 50) shouldBe titles
     }
+
+    @Test
+    fun `patchTeaserItems preserves card position but refreshes metadata from pool`() {
+        val oldCard1 = discoveryItem("Card 1").copy(coverUrl = "old_cover_1")
+        val oldCard2 = discoveryItem("Card 2").copy(coverUrl = "old_cover_2")
+        val currentItems = listOf(oldCard1, oldCard2)
+
+        val freshSug1 = suggestion("Card 1").copy(coverUrl = "new_cover_1", genres = listOf("Action"))
+        val freshSug2 = suggestion("Card 2").copy(coverUrl = "new_cover_2", genres = listOf("Comedy"))
+        val pool = listOf(freshSug1, freshSug2)
+
+        val result = patchTeaserItems(
+            currentItems = currentItems,
+            pool = pool,
+            validCleanTitles = setOf("card 1", "card 2"),
+            targetCount = 2,
+            shownTitles = emptySet(),
+            shownCutoffMap = emptyMap(),
+        )
+
+        result.size shouldBe 2
+        result[0].cleanTitle shouldBe "card 1"
+        result[0].coverUrl shouldBe "new_cover_1"
+        result[0].genres shouldBe listOf("Action")
+        result[1].cleanTitle shouldBe "card 2"
+        result[1].coverUrl shouldBe "new_cover_2"
+        result[1].genres shouldBe listOf("Comedy")
+    }
+
+    @Test
+    fun `selectFreshTeaserItems shownOnScreen never jumps ahead of shownNotCurrent`() {
+        val pool = listOf(
+            suggestion("Card 1"),
+            suggestion("Card 2"),
+            suggestion("Card 3"),
+            suggestion("Card 4"),
+        )
+        val shownTitles = setOf("card 1", "card 2", "card 3", "card 4")
+        val shownCutoffMap = mapOf(
+            "card 1" to 100L,
+            "card 2" to 200L,
+            "card 3" to 300L,
+            "card 4" to 400L,
+        )
+        val currentTitles = setOf("card 1", "card 2")
+
+        val result = selectFreshTeaserItems(
+            pool = pool,
+            shownTitles = shownTitles,
+            count = 3,
+            offset = 1,
+            shownCutoffMap = shownCutoffMap,
+            currentTitles = currentTitles,
+        )
+
+        val nonCurrentCleanTitles = setOf("card 3", "card 4")
+        val firstIndexNotCurrent = result.indexOfFirst { it.cleanTitle in nonCurrentCleanTitles }
+        val firstIndexOnScreen = result.indexOfFirst { it.cleanTitle in currentTitles }
+
+        firstIndexNotCurrent shouldBe 0
+        (firstIndexOnScreen > firstIndexNotCurrent) shouldBe true
+    }
+
+    @Test
+    fun `selectFreshTeaserItems franchise clustering backfills up to count`() {
+        val pool = listOf(
+            suggestion("Jujutsu Kaisen Season 2"),
+            suggestion("Jujutsu Kaisen: Shibuya Incident"),
+            suggestion("Dungeon Meshi"),
+            suggestion("Chainsaw Man"),
+        )
+        val result = selectFreshTeaserItems(
+            pool = pool,
+            shownTitles = emptySet(),
+            count = 3,
+            offset = 0,
+            shownCutoffMap = emptyMap(),
+            currentTitles = emptySet(),
+        )
+
+        result.size shouldBe 3
+        result.map { it.title } shouldBe listOf("Jujutsu Kaisen Season 2", "Dungeon Meshi", "Chainsaw Man")
+    }
 }
