@@ -313,14 +313,7 @@ class DiscoveryTasteRowBuilder(
 
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
         val policy = context.candidatePolicy
-        // Синтез профиля при холодном старте (пустая библиотека/история):
-        // если пользователь явно задал required/priority жанры, используем их как активный профиль.
-        val rawProfile = context.tasteProfile.ifEmpty {
-            (context.requiredGenres + context.priorityGenres).distinct().map { it to 1.0 }
-        }
-        if (rawProfile.isEmpty()) return emptyList()
-        // B2: заблэклиженные и глобально игнорируемые жанры выключаются из профиля ДО запросов.
-        val activeProfile = rawProfile.filterNot { (genre, _) -> policy.isForbidden(listOf(genre)) }
+        val activeProfile = resolveDiscoveryTasteProfile(context.tasteProfile, policy)
         if (activeProfile.isEmpty()) return emptyList()
 
         // Внешний запрос: сначала явно запрошенные required и priority, затем топ профиля

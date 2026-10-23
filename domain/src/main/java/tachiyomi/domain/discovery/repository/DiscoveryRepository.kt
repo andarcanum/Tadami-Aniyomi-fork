@@ -104,6 +104,37 @@ interface DiscoveryRepository {
     )
 
     /**
+     * Write a signal and return its persisted event timestamp, or null if superseded.
+     * Persistent implementations that adjust timestamps must override this method.
+     * The default retains compatibility with simple, timestamp-preserving repositories.
+     */
+    suspend fun recordSignalWithReceipt(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        title: String,
+        signalType: DiscoverySignalType,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+        timestamp: Long = System.currentTimeMillis(),
+    ): Long? {
+        recordSignal(mediaType, cleanTitle, title, signalType, genres, provider, sourceKey, timestamp)
+        return timestamp
+    }
+
+    /**
+     * Undo hiding without deleting an unrelated LIKE, ADD or CONSUMED signal.
+     * Persistent implementations must override this fallback with an atomic operation.
+     */
+    suspend fun undoHide(mediaType: DiscoveryMediaType, cleanTitle: String) {
+        unhide(mediaType, cleanTitle)
+        val current = getSignals(mediaType).firstOrNull { it.cleanTitle == cleanTitle }
+        if (current?.signalType == DiscoverySignalType.HIDE) {
+            removeSignal(mediaType, cleanTitle)
+        }
+    }
+
+    /**
      * Атомарное дообогащение метаданных (жанры, provider, sourceKey) существующего сигнала.
      * Обновляет метаданные ТОЛЬКО если сигнал существует и его [createdAt] совпадает с [expectedCreatedAt].
      * Не создаёт новую строку, не меняет тип сигнала, вес и время создания [createdAt].

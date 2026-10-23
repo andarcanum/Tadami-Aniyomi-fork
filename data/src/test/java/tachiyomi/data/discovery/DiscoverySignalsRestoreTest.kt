@@ -56,6 +56,106 @@ class DiscoverySignalsRestoreTest {
         driver.close()
     }
 
+    @Test
+    fun `receipt contains the persisted timestamp when repository advances the request timestamp`() = runTest {
+        repository.recordSignal(
+            DiscoveryMediaType.NOVEL,
+            "earlier",
+            "Earlier",
+            DiscoverySignalType.LIKE,
+            emptyList(),
+            null,
+            null,
+            timestamp = 20_000L,
+        )
+        val receipt = repository.recordSignalWithReceipt(
+            DiscoveryMediaType.NOVEL,
+            "target",
+            "Target",
+            DiscoverySignalType.LIKE,
+            emptyList(),
+            null,
+            null,
+            timestamp = 10_000L,
+        )
+        receipt shouldBe 20_001L
+        repository.getSignals(DiscoveryMediaType.NOVEL).single { it.cleanTitle == "target" }.createdAt shouldBe receipt
+        repository.enrichSignalMetadataIfCurrent(
+            DiscoveryMediaType.NOVEL,
+            "target",
+            receipt!!,
+            listOf("Fantasy"),
+            null,
+            null,
+        ) shouldBe true
+        repository.getSignals(DiscoveryMediaType.NOVEL).single { it.cleanTitle == "target" }.genres shouldBe
+            listOf("Fantasy")
+    }
+
+    @Test
+    fun `receipt is null for a weaker event that was not persisted`() = runTest {
+        repository.recordSignal(
+            DiscoveryMediaType.NOVEL,
+            "hidden",
+            "Hidden",
+            DiscoverySignalType.HIDE,
+            emptyList(),
+            null,
+            null,
+            timestamp = 10_000L,
+        )
+        repository.recordSignalWithReceipt(
+            DiscoveryMediaType.NOVEL,
+            "hidden",
+            "Hidden",
+            DiscoverySignalType.LIKE,
+            emptyList(),
+            null,
+            null,
+            timestamp = 20_000L,
+        ) shouldBe null
+        repository.getSignals(DiscoveryMediaType.NOVEL).single().signalType shouldBe DiscoverySignalType.HIDE
+    }
+
+    @Test
+    fun `undoHide preserves consumed liked and added signals and removes only hide signals`() = runTest {
+        val retainedTypes = DiscoverySignalType.entries.filter {
+            it.excludesFromFeed || it == DiscoverySignalType.LIKE || it == DiscoverySignalType.ADD
+        }
+        for (type in retainedTypes) {
+            val title = "preserve ${type.key}"
+            repository.recordSignal(
+                DiscoveryMediaType.NOVEL,
+                title,
+                title,
+                type,
+                listOf("Fantasy"),
+                "provider",
+                "source",
+                timestamp = 10_000L,
+            )
+            repository.hide(DiscoveryMediaType.NOVEL, title)
+            val before = repository.getSignals(DiscoveryMediaType.NOVEL).single { it.cleanTitle == title }
+            repository.undoHide(DiscoveryMediaType.NOVEL, title)
+            repository.getSignals(DiscoveryMediaType.NOVEL).single { it.cleanTitle == title } shouldBe before
+            (title in repository.getHiddenTitles(DiscoveryMediaType.NOVEL)) shouldBe false
+        }
+        repository.recordSignal(
+            DiscoveryMediaType.NOVEL,
+            "remove hide",
+            "Remove Hide",
+            DiscoverySignalType.HIDE,
+            emptyList(),
+            null,
+            null,
+            timestamp = 20_000L,
+        )
+        repository.hide(DiscoveryMediaType.NOVEL, "remove hide")
+        repository.undoHide(DiscoveryMediaType.NOVEL, "remove hide")
+        repository.getSignals(DiscoveryMediaType.NOVEL).none { it.cleanTitle == "remove hide" } shouldBe true
+        ("remove hide" in repository.getHiddenTitles(DiscoveryMediaType.NOVEL)) shouldBe false
+    }
+
     private fun signal(title: String, type: DiscoverySignalType, createdAt: Long = 1_000L) = DiscoverySignal(
         mediaType = DiscoveryMediaType.NOVEL,
         cleanTitle = title.lowercase(),

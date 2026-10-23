@@ -154,6 +154,17 @@ class HomeDiscoveryControllerTest {
 
         override suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String) {
             removedSignalTitles += cleanTitle
+            signalsList.removeAll { it.mediaType == mediaType && it.cleanTitle == cleanTitle }
+        }
+
+        override suspend fun undoHide(mediaType: DiscoveryMediaType, cleanTitle: String) {
+            unhide(mediaType, cleanTitle)
+            // Preserve the existing undo-attempt log, but mutate signals like the production query.
+            removedSignalTitles += cleanTitle
+            signalsList.removeAll {
+                it.mediaType == mediaType && it.cleanTitle == cleanTitle &&
+                    it.signalType == DiscoverySignalType.HIDE
+            }
         }
 
         override suspend fun clearSignals(mediaType: DiscoveryMediaType) = Unit
@@ -244,6 +255,7 @@ class HomeDiscoveryControllerTest {
                 onEmitEffect = {},
             )
 
+            repo.poolFlow.value = listOf(testSuggestion("Card 1"), testSuggestion("Card 2"))
             controller.restoreHiddenTeaserItem(testSuggestion("Card 1").toHomeHubDiscoveryItem())
 
             waitUntil {
@@ -403,6 +415,67 @@ class HomeDiscoveryControllerTest {
             currentState.discovery shouldBe emptyList()
             currentState.discoveryPool shouldBe emptyList()
         }
+    }
+
+    @Test
+    fun `undo evaluates current cached genres rather than the hidden snapshot`(): Unit = runBlocking {
+        val repo = TestDiscoveryRepo()
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+        prefs.ignoredGenres().set("fantasy")
+        val old = testSuggestion("Changed Card").copy(genres = listOf("Action"))
+        repo.poolFlow.value = listOf(old.copy(genres = listOf("Fantasy")))
+        var current = HomeHubUiState(
+            userName = "Test",
+            userAvatar = "",
+            greeting = tachiyomi.i18n.MR.strings.app_name,
+            greetingReady = true,
+            isLoading = false,
+            showWelcome = false,
+        )
+        val controller = HomeDiscoveryController(
+            mediaType = DiscoveryMediaType.ANIME,
+            repository = repo,
+            preferences = prefs,
+            context = mockk<Context>(relaxed = true),
+            scope = this,
+            onStateUpdate = { updater -> current = updater(current) },
+            currentState = { current },
+            onEmitEffect = {},
+        )
+        controller.restoreHiddenTeaserItem(old.toHomeHubDiscoveryItem())
+        coroutineContext[kotlinx.coroutines.Job]!!.children.toList().forEach { it.join() }
+        current.discovery.shouldBeEmpty()
+        current.discoveryPool.shouldBeEmpty()
+    }
+
+    @Test
+    fun `undo restores fresh cover and binding from the current cache`(): Unit = runBlocking {
+        val repo = TestDiscoveryRepo()
+        val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+        val old = testSuggestion("Changed Card")
+        repo.poolFlow.value = listOf(old.copy(coverUrl = "new-cover", sourceId = 42L, sourceUrl = "/new"))
+        var current = HomeHubUiState(
+            userName = "Test",
+            userAvatar = "",
+            greeting = tachiyomi.i18n.MR.strings.app_name,
+            greetingReady = true,
+            isLoading = false,
+            showWelcome = false,
+        )
+        val controller = HomeDiscoveryController(
+            mediaType = DiscoveryMediaType.ANIME,
+            repository = repo,
+            preferences = prefs,
+            context = mockk<Context>(relaxed = true),
+            scope = this,
+            onStateUpdate = { updater -> current = updater(current) },
+            currentState = { current },
+            onEmitEffect = {},
+        )
+        controller.restoreHiddenTeaserItem(old.toHomeHubDiscoveryItem())
+        coroutineContext[kotlinx.coroutines.Job]!!.children.toList().forEach { it.join() }
+        current.discoveryPool.single().coverUrl shouldBe "new-cover"
+        current.discoveryPool.single().sourceUrl shouldBe "/new"
     }
 
     @Test

@@ -16,6 +16,7 @@ import eu.kanade.tachiyomi.util.system.workManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.common.util.lang.launchIO
@@ -339,30 +340,27 @@ internal class HomeDiscoveryController(
     }
 
     fun restoreHiddenTeaserItem(item: HomeHubDiscoveryItem) {
-        if (item.cleanTitle.isBlank()) return
+        if (item.cleanTitle.isBlank() || item.mediaType != mediaType) return
         scope.launchIO {
-            repository.unhide(item.mediaType, item.cleanTitle)
-            repository.removeSignal(item.mediaType, item.cleanTitle)
+            repository.undoHide(item.mediaType, item.cleanTitle)
             mutex.withLock {
                 dismissedSessionTitles -= item.cleanTitle
-                val enabled = preferences.discoveryEnabled().get()
-                if (!enabled) return@withLock
+                val suggestion = repository.subscribe(mediaType).first()
+                    .firstOrNull { it.cleanTitle == item.cleanTitle } ?: return@withLock
+                val consumed = repository.getSignals(mediaType)
+                    .any { it.cleanTitle == item.cleanTitle && it.signalType.excludesFromFeed }
+                if (consumed || item.cleanTitle in repository.getHiddenTitles(mediaType)) return@withLock
                 val blacklist = repository.getBlacklistedTags(mediaType)
-                val filterSpec = preferences.genreFilterSpec()
-                val policy = DiscoveryCandidatePolicy(spec = filterSpec, blacklistedTags = blacklist)
-                val suggestion = item.toDiscoverySuggestion()
-                if (!policy.isAllowed(suggestion)) return@withLock
-                val consumedTitles = runCatching {
-                    repository.getSignals(mediaType)
-                        .filter { it.signalType.excludesFromFeed }
-                        .mapTo(HashSet()) { it.cleanTitle }
-                }.getOrDefault(emptySet())
-                if (item.cleanTitle in consumedTitles) return@withLock
-
-                val shownMap = runCatching {
-                    repository.getRecentExclusionsWithTimestamp(mediaType)
-                }.getOrDefault(emptyMap())
-                val freshItem = item.copy(shownAt = shownMap[item.cleanTitle])
+                val shownMap = repository.getRecentExclusionsWithTimestamp(mediaType)
+                // Read preferences after the suspend points, immediately before publishing.
+                val policy = DiscoveryCandidatePolicy(
+                    spec = preferences.genreFilterSpec(),
+                    blacklistedTags = blacklist,
+                )
+                if (!preferences.discoveryEnabled().get() || !policy.isAllowed(suggestion)) return@withLock
+                val freshItem = suggestion.toHomeHubDiscoveryItem(shownMap[item.cleanTitle])
+                cachedDiscoveryPool = listOf(suggestion) +
+                    cachedDiscoveryPool.filterNot { it.cleanTitle == suggestion.cleanTitle }
                 onStateUpdate { current ->
                     val updatedDiscovery = restoreTeaserItem(
                         current = current.discovery,
