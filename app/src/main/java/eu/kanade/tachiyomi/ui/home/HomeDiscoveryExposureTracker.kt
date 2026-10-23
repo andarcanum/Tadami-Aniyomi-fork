@@ -29,6 +29,7 @@ const val DISCOVERY_EXPOSURE_MIN_DURATION_MS = 1000L
  */
 internal class HomeDiscoveryExposureTracker(
     private val scope: CoroutineScope,
+    private val clock: () -> Long = { System.currentTimeMillis() },
     private val onExposure: (HomeHubDiscoveryItem) -> Unit,
 ) {
     private val activeJobs = mutableMapOf<String, Job>()
@@ -52,14 +53,14 @@ internal class HomeDiscoveryExposureTracker(
             return
         }
 
-        val now = System.currentTimeMillis()
+        val now = clock()
         val lastRecorded = recordedTitlesWithTime[cleanTitle]
         if (lastRecorded != null && (now - lastRecorded) < DEDUPE_INTERVAL_MS) return
         if (activeJobs[cleanTitle]?.isActive == true) return
 
         activeJobs[cleanTitle] = scope.launch {
             delay(DISCOVERY_EXPOSURE_MIN_DURATION_MS)
-            recordedTitlesWithTime[cleanTitle] = System.currentTimeMillis()
+            recordedTitlesWithTime[cleanTitle] = clock()
             activeJobs.remove(cleanTitle)
             onExposure(item)
         }
@@ -72,7 +73,7 @@ internal class HomeDiscoveryExposureTracker(
     ) {
         val cleanTitle = item.cleanTitle
         if (cleanTitle.isBlank() || !isSectionActive || !isResumed) return
-        val now = System.currentTimeMillis()
+        val now = clock()
         val lastRecorded = recordedTitlesWithTime[cleanTitle]
         if (lastRecorded != null && (now - lastRecorded) < DEDUPE_INTERVAL_MS) return
 
@@ -112,10 +113,22 @@ internal fun Modifier.trackDiscoveryExposure(
     val currentSectionActive by rememberUpdatedState(isSectionActive)
     val currentResumed by rememberUpdatedState(isResumed)
 
+    val lastRatioState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
+
     val capturedItem = item
     val capturedTracker = tracker
     DisposableEffect(capturedItem.cleanTitle, isSectionActive, isResumed) {
-        if (!isSectionActive || !isResumed) {
+        if (isSectionActive && isResumed) {
+            val ratio = lastRatioState.floatValue
+            if (ratio > 0f) {
+                capturedTracker.onVisibilityChanged(
+                    item = capturedItem,
+                    visibleRatio = ratio,
+                    isSectionActive = true,
+                    isResumed = true,
+                )
+            }
+        } else {
             capturedTracker.onVisibilityChanged(
                 item = capturedItem,
                 visibleRatio = 0f,
@@ -135,11 +148,13 @@ internal fun Modifier.trackDiscoveryExposure(
 
     return this.onGloballyPositioned { coordinates ->
         if (!coordinates.isAttached) {
+            lastRatioState.floatValue = 0f
             currentTracker.onVisibilityChanged(currentItem, 0f, currentSectionActive, currentResumed)
             return@onGloballyPositioned
         }
         val cardArea = coordinates.size.width * coordinates.size.height
         if (cardArea <= 0) {
+            lastRatioState.floatValue = 0f
             currentTracker.onVisibilityChanged(currentItem, 0f, currentSectionActive, currentResumed)
             return@onGloballyPositioned
         }
@@ -154,6 +169,7 @@ internal fun Modifier.trackDiscoveryExposure(
         val visibleHeight = maxOf(0f, visibleBottom - visibleTop)
         val visibleArea = visibleWidth * visibleHeight
         val ratio = visibleArea / cardArea.toFloat()
+        lastRatioState.floatValue = ratio
 
         currentTracker.onVisibilityChanged(
             item = currentItem,
