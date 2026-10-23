@@ -397,6 +397,36 @@ class DiscoveryRunnerTest {
     }
 
     @Test
+    fun `successful run with empty candidates produces SUCCESS status and updates preferences`() = runTest {
+        val repo = FakeRepository()
+        val emptyBuilders = listOf(
+            object : DiscoveryRowBuilder {
+                override val rowType = DiscoveryRowType.LIKE
+                override suspend fun build(context: DiscoveryBuildContext) = emptyList<DiscoveryRowItem>()
+            },
+        )
+        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        prefs.rowTasteEnabled().set(false)
+        prefs.rowTrendEnabled().set(false)
+        prefs.rowSourceEnabled().set(false)
+        val runner = DiscoveryRunner(
+            repository = repo,
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(emptyBuilders) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+            failedRowsSink = { _, _ -> },
+        )
+        val outcomes = runner.run(listOf(DiscoveryMediaType.NOVEL))
+        val outcome = outcomes[DiscoveryMediaType.NOVEL]!!
+        outcome.status shouldBe DiscoveryRunStatus.SUCCESS
+        outcome.failedRows.isEmpty() shouldBe true
+        outcome.persistedRows.isEmpty() shouldBe true
+        prefs.lastGenerationStatus(DiscoveryMediaType.NOVEL).get() shouldBe DiscoveryRunStatus.SUCCESS.name
+        (prefs.lastGenerationAt(DiscoveryMediaType.NOVEL).get() > 0L) shouldBe true
+    }
+
+    @Test
     fun `disabled discovery returns SKIPPED status`() = runTest {
         val prefs = discoveryPrefs(
             InMemoryPreferenceStore.InMemoryPreference("discovery_enabled", false, true),

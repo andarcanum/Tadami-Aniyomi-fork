@@ -180,6 +180,8 @@ class DiscoveryRunner(
                 throw e
             } catch (e: Exception) {
                 logcat { "[DiscoveryRunner] $mediaType FAILED: ${e.message}" }
+                preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.FAILED.name)
+                preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
                 outcomes[mediaType] = DiscoveryRunOutcome(
                     mediaType = mediaType,
                     status = DiscoveryRunStatus.FAILED,
@@ -507,6 +509,8 @@ class DiscoveryRunner(
         }
         if (builders.isEmpty()) {
             failedRowsSink(mediaType, emptySet())
+            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.SKIPPED.name)
+            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
             return DiscoveryRunOutcome(
                 mediaType = mediaType,
                 status = DiscoveryRunStatus.SKIPPED,
@@ -605,12 +609,20 @@ class DiscoveryRunner(
             total = builders.size,
         )
 
+        val actualExecutedRows = feed.rows.keys + feed.failedRows
+        val allExecutedFailed = actualExecutedRows.isNotEmpty() && feed.failedRows.containsAll(actualExecutedRows)
+        val hasPartialFailures = feed.failedRows.isNotEmpty() ||
+            feed.degradedRows.isNotEmpty() ||
+            (attemptedRows.isNotEmpty() && actualExecutedRows.size < attemptedRows.size)
+
         val status = when {
-            persistedRows.isEmpty() -> DiscoveryRunStatus.FAILED
-            feed.failedRows.isNotEmpty() || feed.degradedRows.isNotEmpty() -> DiscoveryRunStatus.PARTIAL
-            persistedRows.size < attemptedRows.size -> DiscoveryRunStatus.PARTIAL
+            allExecutedFailed -> DiscoveryRunStatus.FAILED
+            hasPartialFailures -> DiscoveryRunStatus.PARTIAL
             else -> DiscoveryRunStatus.SUCCESS
         }
+
+        preferences.lastGenerationStatus(mediaType).set(status.name)
+        preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
 
         return DiscoveryRunOutcome(
             mediaType = mediaType,
