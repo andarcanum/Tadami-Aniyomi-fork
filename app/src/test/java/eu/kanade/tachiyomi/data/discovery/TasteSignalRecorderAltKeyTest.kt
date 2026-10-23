@@ -266,6 +266,13 @@ class TasteSignalRecorderAltKeyTest {
         val itemWithGenuineGenres = itemWithFictitiousMetadata.copy(genres = listOf("Sci-Fi", "Mystery"))
         TasteSignalRecorder.snapshotGenres(itemWithGenuineGenres) shouldBe listOf("Sci-Fi", "Mystery")
     }
+
+    @Test
+    fun `nextMonotonicTimestamp produces strictly increasing values`() {
+        val count = 1000
+        val timestamps = (1..count).map { TasteSignalRecorder.nextMonotonicTimestamp() }
+        timestamps.zipWithNext().all { (a, b) -> a < b } shouldBe true
+    }
 }
 
 private fun suggestionOf(title: String) = DiscoverySuggestion(

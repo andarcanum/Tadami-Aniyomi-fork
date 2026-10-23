@@ -44,6 +44,19 @@ internal fun consumedAltKey(primaryTitle: String, meta: DiscoveryMeta?): String?
  */
 object TasteSignalRecorder {
 
+    private val lastSignalTimestamp = java.util.concurrent.atomic.AtomicLong(0L)
+
+    internal fun nextMonotonicTimestamp(): Long {
+        while (true) {
+            val current = lastSignalTimestamp.get()
+            val now = System.currentTimeMillis()
+            val next = if (now > current) now else current + 1
+            if (lastSignalTimestamp.compareAndSet(current, next)) {
+                return next
+            }
+        }
+    }
+
     /**
      * Жанры тайтла строго из достоверных метаданных: [item.genres] или cached meta по названию тайтла.
      * Explanation payload ([item.reason]) и сидовые метаданные ([item.seedTitle]) исключены,
@@ -89,7 +102,7 @@ object TasteSignalRecorder {
                 genres = local
             }
         }
-        val eventTimestamp = System.currentTimeMillis()
+        val eventTimestamp = nextMonotonicTimestamp()
         val recorded = runCatchingUnlessCancelled {
             repository.recordSignal(
                 mediaType = item.mediaType,
@@ -187,6 +200,7 @@ object TasteSignalRecorder {
         val cleanTitle = tachiyomi.domain.discovery.model.normalizeDiscoveryTitle(title)
         if (cleanTitle.isBlank()) return
         val sourceKey = resolveSourceKey(mediaType, sourceId)
+        val eventTimestamp = nextMonotonicTimestamp()
         runCatchingUnlessCancelled {
             repository.recordSignal(
                 mediaType = mediaType,
@@ -196,6 +210,7 @@ object TasteSignalRecorder {
                 genres = emptyList(),
                 provider = null,
                 sourceKey = sourceKey,
+                timestamp = eventTimestamp,
             )
         }
         recordConsumedAltKeys(
@@ -223,6 +238,7 @@ object TasteSignalRecorder {
     ) {
         val meta = runCatchingUnlessCancelled { altMetaResolver(primaryTitle, mediaType) }.getOrNull() ?: return
         val altKey = consumedAltKey(primaryTitle, meta) ?: return
+        val eventTimestamp = nextMonotonicTimestamp()
         runCatchingUnlessCancelled {
             repository.recordSignal(
                 mediaType = mediaType,
@@ -232,6 +248,7 @@ object TasteSignalRecorder {
                 genres = emptyList(),
                 provider = null,
                 sourceKey = sourceKey,
+                timestamp = eventTimestamp,
             )
         }
     }
