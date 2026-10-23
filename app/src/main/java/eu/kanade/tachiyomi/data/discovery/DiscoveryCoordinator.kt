@@ -88,13 +88,6 @@ class DiscoveryCoordinator(
                     val policyFiltered = context.candidatePolicy.filterRowCandidates(
                         candidates,
                         genresSelector = { it.genres },
-                        fallbackTagsSelector = { item ->
-                            if (pType == DiscoveryRowType.TASTE) {
-                                DiscoveryCandidatePolicy.extractFallbackTags(item.reason)
-                            } else {
-                                emptyList()
-                            }
-                        },
                     )
                     val selected = selectRowItems(
                         policyFiltered,

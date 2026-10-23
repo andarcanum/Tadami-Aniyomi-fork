@@ -156,18 +156,10 @@ internal fun synthesizeImplicitNegatives(
     profileGenres: List<String> = emptyList(),
 ): List<DiscoverySignal> {
     val explicitTitles = explicitSignals.mapTo(HashSet()) { it.cleanTitle }
-    // cleanTitle → жанры из reason-CSV текущего кэша (TASTE-ряд; прочие — без жанров).
+    // cleanTitle → достоверные жанры текущего кэша (только известные genres).
     val genresByTitle = currentSuggestions
-        .filter { it.rowType == tachiyomi.domain.discovery.model.DiscoveryRowType.TASTE }
-        .associate { item ->
-            item.cleanTitle to (
-                item.reason
-                    ?.splitToSequence(",")
-                    ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
-                    ?.toList()
-                    .orEmpty()
-                )
-        }
+        .filter { it.genres.isNotEmpty() }
+        .associate { item -> item.cleanTitle to item.genres }
     return shownWithCount
         .filter { (cleanTitle, _, count) ->
             count >= SHOWN_IGNORED_MIN_SHOWS && cleanTitle !in explicitTitles

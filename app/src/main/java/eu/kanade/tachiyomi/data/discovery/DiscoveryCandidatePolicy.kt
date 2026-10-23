@@ -94,12 +94,6 @@ class DiscoveryCandidatePolicy(
         if (item.genres.isNotEmpty()) {
             return isForbidden(item.genres)
         }
-        if (item.rowType == DiscoveryRowType.TASTE) {
-            val tags = extractFallbackTags(item.reason)
-            if (tags.isNotEmpty()) {
-                return isForbidden(tags)
-            }
-        }
         return false
     }
 

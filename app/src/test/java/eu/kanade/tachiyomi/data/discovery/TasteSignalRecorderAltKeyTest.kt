@@ -243,6 +243,29 @@ class TasteSignalRecorderAltKeyTest {
         sourceResolverCalled shouldBe false
         repo.recordedGenres.last() shouldBe emptyList()
     }
+
+    @Test
+    fun `snapshotGenres ignores reason and seedTitle, returns genuine genres only`() {
+        val itemWithFictitiousMetadata = DiscoverySuggestion(
+            id = 1L,
+            mediaType = DiscoveryMediaType.NOVEL,
+            rowType = DiscoveryRowType.TASTE,
+            title = "Unknown Novel",
+            cleanTitle = "unknown novel",
+            coverUrl = null,
+            reason = "Action, Drama",
+            seedTitle = "Naruto",
+            provider = "catalog",
+            score = 0.5,
+            position = 0L,
+            createdAt = 0L,
+            genres = emptyList(),
+        )
+        TasteSignalRecorder.snapshotGenres(itemWithFictitiousMetadata) shouldBe emptyList()
+
+        val itemWithGenuineGenres = itemWithFictitiousMetadata.copy(genres = listOf("Sci-Fi", "Mystery"))
+        TasteSignalRecorder.snapshotGenres(itemWithGenuineGenres) shouldBe listOf("Sci-Fi", "Mystery")
+    }
 }
 
 private fun suggestionOf(title: String) = DiscoverySuggestion(
@@ -285,7 +308,10 @@ private open class RecordingFakeRepository : DiscoveryRepository {
         genres: List<String>,
         provider: String?,
         sourceKey: String?,
-    ): Boolean = false
+    ): Boolean {
+        recordedGenres += genres
+        return true
+    }
 
     override fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>> =
         MutableStateFlow(emptyList())

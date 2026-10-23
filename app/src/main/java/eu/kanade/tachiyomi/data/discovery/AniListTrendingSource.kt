@@ -79,6 +79,33 @@ internal fun resolveSeasonWindow(nowMonth: Int, nowYear: Int, next: Boolean): Pa
     return if (target > 3) order[0] to (nowYear + 1) else order[target] to nowYear
 }
 
+internal fun buildSeasonQuery(hasStatuses: Boolean): String {
+    val statusArg = if (hasStatuses) ", status_in: \$statuses" else ""
+    return """
+        query (${'$'}season: MediaSeason, ${'$'}year: Int, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (hasStatuses) ", ${'$'}statuses: [MediaStatus]" else ""}) {
+          Page(page: ${'$'}page, perPage: 50) {
+            media(type: ANIME, season: ${'$'}season, seasonYear: ${'$'}year, sort: ${'$'}sort, isAdult: ${'$'}isAdult$statusArg) {
+              id title { romaji english native } coverImage { large } genres
+            }
+          }
+        }
+    """.trimIndent()
+}
+
+internal fun buildPopularQuery(format: String?, hasStatuses: Boolean): String {
+    val formatArg = if (format != null) ", format: \$format" else ""
+    val statusArg = if (hasStatuses) ", status_in: \$statuses" else ""
+    return """
+        query (${'$'}type: MediaType, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (format != null) ", ${'$'}format: MediaFormat" else ""}${if (hasStatuses) ", ${'$'}statuses: [MediaStatus]" else ""}) {
+          Page(page: ${'$'}page, perPage: 50) {
+            media(type: ${'$'}type, sort: ${'$'}sort, isAdult: ${'$'}isAdult$formatArg$statusArg) {
+              id title { romaji english native } coverImage { large } genres
+            }
+          }
+        }
+    """.trimIndent()
+}
+
 internal fun parseTrendingPage(page: JsonObject, seasonLabel: String? = null): List<DiscoveryTrendingItem> =
     (((page["data"] as? JsonObject)?.get("Page") as? JsonObject)?.get("media") as? JsonArray)
         ?.mapNotNull { it as? JsonObject }
@@ -182,17 +209,7 @@ open class AniListTrendingSource(
         page: Int = 1,
         releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
     ): List<DiscoveryTrendingItem> {
-        // V1: статус фильтруется серверно через status_in (AniList поддерживает список).
-        val statusArg = if (releaseStatuses.isNotEmpty()) ", status_in: ${'$'}statuses" else ""
-        val query = """
-            query (${'$'}season: MediaSeason, ${'$'}year: Int, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (releaseStatuses.isNotEmpty()) ", ${'$'}statuses: [MediaStatus]" else ""}) {
-              Page(page: ${'$'}page, perPage: 50) {
-                media(type: ANIME, season: ${'$'}season, seasonYear: ${'$'}year, sort: ${'$'}sort, isAdult: ${'$'}isAdult$statusArg) {
-                  id title { romaji english native } coverImage { large }
-                }
-              }
-            }
-        """.trimIndent()
+        val query = buildSeasonQuery(releaseStatuses.isNotEmpty())
         val payload = buildJsonObject {
             put("query", query)
             put(
@@ -229,17 +246,7 @@ open class AniListTrendingSource(
         page: Int = 1,
         releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
     ): List<DiscoveryTrendingItem> {
-        val formatArg = if (format != null) ", format: ${'$'}format" else ""
-        val statusArg = if (releaseStatuses.isNotEmpty()) ", status_in: ${'$'}statuses" else ""
-        val query = """
-            query (${'$'}type: MediaType, ${'$'}sort: [MediaSort], ${'$'}page: Int, ${'$'}isAdult: Boolean${if (format != null) ", ${'$'}format: MediaFormat" else ""}${if (releaseStatuses.isNotEmpty()) ", ${'$'}statuses: [MediaStatus]" else ""}) {
-              Page(page: ${'$'}page, perPage: 50) {
-                media(type: ${'$'}type, sort: ${'$'}sort, isAdult: ${'$'}isAdult$formatArg$statusArg) {
-                  id title { romaji english native } coverImage { large }
-                }
-              }
-            }
-        """.trimIndent()
+        val query = buildPopularQuery(format, releaseStatuses.isNotEmpty())
         val payload = buildJsonObject {
             put("query", query)
             put(
