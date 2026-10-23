@@ -426,4 +426,118 @@ class DiscoverySignalsRestoreTest {
         val shown = repository.getShownWithCount(DiscoveryMediaType.NOVEL, Long.MAX_VALUE / 2)
         shown.single() shouldBe Triple("solo leveling", t2, 2)
     }
+
+    @Test
+    fun `enrichSignalMetadataIfCurrent updates existing signal without changing created_at`() = runTest {
+        val initialTimestamp = 5_000L
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "overlord",
+            title = "Overlord",
+            signalType = DiscoverySignalType.LIKE,
+            genres = emptyList(),
+            provider = "Shikimori",
+            sourceKey = null,
+            timestamp = initialTimestamp,
+        )
+
+        val success = repository.enrichSignalMetadataIfCurrent(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "overlord",
+            expectedCreatedAt = initialTimestamp,
+            genres = listOf("Isekai", "Dark Fantasy"),
+            provider = "Shikimori",
+            sourceKey = "123",
+        )
+
+        success shouldBe true
+        val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        signals.size shouldBe 1
+        val signal = signals.single()
+        signal.cleanTitle shouldBe "overlord"
+        signal.signalType shouldBe DiscoverySignalType.LIKE
+        signal.genres shouldBe listOf("Isekai", "Dark Fantasy")
+        signal.sourceKey shouldBe "123"
+        signal.createdAt shouldBe initialTimestamp
+    }
+
+    @Test
+    fun `enrichSignalMetadataIfCurrent does not resurrect deleted signal`() = runTest {
+        val initialTimestamp = 5_000L
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "overlord",
+            title = "Overlord",
+            signalType = DiscoverySignalType.LIKE,
+            genres = emptyList(),
+            provider = "Shikimori",
+            sourceKey = null,
+            timestamp = initialTimestamp,
+        )
+
+        // User deletes/unlikes the signal while network enrichment is in flight
+        repository.removeSignal(DiscoveryMediaType.NOVEL, "overlord")
+
+        // Network returns late with enriched metadata
+        val success = repository.enrichSignalMetadataIfCurrent(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "overlord",
+            expectedCreatedAt = initialTimestamp,
+            genres = listOf("Isekai", "Dark Fantasy"),
+            provider = "Shikimori",
+            sourceKey = "123",
+        )
+
+        success shouldBe false
+        val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        signals.isEmpty() shouldBe true
+    }
+
+    @Test
+    fun `enrichSignalMetadataIfCurrent protects against ABA when signal is deleted and recreated`() = runTest {
+        val initialTimestamp = 5_000L
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "overlord",
+            title = "Overlord",
+            signalType = DiscoverySignalType.LIKE,
+            genres = emptyList(),
+            provider = "Shikimori",
+            sourceKey = null,
+            timestamp = initialTimestamp,
+        )
+
+        repository.removeSignal(DiscoveryMediaType.NOVEL, "overlord")
+
+        // User later records a different event for overlord at timestamp 9000L
+        val newTimestamp = 9_000L
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "overlord",
+            title = "Overlord",
+            signalType = DiscoverySignalType.CONSUMED,
+            genres = listOf("Sci-Fi"),
+            provider = "Local",
+            sourceKey = null,
+            timestamp = newTimestamp,
+        )
+
+        // Late network response from old LIKE event arrives with expectedCreatedAt = 5000L
+        val success = repository.enrichSignalMetadataIfCurrent(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "overlord",
+            expectedCreatedAt = initialTimestamp,
+            genres = listOf("Isekai", "Dark Fantasy"),
+            provider = "Shikimori",
+            sourceKey = "123",
+        )
+
+        success shouldBe false
+        val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        signals.size shouldBe 1
+        val signal = signals.single()
+        signal.signalType shouldBe DiscoverySignalType.CONSUMED
+        signal.genres shouldBe listOf("Sci-Fi")
+        signal.createdAt shouldBe newTimestamp
+    }
 }

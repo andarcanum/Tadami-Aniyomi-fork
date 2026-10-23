@@ -278,6 +278,15 @@ private open class RecordingFakeRepository : DiscoveryRepository {
         recordedGenres += genres
     }
 
+    override suspend fun enrichSignalMetadataIfCurrent(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        expectedCreatedAt: Long,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+    ): Boolean = false
+
     override fun subscribe(mediaType: DiscoveryMediaType): Flow<List<DiscoverySuggestion>> =
         MutableStateFlow(emptyList())
 

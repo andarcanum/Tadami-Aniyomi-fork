@@ -187,4 +187,56 @@ class DiscoveryFeedWindowLogicTest {
 
         patched.map { it.title } shouldBe listOf("A", "C")
     }
+
+    @Test
+    fun `reconcileFeedWindow replaces surviving items with fresh objects from latest pool`() {
+        val oldA = mockSuggestion("A", provider = "oldProvider").copy(genres = listOf("OldGenre"))
+        val oldB = mockSuggestion("B", provider = "oldProvider").copy(genres = listOf("OldGenre"))
+        val current = listOf(oldA, oldB)
+
+        val freshA = mockSuggestion("A", provider = "newProvider").copy(genres = listOf("NewGenre"))
+        val freshB = mockSuggestion("B", provider = "newProvider").copy(genres = listOf("NewGenre"))
+        val pool = listOf(freshA, freshB)
+
+        val reconciled = reconcileFeedWindow(current, pool, targetSize = 2)
+
+        reconciled.size shouldBe 2
+        reconciled[0].provider shouldBe "newProvider"
+        reconciled[0].genres shouldBe listOf("NewGenre")
+        reconciled[1].provider shouldBe "newProvider"
+        reconciled[1].genres shouldBe listOf("NewGenre")
+    }
+
+    @Test
+    fun `reconcileFeedWindow replenishes missing items from pool up to targetSize when some items are excluded`() {
+        val oldA = mockSuggestion("A")
+        val oldB = mockSuggestion("B")
+        val oldC = mockSuggestion("C")
+        val current = listOf(oldA, oldB, oldC)
+
+        // B was excluded from pool (e.g. by genre filter), pool contains A, C, D, E
+        val freshA = mockSuggestion("A")
+        val freshC = mockSuggestion("C")
+        val freshD = mockSuggestion("D")
+        val freshE = mockSuggestion("E")
+        val pool = listOf(freshA, freshC, freshD, freshE)
+
+        val reconciled = reconcileFeedWindow(current, pool, targetSize = 3)
+
+        // Surviving: A, C. Replenished with D to reach targetSize 3.
+        reconciled.map { it.title } shouldBe listOf("A", "C", "D")
+    }
+
+    @Test
+    fun `reconcileFeedWindow returns emptyList when pool is empty`() {
+        val current = listOf(mockSuggestion("A"))
+        reconcileFeedWindow(current, emptyList(), targetSize = 2) shouldBe emptyList()
+    }
+
+    @Test
+    fun `reconcileFeedWindow returns initial pool slice when currentWindow is empty`() {
+        val pool = listOf(mockSuggestion("A"), mockSuggestion("B"), mockSuggestion("C"))
+        val reconciled = reconcileFeedWindow(emptyList(), pool, targetSize = 2)
+        reconciled.map { it.title } shouldBe listOf("A", "B")
+    }
 }

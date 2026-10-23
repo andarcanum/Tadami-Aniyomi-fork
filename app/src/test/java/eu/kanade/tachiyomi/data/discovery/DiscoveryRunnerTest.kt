@@ -187,6 +187,14 @@ class DiscoveryRunnerTest {
         ) {
             recordedSignals += Triple(mediaType, cleanTitle, signalType)
         }
+        override suspend fun enrichSignalMetadataIfCurrent(
+            mediaType: DiscoveryMediaType,
+            cleanTitle: String,
+            expectedCreatedAt: Long,
+            genres: List<String>,
+            provider: String?,
+            sourceKey: String?,
+        ): Boolean = false
         override suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String) {}
         override suspend fun clearSignals(mediaType: DiscoveryMediaType) {}
         override suspend fun clearAllSignals() {}

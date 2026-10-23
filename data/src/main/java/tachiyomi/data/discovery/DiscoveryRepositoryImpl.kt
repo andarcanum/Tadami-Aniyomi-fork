@@ -376,6 +376,38 @@ class DiscoveryRepositoryImpl(
         }
     }
 
+    override suspend fun enrichSignalMetadataIfCurrent(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        expectedCreatedAt: Long,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+    ): Boolean = handler.await(inTransaction = true) { db ->
+        val existing = db.discovery_signalsQueries
+            .selectByTitle(mediaType.key, cleanTitle, ::signalMapper)
+            .executeAsOneOrNull()
+        if (existing == null || existing.createdAt != expectedCreatedAt) {
+            return@await false
+        }
+        val mergedMeta = mergeSignalMetadata(
+            existing = existing,
+            incomingTitle = existing.title,
+            incomingGenres = genres,
+            incomingProvider = provider,
+            incomingSourceKey = sourceKey,
+        )
+        db.discovery_signalsQueries.updateMetadataIfMatchesCreatedAt(
+            genres = mergedMeta.genres.joinToString(","),
+            provider = mergedMeta.provider,
+            source_key = mergedMeta.sourceKey,
+            media_type = mediaType.key,
+            clean_title = cleanTitle,
+            created_at = expectedCreatedAt,
+        )
+        true
+    }
+
     override suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String) {
         handler.await { db -> db.discovery_signalsQueries.delete(mediaType.key, cleanTitle) }
     }
