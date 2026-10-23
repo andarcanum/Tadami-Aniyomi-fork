@@ -257,9 +257,7 @@ class DiscoveryTrendRowBuilder(
             }
         }
 
-        // V3: приоритетные жанры — буст не применим к TREND-ряду: скор = 0.0
-        // (тренды не ранжируются по жанрам), а reason хранит seasonLabel, не жанры.
-        // Приоритет работает только в TASTE-ряду через boostedTasteScore.
+        // Приоритетные жанры ранжируются единым within-row ranker'ом в policy.filterRowCandidates.
 
         if (context.mediaType == DiscoveryMediaType.NOVEL) {
             val combinedNovels = (fromSource + fromTrending).distinctBy { it.cleanTitle }
@@ -382,8 +380,8 @@ class DiscoveryTasteRowBuilder(
                     reason = matchedGenres(item.genres, activeProfile).joinToString(", "),
                     seedTitle = null,
                     provider = item.provider,
-                    // V3: приоритетные жанры — буст скора (×1.5), не отсекают.
-                    score = boostedTasteScore(item.genres, activeProfile, context.priorityGenres),
+                    // Базовый скор совпадения жанров; приоритетные жанры бустятся единым within-row ranker'ом в policy.
+                    score = tasteScore(item.genres, activeProfile),
                     genres = item.genres,
                 )
             }

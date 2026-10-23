@@ -216,6 +216,7 @@ class DiscoveryCandidatePolicy(
         items: List<T>,
         genresSelector: (T) -> List<String>,
         fallbackTagsSelector: (T) -> List<String> = { emptyList() },
+        scoreSelector: ((T) -> Double)? = null,
     ): List<T> {
         if (items.isEmpty()) return emptyList()
 
@@ -238,26 +239,60 @@ class DiscoveryCandidatePolicy(
         }
 
         if (withoutForbidden.isEmpty()) return emptyList()
-        if (requiredGenres.isEmpty()) return withoutForbidden.map { it.first }
 
         // 2. Проверяем required
-        val withRequired = withoutForbidden.filter { (_, verdict) ->
-            if (verdict is CandidateVerdict.Admitted) {
-                verdict.matchesRequired || (verdict.hasIncompleteMetadata && !isStrictRequired)
-            } else {
-                false
-            }
-        }.map { it.first }
-
-        return if (withRequired.isNotEmpty()) {
-            withRequired
-        } else if (!isStrictRequired) {
-            // Best-effort ослабление: подходящих по requiredGenres тайтлов нет,
-            // возвращаем допущенные без блэклиста/игнора, чтобы лента не была пустой.
-            withoutForbidden.map { it.first }
+        val admittedCandidates = if (requiredGenres.isEmpty()) {
+            withoutForbidden
         } else {
-            emptyList()
+            val withRequired = withoutForbidden.filter { (_, verdict) ->
+                if (verdict is CandidateVerdict.Admitted) {
+                    verdict.matchesRequired || (verdict.hasIncompleteMetadata && !isStrictRequired)
+                } else {
+                    false
+                }
+            }
+            if (withRequired.isNotEmpty()) {
+                withRequired
+            } else if (!isStrictRequired) {
+                // Best-effort ослабление: подходящих по requiredGenres тайтлов нет,
+                // возвращаем допущенные без блэклиста/игнора, чтобы лента не была пустой.
+                withoutForbidden
+            } else {
+                emptyList()
+            }
         }
+
+        if (admittedCandidates.isEmpty()) return emptyList()
+
+        // 3. Если нет priorityGenres и явный scoreSelector не передан, сохраняем оригинальный порядок
+        if (priorityGenres.isEmpty() && scoreSelector == null) {
+            return admittedCandidates.map { it.first }
+        }
+
+        // 4. Единый стабильный within-row ranker с независимым вкладом priority даже при 0 базовом score
+        val extractScore: (T) -> Double = scoreSelector
+            ?: { item -> (item as? DiscoveryRowItem)?.score ?: (item as? DiscoverySuggestion)?.score ?: 0.0 }
+
+        val scores = admittedCandidates.map { extractScore(it.first) }
+        val minScore = scores.minOrNull() ?: 0.0
+        val maxScore = scores.maxOrNull() ?: 0.0
+        val hasSpread = maxScore > minScore
+
+        return admittedCandidates
+            .map { (item, verdict) ->
+                val admitted = verdict as? CandidateVerdict.Admitted
+                val hasBoost = admitted?.hasPriorityBoost == true
+                val rawScore = extractScore(item)
+                val normalizedScore = if (hasSpread) (rawScore - minScore) / (maxScore - minScore) else 0.0
+                // priority даёт гарантированный независимый бонус (+1.0), работающий даже при базовом score = 0.0.
+                // Внутри группы boosted и non-boosted сохраняется исходное ранжирование по normalizedScore / исходному порядку.
+                val effectiveRank = (if (hasBoost) 1.0 else 0.0) + (normalizedScore * 0.5)
+                Triple(item, effectiveRank, hasBoost)
+            }
+            .sortedWith(
+                compareByDescending { it.second },
+            )
+            .map { it.first }
     }
 
     private fun matchesBlacklist(itemGenres: List<String>): String? {

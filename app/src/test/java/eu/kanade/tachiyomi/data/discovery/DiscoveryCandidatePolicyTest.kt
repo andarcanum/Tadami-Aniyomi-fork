@@ -37,6 +37,7 @@ class DiscoveryCandidatePolicyTest {
         title: String,
         genres: List<String> = emptyList(),
         reason: String? = null,
+        score: Double = 1.0,
     ) = DiscoveryRowItem(
         title = title,
         cleanTitle = title.lowercase(),
@@ -44,7 +45,7 @@ class DiscoveryCandidatePolicyTest {
         reason = reason,
         seedTitle = null,
         provider = "test",
-        score = 1.0,
+        score = score,
         genres = genres,
     )
 
@@ -113,6 +114,69 @@ class DiscoveryCandidatePolicyTest {
         normalItem.shouldBeInstanceOf<CandidateVerdict.Admitted>()
         normalItem.hasPriorityBoost shouldBe false
         normalItem.scoreMultiplier shouldBe (1.0 plusOrMinus 0.001)
+    }
+
+    @Test
+    fun `filterRowCandidates ranks items with priority genres ahead when base score is zero`() {
+        val policy = DiscoveryCandidatePolicy(
+            priorityGenres = setOf("Cyberpunk"),
+        )
+
+        // All items have score = 0.0 (like in TREND / SOURCE rows)
+        val items = listOf(
+            testRowItem("Normal Item 1", genres = listOf("Drama"), score = 0.0),
+            testRowItem("Priority Item 1", genres = listOf("Cyberpunk"), score = 0.0),
+            testRowItem("Normal Item 2", genres = listOf("Action"), score = 0.0),
+            testRowItem("Priority Item 2", genres = listOf("Cyberpunk", "Sci-Fi"), score = 0.0),
+        )
+
+        val filtered = policy.filterRowCandidates(items, { it.genres })
+        // Priority items sort ahead, preserving their relative order; followed by normal items preserving order
+        filtered.map { it.title } shouldBe listOf(
+            "Priority Item 1",
+            "Priority Item 2",
+            "Normal Item 1",
+            "Normal Item 2",
+        )
+    }
+
+    @Test
+    fun `filterRowCandidates ranks items with priority genres ahead preserving base score order within groups`() {
+        val policy = DiscoveryCandidatePolicy(
+            priorityGenres = setOf("Romance"),
+        )
+
+        val items = listOf(
+            testRowItem("Non-priority High Score", genres = listOf("Action"), score = 0.9),
+            testRowItem("Priority Low Score", genres = listOf("Romance"), score = 0.2),
+            testRowItem("Non-priority Low Score", genres = listOf("Comedy"), score = 0.1),
+            testRowItem("Priority High Score", genres = listOf("Romance", "Drama"), score = 0.8),
+        )
+
+        val filtered = policy.filterRowCandidates(items, { it.genres })
+        // Priority items are first (high score 0.8 then low score 0.2), then non-priority (0.9 then 0.1)
+        filtered.map { it.title } shouldBe listOf(
+            "Priority High Score",
+            "Priority Low Score",
+            "Non-priority High Score",
+            "Non-priority Low Score",
+        )
+    }
+
+    @Test
+    fun `filterRowCandidates preserves original order when no priority genres defined and no scores provided`() {
+        val policy = DiscoveryCandidatePolicy(
+            priorityGenres = emptySet(),
+        )
+
+        val items = listOf(
+            testRowItem("Item A", genres = listOf("Action"), score = 0.0),
+            testRowItem("Item B", genres = listOf("Drama"), score = 0.0),
+            testRowItem("Item C", genres = listOf("Comedy"), score = 0.0),
+        )
+
+        val filtered = policy.filterRowCandidates(items, { it.genres })
+        filtered.map { it.title } shouldBe listOf("Item A", "Item B", "Item C")
     }
 
     @Test

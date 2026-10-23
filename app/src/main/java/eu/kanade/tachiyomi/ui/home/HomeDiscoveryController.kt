@@ -125,7 +125,11 @@ internal class HomeDiscoveryController(
                         }
                         return@collectLatest
                     }
-                    val filtered = obs.visible.filter { obs.policy.isAllowed(it) }
+                    val filtered = obs.visible
+                        .groupBy { it.rowType }
+                        .flatMap { (_, items) ->
+                            obs.policy.filterRowCandidates(items, { it.genres }, scoreSelector = { it.score })
+                        }
                     cachedDiscoveryPool = dedupeCrossRow(filtered).filterNot { it.cleanTitle in dismissedSessionTitles }
                     val shownAtByTitle = runCatching {
                         repository.getRecentExclusionsWithTimestamp(mediaType)
