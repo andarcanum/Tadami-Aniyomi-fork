@@ -32,7 +32,7 @@ internal class HomeDiscoveryExposureTracker(
     private val onExposure: (HomeHubDiscoveryItem) -> Unit,
 ) {
     private val activeJobs = mutableMapOf<String, Job>()
-    private val recordedTitlesInSession = mutableSetOf<String>()
+    private val recordedTitlesWithTime = mutableMapOf<String, Long>()
 
     fun onVisibilityChanged(
         item: HomeHubDiscoveryItem,
@@ -52,12 +52,14 @@ internal class HomeDiscoveryExposureTracker(
             return
         }
 
-        if (cleanTitle in recordedTitlesInSession) return
+        val now = System.currentTimeMillis()
+        val lastRecorded = recordedTitlesWithTime[cleanTitle]
+        if (lastRecorded != null && (now - lastRecorded) < DEDUPE_INTERVAL_MS) return
         if (activeJobs[cleanTitle]?.isActive == true) return
 
         activeJobs[cleanTitle] = scope.launch {
             delay(DISCOVERY_EXPOSURE_MIN_DURATION_MS)
-            recordedTitlesInSession.add(cleanTitle)
+            recordedTitlesWithTime[cleanTitle] = System.currentTimeMillis()
             activeJobs.remove(cleanTitle)
             onExposure(item)
         }
@@ -70,9 +72,11 @@ internal class HomeDiscoveryExposureTracker(
     ) {
         val cleanTitle = item.cleanTitle
         if (cleanTitle.isBlank() || !isSectionActive || !isResumed) return
-        if (cleanTitle in recordedTitlesInSession) return
+        val now = System.currentTimeMillis()
+        val lastRecorded = recordedTitlesWithTime[cleanTitle]
+        if (lastRecorded != null && (now - lastRecorded) < DEDUPE_INTERVAL_MS) return
 
-        recordedTitlesInSession.add(cleanTitle)
+        recordedTitlesWithTime[cleanTitle] = now
         onExposure(item)
     }
 
@@ -83,7 +87,11 @@ internal class HomeDiscoveryExposureTracker(
 
     fun clearSession() {
         onPauseOrInactive()
-        recordedTitlesInSession.clear()
+        recordedTitlesWithTime.clear()
+    }
+
+    companion object {
+        const val DEDUPE_INTERVAL_MS = 15 * 60_000L
     }
 }
 
@@ -104,18 +112,20 @@ internal fun Modifier.trackDiscoveryExposure(
     val currentSectionActive by rememberUpdatedState(isSectionActive)
     val currentResumed by rememberUpdatedState(isResumed)
 
-    DisposableEffect(currentItem.cleanTitle, currentSectionActive, currentResumed) {
-        if (!currentSectionActive || !currentResumed) {
-            currentTracker.onVisibilityChanged(
-                item = currentItem,
+    val capturedItem = item
+    val capturedTracker = tracker
+    DisposableEffect(capturedItem.cleanTitle, isSectionActive, isResumed) {
+        if (!isSectionActive || !isResumed) {
+            capturedTracker.onVisibilityChanged(
+                item = capturedItem,
                 visibleRatio = 0f,
                 isSectionActive = false,
                 isResumed = false,
             )
         }
         onDispose {
-            currentTracker.onVisibilityChanged(
-                item = currentItem,
+            capturedTracker.onVisibilityChanged(
+                item = capturedItem,
                 visibleRatio = 0f,
                 isSectionActive = false,
                 isResumed = false,

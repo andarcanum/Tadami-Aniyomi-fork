@@ -103,6 +103,21 @@ interface DiscoveryRepository {
         timestamp: Long = System.currentTimeMillis(),
     )
 
+    /**
+     * Атомарное дообогащение метаданных (жанры, provider, sourceKey) существующего сигнала.
+     * Обновляет метаданные ТОЛЬКО если сигнал существует и его [createdAt] совпадает с [expectedCreatedAt].
+     * Не создаёт новую строку, не меняет тип сигнала, вес и время создания [createdAt].
+     * Возвращает true, если строка найдена и обновлена, иначе false.
+     */
+    suspend fun enrichSignalMetadataIfCurrent(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        expectedCreatedAt: Long,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+    ): Boolean
+
     /** Undo сигнала: строка удаляется (профиль возвращается к состоянию «до сигнала»). */
     suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String)
 

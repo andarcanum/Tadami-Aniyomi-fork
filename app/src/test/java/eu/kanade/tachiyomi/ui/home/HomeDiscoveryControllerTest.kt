@@ -142,6 +142,15 @@ class HomeDiscoveryControllerTest {
             recordedSignals += Triple(cleanTitle, signalType, genres)
         }
 
+        override suspend fun enrichSignalMetadataIfCurrent(
+            mediaType: DiscoveryMediaType,
+            cleanTitle: String,
+            expectedCreatedAt: Long,
+            genres: List<String>,
+            provider: String?,
+            sourceKey: String?,
+        ): Boolean = false
+
         override suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String) {
             removedSignalTitles += cleanTitle
         }

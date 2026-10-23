@@ -100,6 +100,7 @@ object TasteSignalRecorder {
                 genres = local
             }
         }
+        val eventTimestamp = System.currentTimeMillis()
         val recorded = runCatchingUnlessCancelled {
             repository.recordSignal(
                 mediaType = item.mediaType,
@@ -109,6 +110,7 @@ object TasteSignalRecorder {
                 genres = genres,
                 provider = item.provider,
                 sourceKey = sourceKey,
+                timestamp = eventTimestamp,
             )
         }.isSuccess
         if (!recorded) return false
@@ -134,6 +136,7 @@ object TasteSignalRecorder {
                         repository = repository,
                         item = item,
                         sourceKey = sourceKey,
+                        expectedCreatedAt = eventTimestamp,
                         sourceDetailsResolver = sourceDetailsResolver,
                     )
                 }
@@ -146,6 +149,7 @@ object TasteSignalRecorder {
         repository: DiscoveryRepository,
         item: DiscoverySuggestion,
         sourceKey: String?,
+        expectedCreatedAt: Long,
         sourceDetailsResolver: suspend (
             DiscoveryMediaType,
             Long,
@@ -162,11 +166,10 @@ object TasteSignalRecorder {
             }.getOrNull().orEmpty()
             if (enriched.isNotEmpty()) {
                 runCatchingUnlessCancelled {
-                    repository.recordSignal(
+                    repository.enrichSignalMetadataIfCurrent(
                         mediaType = item.mediaType,
                         cleanTitle = item.cleanTitle,
-                        title = item.title,
-                        signalType = DiscoverySignalType.LIKE,
+                        expectedCreatedAt = expectedCreatedAt,
                         genres = enriched,
                         provider = item.provider,
                         sourceKey = sourceKey,

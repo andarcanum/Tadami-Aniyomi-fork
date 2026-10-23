@@ -69,3 +69,13 @@ DELETE FROM discovery_signals WHERE media_type = ? AND clean_title IN (
     WHERE media_type = ? AND signal IN ('consumed', 'consumed_liked', 'consumed_added')
     ORDER BY created_at ASC, clean_title ASC LIMIT ?
 );
+
+updateMetadataIfMatchesCreatedAt:
+UPDATE discovery_signals
+SET
+    genres = ?,
+    provider = ?,
+    source_key = ?
+WHERE media_type = ?
+  AND clean_title = ?
+  AND created_at = ?;

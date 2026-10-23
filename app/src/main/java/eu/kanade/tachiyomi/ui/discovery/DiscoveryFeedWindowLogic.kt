@@ -14,6 +14,34 @@ internal fun resolveManualRefreshAction(isActive: Boolean, remainingCooldown: Lo
     }
 
 /**
+ * Чистый редьюсер синхронизации активного окна ленты со свежим пулом кандидатов (PR R05):
+ * 1. Заменяет выжившие карточки на их актуальные объекты из свежего пула (обновляя cover, genres, reason).
+ * 2. Сохраняет относительный порядок выживших элементов.
+ * 3. Если часть карточек исключена (скрыта/отфильтрована), добирает недостающие позиции из пула до [targetSize].
+ * 4. Не производит side effects и не пишет в журнал экспозиций.
+ */
+internal fun reconcileFeedWindow(
+    currentWindow: List<DiscoverySuggestion>,
+    pool: List<DiscoverySuggestion>,
+    targetSize: Int = FEED_WINDOW_SIZE,
+): List<DiscoverySuggestion> {
+    if (pool.isEmpty()) return emptyList()
+    if (currentWindow.isEmpty()) return pool.take(targetSize)
+
+    val poolByTitle = pool.associateBy { it.cleanTitle }
+    val survivingFresh = currentWindow.mapNotNull { old -> poolByTitle[old.cleanTitle] }
+
+    if (survivingFresh.size >= targetSize || survivingFresh.size == pool.size) {
+        return survivingFresh.take(targetSize)
+    }
+
+    val usedTitles = survivingFresh.mapTo(HashSet()) { it.cleanTitle }
+    val available = pool.filterNot { it.cleanTitle in usedTitles }
+    val needed = targetSize - survivingFresh.size
+    return survivingFresh + available.take(needed)
+}
+
+/**
  * Вычисляет следующий оффсет окна ленты и флаг необходимости сетевого рефреша.
  *
  * @param currentOffset текущий оффсет окна (0, 20, 40...)

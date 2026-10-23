@@ -263,6 +263,14 @@ private class FakeDiscoveryRepository : DiscoveryRepository {
         sourceKey: String?,
         timestamp: Long,
     ) = Unit
+    override suspend fun enrichSignalMetadataIfCurrent(
+        mediaType: DiscoveryMediaType,
+        cleanTitle: String,
+        expectedCreatedAt: Long,
+        genres: List<String>,
+        provider: String?,
+        sourceKey: String?,
+    ): Boolean = false
     override suspend fun removeSignal(mediaType: DiscoveryMediaType, cleanTitle: String) = Unit
     override suspend fun clearSignals(mediaType: DiscoveryMediaType) = Unit
     override suspend fun clearAllSignals() = Unit

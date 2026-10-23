@@ -42,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,6 +64,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -102,8 +106,10 @@ import eu.kanade.tachiyomi.ui.entries.manga.MangaScreen
 import eu.kanade.tachiyomi.ui.entries.novel.NovelScreen
 import eu.kanade.tachiyomi.ui.entries.suggestions.toDirectEntryScreenOrNull
 import eu.kanade.tachiyomi.ui.entries.suggestions.toGlobalSearchScreen
+import eu.kanade.tachiyomi.ui.home.HomeDiscoveryExposureTracker
 import eu.kanade.tachiyomi.ui.home.discoveryReasonText
 import eu.kanade.tachiyomi.ui.home.toHomeHubDiscoveryItem
+import eu.kanade.tachiyomi.ui.home.trackDiscoveryExposure
 import eu.kanade.tachiyomi.util.system.toast
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -157,6 +163,28 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
         var sheetMetaLoading by remember { mutableStateOf(false) }
         var longPressItem by remember { mutableStateOf<DiscoverySuggestion?>(null) }
         val trendingSource = remember { CompositeTrendingSource() }
+
+        val lifecycleOwner = LocalLifecycleOwner.current
+        var isResumed by remember(lifecycleOwner) {
+            mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        }
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                isResumed = event.targetState.isAtLeast(Lifecycle.State.RESUMED)
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+        val exposureTracker = remember(screenModel, scope) {
+            HomeDiscoveryExposureTracker(scope) { homeItem ->
+                screenModel.markItemExposed(homeItem.cleanTitle)
+            }
+        }
+        LaunchedEffect(isResumed) {
+            if (!isResumed) {
+                exposureTracker.onPauseOrInactive()
+            }
+        }
 
         val navigateFor: (DiscoverySuggestion) -> Unit = { item ->
             scope.launch {
@@ -221,6 +249,8 @@ class DiscoveryFeedScreen(val initialMediaKey: String) : Screen(), Serializable 
                     top = if (topBarHeightDp > 0.dp) topBarHeightDp + 8.dp else 140.dp,
                     bottom = 24.dp,
                 ),
+                exposureTracker = exposureTracker,
+                isResumed = isResumed,
                 // Прямое открытие plugin-bound карточки; guard от повторного тапа
                 // на время резолва, fallback в шторку при неполной привязке/ошибке.
                 onItemClick = { item ->
@@ -765,6 +795,8 @@ private fun FeedBody(
     hazeState: HazeState,
     items: List<DiscoverySuggestion>,
     contentPadding: PaddingValues,
+    exposureTracker: HomeDiscoveryExposureTracker,
+    isResumed: Boolean,
     onItemClick: (DiscoverySuggestion) -> Unit,
     onItemLongClick: (DiscoverySuggestion) -> Unit,
     onItemAdd: (DiscoverySuggestion) -> Unit,
@@ -857,6 +889,12 @@ private fun FeedBody(
                     isAdding = item.title in state.addingTitles,
                     coverMediaType = state.mediaType,
                     coverRecoveryTick = state.coverRecoveryTick,
+                    modifier = Modifier.trackDiscoveryExposure(
+                        tracker = exposureTracker,
+                        item = homeItem,
+                        isSectionActive = true,
+                        isResumed = isResumed,
+                    ),
                     onClick = {
                         appHaptics.tap()
                         onItemClick(item)
@@ -882,6 +920,7 @@ private fun FeedCard(
     isAdding: Boolean,
     coverMediaType: DiscoveryMediaType,
     coverRecoveryTick: Int,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onAdd: () -> Unit,
@@ -922,7 +961,7 @@ private fun FeedCard(
     }
 
     Column(
-        Modifier
+        modifier
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .clip(containerShape)
             .background(if (isDark) colors.glass.copy(alpha = 0.10f) else colors.cardBackground)

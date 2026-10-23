@@ -343,28 +343,18 @@ internal class DiscoveryFeedScreenModel(
                             currentWindows[FeedSignalTab.MIX].isNullOrEmpty()
                         ) {
                             if (mix.isNotEmpty()) {
-                                val initialMixWindow = sliceFeedWindow(mix, 0, FEED_WINDOW_SIZE)
-                                screenModelScope.launchIO {
-                                    repository.markShown(mediaType, initialMixWindow.map { it.cleanTitle })
-                                }
-                                mapOf(FeedSignalTab.MIX to initialMixWindow)
+                                mapOf(FeedSignalTab.MIX to sliceFeedWindow(mix, 0, FEED_WINDOW_SIZE))
                             } else {
                                 emptyMap()
                             }
                         } else {
                             currentWindows.mapValues { (tab, currentWindow) ->
                                 val pool = if (tab == FeedSignalTab.MIX) mix else rows[tab.rowType()].orEmpty()
-                                val valid = currentWindow.filter { w -> pool.any { it.cleanTitle == w.cleanTitle } }
-                                if (valid.isEmpty() && pool.isNotEmpty()) {
-                                    val offset = current.tabOffsets[tab] ?: 0
-                                    val window = sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
-                                    screenModelScope.launchIO {
-                                        repository.markShown(mediaType, window.map { it.cleanTitle })
-                                    }
-                                    window
-                                } else {
-                                    valid
-                                }
+                                reconcileFeedWindow(
+                                    currentWindow = currentWindow,
+                                    pool = pool,
+                                    targetSize = FEED_WINDOW_SIZE,
+                                )
                             }
                         }
                         current.copy(
@@ -457,11 +447,6 @@ internal class DiscoveryFeedScreenModel(
             val offset = currentState.tabOffsets[tab] ?: 0
             val window = sliceFeedWindow(pool, offset, FEED_WINDOW_SIZE)
             mutableState.update { it.copy(activeWindows = it.activeWindows + (tab to window)) }
-            if (window.isNotEmpty()) {
-                screenModelScope.launchIO {
-                    repository.markShown(currentState.mediaType, window.map { it.cleanTitle })
-                }
-            }
         }
     }
 
@@ -504,11 +489,6 @@ internal class DiscoveryFeedScreenModel(
                 activeWindows = it.activeWindows + (currentTab to newWindow),
             )
         }
-        if (newWindow.isNotEmpty()) {
-            screenModelScope.launchIO {
-                repository.markShown(currentState.mediaType, newWindow.map { it.cleanTitle })
-            }
-        }
         return 0L
     }
 
@@ -537,8 +517,15 @@ internal class DiscoveryFeedScreenModel(
                 activeWindows = current.activeWindows + (tab to patchedWindow),
             )
         }
-        if (candidate != null) {
-            repository.markShown(currentState.mediaType, listOf(candidate.cleanTitle))
+    }
+
+    fun markItemExposed(cleanTitle: String) {
+        if (cleanTitle.isBlank()) return
+        screenModelScope.launchIO {
+            repository.recordExposure(
+                mediaType = state.value.mediaType,
+                cleanTitles = listOf(cleanTitle),
+            )
         }
     }
 
