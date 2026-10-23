@@ -133,6 +133,31 @@ class DiscoveryRunnerTest {
             mediaType: DiscoveryMediaType,
             windowMillis: Long,
         ): List<Triple<String, Long, Int>> = shownWithCount
+
+        override suspend fun recordExposure(
+            mediaType: DiscoveryMediaType,
+            cleanTitles: Collection<String>,
+            timestamp: Long,
+        ) {
+            markedShown += mediaType to cleanTitles
+        }
+
+        override suspend fun suppressRecentlyConsumed(
+            mediaType: DiscoveryMediaType,
+            cleanTitles: Collection<String>,
+            timestamp: Long,
+        ) = Unit
+
+        override suspend fun getRecentExclusions(
+            mediaType: DiscoveryMediaType,
+            windowMillis: Long,
+        ): Set<String> = emptySet()
+
+        override suspend fun getRecentExclusionsWithTimestamp(
+            mediaType: DiscoveryMediaType,
+            windowMillis: Long,
+        ): Map<String, Long> = emptyMap()
+
         override suspend fun markShown(
             mediaType: DiscoveryMediaType,
             cleanTitles: Collection<String>,

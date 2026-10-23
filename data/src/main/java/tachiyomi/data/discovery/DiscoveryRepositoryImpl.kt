@@ -167,7 +167,7 @@ class DiscoveryRepositoryImpl(
     override suspend fun getShownTitles(mediaType: DiscoveryMediaType, windowMillis: Long): Set<String> {
         val since = System.currentTimeMillis() - windowMillis
         return handler.awaitList { db ->
-            db.discovery_shownQueries.selectShownSince(mediaType.key, since)
+            db.discovery_exposuresQueries.selectExposedSince(mediaType.key, since)
         }.toSet()
     }
 
@@ -177,8 +177,11 @@ class DiscoveryRepositoryImpl(
     ): Map<String, Long> {
         val since = System.currentTimeMillis() - windowMillis
         return handler.awaitList { db ->
-            db.discovery_shownQueries.selectShownWithTimeSince(mediaType.key, since) { clean_title, shown_at ->
-                clean_title to shown_at
+            db.discovery_exposuresQueries.selectExposedWithTimeSince(mediaType.key, since) {
+                    clean_title,
+                    latest_exposed_at,
+                ->
+                clean_title to latest_exposed_at
             }
         }.toMap()
     }
@@ -189,13 +192,93 @@ class DiscoveryRepositoryImpl(
     ): List<Triple<String, Long, Int>> {
         val since = System.currentTimeMillis() - windowMillis
         return handler.awaitList { db ->
-            db.discovery_shownQueries.selectShownWithCountSince(mediaType.key, since) {
+            db.discovery_exposuresQueries.selectExposedWithCountSince(mediaType.key, since) {
                     clean_title,
-                    shown_at,
-                    shown_count,
+                    latest_exposed_at,
+                    count,
                 ->
-                Triple(clean_title, shown_at, shown_count.toInt())
+                Triple(clean_title, latest_exposed_at, count.toInt())
             }
+        }
+    }
+
+    override suspend fun recordExposure(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long,
+    ) {
+        if (cleanTitles.isEmpty()) return
+        val cutoff = timestamp - (48 * 3600_000L)
+        val dedupeIntervalMillis = 15 * 60_000L // 15 minutes deduplication window
+        handler.await(inTransaction = true) { db ->
+            db.discovery_exposuresQueries.cleanupOld(cutoff)
+            for (cleanTitle in cleanTitles) {
+                if (cleanTitle.isNotBlank()) {
+                    val latest = db.discovery_exposuresQueries
+                        .selectLatestExposedAt(mediaType.key, cleanTitle)
+                        .executeAsOneOrNull()
+                        ?.latest
+                    if (latest == null || (timestamp - latest) >= dedupeIntervalMillis) {
+                        db.discovery_exposuresQueries.insert(mediaType.key, cleanTitle, timestamp)
+                    }
+                }
+            }
+        }
+    }
+
+    override suspend fun suppressRecentlyConsumed(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long,
+    ) {
+        if (cleanTitles.isEmpty()) return
+        val cutoff = timestamp - (48 * 3600_000L)
+        handler.await(inTransaction = true) { db ->
+            db.discovery_suppressionsQueries.cleanupOld(cutoff)
+            for (cleanTitle in cleanTitles) {
+                if (cleanTitle.isNotBlank()) {
+                    db.discovery_suppressionsQueries.upsert(mediaType.key, cleanTitle, timestamp)
+                }
+            }
+        }
+    }
+
+    override suspend fun getRecentExclusions(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long,
+    ): Set<String> {
+        val since = System.currentTimeMillis() - windowMillis
+        return handler.await(inTransaction = true) { db ->
+            val exposed = db.discovery_exposuresQueries.selectExposedSince(mediaType.key, since).executeAsList()
+            val suppressed = db.discovery_suppressionsQueries.selectSuppressedSince(
+                mediaType.key,
+                since,
+            ).executeAsList()
+            (exposed + suppressed).toSet()
+        }
+    }
+
+    override suspend fun getRecentExclusionsWithTimestamp(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long,
+    ): Map<String, Long> {
+        val since = System.currentTimeMillis() - windowMillis
+        return handler.await(inTransaction = true) { db ->
+            val result = mutableMapOf<String, Long>()
+            db.discovery_exposuresQueries.selectExposedWithTimeSince(mediaType.key, since) {
+                    clean_title,
+                    latest_exposed_at,
+                ->
+                result[clean_title] = latest_exposed_at
+            }.executeAsList()
+            db.discovery_suppressionsQueries.selectSuppressedWithTimeSince(mediaType.key, since) {
+                    clean_title,
+                    suppressed_at,
+                ->
+                val existing = result[clean_title] ?: 0L
+                result[clean_title] = maxOf(existing, suppressed_at)
+            }.executeAsList()
+            result
         }
     }
 
@@ -204,20 +287,14 @@ class DiscoveryRepositoryImpl(
         cleanTitles: Collection<String>,
         timestamp: Long,
     ) {
-        if (cleanTitles.isEmpty()) return
-        val cutoff = timestamp - (48 * 3600_000L)
-        handler.await(inTransaction = true) { db ->
-            db.discovery_shownQueries.cleanupOld(cutoff)
-            for (cleanTitle in cleanTitles) {
-                if (cleanTitle.isNotBlank()) {
-                    db.discovery_shownQueries.upsert(mediaType.key, cleanTitle, timestamp)
-                }
-            }
-        }
+        recordExposure(mediaType, cleanTitles, timestamp)
     }
 
     override suspend fun clearShown(mediaType: DiscoveryMediaType) {
-        handler.await { db -> db.discovery_shownQueries.deleteAllByMedia(mediaType.key) }
+        handler.await(inTransaction = true) { db ->
+            db.discovery_exposuresQueries.deleteAllByMedia(mediaType.key)
+            db.discovery_suppressionsQueries.deleteAllByMedia(mediaType.key)
+        }
     }
 
     // ==================== Taste Learning Engine ====================

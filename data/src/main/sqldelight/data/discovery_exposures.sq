@@ -1,0 +1,44 @@
+CREATE TABLE discovery_exposures (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    media_type TEXT NOT NULL,
+    clean_title TEXT NOT NULL,
+    exposed_at INTEGER NOT NULL
+);
+
+CREATE INDEX discovery_exposures_lookup ON discovery_exposures(media_type, clean_title, exposed_at);
+CREATE INDEX discovery_exposures_time ON discovery_exposures(exposed_at);
+
+selectExposedSince:
+SELECT DISTINCT clean_title
+FROM discovery_exposures
+WHERE media_type = ? AND exposed_at >= ?;
+
+selectExposedWithTimeSince:
+SELECT clean_title, MAX(exposed_at) AS latest_exposed_at
+FROM discovery_exposures
+WHERE media_type = ? AND exposed_at >= ?
+GROUP BY clean_title
+ORDER BY latest_exposed_at ASC;
+
+selectExposedWithCountSince:
+SELECT clean_title, MAX(exposed_at) AS latest_exposed_at, COUNT(*) AS count
+FROM discovery_exposures
+WHERE media_type = ? AND exposed_at >= ?
+GROUP BY clean_title;
+
+selectLatestExposedAt:
+SELECT MAX(exposed_at) AS latest
+FROM discovery_exposures
+WHERE media_type = ? AND clean_title = ?;
+
+insert:
+INSERT INTO discovery_exposures(media_type, clean_title, exposed_at)
+VALUES (?, ?, ?);
+
+cleanupOld:
+DELETE FROM discovery_exposures
+WHERE exposed_at < ?;
+
+deleteAllByMedia:
+DELETE FROM discovery_exposures
+WHERE media_type = ?;

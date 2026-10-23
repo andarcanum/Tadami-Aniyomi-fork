@@ -96,7 +96,7 @@ internal class HomeDiscoveryController(
                     val filtered = visible.filterNot { isBlacklisted(it, expandedBlacklist) }
                     cachedDiscoveryPool = dedupeCrossRow(filtered).filterNot { it.cleanTitle in dismissedSessionTitles }
                     val shownAtByTitle = runCatching {
-                        repository.getShownTitlesWithTimestamp(mediaType)
+                        repository.getRecentExclusionsWithTimestamp(mediaType)
                     }.getOrDefault(emptyMap())
 
                     val updatedPool = cachedDiscoveryPool.map { item ->
@@ -136,7 +136,7 @@ internal class HomeDiscoveryController(
         if (!forceUpdate && !advanceOffset && state.discovery.isNotEmpty()) {
             val validCleanTitles = pool.mapTo(HashSet()) { it.cleanTitle }
             val shownMap = runCatching {
-                repository.getShownTitlesWithTimestamp(mediaType)
+                repository.getRecentExclusionsWithTimestamp(mediaType)
             }.getOrDefault(emptyMap())
 
             val patched = patchTeaserItems(
@@ -148,14 +148,6 @@ internal class HomeDiscoveryController(
                 shownCutoffMap = shownMap,
                 dismissedTitles = dismissedSessionTitles,
             )
-
-            val existingValidSet = state.discovery
-                .filter { it.cleanTitle in validCleanTitles }
-                .mapTo(HashSet()) { it.cleanTitle }
-            val newTitles = patched.map { it.cleanTitle }.filterNot { it in existingValidSet }
-            if (newTitles.isNotEmpty()) {
-                runCatching { repository.markShown(mediaType, newTitles) }
-            }
 
             val updatedPool = pool.map { p ->
                 p.toHomeHubDiscoveryItem(shownMap[p.cleanTitle])
@@ -179,7 +171,7 @@ internal class HomeDiscoveryController(
         }
 
         val shownMap = runCatching {
-            repository.getShownTitlesWithTimestamp(mediaType)
+            repository.getRecentExclusionsWithTimestamp(mediaType)
         }.getOrDefault(emptyMap())
         val shownTitles = shownMap.keys
         val currentTitles = state.discovery.mapTo(HashSet()) { it.cleanTitle }
@@ -198,11 +190,6 @@ internal class HomeDiscoveryController(
             if (shouldNotifyDiscoveryPoolLimited(teaser, currentTitles, distinctPoolSize, count)) {
                 onEmitEffect(HomeHubEffect.DiscoveryPoolLimited)
             }
-        }
-
-        val cleanTitlesToMark = teaser.map { it.cleanTitle }
-        if (cleanTitlesToMark.isNotEmpty()) {
-            runCatching { repository.markShown(mediaType, cleanTitlesToMark) }
         }
 
         val updatedPool = pool.map { p ->
@@ -335,12 +322,16 @@ internal class HomeDiscoveryController(
         }
     }
 
-    fun markDiscoveryItemShown(item: HomeHubDiscoveryItem) {
+    fun recordExposure(item: HomeHubDiscoveryItem) {
         if (item.cleanTitle.isBlank()) return
         scope.launchIO {
             runCatching {
-                repository.markShown(item.mediaType, listOf(item.cleanTitle))
+                repository.recordExposure(item.mediaType, listOf(item.cleanTitle))
             }
         }
+    }
+
+    fun markDiscoveryItemShown(item: HomeHubDiscoveryItem) {
+        recordExposure(item)
     }
 }

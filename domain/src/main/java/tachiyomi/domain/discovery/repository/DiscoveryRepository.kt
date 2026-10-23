@@ -39,11 +39,36 @@ interface DiscoveryRepository {
         windowMillis: Long = 48 * 3600_000L,
     ): Map<String, Long>
 
-    /** Счётчик показов (cleanTitle, lastShownAt, count) — для мягкого неявного негатива. */
+    /** Счётчик показов (cleanTitle, lastShownAt, count) — для мягкого неявного негатива (только реальные экспозиции). */
     suspend fun getShownWithCount(
         mediaType: DiscoveryMediaType,
         windowMillis: Long = 48 * 3600_000L,
     ): List<Triple<String, Long, Int>>
+
+    /** Реальные показы рекомендаций пользователю на экране (видимость >= 50% не менее 1с или Stage focus). */
+    suspend fun recordExposure(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long = System.currentTimeMillis(),
+    )
+
+    /** Временное исключение недавно прочитанных/просмотренных тайтлов (без накрутки счётчика показов). */
+    suspend fun suppressRecentlyConsumed(
+        mediaType: DiscoveryMediaType,
+        cleanTitles: Collection<String>,
+        timestamp: Long = System.currentTimeMillis(),
+    )
+
+    /** Объединённые недавние исключения: реальные экспозиции + временные супрессии. */
+    suspend fun getRecentExclusions(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long = 48 * 3600_000L,
+    ): Set<String>
+
+    suspend fun getRecentExclusionsWithTimestamp(
+        mediaType: DiscoveryMediaType,
+        windowMillis: Long = 48 * 3600_000L,
+    ): Map<String, Long>
 
     suspend fun markShown(
         mediaType: DiscoveryMediaType,

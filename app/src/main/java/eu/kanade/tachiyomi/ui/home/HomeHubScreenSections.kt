@@ -653,6 +653,30 @@ private fun HomeHubScreen(
     val trendingSource = remember { CompositeTrendingSource() }
     val directOpenResolver = remember { DiscoveryDirectOpenResolver() }
 
+    val isSectionActive = section == activeSection
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isResumed by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, _ ->
+            isResumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val exposureTracker = remember(section) {
+        HomeDiscoveryExposureTracker(scope = scope, onExposure = onDiscoveryItemFocused)
+    }
+    LaunchedEffect(isSectionActive, isResumed) {
+        if (!isSectionActive || !isResumed) {
+            exposureTracker.onPauseOrInactive()
+        }
+    }
+
     // Direct open для Home-тизеров: plugin-bound карточка открывает экран тайтла
     // напрямую (materialize по sourceId/sourceUrl); неполная привязка, неустановленный
     // источник или любая ошибка деградирует в прежнюю шторку предпросмотра.
@@ -781,7 +805,9 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
-                                onItemFocused = onDiscoveryItemFocused,
+                                onItemFocused = { item ->
+                                    exposureTracker.recordStageFocus(item, isSectionActive, isResumed)
+                                },
                             )
                             heroPresentation == HomeHeroMode.Collage -> DiscoveryHeroCollage(
                                 items = heroFeedItems,
@@ -789,7 +815,9 @@ private fun HomeHubScreen(
                                 onMoreClick = onForYouMoreClick,
                                 onItemClick = { openTeaser(it) },
                                 onLongClick = { longPressItem = it },
-                                onItemFocused = onDiscoveryItemFocused,
+                                onItemFocused = { item ->
+                                    exposureTracker.recordStageFocus(item, isSectionActive, isResumed)
+                                },
                             )
                             heroPresentation == HomeHeroMode.Hybrid && hero != null -> Column {
                                 HeroSection(
@@ -808,6 +836,9 @@ private fun HomeHubScreen(
                                     onLongClick = { longPressItem = it },
                                     isRefreshing = state.isDiscoveryRefreshing,
                                     onRefreshClick = onDiscoveryRefreshClick,
+                                    tracker = exposureTracker,
+                                    isSectionActive = isSectionActive,
+                                    isResumed = isResumed,
                                 )
                             }
                             heroPresentation == HomeHeroMode.Hybrid && hero == null -> HybridDiscoveryStrip(
@@ -818,6 +849,9 @@ private fun HomeHubScreen(
                                 onLongClick = { longPressItem = it },
                                 isRefreshing = state.isDiscoveryRefreshing,
                                 onRefreshClick = onDiscoveryRefreshClick,
+                                tracker = exposureTracker,
+                                isSectionActive = isSectionActive,
+                                isResumed = isResumed,
                             )
                             hero != null -> HeroSection(
                                 hero = hero,
@@ -870,6 +904,9 @@ private fun HomeHubScreen(
                             onLongClick = { longPressItem = it },
                             isRefreshing = state.isDiscoveryRefreshing,
                             onRefreshClick = onDiscoveryRefreshClick,
+                            tracker = exposureTracker,
+                            isSectionActive = isSectionActive,
+                            isResumed = isResumed,
                         )
                     }
                 }

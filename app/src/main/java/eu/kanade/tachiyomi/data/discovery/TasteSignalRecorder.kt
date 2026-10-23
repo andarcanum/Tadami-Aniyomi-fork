@@ -254,7 +254,7 @@ object TasteSignalRecorder {
         mediaType: DiscoveryMediaType,
         cleanTitle: String,
     ) {
-        runCatching { repository.markShown(mediaType, listOf(cleanTitle)) }
+        runCatching { repository.suppressRecentlyConsumed(mediaType, listOf(cleanTitle)) }
         runCatching {
             val app = Injekt.get<android.app.Application>()
             DiscoveryUpdateJob.scheduleConsumedRefill(app, mediaType)

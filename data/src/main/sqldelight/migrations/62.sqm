@@ -1,0 +1,27 @@
+-- Migration 62: Separate real exposures from suppressions and replace cumulative counter with log
+
+CREATE TABLE discovery_exposures (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    media_type TEXT NOT NULL,
+    clean_title TEXT NOT NULL,
+    exposed_at INTEGER NOT NULL
+);
+
+CREATE INDEX discovery_exposures_lookup ON discovery_exposures(media_type, clean_title, exposed_at);
+CREATE INDEX discovery_exposures_time ON discovery_exposures(exposed_at);
+
+CREATE TABLE discovery_suppressions (
+    media_type TEXT NOT NULL,
+    clean_title TEXT NOT NULL,
+    suppressed_at INTEGER NOT NULL,
+    PRIMARY KEY (media_type, clean_title)
+);
+
+CREATE INDEX discovery_suppressions_time ON discovery_suppressions(media_type, suppressed_at);
+
+-- Conservative migration: transfer old shown_at into discovery_suppressions to maintain 48h repeat protection
+INSERT OR IGNORE INTO discovery_suppressions (media_type, clean_title, suppressed_at)
+SELECT media_type, clean_title, shown_at
+FROM discovery_shown;
+
+DROP TABLE discovery_shown;
