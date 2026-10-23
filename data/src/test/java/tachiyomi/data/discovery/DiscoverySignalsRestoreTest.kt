@@ -540,4 +540,35 @@ class DiscoverySignalsRestoreTest {
         signal.genres shouldBe listOf("Sci-Fi")
         signal.createdAt shouldBe newTimestamp
     }
+
+    @Test
+    fun `enrichSignalMetadataIfCurrent rejects update when signal is not LIKE`() =
+        runTest {
+            val timestamp = 5_000L
+            repository.recordSignal(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "overlord",
+                title = "Overlord",
+                signalType = DiscoverySignalType.CONSUMED,
+                genres = listOf("Sci-Fi"),
+                provider = "Local",
+                sourceKey = null,
+                timestamp = timestamp,
+            )
+
+            // Late enrichment with expectedCreatedAt matching the CONSUMED event's timestamp
+            val success = repository.enrichSignalMetadataIfCurrent(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "overlord",
+                expectedCreatedAt = timestamp,
+                genres = listOf("Isekai", "Dark Fantasy"),
+                provider = "Shikimori",
+                sourceKey = "123",
+            )
+
+            success shouldBe false
+            val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
+            signals.single().signalType shouldBe DiscoverySignalType.CONSUMED
+            signals.single().genres shouldBe listOf("Sci-Fi")
+        }
 }

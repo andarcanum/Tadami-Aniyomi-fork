@@ -334,6 +334,19 @@ class DiscoveryRepositoryImpl(
             db.discovery_signalsQueries.selectConsumedByMedia(mediaType.key, ::signalMapper)
         }.map { signals -> signals.mapTo(HashSet()) { it.cleanTitle } }
 
+    private val lastSignalTimestamp = java.util.concurrent.atomic.AtomicLong(0L)
+
+    private fun nextMonotonicTimestamp(timestamp: Long): Long {
+        while (true) {
+            val current = lastSignalTimestamp.get()
+            val base = if (timestamp > 0L) timestamp else System.currentTimeMillis()
+            val next = if (base > current) base else current + 1
+            if (lastSignalTimestamp.compareAndSet(current, next)) {
+                return next
+            }
+        }
+    }
+
     override suspend fun recordSignal(
         mediaType: DiscoveryMediaType,
         cleanTitle: String,
@@ -344,6 +357,7 @@ class DiscoveryRepositoryImpl(
         sourceKey: String?,
         timestamp: Long,
     ) {
+        val eventTimestamp = nextMonotonicTimestamp(timestamp)
         handler.await(inTransaction = true) { db ->
             // Старшинство: слабый сигнал не затирает уже записанный сильный
             // (клик после лайка не понижает вес).
@@ -370,7 +384,7 @@ class DiscoveryRepositoryImpl(
                 genres = mergedMeta.genres.joinToString(","),
                 provider = mergedMeta.provider,
                 source_key = mergedMeta.sourceKey,
-                created_at = timestamp,
+                created_at = eventTimestamp,
             )
             enforceSignalCaps(db.discovery_signalsQueries, mediaType)
         }
@@ -387,7 +401,9 @@ class DiscoveryRepositoryImpl(
         val existing = db.discovery_signalsQueries
             .selectByTitle(mediaType.key, cleanTitle, ::signalMapper)
             .executeAsOneOrNull()
-        if (existing == null || existing.createdAt != expectedCreatedAt) {
+        if (existing == null || existing.createdAt != expectedCreatedAt ||
+            existing.signalType != DiscoverySignalType.LIKE
+        ) {
             return@await false
         }
         val mergedMeta = mergeSignalMetadata(

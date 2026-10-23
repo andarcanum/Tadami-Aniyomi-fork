@@ -78,4 +78,5 @@ SET
     source_key = ?
 WHERE media_type = ?
   AND clean_title = ?
-  AND created_at = ?;
+  AND created_at = ?
+  AND signal = 'like';
