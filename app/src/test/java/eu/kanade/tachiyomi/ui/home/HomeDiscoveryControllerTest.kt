@@ -447,6 +447,54 @@ class HomeDiscoveryControllerTest {
     }
 
     @Test
+    fun `controller flags NO_CANDIDATES when pool is empty but generation completed successfully`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(true)
+            prefs.lastGenerationStatus(DiscoveryMediaType.ANIME).set("SUCCESS")
+            prefs.lastGenerationAt(DiscoveryMediaType.ANIME).set(10_000L)
+            val context = mockk<Context>(relaxed = true)
+
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = true,
+            )
+
+            val controller = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            controller.startObserving()
+
+            waitUntil { currentState.discoveryLastUpdated != null }
+            currentState.isDiscoveryFailed shouldBe false
+            currentState.discovery.shouldBeEmpty()
+            currentState.discoveryLastUpdated shouldBe 10_000L
+
+            val emptyState = resolveForYouEmptyState(
+                discoveryEnabled = currentState.discoveryEnabled,
+                isRefreshing = currentState.isDiscoveryRefreshing,
+                hasItems = currentState.discovery.isNotEmpty(),
+                lastUpdatedAt = currentState.discoveryLastUpdated,
+                isFailed = currentState.isDiscoveryFailed,
+            )
+            emptyState shouldBe ForYouEmptyState.NO_CANDIDATES
+        }
+    }
+
+    @Test
     fun `controller preserves mediaType isolation between anime manga and novel`() {
         runBlocking {
             val repo = TestDiscoveryRepo()

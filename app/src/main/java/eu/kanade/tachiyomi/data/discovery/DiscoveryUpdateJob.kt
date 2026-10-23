@@ -130,6 +130,10 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                         resolveWorkResult(isManual, runAttemptCount, outcomes = completed.values)
                     } else {
                         logcat { "[DiscoveryUpdateJob] TIMEOUT after ${WORKER_TIMEOUT_MS}ms" }
+                        mediaTypes.forEach { mediaType ->
+                            preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.FAILED.name)
+                            preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
+                        }
                         resolveWorkResult(isManual, runAttemptCount, isSuccess = false)
                     }
                 } finally {
@@ -140,6 +144,10 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             throw e
         } catch (e: Exception) {
             logcat { "[DiscoveryUpdateJob] FAILED: ${e.message}" }
+            mediaTypes.forEach { mediaType ->
+                preferences.lastGenerationStatus(mediaType).set(DiscoveryRunStatus.FAILED.name)
+                preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
+            }
             resolveWorkResult(isManual, runAttemptCount, isSuccess = false)
         } finally {
             if (isManual) {

@@ -142,6 +142,14 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
     fun lastFailedRows(mediaType: DiscoveryMediaType): Preference<String> =
         preferenceStore.getString("discovery_failed_rows_" + mediaType.key, "")
 
+    /** Статус последней генерации per-media: "SUCCESS", "PARTIAL", "FAILED", "SKIPPED", "" (не запускалось). */
+    fun lastGenerationStatus(mediaType: DiscoveryMediaType): Preference<String> =
+        preferenceStore.getString("discovery_last_gen_status_" + mediaType.key, "")
+
+    /** Время завершения последней попытки генерации per-media. */
+    fun lastGenerationAt(mediaType: DiscoveryMediaType): Preference<Long> =
+        preferenceStore.getLong("discovery_last_gen_at_" + mediaType.key, 0L)
+
     /** Режим участия плагинов в подборках: "auto" (топ-3 по весу библиотеки) | "manual" (свой набор). */
     fun discoverySourceMode(mediaType: DiscoveryMediaType): Preference<String> =
         preferenceStore.getString("discovery_source_mode_" + mediaType.key, "auto")
