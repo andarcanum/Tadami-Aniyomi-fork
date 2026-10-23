@@ -7,6 +7,7 @@ import cafe.adriel.voyager.core.model.StateScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import eu.kanade.domain.discovery.service.DiscoveryPreferences
 import eu.kanade.tachiyomi.data.discovery.CompositeTrendingSource
+import eu.kanade.tachiyomi.data.discovery.DiscoveryCandidatePolicy
 import eu.kanade.tachiyomi.data.discovery.DiscoveryLibraryAdder
 import eu.kanade.tachiyomi.data.discovery.DiscoveryRowItem
 import eu.kanade.tachiyomi.data.discovery.DiscoveryTrendingSource
@@ -17,6 +18,7 @@ import eu.kanade.tachiyomi.data.discovery.dedupeCrossRow
 import eu.kanade.tachiyomi.data.discovery.expandGenreSet
 import eu.kanade.tachiyomi.data.discovery.interleaveMix
 import eu.kanade.tachiyomi.data.discovery.isBlacklisted
+import eu.kanade.tachiyomi.data.discovery.parseGenreFilterCsv
 import eu.kanade.tachiyomi.data.discovery.recoverMissingCovers
 import eu.kanade.tachiyomi.data.discovery.rrfScores
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
@@ -312,18 +314,22 @@ internal class DiscoveryFeedScreenModel(
                     repository.subscribeConsumed(mediaType),
                 ) { hidden, consumed -> hidden to consumed },
                 preferences.lastFailedRows(mediaType).changes(),
-                repository.subscribeBlacklist(mediaType),
-            ) { all, refreshing, hiddenAndConsumed, failedCsv, blacklist ->
-                FeedSources(all, refreshing, hiddenAndConsumed.first, failedCsv, blacklist, hiddenAndConsumed.second)
+                combine(
+                    repository.subscribeBlacklist(mediaType),
+                    preferences.ignoredGenres().changes(),
+                ) { blacklist, ignoredCsv ->
+                    val (canon, raw) = parseGenreFilterCsv(ignoredCsv)
+                    DiscoveryCandidatePolicy(blacklistedTags = blacklist, ignoredGenres = canon + raw.toSet())
+                },
+            ) { all, refreshing, hiddenAndConsumed, failedCsv, policy ->
+                FeedSources(all, refreshing, hiddenAndConsumed.first, failedCsv, policy, hiddenAndConsumed.second)
             }
-                .collectLatest { (all, refreshing, hidden, failedCsv, blacklist, consumed) ->
+                .collectLatest { (all, refreshing, hidden, failedCsv, policy, consumed) ->
                     // Кросс-рядовой дедуп: упавший ряд живёт старым кэшем и может
                     // содержать тайтлы свежих рядов — приоритет у rowType.ordinal.
-                    val expandedBlacklist = expandGenreSet(blacklist.toList())
                     val visible = dedupeCrossRow(
-                        all.filterNot {
-                            it.cleanTitle in hidden || it.cleanTitle in consumed ||
-                                isBlacklisted(it, expandedBlacklist)
+                        all.filter { item ->
+                            item.cleanTitle !in hidden && item.cleanTitle !in consumed && policy.isAllowed(item)
                         },
                     )
                     val rows = groupFeedRows(visible)
@@ -394,7 +400,7 @@ internal class DiscoveryFeedScreenModel(
         val refreshing: Boolean,
         val hidden: Set<String>,
         val failedCsv: String,
-        val blacklist: Set<String>,
+        val policy: DiscoveryCandidatePolicy,
         val consumed: Set<String>,
     )
 

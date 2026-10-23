@@ -173,4 +173,42 @@ class DiscoveryTrendRowBuilderTest {
         result.first().title shouldBe "Another Fresh Novel"
         result.first().reason shouldBe "source"
     }
+
+    @Test
+    fun `globally ignored genre filtered from fallback source in trend builder`() = runTest {
+        val trending = FakeTrending(shouldFail = true)
+        val catalog = FakeCatalog(
+            latestItems = listOf(
+                DiscoveryRowItem(
+                    "Clean Novel",
+                    "clean novel",
+                    null,
+                    null,
+                    null,
+                    "InkStory",
+                    0.0,
+                    genres = listOf("Fantasy"),
+                ),
+                DiscoveryRowItem(
+                    "Ignored Novel",
+                    "ignored novel",
+                    null,
+                    null,
+                    null,
+                    "InkStory",
+                    0.0,
+                    genres = listOf("Ecchi"),
+                ),
+            ),
+        )
+        val builder = DiscoveryTrendRowBuilder(
+            trending = trending,
+            catalog = catalog,
+            seasonProvider = { TrendSeason.CURRENT },
+            sortProvider = { TrendSort.TRENDING },
+        )
+
+        val result = builder.build(testContext.copy(ignoredGenres = setOf("Ecchi")))
+        result.map { it.title } shouldBe listOf("Clean Novel")
+    }
 }

@@ -256,4 +256,21 @@ class DiscoverySourceRowBuilderTest {
         rotated.take(15).map { it.provider.substringBefore("-") } shouldBe
             (sourceIds.drop(1) + sourceIds.take(1)).map { "S$it" }
     }
+
+    @Test
+    fun `blacklisted and ignored genres are filtered from source row`() = runTest {
+        val popular = listOf(
+            DiscoveryRowItem("Clean Title", "clean title", null, null, null, "S1", 1.0, genres = listOf("Fantasy")),
+            DiscoveryRowItem("Ecchi Title", "ecchi title", null, null, null, "S1", 0.9, genres = listOf("Ecchi")),
+            DiscoveryRowItem("Horror Title", "horror title", null, null, null, "S1", 0.8, genres = listOf("Horror")),
+        )
+        val catalog = FakeCatalog(itemsBySource = mapOf(1L to popular), latestBySource = emptyMap())
+        val builder = DiscoverySourceRowBuilder(catalog, rowCap = 10)
+        val ctx = context(sourceIds = listOf(1L)).copy(
+            blacklistedTags = setOf("Ecchi"),
+            ignoredGenres = setOf("Horror"),
+        )
+        val result = builder.build(ctx)
+        result.map { it.title } shouldBe listOf("Clean Title")
+    }
 }

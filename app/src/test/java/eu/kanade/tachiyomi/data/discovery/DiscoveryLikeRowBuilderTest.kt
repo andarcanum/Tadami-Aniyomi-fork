@@ -179,4 +179,40 @@ class DiscoveryLikeRowBuilderTest {
         catalog.maxConcurrent.get() shouldBe io.kotest.matchers.ints.beGreaterThan(1)
         results.isNotEmpty() shouldBe true
     }
+
+    @Test
+    fun `blacklisted tags filter external suggestions in like row builder`() = runTest {
+        val suggestions = mockk<SuggestionCoordinator>()
+        val item1 =
+            SuggestionItem(
+                "Clean Like",
+                listOf("Clean Like"),
+                null,
+                "AniList",
+                "",
+                null,
+                eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType.NOVEL,
+                genres = listOf("Adventure"),
+            )
+        val item2 =
+            SuggestionItem(
+                "Dirty Like",
+                listOf("Dirty Like"),
+                null,
+                "AniList",
+                "",
+                null,
+                eu.kanade.tachiyomi.data.suggestions.sources.SuggestionMediaType.NOVEL,
+                genres = listOf("Ecchi"),
+            )
+        coEvery { suggestions.fetchSuggestions(any(), any(), any()) } returns
+            SuggestionFetchResult(listOf(item1, item2), attemptedSources = 1, failedSources = 0)
+        val builder = DiscoveryLikeRowBuilder(suggestions)
+
+        val context = externalContext(feedback = false).copy(
+            blacklistedTags = setOf("Ecchi"),
+        )
+        val result = builder.build(context)
+        result.map { it.title } shouldBe listOf("Clean Like")
+    }
 }

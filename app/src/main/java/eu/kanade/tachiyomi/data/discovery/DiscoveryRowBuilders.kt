@@ -79,6 +79,7 @@ class DiscoveryLikeRowBuilder(
                         seedTitle = feedbackSeed.title,
                         provider = item.providerName,
                         score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
+                        genres = item.genres,
                     )
                 }
             }
@@ -114,6 +115,7 @@ class DiscoveryLikeRowBuilder(
                         seedTitle = seed.title,
                         provider = item.providerName,
                         score = item.bestMatchScoreFor(suggestionSeed).toDouble(),
+                        genres = item.genres,
                     )
                 }
             }
@@ -126,7 +128,7 @@ class DiscoveryLikeRowBuilder(
             if (merged.isEmpty() && totalSeeds > 0 && (fullyFailedSeeds == totalSeeds || hasFailedSources)) {
                 throw IOException("all suggestion providers failed for every seed")
             }
-            return merged
+            return context.candidatePolicy.filterRowCandidates(merged, { it.genres })
         } else {
             if (catalog == null) return emptyList()
             val sourceIds = context.sourceIds.filter { it > 0 }
@@ -171,7 +173,8 @@ class DiscoveryLikeRowBuilder(
                     }
                 }.awaitAll()
             }
-            return mergeSeedResults(perSeed)
+            val merged = mergeSeedResults(perSeed)
+            return context.candidatePolicy.filterRowCandidates(merged, { it.genres })
         }
     }
 }
@@ -198,8 +201,7 @@ class DiscoveryTrendRowBuilder(
         }
         // C1: приоритет — топ-взвешенный источник библиотеки, иначе lastUsed/fallback.
         val preferredSourceId = context.sourceIds.firstOrNull() ?: context.sourceId
-        // B2: жанры из tag-blacklist не проходят в ряд (best-effort: без жанров — без фильтра).
-        val expandedBlacklist = expandGenreSet(context.blacklistedTags.toList())
+        val policy = context.candidatePolicy
 
         val fromSource = if (context.mediaType == DiscoveryMediaType.NOVEL && preferredSourceId > 0) {
             runCatchingUnlessCancelled {
@@ -214,7 +216,7 @@ class DiscoveryTrendRowBuilder(
                     reason = "source",
                     score = 0.0,
                 )
-            }
+            }.let { items -> policy.filterRowCandidates(items, { it.genres }) }
         } else {
             emptyList()
         }
@@ -228,12 +230,7 @@ class DiscoveryTrendRowBuilder(
                 releaseStatuses = context.releaseStatuses,
             )
         }.getOrNull().orEmpty()
-            // B2: жанры из tag-blacklist не проходят в ряд — эвристика GenreMatcher
-            // режет любые языки/формы (экшен вырежет и «Action», и «aksiyon»).
-            .filterNot { item -> matchesAnyGenre(item.genres, expandedBlacklist) }
-            // V3: обязательные жанры — только тайтлы с ними (best-effort:
-            // пустой результат → без фильтра, лента не голодает).
-            .let { items -> applyRequiredGenres(items, context.requiredGenres) }
+            .let { items -> policy.filterRowCandidates(items, { it.genres }) }
             .map { item ->
                 DiscoveryRowItem(
                     title = item.title,
@@ -266,8 +263,9 @@ class DiscoveryTrendRowBuilder(
 
         if (context.mediaType == DiscoveryMediaType.NOVEL) {
             val combinedNovels = (fromSource + fromTrending).distinctBy { it.cleanTitle }
-            if (combinedNovels.isNotEmpty()) {
-                return combinedNovels
+            val filteredNovels = policy.filterRowCandidates(combinedNovels, { it.genres })
+            if (filteredNovels.isNotEmpty()) {
+                return filteredNovels
             }
         } else {
             if (fromTrending.isNotEmpty()) {
@@ -289,7 +287,7 @@ class DiscoveryTrendRowBuilder(
                         reason = "source",
                         score = 0.0,
                     )
-                }
+                }.let { items -> policy.filterRowCandidates(items, { it.genres }) }
                 if (fallbackSource.isNotEmpty()) {
                     return fallbackSource
                 }
@@ -318,10 +316,9 @@ class DiscoveryTasteRowBuilder(
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
         val profile = context.tasteProfile
         if (profile.isEmpty()) return emptyList()
-        // B2: заблэклиженные жанры выключаются из профиля ДО запросов — они не
-        // должны попадать ни в genre-запросы, ни в скор/обоснования.
-        val expandedBlacklist = expandGenreSet(context.blacklistedTags.toList())
-        val activeProfile = profile.filterNot { (genre, _) -> matchesAnyGenre(listOf(genre), expandedBlacklist) }
+        val policy = context.candidatePolicy
+        // B2: заблэклиженные и глобально игнорируемые жанры выключаются из профиля ДО запросов.
+        val activeProfile = profile.filterNot { (genre, _) -> policy.isForbidden(listOf(genre)) }
         if (activeProfile.isEmpty()) return emptyList()
         val genreNames = activeProfile.take(6).map { it.first }
         // V3: у source-выдачи нет жанров на айтеме (клиентский фильтр невозможен),
@@ -371,10 +368,7 @@ class DiscoveryTasteRowBuilder(
             emptyList()
         }
         val fromTrending = trendingResult?.getOrNull().orEmpty()
-            // best-effort: провайдеры без жанров в выдаче (source-latest) не фильтруются
-            .filterNot { item -> matchesAnyGenre(item.genres, expandedBlacklist) }
-            // V3: обязательные жанры — best-effort (пустой результат → без фильтра).
-            .let { items -> applyRequiredGenres(items, context.requiredGenres) }
+            .let { items -> policy.filterRowCandidates(items, { it.genres }) }
             .map { item ->
                 DiscoveryRowItem(
                     title = item.title,
@@ -405,14 +399,19 @@ class DiscoveryTasteRowBuilder(
             interleaveSourceParts(sourceParts, cap = 50).distinctBy { it.cleanTitle }
         } else {
             sourceParts.flatten()
-        }
+        }.let { items -> policy.filterRowCandidates(items, { it.genres }) }
         val combined = if (fromTrending.isEmpty()) fromSource else mergeNormalized(fromTrending, fromSource)
+        val filteredCombined = policy.filterRowCandidates(
+            combined,
+            { it.genres },
+            { DiscoveryCandidatePolicy.extractFallbackTags(it.reason) },
+        )
         val anyFailed =
             (trendingResult?.isFailure ?: false) || (sourceResults.isNotEmpty() && sourceResults.all { it.isFailure })
-        if (combined.isEmpty() && anyFailed) {
+        if (filteredCombined.isEmpty() && anyFailed) {
             throw IOException("taste sources failed without results")
         }
-        return filterGenreClustering(combined, maxPerGenre = 6).take(50)
+        return filterGenreClustering(filteredCombined, maxPerGenre = 6).take(50)
     }
 }
 
@@ -515,13 +514,15 @@ class DiscoverySourceRowBuilder(
         val surplusParts = results.map { it.second }
 
         val selected = interleaveSourceParts(parts, rowCap).distinctBy { it.cleanTitle }
-        if (selected.size >= rowCap) return selected
-        val selectedTitles = selected.mapTo(HashSet()) { it.cleanTitle }
+        val filteredSelected = context.candidatePolicy.filterRowCandidates(selected, { it.genres })
+        if (filteredSelected.size >= rowCap) return filteredSelected
+        val selectedTitles = filteredSelected.mapTo(HashSet()) { it.cleanTitle }
         val backfill = interleaveSourceParts(
             surplusParts.map { items -> items.filterNot { it.cleanTitle in selectedTitles } },
             rowCap,
         ).distinctBy { it.cleanTitle }
-        return (selected + backfill).take(rowCap)
+        val filteredBackfill = context.candidatePolicy.filterRowCandidates(backfill, { it.genres })
+        return (filteredSelected + filteredBackfill).take(rowCap)
     }
 }
 

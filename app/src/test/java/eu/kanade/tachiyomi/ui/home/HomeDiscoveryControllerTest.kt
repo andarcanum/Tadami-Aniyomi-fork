@@ -338,6 +338,57 @@ class HomeDiscoveryControllerTest {
         }
     }
 
+    @Test
+    fun `changing ignoredGenres purges matching card and replaces it with allowed candidate`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(true)
+            prefs.teaserCount().set(3)
+            val context = mockk<Context>(relaxed = true)
+
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+            )
+
+            val controller = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            repo.poolFlow.value = listOf(
+                testSuggestion("Safe 1").copy(genres = listOf("Action")),
+                testSuggestion("Spicy 2").copy(genres = listOf("Ecchi")),
+                testSuggestion("Safe 3").copy(genres = listOf("Comedy")),
+                testSuggestion("Safe 4").copy(genres = listOf("Fantasy")),
+            )
+            controller.startObserving()
+
+            waitUntil { currentState.discovery.size == 3 }
+            currentState.discovery.map { it.title } shouldBe listOf("Safe 1", "Spicy 2", "Safe 3")
+
+            // User dynamically adds Ecchi to ignored genres in settings
+            prefs.ignoredGenres().set("ecchi")
+
+            // Spicy 2 should be immediately purged and replaced by Safe 4!
+            waitUntil { currentState.discovery.any { it.title == "Safe 4" } }
+            currentState.discovery.none { it.cleanTitle == "spicy 2" } shouldBe true
+            currentState.discoveryPool.none { it.cleanTitle == "spicy 2" } shouldBe true
+            currentState.discovery.map { it.title } shouldBe listOf("Safe 1", "Safe 4", "Safe 3")
+        }
+    }
+
     private suspend fun waitUntil(timeoutMs: Long = 5000, condition: () -> Boolean) {
         val start = System.currentTimeMillis()
         while (!condition()) {

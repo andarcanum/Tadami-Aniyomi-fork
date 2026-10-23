@@ -415,9 +415,9 @@ class DiscoveryRunner(
             historyCleanTitles = seedSources.historyCleanTitles(mediaType),
             hiddenCleanTitles = repository.getHiddenTitles(mediaType) + consumedCleanTitles,
             tasteProfile = mergedTasteProfile,
-            // V3: глобальный игнор-список жанров (преф) поверх per-media блэклиста тегов.
-            blacklistedTags = repository.getBlacklistedTags(mediaType) +
-                parseGenreFilterCsv(preferences.ignoredGenres().get()).let { (canon, raw) -> canon + raw },
+            blacklistedTags = repository.getBlacklistedTags(mediaType),
+            ignoredGenres = parseGenreFilterCsv(preferences.ignoredGenres().get())
+                .let { (canon, raw) -> canon + raw.toSet() },
             // V1: статус-фильтр трендов — CSV из настроек, пусто = без фильтра.
             releaseStatuses = DiscoveryReleaseStatus.parseCsv(preferences.releaseStatusFilter().get()),
             // V3: жанровые фильтры — CSV с raw-префиксом; canonical + raw матчатся одинаково.

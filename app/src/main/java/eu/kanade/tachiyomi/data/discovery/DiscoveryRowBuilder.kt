@@ -34,6 +34,8 @@ data class DiscoveryBuildContext(
     val tasteProfile: List<Pair<String, Double>> = emptyList(),
     /** B2: теги из tag-blacklist — жанры профиля и айтемов с ними не проходят. */
     val blacklistedTags: Set<String> = emptySet(),
+    /** V3: глобально игнорируемые жанры (преф). */
+    val ignoredGenres: Set<String> = emptySet(),
     /** V1: статус-фильтр трендов (пусто = без фильтра, все статусы). */
     val releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus> = emptySet(),
     /** V3: приоритетные жанры — буст скора, не отсекают. */
@@ -51,7 +53,15 @@ data class DiscoveryBuildContext(
     /** Тайтлы ТЕКУЩЕЙ ленты (ручной рефреш): stale-добор их не возвращает — наполнение реально сменяется. */
     val currentFeedCleanTitles: Set<String> = emptySet(),
     val pageOffset: Int = 1,
-)
+) {
+    val candidatePolicy: DiscoveryCandidatePolicy
+        get() = DiscoveryCandidatePolicy(
+            blacklistedTags = blacklistedTags,
+            ignoredGenres = ignoredGenres,
+            requiredGenres = requiredGenres,
+            priorityGenres = priorityGenres,
+        )
+}
 
 interface DiscoveryRowBuilder {
     val rowType: DiscoveryRowType
