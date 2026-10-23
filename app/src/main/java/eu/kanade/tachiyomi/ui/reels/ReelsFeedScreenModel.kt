@@ -145,6 +145,8 @@ class ReelsFeedScreenModel(
     private val reelsAlbumRepository: ReelsAlbumRepository = Injekt.get(),
     private val offlineStore: ReelsOfflineStore = Injekt.get(),
     private val sessionSound: ReelsSessionSoundState = sharedSessionSound,
+    // Adaptive pager runway; injectable so tests can drive a fake mono clock.
+    private val runway: ReelsFeedRunway = ReelsFeedRunway(),
 ) : StateScreenModel<ReelsFeedScreenModel.State>(
     State(
         currentSourceId = initialSourceId,
@@ -231,6 +233,11 @@ class ReelsFeedScreenModel(
     // write goes through the same generation-checked CAS update as the items — a stale job
     // can no longer corrupt the newer feed's cursor.
     private val loadGeneration = AtomicInteger(0)
+
+    // Latest pager position, including transient pages crossed during a fling. The settled
+    // page is not enough: a 10-reel fling must already have the next page in flight.
+    @Volatile
+    private var lastPagerPage = 0
 
     // Snapshot of the unfiltered feed, used to restore position when a search is cleared.
     // Written only from main-thread entry points (search/clearSearch/switchSource).
@@ -656,6 +663,10 @@ class ReelsFeedScreenModel(
 
         loadJob?.cancel()
         val generation = loadGeneration.incrementAndGet()
+        if (reset) {
+            runway.reset()
+            lastPagerPage = 0
+        }
 
         // Set synchronously before the coroutine is dispatched: two rapid
         // loadNextPageIfNeeded() calls must not both pass the isLoading guard while the
@@ -708,11 +719,13 @@ class ReelsFeedScreenModel(
             return
         }
 
+        val pageAtLoadStart = lastPagerPage
         loadJob = screenModelScope.launch(ioDispatcher) {
             if (mode == FeedMode.FOLLOWING) {
                 loadFollowing(generation = generation, reset = reset, src = src)
                 return@launch
             }
+            runway.onLoadStarted()
             try {
                 // The creator page shares the sticky cursor protocol with the global feed,
                 // just on its own per-stream token space (contract v18). switchSource has
@@ -781,6 +794,7 @@ class ReelsFeedScreenModel(
                     pageData.videos.distinctBy { it.id }.filterHidden()
                         .all { it.id in state.value.seenIds }
 
+                val itemsBeforeAppend = state.value.items.size
                 mutableState.update { current ->
                     // Re-check inside the CAS: a reset may have landed between the outer guard
                     // and this update; writing a stale page would corrupt the newer feed.
@@ -836,6 +850,9 @@ class ReelsFeedScreenModel(
                         pageError = null,
                     )
                 }
+                runway.onLoadFinished()
+                val itemsAfterAppend = state.value.items.size
+                val appended = if (reset) itemsAfterAppend else itemsAfterAppend - itemsBeforeAppend
                 // Deep-link seek continuation: the tapped clip was not on this page — silently
                 // append the next page until it surfaces (unbounded by design: deep albums put
                 // the clip dozens of pages in). Natural stops: end of feed, or a stall page
@@ -846,6 +863,10 @@ class ReelsFeedScreenModel(
                     } else {
                         loadFeed(reset = false)
                     }
+                } else if (appended > 0 && lastPagerPage > pageAtLoadStart) {
+                    // The fling crossed at least one page while this page was in flight:
+                    // re-evaluate the runway so the next page is already on its way.
+                    maybeLoadMoreForRunway()
                 }
             } catch (e: CancellationException) {
                 // Superseded by a newer reset/switch: keep whatever state the new load owns.
@@ -856,6 +877,7 @@ class ReelsFeedScreenModel(
                 logcat(LogPriority.ERROR, t) { "Failed to load video feed from source ${state.value.currentSourceId}" }
                 // A load that lost the generation race must not stamp its error onto the new feed.
                 if (loadGeneration.get() != generation) return@launch
+                runway.onLoadAborted()
                 mutableState.update { current ->
                     if (current.items.isEmpty()) {
                         current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
@@ -876,10 +898,57 @@ class ReelsFeedScreenModel(
         }
     }
 
+    /**
+     * Samples the live pager position (including transient pages crossed during a fling)
+     * and asks the adaptive runway whether the next page should already be in flight.
+     */
+    fun onPagerPositionChanged(page: Int) {
+        if (page < 0) return
+        lastPagerPage = page
+        runway.onPage(page)
+        maybeLoadMoreForRunway()
+    }
+
     fun loadNextPageIfNeeded(visibleIndex: Int) {
-        if (visibleIndex >= state.value.items.size - 2 && state.value.canLoadMore && !state.value.isLoading) {
-            loadFeed(reset = false)
+        if (mode == FeedMode.FOLLOWING) {
+            // Following feeds top up per-creator streams and keep their own merged-tail rule.
+            if (visibleIndex >= state.value.items.size - 2 &&
+                state.value.canLoadMore &&
+                !state.value.isLoading
+            ) {
+                loadFeed(reset = false)
+            }
+            return
         }
+        if (visibleIndex >= 0) {
+            lastPagerPage = visibleIndex
+            runway.onPage(visibleIndex)
+        }
+        maybeLoadMoreForRunway()
+    }
+
+    private fun maybeLoadMoreForRunway() {
+        val current = state.value
+        if (mode == FeedMode.FOLLOWING) return
+        if (current.isOffline || current.isLoading || !current.canLoadMore || current.items.isEmpty()) return
+        // Album search paginates on its own cursor/cap flag; the reels runway does not apply.
+        if (current.albumSearchCapable && current.searchQuery.isNotBlank()) return
+
+        val page = lastPagerPage.coerceIn(0, current.items.lastIndex)
+        val decision = runway.evaluate(
+            page = page,
+            total = current.items.size,
+            isLoading = current.isLoading,
+            canLoadMore = current.canLoadMore,
+        )
+        if (!decision.shouldLoad) return
+
+        logcat(LogPriority.DEBUG) {
+            "Reels runway: page=$page size=${current.items.size} " +
+                "remaining=${decision.pagesRemaining} rate=${"%.2f".format(decision.pagesPerSecond)}/s " +
+                "eta=${decision.etaMs}ms"
+        }
+        loadFeed(reset = false)
     }
 
     /**
