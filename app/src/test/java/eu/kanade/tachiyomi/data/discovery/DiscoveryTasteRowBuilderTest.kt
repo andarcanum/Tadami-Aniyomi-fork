@@ -14,6 +14,9 @@ class DiscoveryTasteRowBuilderTest {
         private val genreItems: List<DiscoveryTrendingItem> = emptyList(),
         private val shouldFail: Boolean = false,
     ) : DiscoveryTrendingSource {
+        var lastQueriedGenres: List<String>? = null
+        var lastQueriedPage: Int? = null
+
         override suspend fun fetch(
             mediaType: DiscoveryMediaType,
             season: TrendSeason,
@@ -29,6 +32,8 @@ class DiscoveryTasteRowBuilderTest {
             page: Int,
             releaseStatuses: Set<tachiyomi.domain.discovery.model.DiscoveryReleaseStatus>,
         ): List<DiscoveryTrendingItem> {
+            lastQueriedGenres = genres
+            lastQueriedPage = page
             if (shouldFail) throw IOException("trending boom")
             return genreItems
         }
@@ -244,5 +249,40 @@ class DiscoveryTasteRowBuilderTest {
         ).build(ctx)
 
         result.map { it.title } shouldBe listOf("Src10 Item 1", "Src20 Item 1")
+    }
+
+    @Test
+    fun `empty taste profile with required genres builds TASTE row from explicit genres`() = runTest {
+        val trending = FakeTrending(
+            genreItems = listOf(
+                DiscoveryTrendingItem("Cyber Love", "cyber love", null, 1L, null, genres = listOf("Cyberpunk")),
+            ),
+        )
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Cyberpunk"),
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val ctx = context(profile = emptyList()).copy(
+            requiredGenres = setOf("Cyberpunk"),
+            genreFilterSpec = spec,
+        )
+        val result = builder(trending, FakeCatalog()).build(ctx)
+        result.map { it.title } shouldBe listOf("Cyber Love")
+        trending.lastQueriedGenres shouldBe listOf("Cyberpunk")
+    }
+
+    @Test
+    fun `explicit required and priority genres take precedence over library profile in external query`() = runTest {
+        val trending = FakeTrending(
+            genreItems = listOf(
+                DiscoveryTrendingItem("Item", "item", null, 1L, null, genres = listOf("Sci-Fi")),
+            ),
+        )
+        val ctx = context(profile = listOf("Action" to 5.0, "Comedy" to 4.0)).copy(
+            requiredGenres = setOf("Sci-Fi"),
+            priorityGenres = setOf("Mecha"),
+        )
+        builder(trending, FakeCatalog()).build(ctx)
+        trending.lastQueriedGenres?.take(2) shouldBe listOf("Sci-Fi", "Mecha")
     }
 }

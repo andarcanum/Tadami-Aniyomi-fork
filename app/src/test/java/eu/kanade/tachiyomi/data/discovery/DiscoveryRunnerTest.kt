@@ -1169,6 +1169,24 @@ class DiscoveryRunnerTest {
     }
 
     @Test
+    fun `manual refresh count is incremented when builders run even if rows empty`() = runTest {
+        val prefs = DiscoveryPreferences(eu.kanade.tachiyomi.test.PersistingPreferenceStore())
+        val emptyBuilder = object : DiscoveryRowBuilder {
+            override val rowType = DiscoveryRowType.TREND
+            override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> = emptyList()
+        }
+        val runner = DiscoveryRunner(
+            repository = FakeRepository(),
+            preferences = prefs,
+            seedSources = FakeSeedSources(),
+            coordinatorFactory = { DiscoveryCoordinator(listOf(emptyBuilder)) },
+            sourcePreferencesProvider = ::testSourcePrefs,
+        )
+        runner.run(listOf(DiscoveryMediaType.MANGA), isManualRefresh = true)
+        prefs.manualRefreshCount(DiscoveryMediaType.MANGA).get() shouldBe 1
+    }
+
+    @Test
     fun `like row cache cleared when seeds empty and row honestly empty`() = runTest {
         val repo = FakeRepository()
         val runner = DiscoveryRunner(
