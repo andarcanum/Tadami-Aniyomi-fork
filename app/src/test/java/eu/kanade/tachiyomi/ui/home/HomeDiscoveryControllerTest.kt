@@ -255,6 +255,61 @@ class HomeDiscoveryControllerTest {
         }
     }
 
+    @Test
+    fun `dismissed card does not re-enter teaser or pool when repository re-emits`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(true)
+            val context = mockk<Context>(relaxed = true)
+
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+            )
+
+            val controller = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            repo.poolFlow.value = listOf(
+                testSuggestion("Card 1"),
+                testSuggestion("Card 2"),
+                testSuggestion("Card 3"),
+            )
+            controller.startObserving()
+
+            waitUntil { currentState.discovery.size == 3 }
+            currentState.discovery.map { it.title } shouldBe listOf("Card 1", "Card 2", "Card 3")
+
+            controller.likeDiscoveryItem(testSuggestion("Card 1").toHomeHubDiscoveryItem())
+            waitUntil { currentState.discovery.none { it.cleanTitle == "card 1" } }
+
+            repo.poolFlow.value = listOf(
+                testSuggestion("Card 1"),
+                testSuggestion("Card 2"),
+                testSuggestion("Card 3"),
+                testSuggestion("Card 4"),
+            )
+
+            waitUntil { currentState.discoveryPool.any { it.cleanTitle == "card 4" } }
+
+            currentState.discovery.none { it.cleanTitle == "card 1" } shouldBe true
+            currentState.discoveryPool.none { it.cleanTitle == "card 1" } shouldBe true
+        }
+    }
+
     private suspend fun waitUntil(timeoutMs: Long = 5000, condition: () -> Boolean) {
         val start = System.currentTimeMillis()
         while (!condition()) {

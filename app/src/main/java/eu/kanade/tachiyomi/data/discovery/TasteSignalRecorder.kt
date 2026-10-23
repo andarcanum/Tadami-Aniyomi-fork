@@ -3,7 +3,11 @@ package eu.kanade.tachiyomi.data.discovery
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.novelsource.model.SNovel
 import eu.kanade.tachiyomi.source.model.SManga
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
 import tachiyomi.domain.discovery.model.DiscoveryRowType
 import tachiyomi.domain.discovery.model.DiscoverySignalType
@@ -14,6 +18,8 @@ import tachiyomi.domain.source.manga.model.StubMangaSource
 import tachiyomi.domain.source.novel.model.StubNovelSource
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+
+private val defaultEnrichmentScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
 /** Общий инстанс для кэшей меты (globalMetaCache статический, per-source кэши — общие). */
 private val sharedTrendingSource: CompositeTrendingSource by lazy { CompositeTrendingSource() }
@@ -65,6 +71,7 @@ object TasteSignalRecorder {
         repository: DiscoveryRepository,
         item: DiscoverySuggestion,
         signalType: DiscoverySignalType,
+        enrichmentScope: CoroutineScope = defaultEnrichmentScope,
         altMetaResolver: suspend (String, DiscoveryMediaType) -> DiscoveryMeta? = { t, m ->
             runCatchingUnlessCancelled { sharedTrendingSource.fetchMeta(t, m) }.getOrNull()
         },
@@ -117,32 +124,56 @@ object TasteSignalRecorder {
         if (signalType == DiscoverySignalType.CONSUMED) {
             afterConsumed(repository, item.mediaType, item.cleanTitle)
         } else if (signalType == DiscoverySignalType.LIKE) {
-            if (genres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
-                val sourceId = item.sourceId!!
-                val sourceUrl = item.sourceUrl!!
-                val enriched = runCatchingUnlessCancelled {
-                    sourceDetailsResolver(item.mediaType, sourceId, sourceUrl)
-                }.getOrNull().orEmpty()
-                if (enriched.isNotEmpty()) {
-                    runCatchingUnlessCancelled {
-                        repository.recordSignal(
-                            mediaType = item.mediaType,
-                            cleanTitle = item.cleanTitle,
-                            title = item.title,
-                            signalType = signalType,
-                            genres = enriched,
-                            provider = item.provider,
-                            sourceKey = sourceKey,
-                        )
-                    }
-                }
-            }
             runCatching {
                 val app = Injekt.get<android.app.Application>()
                 DiscoveryUpdateJob.scheduleRefill(app, item.mediaType)
             }
+            if (genres.isEmpty() && (item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
+                enrichmentScope.launch {
+                    enrichLikeMetadata(
+                        repository = repository,
+                        item = item,
+                        sourceKey = sourceKey,
+                        sourceDetailsResolver = sourceDetailsResolver,
+                    )
+                }
+            }
         }
         return true
+    }
+
+    internal suspend fun enrichLikeMetadata(
+        repository: DiscoveryRepository,
+        item: DiscoverySuggestion,
+        sourceKey: String?,
+        sourceDetailsResolver: suspend (
+            DiscoveryMediaType,
+            Long,
+            String,
+        ) -> List<String> = { mediaType, sourceId, sourceUrl ->
+            fetchSourceGenres(mediaType, sourceId, sourceUrl)
+        },
+    ) {
+        if ((item.sourceId ?: 0L) > 0L && !item.sourceUrl.isNullOrBlank()) {
+            val sourceId = item.sourceId!!
+            val sourceUrl = item.sourceUrl!!
+            val enriched = runCatchingUnlessCancelled {
+                sourceDetailsResolver(item.mediaType, sourceId, sourceUrl)
+            }.getOrNull().orEmpty()
+            if (enriched.isNotEmpty()) {
+                runCatchingUnlessCancelled {
+                    repository.recordSignal(
+                        mediaType = item.mediaType,
+                        cleanTitle = item.cleanTitle,
+                        title = item.title,
+                        signalType = DiscoverySignalType.LIKE,
+                        genres = enriched,
+                        provider = item.provider,
+                        sourceKey = sourceKey,
+                    )
+                }
+            }
+        }
     }
 
     /**

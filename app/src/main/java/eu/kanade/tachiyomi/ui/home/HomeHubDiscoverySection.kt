@@ -399,23 +399,30 @@ internal fun patchTeaserItems(
     targetCount: Int,
     shownTitles: Set<String> = emptySet(),
     shownCutoffMap: Map<String, Long> = emptyMap(),
+    dismissedTitles: Set<String> = emptySet(),
 ): List<HomeHubDiscoveryItem> {
     val capped = targetCount.coerceIn(3, 20)
     if (pool.isEmpty()) return emptyList()
     if (currentItems.isEmpty()) {
         return selectFreshTeaserItems(
-            pool = pool,
+            pool = pool.filterNot { it.cleanTitle in dismissedTitles },
             shownTitles = shownTitles,
             count = capped,
             shownCutoffMap = shownCutoffMap,
         )
     }
 
-    val usedCleanTitles = currentItems.filter { it.cleanTitle in validCleanTitles }
+    val usedCleanTitles = currentItems
+        .filter { it.cleanTitle in validCleanTitles && it.cleanTitle !in dismissedTitles }
         .mapTo(HashSet()) { it.cleanTitle }
+    usedCleanTitles.addAll(dismissedTitles)
 
     // Кандидаты на замену из доступного валидного пула
-    val validCandidates = pool.filter { it.cleanTitle in validCleanTitles && it.cleanTitle !in usedCleanTitles }
+    val validCandidates = pool.filter {
+        it.cleanTitle in validCleanTitles &&
+            it.cleanTitle !in usedCleanTitles &&
+            it.cleanTitle !in dismissedTitles
+    }
     val freshCandidates = ArrayDeque(validCandidates.filterNot { it.cleanTitle in shownTitles })
     val backfillCandidates = ArrayDeque(
         validCandidates.filter { it.cleanTitle in shownTitles }
@@ -424,7 +431,7 @@ internal fun patchTeaserItems(
 
     val currentSeriesKeys = mutableMapOf<String, Int>()
     for (item in currentItems) {
-        if (item.cleanTitle in validCleanTitles) {
+        if (item.cleanTitle in validCleanTitles && item.cleanTitle !in dismissedTitles) {
             val key = extractSeriesKey(item.title, item.cleanTitle)
             currentSeriesKeys[key] = (currentSeriesKeys[key] ?: 0) + 1
         }
@@ -461,7 +468,7 @@ internal fun patchTeaserItems(
     val result = mutableListOf<HomeHubDiscoveryItem>()
     for (item in currentItems) {
         if (result.size >= capped) break
-        if (item.cleanTitle in validCleanTitles) {
+        if (item.cleanTitle in validCleanTitles && item.cleanTitle !in dismissedTitles) {
             val fresh = poolMap[item.cleanTitle]?.toHomeHubDiscoveryItem(shownCutoffMap[item.cleanTitle]) ?: item
             result.add(fresh)
         } else {

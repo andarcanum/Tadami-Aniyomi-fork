@@ -94,7 +94,7 @@ internal class HomeDiscoveryController(
                         return@collectLatest
                     }
                     val filtered = visible.filterNot { isBlacklisted(it, expandedBlacklist) }
-                    cachedDiscoveryPool = dedupeCrossRow(filtered)
+                    cachedDiscoveryPool = dedupeCrossRow(filtered).filterNot { it.cleanTitle in dismissedSessionTitles }
                     val shownAtByTitle = runCatching {
                         repository.getShownTitlesWithTimestamp(mediaType)
                     }.getOrDefault(emptyMap())
@@ -146,6 +146,7 @@ internal class HomeDiscoveryController(
                 targetCount = count,
                 shownTitles = shownMap.keys,
                 shownCutoffMap = shownMap,
+                dismissedTitles = dismissedSessionTitles,
             )
 
             val existingValidSet = state.discovery
@@ -184,7 +185,7 @@ internal class HomeDiscoveryController(
         val currentTitles = state.discovery.mapTo(HashSet()) { it.cleanTitle }
 
         val teaser = selectFreshTeaserItems(
-            pool = pool,
+            pool = pool.filterNot { it.cleanTitle in dismissedSessionTitles },
             shownTitles = shownTitles,
             count = count,
             offset = discoveryOffset,
@@ -324,8 +325,11 @@ internal class HomeDiscoveryController(
     }
 
     fun onItemDismissedFromPool(cleanTitle: String) {
+        if (cleanTitle.isBlank()) return
         scope.launchIO {
             mutex.withLock {
+                dismissedSessionTitles += cleanTitle
+                dismissedSessionTitles = pruneDismissedSessionTitles(dismissedSessionTitles).toMutableSet()
                 cachedDiscoveryPool = cachedDiscoveryPool.filterNot { it.cleanTitle == cleanTitle }
             }
         }
