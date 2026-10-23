@@ -108,7 +108,7 @@ class DiscoverySignalsRestoreTest {
     }
 
     @Test
-    fun `eviction prefers live signals and keeps consumed rows`() = runTest {
+    fun `consumed signals do not count towards live cap and do not evict live signals`() = runTest {
         for (i in 1..498) {
             repository.recordSignal(
                 mediaType = DiscoveryMediaType.NOVEL,
@@ -145,10 +145,10 @@ class DiscoverySignalsRestoreTest {
         )
 
         val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
-        signals.size shouldBe 500
+        signals.size shouldBe 502
         val consumedCount = signals.count { it.signalType == DiscoverySignalType.CONSUMED }
         consumedCount shouldBe 498
-        signals.map { it.cleanTitle }.contains("like 1") shouldBe false
+        signals.map { it.cleanTitle }.contains("like 1") shouldBe true
         signals.map { it.cleanTitle }.contains("like 4") shouldBe true
     }
 
@@ -192,7 +192,97 @@ class DiscoverySignalsRestoreTest {
         val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
         val consumedCount = signals.count { it.signalType == DiscoverySignalType.CONSUMED }
         consumedCount shouldBe 600
-        signals.size shouldBe 600
+        val liveCount = signals.count { it.signalType == DiscoverySignalType.LIKE }
+        liveCount shouldBe 4
+        signals.size shouldBe 604
+        signals.map { it.cleanTitle }.contains("like 1") shouldBe true
+        signals.map { it.cleanTitle }.contains("like 4") shouldBe true
+    }
+
+    @Test
+    fun `like with genres followed by consumed without genres preserves known genres`() = runTest {
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "overlord",
+            title = "Overlord",
+            signalType = DiscoverySignalType.LIKE,
+            genres = listOf("Action", "Fantasy"),
+            provider = "Shikimori",
+            sourceKey = "novel-shiki-1",
+            timestamp = 1_000L,
+        )
+
+        // Read/consumed event with empty genres and null provider
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "overlord",
+            title = "Overlord",
+            signalType = DiscoverySignalType.CONSUMED,
+            genres = emptyList(),
+            provider = null,
+            sourceKey = null,
+            timestamp = 2_000L,
+        )
+
+        val signal = repository.getSignals(DiscoveryMediaType.NOVEL).single()
+        signal.signalType shouldBe DiscoverySignalType.CONSUMED_LIKED
+        signal.genres shouldBe listOf("Action", "Fantasy")
+        signal.provider shouldBe "Shikimori"
+        signal.sourceKey shouldBe "novel-shiki-1"
+    }
+
+    @Test
+    fun `live signals cap evicts oldest live signals independently of consumed count`() = runTest {
+        for (i in 1..501) {
+            repository.recordSignal(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "like $i",
+                title = "Like $i",
+                signalType = DiscoverySignalType.LIKE,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = null,
+                timestamp = i.toLong(),
+            )
+        }
+
+        val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        signals.size shouldBe 500
+        signals.map { it.cleanTitle }.contains("like 1") shouldBe false
+        signals.map { it.cleanTitle }.contains("like 2") shouldBe true
+        signals.map { it.cleanTitle }.contains("like 501") shouldBe true
+    }
+
+    @Test
+    fun `limits and caps are isolated per media type`() = runTest {
+        for (i in 1..501) {
+            repository.recordSignal(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "novel $i",
+                title = "Novel $i",
+                signalType = DiscoverySignalType.LIKE,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = null,
+                timestamp = i.toLong(),
+            )
+        }
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.MANGA,
+            cleanTitle = "manga 1",
+            title = "Manga 1",
+            signalType = DiscoverySignalType.LIKE,
+            genres = listOf("Action"),
+            provider = "MangaUpdates",
+            sourceKey = null,
+            timestamp = 100L,
+        )
+
+        val novelSignals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        val mangaSignals = repository.getSignals(DiscoveryMediaType.MANGA)
+        novelSignals.size shouldBe 500
+        mangaSignals.size shouldBe 1
+        mangaSignals.single().cleanTitle shouldBe "manga 1"
     }
 
     @Test
@@ -214,6 +304,107 @@ class DiscoverySignalsRestoreTest {
         signals.map { it.cleanTitle }.contains("consumed 1") shouldBe false
         signals.map { it.cleanTitle }.contains("consumed 2") shouldBe true
         signals.map { it.cleanTitle }.contains("consumed 5001") shouldBe true
+    }
+
+    @Test
+    fun `5000 consumed plus new like preserves like and consumed cap overflow does not evict live`() = runTest {
+        for (i in 1..5000) {
+            repository.recordSignal(
+                mediaType = DiscoveryMediaType.NOVEL,
+                cleanTitle = "consumed $i",
+                title = "Consumed $i",
+                signalType = DiscoverySignalType.CONSUMED,
+                genres = emptyList(),
+                provider = null,
+                sourceKey = null,
+                timestamp = i.toLong(),
+            )
+        }
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "favorite",
+            title = "Favorite",
+            signalType = DiscoverySignalType.LIKE,
+            genres = listOf("Fantasy"),
+            provider = "Shikimori",
+            sourceKey = null,
+            timestamp = 6000L,
+        )
+
+        // Add 5001st consumed to trigger consumed cap eviction
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "consumed 5001",
+            title = "Consumed 5001",
+            signalType = DiscoverySignalType.CONSUMED,
+            genres = emptyList(),
+            provider = null,
+            sourceKey = null,
+            timestamp = 6001L,
+        )
+
+        val signals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        val consumedCount = signals.count { it.signalType == DiscoverySignalType.CONSUMED }
+        val liveCount = signals.count { it.signalType == DiscoverySignalType.LIKE }
+
+        consumedCount shouldBe 5000
+        liveCount shouldBe 1
+        signals.map { it.cleanTitle }.contains("favorite") shouldBe true
+        signals.map { it.cleanTitle }.contains("consumed 1") shouldBe false
+        signals.map { it.cleanTitle }.contains("consumed 5001") shouldBe true
+    }
+
+    @Test
+    fun `transition live to consumed correctly updates categories`() = runTest {
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "re zero",
+            title = "Re:Zero",
+            signalType = DiscoverySignalType.LIKE,
+            genres = listOf("Isekai"),
+            provider = null,
+            sourceKey = null,
+            timestamp = 100L,
+        )
+        val initialSignals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        initialSignals.single().signalType shouldBe DiscoverySignalType.LIKE
+
+        repository.recordSignal(
+            mediaType = DiscoveryMediaType.NOVEL,
+            cleanTitle = "re zero",
+            title = "Re:Zero",
+            signalType = DiscoverySignalType.CONSUMED,
+            genres = emptyList(),
+            provider = null,
+            sourceKey = null,
+            timestamp = 200L,
+        )
+        val updatedSignals = repository.getSignals(DiscoveryMediaType.NOVEL)
+        updatedSignals.single().signalType shouldBe DiscoverySignalType.CONSUMED_LIKED
+        updatedSignals.single().genres shouldBe listOf("Isekai")
+    }
+
+    @Test
+    fun `restore large mixed backup respects caps deterministically`() = runTest {
+        val backup = (1..600).map { i ->
+            signal("like $i", DiscoverySignalType.LIKE, createdAt = i.toLong())
+        } + (1..5100).map { i ->
+            signal("consumed $i", DiscoverySignalType.CONSUMED, createdAt = i.toLong())
+        }
+
+        repository.restoreSignals(backup)
+        val firstPass = repository.getSignals(DiscoveryMediaType.NOVEL)
+        val liveCount1 = firstPass.count { it.signalType == DiscoverySignalType.LIKE }
+        val consumedCount1 = firstPass.count { it.signalType == DiscoverySignalType.CONSUMED }
+
+        liveCount1 shouldBe 500
+        consumedCount1 shouldBe 5000
+
+        // Repeated restore of the same data should produce the identical deterministic set
+        repository.restoreSignals(backup)
+        val secondPass = repository.getSignals(DiscoveryMediaType.NOVEL)
+        secondPass.size shouldBe firstPass.size
+        secondPass.map { it.cleanTitle } shouldBe firstPass.map { it.cleanTitle }
     }
 
     @Test
