@@ -142,6 +142,7 @@ class TasteSignalRecorderAltKeyTest {
             repository = repo,
             item = item,
             signalType = DiscoverySignalType.LIKE,
+            enrichmentScope = this,
             sourceDetailsResolver = { mediaType, sourceId, sourceUrl ->
                 resolverCalled = true
                 sourceId shouldBe 42L
@@ -149,8 +150,42 @@ class TasteSignalRecorderAltKeyTest {
                 listOf("Action", "Fantasy")
             },
         )
+        testScheduler.advanceUntilIdle()
         success shouldBe true
         resolverCalled shouldBe true
+        repo.recordedGenres.last() shouldBe listOf("Action", "Fantasy")
+    }
+
+    @Test
+    fun `like signal returns immediately without blocking on sourceDetailsResolver`() = runTest {
+        val repo = RecordingFakeRepository()
+        val item = suggestionOf("Solo Leveling").copy(
+            sourceId = 42L,
+            sourceUrl = "/manga/solo-leveling",
+            genres = emptyList(),
+        )
+        val resolverEntered = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val allowResolverToFinish = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+        val success = TasteSignalRecorder.record(
+            repository = repo,
+            item = item,
+            signalType = DiscoverySignalType.LIKE,
+            enrichmentScope = this,
+            sourceDetailsResolver = { _, _, _ ->
+                resolverEntered.complete(Unit)
+                allowResolverToFinish.await()
+                listOf("Action", "Fantasy")
+            },
+        )
+        // Primary write succeeds immediately before source resolver finishes
+        success shouldBe true
+        repo.recorded.any { it.second == "solo leveling" } shouldBe true
+
+        resolverEntered.await()
+        allowResolverToFinish.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
         repo.recordedGenres.last() shouldBe listOf("Action", "Fantasy")
     }
 
