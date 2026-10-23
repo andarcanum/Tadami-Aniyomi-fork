@@ -8,7 +8,6 @@ import eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder
 import eu.kanade.tachiyomi.data.discovery.dedupeCrossRow
 import eu.kanade.tachiyomi.data.discovery.expandGenreSet
 import eu.kanade.tachiyomi.data.discovery.isBlacklisted
-import eu.kanade.tachiyomi.data.discovery.parseGenreFilterCsv
 import eu.kanade.tachiyomi.ui.discovery.ManualRefreshAction
 import eu.kanade.tachiyomi.ui.discovery.manualRefreshFlow
 import eu.kanade.tachiyomi.ui.discovery.remainingCooldownSeconds
@@ -88,15 +87,14 @@ internal class HomeDiscoveryController(
                 ) { hidden, consumed -> hidden to consumed },
                 combine(
                     repository.subscribeBlacklist(mediaType),
-                    preferences.ignoredGenres().changes(),
+                    preferences.observeGenreFilterSpec(),
                     preferences.lastFailedRows(mediaType).changes(),
                     preferences.lastGenerationStatus(mediaType).changes(),
                     preferences.lastGenerationAt(mediaType).changes(),
-                ) { blacklist, ignoredCsv, failedCsv, lastStatus, lastGenAt ->
-                    val (canon, raw) = parseGenreFilterCsv(ignoredCsv)
+                ) { blacklist, filterSpec, failedCsv, lastStatus, lastGenAt ->
                     val policy = DiscoveryCandidatePolicy(
+                        spec = filterSpec,
                         blacklistedTags = blacklist,
-                        ignoredGenres = canon + raw.toSet(),
                     )
                     Triple(policy, failedCsv, lastStatus to lastGenAt)
                 },

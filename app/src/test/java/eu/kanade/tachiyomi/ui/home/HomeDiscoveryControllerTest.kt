@@ -199,7 +199,7 @@ class HomeDiscoveryControllerTest {
 
             controller.likeDiscoveryItem(testSuggestion("Card 1").toHomeHubDiscoveryItem())
 
-            waitUntil { repo.recordedSignals.isNotEmpty() && currentState.discovery.size == 2 }
+            waitUntil { repo.recordedSignals.isNotEmpty() && currentState.discovery.none { it.title == "Card 1" } }
 
             repo.recordedSignals.size shouldBe 1
             repo.recordedSignals[0].first shouldBe "card 1"
@@ -396,6 +396,53 @@ class HomeDiscoveryControllerTest {
             currentState.discovery.none { it.cleanTitle == "spicy 2" } shouldBe true
             currentState.discoveryPool.none { it.cleanTitle == "spicy 2" } shouldBe true
             currentState.discovery.map { it.title } shouldBe listOf("Safe 1", "Safe 4", "Safe 3")
+        }
+    }
+
+    @Test
+    fun `changing requiredGenres reactively purges non-matching cards without runner rerun`() {
+        runBlocking {
+            val repo = TestDiscoveryRepo()
+            val prefs = DiscoveryPreferences(PersistingPreferenceStore())
+            prefs.discoveryEnabled().set(true)
+            prefs.teaserCount().set(3)
+            val context = mockk<Context>(relaxed = true)
+
+            var currentState = HomeHubUiState(
+                userName = "Test",
+                userAvatar = "",
+                greeting = tachiyomi.i18n.MR.strings.app_name,
+                greetingReady = true,
+                isLoading = false,
+                showWelcome = false,
+            )
+
+            val controller = HomeDiscoveryController(
+                mediaType = DiscoveryMediaType.ANIME,
+                repository = repo,
+                preferences = prefs,
+                context = context,
+                scope = CoroutineScope(Dispatchers.Unconfined),
+                onStateUpdate = { updater -> currentState = updater(currentState) },
+                currentState = { currentState },
+                onEmitEffect = {},
+            )
+
+            repo.poolFlow.value = listOf(
+                testSuggestion("Action Card").copy(genres = listOf("Action")),
+                testSuggestion("Fantasy Card").copy(genres = listOf("Fantasy")),
+                testSuggestion("Comedy Card").copy(genres = listOf("Comedy")),
+            )
+            controller.startObserving()
+
+            waitUntil { currentState.discovery.size == 3 }
+
+            // User dynamically sets required genres to Fantasy in settings
+            prefs.requiredGenres().set("fantasy")
+
+            // Only Fantasy Card matches; Action Card and Comedy Card are reactively purged!
+            waitUntil { currentState.discovery.size == 1 }
+            currentState.discovery.map { it.title } shouldBe listOf("Fantasy Card")
         }
     }
 

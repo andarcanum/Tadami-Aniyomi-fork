@@ -254,4 +254,22 @@ class GenreMatcherTest {
         val (resolved, _) = resolveUserGenreInput("бытовое фэнтези, драма")
         (resolved.contains(",")) shouldBe false
     }
+
+    // ═══════════ G08: Строгое ограничение (matchesConstraint) vs Поиск (matchesSearch) ═══════════
+
+    @Test
+    fun `matchesConstraint сопоставляет онтологические категории и точные формы`() {
+        GenreMatcher.matchesConstraint("экшен", "Action") shouldBe true
+        GenreMatcher.matchesConstraint("боевик", "Action") shouldBe true
+        GenreMatcher.matchesConstraint("приключения", "Adventure") shouldBe true
+        GenreMatcher.matchesConstraint("horror", "ужасы") shouldBe true
+    }
+
+    @Test
+    fun `matchesConstraint исключает нестрогую токенизацию и опечатки Левенштейна`() {
+        GenreMatcher.matchesConstraint("actoin", "Action") shouldBe false
+        GenreMatcher.matchesConstraint("драма", "мелодрама") shouldBe false
+        GenreMatcher.matchesConstraint("romance", "romantic comedy") shouldBe false
+        GenreMatcher.matchesSearch("боевик", "Action") shouldBe true
+    }
 }

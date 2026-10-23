@@ -259,4 +259,76 @@ class DiscoveryCandidatePolicyTest {
         policy.isAllowed(trendItem) shouldBe true
         policy.isForbidden(trendItem) shouldBe false
     }
+
+    // ═══════════ G01: Режимы сопоставления ANY vs ALL и строгость STRICT ═══════════
+
+    @Test
+    fun `requiredMatchMode ALL requires every required genre`() {
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Action", "Comedy"),
+            requiredMatchMode = RequiredMatchMode.ALL,
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val policy = DiscoveryCandidatePolicy(spec)
+
+        val bothItem = testSuggestion("Action Comedy", genres = listOf("Action", "Comedy"))
+        val actionOnlyItem = testSuggestion("Just Action", genres = listOf("Action", "Drama"))
+        val noneItem = testSuggestion("Just Drama", genres = listOf("Drama"))
+
+        policy.isAllowed(bothItem) shouldBe true
+        policy.isAllowed(actionOnlyItem) shouldBe false
+        policy.isAllowed(noneItem) shouldBe false
+    }
+
+    @Test
+    fun `requiredMatchMode ANY requires at least one required genre`() {
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Action", "Comedy"),
+            requiredMatchMode = RequiredMatchMode.ANY,
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val policy = DiscoveryCandidatePolicy(spec)
+
+        val actionOnlyItem = testSuggestion("Just Action", genres = listOf("Action", "Drama"))
+        val comedyOnlyItem = testSuggestion("Just Comedy", genres = listOf("Comedy", "Slice of Life"))
+        val noneItem = testSuggestion("Just Drama", genres = listOf("Drama"))
+
+        policy.isAllowed(actionOnlyItem) shouldBe true
+        policy.isAllowed(comedyOnlyItem) shouldBe true
+        policy.isAllowed(noneItem) shouldBe false
+    }
+
+    @Test
+    fun `strict required rejects items with unknown genres even if incomplete is normally allowed`() {
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Action"),
+            requiredMatchMode = RequiredMatchMode.ALL,
+            requiredEnforcement = RequiredEnforcement.STRICT,
+            unknownGenrePolicy = UnknownGenrePolicy.ALLOW_AS_INCOMPLETE,
+        )
+        val policy = DiscoveryCandidatePolicy(spec)
+
+        val unknownItem = testSuggestion("Mystery Novel", genres = emptyList())
+        policy.isAllowed(unknownItem) shouldBe false
+        val verdict = policy.evaluate(emptyList())
+        verdict.shouldBeInstanceOf<CandidateVerdict.Rejected>()
+        verdict.reason.shouldBeInstanceOf<RejectionReason.MissingRequiredGenre>()
+    }
+
+    @Test
+    fun `strict required filterRowCandidates returns emptyList when no candidates match and never relaxes`() {
+        val spec = GenreFilterSpec(
+            requiredGenres = setOf("Horror"),
+            requiredMatchMode = RequiredMatchMode.ALL,
+            requiredEnforcement = RequiredEnforcement.STRICT,
+        )
+        val policy = DiscoveryCandidatePolicy(spec)
+
+        val items = listOf(
+            testRowItem("Happy Romance", genres = listOf("Romance")),
+            testRowItem("Exciting Action", genres = listOf("Action")),
+        )
+
+        policy.filterRowCandidates(items, { it.genres }) shouldBe emptyList()
+    }
 }
