@@ -312,13 +312,24 @@ class DiscoveryTasteRowBuilder(
     override val rowType = DiscoveryRowType.TASTE
 
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
-        val profile = context.tasteProfile
-        if (profile.isEmpty()) return emptyList()
         val policy = context.candidatePolicy
+        // Синтез профиля при холодном старте (пустая библиотека/история):
+        // если пользователь явно задал required/priority жанры, используем их как активный профиль.
+        val rawProfile = context.tasteProfile.ifEmpty {
+            (context.requiredGenres + context.priorityGenres).distinct().map { it to 1.0 }
+        }
+        if (rawProfile.isEmpty()) return emptyList()
         // B2: заблэклиженные и глобально игнорируемые жанры выключаются из профиля ДО запросов.
-        val activeProfile = profile.filterNot { (genre, _) -> policy.isForbidden(listOf(genre)) }
+        val activeProfile = rawProfile.filterNot { (genre, _) -> policy.isForbidden(listOf(genre)) }
         if (activeProfile.isEmpty()) return emptyList()
-        val genreNames = activeProfile.take(6).map { it.first }
+
+        // Внешний запрос: сначала явно запрошенные required и priority, затем топ профиля
+        val genreNames = (
+            context.requiredGenres.filterNot { policy.isForbidden(listOf(it)) } +
+                context.priorityGenres.filterNot { policy.isForbidden(listOf(it)) } +
+                activeProfile.map { it.first }
+            ).distinct().take(6)
+
         // V3: у source-выдачи нет жанров на айтеме (клиентский фильтр невозможен),
         // поэтому обязательные жанры прокидываем в запрос серверно.
         val sourceGenreNames = if (context.requiredGenres.isNotEmpty()) {
@@ -339,6 +350,27 @@ class DiscoveryTasteRowBuilder(
         } else {
             null
         }
+
+        var trendingItems = trendingResult?.getOrNull().orEmpty()
+        var filteredTrending = policy.filterRowCandidates(trendingItems, { it.genres })
+        // Добор со 2-й страницы при строгом фильтре, если 1-я страница вернула результаты, но ни один не прошёл строгий фильтр
+        if (filteredTrending.isEmpty() && policy.isStrictRequired && trendingItems.isNotEmpty() && includeExternal) {
+            val page2Result = runCatchingUnlessCancelled {
+                trending.fetchByGenres(
+                    context.mediaType,
+                    genreNames,
+                    sortProvider(),
+                    page = context.pageOffset + 1,
+                    releaseStatuses = context.releaseStatuses,
+                )
+            }
+            val page2Items = page2Result.getOrNull().orEmpty()
+            if (page2Items.isNotEmpty()) {
+                trendingItems = (trendingItems + page2Items).distinctBy { it.cleanTitle }
+                filteredTrending = policy.filterRowCandidates(trendingItems, { it.genres })
+            }
+        }
+
         val sourceIds = context.sourceIds.filter { it > 0 }
             .ifEmpty { listOf(context.sourceId).filter { it > 0 } }
         val sourceResults = if (sourceIds.isNotEmpty()) {
@@ -365,26 +397,24 @@ class DiscoveryTasteRowBuilder(
         } else {
             emptyList()
         }
-        val fromTrending = trendingResult?.getOrNull().orEmpty()
-            .let { items -> policy.filterRowCandidates(items, { it.genres }) }
-            .map { item ->
-                DiscoveryRowItem(
-                    title = item.title,
-                    cleanTitle = item.cleanTitle,
-                    altCleanTitles = listOfNotNull(
-                        item.altTitle?.let {
-                            normalizeDiscoveryTitle(it)
-                        },
-                    ).filter { it.isNotBlank() },
-                    coverUrl = item.coverUrl,
-                    reason = matchedGenres(item.genres, activeProfile).joinToString(", "),
-                    seedTitle = null,
-                    provider = item.provider,
-                    // Базовый скор совпадения жанров; приоритетные жанры бустятся единым within-row ranker'ом в policy.
-                    score = tasteScore(item.genres, activeProfile),
-                    genres = item.genres,
-                )
-            }
+        val fromTrending = filteredTrending.map { item ->
+            DiscoveryRowItem(
+                title = item.title,
+                cleanTitle = item.cleanTitle,
+                altCleanTitles = listOfNotNull(
+                    item.altTitle?.let {
+                        normalizeDiscoveryTitle(it)
+                    },
+                ).filter { it.isNotBlank() },
+                coverUrl = item.coverUrl,
+                reason = matchedGenres(item.genres, activeProfile).ifEmpty { genreNames.take(2) }.joinToString(", "),
+                seedTitle = null,
+                provider = item.provider,
+                // Базовый скор совпадения жанров; приоритетные жанры бустятся единым within-row ranker'ом в policy.
+                score = tasteScore(item.genres, activeProfile),
+                genres = item.genres,
+            )
+        }
         val sourceParts = sourceResults.map { res ->
             res.getOrNull().orEmpty().map { item ->
                 item.copy(

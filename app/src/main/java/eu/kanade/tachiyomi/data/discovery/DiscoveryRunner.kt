@@ -587,12 +587,26 @@ class DiscoveryRunner(
         }
         if (feed.rows[DiscoveryRowType.TASTE].isNullOrEmpty() &&
             DiscoveryRowType.TASTE !in feed.failedRows &&
-            context.tasteProfile.isEmpty()
+            context.tasteProfile.isEmpty() &&
+            context.requiredGenres.isEmpty() &&
+            context.priorityGenres.isEmpty()
         ) {
             repository.replaceRows(mediaType, DiscoveryRowType.TASTE, emptyList())
         }
-        val anyRowPersisted = persistedRows.isNotEmpty()
-        if (anyRowPersisted) {
+
+        val actualExecutedRows = feed.rows.keys + feed.failedRows
+        val allExecutedFailed = actualExecutedRows.isNotEmpty() && feed.failedRows.containsAll(actualExecutedRows)
+        val hasPartialFailures = feed.failedRows.isNotEmpty() ||
+            feed.degradedRows.isNotEmpty() ||
+            (attemptedRows.isNotEmpty() && actualExecutedRows.size < attemptedRows.size)
+
+        val status = when {
+            allExecutedFailed -> DiscoveryRunStatus.FAILED
+            hasPartialFailures -> DiscoveryRunStatus.PARTIAL
+            else -> DiscoveryRunStatus.SUCCESS
+        }
+
+        if (actualExecutedRows.isNotEmpty() && !allExecutedFailed) {
             if (isManualRefresh) {
                 preferences.manualRefreshCount(mediaType).set(candidateRefreshCount)
             } else {
@@ -607,18 +621,6 @@ class DiscoveryRunner(
             current = builders.size,
             total = builders.size,
         )
-
-        val actualExecutedRows = feed.rows.keys + feed.failedRows
-        val allExecutedFailed = actualExecutedRows.isNotEmpty() && feed.failedRows.containsAll(actualExecutedRows)
-        val hasPartialFailures = feed.failedRows.isNotEmpty() ||
-            feed.degradedRows.isNotEmpty() ||
-            (attemptedRows.isNotEmpty() && actualExecutedRows.size < attemptedRows.size)
-
-        val status = when {
-            allExecutedFailed -> DiscoveryRunStatus.FAILED
-            hasPartialFailures -> DiscoveryRunStatus.PARTIAL
-            else -> DiscoveryRunStatus.SUCCESS
-        }
 
         preferences.lastGenerationStatus(mediaType).set(status.name)
         preferences.lastGenerationAt(mediaType).set(System.currentTimeMillis())
