@@ -1,5 +1,11 @@
 package eu.kanade.domain.discovery.service
 
+import eu.kanade.tachiyomi.data.discovery.GenreFilterSpec
+import eu.kanade.tachiyomi.data.discovery.RequiredEnforcement
+import eu.kanade.tachiyomi.data.discovery.RequiredMatchMode
+import eu.kanade.tachiyomi.data.discovery.parseGenreFilterCsv
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import tachiyomi.core.common.preference.Preference
 import tachiyomi.core.common.preference.PreferenceStore
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
@@ -137,6 +143,58 @@ class DiscoveryPreferences(private val preferenceStore: PreferenceStore) {
      */
     fun ignoredGenres(): Preference<String> =
         preferenceStore.getString("discovery_ignored_genres", "")
+
+    /** G01: Режим сопоставления обязательных жанров ("ALL" | "ANY"). По умолчанию "ALL". */
+    fun requiredMatchMode(): Preference<String> =
+        preferenceStore.getString("discovery_required_match_mode", "ALL")
+
+    /** G01: Режим строгости обязательных жанров ("STRICT" | "BEST_EFFORT"). По умолчанию "STRICT". */
+    fun requiredEnforcement(): Preference<String> =
+        preferenceStore.getString("discovery_required_enforcement", "STRICT")
+
+    fun genreFilterSpec(): GenreFilterSpec {
+        val (ignCanon, ignRaw) = parseGenreFilterCsv(ignoredGenres().get())
+        val (reqCanon, reqRaw) = parseGenreFilterCsv(requiredGenres().get())
+        val (priCanon, priRaw) = parseGenreFilterCsv(priorityGenres().get())
+        val matchMode = runCatching {
+            RequiredMatchMode.valueOf(requiredMatchMode().get())
+        }.getOrDefault(RequiredMatchMode.ALL)
+        val enforcement = runCatching {
+            RequiredEnforcement.valueOf(requiredEnforcement().get())
+        }.getOrDefault(RequiredEnforcement.STRICT)
+        return GenreFilterSpec(
+            ignoredGenres = ignCanon + ignRaw.toSet(),
+            requiredGenres = reqCanon + reqRaw.toSet(),
+            priorityGenres = priCanon + priRaw.toSet(),
+            requiredMatchMode = matchMode,
+            requiredEnforcement = enforcement,
+        )
+    }
+
+    fun observeGenreFilterSpec(): Flow<GenreFilterSpec> = combine(
+        ignoredGenres().changes(),
+        requiredGenres().changes(),
+        priorityGenres().changes(),
+        requiredMatchMode().changes(),
+        requiredEnforcement().changes(),
+    ) { ignCsv, reqCsv, priCsv, matchModeStr, enforcementStr ->
+        val (ignCanon, ignRaw) = parseGenreFilterCsv(ignCsv)
+        val (reqCanon, reqRaw) = parseGenreFilterCsv(reqCsv)
+        val (priCanon, priRaw) = parseGenreFilterCsv(priCsv)
+        val matchMode = runCatching {
+            RequiredMatchMode.valueOf(matchModeStr)
+        }.getOrDefault(RequiredMatchMode.ALL)
+        val enforcement = runCatching {
+            RequiredEnforcement.valueOf(enforcementStr)
+        }.getOrDefault(RequiredEnforcement.STRICT)
+        GenreFilterSpec(
+            ignoredGenres = ignCanon + ignRaw.toSet(),
+            requiredGenres = reqCanon + reqRaw.toSet(),
+            priorityGenres = priCanon + priRaw.toSet(),
+            requiredMatchMode = matchMode,
+            requiredEnforcement = enforcement,
+        )
+    }
 
     /** CSV ключей рядов, упавших при последней генерации (для баннера «показан кэш»). */
     fun lastFailedRows(mediaType: DiscoveryMediaType): Preference<String> =

@@ -409,6 +409,7 @@ class DiscoveryRunner(
             .filter { it.signalType.excludesFromFeed }
             .mapTo(HashSet()) { it.cleanTitle }
 
+        val genreFilterSpec = preferences.genreFilterSpec()
         val context = DiscoveryBuildContext(
             mediaType = mediaType,
             seeds = seedsWithTracks,
@@ -418,15 +419,13 @@ class DiscoveryRunner(
             hiddenCleanTitles = repository.getHiddenTitles(mediaType) + consumedCleanTitles,
             tasteProfile = mergedTasteProfile,
             blacklistedTags = repository.getBlacklistedTags(mediaType),
-            ignoredGenres = parseGenreFilterCsv(preferences.ignoredGenres().get())
-                .let { (canon, raw) -> canon + raw.toSet() },
+            ignoredGenres = genreFilterSpec.ignoredGenres,
             // V1: статус-фильтр трендов — CSV из настроек, пусто = без фильтра.
             releaseStatuses = DiscoveryReleaseStatus.parseCsv(preferences.releaseStatusFilter().get()),
-            // V3: жанровые фильтры — CSV с raw-префиксом; canonical + raw матчатся одинаково.
-            priorityGenres = parseGenreFilterCsv(preferences.priorityGenres().get())
-                .let { (canon, raw) -> canon + raw.toSet() },
-            requiredGenres = parseGenreFilterCsv(preferences.requiredGenres().get())
-                .let { (canon, raw) -> canon + raw.toSet() },
+            // V3: жанровые фильтры — полная спецификация с режимами строгости и сопоставления.
+            priorityGenres = genreFilterSpec.priorityGenres,
+            requiredGenres = genreFilterSpec.requiredGenres,
+            genreFilterSpec = genreFilterSpec,
             sourceId = participation.primarySourceId,
             // C1 + участие плагинов: состав определяет resolveSourceParticipation
             // (auto — топ-3 по весу библиотеки, manual — все выбранные).

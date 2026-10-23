@@ -20,6 +20,21 @@ enum class UnknownGenrePolicy {
     DISALLOW,
 }
 
+enum class RequiredMatchMode { ANY, ALL }
+enum class RequiredEnforcement { STRICT, BEST_EFFORT }
+
+/**
+ * Неизменяемая спецификация жанровых фильтров пользователя (G01 / G02).
+ */
+data class GenreFilterSpec(
+    val ignoredGenres: Set<String> = emptySet(),
+    val requiredGenres: Set<String> = emptySet(),
+    val priorityGenres: Set<String> = emptySet(),
+    val requiredMatchMode: RequiredMatchMode = RequiredMatchMode.ALL,
+    val requiredEnforcement: RequiredEnforcement = RequiredEnforcement.STRICT,
+    val unknownGenrePolicy: UnknownGenrePolicy = UnknownGenrePolicy.ALLOW_AS_INCOMPLETE,
+)
+
 /**
  * Причина отклонения кандидата политикой [DiscoveryCandidatePolicy].
  */
@@ -72,7 +87,27 @@ class DiscoveryCandidatePolicy(
     val priorityGenres: Set<String> = emptySet(),
     val unknownGenrePolicy: UnknownGenrePolicy = UnknownGenrePolicy.ALLOW_AS_INCOMPLETE,
     val strictRequired: Boolean = false,
+    val requiredMatchMode: RequiredMatchMode = RequiredMatchMode.ALL,
+    val requiredEnforcement: RequiredEnforcement =
+        if (strictRequired) RequiredEnforcement.STRICT else RequiredEnforcement.BEST_EFFORT,
 ) {
+    constructor(
+        spec: GenreFilterSpec,
+        blacklistedTags: Set<String> = emptySet(),
+    ) : this(
+        blacklistedTags = blacklistedTags,
+        ignoredGenres = spec.ignoredGenres,
+        requiredGenres = spec.requiredGenres,
+        priorityGenres = spec.priorityGenres,
+        unknownGenrePolicy = spec.unknownGenrePolicy,
+        strictRequired = spec.requiredEnforcement == RequiredEnforcement.STRICT,
+        requiredMatchMode = spec.requiredMatchMode,
+        requiredEnforcement = spec.requiredEnforcement,
+    )
+
+    val isStrictRequired: Boolean
+        get() = strictRequired || requiredEnforcement == RequiredEnforcement.STRICT
+
     // Предварительно развёрнутые множества жанров для быстрого сопоставления с учётом RU/EN переводов
     private val expandedBlacklist: Set<String> = expandGenreSet(blacklistedTags.toList())
     private val expandedIgnored: Set<String> = expandGenreSet(ignoredGenres.toList())
@@ -98,15 +133,20 @@ class DiscoveryCandidatePolicy(
     }
 
     /**
-     * Возвращает true, если рекомендация [item] допущена политикой.
+     * Возвращает true, если рекомендация [item] допущена политикой (прошла blacklist, ignored и strict required).
      */
-    fun isAllowed(item: DiscoverySuggestion): Boolean = !isForbidden(item)
+    fun isAllowed(item: DiscoverySuggestion): Boolean = evaluate(item.genres) is CandidateVerdict.Admitted
+
+    /**
+     * Возвращает true, если рекомендация не нарушает жёстких запретов (blacklist и global ignored).
+     */
+    fun passesHardExclusions(item: DiscoverySuggestion): Boolean = !isForbidden(item)
 
     /**
      * Оценивает кандидата по всем критериям политики.
      *
      * @param genres список известных жанров кандидата
-     * @param fallbackTags запасные теги/жанры (например, из reason строки TASTE), если genres пуст
+     * @param fallbackTags запасные теги/жанры, если genres пуст
      */
     fun evaluate(
         genres: List<String>,
@@ -131,7 +171,7 @@ class DiscoveryCandidatePolicy(
             return when (unknownGenrePolicy) {
                 UnknownGenrePolicy.DISALLOW -> CandidateVerdict.Rejected(RejectionReason.UnknownGenresDisallowed)
                 UnknownGenrePolicy.ALLOW_AS_INCOMPLETE -> {
-                    if (strictRequired && requiredGenres.isNotEmpty()) {
+                    if (isStrictRequired && requiredGenres.isNotEmpty()) {
                         CandidateVerdict.Rejected(RejectionReason.MissingRequiredGenre(requiredGenres))
                     } else {
                         CandidateVerdict.Admitted(
@@ -147,7 +187,7 @@ class DiscoveryCandidatePolicy(
 
         // 4. Обязательные жанры (requiredGenres)
         val matchesReq = matchesRequired(effectiveGenres)
-        if (!matchesReq && strictRequired && requiredGenres.isNotEmpty()) {
+        if (!matchesReq && isStrictRequired && requiredGenres.isNotEmpty()) {
             return CandidateVerdict.Rejected(RejectionReason.MissingRequiredGenre(requiredGenres))
         }
 
@@ -164,12 +204,13 @@ class DiscoveryCandidatePolicy(
     }
 
     /**
-     * Фильтрует список кандидатов ряда с учётом best-effort семантики для requiredGenres:
+     * Фильтрует список кандидатов ряда с учётом best-effort / strict семантики для requiredGenres:
      * - Запрещённые (блэклист и глобальный игнор) исключаются ВСЕГДА.
      * - Если заданы requiredGenres:
-     *     - Выбираются только кандидаты, матчащие requiredGenres (или с неполными метаданными при !strictRequired).
-     *     - Если таких нет и !strictRequired: ослабляется требование requiredGenres,
+     *     - Выбираются только кандидаты, матчащие requiredGenres (или с неполными метаданными при !isStrictRequired).
+     *     - Если таких нет и !isStrictRequired: ослабляется требование requiredGenres,
      *       возвращаются все допущенные кандидаты (без блэклиста и игнора).
+     *     - Если isStrictRequired: возвращается пустой список (никогда не ослабляется).
      */
     fun <T> filterRowCandidates(
         items: List<T>,
@@ -202,7 +243,7 @@ class DiscoveryCandidatePolicy(
         // 2. Проверяем required
         val withRequired = withoutForbidden.filter { (_, verdict) ->
             if (verdict is CandidateVerdict.Admitted) {
-                verdict.matchesRequired || (verdict.hasIncompleteMetadata && !strictRequired)
+                verdict.matchesRequired || (verdict.hasIncompleteMetadata && !isStrictRequired)
             } else {
                 false
             }
@@ -210,7 +251,7 @@ class DiscoveryCandidatePolicy(
 
         return if (withRequired.isNotEmpty()) {
             withRequired
-        } else if (!strictRequired) {
+        } else if (!isStrictRequired) {
             // Best-effort ослабление: подходящих по requiredGenres тайтлов нет,
             // возвращаем допущенные без блэклиста/игнора, чтобы лента не была пустой.
             withoutForbidden.map { it.first }
@@ -222,28 +263,44 @@ class DiscoveryCandidatePolicy(
     private fun matchesBlacklist(itemGenres: List<String>): String? {
         if (blacklistedTags.isEmpty() || itemGenres.isEmpty()) return null
         return itemGenres.firstOrNull { genre ->
-            expandedBlacklist.any { tag -> GenreMatcher.matches(tag, genre) }
+            expandedBlacklist.any { tag -> GenreMatcher.matchesConstraint(tag, genre) }
         }
     }
 
     private fun matchesIgnored(itemGenres: List<String>): String? {
         if (ignoredGenres.isEmpty() || itemGenres.isEmpty()) return null
         return itemGenres.firstOrNull { genre ->
-            expandedIgnored.any { ignored -> GenreMatcher.matches(ignored, genre) }
+            expandedIgnored.any { ignored -> GenreMatcher.matchesConstraint(ignored, genre) }
         }
     }
 
     private fun matchesRequired(itemGenres: List<String>): Boolean {
-        if (requiredGenres.isEmpty() || itemGenres.isEmpty()) return false
-        return itemGenres.any { genre ->
-            expandedRequired.any { req -> GenreMatcher.matches(req, genre) }
+        if (requiredGenres.isEmpty()) return true
+        if (itemGenres.isEmpty()) return false
+        return when (requiredMatchMode) {
+            RequiredMatchMode.ANY -> {
+                requiredGenres.any { req ->
+                    val expanded = expandGenreSet(listOf(req))
+                    itemGenres.any { itemG ->
+                        expanded.any { exp -> GenreMatcher.matchesConstraint(exp, itemG) }
+                    }
+                }
+            }
+            RequiredMatchMode.ALL -> {
+                requiredGenres.all { req ->
+                    val expanded = expandGenreSet(listOf(req))
+                    itemGenres.any { itemG ->
+                        expanded.any { exp -> GenreMatcher.matchesConstraint(exp, itemG) }
+                    }
+                }
+            }
         }
     }
 
     private fun matchesPriority(itemGenres: List<String>): Boolean {
         if (priorityGenres.isEmpty() || itemGenres.isEmpty()) return false
         return itemGenres.any { genre ->
-            expandedPriority.any { pri -> GenreMatcher.matches(pri, genre) }
+            expandedPriority.any { pri -> GenreMatcher.matchesConstraint(pri, genre) }
         }
     }
 

@@ -18,7 +18,6 @@ import eu.kanade.tachiyomi.data.discovery.dedupeCrossRow
 import eu.kanade.tachiyomi.data.discovery.expandGenreSet
 import eu.kanade.tachiyomi.data.discovery.interleaveMix
 import eu.kanade.tachiyomi.data.discovery.isBlacklisted
-import eu.kanade.tachiyomi.data.discovery.parseGenreFilterCsv
 import eu.kanade.tachiyomi.data.discovery.recoverMissingCovers
 import eu.kanade.tachiyomi.data.discovery.rrfScores
 import eu.kanade.tachiyomi.data.suggestions.SuggestionItem
@@ -316,10 +315,12 @@ internal class DiscoveryFeedScreenModel(
                 preferences.lastFailedRows(mediaType).changes(),
                 combine(
                     repository.subscribeBlacklist(mediaType),
-                    preferences.ignoredGenres().changes(),
-                ) { blacklist, ignoredCsv ->
-                    val (canon, raw) = parseGenreFilterCsv(ignoredCsv)
-                    DiscoveryCandidatePolicy(blacklistedTags = blacklist, ignoredGenres = canon + raw.toSet())
+                    preferences.observeGenreFilterSpec(),
+                ) { blacklist, filterSpec ->
+                    DiscoveryCandidatePolicy(
+                        spec = filterSpec,
+                        blacklistedTags = blacklist,
+                    )
                 },
             ) { all, refreshing, hiddenAndConsumed, failedCsv, policy ->
                 FeedSources(all, refreshing, hiddenAndConsumed.first, failedCsv, policy, hiddenAndConsumed.second)

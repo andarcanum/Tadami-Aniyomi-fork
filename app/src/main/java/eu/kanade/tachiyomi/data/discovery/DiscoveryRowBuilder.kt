@@ -42,6 +42,12 @@ data class DiscoveryBuildContext(
     val priorityGenres: Set<String> = emptySet(),
     /** V3: обязательные жанры — только тайтлы с ними (best-effort, пустой результат → без фильтра). */
     val requiredGenres: Set<String> = emptySet(),
+    /** G01: полная спецификация жанровых фильтров. */
+    val genreFilterSpec: GenreFilterSpec = GenreFilterSpec(
+        ignoredGenres = ignoredGenres,
+        requiredGenres = requiredGenres,
+        priorityGenres = priorityGenres,
+    ),
     val sourceId: Long = -1L,
     /** C1: источники библиотеки, упорядоченные по весу (топ-3) — для ряда SOURCE. */
     val sourceIds: List<Long> = emptyList(),
@@ -55,12 +61,23 @@ data class DiscoveryBuildContext(
     val pageOffset: Int = 1,
 ) {
     val candidatePolicy: DiscoveryCandidatePolicy
-        get() = DiscoveryCandidatePolicy(
-            blacklistedTags = blacklistedTags,
-            ignoredGenres = ignoredGenres,
-            requiredGenres = requiredGenres,
-            priorityGenres = priorityGenres,
-        )
+        get() {
+            val effectiveIgnored =
+                if (genreFilterSpec.ignoredGenres.isNotEmpty()) genreFilterSpec.ignoredGenres else ignoredGenres
+            val effectiveRequired =
+                if (genreFilterSpec.requiredGenres.isNotEmpty()) genreFilterSpec.requiredGenres else requiredGenres
+            val effectivePriority =
+                if (genreFilterSpec.priorityGenres.isNotEmpty()) genreFilterSpec.priorityGenres else priorityGenres
+            val effectiveSpec = genreFilterSpec.copy(
+                ignoredGenres = effectiveIgnored,
+                requiredGenres = effectiveRequired,
+                priorityGenres = effectivePriority,
+            )
+            return DiscoveryCandidatePolicy(
+                spec = effectiveSpec,
+                blacklistedTags = blacklistedTags,
+            )
+        }
 }
 
 interface DiscoveryRowBuilder {
