@@ -44,26 +44,15 @@ internal fun consumedAltKey(primaryTitle: String, meta: DiscoveryMeta?): String?
  */
 object TasteSignalRecorder {
 
-    /** Жанры тайтла из genres (все ряды) с фоллбэком на reason-CSV (TASTE) и cached meta. */
+    /**
+     * Жанры тайтла строго из достоверных метаданных: [item.genres] или cached meta по названию тайтла.
+     * Explanation payload ([item.reason]) и сидовые метаданные ([item.seedTitle]) исключены,
+     * чтобы не приписывать кандидату вымышленные жанры профиля/сида.
+     */
     fun snapshotGenres(item: DiscoverySuggestion): List<String> {
         if (item.genres.isNotEmpty()) return item.genres
-        val fromReason = if (item.rowType == DiscoveryRowType.TASTE) {
-            item.reason
-                ?.splitToSequence(",")
-                ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
-                ?.toList()
-                .orEmpty()
-        } else {
-            emptyList()
-        }
-        if (fromReason.isNotEmpty()) return fromReason
         val titleMeta = CompositeTrendingSource.getCachedMeta(item.title, item.mediaType)
         if (titleMeta != null && titleMeta.genres.isNotEmpty()) return titleMeta.genres
-        val seed = item.seedTitle
-        if (!seed.isNullOrBlank()) {
-            val seedMeta = CompositeTrendingSource.getCachedMeta(seed, item.mediaType)
-            if (seedMeta != null && seedMeta.genres.isNotEmpty()) return seedMeta.genres
-        }
         return emptyList()
     }
 

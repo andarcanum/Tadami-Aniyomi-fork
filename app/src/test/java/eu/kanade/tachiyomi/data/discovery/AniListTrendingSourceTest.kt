@@ -76,4 +76,26 @@ class AniListTrendingSourceTest {
         items[0].cleanTitle shouldBe "solo leveling"
         items[1].cleanTitle shouldBe "葬送のフリーレン"
     }
+
+    @Test
+    fun `buildSeasonQuery and buildPopularQuery request genres in media body`() {
+        val seasonQuery = buildSeasonQuery(hasStatuses = false)
+        seasonQuery.contains("coverImage { large } genres") shouldBe true
+
+        val popularQuery = buildPopularQuery(format = "NOVEL", hasStatuses = true)
+        popularQuery.contains("coverImage { large } genres") shouldBe true
+    }
+
+    @Test
+    fun `parse extracts genres list from media item`() {
+        val json = Json.parseToJsonElement(
+            """
+            {"data":{"Page":{"media":[
+              {"id":1,"title":{"romaji":"Frieren"},"coverImage":{"large":"http://c/1.jpg"},"genres":["Adventure","Fantasy"]}
+            ]}}}
+            """.trimIndent(),
+        ) as JsonObject
+        val items = parseTrendingPage(json)
+        items.single().genres shouldBe listOf("Adventure", "Fantasy")
+    }
 }

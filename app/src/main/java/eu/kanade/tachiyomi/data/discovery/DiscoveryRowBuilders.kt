@@ -404,7 +404,6 @@ class DiscoveryTasteRowBuilder(
         val filteredCombined = policy.filterRowCandidates(
             combined,
             { it.genres },
-            { DiscoveryCandidatePolicy.extractFallbackTags(it.reason) },
         )
         val anyFailed =
             (trendingResult?.isFailure ?: false) || (sourceResults.isNotEmpty() && sourceResults.all { it.isFailure })

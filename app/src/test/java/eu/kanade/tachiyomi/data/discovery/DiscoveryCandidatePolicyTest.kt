@@ -242,20 +242,21 @@ class DiscoveryCandidatePolicyTest {
         policy.isAllowed(ignoredItem) shouldBe false
         policy.isForbidden(ignoredItem) shouldBe true
 
-        // TASTE fallback reason matching
-        val tasteFallbackBad =
+        // Candidate with empty genres and explanation reason is not fabricated into blacklisted genre
+        val tasteUnknownItem =
             testSuggestion(
                 "Taste Sad",
                 genres = emptyList(),
                 rowType = DiscoveryRowType.TASTE,
                 reason = "Tragedy, Romance",
             )
-        policy.isAllowed(tasteFallbackBad) shouldBe false
-        policy.isForbidden(tasteFallbackBad) shouldBe true
+        policy.isAllowed(tasteUnknownItem) shouldBe true
+        policy.isForbidden(tasteUnknownItem) shouldBe false
 
         // Non-TASTE reason (e.g. TREND season label "Tragedy" or "current") should not be misidentified if genres is empty
         val trendItem =
             testSuggestion("Trend Current", genres = emptyList(), rowType = DiscoveryRowType.TREND, reason = "Tragedy")
         policy.isAllowed(trendItem) shouldBe true
+        policy.isForbidden(trendItem) shouldBe false
     }
 }
