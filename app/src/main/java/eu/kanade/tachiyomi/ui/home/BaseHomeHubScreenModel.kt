@@ -16,12 +16,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import tachiyomi.core.common.util.lang.launchIO
 import tachiyomi.domain.discovery.model.DiscoveryMediaType
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 
 internal abstract class BaseHomeHubScreenModel(
     protected val context: android.content.Context,
@@ -68,67 +64,33 @@ internal abstract class BaseHomeHubScreenModel(
         }
     }
 
-    private var dismissedSessionTitles = mutableSetOf<String>()
-    private val discoveryLikeMutex = Mutex()
+    protected open val discoveryController: HomeDiscoveryController? = null
 
     open fun likeDiscoveryItem(item: HomeHubDiscoveryItem) {
-        if (item.cleanTitle.isBlank()) return
-        screenModelScope.launchIO {
-            val suggestion = item.toDiscoverySuggestion()
-            val tasteRepository = Injekt.get<tachiyomi.domain.discovery.repository.DiscoveryRepository>()
-            val recorded = eu.kanade.tachiyomi.data.discovery.TasteSignalRecorder.record(
-                tasteRepository,
-                suggestion,
-                tachiyomi.domain.discovery.model.DiscoverySignalType.LIKE,
-            )
-            if (recorded) {
-                discoveryLikeMutex.withLock {
-                    dismissedSessionTitles += item.cleanTitle
-                    dismissedSessionTitles = pruneDismissedSessionTitles(dismissedSessionTitles).toMutableSet()
-                    val dismissedTitles = dismissedSessionTitles.toSet()
-                    mutableState.update { current ->
-                        val updated = current.reduceDismissTeaserCard(
-                            likedCleanTitle = item.cleanTitle,
-                            targetCount = current.discovery.size,
-                            dismissedTitles = dismissedTitles,
-                        )
-                        val updatedPool = current.discoveryPool.filterNot { it.cleanTitle == item.cleanTitle }
-                        updated.copy(discoveryPool = updatedPool)
-                    }
-                }
-                onItemDismissedFromPool(item.cleanTitle)
-            }
-        }
+        discoveryController?.likeDiscoveryItem(item)
     }
 
     open fun restoreHiddenTeaserItem(item: HomeHubDiscoveryItem) {
-        if (item.cleanTitle.isBlank()) return
-        screenModelScope.launchIO {
-            val tasteRepository = Injekt.get<tachiyomi.domain.discovery.repository.DiscoveryRepository>()
-            tasteRepository.unhide(item.mediaType, item.cleanTitle)
-            tasteRepository.removeSignal(item.mediaType, item.cleanTitle)
-            discoveryLikeMutex.withLock {
-                dismissedSessionTitles -= item.cleanTitle
-                mutableState.update { current ->
-                    val updatedDiscovery = restoreTeaserItem(
-                        current = current.discovery,
-                        restored = item,
-                        targetCount = current.discovery.size,
-                    )
-                    val updatedPool =
-                        listOf(item) + current.discoveryPool.filterNot { it.cleanTitle == item.cleanTitle }
-                    current.copy(discovery = updatedDiscovery, discoveryPool = updatedPool)
-                }
-            }
-            onItemRestoredToPool(item.cleanTitle)
-        }
+        discoveryController?.restoreHiddenTeaserItem(item)
     }
 
-    protected open fun onItemDismissedFromPool(cleanTitle: String) {}
+    protected open fun onItemDismissedFromPool(cleanTitle: String) {
+        discoveryController?.onItemDismissedFromPool(cleanTitle)
+    }
+
     protected open fun onItemRestoredToPool(cleanTitle: String) {}
 
-    open fun rotateOrRefreshDiscovery() {}
-    open fun onScreenReentry() {}
+    open fun rotateOrRefreshDiscovery() {
+        discoveryController?.rotateOrRefreshDiscovery()
+    }
+
+    open fun onScreenReentry() {
+        discoveryController?.onScreenReentry()
+    }
+
+    open fun markDiscoveryItemShown(item: HomeHubDiscoveryItem) {
+        discoveryController?.markDiscoveryItemShown(item)
+    }
 
     protected abstract fun updateCacheUserName(name: String)
     protected abstract fun updateCacheUserAvatar(path: String)
