@@ -326,6 +326,12 @@ data class ReelsFeedScreen(
         // re-enters fullscreen on its own; a manual exit disarms it.
         var landscapeFullscreen by remember { mutableStateOf(false) }
         var landscapeAutoRestore by remember { mutableStateOf(false) }
+        // U07: while software fullscreen is active, the window belongs to the video —
+        // MainActivity's generic navigation-bar scrim must not paint over it.
+        val fullscreenOwner = remember { Any() }
+        DisposableEffect(fullscreenOwner) {
+            onDispose { ReelsFullscreen.release(fullscreenOwner) }
+        }
         BackHandler(enabled = landscapeFullscreen) {
             landscapeFullscreen = false
             landscapeAutoRestore = false
@@ -345,7 +351,8 @@ data class ReelsFeedScreen(
 
         // Hide the system bars while the rotated video owns the screen; restore on exit
         // and on screen disposal so the rest of the app is unaffected.
-        DisposableEffect(landscapeFullscreen) {
+        DisposableEffect(landscapeFullscreen, fullscreenOwner) {
+            ReelsFullscreen.set(fullscreenOwner, landscapeFullscreen)
             val window = (context as? Activity)?.window
             val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
             if (landscapeFullscreen && controller != null) {
