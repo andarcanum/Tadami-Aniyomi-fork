@@ -6,6 +6,7 @@ import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.ast.findChildOfType
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import org.intellij.markdown.flavours.gfm.GFMTokenTypes
+import org.intellij.markdown.parser.CancellationToken
 import org.intellij.markdown.parser.MarkdownParser
 
 /**
@@ -75,7 +76,10 @@ object DescriptionEngine {
         val text = normalizeRaw(raw)
         if (text.isBlank()) return emptyList()
 
-        val tree = MarkdownParser(GFMFlavourDescriptor()).buildMarkdownTreeFromString(text)
+        val tree = MarkdownParser(
+            flavour = GFMFlavourDescriptor(),
+            cancellationToken = CancellationToken.NonCancellable,
+        ).buildMarkdownTreeFromString(text as CharSequence)
         val blocks = mutableListOf<DescriptionBlock>()
         var sawStructure = false
 

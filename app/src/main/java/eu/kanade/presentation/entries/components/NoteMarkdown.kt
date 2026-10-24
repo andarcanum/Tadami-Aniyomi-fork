@@ -4,6 +4,7 @@ import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
 import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
+import org.intellij.markdown.parser.CancellationToken
 import org.intellij.markdown.parser.MarkdownParser
 
 sealed interface NoteSpan {
@@ -67,7 +68,10 @@ object NoteMarkdown {
         if (text.isBlank()) return emptyList()
 
         val blocks = mutableListOf<NoteBlock>()
-        val tree = MarkdownParser(GFMFlavourDescriptor()).buildMarkdownTreeFromString(text)
+        val tree = MarkdownParser(
+            flavour = GFMFlavourDescriptor(),
+            cancellationToken = CancellationToken.NonCancellable,
+        ).buildMarkdownTreeFromString(text as CharSequence)
         for (node in tree.children) {
             appendBlock(node, text, blocks)
         }
