@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reels.player
 
+import android.app.Activity
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.net.Uri
@@ -22,7 +23,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -60,7 +60,6 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import eu.kanade.tachiyomi.network.NetworkHelper
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import logcat.LogPriority
 import okhttp3.OkHttpClient
 import tachiyomi.core.common.util.system.logcat
@@ -176,12 +175,20 @@ fun ReelsPlayerView(
     // Listener and surface callbacks are created once with the player; they must read the
     // CURRENT composition values, not the ones captured on first composition.
     val currentCropMode by rememberUpdatedState(isCropMode)
+    // P02: delayed retries read the LIVE page intent, not the values captured when the
+    // player listener was created.
+    val currentIsActive by rememberUpdatedState(isActive)
+    val currentIsPlaying by rememberUpdatedState(isPlaying)
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isLifecycleStarted by remember(lifecycleOwner) {
+        mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
     var player by remember { mutableStateOf<ExoPlayer?>(null) }
     // CDN rate-limit (429) auto-recovery: silent backoff re-prepares before the error
-    // snackbar is allowed to surface (device logcat evidence).
-    val retryScope = rememberCoroutineScope()
-    var autoRetry429Count by remember { mutableIntStateOf(0) }
-    var autoRetry429Signal by remember { mutableIntStateOf(0) }
+    // snackbar is allowed to surface (device logcat evidence). The counter and the pending
+    // attempt belong to one media URL; replacing the player drops both.
+    var autoRetry429Count by remember(videoUrl) { mutableIntStateOf(0) }
+    var pending429Retry by remember(videoUrl) { mutableIntStateOf(0) }
     var isFirstFrameRendered by remember(videoUrl) { mutableStateOf(false) }
     // First-frame wall-clock anchor for the minimum-dwell rule (see reelsEndHold).
     var firstFrameAtMs by remember(videoUrl) { mutableLongStateOf(0L) }
@@ -268,6 +275,10 @@ fun ReelsPlayerView(
         }
 
         if (player == null) {
+            // A re-created player starts a new retry budget; a pending 429 attempt for the
+            // released instance must never fire against this one.
+            autoRetry429Count = 0
+            pending429Retry = 0
             // Short clips: cap buffering so a preload player doesn't hoard tens of MB /
             // compete with the active video for bandwidth (media3 default is ~50s).
             // minBufferMs must be >= both playback thresholds (media3 assertion).
@@ -399,11 +410,8 @@ fun ReelsPlayerView(
                             }
                             if (rateLimited && autoRetry429Count < MAX_PLAYBACK_429_RETRIES) {
                                 autoRetry429Count++
+                                pending429Retry = autoRetry429Count
                                 onBufferingChanged(true)
-                                retryScope.launch {
-                                    delay(PLAYBACK_429_BACKOFF_MS * autoRetry429Count)
-                                    autoRetry429Signal++
-                                }
                                 return
                             }
                             onPlaybackError(error.localizedMessage ?: error.errorCodeName)
@@ -471,15 +479,45 @@ fun ReelsPlayerView(
         player?.repeatMode = if (isAutoAdvance && !isLastPage) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE
     }
 
-    // Retry after a playback error: re-prepare the same media from the beginning.
-    LaunchedEffect(retrySignal, autoRetry429Signal) {
-        if (retrySignal > 0 || autoRetry429Signal > 0) {
+    // Manual retry after a surfaced playback error: explicit restart from 0. P02: the play
+    // intent still comes from the live eligibility gate — a stale snackbar action must not
+    // start a paused, backgrounded, or already-replaced page.
+    LaunchedEffect(retrySignal) {
+        if (retrySignal > 0 && currentIsActive) {
+            autoRetry429Count = 0
+            pending429Retry = 0
             player?.apply {
                 seekTo(0)
                 prepare()
-                playWhenReady = true
+                playWhenReady = reelsShouldRunPlayback(
+                    isActive = currentIsActive,
+                    isPlaying = currentIsPlaying,
+                    lifecycleStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED),
+                )
             }
         }
+    }
+
+    // 429 backoff: re-prepare WITHOUT resetting the position and WITHOUT forcing playback.
+    // A pause, background stop, page change, or player replacement cancels the wait; the
+    // attempt stays parked and is retried once playback is eligible again.
+    LaunchedEffect(pending429Retry, player, isActive, isPlaying, isLifecycleStarted) {
+        val attempt = pending429Retry
+        val retryPlayer = player
+        if (attempt <= 0 || retryPlayer == null) return@LaunchedEffect
+        if (!reelsShouldRunPlayback(isActive, isPlaying, isLifecycleStarted)) {
+            // No spinner over a reel that is not allowed to retry right now.
+            onBufferingChanged(false)
+            return@LaunchedEffect
+        }
+        delay(PLAYBACK_429_BACKOFF_MS * attempt)
+        val stillStarted = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        if (player !== retryPlayer || !reelsShouldRunPlayback(currentIsActive, currentIsPlaying, stillStarted)) {
+            return@LaunchedEffect
+        }
+        retryPlayer.prepare()
+        retryPlayer.playWhenReady = true
+        pending429Retry = 0
     }
 
     // React to play / pause changes.
@@ -521,13 +559,26 @@ fun ReelsPlayerView(
         }
     }
 
-    // Pause when the app goes to background so audio/video/network don't keep running.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, isActive, isPlaying) {
+    // P01: a real background stop clears the play intent even while BUFFERING, where
+    // Player.isPlaying is false but playWhenReady is still true. PiP is the one stop state
+    // that keeps playing; ON_START restores the current page's intent from live values.
+    DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
+            isLifecycleStarted = event.targetState.isAtLeast(Lifecycle.State.STARTED)
             when (event) {
-                Lifecycle.Event.ON_STOP -> player?.let { if (it.isPlaying) it.pause() }
-                Lifecycle.Event.ON_START -> player?.let { it.playWhenReady = isActive && isPlaying }
+                Lifecycle.Event.ON_STOP -> {
+                    val inPip = (context as? Activity)?.isInPictureInPictureMode == true
+                    if (reelsShouldPauseOnStop(inPictureInPicture = inPip)) {
+                        player?.pause()
+                    }
+                }
+                Lifecycle.Event.ON_START -> {
+                    player?.playWhenReady = reelsShouldRunPlayback(
+                        isActive = currentIsActive,
+                        isPlaying = currentIsPlaying,
+                        lifecycleStarted = true,
+                    )
+                }
                 else -> Unit
             }
         }
@@ -681,6 +732,13 @@ internal fun reelsEndHold(durationMs: Long, shownMs: Long, minDwellMs: Long = RE
     if (remainingMs <= 0) return null
     return ReelsEndHold(remainingMs = remainingMs, loop = durationMs > 0)
 }
+
+/** P01: a real background stop clears the play intent; PiP is the only exempt stop state. */
+internal fun reelsShouldPauseOnStop(inPictureInPicture: Boolean): Boolean = !inPictureInPicture
+
+/** P02: the single playback-eligibility gate every retry path must derive its intent from. */
+internal fun reelsShouldRunPlayback(isActive: Boolean, isPlaying: Boolean, lifecycleStarted: Boolean): Boolean =
+    isActive && isPlaying && lifecycleStarted
 
 private var reelsVideoCache: SimpleCache? = null
 
