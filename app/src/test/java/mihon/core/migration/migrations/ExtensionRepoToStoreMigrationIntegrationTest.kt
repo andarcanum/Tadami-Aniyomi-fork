@@ -94,6 +94,16 @@ class ExtensionRepoToStoreMigrationIntegrationTest {
             reels_hiddenAdapter = dataanime.Reels_hidden.Adapter(hidden_atAdapter = DateColumnAdapter),
             reels_albumsAdapter = dataanime.Reels_albums.Adapter(added_atAdapter = DateColumnAdapter),
             reels_album_watchedAdapter = dataanime.Reels_album_watched.Adapter(marked_atAdapter = DateColumnAdapter),
+            reels_consumptionAdapter = dataanime.Reels_consumption.Adapter(
+                watched_qualified_atAdapter = DateColumnAdapter,
+                skipped_forward_atAdapter = DateColumnAdapter,
+                last_action_atAdapter = DateColumnAdapter,
+            ),
+            reels_candidateAdapter = dataanime.Reels_candidate.Adapter(
+                discovered_atAdapter = DateColumnAdapter,
+                last_validated_atAdapter = DateColumnAdapter,
+                retry_afterAdapter = DateColumnAdapter,
+            ),
         )
         novelDatabase = NovelDatabase(
             driver = novelDriver,

@@ -1,6 +1,7 @@
 package eu.kanade.tachiyomi.ui.reels
 
 import android.net.Uri
+import android.os.SystemClock
 import android.webkit.CookieManager
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
@@ -18,6 +19,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCategorySubscriptionSource
 import eu.kanade.tachiyomi.animesource.AnimeContentPreferencesSource
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedAccountIdentitySource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginInstrumentationSource
@@ -77,11 +79,14 @@ import kotlinx.coroutines.withContext
 import logcat.LogPriority
 import tachiyomi.core.common.util.system.logcat
 import tachiyomi.domain.reels.anime.model.ReelsAlbum
+import tachiyomi.domain.reels.anime.model.ReelsCandidate
 import tachiyomi.domain.reels.anime.model.ReelsFavorite
 import tachiyomi.domain.reels.anime.model.ReelsFollow
 import tachiyomi.domain.reels.anime.model.ReelsHiddenEntry
 import tachiyomi.domain.reels.anime.model.ReelsWatchEntry
 import tachiyomi.domain.reels.anime.repository.ReelsAlbumRepository
+import tachiyomi.domain.reels.anime.repository.ReelsCandidateRepository
+import tachiyomi.domain.reels.anime.repository.ReelsConsumptionRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFavoriteRepository
 import tachiyomi.domain.reels.anime.repository.ReelsFollowRepository
 import tachiyomi.domain.reels.anime.repository.ReelsHiddenRepository
@@ -150,6 +155,14 @@ class ReelsFeedScreenModel(
     private val reelsWatchRepository: ReelsWatchRepository = Injekt.get(),
     private val reelsHiddenRepository: ReelsHiddenRepository = Injekt.get(),
     private val reelsAlbumRepository: ReelsAlbumRepository = Injekt.get(),
+    private val reelsConsumptionRepository: ReelsConsumptionRepository = Injekt.get(),
+    private val reelsCandidateRepository: ReelsCandidateRepository = Injekt.get(),
+    // Injectable monotonic clock (the watch accumulator must never use wall time) and wall
+    // clock (the durable summary stores real timestamps).
+    private val nowMs: () -> Long = { SystemClock.elapsedRealtime() },
+    private val wallClock: () -> Date = { Date() },
+    // Pure watch-qualification state machine; one per screen so a source switch starts clean.
+    private val interactionTracker: ReelsInteractionTracker = ReelsInteractionTracker(),
     private val offlineStore: ReelsOfflineStore = Injekt.get(),
     private val sessionSound: ReelsSessionSoundState = sharedSessionSound,
     // Adaptive pager runway; injectable so tests can drive a fake mono clock.
@@ -170,6 +183,7 @@ class ReelsFeedScreenModel(
         preloadEnabled = sourcePreferences.reelsPreloadEnabled().get(),
         preloadWifiOnly = sourcePreferences.reelsPreloadWifiOnly().get(),
         isPipEnabled = sourcePreferences.reelsPipEnabled().get(),
+        unseenOnly = sourcePreferences.reelsUnseenOnly().get(),
         showUnmuteHint = !sessionSound.decided,
     ),
 ) {
@@ -328,6 +342,257 @@ class ReelsFeedScreenModel(
     private fun List<ShortVideoItem>.filterHidden(): List<ShortVideoItem> {
         val (videos, authors) = hiddenSnapshot
         return filterNot { it.id in videos || (it.author != null && it.author in authors) }
+    }
+
+    // ---------------------------------------------------------------------------
+    // For You consumption history (durable, host-side)
+    //
+    // "Received", "inserted into the pager", "prefetched" and "decoded" are transport facts
+    // and never create history: only a qualified watch or a committed MANUAL forward swipe
+    // does. The scope is the source's stable account identity (never a display name or
+    // @handle), so a relogin keeps the history while a different account gets its own.
+    // ---------------------------------------------------------------------------
+
+    @Volatile
+    private var forYouScope: String? = null
+
+    @Volatile
+    private var forYouGeneration: Long = 0L
+
+    // Ids whose interaction was already committed in THIS session: duplicate player callbacks
+    // and repeated transitions must not issue duplicate writes (the DB upsert is idempotent
+    // as well — this only keeps the writer quiet).
+    private val watchedCommitted = mutableSetOf<String>()
+    private val skippedCommitted = mutableSetOf<String>()
+
+    // Pages fetched by the unseen refill loop in the current feed generation (bounded).
+    private var unseenRefillPages = 0
+
+    private fun accountScopeFor(sourceId: Long): String {
+        // A capability lookup on plugin bytecode: never let a broken extension break history.
+        val identity = runCatching {
+            (sourceManager.get(sourceId) as? AnimeFeedAccountIdentitySource)?.accountScopeId()
+        }.getOrNull()
+        return ReelsForYou.accountScope(sourceId, identity)
+    }
+
+    /** Scope + history generation of the current account, cached until the scope changes. */
+    private suspend fun ensureForYouScope(sourceId: Long): Pair<String, Long> {
+        val scope = accountScopeFor(sourceId)
+        if (forYouScope == scope) return scope to forYouGeneration
+        val generation = reelsConsumptionRepository.ensureScope(scope, ReelsForYou.POLICY_VERSION)
+        forYouScope = scope
+        forYouGeneration = generation
+        return scope to generation
+    }
+
+    /** Diagnostic surface stored with the summary; never used to decide filtering. */
+    private fun currentSurface(): ReelsSurface {
+        if (state.value.isOffline) return ReelsSurface.PLAYLIST
+        if (state.value.searchQuery.isNotBlank()) return ReelsSurface.SEARCH
+        return when (mode) {
+            FeedMode.GLOBAL -> ReelsSurface.FOR_YOU
+            FeedMode.CREATOR -> ReelsSurface.CREATOR
+            FeedMode.FOLLOWING -> ReelsSurface.FOLLOWING
+            FeedMode.CUSTOM -> ReelsSurface.CUSTOM
+            FeedMode.NICHE -> ReelsSurface.NICHE
+        }
+    }
+
+    /**
+     * Only the automatic For You feed hides consumed reels. Explicit surfaces (creator, niche,
+     * search, custom feeds, favorites, history) must never go empty because of this history —
+     * they may grow an "unwatched only" switch later.
+     */
+    private fun filtersUnseen(query: String): Boolean {
+        return mode == FeedMode.GLOBAL &&
+            query.isBlank() &&
+            !state.value.isOffline &&
+            state.value.unseenOnly &&
+            // Entering from the watch history is an explicit "play THIS clip" request: hiding
+            // the target would break the resume promise.
+            resumeVideoId == null
+    }
+
+    /** A page became the active card: a fresh visit starts, the previous one is dropped. */
+    fun onVisitStarted(item: ShortVideoItem) {
+        if (state.value.isOffline) return
+        interactionTracker.startVisit(item.id, item.durationSec?.let { (it * 1000f).toLong() }, nowMs())
+    }
+
+    /** The player presented its first frame for this visit: time may start counting. */
+    fun onFirstFramePresented(itemId: String) {
+        interactionTracker.onFirstFrame(itemId)
+    }
+
+    /**
+     * One sample of the active page's player state.
+     *
+     * [eligible] folds together every condition the product contract requires: the card is the
+     * settled one, the screen is in the foreground, the player is really playing (not
+     * READY/paused/buffering) and a frame was presented. The summary is committed the moment
+     * the threshold is crossed — not on `onStop`, which a process kill can preempt.
+     */
+    fun onPlaybackSample(itemId: String, positionMs: Long, eligible: Boolean) {
+        if (state.value.isOffline) return
+        val event = interactionTracker.onSample(itemId, nowMs(), positionMs, eligible) ?: return
+        commitWatched(event.itemId)
+    }
+
+    /**
+     * The active card left the screen. Persists the resume position and the legacy history
+     * row; the consumption summary itself was already committed when it qualified.
+     */
+    fun onVisitEnded(item: ShortVideoItem, positionMs: Long, positionFraction: Float, durationSec: Float) {
+        val snapshot = interactionTracker.endVisit(item.id, nowMs(), positionMs)
+        if (snapshot == null) return
+        // Remote personalization (opt-in capability) reports the REAL foreground playback the
+        // tracker measured, not the wall time the card spent on screen.
+        reportVideoView(item.id, snapshot.watchedMs / 1000f, durationSec)
+        recordWatchHistory(item, positionFraction, durationSec)
+        if (state.value.isOffline) return
+        if (positionMs <= 0L) return
+        val sourceId = state.value.currentSourceId
+        if (isIncognito(sourceId)) return
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val (scope, _) = ensureForYouScope(sourceId)
+            reelsCandidateRepository.saveResumePosition(scope, sourceId, item.id, positionMs)
+        }
+    }
+
+    private fun commitWatched(itemId: String) {
+        val sourceId = state.value.currentSourceId
+        // Incognito means "do not persist what I watch" — the For You history included.
+        if (isIncognito(sourceId)) return
+        if (!watchedCommitted.add(itemId)) return
+        val surface = currentSurface().key
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val (scope, generation) = ensureForYouScope(sourceId)
+            val at = wallClock()
+            var ok = reelsConsumptionRepository.markWatched(
+                scope,
+                sourceId,
+                itemId,
+                at,
+                surface,
+                ReelsForYou.POLICY_VERSION,
+                generation,
+            )
+            // A transient DB failure gets one retry; a stale generation (history reset while
+            // the write was in flight) must NOT be retried — that is exactly the row the
+            // reset deleted.
+            if (!ok && reelsConsumptionRepository.generation(scope) == generation) {
+                ok = reelsConsumptionRepository.markWatched(
+                    scope,
+                    sourceId,
+                    itemId,
+                    at,
+                    surface,
+                    ReelsForYou.POLICY_VERSION,
+                    generation,
+                )
+            }
+            if (ok) {
+                reelsCandidateRepository.remove(scope, sourceId, listOf(itemId))
+            } else {
+                logcat(LogPriority.WARN) { "Reels watch for $itemId was not persisted (generation $generation)" }
+            }
+        }
+    }
+
+    private fun commitSkipped(itemId: String) {
+        if (state.value.isOffline) return
+        val sourceId = state.value.currentSourceId
+        if (isIncognito(sourceId)) return
+        if (!skippedCommitted.add(itemId)) return
+        val surface = currentSurface().key
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val (scope, generation) = ensureForYouScope(sourceId)
+            val ok = reelsConsumptionRepository.markSkipped(
+                scope,
+                sourceId,
+                itemId,
+                wallClock(),
+                surface,
+                ReelsForYou.POLICY_VERSION,
+                generation,
+            )
+            if (ok) {
+                reelsCandidateRepository.remove(scope, sourceId, listOf(itemId))
+            } else {
+                logcat(LogPriority.WARN) { "Reels skip for $itemId was not persisted (generation $generation)" }
+            }
+        }
+    }
+
+    /** "Only unwatched in For You": OFF is the explicit show-watched mode, not a history wipe. */
+    fun setUnseenOnly(enabled: Boolean) {
+        if (state.value.unseenOnly == enabled) return
+        persistUnlessIncognito(state.value.currentSourceId) {
+            sourcePreferences.reelsUnseenOnly().set(enabled)
+        }
+        watchedCommitted.clear()
+        skippedCommitted.clear()
+        mutableState.update { it.copy(unseenOnly = enabled) }
+        loadFeed(reset = true)
+    }
+
+    /**
+     * "Reset For You history" — bumps the history generation (fencing writers that are still
+     * in flight) and drops the summary. Explicit hidden/blacklist entries live in their own
+     * table and survive by design.
+     */
+    fun resetForYouHistory() {
+        val sourceId = state.value.currentSourceId
+        watchedCommitted.clear()
+        skippedCommitted.clear()
+        screenModelScope.launch(NonCancellable + ioDispatcher) {
+            val scope = accountScopeFor(sourceId)
+            val generation = reelsConsumptionRepository.resetHistory(scope, ReelsForYou.POLICY_VERSION)
+            forYouScope = scope
+            forYouGeneration = generation
+            withContext(Dispatchers.Main.immediate) { loadFeed(reset = true) }
+        }
+    }
+
+    private fun ShortVideoItem.toCandidate(scope: String, sourceId: Long, now: Date): ReelsCandidate {
+        return ReelsCandidate(
+            accountScopeId = scope,
+            sourceId = sourceId,
+            itemId = id,
+            title = title,
+            author = author,
+            videoUrl = videoUrl,
+            videoUrlHd = videoUrlHd,
+            posterUrl = posterUrl,
+            posterUrlVertical = posterUrlVertical,
+            webUrl = webUrl,
+            durationSec = durationSec?.toDouble(),
+            hasAudio = hasAudio,
+            createdAtEpochSec = createdAtEpochSec,
+            discoveredAt = now,
+            lastValidatedAt = now,
+            availability = ReelsCandidate.AVAILABILITY_AVAILABLE,
+            retryAfter = null,
+            resumePositionMs = null,
+            metadataSchemaVersion = ReelsForYou.METADATA_SCHEMA_VERSION,
+        )
+    }
+
+    private fun ReelsCandidate.toShortVideoItem(): ShortVideoItem {
+        return ShortVideoItem(
+            id = itemId,
+            title = title,
+            author = author,
+            videoUrl = videoUrl,
+            videoUrlHd = videoUrlHd,
+            posterUrl = posterUrl.orEmpty(),
+            posterUrlVertical = posterUrlVertical,
+            durationSec = durationSec?.toFloat(),
+            hasAudio = hasAudio,
+            webUrl = webUrl,
+            createdAtEpochSec = createdAtEpochSec,
+        )
     }
 
     init {
@@ -526,6 +791,11 @@ class ReelsFeedScreenModel(
             baseCanLoadMore = true
             basePosition = 0
             decidedIds.clear()
+            // Interaction ids are per (source, item): a source switch must not suppress the
+            // same id in a different source's history.
+            watchedCommitted.clear()
+            skippedCommitted.clear()
+            unseenRefillPages = 0
             // A manual switch to a DIFFERENT source voids any pending deep-link seek from the
             // entry point; the entry switch itself (same id) keeps it.
             if (newSourceId != previousSourceId) resumeNavPending = false
@@ -693,6 +963,7 @@ class ReelsFeedScreenModel(
         if (reset) {
             runway.reset()
             lastPagerPage = 0
+            unseenRefillPages = 0
         }
 
         // Set synchronously before the coroutine is dispatched: two rapid
@@ -715,6 +986,8 @@ class ReelsFeedScreenModel(
                     albumSearchNextCursor = null,
                     albumSearchCursorMode = false,
                     albumSearchCanLoadMore = true,
+                    unseenHidden = 0,
+                    unseenScanStopped = false,
                 )
             } else {
                 current.copy(isLoading = true, error = null, errorRes = null, errorCounts = null)
@@ -726,6 +999,9 @@ class ReelsFeedScreenModel(
         val query = snapshot.searchQuery
         val filters = snapshot.filters
         val page = snapshot.nextPageIndex
+        val sourceIdAtStart = snapshot.currentSourceId
+        // Decided once per request: a preference flip mid-flight must not half-filter a page.
+        val unseenFilter = filtersUnseen(query)
         // Contract v17: while locked into cursor mode the token is authoritative;
         // in page-int mode the source always receives a null cursor.
         val cursor = if (snapshot.cursorMode) snapshot.nextCursor else null
@@ -823,15 +1099,56 @@ class ReelsFeedScreenModel(
                         .all { it.id in state.value.seenIds }
 
                 val itemsBeforeAppend = state.value.items.size
+
+                // --- For You: filter BEFORE the page is published, never after ---
+                // Receiving, decoding and prefetching are transport facts: they never create
+                // a consumption row. Only an already recorded watch/skip removes a reel here.
+                val rawIncoming = pageData.videos.distinctBy { it.id }.filterHidden()
+                val forYou = if (unseenFilter) ensureForYouScope(sourceIdAtStart) else null
+                val consumed = if (forYou != null && rawIncoming.isNotEmpty()) {
+                    reelsConsumptionRepository.consumedIds(
+                        forYou.first,
+                        sourceIdAtStart,
+                        rawIncoming.map { it.id },
+                    )
+                } else {
+                    emptySet()
+                }
+                val incoming = if (consumed.isEmpty()) rawIncoming else rawIncoming.filterNot { it.id in consumed }
+                // Durable inbox: persisted BEFORE the UI publish, so a crash between the two
+                // still leaves the received candidates recoverable after reopening.
+                if (forYou != null && incoming.isNotEmpty()) {
+                    val now = wallClock()
+                    reelsCandidateRepository.ingest(
+                        forYou.first,
+                        sourceIdAtStart,
+                        incoming.map { it.toCandidate(forYou.first, sourceIdAtStart, now) },
+                    )
+                }
+                // Restart/rescan recovery: the durable unseen backlog seeds a fresh generation,
+                // so reels the user never reached survive a lost plugin cursor. Fresh items
+                // keep the head of the feed; the backlog follows them.
+                val backlog = if (reset && forYou != null) {
+                    reelsCandidateRepository
+                        .unconsumed(forYou.first, sourceIdAtStart, ReelsForYou.BACKLOG_SEED_LIMIT)
+                        .map { it.toShortVideoItem() }
+                } else {
+                    emptyList()
+                }
+
                 mutableState.update { current ->
                     // Re-check inside the CAS: a reset may have landed between the outer guard
                     // and this update; writing a stale page would corrupt the newer feed.
                     if (loadGeneration.get() != generation) return@update current
-                    val incoming = pageData.videos.distinctBy { it.id }.filterHidden()
                     val newItems = if (reset) {
                         incoming
                     } else {
                         incoming.filterNot { it.id in current.seenIds }
+                    }
+                    val merged = when {
+                        !reset -> current.items + newItems
+                        backlog.isEmpty() -> newItems
+                        else -> (newItems + backlog).distinctBy { it.id }
                     }
                     // Sticky cursor mode (contract v17), shared with every other host surface:
                     // the first non-null token locks the generation, and losing the token while
@@ -848,9 +1165,9 @@ class ReelsFeedScreenModel(
                         }
                     }
                     current.copy(
-                        items = (if (reset) newItems else current.items + newItems).toImmutableList(),
+                        items = merged.toImmutableList(),
                         seenIds = if (reset) {
-                            newItems.map { it.id }.toImmutableSet()
+                            merged.map { it.id }.toImmutableSet()
                         } else {
                             (current.seenIds + newItems.map { it.id }).toImmutableSet()
                         },
@@ -879,6 +1196,11 @@ class ReelsFeedScreenModel(
                         activeIndex = if (reset) 0 else current.activeIndex,
                         // A recovered append must not leave a stale transient error.
                         pageError = null,
+                        unseenHidden = if (consumed.isEmpty()) {
+                            current.unseenHidden
+                        } else {
+                            current.unseenHidden + consumed.size
+                        },
                     )
                 }
                 runway.onLoadFinished()
@@ -900,6 +1222,16 @@ class ReelsFeedScreenModel(
                     } else {
                         resumeSeekPages++
                         loadFeed(reset = false)
+                    }
+                } else if (unseenFilter && incoming.isEmpty() && state.value.canLoadMore) {
+                    // The whole page was already consumed. Keep scanning — bounded — so a deep
+                    // watch history cannot turn For You into a permanent empty screen. Running
+                    // out of budget is NOT end-of-feed: the screen says "still scanning".
+                    if (unseenRefillPages < ReelsForYou.UNSEEN_REFILL_MAX_PAGES) {
+                        unseenRefillPages++
+                        loadFeed(reset = false)
+                    } else {
+                        mutableState.update { it.copy(unseenScanStopped = true) }
                     }
                 } else if (appended > 0 && lastPagerPage > pageAtLoadStart) {
                     // The fling crossed at least one page while this page was in flight:
@@ -2250,6 +2582,11 @@ class ReelsFeedScreenModel(
                     loginRejected = !ok,
                 )
             }
+            // A login can change the underlying account: the For You scope must be re-resolved
+            // instead of reusing the previous account's generation.
+            forYouScope = null
+            watchedCommitted.clear()
+            skippedCommitted.clear()
             if (ok) loadFeed(reset = true)
         }
     }
@@ -2269,6 +2606,11 @@ class ReelsFeedScreenModel(
                 runCatching { clearWebLoginCookies(webLoginSource.webLoginUrl(), purgeOrigins) }
             }
             mutableState.update { it.copy(loggedInAccount = null, loginError = null, loginRejected = false) }
+            // Logout fences the account scope: the next load re-resolves it, so the previous
+            // account's history is never reused for a different session.
+            forYouScope = null
+            watchedCommitted.clear()
+            skippedCommitted.clear()
             loadFeed(reset = true)
         }
     }
@@ -2774,7 +3116,17 @@ class ReelsFeedScreenModel(
         }
     }
 
-    fun onPageChanged(index: Int) {
+    fun onPageChanged(index: Int, cause: ReelsTransitionCause = ReelsTransitionCause.PROGRAMMATIC) {
+        val previousIndex = state.value.activeIndex
+        val previousItem = state.value.items.getOrNull(previousIndex)
+        // A skip exists only for a COMMITTED MANUAL forward move away from the card that was
+        // actually settled. Cancelled drags never reach this collector (settledPage does not
+        // change), auto-advance/restore/error-fallback arrive as PROGRAMMATIC, a backward move
+        // is USER_BACKWARD, and a fast fling reports the origin page only — the pages it flew
+        // over never became committed visits.
+        if (cause == ReelsTransitionCause.USER_FORWARD && index > previousIndex && previousItem != null) {
+            commitSkipped(previousItem.id)
+        }
         mutableState.update {
             it.copy(
                 activeIndex = index,
@@ -3022,6 +3374,14 @@ class ReelsFeedScreenModel(
         val blockedTagsSaveFailed: Boolean = false,
         // Session-scoped "tap to unmute" pill: visible while the user has not decided sound.
         val showUnmuteHint: Boolean = false,
+        // For You unseen policy (durable consumption history). [unseenOnly] mirrors the user
+        // preference ("show watched" is its OFF state, not a history wipe); [unseenHidden]
+        // counts reels dropped because they were already watched/skipped in this generation;
+        // [unseenScanStopped] means the bounded refill budget ran out — which is NOT the same
+        // as "everything has been seen".
+        val unseenOnly: Boolean = true,
+        val unseenHidden: Int = 0,
+        val unseenScanStopped: Boolean = false,
     ) {
         /**
          * Like identity for the playlist slot: the offline playlist merges several sources,

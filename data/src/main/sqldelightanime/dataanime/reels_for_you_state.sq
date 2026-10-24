@@ -1,0 +1,32 @@
+-- Per-account For You bookkeeping. history_generation fences async writers: a commit that
+-- started before a history reset carries the old generation and is dropped, so a stale
+-- coroutine can never resurrect a consumed row.
+CREATE TABLE reels_for_you_state(
+    account_scope_id TEXT NOT NULL PRIMARY KEY,
+    history_generation INTEGER NOT NULL DEFAULT 0,
+    policy_version INTEGER NOT NULL DEFAULT 1
+);
+
+getState:
+SELECT *
+FROM reels_for_you_state
+WHERE account_scope_id = :scope;
+
+getGeneration:
+SELECT history_generation
+FROM reels_for_you_state
+WHERE account_scope_id = :scope;
+
+ensureState:
+INSERT OR IGNORE INTO reels_for_you_state(account_scope_id, history_generation, policy_version)
+VALUES (?, 0, ?);
+
+bumpGeneration:
+INSERT INTO reels_for_you_state(account_scope_id, history_generation, policy_version)
+VALUES (?, 1, ?)
+ON CONFLICT(account_scope_id)
+DO UPDATE SET history_generation = reels_for_you_state.history_generation + 1;
+
+deleteForScope:
+DELETE FROM reels_for_you_state
+WHERE account_scope_id = :scope;

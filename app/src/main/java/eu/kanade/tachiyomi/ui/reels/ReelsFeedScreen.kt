@@ -20,8 +20,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +53,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.AddCircle
 import androidx.compose.material.icons.outlined.Collections
 import androidx.compose.material3.AlertDialog
@@ -87,7 +91,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -98,6 +104,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import cafe.adriel.voyager.core.model.rememberScreenModel
 import cafe.adriel.voyager.core.screen.Screen
@@ -141,6 +150,8 @@ import tachiyomi.presentation.core.screens.EmptyScreenAction
 import tachiyomi.presentation.core.screens.LoadingScreen
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.abs
 import androidx.compose.foundation.lazy.grid.items as gridItems
 
 data class ReelsFeedScreen(
@@ -218,7 +229,27 @@ data class ReelsFeedScreen(
         val state by screenModel.state.collectAsStateWithLifecycle()
         val snackbarHostState = remember { SnackbarHostState() }
         var pendingDeleteFeed by remember { mutableStateOf<CustomFeedRef?>(null) }
+        // "Reset For You history" is destructive (watched reels become recommendable again),
+        // so it is always confirmed. Explicit hidden/blacklist entries are NOT touched.
+        var pendingResetHistory by remember { mutableStateOf(false) }
         val retryLabel = stringResource(MR.strings.action_retry)
+        // Foreground gate for watch qualification: playback that keeps running while the app
+        // is backgrounded (audio-only, PiP hand-off) must never earn "watched" credit.
+        val lifecycleOwner = LocalLifecycleOwner.current
+        var isForeground by remember(lifecycleOwner) {
+            mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        }
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> isForeground = true
+                    Lifecycle.Event.ON_PAUSE -> isForeground = false
+                    else -> Unit
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
         // Audit H9: incognito must be VISIBLE — every like/follow/history write for this
         // source is silently suppressed while it is on. Reels owns its incognito: only the
         // reels-only toggle applies here — the global switch, the NSFW auto policy and the
@@ -613,6 +644,32 @@ data class ReelsFeedScreen(
                             ),
                             modifier = Modifier.fillMaxSize(),
                         )
+                    } else if (
+                        state.unseenOnly &&
+                        state.mode == ReelsFeedScreenModel.FeedMode.GLOBAL &&
+                        state.searchQuery.isBlank() &&
+                        !state.isOffline
+                    ) {
+                        // For You has nothing UNWATCHED left (or the bounded scan stopped).
+                        // "Show watched" is an explicit mode switch, never a history wipe.
+                        // Search and the offline playlist are explicit surfaces and keep the
+                        // neutral "nothing here" copy: their emptiness has nothing to do with
+                        // the watch history.
+                        EmptyScreen(
+                            stringRes = if (state.unseenScanStopped) {
+                                MR.strings.reels_feed_empty_unseen_scanning
+                            } else {
+                                MR.strings.reels_feed_empty_unseen
+                            },
+                            actions = persistentListOf(
+                                EmptyScreenAction(
+                                    stringRes = MR.strings.reels_feed_show_watched,
+                                    icon = Icons.Filled.PlayArrow,
+                                    onClick = { screenModel.setUnseenOnly(false) },
+                                ),
+                            ),
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     } else {
                         // Audit H11: "No source found" was semantically wrong — the source IS
                         // there, it just served nothing (or everything is filtered/hidden).
@@ -696,11 +753,26 @@ data class ReelsFeedScreen(
                         }
                     }
 
+                    // Passive gesture observer: `settledPage` alone cannot tell a deliberate
+                    // swipe from an auto-advance/restore. This records WHEN a real drag moved
+                    // the pager; it never consumes events, so the pager keeps full control.
+                    val lastUserNavAtMs = remember(pagerState) { AtomicLong(0L) }
+
                     LaunchedEffect(pagerState) {
+                        var previous = pagerState.settledPage
                         snapshotFlow { pagerState.settledPage }
                             .distinctUntilChanged()
                             .collect { page ->
-                                screenModel.onPageChanged(page)
+                                val from = previous
+                                previous = page
+                                val userRecent = SystemClock.elapsedRealtime() - lastUserNavAtMs.get() <
+                                    ReelsForYou.USER_NAV_WINDOW_MS
+                                val cause = when {
+                                    page > from && userRecent -> ReelsTransitionCause.USER_FORWARD
+                                    page < from && userRecent -> ReelsTransitionCause.USER_BACKWARD
+                                    else -> ReelsTransitionCause.PROGRAMMATIC
+                                }
+                                screenModel.onPageChanged(page, cause)
                             }
                     }
 
@@ -763,6 +835,25 @@ data class ReelsFeedScreen(
                         userScrollEnabled = !landscapeFullscreen && !touchLocked,
                         modifier = Modifier
                             .fillMaxSize()
+                            .pointerInput(pagerState) {
+                                // Observe-only: reports a completed drag that actually changed
+                                // the page. A cancelled drag snaps back to the same page and is
+                                // deliberately ignored (FY04: no skip).
+                                awaitEachGesture {
+                                    val startPage = pagerState.currentPage
+                                    val down = awaitFirstDown(
+                                        requireUnconsumed = false,
+                                        pass = PointerEventPass.Initial,
+                                    )
+                                    var dragged = false
+                                    drag(down.id) { change ->
+                                        if (abs(change.positionChange().y) > 0f) dragged = true
+                                    }
+                                    if (dragged && pagerState.currentPage != startPage) {
+                                        lastUserNavAtMs.set(SystemClock.elapsedRealtime())
+                                    }
+                                }
+                            }
                             .pointerInput(feedSwipeEnabled, swipeThresholdPx) {
                                 if (!feedSwipeEnabled) return@pointerInput
                                 detectHorizontalDragGestures(
@@ -978,10 +1069,11 @@ data class ReelsFeedScreen(
                                     }
                                 },
                                 onScrubStart = { chromeVisible = true },
-                                onViewReported = { watched, duration, fraction ->
-                                    screenModel.reportVideoView(item.id, watched, duration)
-                                    screenModel.recordWatchHistory(item, fraction, duration)
-                                },
+                                onVisitStarted = screenModel::onVisitStarted,
+                                onFirstFramePresented = screenModel::onFirstFramePresented,
+                                onPlaybackSample = screenModel::onPlaybackSample,
+                                onVisitEnded = screenModel::onVisitEnded,
+                                isForeground = isForeground,
                                 onPlayingStateChanged = screenModel::setPlaybackRunning,
                                 initialSeekFraction = if (item.id ==
                                     state.resumeVideoId
@@ -1195,6 +1287,9 @@ data class ReelsFeedScreen(
                     onToggleTouchLock = { touchLocked = !touchLocked },
                     isReelsIncognito = isIncognito,
                     onToggleReelsIncognito = screenModel::toggleReelsIncognito,
+                    isUnseenOnly = state.unseenOnly,
+                    onToggleUnseenOnly = { screenModel.setUnseenOnly(!state.unseenOnly) },
+                    onResetForYouHistory = { pendingResetHistory = true },
                     onMoreMenuOpenChanged = { moreMenuOpen = it },
                     onClearVideoCache = {
                         coroutineScope.launch {
@@ -1356,6 +1451,30 @@ data class ReelsFeedScreen(
                         )
                     },
                     onDeleteFeed = { feed -> pendingDeleteFeed = feed },
+                )
+            }
+
+            // Reset For You history confirmation
+            if (pendingResetHistory) {
+                AlertDialog(
+                    onDismissRequest = { pendingResetHistory = false },
+                    title = { Text(stringResource(MR.strings.reels_menu_reset_history)) },
+                    text = { Text(stringResource(MR.strings.reels_reset_history_confirm)) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                screenModel.resetForYouHistory()
+                                pendingResetHistory = false
+                            },
+                        ) {
+                            Text(stringResource(MR.strings.reels_menu_reset_history))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingResetHistory = false }) {
+                            Text(stringResource(MR.strings.action_cancel))
+                        }
+                    },
                 )
             }
 
