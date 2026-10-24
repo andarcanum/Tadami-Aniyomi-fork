@@ -2,15 +2,20 @@ package eu.kanade.tachiyomi.data.download.manga
 
 import android.app.Application
 import android.content.Context
+import android.util.AtomicFile
 import androidx.core.net.toUri
 import com.hippo.unifile.UniFile
 import eu.kanade.tachiyomi.extension.manga.MangaExtensionManager
 import eu.kanade.tachiyomi.source.MangaSource
 import eu.kanade.tachiyomi.util.size
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.BufferOverflow
@@ -40,6 +45,7 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.protobuf.ProtoBuf
 import logcat.LogPriority
+import logcat.asLog
 import tachiyomi.core.common.storage.extension
 import tachiyomi.core.common.storage.nameWithoutExtension
 import tachiyomi.core.common.util.lang.launchIO
@@ -51,6 +57,7 @@ import tachiyomi.domain.storage.service.StorageManager
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
@@ -66,9 +73,20 @@ class MangaDownloadCache(
     private val sourceManager: MangaSourceManager = Injekt.get(),
     private val extensionManager: MangaExtensionManager = Injekt.get(),
     private val storageManager: StorageManager = Injekt.get(),
+    private val scope: CoroutineScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, error ->
+            logcat.logcat("MangaDownloadCache", LogPriority.ERROR) {
+                "MangaDownloadCache: background operation failed\n${error.asLog()}"
+            }
+        },
+    ),
 ) {
 
-    private val scope = CoroutineScope(Dispatchers.IO)
+    private val restoreFinished = CompletableDeferred<Unit>()
+    private val renewalLock = Any()
+    private val storageGeneration = AtomicLong(0L)
+    private val diskCacheMutex = Mutex()
+    private val writerLock = Any()
 
     private val _changes = MutableSharedFlow<Unit>(
         replay = 1,
@@ -87,6 +105,7 @@ class MangaDownloadCache(
     /**
      * The last time the cache was refreshed.
      */
+    @Volatile
     private var lastRenew = 0L
     private var renewalJob: Job? = null
 
@@ -109,26 +128,34 @@ class MangaDownloadCache(
     init {
         _changes.tryEmit(Unit)
 
-        // Attempt to read cache file
+        val restoreGeneration = storageGeneration.get()
         scope.launch {
-            rootDownloadsDirMutex.withLock {
-                try {
-                    if (diskCacheFile.exists()) {
-                        val diskCache = diskCacheFile.inputStream().use {
-                            ProtoBuf.decodeFromByteArray<RootDirectory>(it.readBytes())
+            try {
+                diskCacheMutex.withLock {
+                    val atomicFile = AtomicFile(diskCacheFile)
+                    if (diskCacheFile.exists() || File("${diskCacheFile.path}.bak").exists()) {
+                        val restored = ProtoBuf.decodeFromByteArray<RootDirectory>(atomicFile.readFully())
+                        rootDownloadsDirMutex.withLock {
+                            synchronized(renewalLock) {
+                                if (storageGeneration.get() == restoreGeneration &&
+                                    restored.dir?.uri == rootDownloadsDir.dir?.uri
+                                ) {
+                                    rootDownloadsDir = restored
+                                    lastRenew = restored.lastSuccessfulScanAt
+                                        .takeIf { it in 1..System.currentTimeMillis() } ?: 0L
+                                }
+                            }
                         }
-                        rootDownloadsDir = diskCache
-                        // C-M5: the trust window starts at the file's AGE, not at "now" - the old
-                        // code marked a month-old snapshot as freshly renewed, so external
-                        // renames/deletes stayed invisible for another full hour after launch.
-                        // An unavailable mtime (0) forces an immediate renewal.
-                        lastRenew = diskCacheFile.lastModified()
-                            .takeIf { it in 1..System.currentTimeMillis() } ?: 0L
                     }
-                } catch (e: Throwable) {
-                    logcat(LogPriority.ERROR, e) { "Failed to initialize from disk cache" }
-                    diskCacheFile.delete()
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                logcat(LogPriority.ERROR, e) { "Failed to initialize from disk cache" }
+            } finally {
+                restoreFinished.complete(Unit)
+                // Restore is a state transition, not a new filesystem validation.
+                notifyChanges(persist = false)
             }
         }
 
@@ -190,14 +217,12 @@ class MangaDownloadCache(
      * suffix. Exact names keep priority.
      */
     private fun mangaDirsFor(sourceDir: SourceDirectory, mangaTitle: String, mangaId: Long?): List<MangaDirectory> {
-        val scoped = mangaId?.let { sourceDir.mangaDirs[provider.getMangaDirName(mangaTitle, it)] }
-        val legacy = sourceDir.mangaDirs[provider.getLegacyMangaDirName(mangaTitle)]
-        val suffixMatched = mangaId?.let { id ->
-            val suffix = " [$id]"
-            sourceDir.mangaDirs.values.filter { it.dir?.name?.endsWith(suffix) == true }
-        }.orEmpty()
-        return (listOfNotNull(scoped, legacy) + suffixMatched)
-            .distinctBy { it.dir?.name }
+        return cachedMangaDirectories(
+            directories = sourceDir.mangaDirs,
+            scopedName = mangaId?.let { provider.getMangaDirName(mangaTitle, it) },
+            legacyName = provider.getLegacyMangaDirName(mangaTitle),
+            mangaId = mangaId,
+        )
     }
 
     /**
@@ -261,6 +286,7 @@ class MangaDownloadCache(
      * @param manga the manga of the chapter.
      */
     suspend fun addChapter(chapterDirName: String, mangaUniFile: UniFile, manga: Manga) {
+        restoreFinished.await()
         rootDownloadsDirMutex.withLock {
             // Retrieve the cached source directory or cache a new one
             var sourceDir = rootDownloadsDir.sourceDirs[manga.source]
@@ -294,6 +320,7 @@ class MangaDownloadCache(
      * @param manga the manga of the chapter.
      */
     suspend fun removeChapter(chapter: Chapter, manga: Manga) {
+        restoreFinished.await()
         rootDownloadsDirMutex.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             mangaDirsFor(sourceDir, manga.title, manga.id).forEach { mangaDir ->
@@ -315,6 +342,7 @@ class MangaDownloadCache(
      * @param manga the manga of the chapter.
      */
     suspend fun removeChapters(chapters: List<Chapter>, manga: Manga) {
+        restoreFinished.await()
         rootDownloadsDirMutex.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             mangaDirsFor(sourceDir, manga.title, manga.id).forEach { mangaDir ->
@@ -337,6 +365,7 @@ class MangaDownloadCache(
      * @param manga the manga to remove.
      */
     suspend fun removeManga(manga: Manga) {
+        restoreFinished.await()
         rootDownloadsDirMutex.withLock {
             val sourceDir = rootDownloadsDir.sourceDirs[manga.source] ?: return
             listOfNotNull(
@@ -353,6 +382,7 @@ class MangaDownloadCache(
     }
 
     suspend fun removeSource(source: MangaSource) {
+        restoreFinished.await()
         rootDownloadsDirMutex.withLock {
             rootDownloadsDir.sourceDirs -= source.id
         }
@@ -361,152 +391,190 @@ class MangaDownloadCache(
     }
 
     fun invalidateCache() {
-        lastRenew = 0L
-        renewalJob?.cancel()
-        diskCacheFile.delete()
-        renewCache()
+        val generation = synchronized(renewalLock) {
+            val next = storageGeneration.incrementAndGet()
+            lastRenew = 0L
+            rootDownloadsDir.lastSuccessfulScanAt = 0L
+            renewalJob?.cancel()
+            renewalJob = null
+            next
+        }
+        scope.launch {
+            restoreFinished.await()
+            diskCacheMutex.withLock {
+                if (storageGeneration.get() == generation) {
+                    AtomicFile(diskCacheFile).delete()
+                }
+            }
+            if (storageGeneration.get() == generation) renewCache()
+        }
     }
 
-    /**
-     * Renews the downloads cache.
-     */
+    /** Only one renewal is admitted, including calls racing with disk restore. */
     private fun renewCache() {
-        // Avoid renewing cache if in the process nor too often
-        if (lastRenew + renewInterval >= System.currentTimeMillis() || renewalJob?.isActive == true) {
-            return
-        }
-
-        var renewalSucceeded = false
-        renewalJob = scope.launchIO {
-            if (lastRenew == 0L) {
-                _isInitializing.emit(true)
+        synchronized(renewalLock) {
+            if (lastRenew + renewInterval >= System.currentTimeMillis() || renewalJob?.isActive == true) {
+                return
             }
-
-            // Try to wait until extensions and sources have loaded
-            val sources = withTimeoutOrNull(30.seconds) {
-                extensionManager.isInitialized.first { it }
-                sourceManager.isInitialized.first { it }
-                getSources()
-            }
-            if (sources == null || sources.isEmpty()) {
-                logcat(LogPriority.WARN) { "DownloadCache: sources unavailable, keeping previous cache snapshot" }
-                _isInitializing.emit(false)
-                return@launchIO
-            }
-
-            // C-M5: a temporarily unavailable downloads directory (unmounted SD card, revoked
-            // SAF permission) used to produce an EMPTY snapshot that was swapped in AND
-            // persisted to disk - wiping the index until the next renewal. Keep the previous
-            // snapshot and retry on the failure interval instead.
-            val downloadsDirNow = storageManager.getDownloadsDirectory()
-            if (downloadsDirNow == null) {
-                logcat(LogPriority.WARN) { "DownloadCache: downloads directory unavailable, keeping previous snapshot" }
-                _isInitializing.emit(false)
-                return@launchIO
-            }
-
-            val sourceMap = sources.associate { provider.getSourceDirName(it).lowercase() to it.id }
-
-            rootDownloadsDirMutex.withLock {
-                val updatedRootDir = RootDirectory(downloadsDirNow)
-
-                updatedRootDir.sourceDirs = updatedRootDir.dir?.listFiles().orEmpty()
-                    .filter { it.isDirectory && !it.name.isNullOrBlank() }
-                    .mapNotNull { dir ->
-                        val sourceId = sourceMap[dir.name!!.lowercase()]
-                        sourceId?.let { it to SourceDirectory(dir) }
+            val generation = storageGeneration.get()
+            val job = scope.launch(start = CoroutineStart.LAZY) {
+                var attempted = false
+                var succeeded = false
+                try {
+                    restoreFinished.await()
+                    if (storageGeneration.get() != generation ||
+                        lastRenew + renewInterval >= System.currentTimeMillis()
+                    ) {
+                        return@launch
                     }
-                    .toMap()
+                    attempted = true
+                    _isInitializing.value = lastRenew == 0L
 
-                updatedRootDir.sourceDirs.values.map { sourceDir ->
-                    async {
-                        sourceDir.mangaDirs = sourceDir.dir?.listFiles().orEmpty()
+                    val sources = withTimeoutOrNull(30.seconds) {
+                        extensionManager.isInitialized.first { it }
+                        sourceManager.isInitialized.first { it }
+                        getSources()
+                    }
+                    if (sources.isNullOrEmpty()) {
+                        logcat(LogPriority.WARN) { "DownloadCache: sources unavailable, keeping snapshot" }
+                        return@launch
+                    }
+                    val downloadsDirNow = storageManager.getDownloadsDirectory()
+                    if (downloadsDirNow == null) {
+                        logcat(LogPriority.WARN) { "DownloadCache: storage unavailable, keeping snapshot" }
+                        return@launch
+                    }
+
+                    val sourceMap = sources.associate { provider.getSourceDirName(it).lowercase() to it.id }
+
+                    rootDownloadsDirMutex.withLock {
+                        val updatedRootDir = RootDirectory(downloadsDirNow)
+
+                        updatedRootDir.sourceDirs = updatedRootDir.dir?.listFiles().orEmpty()
                             .filter { it.isDirectory && !it.name.isNullOrBlank() }
-                            .associate { it.name!! to MangaDirectory(it) }
-                        sourceDir.mangaDirs.values.forEach { mangaDir ->
-                            val chapterDirs = mangaDir.dir?.listFiles().orEmpty()
-                                .mapNotNull {
-                                    when {
-                                        // Ignore incomplete downloads; C-M4: reap STALE ones.
-                                        // Crashed/errored downloads left "_tmp" dirs and
-                                        // ".cbz_tmp" files with no cleaner anywhere. Active
-                                        // downloads keep touching their files, so the 24h
-                                        // last-modified guard never hits a live download.
-                                        it.name?.endsWith(MangaDownloader.TMP_DIR_SUFFIX) == true -> {
-                                            val lastModified = runCatching { it.lastModified() }.getOrDefault(0L)
-                                            if (lastModified > 0L &&
-                                                System.currentTimeMillis() - lastModified > STALE_TMP_MILLIS
-                                            ) {
-                                                runCatching { it.delete() }
-                                            }
-                                            null
-                                        }
-                                        // Folder of images
-                                        it.isDirectory -> it.name
-                                        // CBZ files
-                                        it.isFile && it.extension == "cbz" -> it.nameWithoutExtension
-                                        // Anything else is irrelevant
-                                        else -> null
-                                    }
-                                }
-                                .toMutableSet()
+                            .mapNotNull { dir ->
+                                val sourceId = sourceMap[dir.name!!.lowercase()]
+                                sourceId?.let { it to SourceDirectory(dir) }
+                            }
+                            .toMap()
 
-                            mangaDir.chapterDirs = chapterDirs
+                        updatedRootDir.sourceDirs.values.map { sourceDir ->
+                            async {
+                                sourceDir.mangaDirs = sourceDir.dir?.listFiles().orEmpty()
+                                    .filter { it.isDirectory && !it.name.isNullOrBlank() }
+                                    .associate { it.name!! to MangaDirectory(it) }
+                                sourceDir.mangaDirs.values.forEach { mangaDir ->
+                                    val chapterDirs = mangaDir.dir?.listFiles().orEmpty()
+                                        .mapNotNull {
+                                            when {
+                                                // Ignore incomplete downloads; C-M4: reap STALE ones.
+                                                // Crashed/errored downloads left "_tmp" dirs and
+                                                // ".cbz_tmp" files with no cleaner anywhere. Active
+                                                // downloads keep touching their files, so the 24h
+                                                // last-modified guard never hits a live download.
+                                                it.name?.endsWith(MangaDownloader.TMP_DIR_SUFFIX) == true -> {
+                                                    val lastModified = runCatching {
+                                                        it.lastModified()
+                                                    }.getOrDefault(0L)
+                                                    if (lastModified > 0L &&
+                                                        System.currentTimeMillis() - lastModified > STALE_TMP_MILLIS
+                                                    ) {
+                                                        runCatching { it.delete() }
+                                                    }
+                                                    null
+                                                }
+                                                // Folder of images
+                                                it.isDirectory -> it.name
+                                                // CBZ files
+                                                it.isFile && it.extension == "cbz" -> it.nameWithoutExtension
+                                                // Anything else is irrelevant
+                                                else -> null
+                                            }
+                                        }
+                                        .toMutableSet()
+
+                                    mangaDir.chapterDirs = chapterDirs
+                                }
+                            }
+                        }
+                            .awaitAll()
+
+                        ensureActive()
+                        synchronized(renewalLock) {
+                            if (storageGeneration.get() != generation) return@launch
+                            updatedRootDir.lastSuccessfulScanAt = System.currentTimeMillis()
+                            rootDownloadsDir = updatedRootDir
                         }
                     }
+                    succeeded = true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "DownloadCache: failed to create cache" }
+                } finally {
+                    synchronized(renewalLock) {
+                        if (storageGeneration.get() == generation) {
+                            if (attempted) {
+                                val now = System.currentTimeMillis()
+                                lastRenew = if (succeeded) {
+                                    now
+                                } else {
+                                    now - renewInterval + failedRenewRetryInterval
+                                }
+                            }
+                            _isInitializing.value = false
+                        }
+                    }
+                    if (storageGeneration.get() == generation) {
+                        notifyChanges(persist = succeeded)
+                    }
                 }
-                    .awaitAll()
-
-                rootDownloadsDir = updatedRootDir
             }
-
-            renewalSucceeded = true
-            _isInitializing.emit(false)
-        }.also {
-            it.invokeOnCompletion(onCancelling = true) { exception ->
-                scope.launch { _isInitializing.emit(false) }
-                if (exception != null && exception !is CancellationException) {
-                    logcat(LogPriority.ERROR, exception) { "DownloadCache: failed to create cache" }
-                }
-                val now = System.currentTimeMillis()
-                lastRenew = if (exception == null && renewalSucceeded) {
-                    now
-                } else {
-                    now - renewInterval + failedRenewRetryInterval
-                }
-                notifyChanges()
-            }
+            renewalJob = job
+            job.start()
         }
-
-        // Mainly to notify the indexing notifier UI
-        notifyChanges()
     }
 
     private fun getSources(): List<MangaSource> {
         return sourceManager.getOnlineSources() + sourceManager.getStubSources()
     }
 
-    private fun notifyChanges() {
+    private fun notifyChanges(persist: Boolean = true) {
         _changes.tryEmit(Unit)
-        updateDiskCache()
+        if (persist) updateDiskCache()
     }
 
     private var updateDiskCacheJob: Job? = null
     private fun updateDiskCache() {
-        updateDiskCacheJob?.cancel()
-        updateDiskCacheJob = scope.launchIO {
-            delay(1000)
-            ensureActive()
-            val bytes = ProtoBuf.encodeToByteArray(rootDownloadsDir)
-            ensureActive()
-            try {
-                diskCacheFile.writeBytes(bytes)
-            } catch (e: Throwable) {
-                logcat(
-                    priority = LogPriority.ERROR,
-                    throwable = e,
-                    message = { "Failed to write disk cache file" },
-                )
+        synchronized(writerLock) {
+            updateDiskCacheJob?.cancel()
+            updateDiskCacheJob = scope.launchIO {
+                delay(1000L)
+                restoreFinished.await()
+                try {
+                    diskCacheMutex.withLock {
+                        val generation = storageGeneration.get()
+                        val snapshot = rootDownloadsDirMutex.withLock {
+                            rootDownloadsDir.copyForDisk()
+                        }
+                        val bytes = ProtoBuf.encodeToByteArray(snapshot)
+                        ensureActive()
+                        if (storageGeneration.get() != generation) return@withLock
+                        val file = AtomicFile(diskCacheFile)
+                        val output = file.startWrite()
+                        try {
+                            output.write(bytes)
+                            file.finishWrite(output)
+                        } catch (e: Exception) {
+                            file.failWrite(output)
+                            throw e
+                        }
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    logcat(LogPriority.ERROR, e) { "Failed to write disk cache file" }
+                }
             }
         }
     }
@@ -516,10 +584,11 @@ class MangaDownloadCache(
  * Class to store the files under the root downloads directory.
  */
 @Serializable
-private class RootDirectory(
+internal class RootDirectory(
     @Serializable(with = UniFileAsStringSerializer::class)
     val dir: UniFile?,
-    var sourceDirs: Map<Long, SourceDirectory> = mapOf(),
+    @Volatile var sourceDirs: Map<Long, SourceDirectory> = mapOf(),
+    @Volatile var lastSuccessfulScanAt: Long = 0L,
 )
 
 /** C-M4: incomplete-download artifacts older than this are reaped during cache renewal. */
@@ -529,20 +598,20 @@ private const val STALE_TMP_MILLIS = 24L * 60 * 60 * 1000
  * Class to store the files under a source directory.
  */
 @Serializable
-private class SourceDirectory(
+internal class SourceDirectory(
     @Serializable(with = UniFileAsStringSerializer::class)
     val dir: UniFile?,
-    var mangaDirs: Map<String, MangaDirectory> = mapOf(),
+    @Volatile var mangaDirs: Map<String, MangaDirectory> = mapOf(),
 )
 
 /**
  * Class to store the files under a manga directory.
  */
 @Serializable
-private class MangaDirectory(
+internal class MangaDirectory(
     @Serializable(with = UniFileAsStringSerializer::class)
     val dir: UniFile?,
-    var chapterDirs: MutableSet<String> = mutableSetOf(),
+    @Volatile var chapterDirs: MutableSet<String> = mutableSetOf(),
 )
 
 private object UniFileAsStringSerializer : KSerializer<UniFile?> {
@@ -565,3 +634,34 @@ private object UniFileAsStringSerializer : KSerializer<UniFile?> {
         }
     }
 }
+
+internal fun <T : Any> cachedMangaDirectories(
+    directories: Map<String, T>,
+    scopedName: String?,
+    legacyName: String,
+    mangaId: Long?,
+): List<T> {
+    val names = buildSet {
+        scopedName?.let(::add)
+        add(legacyName)
+        mangaId?.let { id ->
+            val suffix = " [$id]"
+            directories.keys.filterTo(this) { it.endsWith(suffix) }
+        }
+    }
+    return names.mapNotNull { directories[it] }
+}
+
+/** Call under rootDownloadsDirMutex; the encoder must never walk the live tree. */
+internal fun RootDirectory.copyForDisk(): RootDirectory = RootDirectory(
+    dir = dir,
+    sourceDirs = sourceDirs.mapValues { (_, source) ->
+        SourceDirectory(
+            dir = source.dir,
+            mangaDirs = source.mangaDirs.mapValues { (_, manga) ->
+                MangaDirectory(manga.dir, manga.chapterDirs.toMutableSet())
+            },
+        )
+    },
+    lastSuccessfulScanAt = lastSuccessfulScanAt,
+)
