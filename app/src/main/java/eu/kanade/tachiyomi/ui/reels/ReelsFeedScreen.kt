@@ -70,9 +70,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -86,6 +88,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
@@ -317,6 +320,20 @@ data class ReelsFeedScreen(
         // Data saver: force SD on metered networks. The page pins this value at activation,
         // so playback never rebuilds mid-clip when connectivity changes.
         val effectiveHd = if (state.dataSaverMetered && !isOnWifi) false else state.isHdQuality
+        // U02: software fullscreen rotates the page subtree instead of requesting an
+        // orientation. A window that is already landscape (split-screen/tablet/foldable)
+        // or a system-owned PiP frame must not rotate at all.
+        val windowConfiguration = LocalConfiguration.current
+        val windowIsLandscape = reelsWindowIsLandscape(
+            windowConfiguration.screenWidthDp,
+            windowConfiguration.screenHeightDp,
+        )
+        val inPictureInPicture = ReelsPip.isInPictureInPictureMode
+        // The active reel's orientation drives the PiP aspect ratio. Values are kept per
+        // item: a preloaded neighbor may report before it settles into the active page.
+        val videoOrientations = remember { mutableStateMapOf<String, Boolean>() }
+        var activeVideoLandscape by remember { mutableStateOf<Boolean?>(null) }
+        val currentActiveVideoLandscape by rememberUpdatedState(activeVideoLandscape)
         var chromeVisible by remember { mutableStateOf(true) }
         // Device UX: the ⋮ settings block holds playback and pins the chrome while open.
         var moreMenuOpen by remember { mutableStateOf(false) }
@@ -326,6 +343,16 @@ data class ReelsFeedScreen(
         // re-enters fullscreen on its own; a manual exit disarms it.
         var landscapeFullscreen by remember { mutableStateOf(false) }
         var landscapeAutoRestore by remember { mutableStateOf(false) }
+        // U02: the portrait lock pins Display.rotation, so the physical hold side comes from
+        // gravity. The sensor is registered only while the rotated frame is actually used.
+        val landscapeRotation = rememberReelsLandscapeRotation(
+            enabled = landscapeFullscreen && !windowIsLandscape && !inPictureInPicture,
+        )
+        val softwareRotationDegrees = reelsSoftwareRotationDegrees(
+            landscapeRotation = landscapeRotation,
+            windowIsLandscape = windowIsLandscape,
+            inPictureInPicture = inPictureInPicture,
+        )
         // U07: while software fullscreen is active, the window belongs to the video —
         // MainActivity's generic navigation-bar scrim must not paint over it.
         val fullscreenOwner = remember { Any() }
@@ -396,7 +423,9 @@ data class ReelsFeedScreen(
                 val activity = context as? Activity
                 if (activity != null && current.isPipEnabled && current.isActuallyPlaying && !current.isOffline) {
                     runCatching {
-                        activity.enterPictureInPictureMode(ReelsPip.buildParams(activity))
+                        activity.enterPictureInPictureMode(
+                            ReelsPip.buildParams(activity, currentActiveVideoLandscape),
+                        )
                     }.getOrDefault(false)
                 } else {
                     false
@@ -561,6 +590,15 @@ data class ReelsFeedScreen(
                         pageCount = { state.items.size },
                     )
 
+                    // PiP shape follows the settled reel, including one whose player already
+                    // reported its orientation while the page was only preloaded.
+                    LaunchedEffect(pagerState.settledPage, state.items) {
+                        activeVideoLandscape = state.items
+                            .getOrNull(pagerState.settledPage)
+                            ?.id
+                            ?.let(videoOrientations::get)
+                    }
+
                     // C-intermediate (audit): heads of the reels BEYOND the player preload window
                     // (+2..+4) are warmed into the video cache with plain bytes — no player, no
                     // decoder — so a deep swipe starts from disk instead of a cold CDN round-trip.
@@ -710,6 +748,14 @@ data class ReelsFeedScreen(
                                 isCropMode = state.isCropMode,
                                 chromeVisible = chromeVisible && page == pagerState.settledPage && !landscapeFullscreen,
                                 isLandscapeFullscreen = landscapeFullscreen,
+                                softwareRotationDegrees = softwareRotationDegrees,
+                                isInPictureInPicture = inPictureInPicture,
+                                onVideoLandscapeKnown = { landscape ->
+                                    videoOrientations[item.id] = landscape
+                                    if (page == pagerState.settledPage) {
+                                        activeVideoLandscape = landscape
+                                    }
+                                },
                                 landscapeAutoRestore = landscapeAutoRestore,
                                 onLandscapeFullscreenChange = { enter ->
                                     landscapeFullscreen = enter
