@@ -10,6 +10,7 @@ import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
 import eu.kanade.tachiyomi.animesource.model.FeedPage
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
 import io.kotest.matchers.shouldBe
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -50,6 +51,7 @@ class ReelsCustomFeedEditorScreenModelTest {
         val tagCatalog = listOf("Tag A", "Tag B", "Tag C")
         var failTags = false
         var failDetail = false
+        var saveGate: CompletableDeferred<Unit>? = null
         var detail = CustomFeedDetail("My Feed", listOf("Tag A"))
         val createRequests = mutableListOf<Pair<String, List<String>>>()
         val updateRequests = mutableListOf<Triple<String, String, List<String>>>()
@@ -73,11 +75,13 @@ class ReelsCustomFeedEditorScreenModelTest {
         }
 
         override suspend fun createCustomFeed(name: String, tags: List<String>): CustomFeedRef {
+            saveGate?.await()
             createRequests += name to tags
             return CustomFeedRef("new-1", name)
         }
 
         override suspend fun updateCustomFeed(id: String, name: String, tags: List<String>): Boolean {
+            saveGate?.await()
             updateRequests += Triple(id, name, tags)
             return true
         }
@@ -186,15 +190,61 @@ class ReelsCustomFeedEditorScreenModelTest {
     }
 
     @Test
-    fun `failed tag catalog load surfaces an error and keeps save disabled`() = runTest(testDispatcher) {
+    fun `failed tag catalog surfaces an error without blocking create`() = runTest(testDispatcher) {
         val source = FakeEditorSource()
         source.failTags = true
         val model = buildEditor(source, initialName = "Named")
         testDispatcher.scheduler.advanceUntilIdle()
 
         model.state.value.isLoading shouldBe false
+        model.state.value.isDetailLoaded shouldBe true
         model.state.value.error shouldBe null
         model.state.value.errorRes shouldBe MR.strings.reels_editor_tags_failed
         model.state.value.allTags.isEmpty() shouldBe true
+    }
+
+    @Test
+    fun `detail failure blocks update until a retry loads the existing tags`() = runTest(testDispatcher) {
+        val source = FakeEditorSource()
+        source.failDetail = true
+        val model = buildEditor(source, feedId = "f1", initialName = "Known")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.isDetailLoaded shouldBe false
+        model.state.value.errorRes shouldBe MR.strings.reels_feed_load_failed
+
+        model.setName("Renamed")
+        model.save()
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.state.value.isSaved shouldBe false
+        source.updateRequests.isEmpty() shouldBe true
+
+        source.failDetail = false
+        model.retryLoad()
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.state.value.isDetailLoaded shouldBe true
+        model.state.value.name shouldBe "My Feed"
+        model.state.value.selectedTags shouldBe setOf("Tag A")
+
+        model.save()
+        testDispatcher.scheduler.advanceUntilIdle()
+        model.state.value.isSaved shouldBe true
+        source.updateRequests shouldBe listOf(Triple("f1", "My Feed", listOf("Tag A")))
+    }
+
+    @Test
+    fun `a save that never returns fails after the timeout`() = runTest(testDispatcher) {
+        val source = FakeEditorSource()
+        source.saveGate = CompletableDeferred()
+        val model = buildEditor(source)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.setName("Hanging")
+        model.save()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.isSaving shouldBe false
+        model.state.value.isSaved shouldBe false
+        model.state.value.errorRes shouldBe MR.strings.reels_save_failed
     }
 }

@@ -63,9 +63,10 @@ data class ReelsCustomFeedEditorScreen(
 
         // Audit H11: unsaved edits must not die silently on back — snapshot the first loaded
         // state as the baseline and confirm the discard when the user diverges from it.
+        // F06: an edit form is only a valid baseline after its detail loaded.
         var baseline by remember { mutableStateOf<Pair<String, Set<String>>?>(null) }
-        LaunchedEffect(state.isLoading) {
-            if (!state.isLoading && baseline == null) {
+        LaunchedEffect(state.isLoading, state.isDetailLoaded) {
+            if (!state.isLoading && state.isDetailLoaded && baseline == null) {
                 baseline = state.name to state.selectedTags
             }
         }
@@ -106,7 +107,10 @@ data class ReelsCustomFeedEditorScreen(
                     },
                     actions = {
                         TextButton(
-                            enabled = state.name.isNotBlank() && !state.isSaving && !state.isLoading,
+                            enabled = state.name.isNotBlank() &&
+                                state.isDetailLoaded &&
+                                !state.isSaving &&
+                                !state.isLoading,
                             onClick = screenModel::save,
                         ) {
                             Text(stringResource(MR.strings.reels_custom_feed_save))
@@ -123,6 +127,27 @@ data class ReelsCustomFeedEditorScreen(
                         verticalArrangement = Arrangement.Center,
                     ) {
                         CircularProgressIndicator()
+                    }
+                }
+                // F06: without the detail there are no trustworthy tags to edit. Showing the
+                // form here would let the user save an empty list over the existing feed.
+                !state.isDetailLoaded -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(contentPadding)
+                            .padding(horizontal = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+                    ) {
+                        Text(
+                            text = stringResource(state.errorRes ?: MR.strings.reels_feed_load_failed),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        TextButton(onClick = screenModel::retryLoad) {
+                            Text(stringResource(MR.strings.action_retry))
+                        }
                     }
                 }
                 else -> Column(
