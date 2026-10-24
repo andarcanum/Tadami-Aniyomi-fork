@@ -740,17 +740,19 @@ internal fun reelsShouldPauseOnStop(inPictureInPicture: Boolean): Boolean = !inP
 internal fun reelsShouldRunPlayback(isActive: Boolean, isPlaying: Boolean, lifecycleStarted: Boolean): Boolean =
     isActive && isPlaying && lifecycleStarted
 
-private var reelsVideoCache: SimpleCache? = null
+private val reelsVideoCacheOwner = ReelsCacheOwner<SimpleCache>()
 
 // Process-wide LRU disk cache so re-watching a reel doesn't hit the network again.
 // Must be called with an application context: StandaloneDatabaseProvider is a
 // SQLiteOpenHelper that would otherwise retain the first Activity forever.
 private fun getReelsVideoCache(context: android.content.Context): SimpleCache {
-    return reelsVideoCache ?: SimpleCache(
-        File(context.cacheDir, REELS_CACHE_DIR),
-        LeastRecentlyUsedCacheEvictor(REELS_CACHE_BYTES),
-        StandaloneDatabaseProvider(context),
-    ).also { reelsVideoCache = it }
+    return reelsVideoCacheOwner.getOrCreate {
+        SimpleCache(
+            File(context.cacheDir, REELS_CACHE_DIR),
+            LeastRecentlyUsedCacheEvictor(REELS_CACHE_BYTES),
+            StandaloneDatabaseProvider(context),
+        )
+    }
 }
 
 /**
@@ -758,16 +760,22 @@ private fun getReelsVideoCache(context: android.content.Context): SimpleCache {
  * SimpleCache is live, spans are removed through it — deleting files under an active
  * index would corrupt it. A reel playing over a removed span falls back to the network
  * (FLAG_IGNORE_CACHE_ON_ERROR). With no live instance the folder (index included) is
- * deleted outright. File IO: call from a background dispatcher.
+ * deleted outright; that decision and the first cache creation are serialized by
+ * [ReelsCacheOwner], so the directory cannot disappear under an initializing cache.
+ * File IO: call from a background dispatcher.
  */
 internal fun clearReelsVideoCache(context: android.content.Context): Long {
-    val cache = reelsVideoCache
-    if (cache == null) {
-        val dir = File(context.cacheDir, REELS_CACHE_DIR)
+    val dir = File(context.cacheDir, REELS_CACHE_DIR)
+    val freedWithoutCache = reelsVideoCacheOwner.clearIfAbsent {
         val freed = dir.walk().filter { it.isFile }.sumOf { it.length() }
         dir.deleteRecursively()
-        return freed
+        freed
     }
+    if (freedWithoutCache != null) return freedWithoutCache
+
+    // The owner never releases a created cache, so this is non-null once clearIfAbsent
+    // declined to run.
+    val cache = reelsVideoCacheOwner.current() ?: return 0L
     var freed = 0L
     for (key in cache.keys.toList()) {
         for (span in cache.getCachedSpans(key).toList()) {
