@@ -353,19 +353,28 @@ fun ReelsVideoPage(
             )
         }
 
-        // 2. Gradient overlays for readable text & controls
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Black.copy(alpha = 0.45f),
-                        0.2f to Color.Transparent,
-                        0.6f to Color.Transparent,
-                        1.0f to Color.Black.copy(alpha = 0.85f),
+        // 2. Gradient overlays for readable text & controls. The scrim is part of the
+        // chrome: in clean fullscreen / auto-hidden state the video must stay untouched
+        // (the progress bar and fullscreen button carry their own backplates).
+        AnimatedVisibility(
+            visible = chromeVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to Color.Black.copy(alpha = 0.45f),
+                            0.2f to Color.Transparent,
+                            0.6f to Color.Transparent,
+                            1.0f to Color.Black.copy(alpha = 0.85f),
+                        ),
                     ),
-                ),
-        )
+            )
+        }
 
         // 3. Play / Pause indicator overlay (flashes briefly on state change)
         AnimatedVisibility(

@@ -124,6 +124,7 @@ import eu.kanade.tachiyomi.ui.more.OnboardingScreen
 import eu.kanade.tachiyomi.ui.player.ExternalIntents
 import eu.kanade.tachiyomi.ui.player.PlayerActivity
 import eu.kanade.tachiyomi.ui.reader.novel.NovelReaderScreen
+import eu.kanade.tachiyomi.ui.reels.ReelsFullscreen
 import eu.kanade.tachiyomi.ui.reels.ReelsPip
 import eu.kanade.tachiyomi.util.system.dpToPx
 import eu.kanade.tachiyomi.util.system.isNavigationBarNeedsScrim
@@ -440,8 +441,10 @@ class MainActivity : BaseActivity() {
                                     },
                                 )
                             }
-                            // Draw navigation bar scrim when needed
-                            if (remember { isNavigationBarNeedsScrim() }) {
+                            // Draw navigation bar scrim when needed. Reels software
+                            // fullscreen owns the window; its generic scrim must not cover
+                            // the video (audit U07).
+                            if (remember { isNavigationBarNeedsScrim() } && !ReelsFullscreen.isActive) {
                                 Spacer(
                                     modifier = Modifier
                                         .align(Alignment.BottomCenter)
