@@ -381,9 +381,9 @@ object SettingsDiscoveryScreen : SearchableSettings {
                 onApply = { csv ->
                     discoveryPreferences.releaseStatusFilter().set(csv)
                     showStatusDialog = false
-                    // Применить сразу: без триггера лента показывала бы старые статусы
-                    // до следующего фонового цикла.
-                    DiscoveryUpdateJob.refreshNow(context)
+                    DiscoveryMediaType.entries.forEach { media ->
+                        DiscoveryUpdateJob.refreshConfiguration(context, media)
+                    }
                 },
                 onDismiss = { showStatusDialog = false },
             )
@@ -396,12 +396,8 @@ object SettingsDiscoveryScreen : SearchableSettings {
                 requiredCsv = discoveryPreferences.requiredGenres().get(),
                 ignoredCsv = discoveryPreferences.ignoredGenres().get(),
                 onApply = { priCsv, reqCsv, ignCsv ->
-                    discoveryPreferences.priorityGenres().set(priCsv)
-                    discoveryPreferences.requiredGenres().set(reqCsv)
-                    discoveryPreferences.ignoredGenres().set(ignCsv)
+                    applyDiscoveryGenreFilters(context, discoveryPreferences, priCsv, reqCsv, ignCsv)
                     showGenreDialog = false
-                    // Игнор/приоритет/обязательные жанры — применить сразу, не ждать фоновый цикл.
-                    DiscoveryUpdateJob.refreshNow(context)
                 },
                 onDismiss = { showGenreDialog = false },
             )

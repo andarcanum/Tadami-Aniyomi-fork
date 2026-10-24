@@ -89,7 +89,8 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
     override suspend fun doWork(): Result {
         val preferences = Injekt.get<DiscoveryPreferences>()
         if (!preferences.discoveryEnabled().get()) return Result.success()
-        val isManual = tags.contains(TAG_MANUAL)
+        val isConfiguration = inputData.getBoolean(KEY_CONFIGURATION_REFRESH, false)
+        val isManual = tags.contains(TAG_MANUAL) && !isConfiguration
         if (isManual) {
             setForegroundSafely()
         }
@@ -128,6 +129,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                             mediaTypes,
                             isManualRefresh = isManual,
                             totalBudgetMs = WORKER_TIMEOUT_MS,
+                            isConfigurationRefresh = isConfiguration,
                         )
                     }
                     if (completed != null) {
@@ -177,6 +179,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                 cancelAllManualRefreshes(context)
             } else {
                 wm.cancelUniqueWork(manualWorkName(mediaType))
+                wm.cancelUniqueWork(configurationWorkName(mediaType))
                 Injekt.get<DiscoveryPreferences>().clearManualRefreshAt(mediaType)
                 DiscoveryNotifier(context).cancel(mediaType)
             }
@@ -235,6 +238,10 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
         }
 
         const val KEY_TARGET_MEDIA_TYPE = "target_media_type"
+        const val KEY_CONFIGURATION_REFRESH = "configuration_refresh"
+
+        fun configurationWorkName(mediaType: DiscoveryMediaType): String =
+            "DiscoveryUpdateConfiguration:${mediaType.key}"
 
         internal fun refreshAfterProviderChange(context: Context, setting: DiscoveryProviderSetting) {
             val mediaTypes = when (setting) {
@@ -245,12 +252,18 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
             mediaTypes.forEach { refreshConfiguration(context, it) }
         }
 
-        /** Provider settings regenerate each affected feed without manual rotation or click accounting. */
+        /** Revalidate settings from page one without manual anti-repeat or rotation accounting. */
         internal fun refreshConfiguration(context: Context, mediaType: DiscoveryMediaType) {
             val preferences = Injekt.get<DiscoveryPreferences>()
             if (!preferences.discoveryEnabled().get()) return
             val request = OneTimeWorkRequestBuilder<DiscoveryUpdateJob>()
-                .setInputData(Data.Builder().putString(KEY_TARGET_MEDIA_TYPE, mediaType.key).build())
+                .addTag(configurationWorkName(mediaType))
+                .setInputData(
+                    Data.Builder()
+                        .putString(KEY_TARGET_MEDIA_TYPE, mediaType.key)
+                        .putBoolean(KEY_CONFIGURATION_REFRESH, true)
+                        .build(),
+                )
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(networkType(preferences))
@@ -258,7 +271,7 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                 )
                 .build()
             context.workManager.enqueueUniqueWork(
-                "DiscoveryUpdateConfiguration:${mediaType.key}",
+                configurationWorkName(mediaType),
                 ExistingWorkPolicy.REPLACE,
                 request,
             )

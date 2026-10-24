@@ -169,6 +169,7 @@ class DiscoveryRunner(
         mediaTypes: List<DiscoveryMediaType> = DiscoveryMediaType.entries,
         isManualRefresh: Boolean = false,
         totalBudgetMs: Long? = null,
+        isConfigurationRefresh: Boolean = false,
     ): Map<DiscoveryMediaType, DiscoveryRunOutcome> {
         if (!preferences.discoveryEnabled().get()) {
             return mediaTypes.associateWith { mediaType ->
@@ -189,8 +190,9 @@ class DiscoveryRunner(
             try {
                 val outcome = runFor(
                     mediaType,
-                    isManualRefresh = isManualRefresh,
+                    isManualRefresh = isManualRefresh && !isConfigurationRefresh,
                     mediaBudgetMs = perMediaBudgetMs,
+                    isConfigurationRefresh = isConfigurationRefresh,
                 )
                 outcomes[mediaType] = outcome
             } catch (e: CancellationException) {
@@ -229,11 +231,12 @@ class DiscoveryRunner(
         mediaType: DiscoveryMediaType,
         isManualRefresh: Boolean = false,
         mediaBudgetMs: Long? = null,
+        isConfigurationRefresh: Boolean = false,
     ): DiscoveryRunOutcome =
         mediaRunLocks.getOrPut(mediaType) { Mutex() }
             .withLock {
                 try {
-                    runForLocked(mediaType, isManualRefresh, mediaBudgetMs)
+                    runForLocked(mediaType, isManualRefresh, mediaBudgetMs, isConfigurationRefresh)
                 } finally {
                     DiscoveryProgressTracker.reset(mediaType)
                 }
@@ -243,6 +246,7 @@ class DiscoveryRunner(
         mediaType: DiscoveryMediaType,
         isManualRefresh: Boolean = false,
         mediaBudgetMs: Long? = null,
+        isConfigurationRefresh: Boolean = false,
     ): DiscoveryRunOutcome {
         DiscoveryProgressTracker.update(
             isRunning = true,
@@ -257,7 +261,7 @@ class DiscoveryRunner(
         } else {
             preferences.manualRefreshCount(mediaType).get()
         }
-        val candidateBackgroundCycle = if (isManualRefresh) {
+        val candidateBackgroundCycle = if (isManualRefresh || isConfigurationRefresh) {
             preferences.backgroundCycleCount(mediaType).get()
         } else {
             preferences.backgroundCycleCount(mediaType).get() + 1
@@ -380,15 +384,22 @@ class DiscoveryRunner(
         }
         val cachedSuggestions = runCatching { repository.subscribe(mediaType).firstOrNull() }.getOrNull().orEmpty()
         val currentSuggestions = cachedSuggestions.filterNot {
-            it.rowType == DiscoveryRowType.LIKE && it.provider in disabledLikeProviders
+            (it.rowType == DiscoveryRowType.LIKE && it.provider in disabledLikeProviders) ||
+                (
+                    !useExternal && it.rowType == DiscoveryRowType.TASTE &&
+                        ((it.sourceId ?: 0L) <= 0L || it.sourceUrl.isNullOrBlank())
+                    )
         }
-        // Explicit opt-out prunes only that provider's LIKE cache, even if the replacement row fails.
-        if (preferences.rowLikeEnabled().get() && currentSuggestions.size != cachedSuggestions.size) {
-            repository.replaceRows(
-                mediaType,
-                DiscoveryRowType.LIKE,
-                currentSuggestions.filter { it.rowType == DiscoveryRowType.LIKE },
-            )
+        // Explicit opt-outs still apply when an incomplete replacement preserves the compatible cache.
+        val cachedLike = cachedSuggestions.filter { it.rowType == DiscoveryRowType.LIKE }
+        val currentLike = currentSuggestions.filter { it.rowType == DiscoveryRowType.LIKE }
+        if (preferences.rowLikeEnabled().get() && currentLike != cachedLike) {
+            repository.replaceRows(mediaType, DiscoveryRowType.LIKE, currentLike)
+        }
+        val cachedTaste = cachedSuggestions.filter { it.rowType == DiscoveryRowType.TASTE }
+        val currentTaste = currentSuggestions.filter { it.rowType == DiscoveryRowType.TASTE }
+        if (!useExternal && preferences.rowTasteEnabled().get() && currentTaste != cachedTaste) {
+            repository.replaceRows(mediaType, DiscoveryRowType.TASTE, currentTaste)
         }
         val shownCutoffMap = runCatching {
             repository.getRecentExclusionsWithTimestamp(mediaType)
@@ -399,10 +410,10 @@ class DiscoveryRunner(
         } else {
             shownTitles
         }
-        val pageOffset = if (isManualRefresh) {
-            manualPageOffset(candidateRefreshCount)
-        } else {
-            backgroundPageOffset(candidateBackgroundCycle)
+        val pageOffset = when {
+            isConfigurationRefresh -> 1
+            isManualRefresh -> manualPageOffset(candidateRefreshCount)
+            else -> backgroundPageOffset(candidateBackgroundCycle)
         }
 
         // Taste Learning Engine: fold сигнал-лога и слияние с библиотечным профилем.
@@ -472,6 +483,7 @@ class DiscoveryRunner(
         )
         logcat {
             "[Discovery] refresh media=$mediaType manual=$isManualRefresh " +
+                "configuration=$isConfigurationRefresh page=$pageOffset " +
                 "statuses=${context.releaseStatuses} sources=${context.sourceIds} primary=${context.sourceId}"
         }
         // Выключенные в настройках ряды: чистим их записи в БД, чтобы UI не показывал «зомби».
@@ -588,10 +600,8 @@ class DiscoveryRunner(
         // оставлять в кэше внешние тайтлы — «пустой ряд не перезаписывает» здесь
         // мешает явному выбору пользователя, чистим вручную. НО: упавший ряд (network)
         // — не «честно пустой», его кэш не трогаем (feed.rows[T]=null при падении).
-        if (!useExternal && feed.rows[tachiyomi.domain.discovery.model.DiscoveryRowType.TASTE].isNullOrEmpty() &&
-            tachiyomi.domain.discovery.model.DiscoveryRowType.TASTE !in feed.failedRows
-        ) {
-            repository.replaceRows(mediaType, tachiyomi.domain.discovery.model.DiscoveryRowType.TASTE, emptyList())
+        if (!useExternal && feed.isConclusiveEmpty(DiscoveryRowType.TASTE)) {
+            repository.replaceRows(mediaType, DiscoveryRowType.TASTE, emptyList())
         }
         // Статус-фильтр активен: пустой ряд (нет тайтлов выбранного статуса) не должен
         // жить старым кэшем с НЕсоответствующими статусами — иначе «выбран Завершённый,
@@ -600,21 +610,19 @@ class DiscoveryRunner(
         // при отвале сети с включённым фильтром пропадала бы вся лента.
         if (context.releaseStatuses.isNotEmpty() || context.requiredGenres.isNotEmpty()) {
             tachiyomi.domain.discovery.model.DiscoveryRowType.entries.forEach { rowType ->
-                if (feed.rows[rowType].isNullOrEmpty() && rowType !in feed.failedRows) {
+                if (feed.isConclusiveEmpty(rowType)) {
                     repository.replaceRows(mediaType, rowType, emptyList())
                 }
             }
         }
         // Замороженные ряды: «честно пустой» LIKE при пустых сидах и TASTE при пустом профиле
         // не должны вечно таскать кэш прошлых генераций.
-        if (feed.rows[DiscoveryRowType.LIKE].isNullOrEmpty() &&
-            DiscoveryRowType.LIKE !in feed.failedRows &&
+        if (feed.isConclusiveEmpty(DiscoveryRowType.LIKE) &&
             context.seeds.isEmpty()
         ) {
             repository.replaceRows(mediaType, DiscoveryRowType.LIKE, emptyList())
         }
-        if (feed.rows[DiscoveryRowType.TASTE].isNullOrEmpty() &&
-            DiscoveryRowType.TASTE !in feed.failedRows &&
+        if (feed.isConclusiveEmpty(DiscoveryRowType.TASTE) &&
             context.tasteProfile.isEmpty() &&
             context.requiredGenres.isEmpty() &&
             context.priorityGenres.isEmpty()
@@ -637,7 +645,7 @@ class DiscoveryRunner(
         if (actualExecutedRows.isNotEmpty() && !allExecutedFailed) {
             if (isManualRefresh) {
                 preferences.manualRefreshCount(mediaType).set(candidateRefreshCount)
-            } else {
+            } else if (!isConfigurationRefresh) {
                 preferences.backgroundCycleCount(mediaType).set(candidateBackgroundCycle)
             }
         }

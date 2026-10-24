@@ -176,9 +176,14 @@ class DiscoveryRefreshRoutingTest {
 
     private suspend fun runRequest(request: OneTimeWorkRequest) {
         val media = DiscoveryMediaType.fromKey(request.workSpec.input.getString("target_media_type")!!)!!
-        Injekt.get<DiscoveryRunner>().run(
+        val outcome = Injekt.get<DiscoveryRunner>().run(
             listOf(media),
             isManualRefresh = request.tags.contains(DiscoveryUpdateJob.TAG_MANUAL),
-        ) shouldBe mapOf(media to Result.success(Unit))
+            isConfigurationRefresh = request.workSpec.input.getBoolean(
+                DiscoveryUpdateJob.KEY_CONFIGURATION_REFRESH,
+                false,
+            ),
+        ).getValue(media)
+        outcome.status shouldBe DiscoveryRunStatus.SUCCESS
     }
 }
