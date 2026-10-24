@@ -124,7 +124,11 @@ class DiscoveryUpdateJob(context: Context, workerParams: WorkerParameters) :
                 }
                 try {
                     val completed = withTimeoutOrNull(WORKER_TIMEOUT_MS) {
-                        Injekt.get<DiscoveryRunner>().run(mediaTypes, isManualRefresh = isManual)
+                        Injekt.get<DiscoveryRunner>().run(
+                            mediaTypes,
+                            isManualRefresh = isManual,
+                            totalBudgetMs = WORKER_TIMEOUT_MS,
+                        )
                     }
                     if (completed != null) {
                         resolveWorkResult(isManual, runAttemptCount, outcomes = completed.values)

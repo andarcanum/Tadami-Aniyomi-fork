@@ -58,6 +58,30 @@ interface DiscoverySourceCatalog {
         releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
     ): List<DiscoveryRowItem>
 
+    /**
+     * Genre query plus details-based verification of missing list genres.
+     *
+     * Default implementation reports only what the list already exposes; the
+     * production catalog overrides it to hydrate under a shared budget.
+     */
+    suspend fun popularWithGenresVerified(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        genres: List<String>,
+        page: Int = 1,
+        releaseStatuses: Set<DiscoveryReleaseStatus> = emptySet(),
+        budget: DiscoveryVerificationBudget? = null,
+    ): DiscoveryGenrePage {
+        val items = popularWithGenres(mediaType, sourceId, genres, page, releaseStatuses)
+        return DiscoveryGenrePage(
+            items = items,
+            verified = items.count { it.genres.isNotEmpty() },
+            unattempted = items.count { it.genres.isEmpty() },
+            metadataUnavailable = 0,
+            transientFailures = 0,
+        )
+    }
+
     suspend fun latest(
         mediaType: DiscoveryMediaType,
         sourceId: Long,
@@ -67,6 +91,8 @@ interface DiscoverySourceCatalog {
 }
 
 class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
+
+    private val genreHydrator = DiscoveryGenreHydrator()
 
     /** M2: перевод непонятых чекбоксов жанров — ленивый, кэш внутри фолбэка. */
     private val genreFallback by lazy {
@@ -89,6 +115,64 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
         releaseStatuses: Set<DiscoveryReleaseStatus>,
     ): List<DiscoveryRowItem> =
         fetch(mediaType, sourceId, genres = genres, page = page, releaseStatuses = releaseStatuses)
+
+    override suspend fun popularWithGenresVerified(
+        mediaType: DiscoveryMediaType,
+        sourceId: Long,
+        genres: List<String>,
+        page: Int,
+        releaseStatuses: Set<DiscoveryReleaseStatus>,
+        budget: DiscoveryVerificationBudget?,
+    ): DiscoveryGenrePage {
+        val items = fetch(mediaType, sourceId, genres = genres, page = page, releaseStatuses = releaseStatuses)
+        if (budget == null) {
+            return DiscoveryGenrePage(
+                items = items,
+                verified = items.count { it.genres.isNotEmpty() },
+                unattempted = items.count { it.genres.isEmpty() },
+                metadataUnavailable = 0,
+                transientFailures = 0,
+            )
+        }
+        val byUrl = items.associateBy { it.sourceUrl }
+        val hydrated = genreHydrator.hydrate(mediaType, sourceId, items, budget) { url ->
+            val title = byUrl[url]?.title.orEmpty()
+            val observed = when (mediaType) {
+                DiscoveryMediaType.MANGA -> {
+                    val source = Injekt.get<MangaSourceManager>().getOrStub(sourceId) as? CatalogueSource
+                    val entry = SManga.create().apply {
+                        this.url = url
+                        this.title = title
+                    }
+                    source?.getMangaDetails(entry)?.genre
+                }
+                DiscoveryMediaType.ANIME -> {
+                    val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource
+                    val entry = SAnime.create().apply {
+                        this.url = url
+                        this.title = title
+                    }
+                    source?.getAnimeDetails(entry)?.genre
+                }
+                DiscoveryMediaType.NOVEL -> {
+                    val source = Injekt.get<NovelSourceManager>().getOrStub(sourceId) as? NovelCatalogueSource
+                    val entry = SNovel.create().apply {
+                        this.url = url
+                        this.title = title
+                    }
+                    source?.getNovelDetails(entry)?.genre
+                }
+            }
+            parseGenres(observed)
+        }
+        return DiscoveryGenrePage(
+            items = hydrated.items,
+            verified = hydrated.verified,
+            unattempted = hydrated.unattempted,
+            metadataUnavailable = hydrated.metadataUnavailable,
+            transientFailures = hydrated.transientFailures,
+        )
+    }
 
     override suspend fun latest(
         mediaType: DiscoveryMediaType,
@@ -294,9 +378,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                 val source = Injekt.get<MangaSourceManager>().getOrStub(sourceId) as? CatalogueSource
                     ?: return emptyList()
                 var filters = if (genres != null) withMangaGenreFilters(source.getFilterList(), genres) else null
-                // Жанровый запрос без применимого фильтра — честный пустой результат,
-                // а не popular-выдача под видом «твоего вкуса».
-                if (genres != null && filters == null) return emptyList()
+                // Unsupported query filters fall back to bounded browse + observed-details verification.
                 // V4: статус выпуска — в тот же FilterList поверх жанров; не применим
                 // (нет фильтра / одиночный Select при 2+ статусах) — best-effort без него.
                 if (releaseStatuses.isNotEmpty()) {
@@ -309,12 +391,26 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     }
                 }
                 val pageData = if (filters == null) {
-                    runCatching { source.getPopularManga(page) }.getOrNull()?.takeIf { it.mangas.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getPopularManga(1) }.getOrNull() else null
+                    runCatching {
+                        source.getPopularManga(page)
+                    }.getForDiscoveryGenreQuery(genres)?.takeIf { it.mangas.isNotEmpty() }
+                        ?: if (page >
+                            1
+                        ) {
+                            runCatching { source.getPopularManga(1) }.getForDiscoveryGenreQuery(genres)
+                        } else {
+                            null
+                        }
                 } else {
                     runCatching { source.getSearchManga(page, "", filters) }
-                        .getOrNull()?.takeIf { it.mangas.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getSearchManga(1, "", filters) }.getOrNull() else null
+                        .getForDiscoveryGenreQuery(genres)?.takeIf { it.mangas.isNotEmpty() }
+                        ?: if (page >
+                            1
+                        ) {
+                            runCatching { source.getSearchManga(1, "", filters) }.getForDiscoveryGenreQuery(genres)
+                        } else {
+                            null
+                        }
                 } ?: return emptyList()
 
                 val keptMangas = enrichMangasWithStatus(source, pageData.mangas, releaseStatuses)
@@ -333,7 +429,6 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                 val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource
                     ?: return emptyList()
                 var filters = if (genres != null) withAnimeGenreFilters(source.getFilterList(), genres) else null
-                if (genres != null && filters == null) return emptyList()
                 if (releaseStatuses.isNotEmpty()) {
                     val candidate = filters ?: source.getFilterList()
                     val applied = applyAnimeStatusFilter(candidate, releaseStatuses)
@@ -344,12 +439,26 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     }
                 }
                 val pageData = if (filters == null) {
-                    runCatching { source.getPopularAnime(page) }.getOrNull()?.takeIf { it.animes.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getPopularAnime(1) }.getOrNull() else null
+                    runCatching {
+                        source.getPopularAnime(page)
+                    }.getForDiscoveryGenreQuery(genres)?.takeIf { it.animes.isNotEmpty() }
+                        ?: if (page >
+                            1
+                        ) {
+                            runCatching { source.getPopularAnime(1) }.getForDiscoveryGenreQuery(genres)
+                        } else {
+                            null
+                        }
                 } else {
                     runCatching { source.getSearchAnime(page, "", filters) }
-                        .getOrNull()?.takeIf { it.animes.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getSearchAnime(1, "", filters) }.getOrNull() else null
+                        .getForDiscoveryGenreQuery(genres)?.takeIf { it.animes.isNotEmpty() }
+                        ?: if (page >
+                            1
+                        ) {
+                            runCatching { source.getSearchAnime(1, "", filters) }.getForDiscoveryGenreQuery(genres)
+                        } else {
+                            null
+                        }
                 } ?: return emptyList()
 
                 val keptAnimes = enrichAnimesWithStatus(source, pageData.animes, releaseStatuses)
@@ -368,7 +477,6 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                 val source = Injekt.get<NovelSourceManager>().getOrStub(sourceId) as? NovelCatalogueSource
                     ?: return emptyList()
                 var filters = if (genres != null) withNovelGenreFilters(source.getFilterList(), genres) else null
-                if (genres != null && filters == null) return emptyList()
                 if (releaseStatuses.isNotEmpty()) {
                     val candidate = filters ?: source.getFilterList()
                     val applied = applyNovelStatusFilter(candidate, releaseStatuses)
@@ -379,12 +487,26 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                     }
                 }
                 val pageData = if (filters == null) {
-                    runCatching { source.getPopularNovels(page) }.getOrNull()?.takeIf { it.novels.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getPopularNovels(1) }.getOrNull() else null
+                    runCatching {
+                        source.getPopularNovels(page)
+                    }.getForDiscoveryGenreQuery(genres)?.takeIf { it.novels.isNotEmpty() }
+                        ?: if (page >
+                            1
+                        ) {
+                            runCatching { source.getPopularNovels(1) }.getForDiscoveryGenreQuery(genres)
+                        } else {
+                            null
+                        }
                 } else {
                     runCatching { source.getSearchNovels(page, "", filters) }
-                        .getOrNull()?.takeIf { it.novels.isNotEmpty() }
-                        ?: if (page > 1) runCatching { source.getSearchNovels(1, "", filters) }.getOrNull() else null
+                        .getForDiscoveryGenreQuery(genres)?.takeIf { it.novels.isNotEmpty() }
+                        ?: if (page >
+                            1
+                        ) {
+                            runCatching { source.getSearchNovels(1, "", filters) }.getForDiscoveryGenreQuery(genres)
+                        } else {
+                            null
+                        }
                 } ?: return emptyList()
 
                 val keptNovels = enrichNovelsWithStatus(source, pageData.novels, releaseStatuses)

@@ -311,25 +311,24 @@ class DiscoveryTasteRowBuilder(
 
     override val rowType = DiscoveryRowType.TASTE
 
+    override var isDegraded: Boolean = false
+        private set
+
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+        isDegraded = false
         val policy = context.candidatePolicy
         val activeProfile = resolveDiscoveryTasteProfile(context.tasteProfile, policy)
         if (activeProfile.isEmpty()) return emptyList()
+        val required = policy.requiredGenres.isNotEmpty()
 
-        // Внешний запрос: сначала явно запрошенные required и priority, затем топ профиля
-        val genreNames = (
-            context.requiredGenres.filterNot { policy.isForbidden(listOf(it)) } +
-                context.priorityGenres.filterNot { policy.isForbidden(listOf(it)) } +
-                activeProfile.map { it.first }
-            ).distinct().take(6)
-
-        // V3: у source-выдачи нет жанров на айтеме (клиентский фильтр невозможен),
-        // поэтому обязательные жанры прокидываем в запрос серверно.
-        val sourceGenreNames = if (context.requiredGenres.isNotEmpty()) {
-            context.requiredGenres.toList()
+        // A required query must not be narrowed by unrelated priority/library genres.
+        val genreNames = if (policy.requiredGenres.isNotEmpty()) {
+            policy.requiredGenres.toList()
         } else {
-            genreNames
+            (policy.priorityGenres + activeProfile.map { it.first })
+                .filterNot { policy.isForbidden(listOf(it)) }.distinct().take(6)
         }
+        val sourceGenreNames = genreNames
         val trendingResult = if (includeExternal) {
             runCatchingUnlessCancelled {
                 trending.fetchByGenres(
@@ -369,26 +368,28 @@ class DiscoveryTasteRowBuilder(
         val sourceResults = if (sourceIds.isNotEmpty()) {
             val rotation = (context.pageOffset - 1).coerceAtLeast(0) % sourceIds.size
             val ordered = sourceIds.drop(rotation) + sourceIds.take(rotation)
-            val toQuery = ordered.take(6)
-            supervisorScope {
-                toQuery.map { id ->
-                    async {
-                        runCatchingUnlessCancelled {
-                            withTimeoutOrNull(SOURCE_FETCH_TIMEOUT_MS) {
-                                catalog.popularWithGenres(
-                                    context.mediaType,
-                                    id,
-                                    sourceGenreNames,
-                                    page = context.pageOffset,
-                                    releaseStatuses = context.releaseStatuses,
-                                )
-                            }
-                        }.map { it.orEmpty() }
-                    }
-                }.awaitAll()
-            }
+            // Required mode pays for verification; the ordinary taste path keeps
+            // its previous cheap shape (six sources, no details hydration).
+            val toQuery = if (required) ordered else ordered.take(6)
+            queryDiscoveryGenreSources(
+                catalog = catalog,
+                media = context.mediaType,
+                sourceIds = toQuery,
+                genres = sourceGenreNames,
+                page = context.pageOffset,
+                releaseStatuses = context.releaseStatuses,
+                policy = policy,
+                timeoutMs = if (required) GENRE_SOURCE_TIMEOUT_MS else SOURCE_FETCH_TIMEOUT_MS,
+                hydrate = required,
+                budget = context.verificationBudget,
+            )
         } else {
             emptyList()
+        }
+        // In the cheap path cards without genres were never going to be hydrated,
+        // so an "unattempted" count there is by design and not a degraded row.
+        isDegraded = sourceResults.any {
+            it.failure != null || (required && it.summary.outcome == GenreVerificationOutcome.INCOMPLETE)
         }
         val fromTrending = filteredTrending.map { item ->
             DiscoveryRowItem(
@@ -409,7 +410,7 @@ class DiscoveryTasteRowBuilder(
             )
         }
         val sourceParts = sourceResults.map { res ->
-            res.getOrNull().orEmpty().map { item ->
+            res.summary.items.map { item ->
                 item.copy(
                     reason = genreNames.take(2).joinToString(", "),
                     score = 0.5 + item.score * 0.1,
@@ -426,8 +427,15 @@ class DiscoveryTasteRowBuilder(
             combined,
             { it.genres },
         )
-        val anyFailed =
-            (trendingResult?.isFailure ?: false) || (sourceResults.isNotEmpty() && sourceResults.all { it.isFailure })
+        // A verified empty source set is a useful result, not a failure. Fail the
+        // row only when nothing useful could be verified at all.
+        val sourcesFailed = sourceResults.isNotEmpty() &&
+            sourceResults.all { it.summary.outcome == GenreVerificationOutcome.FAILED }
+        val anyFailed = if (sourceResults.isEmpty()) {
+            trendingResult?.isFailure ?: false
+        } else {
+            sourcesFailed
+        }
         if (filteredCombined.isEmpty() && anyFailed) {
             throw IOException("taste sources failed without results")
         }
@@ -450,13 +458,42 @@ class DiscoverySourceRowBuilder(
 ) : DiscoveryRowBuilder {
 
     override val rowType = DiscoveryRowType.SOURCE
+    override var isDegraded: Boolean = false
+        private set
 
     override suspend fun build(context: DiscoveryBuildContext): List<DiscoveryRowItem> {
+        isDegraded = false
         val ids = context.sourceIds.filter { it > 0 }
             .ifEmpty { listOf(context.sourceId).filter { it > 0 } }
         if (ids.isEmpty()) return emptyList()
         val rotation = (context.pageOffset - 1).coerceAtLeast(0) % ids.size
         val ordered = ids.drop(rotation) + ids.take(rotation)
+        val policy = context.candidatePolicy
+        if (policy.requiredGenres.isNotEmpty()) {
+            val results = queryDiscoveryGenreSources(
+                catalog = catalog,
+                media = context.mediaType,
+                sourceIds = ordered,
+                genres = policy.requiredGenres.toList(),
+                page = context.pageOffset,
+                releaseStatuses = context.releaseStatuses,
+                policy = policy,
+                maxConcurrency = maxConcurrency,
+                timeoutMs = GENRE_SOURCE_TIMEOUT_MS,
+                hydrate = true,
+                budget = context.verificationBudget,
+            )
+            isDegraded = results.any {
+                it.failure != null || it.summary.outcome == GenreVerificationOutcome.INCOMPLETE
+            }
+            val merged = interleaveSourceParts(results.map { it.summary.items }, rowCap)
+                .distinctBy { it.cleanTitle }
+            val usefulVerification = results.any { it.summary.outcome != GenreVerificationOutcome.FAILED }
+            if (merged.isEmpty() && results.isNotEmpty() && !usefulVerification) {
+                throw IOException("required genre sources could not verify any metadata")
+            }
+            return policy.filterRowCandidates(merged, { it.genres }).take(rowCap)
+        }
         val slotAllocations = allocateSourceSlots(ordered, context.sourceWeights, rowCap)
         val activeSources = ordered.filter { (slotAllocations[it] ?: 0) > 0 }
         if (activeSources.isEmpty()) return emptyList()

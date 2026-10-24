@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -740,6 +741,17 @@ private fun HomeHubScreen(
         discoveryEnabled = state.discoveryEnabled,
         discoveryCount = heroFeedItems.size,
     )
+    // Auto keeps the discovery slot only after discovery produced content once:
+    // on a cold start the Continue hero must stay. Explicit discovery modes keep
+    // their slot regardless of the current count.
+    val hasPreviousDiscoveryContent = state.discoveryLastUpdated != null ||
+        filteredContent.discoveryPool.isNotEmpty()
+    val keepDiscoveryHeroSlot = shouldKeepDiscoveryHeroSlot(
+        preferredMode = heroMode,
+        discoveryEnabled = state.discoveryEnabled,
+        isFiltering = isFiltering,
+        hasPreviousDiscoveryContent = hasPreviousDiscoveryContent,
+    )
     // Коллаж и гибрид уже отображают «Для тебя» в слоте героя; для них нижний дублирующий ряд не нужен.
     val forYouItems = resolveForYouItems(
         heroPresentation = heroPresentation,
@@ -749,8 +761,13 @@ private fun HomeHubScreen(
     // В Collage/Stage hero-слот занят «Для тебя»: возвращаем последний прочитанный
     // тайтл первым элементом ряда «Недавно просмотренные» (без визуального выделения —
     // пользователь и так знает, что читал последним).
-    val historyItems = remember(history, hero, heroPresentation, section) {
-        prependLastReadHero(hero, history, heroPresentation, section)
+    val historyItems = remember(history, hero, heroPresentation, section, keepDiscoveryHeroSlot) {
+        val historyPresentation = if (keepDiscoveryHeroSlot && heroPresentation == HomeHeroMode.Continue) {
+            HomeHeroMode.Stage
+        } else {
+            heroPresentation
+        }
+        prependLastReadHero(hero, history, historyPresentation, section)
     }
     // Считается после historyItems: scroll-эвристика обязана видеть ряд вместе
     // с возвращённым последним прочитанным (иначе расхождение с рендером).
@@ -801,7 +818,7 @@ private fun HomeHubScreen(
                 }
             } else {
                 if (
-                    shouldRenderHomeHubHeroSlot(
+                    keepDiscoveryHeroSlot || shouldRenderHomeHubHeroSlot(
                         heroPresentation = heroPresentation,
                         hasHero = hero != null,
                         reserveHeroSlot = reserveHeroSlot,
@@ -810,6 +827,30 @@ private fun HomeHubScreen(
                 ) {
                     item(key = "hero", contentType = "home_hub_hero") {
                         when {
+                            keepDiscoveryHeroSlot && heroPresentation == HomeHeroMode.Continue -> Box(
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 280.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                ForYouSection(
+                                    items = heroFeedItems,
+                                    coverMediaType = section.toDiscoveryMediaType(),
+                                    onMoreClick = onForYouMoreClick,
+                                    onItemClick = { openTeaser(it) },
+                                    onLongClick = { longPressItem = it },
+                                    isRefreshing = state.isDiscoveryRefreshing,
+                                    onRefreshClick = onDiscoveryRefreshClick,
+                                    tracker = exposureTracker,
+                                    isSectionActive = isSectionActive,
+                                    isResumed = isResumed,
+                                    emptyState = resolveForYouEmptyState(
+                                        discoveryEnabled = state.discoveryEnabled,
+                                        isRefreshing = state.isDiscoveryRefreshing,
+                                        hasItems = heroFeedItems.isNotEmpty(),
+                                        lastUpdatedAt = state.discoveryLastUpdated,
+                                        isFailed = state.isDiscoveryFailed,
+                                    ),
+                                )
+                            }
                             // Ветка stage идёт первой: при наличии hero она обязана перебивать HeroSection,
                             // иначе режим не отрисуется никогда.
                             heroPresentation == HomeHeroMode.Stage -> DiscoveryHeroStage(
@@ -903,7 +944,7 @@ private fun HomeHubScreen(
                 }
 
                 if (
-                    shouldShowForYouSection(state.discoveryEnabled) &&
+                    shouldShowForYouSection(state.discoveryEnabled) && !keepDiscoveryHeroSlot &&
                     heroPresentation != HomeHeroMode.Collage &&
                     heroPresentation != HomeHeroMode.Stage &&
                     (forYouItems.isNotEmpty() || discovery.isEmpty())
