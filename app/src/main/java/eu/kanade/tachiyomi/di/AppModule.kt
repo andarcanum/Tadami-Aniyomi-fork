@@ -106,6 +106,7 @@ import mihon.domain.extensionrepo.novel.interactor.GetNovelExtensionRepo
 import nl.adaptivity.xmlutil.XmlDeclMode.Charset
 import nl.adaptivity.xmlutil.core.XmlVersion
 import nl.adaptivity.xmlutil.serialization.XML
+import nl.adaptivity.xmlutil.serialization.XmlConfig
 import tachiyomi.core.common.storage.AndroidStorageFolderProvider
 import tachiyomi.data.AnimeUpdateStrategyColumnAdapter
 import tachiyomi.`data`.Database
@@ -579,15 +580,19 @@ class AppModule(val app: Application) : InjektModule {
             }
         }
         addSingletonFactory {
-            XML {
-                defaultPolicy {
-                    ignoreUnknownChildren()
-                }
-                autoPolymorphic = true
-                xmlDeclMode = Charset
-                indent = 2
-                xmlVersion = XmlVersion.XML10
-            }
+            XML(
+                XmlConfig(
+                    XmlConfig.DefaultBuilder().apply {
+                        policy {
+                            ignoreUnknownChildren()
+                            autoPolymorphic = true
+                        }
+                        xmlDeclMode = Charset
+                        indentString = "  "
+                        xmlVersion = XmlVersion.XML10
+                    },
+                ),
+            )
         }
         addSingletonFactory<ProtoBuf> {
             ProtoBuf
