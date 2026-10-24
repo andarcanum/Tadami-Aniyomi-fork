@@ -1027,6 +1027,10 @@ class ReelsFeedScreenModelTest {
         val screenModel = buildModel(sourceId = 9062L, manager = sourceManagerOf(source))
         testDispatcher.scheduler.advanceUntilIdle()
 
+        // P03: nothing is confirmed playing until the active player reports it.
+        screenModel.state.value.isActuallyPlaying shouldBe false
+
+        screenModel.setPlaybackRunning(true)
         screenModel.state.value.isActuallyPlaying shouldBe true
 
         // Audio-focus loss pauses the player without the user asking for it.
@@ -1034,10 +1038,14 @@ class ReelsFeedScreenModelTest {
         screenModel.state.value.isActuallyPlaying shouldBe false
         screenModel.state.value.isPlaying shouldBe true
 
-        // A swipe resumes: no deliberate pause was taken.
+        // A swipe resumes the play INTENT; actual playback is confirmed by the new page's
+        // player and must not be assumed at page-change time (it may still be buffering).
         screenModel.onPageChanged(0)
-        screenModel.state.value.isActuallyPlaying shouldBe true
         screenModel.state.value.isPlaying shouldBe true
+        screenModel.state.value.isActuallyPlaying shouldBe false
+
+        screenModel.setPlaybackRunning(true)
+        screenModel.state.value.isActuallyPlaying shouldBe true
     }
 
     @Test
