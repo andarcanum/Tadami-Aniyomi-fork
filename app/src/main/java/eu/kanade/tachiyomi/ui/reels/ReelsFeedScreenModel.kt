@@ -19,8 +19,10 @@ import eu.kanade.tachiyomi.animesource.AnimeContentPreferencesSource
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginInstrumentationSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedVideoResolverSource
@@ -33,6 +35,8 @@ import eu.kanade.tachiyomi.animesource.model.AnimeFilterList
 import eu.kanade.tachiyomi.animesource.model.ContentPreferenceOption
 import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
 import eu.kanade.tachiyomi.animesource.model.FeedCategory
+import eu.kanade.tachiyomi.animesource.model.FeedError
+import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
 import eu.kanade.tachiyomi.animesource.model.FeedPage
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
@@ -912,6 +916,18 @@ class ReelsFeedScreenModel(
                 // A load that lost the generation race must not stamp its error onto the new feed.
                 if (loadGeneration.get() != generation) return@launch
                 runway.onLoadAborted()
+                val msg = t.localizedMessage.orEmpty()
+                // Contract v25: a source-supplied verdict replaces the text heuristics. On an
+                // append, an expired cursor only ends this feed session: the usable feed stays,
+                // the dead cursor is never retried, and a refresh starts a fresh generation.
+                val verdict = classifyFeedError(t)
+                if (verdict == FeedError.ExpiredCursor && !reset && state.value.items.isNotEmpty()) {
+                    logcat(LogPriority.WARN) {
+                        "Feed ${state.value.currentSourceId} cursor expired; stopping pagination (contract v25)."
+                    }
+                    mutableState.update { it.copy(isLoading = false, canLoadMore = false, pageError = null) }
+                    return@launch
+                }
                 mutableState.update { current ->
                     if (current.items.isEmpty()) {
                         current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
@@ -921,13 +937,7 @@ class ReelsFeedScreenModel(
                         current.copy(isLoading = false, pageError = t.localizedMessage.orEmpty())
                     }
                 }
-                // Cloudflare managed challenge (403) or a dead account bearer (401) on
-                // web-login-capable sources: bootstrap the session cookies/tokens via an
-                // offscreen WebView without any user interaction; the import verification
-                // reloads the feed on success. Capped per source entry (see the helper).
-                val msg = t.localizedMessage.orEmpty()
-                maybeBumpBootstrap(HTTP_SESSION_ERROR_REGEX.containsMatchIn(msg))
-                maybeScheduleRateLimitRetry(msg, reset)
+                handleFeedErrorVerdict(verdict, msg, reset)
             }
         }
     }
@@ -1059,11 +1069,25 @@ class ReelsFeedScreenModel(
         } catch (t: Throwable) {
             logcat(LogPriority.ERROR, throwable = t) { "Album search failed for query $query" }
             if (loadGeneration.get() != generation) return
-            maybeScheduleRateLimitRetry(t.localizedMessage.orEmpty(), reset)
+            val msg = t.localizedMessage.orEmpty()
+            val verdict = classifyFeedError(t)
+            if (verdict == FeedError.ExpiredCursor && !reset && state.value.albumSearchResults.isNotEmpty()) {
+                // The album cursor expired mid-stream: stop its pagination silently, keeping
+                // the albums already on screen (contract v25).
+                logcat(LogPriority.WARN) {
+                    "Album search for \"$query\" cursor expired; stopping pagination (contract v25)."
+                }
+                mutableState.update { current ->
+                    if (loadGeneration.get() != generation) return@update current
+                    current.copy(isLoading = false, albumSearchCanLoadMore = false)
+                }
+                return
+            }
             mutableState.update { current ->
                 if (loadGeneration.get() != generation) return@update current
-                current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
+                current.copy(isLoading = false, error = msg)
             }
+            handleFeedErrorVerdict(verdict, msg, reset)
         }
     }
 
@@ -1204,14 +1228,43 @@ class ReelsFeedScreenModel(
             if (loadGeneration.get() != generation) return
 
             val failures = mutableListOf<String>()
+            val unclassifiedFailures = mutableListOf<String>()
             val alive = mutableListOf<FollowingStream>()
+            val failedStreams = mutableSetOf<FollowingStream>()
+            var authRequired = false
+            var rateLimited = false
+            var rateLimitRetryAt: Long? = null
             requests.forEachIndexed { index, (stream, page, _) ->
                 val result = outcomes[index]
                 val pageData = result.getOrNull()
                 if (pageData == null) {
                     val t = result.exceptionOrNull()
+                    val verdict = t?.let(::classifyFeedError)
+                    if (verdict == FeedError.ExpiredCursor) {
+                        // One creator's cursor went stale: end that stream silently while the
+                        // aggregate feed keeps its other streams (contract v25). A reset
+                        // generation rebuilds the stream from cursor = null.
+                        logcat(LogPriority.WARN) {
+                            "Following stream '${stream.creator}' cursor expired; stopping it (contract v25)."
+                        }
+                        stream.exhausted = true
+                        alive += stream
+                        return@forEachIndexed
+                    }
                     logcat(LogPriority.ERROR, throwable = t) { "Following stream '${stream.creator}' failed" }
-                    failures += "'${stream.creator}': ${t?.localizedMessage ?: "failed"}"
+                    failedStreams += stream
+                    val text = "'${stream.creator}': ${t?.localizedMessage ?: "failed"}"
+                    failures += text
+                    when (verdict) {
+                        FeedError.AuthRequired -> authRequired = true
+                        is FeedError.RateLimited -> {
+                            rateLimited = true
+                            val at = verdict.retryAtEpochMillis
+                            if (at != null) rateLimitRetryAt = minOf(rateLimitRetryAt ?: at, at)
+                        }
+                        FeedError.Terminal, FeedError.Transient -> Unit
+                        FeedError.ExpiredCursor, null -> unclassifiedFailures += text
+                    }
                     return@forEachIndexed
                 }
                 stream.buffer.addAll(pageData.videos)
@@ -1230,19 +1283,27 @@ class ReelsFeedScreenModel(
                 stream.exhausted = !pageData.hasNextPage || cursorLost
                 alive += stream
             }
-            val failedStreams = requests.filterIndexed { index, _ -> outcomes[index].isFailure }
-                .map { it.first }
-                .toSet()
             followingStreams = if (reset) alive else followingStreams.filterNot { it in failedStreams }
             val merged = mergeFollowingStreams(followingStreams)
             val failedText = failures.joinToString("; ")
+            // Only unclassified failures fall through to the legacy text heuristics; a typed
+            // Terminal verdict must not bootstrap or back off just because its message
+            // happens to contain a status-like number.
+            val legacyText = unclassifiedFailures.joinToString("; ")
             // Same self-healing as loadFeed: a Cloudflare/dead-session failure inside the
             // creator streams re-lifts the web session through the bootstrap WebView.
-            maybeBumpBootstrap(HTTP_SESSION_ERROR_REGEX.containsMatchIn(failedText))
+            maybeBumpBootstrap(authRequired || HTTP_SESSION_ERROR_REGEX.containsMatchIn(legacyText))
             // B1: a rate-limited shutdown (every stream 429'd) schedules the capped auto-retry;
             // a fully clean fan-out resets the budget.
             if (alive.isEmpty() && failures.isNotEmpty()) {
-                maybeScheduleRateLimitRetry(failedText, reset)
+                if (rateLimited) {
+                    val seconds = rateLimitRetryAt
+                        ?.let { ((it - System.currentTimeMillis() + 999) / 1000L).coerceIn(1L, 120L).toInt() }
+                        ?: RATE_LIMIT_DEFAULT_RETRY_SEC
+                    scheduleRateLimitRetry(seconds, reset)
+                } else {
+                    maybeScheduleRateLimitRetry(legacyText, reset)
+                }
             } else if (failures.isEmpty()) {
                 rateLimitRetries = 0
             }
@@ -1311,6 +1372,8 @@ class ReelsFeedScreenModel(
         } catch (t: Throwable) {
             logcat(LogPriority.ERROR, t) { "Failed to load following feed from source ${state.value.currentSourceId}" }
             if (loadGeneration.get() != generation) return
+            val msg = t.localizedMessage.orEmpty()
+            val verdict = classifyFeedError(t)
             mutableState.update { current ->
                 if (current.items.isEmpty()) {
                     current.copy(isLoading = false, error = t.localizedMessage.orEmpty())
@@ -1318,7 +1381,7 @@ class ReelsFeedScreenModel(
                     current.copy(isLoading = false, pageError = t.localizedMessage.orEmpty())
                 }
             }
-            maybeScheduleRateLimitRetry(t.localizedMessage.orEmpty(), reset)
+            handleFeedErrorVerdict(verdict, msg, reset)
         }
     }
 
@@ -2363,13 +2426,51 @@ class ReelsFeedScreenModel(
     enum class OfflineCopyResult { SAVED, REMOVED, FAILED_QUOTA, FAILED_NETWORK, FAILED_UNSUPPORTED }
 
     /**
+     * Contract v25: the source's own media verdict for [item], or null when the source does
+     * not implement the capability (the host then keeps the legacy URL-based rules).
+     * [sourceId] names the item's owning source when it differs from the live feed source
+     * (the offline playlist mixes sources; its slots carry their own id).
+     */
+    fun mediaDescriptor(item: ShortVideoItem, sourceId: Long? = null): FeedMediaDescriptor? {
+        val owner = sourceId?.let(sourceManager::get) ?: source
+        val descriptorSource = owner as? AnimeFeedMediaDescriptorSource ?: return null
+        return try {
+            descriptorSource.mediaDescriptor(item)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            logcat(LogPriority.WARN, t) { "mediaDescriptor failed for item ${item.id}; using legacy rules" }
+            null
+        }
+    }
+
+    /**
      * Just-in-time stream signing (contract v22): sources may serve items with a blank
      * videoUrl (balbums v6+ defers signing to playback time); the player and the offline
      * downloader resolve through the resolver capability instead of batch-resolving pages.
+     * v25: a failed HD resolution may retry the base variant unless the descriptor opts out.
      */
-    suspend fun resolvePlaybackUrl(item: ShortVideoItem, hd: Boolean): String? {
-        val resolver = source as? AnimeFeedVideoResolverSource ?: return null
-        return runCatching { resolver.resolveVideoUrl(item.id, hd) }.getOrNull()
+    suspend fun resolvePlaybackUrl(
+        item: ShortVideoItem,
+        hd: Boolean,
+        sourceId: Long? = null,
+    ): String? {
+        val owner = sourceId?.let(sourceManager::get) ?: source
+        val resolver = owner as? AnimeFeedVideoResolverSource ?: return null
+        val hdFallback = mediaDescriptor(item, sourceId)?.hdFallback ?: true
+        return try {
+            resolver.resolveVideoUrl(item.id, hd)?.takeIf { it.isNotBlank() }
+                ?: if (hd && hdFallback) {
+                    resolver.resolveVideoUrl(item.id, false)?.takeIf { it.isNotBlank() }
+                } else {
+                    null
+                }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            logcat(LogPriority.WARN, t) { "Video resolver failed for item ${item.id}" }
+            null
+        }
     }
 
     /**
@@ -2404,8 +2505,13 @@ class ReelsFeedScreenModel(
         }
         // Transport exceptions are a NETWORK verdict, never a crash in the UI scope.
         // Lazy-signed items (blank url) are resolved just-in-time before the download.
+        // v25: a source can declare an item non-downloadable; removing a stored copy above
+        // stays available regardless.
+        if (mediaDescriptor(item, sourceId)?.offlineSupported == false) {
+            return OfflineCopyResult.FAILED_UNSUPPORTED
+        }
         val downloadItem = if (item.videoUrl.isBlank()) {
-            val resolved = resolvePlaybackUrl(item, state.value.isHdQuality)
+            val resolved = resolvePlaybackUrl(item, state.value.isHdQuality, sourceId)
                 ?: return OfflineCopyResult.FAILED_NETWORK
             item.copy(videoUrl = resolved)
         } else {
@@ -2575,6 +2681,51 @@ class ReelsFeedScreenModel(
     }
 
     /**
+     * Contract v25: the source's typed verdict for a failed request, or null when it has no
+     * opinion (or the classifier itself failed) — the host then keeps its legacy error-text
+     * heuristics. A broken classifier must never mask the original feed error.
+     */
+    private fun classifyFeedError(error: Throwable): FeedError? {
+        val classifier = source as? AnimeFeedErrorClassifierSource ?: return null
+        return try {
+            classifier.classifyFeedError(error)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            logcat(LogPriority.WARN, t) { "Feed error classifier failed; using legacy heuristics" }
+            null
+        }
+    }
+
+    /**
+     * Applies a typed verdict (contract v25). A verdict is authoritative: Terminal suppresses
+     * the 401/403/429 text heuristics entirely, AuthRequired bootstraps even without status
+     * text, and RateLimited honors the source's retry window. Null = legacy behavior.
+     */
+    private fun handleFeedErrorVerdict(verdict: FeedError?, message: String, reset: Boolean) {
+        when (verdict) {
+            // Expired cursors are handled by the caller (silent append stop); a reset load
+            // has no cursor to expire and is surfaced as a regular terminal error.
+            FeedError.ExpiredCursor -> Unit
+            FeedError.AuthRequired -> maybeBumpBootstrap(true)
+            is FeedError.RateLimited -> scheduleRateLimitRetry(
+                seconds = verdict.retryAtEpochMillis
+                    ?.let { ((it - System.currentTimeMillis() + 999) / 1000L).coerceIn(1L, 120L).toInt() }
+                    ?: RATE_LIMIT_DEFAULT_RETRY_SEC,
+                reset = reset,
+            )
+            FeedError.Transient, FeedError.Terminal -> Unit
+            null -> {
+                // Cloudflare managed challenge (403) or a dead account bearer (401) on
+                // web-login-capable sources: bootstrap via an offscreen WebView without user
+                // interaction; the import verification reloads the feed on success.
+                maybeBumpBootstrap(HTTP_SESSION_ERROR_REGEX.containsMatchIn(message))
+                maybeScheduleRateLimitRetry(message, reset)
+            }
+        }
+    }
+
+    /**
      * B1: a 429 verdict surfaces the wait ([State.retryAfterSec] drives the snackbar) and
      * schedules ONE automatic retry, capped at [RATE_LIMIT_MAX_RETRIES] consecutive attempts
      * so a hard-blocked source cannot spin forever. Any successful page resets the budget.
@@ -2582,10 +2733,14 @@ class ReelsFeedScreenModel(
      */
     private fun maybeScheduleRateLimitRetry(message: String, reset: Boolean) {
         if (!HTTP_TOO_MANY_REQUESTS_REGEX.containsMatchIn(message)) return
-        if (rateLimitRetries >= RATE_LIMIT_MAX_RETRIES) return
         val seconds = RETRY_AFTER_REGEX.find(message)?.groupValues?.get(1)?.toIntOrNull()
             ?.coerceIn(1, 120)
             ?: RATE_LIMIT_DEFAULT_RETRY_SEC
+        scheduleRateLimitRetry(seconds, reset)
+    }
+
+    private fun scheduleRateLimitRetry(seconds: Int, reset: Boolean) {
+        if (rateLimitRetries >= RATE_LIMIT_MAX_RETRIES) return
         val sourceId = state.value.currentSourceId
         rateLimitRetries++
         mutableState.update { it.copy(retryAfterSec = seconds) }

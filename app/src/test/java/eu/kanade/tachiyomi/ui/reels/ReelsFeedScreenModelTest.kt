@@ -9,9 +9,12 @@ import eu.kanade.tachiyomi.animesource.AnimeContentPreferencesSource
 import eu.kanade.tachiyomi.animesource.AnimeCreatorFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedErrorClassifierSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedMediaDescriptorSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedVideoResolverSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedWebLoginSource
 import eu.kanade.tachiyomi.animesource.AnimeReelsFeedbackSource
 import eu.kanade.tachiyomi.animesource.AnimeSource
@@ -22,6 +25,8 @@ import eu.kanade.tachiyomi.animesource.model.CustomFeedDetail
 import eu.kanade.tachiyomi.animesource.model.CustomFeedRef
 import eu.kanade.tachiyomi.animesource.model.FeedCategory
 import eu.kanade.tachiyomi.animesource.model.FeedCategoryPage
+import eu.kanade.tachiyomi.animesource.model.FeedError
+import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
 import eu.kanade.tachiyomi.animesource.model.FeedPage
 import eu.kanade.tachiyomi.animesource.model.SAnime
 import eu.kanade.tachiyomi.animesource.model.SEpisode
@@ -1116,6 +1121,52 @@ class ReelsFeedScreenModelTest {
         }
     }
 
+    private class ResolvingFeedSource(
+        override val id: Long,
+        private val descriptor: FeedMediaDescriptor = FeedMediaDescriptor(),
+    ) : AnimeFeedSource, AnimeFeedVideoResolverSource, AnimeFeedMediaDescriptorSource {
+        override val name: String = "Resolving Feed $id"
+        override val lang: String = "all"
+        val resolutions = mutableListOf<Pair<String, Boolean>>()
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            FeedPage(emptyList(), false)
+
+        override suspend fun resolveVideoUrl(itemId: String, hd: Boolean): String? {
+            resolutions += itemId to hd
+            return if (hd) null else "https://cdn.example.com/$itemId-sd.mp4"
+        }
+
+        override fun mediaDescriptor(item: ShortVideoItem): FeedMediaDescriptor = descriptor
+    }
+
+    private class ClassifiedFeedSource(
+        override val id: Long,
+        private val classifier: (Throwable) -> FeedError?,
+        private val feedProvider: (Int) -> FeedPage,
+    ) : AnimeFeedSource, AnimeFeedErrorClassifierSource {
+        override val name: String = "Classified Feed $id"
+        override val lang: String = "all"
+        val requestedPages = mutableListOf<Int>()
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage {
+            requestedPages += page
+            return feedProvider(page)
+        }
+
+        override fun classifyFeedError(error: Throwable): FeedError? = classifier(error)
+    }
+
+    private class ClassifiedWebLoginSource(
+        id: Long,
+        private val failure: Throwable,
+    ) : FakeWebLoginSource(id), AnimeFeedErrorClassifierSource {
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            throw failure
+
+        override fun classifyFeedError(error: Throwable): FeedError = FeedError.AuthRequired
+    }
+
     private class FakeAlbumRepository : ReelsAlbumRepository {
         val albums = mutableMapOf<Pair<String, Long>, ReelsAlbum>()
 
@@ -1506,6 +1557,147 @@ class ReelsFeedScreenModelTest {
         // Initial failure + exactly RATE_LIMIT_MAX_RETRIES auto-retries, then it stops.
         calls shouldBe 4
         screenModel.state.value.error.orEmpty().contains("429") shouldBe true
+    }
+
+    // ---- Contract v25: media descriptor ----
+
+    @Test
+    fun `HD resolution falls back to the base variant`() = runTest(testDispatcher) {
+        val source = ResolvingFeedSource(9200L)
+        val screenModel = buildModel(sourceId = 9200L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.resolvePlaybackUrl(videoItem("lazy-hd"), hd = true) shouldBe
+            "https://cdn.example.com/lazy-hd-sd.mp4"
+        source.resolutions shouldBe listOf("lazy-hd" to true, "lazy-hd" to false)
+    }
+
+    @Test
+    fun `a descriptor can disable the HD-to-base fallback`() = runTest(testDispatcher) {
+        val source = ResolvingFeedSource(9201L, FeedMediaDescriptor(hdFallback = false))
+        val screenModel = buildModel(sourceId = 9201L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.resolvePlaybackUrl(videoItem("lazy-hd-only"), hd = true) shouldBe null
+        source.resolutions shouldBe listOf("lazy-hd-only" to true)
+        screenModel.resolvePlaybackUrl(videoItem("lazy-sd"), hd = false) shouldBe
+            "https://cdn.example.com/lazy-sd-sd.mp4"
+    }
+
+    @Test
+    fun `offline unsupported item is refused before any download`() = runTest(testDispatcher) {
+        val favorites = FakeReelsFavoriteRepository()
+        favorites.favorites["off-4" to 9202L] = offlineFavorite("off-4").copy(sourceId = 9202L)
+        val store = FakeReelsOfflineStore()
+        val source = ResolvingFeedSource(9202L, FeedMediaDescriptor(offlineSupported = false))
+        val screenModel = buildModel(
+            sourceId = 9202L,
+            manager = sourceManagerOf(source),
+            repository = favorites,
+            offlineStore = store,
+            offlinePlaylist = true,
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val result = screenModel.toggleOfflineCopy(screenModel.state.value.items.first(), 0)
+
+        result shouldBe ReelsFeedScreenModel.OfflineCopyResult.FAILED_UNSUPPORTED
+        store.downloads shouldBe 0
+        screenModel.state.value.offlineStored.shouldBeEmpty()
+    }
+
+    // ---- Contract v25: typed feed errors ----
+
+    @Test
+    fun `expired append cursor stops pagination without surfacing an error`() = runTest(testDispatcher) {
+        val source = ClassifiedFeedSource(
+            id = 9203L,
+            feedProvider = { page ->
+                if (page > 1) throw java.io.IOException("cursor is stale")
+                FeedPage(listOf(videoItem("cursor-1")), hasNextPage = true)
+            },
+            classifier = { FeedError.ExpiredCursor },
+        )
+        val screenModel = buildModel(sourceId = 9203L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+        screenModel.state.value.canLoadMore shouldBe true
+
+        screenModel.onPageChanged(0)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.pageError shouldBe null
+        screenModel.state.value.error shouldBe null
+        screenModel.state.value.canLoadMore shouldBe false
+        screenModel.state.value.items.shouldHaveSize(1)
+        source.requestedPages shouldBe listOf(1, 2)
+    }
+
+    @Test
+    fun `typed rate limit honors the declared retry window without 429 text`() = runTest(testDispatcher) {
+        var calls = 0
+        val source = ClassifiedFeedSource(
+            id = 9204L,
+            feedProvider = {
+                calls++
+                if (calls == 1) throw java.io.IOException("the server is busy")
+                FeedPage(listOf(videoItem("typed-rate")), hasNextPage = false)
+            },
+            classifier = { FeedError.RateLimited(System.currentTimeMillis() + 5_000) },
+        )
+        val screenModel = buildModel(sourceId = 9204L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        calls shouldBe 2
+        screenModel.state.value.items.map { it.id } shouldContain "typed-rate"
+        screenModel.state.value.retryAfterSec shouldBe 0
+    }
+
+    @Test
+    fun `typed terminal failure suppresses the 429 retry`() = runTest(testDispatcher) {
+        var calls = 0
+        val source = ClassifiedFeedSource(
+            id = 9205L,
+            feedProvider = {
+                calls++
+                throw java.io.IOException("HTTP 429 Too Many Requests, Retry-After: 2")
+            },
+            classifier = { FeedError.Terminal },
+        )
+        val screenModel = buildModel(sourceId = 9205L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        calls shouldBe 1
+        screenModel.state.value.error.orEmpty().contains("429") shouldBe true
+        screenModel.state.value.retryAfterSec shouldBe 0
+    }
+
+    @Test
+    fun `typed auth requirement bootstraps a web-login source without status text`() = runTest(testDispatcher) {
+        val source = ClassifiedWebLoginSource(9206L, java.io.IOException("please sign in again"))
+        val screenModel = buildModel(sourceId = 9206L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.cfBootstrapAttempt shouldBe 1
+        screenModel.state.value.error shouldBe "please sign in again"
+    }
+
+    @Test
+    fun `a throwing classifier falls back to the legacy retry heuristics`() = runTest(testDispatcher) {
+        var calls = 0
+        val source = ClassifiedFeedSource(
+            id = 9207L,
+            feedProvider = {
+                calls++
+                if (calls == 1) throw java.io.IOException("HTTP 429 Too Many Requests, Retry-After: 3")
+                FeedPage(listOf(videoItem("legacy-rate")), hasNextPage = false)
+            },
+            classifier = { throw IllegalStateException("classifier bug") },
+        )
+        val screenModel = buildModel(sourceId = 9207L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        calls shouldBe 2
+        screenModel.state.value.items.map { it.id } shouldContain "legacy-rate"
     }
 
     @Test
@@ -2090,6 +2282,7 @@ class ReelsFeedScreenModelTest {
 
     private class FakeReelsOfflineStore : ReelsOfflineStore {
         val stored = mutableMapOf<Pair<Long, String>, String>()
+        var downloads = 0
 
         override fun isStored(sourceId: Long, videoId: String): Boolean = (sourceId to videoId) in stored
 
@@ -2100,6 +2293,7 @@ class ReelsFeedScreenModelTest {
         override fun usedBytes(): Long = stored.size * 1024L
 
         override suspend fun download(item: ShortVideoItem, sourceId: Long): ReelsOfflineStore.DownloadResult {
+            downloads++
             stored[sourceId to item.id] = "file:///offline/${sourceId}_${item.id}.mp4"
             return ReelsOfflineStore.DownloadResult.SAVED
         }

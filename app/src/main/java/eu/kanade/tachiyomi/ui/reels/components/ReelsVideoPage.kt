@@ -67,10 +67,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.theme.AuroraTheme
+import eu.kanade.tachiyomi.animesource.model.FeedMediaDescriptor
+import eu.kanade.tachiyomi.animesource.model.FeedMediaKind
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerView
 import eu.kanade.tachiyomi.ui.reels.player.ReelsWatchClock
 import eu.kanade.tachiyomi.ui.reels.rememberReelsFullscreenSafePadding
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
@@ -113,6 +116,9 @@ fun ReelsVideoPage(
     // Lazy stream signing (balbums v6+): items may carry a blank videoUrl; the page resolves
     // just-in-time through the source's v22 resolver before building the player.
     resolveUrl: (suspend (ShortVideoItem) -> String?)? = null,
+    // Contract v25 media verdict for THIS item (null = legacy URL-based rules): authoritative
+    // still/video kind, whether a blank URL may be resolved, and offline support.
+    mediaDescriptor: FeedMediaDescriptor? = null,
     // Creator follow affordances (contract v18): the caller gates both on
     // `source is AnimeCreatorFeedSource && item.author != null`.
     showFollowAction: Boolean = false,
@@ -303,24 +309,56 @@ fun ReelsVideoPage(
     }
 
     val rawUrl = remember(item, pinnedHd) {
-        if (pinnedHd) (item.videoUrlHd ?: item.videoUrl) else item.videoUrl
+        // A blank HD variant is absent, not a stream: falling back to the base URL here keeps
+        // the playable-base guarantee instead of asking the resolver for an empty URL.
+        if (pinnedHd) {
+            item.videoUrlHd?.takeIf { it.isNotBlank() } ?: item.videoUrl
+        } else {
+            item.videoUrl
+        }
+    }
+    val mediaPlan = remember(rawUrl, item.id, mediaDescriptor?.lazyResolution, resolveUrl != null) {
+        reelMediaPlan(rawUrl, resolveUrl != null, mediaDescriptor?.lazyResolution != false)
     }
     // Lazy signing: a blank url resolves just-in-time; the player is only built once a real
     // url exists (a blank MediaItem would surface a playback error before signing finishes).
     var videoUrl by remember(rawUrl, item.id) { mutableStateOf(rawUrl) }
-    LaunchedEffect(rawUrl, item.id, retrySignal) {
-        if (rawUrl.isBlank()) {
-            val resolved = runCatching { resolveUrl?.invoke(item) }.getOrNull()
-            if (!resolved.isNullOrBlank()) {
-                videoUrl = resolved
-            } else if (resolveUrl != null) {
+    LaunchedEffect(rawUrl, item.id, retrySignal, mediaPlan) {
+        when (mediaPlan) {
+            ReelMediaPlan.READY -> videoUrl = rawUrl
+            ReelMediaPlan.RESOLVE -> {
+                val resolved = try {
+                    resolveUrl?.invoke(item)
+                } catch (e: CancellationException) {
+                    // The page left composition / the feed generation changed: keep the
+                    // resolution job cancelled instead of reporting a playback error.
+                    throw e
+                } catch (_: Throwable) {
+                    null
+                }
+                if (!resolved.isNullOrBlank()) {
+                    videoUrl = resolved
+                } else {
+                    onPlaybackError("Failed to load video stream") {
+                        retrySignal++
+                    }
+                }
+            }
+            ReelMediaPlan.UNPLAYABLE -> {
+                // A blank URL the host cannot sign would otherwise show the poster spinner
+                // forever; fail terminally so the user gets the error affordance.
                 onPlaybackError("Failed to load video stream") {
                     retrySignal++
                 }
             }
-        } else {
-            videoUrl = rawUrl
         }
+    }
+    // Contract v25: a declared kind outranks the URL extension (opaque photo URLs have none,
+    // and a video URL may happen to end in an image extension); null keeps legacy sniffing.
+    val declaredStill = when (mediaDescriptor?.kind) {
+        FeedMediaKind.STILL -> true
+        FeedMediaKind.VIDEO -> false
+        null -> null
     }
     val cacheKey = cachePrefix?.let { prefix -> "$prefix:${item.id}:${if (pinnedHd) "hd" else "sd"}" }
 
@@ -420,6 +458,8 @@ fun ReelsVideoPage(
             isPlaying = isPlaying,
             isAutoAdvance = isAutoAdvance,
             isCropMode = isCropMode,
+            isStill = declaredStill,
+            isMediaUnplayable = mediaPlan == ReelMediaPlan.UNPLAYABLE,
             isLastPage = isLastPage,
             cacheKey = cacheKey,
             videoDescription = listOfNotNull(item.author, item.title).joinToString(" — ").ifBlank { null },
@@ -665,6 +705,25 @@ fun ReelsVideoPage(
             confirmButton = {},
         )
     }
+}
+
+/** How a page turns its raw URL into a playable player input (contract v25). */
+internal enum class ReelMediaPlan {
+    READY,
+    RESOLVE,
+    UNPLAYABLE,
+}
+
+internal fun reelMediaPlan(
+    rawUrl: String,
+    hasResolver: Boolean,
+    lazyResolution: Boolean,
+): ReelMediaPlan = when {
+    rawUrl.isNotBlank() -> ReelMediaPlan.READY
+    // A blank URL is playable only when the source opted into lazy signing AND the host
+    // actually has a resolver to sign it with; otherwise no future event can fill it.
+    hasResolver && lazyResolution -> ReelMediaPlan.RESOLVE
+    else -> ReelMediaPlan.UNPLAYABLE
 }
 
 /**

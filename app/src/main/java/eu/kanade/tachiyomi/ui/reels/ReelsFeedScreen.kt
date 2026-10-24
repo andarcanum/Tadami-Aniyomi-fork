@@ -763,6 +763,9 @@ data class ReelsFeedScreen(
                     ) { page ->
                         val item = state.items.getOrNull(page)
                         if (item != null) {
+                            // Contract v25: the source's per-item media verdict; remembered
+                            // per item so re-composition does not re-run plugin code.
+                            val mediaDescriptor = remember(item) { screenModel.mediaDescriptor(item) }
                             ReelsVideoPage(
                                 item = item,
                                 // Activate only the settled page: during fast flings intermediate
@@ -967,6 +970,7 @@ data class ReelsFeedScreen(
                                 resolveUrl = { pageItem ->
                                     screenModel.resolvePlaybackUrl(pageItem, effectiveHd)
                                 },
+                                mediaDescriptor = mediaDescriptor,
                                 isLastPage = page == state.items.lastIndex,
                                 headers = state.sourceHeaders,
                             )

@@ -1,7 +1,7 @@
 # Reels Feed Contract
 
-**Current version: 24** (`extensionLib` 12.0–23.0 accepted by the host; v24 is a
-purely additive capability, so `LIB_VERSION_MAX` stays at 23.0) ·
+**Current version: 25** (`extensionLib` 12.0–23.0 accepted by the host; v24 and v25 are
+purely additive capabilities, so `LIB_VERSION_MAX` stays at 23.0) ·
 Owner module: [`:source-api`](build.gradle.kts) ·
 API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedSource.kt),
 [`AnimeCreatorFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCreatorFeedSource.kt),
@@ -15,6 +15,11 @@ API surface: [`AnimeFeedSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/anime
 [`AnimeFeedWebLoginSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedWebLoginSource.kt),
 [`AnimeFeedOriginScopedSessionSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedOriginScopedSessionSource.kt),
 [`WebLoginCookie`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/WebLoginCookie.kt),
+[`AnimeFeedMediaDescriptorSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedMediaDescriptorSource.kt),
+[`FeedMediaDescriptor`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedMediaDescriptor.kt),
+[`FeedMediaKind`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedMediaKind.kt),
+[`AnimeFeedErrorClassifierSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedErrorClassifierSource.kt),
+[`FeedError`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedError.kt),
 [`AnimeFeedBrowseSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeFeedBrowseSource.kt),
 [`AnimeCategorizedSearchSource`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/AnimeCategorizedSearchSource.kt),
 [`FeedCategory`](src/commonMain/kotlin/eu/kanade/tachiyomi/animesource/model/FeedCategory.kt),
@@ -216,23 +221,65 @@ Rules for sources:
   LRU eviction, logout, account/source-set change) must **not** be silently
   restarted from the head under the same `page` number. Return a terminal page
   (`hasNextPage = false`, `nextCursor = null`); the next generation starts with
-  `cursor = null`. `FeedPage` has no error channel: throwing makes the host
-  treat it as a transient failure and retry the same dead cursor on every
-  scroll (there is no per-cursor backoff).
+  `cursor = null`. `FeedPage` has no error channel: throwing a plain exception
+  makes the host treat it as a transient failure and retry the same dead cursor
+  on every scroll (there is no per-cursor backoff). Sources implementing the
+  [typed error classifier](#typed-feed-errors-v25-capability-interface) may
+  instead throw `FeedError.ExpiredCursor`: the host then stops the append
+  silently and waits for a manual refresh.
 - The host dedupes by `ShortVideoItem.id` across pages (first occurrence
   wins), so seam duplicates from cursor APIs are safe — but `id` values must
   be stable between requests.
 
 ## Video: `ShortVideoItem` (URL semantics changed in v17!)
 
-- `videoUrl: String` — the **guaranteed playable base URL** (lowest/only
-  quality variant). Required.
+- `videoUrl: String` — the **playable base URL** (lowest/only quality
+  variant). Required; the only exception is a source opting into lazy signing
+  through the v25 [media descriptor](#media-descriptor-v25-capability-interface)
+  (`lazyResolution = true` + `AnimeFeedVideoResolverSource`), which may return a
+  blank string and let the host sign the URL just in time.
 - `videoUrlHd: String?` — an optional **upgrade**. Strictly better than the
   base, or null. Never invert the two.
 - With HD on, the host plays `videoUrlHd ?: videoUrl`; with HD off it always
   plays `videoUrl`. Single-URL source: `videoUrl = url, videoUrlHd = null`.
+  Lazy HD: a failed `resolveVideoUrl(id, hd = true)` may retry the base variant
+  when the descriptor leaves `hdFallback = true`.
 - `posterUrlVertical` — vertical poster if available (ideal for the feed).
 - Temporary CDN links: always set `webUrl` (the watch page) — sharing uses it.
+
+## Media descriptor (v25 capability interface)
+
+`AnimeFeedMediaDescriptorSource.mediaDescriptor(item): FeedMediaDescriptor` is an optional
+per-item contract for the media semantics `ShortVideoItem` cannot express:
+
+| Field | Default | Host behavior |
+|---|---|---|
+| `kind` | `null` | `STILL` renders the URL as an image even without an image extension (signed/opaque photo URLs); `VIDEO` suppresses extension sniffing; `null` keeps the legacy URL-based guess. |
+| `lazyResolution` | `true` | A blank `videoUrl` is signed through `AnimeFeedVideoResolverSource`. `false` makes a blank URL a terminal playback error instead of an endless poster/spinner (no resolver, no retry loop). |
+| `hdFallback` | `true` | A failed HD resolution retries the base variant (`resolveVideoUrl(id, hd = false)`). A present base `videoUrl` is always preferred over HD already. |
+| `offlineSupported` | `true` | `false` refuses downloads for the item; removing an existing copy still works. |
+
+Instanceof-detected, no default members on existing interfaces; the host falls back to the
+legacy rules when the capability is absent, and the `ShortVideoItem` constructor is unchanged.
+`mediaDescriptor` must be cheap and side-effect free — it may run for preloaded pages.
+
+## Typed feed errors (v25 capability interface)
+
+`AnimeFeedErrorClassifierSource.classifyFeedError(error): FeedError?` lets a source classify
+its own failures instead of relying on the host's error-text matching. Returning `null` means
+"no verdict" and the host keeps its legacy 401/403 and 429/Retry-After heuristics; a throwing
+classifier is logged and treated as `null`.
+
+| Verdict | Host action |
+|---|---|
+| `ExpiredCursor` | Append: pagination stops silently, the dead cursor is never retried; refresh starts a fresh generation. Reset load: surfaced as a regular terminal error. |
+| `AuthRequired` | The host starts its web-login session bootstrap (web-login-capable sources) even when the message has no status-like text. |
+| `RateLimited(retryAtEpochMillis)` | The host hides the automatic retry until the given wall-clock time (null = its default backoff) and still caps consecutive automatic retries. |
+| `Transient` | Surfaced to the user; no bootstrap and no automatic backoff. |
+| `Terminal` | Surfaced to the user; **no** bootstrap and **no** automatic retry, even if the message contains `401`, `403` or `429`. |
+
+Instanceof-detected, no default members on existing interfaces. A classifier verdict
+overrides text heuristics; return `null` when unsure.
 
 ## Evolution rules (discipline)
 
@@ -312,6 +359,7 @@ class MyFeed : AnimeFeedSource {
 
 | Version | Change |
 |---|---|
+| 25 | Optional capabilities `AnimeFeedMediaDescriptorSource` (per-item `FeedMediaDescriptor`: media kind, lazy-resolution permission, HD fallback, offline support) and `AnimeFeedErrorClassifierSource` (typed `FeedError` verdicts: `ExpiredCursor`, `AuthRequired`, `RateLimited(retryAtEpochMillis)`, `Transient`, `Terminal`). Both instanceof-detected, no default members, existing constructors unchanged; `null` verdicts and absent capabilities keep the legacy host behavior. Additive: `LIB_VERSION_MAX` stays at 23.0. |
 | 24 | Optional capability `AnimeFeedOriginScopedSessionSource` (`importWebSessionScoped` / `importWebRedirectScoped`) plus model `WebLoginCookie`: origin-scoped session import that preserves same-named cookies from multiple origins and non-default ports. Instanceof-detected, no default members; the legacy `Map<String, String>` methods remain the fallback for pre-v24 hosts. Additive: `LIB_VERSION_MAX` stays at 23.0. |
 | 23 | Optional capability `AnimeAlbumSearchSource.searchAlbums(query, page, cursor): FeedCategoryPage` — paginated album-oriented search for bunkr-like sources; the host renders album cards (open / save to collection / long-press content preview) instead of the flat video feed when present. Instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep their pre-v23 search; `LIB_VERSION_MAX` → 23.0 as the discipline stamp. |
 | 22 | Optional capability `AnimeFeedLoginInstrumentationSource` (source-supplied session instrumentation JS + extra dump origins + logout purge origins) and `AnimeFeedVideoResolverSource` (stable-id → playable URL re-resolution for favorites). Both instanceof-detected, no default members added to existing interfaces. Additive: existing feed plugins keep working; `LIB_VERSION_MAX` → 22.0 as the discipline stamp. |
