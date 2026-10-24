@@ -10,8 +10,11 @@ import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
  */
 interface ReelsOfflineStore {
 
-    /** Why a download did not succeed — the UI shows distinct quota vs network messages. */
-    enum class DownloadResult { SAVED, QUOTA, NETWORK }
+    /**
+     * Why a download did not succeed — the UI shows distinct quota, network and unsupported
+     * (adaptive manifest) messages.
+     */
+    enum class DownloadResult { SAVED, QUOTA, NETWORK, UNSUPPORTED }
 
     fun isStored(sourceId: Long, videoId: String): Boolean
 
@@ -26,7 +29,9 @@ interface ReelsOfflineStore {
 
     /**
      * Downloads the reel's base URL to the store. [DownloadResult.QUOTA] when the copy would
-     * push the store past [MAX_OFFLINE_BYTES], [DownloadResult.NETWORK] on transport failures.
+     * push the store past [MAX_OFFLINE_BYTES], [DownloadResult.NETWORK] on transport failures,
+     * [DownloadResult.UNSUPPORTED] for adaptive manifests (HLS/DASH) that need a media
+     * downloader rather than a single file copy.
      */
     suspend fun download(item: ShortVideoItem, sourceId: Long): DownloadResult
 

@@ -1854,7 +1854,7 @@ class ReelsFeedScreenModelTest {
         screenModel.state.value.items.shouldHaveSize(1)
         screenModel.state.value.items.first().id shouldBe "vid-f"
         screenModel.state.value.items.first().videoUrl shouldBe "https://example.com/f.mp4"
-        screenModel.state.value.likedIds shouldBe setOf("vid-f")
+        screenModel.state.value.likedIds shouldBe setOf("301:vid-f")
 
         // Network entry points are no-ops in offline mode.
         screenModel.loadFeed(reset = true)
@@ -1862,6 +1862,44 @@ class ReelsFeedScreenModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
         screenModel.state.value.items.shouldHaveSize(1)
         screenModel.state.value.searchQuery shouldBe ""
+    }
+
+    @Test
+    fun `offline playlist keeps same-videoId likes separate per source`() = runTest(testDispatcher) {
+        val sourceA = offlineFavorite("dup").copy(sourceId = 401L, addedAt = Date(1_000L))
+        val sourceB = offlineFavorite("dup").copy(sourceId = 402L, addedAt = Date(2_000L))
+        val repository = FakeReelsFavoriteRepository()
+        repository.favorites[sourceA.videoId to sourceA.sourceId] = sourceA
+        repository.favorites[sourceB.videoId to sourceB.sourceId] = sourceB
+        val screenModel = buildModel(
+            sourceId = 401L,
+            manager = sourceManagerOf(),
+            repository = repository,
+            offlinePlaylist = true,
+            initialVideoId = "dup",
+        )
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Newest favorite first: the tapped source-A copy sits at index 1, not index 0.
+        screenModel.state.value.items.map { it.id } shouldBe listOf("dup", "dup")
+        screenModel.state.value.offlineSourceIds shouldBe listOf(402L, 401L)
+        screenModel.state.value.targetPageIndex shouldBe 1
+        screenModel.state.value.isLiked("dup", 0) shouldBe true
+        screenModel.state.value.isLiked("dup", 1) shouldBe true
+
+        // Unliking source B must not clear source A's heart.
+        screenModel.setLike(screenModel.state.value.items[0], liked = false, itemIndex = 0)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        screenModel.state.value.isLiked("dup", 0) shouldBe false
+        screenModel.state.value.isLiked("dup", 1) shouldBe true
+        repository.favorites.keys shouldBe setOf("dup" to 401L)
+
+        // And toggling source A uses its own identity, not the surviving videoId entry.
+        screenModel.toggleLike(screenModel.state.value.items[1], itemIndex = 1)
+        testDispatcher.scheduler.advanceUntilIdle()
+        screenModel.state.value.isLiked("dup", 1) shouldBe false
+        repository.favorites.isEmpty() shouldBe true
     }
 
     @Test

@@ -1994,6 +1994,7 @@
     <string name="reels_following_creators_unavailable">Creators unavailable: %1$d of %2$d</string>
     <string name="reels_offline_failed_quota">Not enough offline storage space</string>
     <string name="reels_offline_failed_network">Download failed (network or source)</string>
+    <string name="reels_offline_failed_unsupported">This reel streams as HLS/DASH and cannot be saved offline</string>
     <string name="reels_feed_empty">Nothing here yet</string>
     <string name="reels_history_delete">Delete entry</string>
     <string name="reels_quality_hd_saver">HD (SD on mobile data)</string>

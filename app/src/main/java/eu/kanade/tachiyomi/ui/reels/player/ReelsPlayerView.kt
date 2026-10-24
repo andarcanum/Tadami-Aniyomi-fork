@@ -66,6 +66,7 @@ import tachiyomi.core.common.util.system.logcat
 import uy.kohesive.injekt.Injekt
 import uy.kohesive.injekt.api.get
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 /**
  * Vertical-feed video player backed by ExoPlayer.
@@ -891,6 +892,10 @@ internal const val HEAD_PREWARM_BYTES = 512L * 1024L
  * (their cache key is URL-derived, a stable-key prewarm would never be read back), and
  * anything already cached. Failures are swallowed: prewarm is best-effort.
  * Blocking network + file IO: call from a background dispatcher.
+ *
+ * [isCancelled] is checked between chunks so a source switch or a fast scroll stops pulling
+ * traffic promptly; the dedicated client's call timeout bounds a hung open/read too, and the
+ * DataSource is closed even when open() itself fails.
  */
 internal fun prewarmReelHead(
     context: android.content.Context,
@@ -898,16 +903,16 @@ internal fun prewarmReelHead(
     cacheKey: String,
     headers: Map<String, String>,
     webUrl: String?,
+    isCancelled: () -> Boolean = { false },
 ) {
     if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) return
     if (!isProgressiveReelUrl(url)) return
     val appContext = context.applicationContext
     val cache = getReelsVideoCache(appContext)
     if (cache.isCached(cacheKey, 0, HEAD_PREWARM_BYTES)) return
-    val networkClient: OkHttpClient = Injekt.get<NetworkHelper>().client
     val upstream = DefaultDataSource.Factory(
         appContext,
-        OkHttpDataSource.Factory(networkClient)
+        OkHttpDataSource.Factory(prewarmNetworkClient)
             .setDefaultRequestProperties(reelsRequestHeaders(headers, webUrl)),
     )
     val dataSource = CacheDataSource.Factory()
@@ -920,18 +925,31 @@ internal fun prewarmReelHead(
         .setKey(cacheKey)
         .setLength(HEAD_PREWARM_BYTES)
         .build()
-    runCatching {
+    try {
         dataSource.open(spec)
-        try {
-            // CacheDataSource writes spans into the cache as bytes are pulled through read();
-            // the length-bounded spec stops the drain at HEAD_PREWARM_BYTES even when the CDN
-            // ignores the Range hint and offers the whole body.
-            val buffer = ByteArray(64 * 1024)
-            while (dataSource.read(buffer, 0, buffer.size) != C.RESULT_END_OF_INPUT) {
-                // drain
-            }
-        } finally {
-            dataSource.close()
+        // CacheDataSource writes spans into the cache as bytes are pulled through read();
+        // the length-bounded spec stops the drain at HEAD_PREWARM_BYTES even when the CDN
+        // ignores the Range hint and offers the whole body.
+        val buffer = ByteArray(64 * 1024)
+        while (!isCancelled()) {
+            if (dataSource.read(buffer, 0, buffer.size) == C.RESULT_END_OF_INPUT) break
         }
+    } catch (_: Exception) {
+        // Prewarm is best-effort; a failed chunk is simply a cache miss later.
+    } finally {
+        // open() can fail after allocating the upstream: close covers that path too.
+        runCatching { dataSource.close() }
     }
 }
+
+/**
+ * Prewarm must not hold a socket for minutes when the user has already swiped away: the
+ * shared client's timeouts are meant for playback, where a long body read is expected.
+ */
+private val prewarmNetworkClient: OkHttpClient by lazy {
+    Injekt.get<NetworkHelper>().client.newBuilder()
+        .callTimeout(HEAD_PREWARM_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        .build()
+}
+
+private const val HEAD_PREWARM_TIMEOUT_MS = 20_000L

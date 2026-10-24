@@ -126,6 +126,7 @@ import eu.kanade.tachiyomi.ui.reels.player.clearReelsVideoCache
 import eu.kanade.tachiyomi.ui.reels.player.prewarmReelHead
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
@@ -278,6 +279,7 @@ data class ReelsFeedScreen(
         val offlineRemovedMessage = stringResource(MR.strings.reels_offline_removed)
         val offlineQuotaMessage = stringResource(MR.strings.reels_offline_failed_quota)
         val offlineNetworkMessage = stringResource(MR.strings.reels_offline_failed_network)
+        val offlineUnsupportedMessage = stringResource(MR.strings.reels_offline_failed_unsupported)
         val undoLabel = stringResource(MR.strings.action_undo)
         fun notifyHidden() {
             // Capture THIS hide's token: with two rapid hides the older snackbar's undo must
@@ -291,24 +293,27 @@ data class ReelsFeedScreen(
                 if (result == SnackbarResult.ActionPerformed) screenModel.undoHide(token)
             }
         }
-        // Preload gating must be reactive: a plain context.isOnWifi() call here would be
-        // recomputed (stale) on every recomposition instead of tracking network changes.
-        var isOnWifi by remember { mutableStateOf(context.isOnWifi()) }
+        // Preload gating must be reactive: a plain context call here would be recomputed
+        // (stale) on every recomposition instead of tracking network changes. Transport
+        // (Wi-Fi) and cost (metered) are tracked separately — a metered hotspot is not
+        // "Wi-Fi" for the data saver, and an unmetered Ethernet is not metered.
+        var networkStatus by remember { mutableStateOf(context.reelsNetworkStatus()) }
         DisposableEffect(Unit) {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                    isOnWifi = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                    networkStatus = networkCapabilities.toReelsNetworkStatus()
                 }
 
                 override fun onLost(network: Network) {
-                    // The default network went away: a stale true would let the wifi-gated
-                    // preload keep running over whatever (possibly mobile) network comes next.
-                    isOnWifi = false
+                    // The default network went away: a stale "on Wi-Fi" would let the
+                    // wifi-gated preload keep running over whatever network comes next, and
+                    // an unknown network must count as metered for the data saver.
+                    networkStatus = ReelsNetworkStatus(onWifi = false, metered = true)
                 }
 
                 override fun onAvailable(network: Network) {
-                    isOnWifi = context.isOnWifi()
+                    networkStatus = context.reelsNetworkStatus()
                 }
             }
             cm?.registerDefaultNetworkCallback(callback)
@@ -316,10 +321,18 @@ data class ReelsFeedScreen(
                 cm?.unregisterNetworkCallback(callback)
             }
         }
-        val preloadAllowed = state.preloadEnabled && (!state.preloadWifiOnly || isOnWifi)
+        val preloadAllowed = reelsPreloadAllowed(
+            preloadEnabled = state.preloadEnabled,
+            preloadWifiOnly = state.preloadWifiOnly,
+            onWifi = networkStatus.onWifi,
+        )
         // Data saver: force SD on metered networks. The page pins this value at activation,
         // so playback never rebuilds mid-clip when connectivity changes.
-        val effectiveHd = if (state.dataSaverMetered && !isOnWifi) false else state.isHdQuality
+        val effectiveHd = if (reelsForcesSd(state.dataSaverMetered, networkStatus.metered)) {
+            false
+        } else {
+            state.isHdQuality
+        }
         // U02: software fullscreen rotates the page subtree instead of requesting an
         // orientation. A window that is already landscape (split-screen/tablet/foldable)
         // or a system-owned PiP frame must not rotate at all.
@@ -615,7 +628,11 @@ data class ReelsFeedScreen(
                         val sourceId = state.currentSourceId
                         val headers = state.sourceHeaders
                         withContext(Dispatchers.IO) {
+                            // The effect's job dies on a settled-page/source/quality change; a
+                            // prewarm run must stop pulling bytes instead of warming stale pages.
+                            val prewarmJob = coroutineContext[Job]
                             for (index in settled + 2..settled + 4) {
+                                if (prewarmJob?.isActive == false) break
                                 val item = items.getOrNull(index) ?: break
                                 val url = if (effectiveHd) item.videoUrlHd ?: item.videoUrl else item.videoUrl
                                 val prefix = if (offline) {
@@ -629,6 +646,7 @@ data class ReelsFeedScreen(
                                     cacheKey = "$prefix:${item.id}:${if (effectiveHd) "hd" else "sd"}",
                                     headers = headers,
                                     webUrl = item.webUrl,
+                                    isCancelled = { prewarmJob?.isActive == false },
                                 )
                             }
                         }
@@ -756,7 +774,7 @@ data class ReelsFeedScreen(
                                 isPreload = preloadAllowed && page == pagerState.settledPage + 1,
                                 isPlaying = state.isPlaying,
                                 isMuted = state.isMuted,
-                                isLiked = (item.id in state.likedIds),
+                                isLiked = state.isLiked(item.id, page),
                                 isHdQuality = effectiveHd,
                                 isAutoAdvance = state.isAutoAdvance,
                                 isCropMode = state.isCropMode,
@@ -838,6 +856,7 @@ data class ReelsFeedScreen(
                                                     OfflineCopyResult.REMOVED -> offlineRemovedMessage
                                                     OfflineCopyResult.FAILED_QUOTA -> offlineQuotaMessage
                                                     OfflineCopyResult.FAILED_NETWORK -> offlineNetworkMessage
+                                                    OfflineCopyResult.FAILED_UNSUPPORTED -> offlineUnsupportedMessage
                                                 }
                                                 snackbarHostState.showSnackbar(message)
                                             } finally {
@@ -1549,11 +1568,18 @@ data class ReelsFeedScreen(
     }
 }
 
-private fun Context.isOnWifi(): Boolean {
-    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-    val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-    return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+private fun Context.reelsNetworkStatus(): ReelsNetworkStatus {
+    val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        ?: return ReelsNetworkStatus(onWifi = false, metered = true)
+    val caps = cm.getNetworkCapabilities(cm.activeNetwork)
+        ?: return ReelsNetworkStatus(onWifi = false, metered = true)
+    return caps.toReelsNetworkStatus()
 }
+
+private fun NetworkCapabilities.toReelsNetworkStatus(): ReelsNetworkStatus = reelsNetworkStatus(
+    onWifi = hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+    unmetered = hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED),
+)
 
 /** Device UX (sign-off): same-message error snackbars are coalesced within this window. */
 private const val ERROR_SNACK_COOLDOWN_MS = 10_000L
