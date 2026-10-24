@@ -1943,8 +1943,18 @@ class ReelsFeedScreenModel(
     }
 
     fun toggleLike(item: ShortVideoItem, itemIndex: Int = -1) {
+        setLike(item, liked = item.id !in state.value.likedIds, itemIndex = itemIndex)
+    }
+
+    /**
+     * Idempotent like write. Gestures and accessibility actions can deliver the same intent
+     * twice (a double-tap replayed after the page was rebound, a repeated action) — a call
+     * whose target equals the current state must not flip the like back or duplicate the
+     * insert / remote feedback.
+     */
+    fun setLike(item: ShortVideoItem, liked: Boolean, itemIndex: Int = -1) {
         val videoId = item.id
-        val willLike = videoId !in state.value.likedIds
+        if (liked == (videoId in state.value.likedIds)) return
         // The item comes from the caller (the page rendering it): re-finding it in state
         // would silently skip the insert when a feed refresh displaced the video between
         // the tap and the write. The write must survive screen disposal (NonCancellable).
@@ -1961,17 +1971,13 @@ class ReelsFeedScreenModel(
         val feedback = source as? AnimeReelsFeedbackSource
         decidedIds += videoId
         mutableState.update { state ->
-            val newLikes = if (videoId in state.likedIds) {
-                state.likedIds - videoId
-            } else {
-                state.likedIds + videoId
-            }
+            val newLikes = if (liked) state.likedIds + videoId else state.likedIds - videoId
             state.copy(likedIds = newLikes.toImmutableSet())
         }
         // Incognito blocks persisting a NEW like, but a removal must always reach the DB so a
         // previously saved like doesn't "resurrect" after restart.
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            if (willLike) {
+            if (liked) {
                 if (!isIncognito(sourceId)) {
                     reelsFavoriteRepository.insert(item.toReelsFavorite(sourceId))
                 }
@@ -1983,7 +1989,7 @@ class ReelsFeedScreenModel(
             // Incognito suppresses the REMOTE signal too: privacy applies end-to-end, not only
             // to the local DB.
             if (feedback != null && !isIncognito(sourceId)) {
-                runCatching { feedback.onVideoLiked(videoId, willLike) }
+                runCatching { feedback.onVideoLiked(videoId, liked) }
             }
         }
     }

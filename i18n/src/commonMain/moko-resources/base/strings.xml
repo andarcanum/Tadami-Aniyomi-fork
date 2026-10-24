@@ -1911,6 +1911,10 @@
     <string name="reels_editor_tags_failed">Failed to load tags</string>
     <string name="reels_sound_on">Sound on</string>
     <string name="reels_sound_off">Sound off</string>
+    <string name="reels_a11y_seek_back">Back 10 seconds</string>
+    <string name="reels_a11y_seek_forward">Forward 10 seconds</string>
+    <string name="reels_a11y_speed_2x">Play at 2× speed</string>
+    <string name="reels_a11y_speed_normal">Play at normal speed</string>
     <string name="reels_manage_follows">Manage subscriptions</string>
     <string name="reels_history_title">Recent</string>
     <string name="reels_history_empty">Nothing watched yet</string>

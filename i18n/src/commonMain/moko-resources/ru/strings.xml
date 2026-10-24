@@ -1714,6 +1714,10 @@
     <string name="reels_editor_tags_failed">Не удалось загрузить теги</string>
     <string name="reels_sound_on">Звук включён</string>
     <string name="reels_sound_off">Звук выключен</string>
+    <string name="reels_a11y_seek_back">Назад на 10 секунд</string>
+    <string name="reels_a11y_seek_forward">Вперёд на 10 секунд</string>
+    <string name="reels_a11y_speed_2x">Воспроизводить на скорости 2×</string>
+    <string name="reels_a11y_speed_normal">Воспроизводить с обычной скоростью</string>
     <string name="reels_manage_follows">Управлять подписками</string>
     <string name="reels_history_title">Недавние</string>
     <string name="reels_history_empty">Пока ничего не смотрели</string>

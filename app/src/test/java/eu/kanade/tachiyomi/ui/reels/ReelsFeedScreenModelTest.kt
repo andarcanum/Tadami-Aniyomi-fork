@@ -531,6 +531,33 @@ class ReelsFeedScreenModelTest {
     }
 
     @Test
+    fun `repeated setLike with the same target is a no-op`() = runTest(testDispatcher) {
+        val item = videoItem("idem-1")
+        val source = FeedbackRecordingSource(733L) { FeedPage(listOf(item), hasNextPage = false) }
+        val favorites = FakeReelsFavoriteRepository()
+        val model = buildModel(sourceId = 733L, manager = sourceManagerOf(source), repository = favorites)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // A double-tap replayed after the page was rebound must not flip the like back.
+        model.setLike(item, liked = true)
+        model.setLike(item, liked = true)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.likedIds.contains(item.id) shouldBe true
+        favorites.favorites.keys shouldBe setOf(item.id to 733L)
+        source.likedCalls shouldBe listOf(item.id to true)
+
+        model.setLike(item, liked = true)
+        model.setLike(item, liked = false)
+        model.setLike(item, liked = false)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.likedIds.contains(item.id) shouldBe false
+        favorites.favorites.isEmpty() shouldBe true
+        source.likedCalls shouldBe listOf(item.id to true, item.id to false)
+    }
+
+    @Test
     fun `unlike during favorites load is not resurrected by the stale snapshot`() = runTest(testDispatcher) {
         val gateItem = ShortVideoItem(
             id = "vid-1",

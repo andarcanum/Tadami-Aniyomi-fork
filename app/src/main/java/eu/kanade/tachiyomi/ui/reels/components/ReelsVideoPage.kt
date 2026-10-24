@@ -58,6 +58,11 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.theme.AuroraTheme
@@ -115,6 +120,9 @@ fun ReelsVideoPage(
     onCreatorClick: ((String) -> Unit)? = null,
     onTogglePlayPause: () -> Unit,
     onToggleLike: () -> Unit,
+    // Double-tap likes idempotently: the gesture coroutine captures this once, so it must
+    // never hold a stale toggle (that would unlike on the second double-tap of the same reel).
+    onLike: () -> Unit = onToggleLike,
     onToggleMute: () -> Unit,
     onShare: (secondsPlayed: Float) -> Unit = {},
     // B3.2 "not interested": gated by the caller; the author variant needs a non-null author.
@@ -154,6 +162,12 @@ fun ReelsVideoPage(
     var showHideDialog by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     val currentIsActive by rememberUpdatedState(isActive)
+    // The tap recognizer below is keyed by Unit and survives page rebinds (the pager reuses
+    // a slot for a different item after a feed reset); values read inside the gesture must
+    // not be captured from the composition that launched it.
+    val currentOnTogglePlayPause by rememberUpdatedState(onTogglePlayPause)
+    val currentOnLike by rememberUpdatedState(onLike)
+    val currentDurationSec by rememberUpdatedState(durationSec)
     // Real playback state of this page's player (audio-focus and lifecycle pauses stop the
     // player without changing the feed-level play intent); gates watched-time accrual.
     var actuallyPlaying by remember(item.id) { mutableStateOf(true) }
@@ -171,6 +185,29 @@ fun ReelsVideoPage(
         rememberReelsFullscreenSafePadding(softwareRotationDegrees)
     } else {
         PaddingValues(0.dp)
+    }
+
+    // U06: playback, seeking, speed and liking are otherwise reachable only through raw
+    // gestures (tap / double-tap thirds / long-press), which TalkBack never delivers.
+    val playPauseLabel = stringResource(if (isPlaying) MR.strings.action_pause else MR.strings.action_play)
+    val seekBackLabel = stringResource(MR.strings.reels_a11y_seek_back)
+    val seekForwardLabel = stringResource(MR.strings.reels_a11y_seek_forward)
+    val likeLabel = stringResource(MR.strings.reels_feed_action_like)
+    val speedLabel = stringResource(
+        if (playbackSpeed == 1f) MR.strings.reels_a11y_speed_2x else MR.strings.reels_a11y_speed_normal,
+    )
+    fun seekBy(deltaSec: Float) {
+        if (durationSec <= 0f) return
+        val target = ((progressState.floatValue * durationSec + deltaSec) / durationSec).coerceIn(0f, 1f)
+        seekFraction = target
+        progressState.floatValue = target
+        coroutineScope.launch {
+            delay(50)
+            seekFraction = null
+        }
+    }
+    fun toggleSpeed() {
+        playbackSpeed = if (playbackSpeed == 1f) 2f else 1f
     }
 
     // Landscape fullscreen survives auto-advance only while the reels stay wide: a
@@ -284,6 +321,34 @@ fun ReelsVideoPage(
         modifier = (if (rotateLandscape) modifier.rotatedLandscapeFill(softwareRotationDegrees) else modifier)
             .fillMaxSize()
             .background(Color.Black)
+            .semantics {
+                onClick(label = playPauseLabel) {
+                    currentOnTogglePlayPause()
+                    true
+                }
+                customActions = listOfNotNull(
+                    CustomAccessibilityAction(seekBackLabel) {
+                        seekBy(-10f)
+                        true
+                    },
+                    CustomAccessibilityAction(seekForwardLabel) {
+                        seekBy(10f)
+                        true
+                    },
+                    CustomAccessibilityAction(speedLabel) {
+                        toggleSpeed()
+                        true
+                    },
+                    if (!isLiked) {
+                        CustomAccessibilityAction(likeLabel) {
+                            currentOnLike()
+                            true
+                        }
+                    } else {
+                        null
+                    },
+                )
+            }
             .pointerInput(Unit) {
                 // 2x speed from a long-press must reset when the finger lifts. detectTapGestures
                 // cancels its press scope the moment the long-press fires (tryAwaitRelease
@@ -300,18 +365,19 @@ fun ReelsVideoPage(
                         playbackSpeed = 2f
                     },
                     onTap = {
-                        onTogglePlayPause()
+                        currentOnTogglePlayPause()
                     },
                     onDoubleTap = { offset ->
                         // Left / right thirds seek ±10s, center double-tap likes.
+                        val activeDurationSec = currentDurationSec
                         val seekDeltaSec = when {
-                            durationSec > 0f && offset.x < size.width / 3f -> -10f
-                            durationSec > 0f && offset.x > size.width * 2f / 3f -> 10f
+                            activeDurationSec > 0f && offset.x < size.width / 3f -> -10f
+                            activeDurationSec > 0f && offset.x > size.width * 2f / 3f -> 10f
                             else -> 0f
                         }
                         if (seekDeltaSec != 0f) {
-                            val currentSec = progressState.floatValue * durationSec
-                            val target = ((currentSec + seekDeltaSec) / durationSec).coerceIn(0f, 1f)
+                            val currentSec = progressState.floatValue * activeDurationSec
+                            val target = ((currentSec + seekDeltaSec) / activeDurationSec).coerceIn(0f, 1f)
                             seekFraction = target
                             progressState.floatValue = target
                             coroutineScope.launch {
@@ -319,7 +385,9 @@ fun ReelsVideoPage(
                                 seekFraction = null
                             }
                         } else {
-                            if (!isLiked) onToggleLike()
+                            // Set-like, not toggle: the second double-tap on an already liked
+                            // reel must stay a like.
+                            currentOnLike()
                             coroutineScope.launch {
                                 showHeartPop = true
                                 heartScale.snapTo(0f)
@@ -412,6 +480,7 @@ fun ReelsVideoPage(
             Box(
                 modifier = Modifier
                     .size(72.dp)
+                    .clickable(role = Role.Button, onClick = currentOnTogglePlayPause)
                     .background(Color.Black.copy(alpha = 0.55f), shape = androidx.compose.foundation.shape.CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
@@ -623,17 +692,24 @@ private fun ReelsLandscapeButton(
 ) {
     Box(
         modifier = modifier
-            .size(36.dp)
-            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
-            .clickable(onClick = onClick),
+            .size(48.dp)
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = Color.White,
-            modifier = Modifier.size(18.dp),
-        )
+        // 48dp touch target (a11y minimum) around the 36dp visual circle.
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                tint = Color.White,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
