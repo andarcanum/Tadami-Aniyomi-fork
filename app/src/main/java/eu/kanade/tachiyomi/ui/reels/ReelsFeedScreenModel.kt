@@ -2469,9 +2469,9 @@ class ReelsFeedScreenModel(
     }
 
     /**
-     * Mirrors the active player's real state (audio-focus, lifecycle pauses and seek can stop
-     * ExoPlayer without the model's play intent changing). Drives FLAG_KEEP_SCREEN_ON and the
-     * watched-seconds accounting via [State.isActuallyPlaying].
+     * Mirrors the active player's real state (buffering, audio-focus, lifecycle pauses and
+     * seek can stop ExoPlayer without the model's play intent changing). Drives
+     * FLAG_KEEP_SCREEN_ON, PiP eligibility and chrome auto-hide via [State.isActuallyPlaying].
      */
     fun setPlaybackRunning(running: Boolean) {
         mutableState.update { current ->
@@ -2531,7 +2531,10 @@ class ReelsFeedScreenModel(
                 // Swiping resumes playback only when the user has not deliberately paused;
                 // the sticky pause keeps every subsequently swiped page paused until resumed.
                 isPlaying = !it.userPaused,
-                isActuallyPlaying = !it.userPaused,
+                // P03: actual playback belongs to the settled page's player. The new page
+                // starts paused/preloaded, so claiming "running" here would keep the screen
+                // awake and hide the chrome while it is still buffering.
+                isActuallyPlaying = false,
             )
         }
         // Every feed mode persists its own browsing position (B3.1); the offline playlist has no
@@ -2700,10 +2703,11 @@ class ReelsFeedScreenModel(
         // Sticky user pause: set by an explicit pause tap, survives swipes (auto-advance must
         // not undo a deliberate pause) and is cleared only by an explicit resume tap.
         val userPaused: Boolean = false,
-        // Actual playback state as reported by the active page's player: audio-focus loss,
-        // lifecycle pauses and seek stop ExoPlayer without the model's play intent changing.
-        // Gates FLAG_KEEP_SCREEN_ON and the watched-seconds accounting.
-        val isActuallyPlaying: Boolean = true,
+        // Actual playback state as reported by the active page's player: buffering, audio-focus
+        // loss, lifecycle pauses and the media end stop ExoPlayer without the play intent
+        // changing. Starts false — nothing is confirmed playing before the player says so.
+        // Gates FLAG_KEEP_SCREEN_ON, PiP eligibility and chrome auto-hide.
+        val isActuallyPlaying: Boolean = false,
         // Bumped every time the feed content is replaced (search/filter/source/reset) so the
         // pager can reliably scroll back to the first video.
         val feedGeneration: Int = 0,

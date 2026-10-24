@@ -1,5 +1,6 @@
 package eu.kanade.tachiyomi.ui.reels.components
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -68,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerView
+import eu.kanade.tachiyomi.ui.reels.player.ReelsWatchClock
 import eu.kanade.tachiyomi.ui.reels.rememberReelsFullscreenSafePadding
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -145,8 +147,9 @@ fun ReelsVideoPage(
     initialSeekFraction: Float? = null,
     // Called once when the resume seek above was applied (the model clears the stored target).
     onInitialSeekConsumed: () -> Unit = {},
-    // Actual playWhenReady of THIS page's player (audio-focus/lifecycle pauses stop the
-    // player without changing the feed-level play intent); forwarded only while active.
+    // Actual Player.isPlaying of THIS page's player (buffering, audio-focus/lifecycle pauses
+    // and the media end stop it without changing the feed-level play intent); forwarded only
+    // while active.
     onPlayingStateChanged: (Boolean) -> Unit = {},
     headers: Map<String, String> = emptyMap(),
     modifier: Modifier = Modifier,
@@ -170,7 +173,9 @@ fun ReelsVideoPage(
     val currentDurationSec by rememberUpdatedState(durationSec)
     // Real playback state of this page's player (audio-focus and lifecycle pauses stop the
     // player without changing the feed-level play intent); gates watched-time accrual.
-    var actuallyPlaying by remember(item.id) { mutableStateOf(true) }
+    // Starts false: time must not accrue before the player confirms it is actually running
+    // (a still reel reports its own eligibility).
+    var actuallyPlaying by remember(item.id) { mutableStateOf(false) }
     var playbackSpeed by remember { mutableFloatStateOf(1f) }
     var retrySignal by remember { mutableIntStateOf(0) }
     val heartScale = remember { Animatable(0f) }
@@ -231,38 +236,40 @@ fun ReelsVideoPage(
         if (isActive) isLandscapeVideo?.let(onVideoLandscapeKnown)
     }
 
-    // Accumulated playback seconds, reported once when the clip is left (drives the feed
-    // source's personalization). Re-counts from zero on every (re)activation.
-    var watchedSeconds by remember(item.id) { mutableFloatStateOf(0f) }
+    // P06: watched time accumulates from monotonic deltas instead of whole-second ticks, so
+    // a 0.8 s watch, or a pause mid-tick, no longer loses its fraction.
+    val watchClock = remember(item.id) { ReelsWatchClock() }
     var wasActivated by remember(item.id) { mutableStateOf(false) }
     var viewReported by remember(item.id) { mutableStateOf(false) }
-    // The counter restarts on every key change, including the actual play state, so an
-    // audio-focus pause stops the accrual at once and a resume picks it up immediately.
-    LaunchedEffect(item.id, isActive, isPlaying, isBuffering, actuallyPlaying) {
-        while (isActive && isPlaying && actuallyPlaying && !isBuffering) {
-            delay(1000)
-            watchedSeconds += 1f
-        }
+    val currentOnViewReported by rememberUpdatedState(onViewReported)
+    // Same eligibility as the feed's "actually playing": active page, play intent, a player
+    // that is really running, and no buffering. Each flip starts/stops the clock exactly.
+    val watchedEligible = isActive && isPlaying && actuallyPlaying && !isBuffering
+    LaunchedEffect(item.id, watchedEligible) {
+        val now = SystemClock.elapsedRealtime()
+        if (watchedEligible) watchClock.start(now) else watchClock.stop(now)
+    }
+    // Consumption is baseline-based, so reporting on deactivation and on disposal cannot
+    // count the same interval twice or drop a partial second.
+    fun reportView() {
+        if (!wasActivated || viewReported) return
+        viewReported = true
+        val now = SystemClock.elapsedRealtime()
+        watchClock.stop(now)
+        currentOnViewReported(watchClock.consumeSeconds(now), durationSec, progressState.floatValue)
     }
     LaunchedEffect(isActive) {
         if (isActive) {
             wasActivated = true
             viewReported = false
-        } else if (wasActivated && !viewReported) {
-            viewReported = true
-            onViewReported(watchedSeconds, durationSec, progressState.floatValue)
-            watchedSeconds = 0f
+        } else {
+            reportView()
         }
     }
     // Leaving the SCREEN (back / dispose) never runs the deactivation branch above: report the
     // watched clip on dispose too, so the last reel doesn't escape the watch history / feedback.
     DisposableEffect(item.id) {
-        onDispose {
-            if (wasActivated && !viewReported) {
-                viewReported = true
-                onViewReported(watchedSeconds, durationSec, progressState.floatValue)
-            }
-        }
+        onDispose { reportView() }
     }
 
     // B3.1 resume-seek: apply the stored history position exactly once, on first activation.
