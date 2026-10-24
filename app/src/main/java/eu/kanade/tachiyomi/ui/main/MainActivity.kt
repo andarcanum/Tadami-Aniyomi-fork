@@ -8,6 +8,7 @@ import android.app.assist.AssistContent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
@@ -199,6 +200,10 @@ class MainActivity : BaseActivity() {
         val splashScreen = if (isLaunch) installSplashScreen() else null
 
         super.onCreate(savedInstanceState)
+
+        // A recreated activity may come back directly in PiP; the process-wide flag must
+        // not keep suppressing the reels fullscreen rotation from a previous instance.
+        ReelsPip.updatePictureInPictureMode(isInPictureInPictureMode)
 
         updateMainActivityWindowBackground(
             readerBackdropColor = NovelReaderBackdropSession.backgroundColor,
@@ -642,6 +647,14 @@ class MainActivity : BaseActivity() {
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
         ReelsPip.handler?.invoke()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        ReelsPip.updatePictureInPictureMode(isInPictureInPictureMode)
     }
 
     // The manifest configChanges (added for the reels PiP) suppresses rotation recreation,

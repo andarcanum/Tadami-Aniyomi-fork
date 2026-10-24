@@ -3,6 +3,10 @@ package eu.kanade.tachiyomi.ui.reels
 import android.app.Activity
 import android.app.PictureInPictureParams
 import android.graphics.Rect
+import android.util.Rational
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 /**
  * Picture-in-picture entry point for the reels feed (B3.5, declutter redesign).
@@ -18,16 +22,33 @@ object ReelsPip {
     @Volatile
     var handler: (() -> Boolean)? = null
 
-    /** Full-screen hint: the reels surface is portrait, the system clamps to the max aspect. */
-    fun buildParams(activity: Activity): PictureInPictureParams {
+    /**
+     * U02: the PiP window is owned by the system, so the feed must not rotate its subtree
+     * as if it were still filling the activity. MainActivity mirrors the real mode here.
+     */
+    var isInPictureInPictureMode by mutableStateOf(false)
+        private set
+
+    fun updatePictureInPictureMode(active: Boolean) {
+        isInPictureInPictureMode = active
+    }
+
+    /**
+     * The window shape follows the active reel: a landscape video in a portrait PiP window
+     * is either cropped or rotated. The source rect stays the full screen hint.
+     */
+    fun buildParams(activity: Activity, isLandscapeVideo: Boolean?): PictureInPictureParams {
         val bounds = Rect(
             0,
             0,
             activity.resources.displayMetrics.widthPixels,
             activity.resources.displayMetrics.heightPixels,
         )
-        return PictureInPictureParams.Builder()
+        val builder = PictureInPictureParams.Builder()
             .setSourceRectHint(bounds)
-            .build()
+        reelsPipAspectRatio(isLandscapeVideo)?.let { (width, height) ->
+            builder.setAspectRatio(Rational(width, height))
+        }
+        return builder.build()
     }
 }

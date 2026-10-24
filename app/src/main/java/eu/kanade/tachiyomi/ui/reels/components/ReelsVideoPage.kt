@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -62,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import eu.kanade.presentation.theme.AuroraTheme
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
 import eu.kanade.tachiyomi.ui.reels.player.ReelsPlayerView
+import eu.kanade.tachiyomi.ui.reels.rememberReelsFullscreenSafePadding
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import tachiyomi.i18n.MR
@@ -85,6 +87,14 @@ fun ReelsVideoPage(
     // Landscape fullscreen: the page content is rendered rotated 90° inside the locked
     // portrait activity (software rotation — no orientation request, no player rebuild).
     isLandscapeFullscreen: Boolean = false,
+    // U02: 90/270 follows the physical hold (gravity — the portrait lock pins the display
+    // rotation); 0 means the window is already landscape (split-screen/tablet/foldable) or
+    // the system owns the PiP frame.
+    softwareRotationDegrees: Int = 90,
+    isInPictureInPicture: Boolean = false,
+    // Reports the media orientation to the host for the PiP aspect ratio; re-emitted when
+    // the page becomes active so a preloaded report cannot be lost.
+    onVideoLandscapeKnown: (Boolean) -> Unit = {},
     onLandscapeFullscreenChange: (Boolean) -> Unit = {},
     // Sticky landscape intent (see ReelsFeedScreen): while armed, a settled landscape
     // reel re-enters fullscreen automatically; a portrait reel only auto-exits.
@@ -154,6 +164,14 @@ fun ReelsVideoPage(
     // Real orientation of the media, reported by the player; null until known. Only
     // landscape reels get the fullscreen affordance.
     var isLandscapeVideo by remember(item) { mutableStateOf<Boolean?>(null) }
+    val rotateLandscape = isLandscapeFullscreen && softwareRotationDegrees != 0
+    // Safe drawing insets are expressed in window coordinates; inside the rotated subtree
+    // they must move to the content edge that actually faces the cutout.
+    val fullscreenSafePadding = if (isLandscapeFullscreen && !isInPictureInPicture) {
+        rememberReelsFullscreenSafePadding(softwareRotationDegrees)
+    } else {
+        PaddingValues(0.dp)
+    }
 
     // Landscape fullscreen survives auto-advance only while the reels stay wide: a
     // portrait reel settling in the rotated frame drops back to the normal feed (the
@@ -169,6 +187,11 @@ fun ReelsVideoPage(
         if (isActive && landscapeAutoRestore && !isLandscapeFullscreen && isLandscapeVideo == true) {
             onLandscapeFullscreenChange(true)
         }
+    }
+    // A preloaded page can discover its orientation before it settles; the host needs the
+    // value for the PiP aspect ratio even though no player event will fire again.
+    LaunchedEffect(isActive, isLandscapeVideo) {
+        if (isActive) isLandscapeVideo?.let(onVideoLandscapeKnown)
     }
 
     // Accumulated playback seconds, reported once when the clip is left (drives the feed
@@ -258,7 +281,7 @@ fun ReelsVideoPage(
     val cacheKey = cachePrefix?.let { prefix -> "$prefix:${item.id}:${if (pinnedHd) "hd" else "sd"}" }
 
     Box(
-        modifier = (if (isLandscapeFullscreen) modifier.rotatedLandscapeFill() else modifier)
+        modifier = (if (rotateLandscape) modifier.rotatedLandscapeFill(softwareRotationDegrees) else modifier)
             .fillMaxSize()
             .background(Color.Black)
             .pointerInput(Unit) {
@@ -331,7 +354,10 @@ fun ReelsVideoPage(
             // The player-reported duration is authoritative; the server value is only a
             // placeholder until STATE_READY (wrong server durations must not stick).
             onDurationKnown = { durationSec = it },
-            onVideoLandscapeKnown = { isLandscapeVideo = it },
+            onVideoLandscapeKnown = { landscape ->
+                isLandscapeVideo = landscape
+                onVideoLandscapeKnown(landscape)
+            },
             onPlaybackError = { msg -> onPlaybackError(msg) { retrySignal++ } },
             onBufferingChanged = { isBuffering = it },
             onPlaybackRunningChanged = { playing ->
@@ -357,7 +383,7 @@ fun ReelsVideoPage(
         // chrome: in clean fullscreen / auto-hidden state the video must stay untouched
         // (the progress bar and fullscreen button carry their own backplates).
         AnimatedVisibility(
-            visible = chromeVisible,
+            visible = chromeVisible && !isInPictureInPicture,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.fillMaxSize(),
@@ -378,7 +404,7 @@ fun ReelsVideoPage(
 
         // 3. Play / Pause indicator overlay (flashes briefly on state change)
         AnimatedVisibility(
-            visible = !isPlaying,
+            visible = !isPlaying && !isInPictureInPicture,
             enter = fadeIn() + scaleIn(initialScale = 0.8f),
             exit = fadeOut() + scaleOut(targetScale = 0.8f),
             modifier = Modifier.align(Alignment.Center),
@@ -401,7 +427,7 @@ fun ReelsVideoPage(
         }
 
         // 4. Double tap Heart burst animation
-        if (showHeartPop) {
+        if (showHeartPop && !isInPictureInPicture) {
             Icon(
                 imageVector = Icons.Filled.Favorite,
                 contentDescription = null,
@@ -418,106 +444,117 @@ fun ReelsVideoPage(
             )
         }
 
-        // 5. Right Action Bar (Like, Follow?, Mute, Share) — hides with the immersive
-        // chrome, sliding out to the trailing edge like the top bar slides up.
-        AnimatedVisibility(
-            visible = chromeVisible,
-            enter = fadeIn() + slideInHorizontally { it },
-            exit = fadeOut() + slideOutHorizontally { it },
-            modifier = Modifier.align(Alignment.BottomEnd),
-        ) {
-            ReelsActionsColumn(
-                isLiked = isLiked,
-                isMuted = isMuted,
-                onToggleLike = {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                    onToggleLike()
-                },
-                onToggleMute = onToggleMute,
-                // B3.6: share carries the current playback second for a timeline URL.
-                onShare = { onShare(progressState.floatValue * durationSec.coerceAtLeast(0f)) },
-                showFollow = showFollowAction,
-                isFollowing = isFollowingCreator,
-                onToggleFollow = {
-                    hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-                    onToggleFollowCreator()
-                },
-                onOpenHide = if (showHideAction) {
-                    { showHideDialog = true }
-                } else {
-                    null
-                },
-                onToggleOffline = if (showOfflineAction) {
-                    onToggleOffline
-                } else {
-                    null
-                },
-                isOfflineStored = isOfflineStored,
-                modifier = Modifier.padding(end = 12.dp, bottom = 48.dp),
-            )
-        }
-
-        // Landscape fullscreen affordance: only landscape reels can expand, and the
-        // buttons ride the same chrome visibility as the rest of the overlay UI.
-        AnimatedVisibility(
-            visible = chromeVisible && isLandscapeVideo == true && !isLandscapeFullscreen,
-            enter = fadeIn() + slideInHorizontally { it },
-            exit = fadeOut() + slideOutHorizontally { it },
-            modifier = Modifier.align(Alignment.CenterEnd),
-        ) {
-            ReelsLandscapeButton(
-                icon = Icons.Filled.Fullscreen,
-                contentDescription = stringResource(MR.strings.reels_landscape_fullscreen),
-                modifier = Modifier.padding(end = 12.dp),
-            ) { onLandscapeFullscreenChange(true) }
-        }
-        AnimatedVisibility(
-            visible = isLandscapeFullscreen,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.TopEnd),
-        ) {
-            // Lives inside the rotated frame so it appears at the video's own top-right
-            // corner once the phone is turned.
-            ReelsLandscapeButton(
-                icon = Icons.Filled.FullscreenExit,
-                contentDescription = stringResource(MR.strings.reels_landscape_exit),
-                modifier = Modifier.padding(end = 12.dp, top = 12.dp),
-            ) { onLandscapeFullscreenChange(false) }
-        }
-
-        // 6. Bottom Meta info (Author, Title, Clickable Tags) — hides with the immersive
-        // chrome, sliding down out of the frame like the top bar slides up.
-        AnimatedVisibility(
-            visible = chromeVisible,
-            enter = fadeIn() + slideInVertically { it },
-            exit = fadeOut() + slideOutVertically { it },
-            modifier = Modifier.align(Alignment.BottomStart),
-        ) {
-            ReelsBottomMeta(
-                item = item,
-                onTagClick = onTagClick,
-                onAuthorClick = onAuthorClick,
-                onCreatorClick = onCreatorClick,
-                modifier = Modifier.padding(start = 16.dp, end = 76.dp, bottom = 24.dp),
-            )
-        }
-
-        // 7. Interactive Scrubber / Seek Bar (Aurora style)
-        ReelsProgressBar(
-            progressState = progressState,
-            durationSec = durationSec,
-            onSeek = { frac ->
-                seekFraction = frac
-                progressState.floatValue = frac
-                coroutineScope.launch {
-                    delay(50)
-                    seekFraction = null
+        // 5-7. Controls sit inside the rotated frame and are inset from the physical safe
+        // edges, so cutouts and rounded corners never cover them. In PiP the system owns the
+        // frame and chrome would only crowd the tiny window.
+        if (!isInPictureInPicture) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(fullscreenSafePadding),
+            ) {
+                // Right Action Bar (Like, Follow?, Mute, Share) — hides with the immersive
+                // chrome, sliding out to the trailing edge like the top bar slides up.
+                AnimatedVisibility(
+                    visible = chromeVisible,
+                    enter = fadeIn() + slideInHorizontally { it },
+                    exit = fadeOut() + slideOutHorizontally { it },
+                    modifier = Modifier.align(Alignment.BottomEnd),
+                ) {
+                    ReelsActionsColumn(
+                        isLiked = isLiked,
+                        isMuted = isMuted,
+                        onToggleLike = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                            onToggleLike()
+                        },
+                        onToggleMute = onToggleMute,
+                        // B3.6: share carries the current playback second for a timeline URL.
+                        onShare = { onShare(progressState.floatValue * durationSec.coerceAtLeast(0f)) },
+                        showFollow = showFollowAction,
+                        isFollowing = isFollowingCreator,
+                        onToggleFollow = {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                            onToggleFollowCreator()
+                        },
+                        onOpenHide = if (showHideAction) {
+                            { showHideDialog = true }
+                        } else {
+                            null
+                        },
+                        onToggleOffline = if (showOfflineAction) {
+                            onToggleOffline
+                        } else {
+                            null
+                        },
+                        isOfflineStored = isOfflineStored,
+                        modifier = Modifier.padding(end = 12.dp, bottom = 48.dp),
+                    )
                 }
-            },
-            onScrubStart = onScrubStart,
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+
+                // Landscape fullscreen affordance: only landscape reels can expand, and the
+                // buttons ride the same chrome visibility as the rest of the overlay UI.
+                AnimatedVisibility(
+                    visible = chromeVisible && isLandscapeVideo == true && !isLandscapeFullscreen,
+                    enter = fadeIn() + slideInHorizontally { it },
+                    exit = fadeOut() + slideOutHorizontally { it },
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                ) {
+                    ReelsLandscapeButton(
+                        icon = Icons.Filled.Fullscreen,
+                        contentDescription = stringResource(MR.strings.reels_landscape_fullscreen),
+                        modifier = Modifier.padding(end = 12.dp),
+                    ) { onLandscapeFullscreenChange(true) }
+                }
+                AnimatedVisibility(
+                    visible = isLandscapeFullscreen,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.TopEnd),
+                ) {
+                    // Lives inside the rotated frame so it appears at the video's own
+                    // top-right corner once the phone is turned.
+                    ReelsLandscapeButton(
+                        icon = Icons.Filled.FullscreenExit,
+                        contentDescription = stringResource(MR.strings.reels_landscape_exit),
+                        modifier = Modifier.padding(end = 12.dp, top = 12.dp),
+                    ) { onLandscapeFullscreenChange(false) }
+                }
+
+                // Bottom Meta info (Author, Title, Clickable Tags) — hides with the immersive
+                // chrome, sliding down out of the frame like the top bar slides up.
+                AnimatedVisibility(
+                    visible = chromeVisible,
+                    enter = fadeIn() + slideInVertically { it },
+                    exit = fadeOut() + slideOutVertically { it },
+                    modifier = Modifier.align(Alignment.BottomStart),
+                ) {
+                    ReelsBottomMeta(
+                        item = item,
+                        onTagClick = onTagClick,
+                        onAuthorClick = onAuthorClick,
+                        onCreatorClick = onCreatorClick,
+                        modifier = Modifier.padding(start = 16.dp, end = 76.dp, bottom = 24.dp),
+                    )
+                }
+
+                // Interactive Scrubber / Seek Bar (Aurora style)
+                ReelsProgressBar(
+                    progressState = progressState,
+                    durationSec = durationSec,
+                    onSeek = { frac ->
+                        seekFraction = frac
+                        progressState.floatValue = frac
+                        coroutineScope.launch {
+                            delay(50)
+                            seekFraction = null
+                        }
+                    },
+                    onScrubStart = onScrubStart,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
+        }
     }
 
     // B3.2 hide choice: reel only, or the author too when one is known.
@@ -556,11 +593,11 @@ fun ReelsVideoPage(
 
 /**
  * Software landscape fill for the locked-portrait reels screen: measures the content
- * with width/height swapped and rotates it 90° about the center, so a landscape video
- * covers the physical screen exactly. No orientation request is made — the activity
+ * with width/height swapped and rotates it by [degrees] about the center, so a landscape
+ * video covers the physical screen exactly. No orientation request is made — the activity
  * stays portrait, the player is never rebuilt, and touch input follows the rotation.
  */
-private fun Modifier.rotatedLandscapeFill(): Modifier = layout { measurable, constraints ->
+private fun Modifier.rotatedLandscapeFill(degrees: Int): Modifier = layout { measurable, constraints ->
     val placeable = measurable.measure(
         Constraints(
             minWidth = 0,
@@ -575,7 +612,7 @@ private fun Modifier.rotatedLandscapeFill(): Modifier = layout { measurable, con
             y = (constraints.maxHeight - placeable.height) / 2,
         )
     }
-}.graphicsLayer { rotationZ = 90f }
+}.graphicsLayer { rotationZ = degrees.toFloat() }
 
 @Composable
 private fun ReelsLandscapeButton(
