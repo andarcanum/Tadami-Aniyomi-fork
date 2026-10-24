@@ -21,6 +21,7 @@ import eu.kanade.tachiyomi.animesource.AnimeCustomFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedBrowseSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginInstrumentationSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedLoginSource
+import eu.kanade.tachiyomi.animesource.AnimeFeedOriginScopedSessionSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedVideoResolverSource
 import eu.kanade.tachiyomi.animesource.AnimeFeedWebLoginSource
@@ -35,7 +36,9 @@ import eu.kanade.tachiyomi.animesource.model.FeedCategory
 import eu.kanade.tachiyomi.animesource.model.FeedPage
 import eu.kanade.tachiyomi.animesource.model.SearchSuggestions
 import eu.kanade.tachiyomi.animesource.model.ShortVideoItem
+import eu.kanade.tachiyomi.animesource.model.WebLoginCookie
 import eu.kanade.tachiyomi.animesource.online.AnimeHttpSource
+import eu.kanade.tachiyomi.ui.reels.components.legacyCookieMap
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -1632,11 +1635,22 @@ class ReelsFeedScreenModel(
      * retries on the next page-finished/Done press) and surfaces [State.webLoginHint]; true
      * closes the dialog, snapshots the account label and reloads the feed exactly like a
      * password-login success. Transport failures of the import count as "not yet".
+     *
+     * Contract v24: [cookies] are origin-scoped records. A source implementing
+     * [AnimeFeedOriginScopedSessionSource] receives them as-is; legacy sources get the old
+     * last-wins name → value merge.
      */
-    fun tryImportWebSession(cookies: Map<String, String>, localStorage: Map<String, String>) {
+    fun tryImportWebSession(cookies: List<WebLoginCookie>, localStorage: Map<String, String>) {
         val webSource = source as? AnimeFeedWebLoginSource ?: return
+        val scopedSource = webSource as? AnimeFeedOriginScopedSessionSource
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val imported = runCatching { webSource.importWebSession(cookies, localStorage) }.getOrDefault(false)
+            val imported = runCatching {
+                if (scopedSource != null) {
+                    scopedSource.importWebSessionScoped(cookies, localStorage)
+                } else {
+                    webSource.importWebSession(legacyCookieMap(cookies), localStorage)
+                }
+            }.getOrDefault(false)
             if (imported) onWebSessionImported() else mutableState.update { it.copy(webLoginHint = true) }
         }
     }
@@ -1646,10 +1660,17 @@ class ReelsFeedScreenModel(
         (source as? AnimeFeedWebLoginSource)?.isOwnLoginRedirect(url) == true
 
     /** Stage-2 code exchange (contract v20): same success/failure semantics as the SPA import. */
-    fun tryImportWebRedirect(url: String, cookies: Map<String, String>) {
+    fun tryImportWebRedirect(url: String, cookies: List<WebLoginCookie>) {
         val webSource = source as? AnimeFeedWebLoginSource ?: return
+        val scopedSource = webSource as? AnimeFeedOriginScopedSessionSource
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val imported = runCatching { webSource.importWebRedirect(url, cookies) }.getOrDefault(false)
+            val imported = runCatching {
+                if (scopedSource != null) {
+                    scopedSource.importWebRedirectScoped(url, cookies)
+                } else {
+                    webSource.importWebRedirect(url, legacyCookieMap(cookies))
+                }
+            }.getOrDefault(false)
             if (imported) applyWebLoginSuccess() else mutableState.update { it.copy(webLoginHint = true) }
         }
     }
@@ -1659,10 +1680,17 @@ class ReelsFeedScreenModel(
      * memory (nothing to lift — the RedGIFs case), bump the stage-2 counter so the dialog
      * loads the source's own PKCE authorize URL in the same WebView.
      */
-    fun tryImportWebSessionStage2(cookies: Map<String, String>, localStorage: Map<String, String>) {
+    fun tryImportWebSessionStage2(cookies: List<WebLoginCookie>, localStorage: Map<String, String>) {
         val webSource = source as? AnimeFeedWebLoginSource ?: return
+        val scopedSource = webSource as? AnimeFeedOriginScopedSessionSource
         screenModelScope.launch(NonCancellable + ioDispatcher) {
-            val imported = runCatching { webSource.importWebSession(cookies, localStorage) }.getOrDefault(false)
+            val imported = runCatching {
+                if (scopedSource != null) {
+                    scopedSource.importWebSessionScoped(cookies, localStorage)
+                } else {
+                    webSource.importWebSession(legacyCookieMap(cookies), localStorage)
+                }
+            }.getOrDefault(false)
             if (imported) {
                 onWebSessionImported()
             } else {
