@@ -612,7 +612,7 @@ class DiscoveryRunnerTest {
             seedSources = FakeSeedSources(),
             coordinatorFactory = { builders ->
                 seenBuilderTypes += builders.map { it.rowType }
-                DiscoveryCoordinator(emptyList())
+                DiscoveryCoordinator(builders)
             },
             sourcePreferencesProvider = ::testSourcePrefs,
         )

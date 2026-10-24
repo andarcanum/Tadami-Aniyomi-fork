@@ -144,7 +144,7 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
                         this.url = url
                         this.title = title
                     }
-                    source?.getMangaDetails(entry)?.genre
+                    source?.let { fetchDiscoveryMangaDetails(it, entry) }?.genre
                 }
                 DiscoveryMediaType.ANIME -> {
                     val source = Injekt.get<AnimeSourceManager>().getOrStub(sourceId) as? AnimeCatalogueSource
@@ -559,17 +559,31 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
     )
 
     internal suspend fun withMangaGenreFilters(filters: FilterList, genres: List<String>): FilterList? {
-        val group = filters.filterIsInstance<Filter.Group<*>>()
-            .firstOrNull { isGenreGroupName(it.name) }
-            ?: return null
-        val boxes = group.state.filterIsInstance<Filter.CheckBox>()
-        val tris = group.state.filterIsInstance<Filter.TriState>()
+        val groups = filters.filterIsInstance<Filter.Group<*>>().filter { isGenreGroupName(it.name) }
+        if (groups.isEmpty()) return null
+        // LibGroup has distinct GenreList and TagList; keep the original plugin instances and IDs.
+        val options = groups.flatMap { it.state }
+        val boxes = options.filterIsInstance<Filter.CheckBox>()
+        val tris = options.filterIsInstance<Filter.TriState>()
         val allOptions = (boxes.map { it.name } + tris.map { it.name }).distinct()
         // Эвристика жанров: чекбоксы и тристейты любого языка матчатся с запросом; непонятые
         // названия источник-специфичной экзотики переводятся один раз (M2).
         val matched = genreFallback.selectSourceGenres(genres, allOptions)
-        boxes.filter { it.name in matched }.forEach { it.state = true }
-        tris.filter { it.name in matched }.forEach { it.state = Filter.TriState.STATE_INCLUDE }
+        val selectedNames = HashSet<String>()
+        for (option in options) {
+            when (option) {
+                is Filter.CheckBox -> {
+                    if (option.name in matched && selectedNames.add(GenreMatcher.normalize(option.name))) {
+                        option.state = true
+                    }
+                }
+                is Filter.TriState -> {
+                    if (option.name in matched && selectedNames.add(GenreMatcher.normalize(option.name))) {
+                        option.state = Filter.TriState.STATE_INCLUDE
+                    }
+                }
+            }
+        }
         return if (matched.isNotEmpty()) filters else null
     }
 
@@ -761,8 +775,8 @@ class AppDiscoverySourceCatalog : DiscoverySourceCatalog {
         if (known.isNotEmpty() || unknown.isEmpty()) return mangas
         // Все без статуса — иначе известные уже отфильтрованы корректно, детали не нужны.
         val enriched = unknown.take(DETAILS_ENRICH_CAP).map { manga ->
-            runCatching {
-                source.getMangaDetails(manga)
+            runCatchingUnlessCancelled {
+                fetchDiscoveryMangaDetails(source, manga)
             }.getOrNull() ?: manga
         }
         return known + enriched + unknown.drop(DETAILS_ENRICH_CAP)
