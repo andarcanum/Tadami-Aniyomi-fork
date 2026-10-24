@@ -2025,4 +2025,8 @@
     <string name="reels_album_remove_album">Remove album from collection</string>
     <string name="reels_album_open">Open album</string>
     <string name="reels_album_play_as_feed">Play as reels feed</string>
+    <string name="reels_album_unavailable">This source no longer provides albums</string>
+    <string name="reels_album_search_loaded">Loaded %1$d videos · more available</string>
+    <string name="reels_album_search_empty">No loaded video matches the search</string>
+    <string name="reels_album_search_load_more">Load more videos</string>
 </resources>

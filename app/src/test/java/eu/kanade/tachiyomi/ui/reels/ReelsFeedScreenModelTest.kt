@@ -40,6 +40,7 @@ import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +49,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -3080,6 +3082,83 @@ class ReelsFeedScreenModelTest {
     }
 
     @Test
+    fun `deep-link seek is bounded by the page budget and leaves the feed pageable`() = runTest(testDispatcher) {
+        val source = RecordingFeedSource(
+            id = 3302L,
+            feedProvider = { page ->
+                // Endless feed where the tapped clip never appears.
+                FeedPage(
+                    videos = (1..3).map { i -> videoItem("q$page-$i") },
+                    hasNextPage = true,
+                )
+            },
+        )
+        val model = buildModel(sourceId = 3302L, manager = sourceManagerOf(source), resumeVideoId = "never-there")
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // Initial page + exactly RESUME_SEEK_MAX_PAGES silent appends, then the seek gives up.
+        source.requestedPages shouldBe (1..1 + ReelsFeedScreenModel.RESUME_SEEK_MAX_PAGES).toList()
+        model.state.value.canLoadMore shouldBe true
+
+        model.loadFeed(reset = false)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // The budget ended only the silent seek: ordinary pagination still appends.
+        source.requestedPages.last() shouldBe 1 + ReelsFeedScreenModel.RESUME_SEEK_MAX_PAGES + 1
+        model.state.value.items.size shouldBe (1 + ReelsFeedScreenModel.RESUME_SEEK_MAX_PAGES + 1) * 3
+    }
+
+    @Test
+    fun `album search stops when the locked cursor disappears`() = runTest(testDispatcher) {
+        val source = CursorAlbumSearchSource()
+        val model = buildModel(sourceId = 9301L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.search("summer")
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.albumRequests shouldBe listOf(1 to null)
+
+        model.loadFeed(reset = false)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        source.albumRequests shouldBe listOf(1 to null, 2 to "c1")
+        model.state.value.albumSearchResults.map { it.id } shouldBe listOf("alb-1", "alb-2")
+        model.state.value.albumSearchCanLoadMore shouldBe false
+
+        // A protocol violation must not restart the directory head.
+        model.loadFeed(reset = false)
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.albumRequests shouldBe listOf(1 to null, 2 to "c1")
+    }
+
+    @Test
+    fun `a late album search response never overwrites the newer query results`() = runTest(testDispatcher) {
+        val source = GatedAlbumSearchSource()
+        val model = buildModel(sourceId = 9302L, manager = sourceManagerOf(source))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // The slow query ignores cancellation and stays in flight...
+        model.search("slow")
+        testDispatcher.scheduler.runCurrent()
+        source.queries shouldBe listOf("slow")
+
+        // ...while the newer query completes first and owns the state.
+        model.search("fresh")
+        testDispatcher.scheduler.advanceUntilIdle()
+        source.queries shouldBe listOf("slow", "fresh")
+        model.state.value.albumSearchResults.map { it.id } shouldBe listOf("fresh")
+        model.state.value.albumSearchNextCursor shouldBe "fresh-token"
+
+        // The stale page lands last and must be dropped wholesale.
+        source.gate.complete(Unit)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        model.state.value.albumSearchResults.map { it.id } shouldBe listOf("fresh")
+        model.state.value.albumSearchNextCursor shouldBe "fresh-token"
+        model.state.value.albumSearchCanLoadMore shouldBe true
+    }
+
+    @Test
     fun `album-capable source renders search as paginated album directory`() = runTest(testDispatcher) {
         val source = FakeAlbumSearchSource()
         val model = buildModel(sourceId = 9201L, manager = sourceManagerOf(source))
@@ -3131,6 +3210,76 @@ class ReelsFeedScreenModelTest {
                         FeedCategory(id = "alb-2", name = "Album Two", imageUrl = null, itemCount = 1),
                     ),
                     hasNextPage = false,
+                )
+            }
+        }
+    }
+
+    /** Page 1 locks cursor "c1"; page 2 drops it while still claiming more pages. */
+    private class CursorAlbumSearchSource : AnimeFeedSource, AnimeAlbumSearchSource, AnimeFeedBrowseSource {
+        override val id: Long = 9301L
+        override val name: String = "Cursor Album Search"
+        override val lang: String = "all"
+        val albumRequests = mutableListOf<Pair<Int, String?>>()
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            FeedPage(emptyList(), false)
+
+        override suspend fun getBrowseCategories(page: Int, cursor: String?): FeedCategoryPage =
+            FeedCategoryPage(emptyList(), hasNextPage = false)
+
+        override suspend fun getCategoryFeed(categoryId: String, page: Int, cursor: String?): FeedPage =
+            FeedPage(emptyList(), hasNextPage = false)
+
+        override suspend fun searchAlbums(query: String, page: Int, cursor: String?): FeedCategoryPage {
+            albumRequests += page to cursor
+            return if (page == 1) {
+                FeedCategoryPage(
+                    categories = listOf(FeedCategory(id = "alb-1", name = "Album One")),
+                    hasNextPage = true,
+                    nextCursor = "c1",
+                )
+            } else {
+                FeedCategoryPage(
+                    categories = listOf(FeedCategory(id = "alb-2", name = "Album Two")),
+                    hasNextPage = true,
+                    nextCursor = null,
+                )
+            }
+        }
+    }
+
+    /** The "slow" query survives cancellation so its late response really reaches the model. */
+    private class GatedAlbumSearchSource : AnimeFeedSource, AnimeAlbumSearchSource, AnimeFeedBrowseSource {
+        override val id: Long = 9302L
+        override val name: String = "Gated Album Search"
+        override val lang: String = "all"
+        val queries = mutableListOf<String>()
+        val gate = CompletableDeferred<Unit>()
+
+        override suspend fun getFeed(page: Int, cursor: String?, filters: AnimeFilterList): FeedPage =
+            FeedPage(emptyList(), false)
+
+        override suspend fun getBrowseCategories(page: Int, cursor: String?): FeedCategoryPage =
+            FeedCategoryPage(emptyList(), hasNextPage = false)
+
+        override suspend fun getCategoryFeed(categoryId: String, page: Int, cursor: String?): FeedPage =
+            FeedPage(emptyList(), hasNextPage = false)
+
+        override suspend fun searchAlbums(query: String, page: Int, cursor: String?): FeedCategoryPage {
+            queries += query
+            return if (query == "slow") {
+                withContext(NonCancellable) { gate.await() }
+                FeedCategoryPage(
+                    categories = listOf(FeedCategory(id = "stale", name = "Stale")),
+                    hasNextPage = true,
+                    nextCursor = "stale-token",
+                )
+            } else {
+                FeedCategoryPage(
+                    categories = listOf(FeedCategory(id = "fresh", name = "Fresh")),
+                    hasNextPage = true,
+                    nextCursor = "fresh-token",
                 )
             }
         }

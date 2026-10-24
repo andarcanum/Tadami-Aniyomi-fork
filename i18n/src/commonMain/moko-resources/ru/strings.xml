@@ -1825,4 +1825,8 @@
     <string name="reels_album_remove_album">Убрать альбом из коллекции</string>
     <string name="reels_album_open">Открыть альбом</string>
     <string name="reels_album_play_as_feed">Смотреть как ленту (Reels)</string>
+    <string name="reels_album_unavailable">Источник больше не предоставляет альбомы</string>
+    <string name="reels_album_search_loaded">Загружено видео: %1$d · есть ещё</string>
+    <string name="reels_album_search_empty">Среди загруженных видео нет совпадений</string>
+    <string name="reels_album_search_load_more">Загрузить ещё видео</string>
 </resources>
